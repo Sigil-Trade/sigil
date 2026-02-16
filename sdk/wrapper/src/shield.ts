@@ -185,8 +185,12 @@ export function shield(
 
     getSpendingSummary(): SpendingSummary {
       const tokens = resolved.spendLimits.map((limit) => {
-        const spent = state.getSpendInWindow(limit.mint, limit.windowMs ?? 86_400_000);
-        const remaining = limit.amount > spent ? limit.amount - spent : BigInt(0);
+        const spent = state.getSpendInWindow(
+          limit.mint,
+          limit.windowMs ?? 86_400_000,
+        );
+        const remaining =
+          limit.amount > spent ? limit.amount - spent : BigInt(0);
         const tokenInfo = getTokenInfo(limit.mint);
         return {
           mint: limit.mint,
@@ -198,7 +202,9 @@ export function shield(
         };
       });
 
-      const txCount = state.getTransactionCountInWindow(resolved.rateLimit.windowMs);
+      const txCount = state.getTransactionCountInWindow(
+        resolved.rateLimit.windowMs,
+      );
       const rateLimit = {
         count: txCount,
         limit: resolved.rateLimit.maxTransactions,

@@ -1,6 +1,8 @@
 node_modules/
 dist/
-target/
+target/*
+!target/idl/
+!target/types/
 .anchor/
 test-ledger/
 *.so

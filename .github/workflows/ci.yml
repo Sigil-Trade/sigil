@@ -164,6 +164,9 @@ jobs:
 
       - name: Run on-chain tests
         run: |
+          # Ensure ledger parent directory exists (.anchor/ is gitignored)
+          mkdir -p .anchor/test-ledger
+
           # Start test validator with the built program
           solana-test-validator \
             --ledger .anchor/test-ledger \
