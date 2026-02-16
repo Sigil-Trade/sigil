@@ -37,11 +37,31 @@ All instructions succeed or all revert atomically. The agent's signing key is va
 
 | Package | Description | npm |
 |---------|-------------|-----|
-| [`@agent-shield/sdk`](./sdk/typescript) | TypeScript SDK — vault management, Jupiter & Flash Trade composition | [![npm](https://img.shields.io/npm/v/@agent-shield/sdk)](https://www.npmjs.com/package/@agent-shield/sdk) |
-| [`@agent-shield/plugin-solana-agent-kit`](./plugins/solana-agent-kit) | Solana Agent Kit plugin — 6 tools for agent DeFi access | [![npm](https://img.shields.io/npm/v/@agent-shield/plugin-solana-agent-kit)](https://www.npmjs.com/package/@agent-shield/plugin-solana-agent-kit) |
-| [`@agent-shield/plugin-elizaos`](./plugins/elizaos) | ElizaOS plugin — actions, providers, and evaluators | [![npm](https://img.shields.io/npm/v/@agent-shield/plugin-elizaos)](https://www.npmjs.com/package/@agent-shield/plugin-elizaos) |
+| [`@agent-shield/core`](./sdk/core) | Pure TypeScript policy engine — zero blockchain dependencies | [![npm](https://img.shields.io/npm/v/@agent-shield/core)](https://www.npmjs.com/package/@agent-shield/core) |
+| [`@agent-shield/solana`](./sdk/wrapper) | Client-side wallet wrapper — 3 lines to protect any Solana agent | [![npm](https://img.shields.io/npm/v/@agent-shield/solana)](https://www.npmjs.com/package/@agent-shield/solana) |
+| [`@agent-shield/sdk`](./sdk/typescript) | On-chain vault SDK — Jupiter & Flash Trade composition | [![npm](https://img.shields.io/npm/v/@agent-shield/sdk)](https://www.npmjs.com/package/@agent-shield/sdk) |
+| [`@agent-shield/plugin-solana-agent-kit`](./plugins/solana-agent-kit) | Solana Agent Kit plugin — 4 monitoring/management tools | [![npm](https://img.shields.io/npm/v/@agent-shield/plugin-solana-agent-kit)](https://www.npmjs.com/package/@agent-shield/plugin-solana-agent-kit) |
+| [`@agent-shield/plugin-elizaos`](./plugins/elizaos) | ElizaOS plugin — 4 actions, 2 providers, 1 evaluator | [![npm](https://img.shields.io/npm/v/@agent-shield/plugin-elizaos)](https://www.npmjs.com/package/@agent-shield/plugin-elizaos) |
 
 ## Quick Start
+
+### Level 1: Client-Side Wrapper (Zero Friction)
+
+```bash
+npm install @agent-shield/solana
+```
+
+```typescript
+import { shield } from "@agent-shield/solana";
+
+// Wrap any wallet in 1 line — secure defaults applied automatically
+const protectedWallet = shield(wallet, { maxSpend: "500 USDC/day" });
+
+// Use it like a normal wallet — shield enforces policies transparently
+const agent = new SolanaAgentKit(protectedWallet, RPC_URL, config);
+```
+
+### Level 3: On-Chain Vault (Cryptographic Guarantees)
 
 ```bash
 npm install @agent-shield/sdk @coral-xyz/anchor @solana/web3.js
@@ -100,8 +120,15 @@ anchor build --no-idl
 # Generate IDL (requires nightly Rust)
 RUSTUP_TOOLCHAIN=nightly anchor idl build -o target/idl/agent_shield.json
 
-# Run tests (48 tests across 3 suites)
+# Run on-chain tests (57 tests across 3 suites)
 anchor test
+
+# Run wrapper tests (49 tests)
+cd sdk/wrapper && pnpm test
+
+# Run plugin tests (53 tests)
+cd plugins/solana-agent-kit && pnpm test
+cd plugins/elizaos && pnpm test
 
 # Lint
 npm run lint
@@ -112,11 +139,14 @@ cargo fmt --check --manifest-path programs/agent-shield/Cargo.toml
 
 | Suite | Tests |
 |-------|-------|
-| Core vault management & permission engine | 30 |
+| Core vault management & permission engine | 39 |
 | Jupiter integration (composed swaps) | 9 |
 | Flash Trade integration (leveraged perps) | 9 |
+| Wrapper SDK (`@agent-shield/solana`) | 49 |
+| SAK plugin (`@agent-shield/plugin-solana-agent-kit`) | 23 |
+| ElizaOS plugin (`@agent-shield/plugin-elizaos`) | 30 |
+| **Total** | **159** |
 
 ## License
 
 MIT
-# agentshield

@@ -16,7 +16,7 @@
   ],
   "peerDependencies": {
     "solana-agent-kit": ">=2.0.0",
-    "@agent-shield/solana": ">=0.1.0",
+    "@agent-shield/solana": ">=0.1.1",
     "@solana/web3.js": ">=1.90.0"
   },
   "devDependencies": {
