@@ -297,7 +297,7 @@ describe("jupiter-integration", () => {
     // Derive vault ATA and deposit
     vaultUsdcAta = getAssociatedTokenAddressSync(usdcMint, vaultPda, true);
 
-    await program.methods
+    const depositSig = await program.methods
       .depositFunds(new BN(500_000_000)) // 500 USDC
       .accountsPartial({
         owner: owner.publicKey,
@@ -310,6 +310,11 @@ describe("jupiter-integration", () => {
         systemProgram: SystemProgram.programId,
       })
       .rpc();
+
+    // Wait for confirmed commitment — Anchor's default "processed" commitment
+    // can race with simulateTransaction's "confirmed" commitment, causing
+    // AccountNotInitialized (3012) when the ATA isn't visible yet.
+    await connection.confirmTransaction(depositSig, "confirmed");
   });
 
   // =========================================================================
@@ -613,7 +618,7 @@ describe("jupiter-integration", () => {
 
       // Deposit USDC into rolling vault (needed for protocol fee transfers)
       rollingVaultUsdcAta = getAssociatedTokenAddressSync(usdcMint, rollingVault, true);
-      await program.methods
+      const depositSig = await program.methods
         .depositFunds(new BN(200_000_000)) // 200 USDC
         .accountsPartial({
           owner: owner.publicKey,
@@ -626,6 +631,12 @@ describe("jupiter-integration", () => {
           systemProgram: SystemProgram.programId,
         })
         .rpc();
+
+      // Wait for confirmed commitment — Anchor's default "processed" commitment
+      // can race with simulateTransaction's "confirmed" commitment, causing
+      // AccountNotInitialized (3012) when the ATA isn't visible yet at the
+      // higher commitment level.
+      await connection.confirmTransaction(depositSig, "confirmed");
     });
 
     it("allows multiple swaps under cap, then rejects when exceeded", async () => {
@@ -635,6 +646,7 @@ describe("jupiter-integration", () => {
         agent.publicKey.toString(),
         "Agent should be registered for rolling window vault"
       );
+
 
       // Swap 1: 40 USDC (total: 40 / 100)
       await sendComposedSwap(

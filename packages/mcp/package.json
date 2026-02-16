@@ -1,0 +1,49 @@
+{
+  "name": "@agent-shield/mcp",
+  "version": "0.1.0",
+  "description": "MCP server for AgentShield — manage on-chain vaults and enforce policies via AI tools",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "agent-shield-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "test": "mocha --require ts-node/register 'tests/*.test.ts' 'tests/**/*.test.ts' --timeout 30000",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1"
+  },
+  "peerDependencies": {
+    "@agent-shield/sdk": ">=0.1.5",
+    "@coral-xyz/anchor": ">=0.32.1",
+    "@solana/web3.js": ">=1.95.0",
+    "zod": ">=3.25.0"
+  },
+  "devDependencies": {
+    "@agent-shield/sdk": "workspace:*",
+    "@coral-xyz/anchor": "^0.32.1",
+    "@solana/web3.js": "^1.95.0",
+    "@types/chai": "^4.3.11",
+    "@types/mocha": "^10.0.6",
+    "@types/sinon": "^17.0.3",
+    "zod": "^3.25.0",
+    "chai": "^4.4.1",
+    "mocha": "^10.3.0",
+    "sinon": "^17.0.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/agent-shield/agent-shield",
+    "directory": "packages/mcp"
+  }
+}

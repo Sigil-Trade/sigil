@@ -401,30 +401,30 @@
 
 > **Goal:** MCP server that lets any AI tool (Claude Desktop, Cursor, Copilot) manage vaults and enforce policies. Ship standalone mode first — proxy mode is a follow-up.
 
-### C.1 Standalone Mode (ship first)
-- [ ] Scaffold `packages/mcp/` with package.json (`@agent-shield/mcp`), tsconfig
-- [ ] MCP server entrypoint using `@modelcontextprotocol/sdk`
-- [ ] Tool: `shield_create_vault` — initialize vault with policy
-- [ ] Tool: `shield_deposit` / `shield_withdraw` — fund management
-- [ ] Tool: `shield_register_agent` — register agent key to vault
-- [ ] Tool: `shield_update_policy` — modify spending caps, whitelists
-- [ ] Tool: `shield_check_vault` — read vault state (read-only)
-- [ ] Tool: `shield_check_spending` — read 24h rolling spend (read-only)
-- [ ] Tool: `shield_execute_swap` — compose + send Jupiter swap through vault
-- [ ] Tool: `shield_open_position` / `shield_close_position` — Flash Trade perps through vault
-- [ ] Tool: `shield_revoke_agent` — kill switch
-- [ ] Tool: `shield_reactivate_vault` — unfreeze vault
+### C.1 Standalone Mode (ship first) ✅
+- [x] Scaffold `packages/mcp/` with package.json (`@agent-shield/mcp`), tsconfig
+- [x] MCP server entrypoint using `@modelcontextprotocol/sdk`
+- [x] Tool: `shield_create_vault` — initialize vault with policy
+- [x] Tool: `shield_deposit` / `shield_withdraw` — fund management
+- [x] Tool: `shield_register_agent` — register agent key to vault
+- [x] Tool: `shield_update_policy` — modify spending caps, whitelists
+- [x] Tool: `shield_check_vault` — read vault state (read-only)
+- [x] Tool: `shield_check_spending` — read 24h rolling spend (read-only)
+- [x] Tool: `shield_execute_swap` — compose + send Jupiter swap through vault
+- [x] Tool: `shield_open_position` / `shield_close_position` — Flash Trade perps through vault
+- [x] Tool: `shield_revoke_agent` — kill switch
+- [x] Tool: `shield_reactivate_vault` — unfreeze vault
 
-### C.2 MCP Resources
-- [ ] Resource: `shield://policy` — current policy configuration
-- [ ] Resource: `shield://spending` — live 24h spending state
-- [ ] Resource: `shield://activity` — recent transaction history
+### C.2 MCP Resources ✅
+- [x] Resource: `shield://vault/{address}/policy` — current policy configuration
+- [x] Resource: `shield://vault/{address}/spending` — live 24h spending state
+- [x] Resource: `shield://vault/{address}/activity` — recent transaction history
 
-### C.3 Packaging + Publish
-- [ ] JSON Schema input validation for all tools
-- [ ] Error handling: map `AgentShieldError` codes to human-readable MCP responses
-- [ ] README with Claude Desktop / Cursor configuration examples
-- [ ] Tests for standalone mode
+### C.3 Packaging + Publish ✅
+- [x] JSON Schema input validation for all tools (zod schemas)
+- [x] Error handling: map all 28 `AgentShieldError` codes to human-readable MCP responses
+- [x] README with Claude Desktop / Cursor configuration examples
+- [x] Tests for standalone mode (78 tests)
 - [ ] Publish `@agent-shield/mcp` to npm
 
 ### C.4 Proxy Mode (follow-up, after C.1-C.3 shipped)

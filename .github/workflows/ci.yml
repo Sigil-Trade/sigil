@@ -2,9 +2,9 @@
 #
 # Runs on every push to main and on pull requests.
 # Three parallel jobs:
-#   1. build-lint-test  — TypeScript builds, Prettier, wrapper tests (49 tests)
+#   1. build-lint-test  — TypeScript builds, Prettier, wrapper + plugin + MCP tests
 #   2. rust-checks      — cargo fmt + cargo clippy
-#   3. on-chain-tests   — Anchor build + solana-test-validator + 57 on-chain tests
+#   3. on-chain-tests   — Anchor build + solana-test-validator + 56 on-chain tests
 
 name: CI
 
@@ -69,6 +69,10 @@ jobs:
         working-directory: plugins/elizaos
         run: pnpm test
 
+      - name: MCP server tests (78 tests)
+        working-directory: packages/mcp
+        run: pnpm test
+
   # ──────────────────────────────────────────────────────────────
   # Job 2: Rust formatting and linting
   # ──────────────────────────────────────────────────────────────
@@ -115,7 +119,7 @@ jobs:
   # Job 3: On-chain tests (requires Anchor + Solana validator)
   # ──────────────────────────────────────────────────────────────
   on-chain-tests:
-    name: On-Chain Tests (57 tests)
+    name: On-Chain Tests (56 tests)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

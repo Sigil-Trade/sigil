@@ -282,7 +282,7 @@ describe("flash-trade-integration", () => {
       2_000_000_000 // 2000 USDC
     );
 
-    await program.methods
+    const depositSig = await program.methods
       .depositFunds(new BN(1_000_000_000)) // 1000 USDC
       .accountsPartial({
         owner: owner.publicKey,
@@ -295,6 +295,11 @@ describe("flash-trade-integration", () => {
         systemProgram: SystemProgram.programId,
       })
       .rpc();
+
+    // Wait for confirmed commitment — Anchor's default "processed" commitment
+    // can race with simulateTransaction's "confirmed" commitment, causing
+    // AccountNotInitialized (3012) when the ATA isn't visible yet.
+    await connection.confirmTransaction(depositSig, "confirmed");
   });
 
   // =========================================================================
