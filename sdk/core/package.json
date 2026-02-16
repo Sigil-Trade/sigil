@@ -1,6 +1,6 @@
 {
   "name": "@agent-shield/core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Pure TypeScript policy engine for AI agent spending controls — zero blockchain dependencies",
   "main": "dist/index.js",
   "module": "dist/index.js",

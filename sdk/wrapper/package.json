@@ -1,6 +1,6 @@
 {
   "name": "@agent-shield/solana",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Client-side spending controls for Solana AI agents. Three lines of code.",
   "main": "dist/index.js",
   "module": "dist/index.js",
