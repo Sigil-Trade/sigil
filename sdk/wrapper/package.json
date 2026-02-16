@@ -1,0 +1,54 @@
+{
+  "name": "@agent-shield/solana",
+  "version": "0.1.0",
+  "description": "Client-side spending controls for Solana AI agents. Three lines of code.",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build",
+    "test": "mocha --require ts-node/register tests/**/*.test.ts --timeout 30000"
+  },
+  "dependencies": {
+    "@solana/web3.js": "^1.95.0",
+    "@solana/spl-token": "^0.4.0"
+  },
+  "peerDependencies": {
+    "@agent-shield/sdk": "^0.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@agent-shield/sdk": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/chai": "^4.3.11",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20.11.0",
+    "chai": "^4.4.1",
+    "mocha": "^10.3.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  },
+  "keywords": [
+    "solana",
+    "ai-agent",
+    "spending-controls",
+    "wallet-wrapper",
+    "defi",
+    "security"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/agentshield/agent-middleware",
+    "directory": "sdk/wrapper"
+  }
+}
