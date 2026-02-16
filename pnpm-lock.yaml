@@ -86,6 +86,12 @@ importers:
         specifier: ^5.3.0
         version: 5.9.3
 
+  sdk/core:
+    devDependencies:
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.3
+
   sdk/typescript:
     dependencies:
       '@coral-xyz/anchor':
@@ -111,6 +117,9 @@ importers:
 
   sdk/wrapper:
     dependencies:
+      '@agent-shield/core':
+        specifier: workspace:*
+        version: link:../core
       '@agent-shield/sdk':
         specifier: ^0.1.0
         version: 0.1.4(@coral-xyz/anchor@0.32.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10))(@solana/web3.js@1.98.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10))(bufferutil@4.1.0)(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.9.3)(utf-8-validate@5.0.10)

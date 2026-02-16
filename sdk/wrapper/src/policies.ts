@@ -1,8 +1,11 @@
 import { PublicKey } from "@solana/web3.js";
-import { KNOWN_TOKENS } from "./registry";
-import { ShieldConfigError } from "./errors";
+import * as Core from "@agent-shield/core";
 
-/** Policy configuration for the shield wrapper */
+// Re-export core types that don't need Solana adaptation
+export type { RateLimitConfig, PolicyCheckResult } from "@agent-shield/core";
+export { DEFAULT_POLICIES, parseSpendLimit } from "@agent-shield/core";
+
+/** Policy configuration for the shield wrapper (accepts PublicKey or string) */
 export interface ShieldPolicies {
   /** Maximum spend per rolling 24h window, per token. e.g. "500 USDC/day" or { mint, amount } */
   maxSpend?: SpendLimit | SpendLimit[] | string | string[];
@@ -15,9 +18,9 @@ export interface ShieldPolicies {
   /** Block unknown (unregistered) program IDs. Default: true */
   blockUnknownPrograms?: boolean;
   /** Maximum transactions per time window */
-  rateLimit?: RateLimitConfig;
+  rateLimit?: Core.RateLimitConfig;
   /** Custom policy evaluation hook — runs AFTER built-in checks */
-  customCheck?: (analysis: TransactionAnalysis) => PolicyCheckResult;
+  customCheck?: (analysis: TransactionAnalysis) => Core.PolicyCheckResult;
 }
 
 export interface SpendLimit {
@@ -27,19 +30,6 @@ export interface SpendLimit {
   amount: bigint;
   /** Window duration in milliseconds. Default: 86_400_000 (24h) */
   windowMs?: number;
-}
-
-export interface RateLimitConfig {
-  /** Max number of transactions in the window */
-  maxTransactions: number;
-  /** Window duration in milliseconds. Default: 3_600_000 (1 hour) */
-  windowMs?: number;
-}
-
-/** Result from a custom policy check */
-export interface PolicyCheckResult {
-  allowed: boolean;
-  reason?: string;
 }
 
 /** Analysis of a transaction's contents, passed to policy engine and custom checks */
@@ -61,185 +51,85 @@ export interface TokenTransfer {
   destination?: PublicKey;
 }
 
-/** Default secure policies — applied when shield() is called with no config */
-export const DEFAULT_POLICIES: Required<
-  Pick<ShieldPolicies, "blockUnknownPrograms" | "rateLimit">
-> & { maxSpend: SpendLimit[] } = {
-  maxSpend: [
-    {
-      // 1000 USDC/day default cap
-      mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-      amount: BigInt(1_000_000_000), // 1000 * 10^6
-      windowMs: 86_400_000,
-    },
-    {
-      // 1000 USDT/day default cap
-      mint: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
-      amount: BigInt(1_000_000_000),
-      windowMs: 86_400_000,
-    },
-    {
-      // 10 SOL/day default cap
-      mint: "So11111111111111111111111111111111111111112",
-      amount: BigInt(10_000_000_000), // 10 * 10^9
-      windowMs: 86_400_000,
-    },
-  ],
-  blockUnknownPrograms: true,
-  rateLimit: {
-    maxTransactions: 60,
-    windowMs: 3_600_000, // 1 hour
-  },
-};
-
-const WINDOW_ALIASES: Record<string, number> = {
-  "/day": 86_400_000,
-  "/hour": 3_600_000,
-  "/hr": 3_600_000,
-  "/min": 60_000,
-  "/minute": 60_000,
-};
-
-/**
- * Parse a human-readable spend limit string like "500 USDC/day" into a SpendLimit.
- *
- * Supported formats:
- * - "500 USDC/day"
- * - "10 SOL/hour"
- * - "1000 USDT/day"
- */
-export function parseSpendLimit(input: string): SpendLimit {
-  const trimmed = input.trim();
-
-  // Match pattern: "<amount> <symbol>/<window>"
-  const match = trimmed.match(/^(\d+(?:\.\d+)?)\s+(\w+)(\/\w+)?$/);
-  if (!match) {
-    throw new ShieldConfigError(
-      `Invalid spend limit format: "${input}". Expected format: "500 USDC/day"`,
-    );
-  }
-
-  const [, amountStr, symbol, windowStr] = match;
-  const windowMs = windowStr ? WINDOW_ALIASES[windowStr] : 86_400_000;
-  if (windowStr && !windowMs) {
-    throw new ShieldConfigError(
-      `Unknown time window: "${windowStr}". Supported: /day, /hour, /hr, /min, /minute`,
-    );
-  }
-
-  // Find token by symbol
-  let foundMint: string | undefined;
-  let foundDecimals: number | undefined;
-  for (const [mint, info] of KNOWN_TOKENS) {
-    if (info.symbol.toUpperCase() === symbol.toUpperCase()) {
-      foundMint = mint;
-      foundDecimals = info.decimals;
-      break;
-    }
-  }
-
-  if (!foundMint || foundDecimals === undefined) {
-    throw new ShieldConfigError(
-      `Unknown token symbol: "${symbol}". Use a known token (USDC, USDT, SOL, wBTC, wETH, mSOL, jitoSOL, bSOL) or pass a SpendLimit object with the mint address.`,
-    );
-  }
-
-  const amountFloat = parseFloat(amountStr);
-  const amountNative = BigInt(Math.round(amountFloat * 10 ** foundDecimals));
-
-  return {
-    mint: foundMint,
-    amount: amountNative,
-    windowMs,
-  };
+/** Internal resolved policy representation (extends core with customCheck) */
+export interface ResolvedPolicies extends Core.ResolvedPolicies {
+  customCheck:
+    | ((analysis: TransactionAnalysis) => Core.PolicyCheckResult)
+    | undefined;
 }
 
 /**
  * Normalize user-provided policies into a resolved internal format.
- * Handles string parsing, defaults, and validation.
+ * Handles PublicKey → string conversion, string parsing, defaults, and validation.
  */
 export function resolvePolicies(input?: ShieldPolicies): ResolvedPolicies {
-  const resolved: ResolvedPolicies = {
-    spendLimits: [...DEFAULT_POLICIES.maxSpend],
-    maxTransactionSize: undefined,
-    allowedProtocols: undefined,
-    allowedTokens: undefined,
-    blockUnknownPrograms: DEFAULT_POLICIES.blockUnknownPrograms,
-    rateLimit: {
-      maxTransactions: DEFAULT_POLICIES.rateLimit.maxTransactions,
-      windowMs: DEFAULT_POLICIES.rateLimit.windowMs ?? 3_600_000,
-    },
-    customCheck: undefined,
+  // Convert Solana-aware input to core format
+  const coreInput: Core.ShieldPolicies | undefined = input
+    ? {
+        maxSpend: input.maxSpend !== undefined
+          ? convertSpendLimits(input.maxSpend)
+          : undefined,
+        maxTransactionSize: input.maxTransactionSize,
+        allowedProtocols: input.allowedProtocols?.map((p) =>
+          typeof p === "string" ? p : p.toBase58(),
+        ),
+        allowedTokens: input.allowedTokens?.map((t) =>
+          typeof t === "string" ? t : t.toBase58(),
+        ),
+        blockUnknownPrograms: input.blockUnknownPrograms,
+        rateLimit: input.rateLimit,
+      }
+    : undefined;
+
+  const coreResolved = Core.resolvePolicies(coreInput);
+
+  return {
+    ...coreResolved,
+    customCheck: input?.customCheck ?? undefined,
   };
-
-  if (!input) return resolved;
-
-  // Parse spend limits
-  if (input.maxSpend !== undefined) {
-    const limits = Array.isArray(input.maxSpend)
-      ? input.maxSpend
-      : [input.maxSpend];
-    resolved.spendLimits = limits.map((l) =>
-      typeof l === "string" ? parseSpendLimit(l) : l,
-    );
-  }
-
-  // Max transaction size
-  if (input.maxTransactionSize !== undefined) {
-    resolved.maxTransactionSize =
-      typeof input.maxTransactionSize === "string"
-        ? parseSpendLimit(input.maxTransactionSize).amount
-        : input.maxTransactionSize;
-  }
-
-  // Allowed protocols
-  if (input.allowedProtocols !== undefined) {
-    resolved.allowedProtocols = new Set(
-      input.allowedProtocols.map((p) =>
-        typeof p === "string" ? p : p.toBase58(),
-      ),
-    );
-  }
-
-  // Allowed tokens
-  if (input.allowedTokens !== undefined) {
-    resolved.allowedTokens = new Set(
-      input.allowedTokens.map((t) =>
-        typeof t === "string" ? t : t.toBase58(),
-      ),
-    );
-  }
-
-  // Block unknown programs
-  if (input.blockUnknownPrograms !== undefined) {
-    resolved.blockUnknownPrograms = input.blockUnknownPrograms;
-  }
-
-  // Rate limit
-  if (input.rateLimit !== undefined) {
-    resolved.rateLimit = {
-      maxTransactions: input.rateLimit.maxTransactions,
-      windowMs: input.rateLimit.windowMs ?? 3_600_000,
-    };
-  }
-
-  // Custom check
-  if (input.customCheck) {
-    resolved.customCheck = input.customCheck;
-  }
-
-  return resolved;
 }
 
-/** Internal resolved policy representation */
-export interface ResolvedPolicies {
-  spendLimits: SpendLimit[];
-  maxTransactionSize: bigint | undefined;
-  allowedProtocols: Set<string> | undefined;
-  allowedTokens: Set<string> | undefined;
-  blockUnknownPrograms: boolean;
-  rateLimit: Required<RateLimitConfig>;
-  customCheck:
-    | ((analysis: TransactionAnalysis) => PolicyCheckResult)
-    | undefined;
+/** Convert wrapper SpendLimit (PublicKey | string mint) to core SpendLimit (string mint) */
+function convertSpendLimits(
+  input: SpendLimit | SpendLimit[] | string | string[],
+): Core.SpendLimit | Core.SpendLimit[] | string | string[] {
+  if (typeof input === "string") return input;
+  if (Array.isArray(input)) {
+    // Check if all elements are strings
+    if (input.every((l): l is string => typeof l === "string")) {
+      return input;
+    }
+    // Otherwise convert each element to Core.SpendLimit
+    return (input as (SpendLimit | string)[]).map((l): Core.SpendLimit => {
+      if (typeof l === "string") return Core.parseSpendLimit(l);
+      return {
+        mint: typeof l.mint === "string" ? l.mint : l.mint.toBase58(),
+        amount: l.amount,
+        windowMs: l.windowMs,
+      };
+    });
+  }
+  return {
+    mint: typeof input.mint === "string" ? input.mint : input.mint.toBase58(),
+    amount: input.amount,
+    windowMs: input.windowMs,
+  };
+}
+
+/**
+ * Convert wrapper TransactionAnalysis (PublicKey-based) to core format (string-based).
+ */
+export function toCoreAnalysis(
+  analysis: TransactionAnalysis,
+): Core.TransactionAnalysis {
+  return {
+    programIds: analysis.programIds.map((p) => p.toBase58()),
+    transfers: analysis.transfers.map((t) => ({
+      mint: t.mint.toBase58(),
+      amount: t.amount,
+      direction: t.direction,
+      destination: t.destination?.toBase58(),
+    })),
+    estimatedValueLamports: analysis.estimatedValueLamports,
+  };
 }

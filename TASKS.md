@@ -241,10 +241,10 @@
 | Suite | File | Tests |
 |-------|------|-------|
 | Core (Phase 1) | `tests/agent-shield.ts` | 39 |
-| Jupiter (Phase 2) | `tests/jupiter-integration.ts` | 8 |
+| Jupiter (Phase 2) | `tests/jupiter-integration.ts` | 9 |
 | Flash Trade (Phase 3) | `tests/flash-trade-integration.ts` | 9 |
 | Wrapper SDK (Phase A) | `sdk/wrapper/tests/wrapper.test.ts` | 41 |
-| **Total** | | **97** |
+| **Total** | | **98** |
 
 ---
 
@@ -336,20 +336,20 @@
 - [x] Remove `yarn.lock`, generate `pnpm-lock.yaml`
 - [x] Shared `tsconfig.base.json` for all TypeScript packages
 - [x] Fix integration tests (sync with dual fee model: `developer_fee_rate`, `protocolTreasuryTokenAccount`, `.accountsPartial()`)
-- [x] **Gate: 97 tests passing (39 core + 8 Jupiter + 9 Flash Trade + 41 wrapper)**
+- [x] **Gate: 98 tests passing (39 core + 9 Jupiter + 9 Flash Trade + 41 wrapper)**
 
 > **Ship 0.1 as its own PR before starting 0.2.** pnpm migration touches every lockfile and build script — keep the blast radius small and bisectable.
 
-### 0.2 Extract `@agent-shield/core`
-- [ ] Scaffold `sdk/core/` with package.json (`@agent-shield/core`), tsconfig
-- [ ] Zero Solana dependencies — pure TypeScript policy engine
-- [ ] Move from `sdk/wrapper/src/`: `engine.ts`, `policies.ts`, `state.ts`, `errors.ts`, `registry.ts`
-- [ ] `@agent-shield/solana` imports policy engine from `@agent-shield/core`
+### 0.2 Extract `@agent-shield/core` ✅
+- [x] Scaffold `sdk/core/` with package.json (`@agent-shield/core`), tsconfig
+- [x] Zero Solana dependencies — pure TypeScript policy engine
+- [x] Move from `sdk/wrapper/src/`: `engine.ts`, `policies.ts`, `state.ts`, `errors.ts`, `registry.ts`
+- [x] `@agent-shield/solana` imports policy engine from `@agent-shield/core`
 - [ ] `@agent-shield/sdk` can optionally import shared types from `@agent-shield/core`
-- [ ] Update all internal imports and verify builds
+- [x] Update all internal imports and verify builds
 - [ ] Publish `@agent-shield/core` to npm (required before `@agent-shield/solana` can depend on it externally)
 - [ ] Publish `@agent-shield/solana` to npm (was never published — A.5 TODO)
-- [ ] **Gate: verify all 97 tests still pass before merging**
+- [x] **Gate: 98 tests still pass (39 core + 9 Jupiter + 9 Flash Trade + 41 wrapper)**
 
 > **Ship 0.2 as its own PR after 0.1 lands.** Core extraction rewrites every import path in the wrapper — don't combine with the pnpm migration.
 

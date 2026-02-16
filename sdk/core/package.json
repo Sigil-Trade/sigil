@@ -1,0 +1,33 @@
+{
+  "name": "@agent-shield/core",
+  "version": "0.1.0",
+  "description": "Pure TypeScript policy engine for AI agent spending controls — zero blockchain dependencies",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  },
+  "keywords": [
+    "ai-agent",
+    "spending-controls",
+    "policy-engine",
+    "security"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/agentshield/agent-middleware",
+    "directory": "sdk/core"
+  }
+}

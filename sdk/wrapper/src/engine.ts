@@ -1,7 +1,10 @@
-import { PublicKey } from "@solana/web3.js";
-import { PolicyViolation, ShieldDeniedError } from "./errors";
-import { ResolvedPolicies, TransactionAnalysis } from "./policies";
-import { isSystemProgram, isKnownProtocol, getTokenInfo } from "./registry";
+import {
+  evaluatePolicy as coreEvaluatePolicy,
+  recordTransaction as coreRecordTransaction,
+} from "@agent-shield/core";
+import type { PolicyViolation } from "@agent-shield/core";
+import { ShieldDeniedError } from "./errors";
+import { ResolvedPolicies, TransactionAnalysis, toCoreAnalysis } from "./policies";
 import { ShieldState } from "./state";
 
 /**
@@ -13,29 +16,15 @@ export function evaluatePolicy(
   policies: ResolvedPolicies,
   state: ShieldState,
 ): PolicyViolation[] {
-  const violations: PolicyViolation[] = [];
+  const coreAnalysis = toCoreAnalysis(analysis);
+  const violations = coreEvaluatePolicy(coreAnalysis, policies, state);
 
-  // 1. Check protocol allowlist / unknown program blocking
-  checkPrograms(analysis, policies, violations);
-
-  // 2. Check token allowlist
-  checkTokens(analysis, policies, violations);
-
-  // 3. Check spending caps
-  checkSpendingCaps(analysis, policies, state, violations);
-
-  // 4. Check per-transaction size limit
-  checkTransactionSize(analysis, policies, violations);
-
-  // 5. Check rate limit
-  checkRateLimit(policies, state, violations);
-
-  // 6. Run custom check if provided
+  // Handle wrapper-specific customCheck (receives PublicKey-based analysis)
   if (policies.customCheck) {
     const result = policies.customCheck(analysis);
     if (!result.allowed) {
       violations.push({
-        rule: "unknown_program", // closest match
+        rule: "unknown_program",
         message: result.reason ?? "Blocked by custom policy check",
         suggestion: "Review the custom policy configuration.",
       });
@@ -66,187 +55,6 @@ export function recordTransaction(
   analysis: TransactionAnalysis,
   state: ShieldState,
 ): void {
-  // Record each outgoing transfer
-  for (const transfer of analysis.transfers) {
-    if (transfer.direction === "outgoing") {
-      const mintKey =
-        transfer.mint.equals(PublicKey.default)
-          ? "unknown"
-          : transfer.mint.toBase58();
-      state.recordSpend(mintKey, transfer.amount);
-    }
-  }
-
-  // Record the transaction for rate limiting
-  state.recordTransaction();
-}
-
-// --- Internal check functions ---
-
-function checkPrograms(
-  analysis: TransactionAnalysis,
-  policies: ResolvedPolicies,
-  violations: PolicyViolation[],
-): void {
-  for (const programId of analysis.programIds) {
-    const key = programId.toBase58();
-
-    // System programs are always allowed
-    if (isSystemProgram(key)) continue;
-
-    // If explicit allowlist is set, only those protocols are allowed
-    if (policies.allowedProtocols) {
-      if (!policies.allowedProtocols.has(key)) {
-        violations.push({
-          rule: "protocol_not_allowed",
-          message: `Protocol ${key} is not in the allowlist`,
-          suggestion:
-            "Add this protocol to allowedProtocols in your shield config.",
-          details: { programId },
-        });
-      }
-      continue;
-    }
-
-    // If blockUnknownPrograms is set, block unregistered protocols
-    if (policies.blockUnknownPrograms && !isKnownProtocol(key)) {
-      violations.push({
-        rule: "unknown_program",
-        message: `Unknown program ${key} — not in the known protocol registry`,
-        suggestion:
-          'Add this program ID to allowedProtocols or set blockUnknownPrograms: false.',
-        details: { programId },
-      });
-    }
-  }
-}
-
-function checkTokens(
-  analysis: TransactionAnalysis,
-  policies: ResolvedPolicies,
-  violations: PolicyViolation[],
-): void {
-  if (!policies.allowedTokens) return;
-
-  for (const transfer of analysis.transfers) {
-    if (transfer.direction !== "outgoing") continue;
-    if (transfer.mint.equals(PublicKey.default)) continue;
-
-    const mintKey = transfer.mint.toBase58();
-    if (!policies.allowedTokens.has(mintKey)) {
-      const tokenInfo = getTokenInfo(mintKey);
-      violations.push({
-        rule: "token_not_allowed",
-        message: `Token ${tokenInfo?.symbol ?? mintKey} is not in the allowed token list`,
-        suggestion: "Add this token mint to allowedTokens in your shield config.",
-        details: { tokenMint: transfer.mint },
-      });
-    }
-  }
-}
-
-function checkSpendingCaps(
-  analysis: TransactionAnalysis,
-  policies: ResolvedPolicies,
-  state: ShieldState,
-  violations: PolicyViolation[],
-): void {
-  for (const limit of policies.spendLimits) {
-    const mintKey = typeof limit.mint === "string" ? limit.mint : limit.mint.toBase58();
-    const windowMs = limit.windowMs ?? 86_400_000;
-
-    // Sum outgoing transfers for this token in this transaction
-    let txSpend = BigInt(0);
-    for (const transfer of analysis.transfers) {
-      if (transfer.direction !== "outgoing") continue;
-      const transferMint = transfer.mint.equals(PublicKey.default)
-        ? "unknown"
-        : transfer.mint.toBase58();
-      if (transferMint === mintKey) {
-        txSpend += transfer.amount;
-      }
-    }
-
-    if (txSpend === BigInt(0)) continue;
-
-    // Check against rolling window
-    const currentSpend = state.getSpendInWindow(mintKey, windowMs);
-    const totalAfterTx = currentSpend + txSpend;
-
-    if (totalAfterTx > limit.amount) {
-      const tokenInfo = getTokenInfo(mintKey);
-      const symbol = tokenInfo?.symbol ?? "tokens";
-      const decimals = tokenInfo?.decimals ?? 0;
-      const remaining =
-        limit.amount > currentSpend ? limit.amount - currentSpend : BigInt(0);
-
-      violations.push({
-        rule: "spending_cap",
-        message: `Spending cap exceeded for ${symbol}: attempting ${formatAmount(txSpend, decimals)}, limit ${formatAmount(limit.amount, decimals)}, already spent ${formatAmount(currentSpend, decimals)}`,
-        suggestion: `Reduce the transaction amount to ${formatAmount(remaining, decimals)} ${symbol} or wait for the spending window to roll over.`,
-        details: {
-          limit: limit.amount,
-          attempted: txSpend,
-          remaining,
-          tokenMint: new PublicKey(mintKey),
-        },
-      });
-    }
-  }
-}
-
-function checkTransactionSize(
-  analysis: TransactionAnalysis,
-  policies: ResolvedPolicies,
-  violations: PolicyViolation[],
-): void {
-  if (!policies.maxTransactionSize) return;
-
-  if (analysis.estimatedValueLamports > policies.maxTransactionSize) {
-    violations.push({
-      rule: "transaction_size",
-      message: `Transaction value ${analysis.estimatedValueLamports} exceeds max transaction size ${policies.maxTransactionSize}`,
-      suggestion:
-        "Split this into smaller transactions or increase maxTransactionSize.",
-      details: {
-        limit: policies.maxTransactionSize,
-        attempted: analysis.estimatedValueLamports,
-      },
-    });
-  }
-}
-
-function checkRateLimit(
-  policies: ResolvedPolicies,
-  state: ShieldState,
-  violations: PolicyViolation[],
-): void {
-  const { maxTransactions, windowMs } = policies.rateLimit;
-  const count = state.getTransactionCountInWindow(windowMs);
-
-  if (count >= maxTransactions) {
-    const windowDesc =
-      windowMs >= 3_600_000
-        ? `${windowMs / 3_600_000}h`
-        : `${windowMs / 60_000}min`;
-    violations.push({
-      rule: "rate_limit",
-      message: `Rate limit exceeded: ${count}/${maxTransactions} transactions in the last ${windowDesc}`,
-      suggestion: `Wait for the rate limit window to reset or increase rateLimit.maxTransactions.`,
-    });
-  }
-}
-
-/** Format a token amount with decimals for display */
-function formatAmount(amount: bigint, decimals: number): string {
-  if (decimals === 0) return amount.toString();
-
-  const divisor = BigInt(10 ** decimals);
-  const whole = amount / divisor;
-  const frac = amount % divisor;
-
-  if (frac === BigInt(0)) return whole.toString();
-
-  const fracStr = frac.toString().padStart(decimals, "0").replace(/0+$/, "");
-  return `${whole}.${fracStr}`;
+  const coreAnalysis = toCoreAnalysis(analysis);
+  coreRecordTransaction(coreAnalysis, state);
 }

@@ -2,7 +2,7 @@
 export { shield } from "./shield";
 export type { ShieldedWallet, WalletLike, ShieldOptions } from "./shield";
 
-// Policy configuration
+// Policy configuration (wrapper types — accepts PublicKey | string)
 export type {
   ShieldPolicies,
   SpendLimit,
@@ -13,14 +13,14 @@ export type {
 } from "./policies";
 export { parseSpendLimit, resolvePolicies, DEFAULT_POLICIES } from "./policies";
 
-// Errors
+// Errors (re-exported from @agent-shield/core)
 export { ShieldDeniedError, ShieldConfigError } from "./errors";
 export type { PolicyViolation } from "./errors";
 
-// Transaction inspection
+// Transaction inspection (Solana-specific)
 export { analyzeTransaction, getNonSystemProgramIds } from "./inspector";
 
-// Protocol & token registry
+// Protocol & token registry (wrapper versions — accept PublicKey | string)
 export {
   KNOWN_PROTOCOLS,
   KNOWN_TOKENS,
@@ -31,11 +31,11 @@ export {
   isKnownProtocol,
 } from "./registry";
 
-// Client-side state
+// Client-side state (re-exported from @agent-shield/core)
 export { ShieldState } from "./state";
 export type { ShieldStorage } from "./state";
 
-// Policy engine
+// Policy engine (wrapper versions — accept PublicKey-based TransactionAnalysis)
 export { evaluatePolicy, enforcePolicy } from "./engine";
 
 // On-chain upgrade (optional — requires @agent-shield/sdk)
