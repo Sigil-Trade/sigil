@@ -1,6 +1,6 @@
 import * as path from "path";
 import { LiteSVM, Clock } from "litesvm";
-import { fromWorkspace, LiteSVMProvider } from "anchor-litesvm";
+import { LiteSVMProvider } from "anchor-litesvm";
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { AgentShield } from "../../target/types/agent_shield";
@@ -28,16 +28,30 @@ const IDL = require("../../target/idl/agent_shield.json");
 // Resolve workspace root relative to this file (tests/helpers/ → project root)
 const WORKSPACE_ROOT = path.resolve(__dirname, "../..");
 
+const PROGRAM_ID = new PublicKey(
+  "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL"
+);
+
 /**
  * Create and return a fully configured LiteSVM test environment.
- * Loads the program from the workspace and sets up a provider + program.
+ *
+ * We create LiteSVM directly (instead of using anchor-litesvm's fromWorkspace)
+ * to ensure all native objects (LiteSVM, Clock) come from the same NAPI addon
+ * instance. pnpm can isolate anchor-litesvm's litesvm copy into a separate
+ * native binary, and passing Clock objects across addon boundaries causes
+ * std::bad_alloc on Linux.
  */
 export function createTestEnv(): {
   svm: LiteSVM;
   provider: LiteSVMProvider;
   program: Program<AgentShield>;
 } {
-  const svm = fromWorkspace(WORKSPACE_ROOT);
+  const svm = new LiteSVM();
+  const programSoPath = path.join(
+    WORKSPACE_ROOT,
+    "target/deploy/agent_shield.so"
+  );
+  svm.addProgramFromFile(PROGRAM_ID, programSoPath);
   // Disable transaction history to allow duplicate transaction patterns
   // (authorize+finalize cycles reuse same session PDA)
   svm.withTransactionHistory(BigInt(0));
