@@ -168,35 +168,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Create test keypair
-        run: solana-keygen new --no-bip39-passphrase --silent
-
       - name: Build program
         run: anchor build --no-idl
 
-      - name: Run on-chain tests
+      - name: Run on-chain tests (LiteSVM)
         run: |
-          # Ensure ledger parent directory exists (.anchor/ is gitignored)
-          mkdir -p .anchor/test-ledger
-
-          # Start test validator with the built program
-          solana-test-validator \
-            --ledger .anchor/test-ledger \
-            --rpc-port 8899 \
-            --bpf-program 4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL target/deploy/agent_shield.so \
-            --reset \
-            --quiet &
-
-          # Wait for validator to be ready
-          sleep 10
-
-          # Run tests (excluding devnet-smoke.ts which requires devnet)
-          ANCHOR_PROVIDER_URL=http://localhost:8899 \
-          ANCHOR_WALLET=~/.config/solana/id.json \
-            npx ts-mocha -p ./tsconfig.json -t 1000000 \
-              tests/agent-shield.ts \
-              tests/jupiter-integration.ts \
-              tests/flash-trade-integration.ts
-
-          # Clean up
-          pkill -f solana-test-validator || true
+          npx ts-mocha -p ./tsconfig.json -t 300000 \
+            tests/agent-shield.ts \
+            tests/jupiter-integration.ts \
+            tests/flash-trade-integration.ts
