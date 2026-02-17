@@ -33,6 +33,9 @@ importers:
       chai:
         specifier: ^4.4.1
         version: 4.5.0
+      litesvm:
+        specifier: ^0.5.0
+        version: 0.5.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)
       mocha:
         specifier: ^10.3.0
         version: 10.8.2
@@ -2068,6 +2071,46 @@ packages:
         optional: true
       openai:
         optional: true
+
+  litesvm-darwin-arm64@0.5.0:
+    resolution: {integrity: sha512-XaY+97QvKofOqs9n4vlEtqFEsDDYjzOiAAtYjhtO0iwhleaNE/dMiFMWneeiZ66iL9jhkSpJtF1rv9IIOoXdyA==}
+    engines: {node: '>= 20'}
+    cpu: [arm64]
+    os: [darwin]
+
+  litesvm-darwin-x64@0.5.0:
+    resolution: {integrity: sha512-W3igCDMOJjG4cApeWM7mNlxuV1uXzhQG/+aq2seCtcEqsoSw32aQ+5I9uXxEpRAJzAiCkqxt+CPwauINGOs9qw==}
+    engines: {node: '>= 20'}
+    cpu: [x64]
+    os: [darwin]
+
+  litesvm-linux-arm64-gnu@0.5.0:
+    resolution: {integrity: sha512-nBvr6fdwi6vb6lJDVqnQGA76D6wMOXXVsLUw8jK+WMeQRM2dP4tV2iZ+XwU7EhXm1TGbrnraAgG4C6xcAUKnEQ==}
+    engines: {node: '>= 20'}
+    cpu: [arm64]
+    os: [linux]
+
+  litesvm-linux-arm64-musl@0.5.0:
+    resolution: {integrity: sha512-VmFDAa1SlkjOTQOrXFlVDdCAPD8OBOWbBOy8LMGri0lhm/UrGvO14Qa2bSc0PtRrFEih6QyIZVjLTcmZnvVvPA==}
+    engines: {node: '>= 20'}
+    cpu: [arm64]
+    os: [linux]
+
+  litesvm-linux-x64-gnu@0.5.0:
+    resolution: {integrity: sha512-W8IIBVlLSBN5RkM88292TImBmYmDMgiYGecin6Qan+dRsBxUffFjRSFHgZRzJQ6X7pfhjlXI6kzuqwsZYchUHA==}
+    engines: {node: '>= 20'}
+    cpu: [x64]
+    os: [linux]
+
+  litesvm-linux-x64-musl@0.5.0:
+    resolution: {integrity: sha512-MECozYJjeEiuAEv04FucrFCA0ivdIxisuiK7Fxzx5uSda0W6AieuDx6rnkMXXTgEsR3PKQUA18KmHR93CN1cdw==}
+    engines: {node: '>= 20'}
+    cpu: [x64]
+    os: [linux]
+
+  litesvm@0.5.0:
+    resolution: {integrity: sha512-lo/W4FcTdUGksuStmdGvRpB6lLRKB5qlvJdMwkGBnOzpIcApHxrvNosHmde4tk9lpWn4ICqW55OYDrSs258bXA==}
+    engines: {node: '>= 20'}
 
   locate-character@3.0.0:
     resolution: {integrity: sha512-SW13ws7BjaeJ6p7Q6CO2nchbYEc3X3J6WrmTTDto7yMPqVSZTUyY5Tjbid+Ab8gLnATtygYtiDIJGQRRn2ZOiA==}
@@ -5461,6 +5504,41 @@ snapshots:
     optionalDependencies:
       '@opentelemetry/api': 1.9.0
       openai: 5.23.2(ws@8.19.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod@3.25.76)
+
+  litesvm-darwin-arm64@0.5.0:
+    optional: true
+
+  litesvm-darwin-x64@0.5.0:
+    optional: true
+
+  litesvm-linux-arm64-gnu@0.5.0:
+    optional: true
+
+  litesvm-linux-arm64-musl@0.5.0:
+    optional: true
+
+  litesvm-linux-x64-gnu@0.5.0:
+    optional: true
+
+  litesvm-linux-x64-musl@0.5.0:
+    optional: true
+
+  litesvm@0.5.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10):
+    dependencies:
+      '@solana/web3.js': 1.98.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)
+      fastestsmallesttextencoderdecoder: 1.0.22
+    optionalDependencies:
+      litesvm-darwin-arm64: 0.5.0
+      litesvm-darwin-x64: 0.5.0
+      litesvm-linux-arm64-gnu: 0.5.0
+      litesvm-linux-arm64-musl: 0.5.0
+      litesvm-linux-x64-gnu: 0.5.0
+      litesvm-linux-x64-musl: 0.5.0
+    transitivePeerDependencies:
+      - bufferutil
+      - encoding
+      - typescript
+      - utf-8-validate
 
   locate-character@3.0.0: {}
 

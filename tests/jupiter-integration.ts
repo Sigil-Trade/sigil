@@ -15,11 +15,7 @@ import {
 import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
-  createMint,
-  createAssociatedTokenAccount,
-  mintTo,
   getAssociatedTokenAddressSync,
-  createAssociatedTokenAccountIdempotentInstruction,
 } from "@solana/spl-token";
 import { expect } from "chai";
 import BN from "bn.js";
@@ -27,6 +23,19 @@ import {
   JUPITER_PROGRAM_ID,
   deserializeInstruction,
 } from "../sdk/typescript/src/integrations/jupiter";
+import {
+  createTestEnv,
+  airdropSol,
+  createMintHelper,
+  createAtaHelper,
+  createAtaIdempotentHelper,
+  mintToHelper,
+  getTokenBalance,
+  sendVersionedTx,
+  TestEnv,
+  LiteSVM,
+  FailedTransactionMetadata,
+} from "./helpers/litesvm-setup";
 
 /**
  * Jupiter Integration Tests
@@ -39,14 +48,12 @@ import {
  * finalize_session — we use a no-op TransactionInstruction as a mock swap.
  */
 describe("jupiter-integration", () => {
-  const provider = anchor.AnchorProvider.env();
-  anchor.setProvider(provider);
-
-  const program = anchor.workspace.AgentShield as Program<AgentShield>;
-  const connection = provider.connection;
+  let env: TestEnv;
+  let svm: LiteSVM;
+  let program: Program<AgentShield>;
 
   // Test actors
-  const owner = provider.wallet as anchor.Wallet;
+  let owner: anchor.Wallet;
   const agent = Keypair.generate();
   const feeDestination = Keypair.generate();
 
@@ -90,7 +97,7 @@ describe("jupiter-integration", () => {
   }
 
   /**
-   * Helper: build and send an atomic composed transaction.
+   * Helper: build and send an atomic composed transaction via LiteSVM.
    * [ComputeBudget, ValidateAndAuthorize, mockSwapIx, FinalizeSession]
    */
   async function sendComposedSwap(
@@ -148,64 +155,37 @@ describe("jupiter-integration", () => {
       })
       .instruction();
 
-    // Build versioned transaction
-    const { blockhash, lastValidBlockHeight } =
-      await connection.getLatestBlockhash("confirmed");
-
-    const messageV0 = new TransactionMessage({
-      payerKey: agentKp.publicKey,
-      recentBlockhash: blockhash,
-      instructions: [computeIx, validateIx, mockSwapIx, finalizeIx],
-    }).compileToV0Message();
-
-    const tx = new VersionedTransaction(messageV0);
-    tx.sign([agentKp]);
-
-    // Simulate first to get error logs (sendRawTransaction loses them)
-    const simResult = await connection.simulateTransaction(tx, {
-      commitment: "confirmed",
-    });
-
-    if (simResult.value.err) {
-      const logs = simResult.value.logs || [];
-      const errMsg = logs.join(" ");
-      throw new Error(`SimulationFailed: ${JSON.stringify(simResult.value.err)} Logs: ${errMsg}`);
-    }
-
-    const sig = await connection.sendRawTransaction(tx.serialize(), {
-      skipPreflight: true,
-    });
-    await connection.confirmTransaction(
-      { signature: sig, blockhash, lastValidBlockHeight },
-      "confirmed"
+    // Build and send versioned transaction via LiteSVM
+    return sendVersionedTx(
+      svm,
+      [computeIx, validateIx, mockSwapIx, finalizeIx],
+      agentKp
     );
-    return sig;
   }
 
   before(async () => {
+    env = createTestEnv();
+    svm = env.svm;
+    program = env.program;
+    owner = env.provider.wallet;
+
     // Airdrop to test accounts
-    await Promise.all([
-      connection.requestAirdrop(agent.publicKey, 10 * LAMPORTS_PER_SOL),
-      connection.requestAirdrop(feeDestination.publicKey, 2 * LAMPORTS_PER_SOL),
-    ]).then((sigs) =>
-      Promise.all(sigs.map((sig) => connection.confirmTransaction(sig)))
-    );
+    airdropSol(svm, agent.publicKey, 10 * LAMPORTS_PER_SOL);
+    airdropSol(svm, feeDestination.publicKey, 2 * LAMPORTS_PER_SOL);
 
     // Create USDC-like mint (6 decimals)
-    usdcMint = await createMint(
-      connection,
+    usdcMint = createMintHelper(
+      svm,
       (owner as any).payer,
       owner.publicKey,
-      null,
       6
     );
 
     // Create disallowed token mint
-    solMint = await createMint(
-      connection,
+    solMint = createMintHelper(
+      svm,
       (owner as any).payer,
       owner.publicKey,
-      null,
       9
     );
 
@@ -228,26 +208,15 @@ describe("jupiter-integration", () => {
     );
 
     // Create protocol treasury ATA (needed for fee transfers)
-    // Protocol treasury is an off-curve address, so we need allowOwnerOffCurve=true
-    protocolTreasuryUsdcAta = getAssociatedTokenAddressSync(
+    protocolTreasuryUsdcAta = createAtaIdempotentHelper(
+      svm,
+      (owner as any).payer,
       usdcMint,
       protocolTreasury,
-      true, // allowOwnerOffCurve
+      true
     );
-    const createAtaIx = createAssociatedTokenAccountIdempotentInstruction(
-      (owner as any).payer.publicKey,
-      protocolTreasuryUsdcAta,
-      protocolTreasury,
-      usdcMint,
-    );
-    const ataTx = new Transaction().add(createAtaIx);
-    await provider.sendAndConfirm(ataTx);
 
-    // Initialize vault with:
-    //   daily cap = 500 USDC (500_000_000 lamports)
-    //   max tx size = 200 USDC (200_000_000 lamports)
-    //   allowed tokens = [usdcMint]
-    //   allowed protocols = [jupiterProtocol]
+    // Initialize vault
     await program.methods
       .initializeVault(
         vaultId,
@@ -279,25 +248,25 @@ describe("jupiter-integration", () => {
       .rpc();
 
     // Fund the vault with USDC
-    ownerUsdcAta = await createAssociatedTokenAccount(
-      connection,
+    ownerUsdcAta = createAtaHelper(
+      svm,
       (owner as any).payer,
       usdcMint,
       owner.publicKey
     );
-    await mintTo(
-      connection,
+    mintToHelper(
+      svm,
       (owner as any).payer,
       usdcMint,
       ownerUsdcAta,
       owner.publicKey,
-      1_000_000_000 // 1000 USDC
+      1_000_000_000n // 1000 USDC
     );
 
     // Derive vault ATA and deposit
     vaultUsdcAta = getAssociatedTokenAddressSync(usdcMint, vaultPda, true);
 
-    const depositSig = await program.methods
+    await program.methods
       .depositFunds(new BN(500_000_000)) // 500 USDC
       .accountsPartial({
         owner: owner.publicKey,
@@ -310,11 +279,6 @@ describe("jupiter-integration", () => {
         systemProgram: SystemProgram.programId,
       })
       .rpc();
-
-    // Wait for confirmed commitment — Anchor's default "processed" commitment
-    // can race with simulateTransaction's "confirmed" commitment, causing
-    // AccountNotInitialized (3012) when the ATA isn't visible yet.
-    await connection.confirmTransaction(depositSig, "confirmed");
   });
 
   // =========================================================================
@@ -409,7 +373,9 @@ describe("jupiter-integration", () => {
         await program.account.sessionAuthority.fetch(session);
         expect.fail("Session should not exist after revert");
       } catch (err: any) {
-        expect(err.toString()).to.include("Account does not exist");
+        expect(err.toString()).to.satisfy(
+          (s: string) => s.includes("Account does not exist") || s.includes("Could not find")
+        );
       }
     });
   });
@@ -517,13 +483,10 @@ describe("jupiter-integration", () => {
         .rpc();
 
       // Freeze it
-      const revokeSig = await program.methods
+      await program.methods
         .revokeAgent()
         .accountsPartial({ owner: owner.publicKey, vault: frozenVault })
         .rpc();
-
-      // Wait for confirmation
-      await connection.confirmTransaction(revokeSig, "confirmed");
 
       // Verify frozen immediately
       const checkVault = await program.account.agentVault.fetch(frozenVault);
@@ -618,7 +581,7 @@ describe("jupiter-integration", () => {
 
       // Deposit USDC into rolling vault (needed for protocol fee transfers)
       rollingVaultUsdcAta = getAssociatedTokenAddressSync(usdcMint, rollingVault, true);
-      const depositSig = await program.methods
+      await program.methods
         .depositFunds(new BN(200_000_000)) // 200 USDC
         .accountsPartial({
           owner: owner.publicKey,
@@ -631,12 +594,6 @@ describe("jupiter-integration", () => {
           systemProgram: SystemProgram.programId,
         })
         .rpc();
-
-      // Wait for confirmed commitment — Anchor's default "processed" commitment
-      // can race with simulateTransaction's "confirmed" commitment, causing
-      // AccountNotInitialized (3012) when the ATA isn't visible yet at the
-      // higher commitment level.
-      await connection.confirmTransaction(depositSig, "confirmed");
     });
 
     it("allows multiple swaps under cap, then rejects when exceeded", async () => {
@@ -646,7 +603,6 @@ describe("jupiter-integration", () => {
         agent.publicKey.toString(),
         "Agent should be registered for rolling window vault"
       );
-
 
       // Swap 1: 40 USDC (total: 40 / 100)
       await sendComposedSwap(
@@ -664,9 +620,6 @@ describe("jupiter-integration", () => {
       let tracker = await program.account.spendTracker.fetch(rollingTracker);
       expect(tracker.recentTransactions.length).to.equal(1);
 
-      // Small delay to avoid blockhash expiry on rapid sequential sends
-      await new Promise((r) => setTimeout(r, 500));
-
       // Swap 2: 40 USDC (total: 80 / 100)
       await sendComposedSwap(
         rollingVault,
@@ -682,9 +635,6 @@ describe("jupiter-integration", () => {
 
       tracker = await program.account.spendTracker.fetch(rollingTracker);
       expect(tracker.recentTransactions.length).to.equal(2);
-
-      // Small delay before final attempt
-      await new Promise((r) => setTimeout(r, 500));
 
       // Swap 3: 30 USDC (total: 110 > 100 cap) — should fail
       try {

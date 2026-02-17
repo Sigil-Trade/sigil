@@ -10,26 +10,33 @@ import {
 import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
-  createMint,
-  createAssociatedTokenAccount,
-  mintTo,
-  getAccount,
   getAssociatedTokenAddressSync,
-  createAssociatedTokenAccountIdempotentInstruction,
 } from "@solana/spl-token";
 import { Transaction } from "@solana/web3.js";
 import { expect } from "chai";
 import BN from "bn.js";
+import {
+  createTestEnv,
+  airdropSol,
+  createMintHelper,
+  createAtaHelper,
+  createAtaIdempotentHelper,
+  mintToHelper,
+  getTokenBalance,
+  getBalance,
+  accountExists,
+  advancePastSlot,
+  TestEnv,
+  LiteSVM,
+} from "./helpers/litesvm-setup";
 
 describe("agent-shield", () => {
-  const provider = anchor.AnchorProvider.env();
-  anchor.setProvider(provider);
-
-  const program = anchor.workspace.AgentShield as Program<AgentShield>;
-  const connection = provider.connection;
+  let env: TestEnv;
+  let svm: LiteSVM;
+  let program: Program<AgentShield>;
 
   // Test actors
-  const owner = provider.wallet as anchor.Wallet;
+  let owner: anchor.Wallet;
   const agent = Keypair.generate();
   const feeDestination = Keypair.generate();
   const unauthorizedUser = Keypair.generate();
@@ -60,62 +67,57 @@ describe("agent-shield", () => {
   let protocolTreasuryUsdcAta: PublicKey;
 
   before(async () => {
+    env = createTestEnv();
+    svm = env.svm;
+    program = env.program;
+    owner = env.provider.wallet;
+
     // Airdrop to test accounts
-    await Promise.all([
-      connection.requestAirdrop(agent.publicKey, 10 * LAMPORTS_PER_SOL),
-      connection.requestAirdrop(unauthorizedUser.publicKey, 10 * LAMPORTS_PER_SOL),
-      connection.requestAirdrop(feeDestination.publicKey, 2 * LAMPORTS_PER_SOL),
-    ]).then((sigs) => Promise.all(sigs.map((sig) => connection.confirmTransaction(sig))));
+    airdropSol(svm, agent.publicKey, 10 * LAMPORTS_PER_SOL);
+    airdropSol(svm, unauthorizedUser.publicKey, 10 * LAMPORTS_PER_SOL);
+    airdropSol(svm, feeDestination.publicKey, 2 * LAMPORTS_PER_SOL);
 
     // Create USDC-like mint (6 decimals)
-    usdcMint = await createMint(
-      connection,
+    usdcMint = createMintHelper(
+      svm,
       (owner as any).payer,
       owner.publicKey,
-      null,
       6
     );
 
     // Create a second mint for testing disallowed tokens
-    solMint = await createMint(
-      connection,
+    solMint = createMintHelper(
+      svm,
       (owner as any).payer,
       owner.publicKey,
-      null,
       9
     );
 
     // Create owner's USDC ATA and mint tokens
-    ownerUsdcAta = await createAssociatedTokenAccount(
-      connection,
+    ownerUsdcAta = createAtaHelper(
+      svm,
       (owner as any).payer,
       usdcMint,
       owner.publicKey
     );
-    await mintTo(
-      connection,
+    mintToHelper(
+      svm,
       (owner as any).payer,
       usdcMint,
       ownerUsdcAta,
       owner.publicKey,
-      1_000_000_000 // 1000 USDC
+      1_000_000_000n // 1000 USDC
     );
 
     // Create protocol treasury ATA (needed for fee transfers)
     // Protocol treasury is an off-curve address, so we need allowOwnerOffCurve=true
-    protocolTreasuryUsdcAta = getAssociatedTokenAddressSync(
+    protocolTreasuryUsdcAta = createAtaIdempotentHelper(
+      svm,
+      (owner as any).payer,
       usdcMint,
       protocolTreasury,
-      true, // allowOwnerOffCurve
+      true
     );
-    const createAtaIx = createAssociatedTokenAccountIdempotentInstruction(
-      (owner as any).payer.publicKey,
-      protocolTreasuryUsdcAta,
-      protocolTreasury,
-      usdcMint,
-    );
-    const tx = new Transaction().add(createAtaIx);
-    await provider.sendAndConfirm(tx);
 
     // Derive PDAs
     [vaultPda, vaultBump] = PublicKey.findProgramAddressSync(
@@ -290,8 +292,8 @@ describe("agent-shield", () => {
         } as any)
         .rpc();
 
-      const vaultAccount = await getAccount(connection, vaultUsdcAta);
-      expect(Number(vaultAccount.amount)).to.equal(100_000_000);
+      const vaultBalance = getTokenBalance(svm, vaultUsdcAta);
+      expect(Number(vaultBalance)).to.equal(100_000_000);
     });
 
     it("rejects non-owner signer", async () => {
@@ -640,8 +642,8 @@ describe("agent-shield", () => {
   // =========================================================================
   describe("withdraw_funds", () => {
     it("transfers tokens from vault to owner", async () => {
-      const ownerBefore = await getAccount(connection, ownerUsdcAta);
-      const vaultBefore = await getAccount(connection, vaultUsdcAta);
+      const ownerBefore = Number(getTokenBalance(svm, ownerUsdcAta));
+      const vaultBefore = Number(getTokenBalance(svm, vaultUsdcAta));
 
       const withdrawAmount = new BN(10_000_000); // 10 USDC
       await program.methods
@@ -656,11 +658,11 @@ describe("agent-shield", () => {
         } as any)
         .rpc();
 
-      const ownerAfter = await getAccount(connection, ownerUsdcAta);
-      const vaultAfter = await getAccount(connection, vaultUsdcAta);
+      const ownerAfter = Number(getTokenBalance(svm, ownerUsdcAta));
+      const vaultAfter = Number(getTokenBalance(svm, vaultUsdcAta));
 
-      expect(Number(vaultAfter.amount)).to.equal(Number(vaultBefore.amount) - 10_000_000);
-      expect(Number(ownerAfter.amount)).to.equal(Number(ownerBefore.amount) + 10_000_000);
+      expect(vaultAfter).to.equal(vaultBefore - 10_000_000);
+      expect(ownerAfter).to.equal(ownerBefore + 10_000_000);
     });
 
     it("rejects withdrawal exceeding balance", async () => {
@@ -821,7 +823,9 @@ describe("agent-shield", () => {
         await program.account.sessionAuthority.fetch(sessionPda);
         expect.fail("Session should have been closed");
       } catch (err: any) {
-        expect(err.toString()).to.include("Account does not exist");
+        expect(err.toString()).to.satisfy(
+          (s: string) => s.includes("Account does not exist") || s.includes("Could not find")
+        );
       }
 
       // Verify vault stats updated
@@ -999,9 +1003,7 @@ describe("agent-shield", () => {
 
     it("rejects unauthorized agent", async () => {
       const fakeAgent = Keypair.generate();
-      await connection
-        .requestAirdrop(fakeAgent.publicKey, LAMPORTS_PER_SOL)
-        .then((sig) => connection.confirmTransaction(sig));
+      airdropSol(svm, fakeAgent.publicKey, LAMPORTS_PER_SOL);
 
       const [fakeSession] = PublicKey.findProgramAddressSync(
         [Buffer.from("session"), vaultPda.toBuffer(), fakeAgent.publicKey.toBuffer()],
@@ -1123,7 +1125,7 @@ describe("agent-shield", () => {
     });
 
     it("closes vault and reclaims rent", async () => {
-      const ownerBefore = await connection.getBalance(owner.publicKey);
+      const ownerBefore = getBalance(svm, owner.publicKey);
 
       await program.methods
         .closeVault()
@@ -1137,17 +1139,12 @@ describe("agent-shield", () => {
         .rpc();
 
       // Accounts should no longer exist
-      const vaultInfo = await connection.getAccountInfo(closeVaultPda);
-      expect(vaultInfo).to.be.null;
-
-      const policyInfo = await connection.getAccountInfo(closePolicyPda);
-      expect(policyInfo).to.be.null;
-
-      const trackerInfo = await connection.getAccountInfo(closeTrackerPda);
-      expect(trackerInfo).to.be.null;
+      expect(accountExists(svm, closeVaultPda)).to.be.false;
+      expect(accountExists(svm, closePolicyPda)).to.be.false;
+      expect(accountExists(svm, closeTrackerPda)).to.be.false;
 
       // Owner should have received rent back
-      const ownerAfter = await connection.getBalance(owner.publicKey);
+      const ownerAfter = getBalance(svm, owner.publicKey);
       expect(ownerAfter).to.be.greaterThan(ownerBefore);
     });
 
@@ -1427,18 +1424,20 @@ describe("agent-shield", () => {
         .rpc();
 
       // Create fee destination ATA
-      feeDestUsdcAta = await createAssociatedTokenAccount(
-        connection,
-        (owner as any).payer,
-        usdcMint,
-        feeDestination.publicKey
-      ).catch(() => {
+      try {
+        feeDestUsdcAta = createAtaHelper(
+          svm,
+          (owner as any).payer,
+          usdcMint,
+          feeDestination.publicKey
+        );
+      } catch {
         // ATA may already exist
-        return anchor.utils.token.associatedAddress({
+        feeDestUsdcAta = anchor.utils.token.associatedAddress({
           mint: usdcMint,
           owner: feeDestination.publicKey,
         });
-      });
+      }
 
       // Authorize
       [feeSessionPda] = PublicKey.findProgramAddressSync(
@@ -1588,9 +1587,7 @@ describe("agent-shield", () => {
 
     before(async () => {
       // Airdrop to new agent
-      await connection
-        .requestAirdrop(expiryAgent.publicKey, 5 * LAMPORTS_PER_SOL)
-        .then((sig) => connection.confirmTransaction(sig));
+      airdropSol(svm, expiryAgent.publicKey, 5 * LAMPORTS_PER_SOL);
 
       [expiryVaultPda] = PublicKey.findProgramAddressSync(
         [Buffer.from("vault"), owner.publicKey.toBuffer(), expiryVaultId.toArrayLike(Buffer, "le", 8)],
@@ -1679,18 +1676,14 @@ describe("agent-shield", () => {
         .signers([expiryAgent])
         .rpc();
 
-      // Wait for session to expire (20 slots + a few extra)
+      // Get session expiry slot
       const sessionData = await program.account.sessionAuthority.fetch(expirySessionPda);
       const expiresAt = sessionData.expiresAtSlot.toNumber();
 
-      // Poll until current slot > expiresAt
-      let currentSlot = await connection.getSlot();
-      while (currentSlot <= expiresAt) {
-        await new Promise((r) => setTimeout(r, 500));
-        currentSlot = await connection.getSlot();
-      }
+      // Advance clock past expiry (instant, no polling needed)
+      advancePastSlot(svm, expiresAt);
 
-      const agentBalBefore = await connection.getBalance(expiryAgent.publicKey);
+      const agentBalBefore = getBalance(svm, expiryAgent.publicKey);
 
       // Finalize expired session — agent as payer, success is forced to false
       await program.methods
@@ -1716,11 +1709,13 @@ describe("agent-shield", () => {
         await program.account.sessionAuthority.fetch(expirySessionPda);
         expect.fail("Session should have been closed");
       } catch (err: any) {
-        expect(err.toString()).to.include("Account does not exist");
+        expect(err.toString()).to.satisfy(
+          (s: string) => s.includes("Account does not exist") || s.includes("Could not find")
+        );
       }
 
       // Agent should have received rent back
-      const agentBalAfter = await connection.getBalance(expiryAgent.publicKey);
+      const agentBalAfter = getBalance(svm, expiryAgent.publicKey);
       expect(agentBalAfter).to.be.greaterThan(agentBalBefore - 10000); // minus small tx fee
 
       // Audit log should record success=false
@@ -1750,14 +1745,10 @@ describe("agent-shield", () => {
         .signers([expiryAgent])
         .rpc();
 
-      // Wait for expiry
+      // Get session expiry and advance past it
       const sessionData = await program.account.sessionAuthority.fetch(expirySessionPda);
       const expiresAt = sessionData.expiresAtSlot.toNumber();
-      let currentSlot = await connection.getSlot();
-      while (currentSlot <= expiresAt) {
-        await new Promise((r) => setTimeout(r, 500));
-        currentSlot = await connection.getSlot();
-      }
+      advancePastSlot(svm, expiresAt);
 
       // Third-party (unauthorizedUser) can clean up expired session
       await program.methods
@@ -1783,7 +1774,9 @@ describe("agent-shield", () => {
         await program.account.sessionAuthority.fetch(expirySessionPda);
         expect.fail("Session should have been closed");
       } catch (err: any) {
-        expect(err.toString()).to.include("Account does not exist");
+        expect(err.toString()).to.satisfy(
+          (s: string) => s.includes("Account does not exist") || s.includes("Could not find")
+        );
       }
     });
 
@@ -1978,9 +1971,7 @@ describe("agent-shield", () => {
 
       // Reactivate so status is Active but with a NEW agent, not our test agent
       const newAgent = Keypair.generate();
-      await connection
-        .requestAirdrop(newAgent.publicKey, LAMPORTS_PER_SOL)
-        .then((sig) => connection.confirmTransaction(sig));
+      airdropSol(svm, newAgent.publicKey, LAMPORTS_PER_SOL);
 
       // First reactivate with newAgent
       try {
@@ -2087,8 +2078,8 @@ describe("agent-shield", () => {
         } as any)
         .rpc();
 
-      const vaultTokenAccount = await getAccount(connection, frozenVaultUsdcAta);
-      expect(Number(vaultTokenAccount.amount)).to.equal(1_000_000);
+      const vaultTokenBalance = getTokenBalance(svm, frozenVaultUsdcAta);
+      expect(Number(vaultTokenBalance)).to.equal(1_000_000);
     });
 
     it("deposit to closed vault → rejects VaultAlreadyClosed", async () => {
@@ -2155,7 +2146,7 @@ describe("agent-shield", () => {
       } catch (err: any) {
         // Vault account no longer exists after close
         expect(err.toString()).to.satisfy(
-          (s: string) => s.includes("VaultAlreadyClosed") || s.includes("AccountNotInitialized") || s.includes("not found") || s.includes("does not exist")
+          (s: string) => s.includes("VaultAlreadyClosed") || s.includes("AccountNotInitialized") || s.includes("not found") || s.includes("does not exist") || s.includes("Could not find")
         );
       }
     });
@@ -2231,7 +2222,7 @@ describe("agent-shield", () => {
       } catch (err: any) {
         // Vault PDA closed — account not found
         expect(err.toString()).to.satisfy(
-          (s: string) => s.includes("VaultNotActive") || s.includes("AccountNotInitialized") || s.includes("not found") || s.includes("does not exist")
+          (s: string) => s.includes("VaultNotActive") || s.includes("AccountNotInitialized") || s.includes("not found") || s.includes("does not exist") || s.includes("Could not find")
         );
       }
     });
@@ -2249,9 +2240,7 @@ describe("agent-shield", () => {
     const ringAgent = Keypair.generate();
 
     before(async () => {
-      await connection
-        .requestAirdrop(ringAgent.publicKey, 10 * LAMPORTS_PER_SOL)
-        .then((sig) => connection.confirmTransaction(sig));
+      airdropSol(svm, ringAgent.publicKey, 10 * LAMPORTS_PER_SOL);
 
       [ringVaultPda] = PublicKey.findProgramAddressSync(
         [Buffer.from("vault"), owner.publicKey.toBuffer(), ringVaultId.toArrayLike(Buffer, "le", 8)],
@@ -2387,9 +2376,7 @@ describe("agent-shield", () => {
     const feeEdgeAgent = Keypair.generate();
 
     before(async () => {
-      await connection
-        .requestAirdrop(feeEdgeAgent.publicKey, 5 * LAMPORTS_PER_SOL)
-        .then((sig) => connection.confirmTransaction(sig));
+      airdropSol(svm, feeEdgeAgent.publicKey, 5 * LAMPORTS_PER_SOL);
 
       [feeEdgeVaultPda] = PublicKey.findProgramAddressSync(
         [Buffer.from("vault"), owner.publicKey.toBuffer(), feeEdgeVaultId.toArrayLike(Buffer, "le", 8)],
@@ -2477,7 +2464,7 @@ describe("agent-shield", () => {
         .signers([feeEdgeAgent])
         .rpc();
 
-      const vaultBalBefore = await getAccount(connection, feeEdgeVaultUsdcAta);
+      const vaultBalBefore = getTokenBalance(svm, feeEdgeVaultUsdcAta);
 
       // Finalize — no token accounts needed since fees are 0
       await program.methods
@@ -2499,8 +2486,8 @@ describe("agent-shield", () => {
         .rpc();
 
       // Vault balance unchanged (no fee deducted)
-      const vaultBalAfter = await getAccount(connection, feeEdgeVaultUsdcAta);
-      expect(Number(vaultBalAfter.amount)).to.equal(Number(vaultBalBefore.amount));
+      const vaultBalAfter = getTokenBalance(svm, feeEdgeVaultUsdcAta);
+      expect(Number(vaultBalAfter)).to.equal(Number(vaultBalBefore));
     });
 
     it("amount = 49999 → fee = 0; amount = 50000 → fee = 1", async () => {
@@ -2568,7 +2555,7 @@ describe("agent-shield", () => {
         .signers([feeEdgeAgent])
         .rpc();
 
-      const vaultBalBefore = await getAccount(connection, feeEdgeVaultUsdcAta);
+      const vaultBalBefore = getTokenBalance(svm, feeEdgeVaultUsdcAta);
 
       // Finalize — needs token accounts since fee = 1
       await program.methods
@@ -2590,8 +2577,8 @@ describe("agent-shield", () => {
         .rpc();
 
       // Vault balance should decrease by exactly 1 (protocol fee)
-      const vaultBalAfter = await getAccount(connection, feeEdgeVaultUsdcAta);
-      expect(Number(vaultBalBefore.amount) - Number(vaultBalAfter.amount)).to.equal(1);
+      const vaultBalAfter = getTokenBalance(svm, feeEdgeVaultUsdcAta);
+      expect(Number(vaultBalBefore) - Number(vaultBalAfter)).to.equal(1);
     });
   });
 });

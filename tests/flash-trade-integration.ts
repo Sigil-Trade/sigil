@@ -15,17 +15,26 @@ import {
 import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
-  createMint,
-  createAssociatedTokenAccount,
-  mintTo,
   getAssociatedTokenAddressSync,
-  createAssociatedTokenAccountIdempotentInstruction,
 } from "@solana/spl-token";
 import { expect } from "chai";
 import BN from "bn.js";
 import {
   FLASH_TRADE_PROGRAM_ID,
 } from "../sdk/typescript/src/integrations/flash-trade";
+import {
+  createTestEnv,
+  airdropSol,
+  createMintHelper,
+  createAtaHelper,
+  createAtaIdempotentHelper,
+  mintToHelper,
+  getTokenBalance,
+  sendVersionedTx,
+  TestEnv,
+  LiteSVM,
+  FailedTransactionMetadata,
+} from "./helpers/litesvm-setup";
 
 /**
  * Flash Trade Integration Tests
@@ -43,13 +52,11 @@ import {
  * - Policy enforcement: leverage limits, max concurrent positions, frozen vault
  */
 describe("flash-trade-integration", () => {
-  const provider = anchor.AnchorProvider.env();
-  anchor.setProvider(provider);
+  let env: TestEnv;
+  let svm: LiteSVM;
+  let program: Program<AgentShield>;
 
-  const program = anchor.workspace.AgentShield as Program<AgentShield>;
-  const connection = provider.connection;
-
-  const owner = provider.wallet as anchor.Wallet;
+  let owner: anchor.Wallet;
   const agent = Keypair.generate();
   const feeDestination = Keypair.generate();
 
@@ -142,72 +149,39 @@ describe("flash-trade-integration", () => {
       })
       .instruction();
 
-    const { blockhash, lastValidBlockHeight } =
-      await connection.getLatestBlockhash("confirmed");
-
-    const messageV0 = new TransactionMessage({
-      payerKey: agentKp.publicKey,
-      recentBlockhash: blockhash,
-      instructions: [computeIx, validateIx, mockDefiIx, finalizeIx],
-    }).compileToV0Message();
-
-    const tx = new VersionedTransaction(messageV0);
-    tx.sign([agentKp]);
-
-    const simResult = await connection.simulateTransaction(tx, {
-      commitment: "confirmed",
-    });
-
-    if (simResult.value.err) {
-      const logs = simResult.value.logs || [];
-      const errMsg = logs.join(" ");
-      throw new Error(
-        `SimulationFailed: ${JSON.stringify(simResult.value.err)} Logs: ${errMsg}`
-      );
-    }
-
-    const sig = await connection.sendRawTransaction(tx.serialize(), {
-      skipPreflight: true,
-    });
-    await connection.confirmTransaction(
-      { signature: sig, blockhash, lastValidBlockHeight },
-      "confirmed"
+    // Build and send versioned transaction via LiteSVM
+    return sendVersionedTx(
+      svm,
+      [computeIx, validateIx, mockDefiIx, finalizeIx],
+      agentKp
     );
-    return sig;
   }
 
   before(async () => {
-    await Promise.all([
-      connection.requestAirdrop(agent.publicKey, 10 * LAMPORTS_PER_SOL),
-      connection.requestAirdrop(feeDestination.publicKey, 2 * LAMPORTS_PER_SOL),
-    ]).then((sigs) =>
-      Promise.all(sigs.map((sig) => connection.confirmTransaction(sig)))
-    );
+    env = createTestEnv();
+    svm = env.svm;
+    program = env.program;
+    owner = env.provider.wallet;
+
+    airdropSol(svm, agent.publicKey, 10 * LAMPORTS_PER_SOL);
+    airdropSol(svm, feeDestination.publicKey, 2 * LAMPORTS_PER_SOL);
 
     // Create USDC-like mint
-    usdcMint = await createMint(
-      connection,
+    usdcMint = createMintHelper(
+      svm,
       (owner as any).payer,
       owner.publicKey,
-      null,
       6
     );
 
-    // Create protocol treasury ATA (needed for fee transfers)
-    // Protocol treasury is an off-curve address, so we need allowOwnerOffCurve=true
-    protocolTreasuryUsdcAta = getAssociatedTokenAddressSync(
+    // Create protocol treasury ATA
+    protocolTreasuryUsdcAta = createAtaIdempotentHelper(
+      svm,
+      (owner as any).payer,
       usdcMint,
       protocolTreasury,
-      true, // allowOwnerOffCurve
+      true
     );
-    const createAtaIx = createAssociatedTokenAccountIdempotentInstruction(
-      (owner as any).payer.publicKey,
-      protocolTreasuryUsdcAta,
-      protocolTreasury,
-      usdcMint,
-    );
-    const ataTx = new Transaction().add(createAtaIx);
-    await provider.sendAndConfirm(ataTx);
 
     // Derive PDAs
     [vaultPda] = PublicKey.findProgramAddressSync(
@@ -230,12 +204,7 @@ describe("flash-trade-integration", () => {
     // Derive vault ATA
     vaultUsdcAta = getAssociatedTokenAddressSync(usdcMint, vaultPda, true);
 
-    // Initialize vault with perp-friendly policy:
-    //   daily cap = 1000 USDC
-    //   max tx = 500 USDC
-    //   max leverage = 10000 bps (100x)
-    //   max concurrent positions = 3
-    //   allowed protocols = [flashProtocol]
+    // Initialize vault with perp-friendly policy
     await program.methods
       .initializeVault(
         vaultId,
@@ -266,23 +235,23 @@ describe("flash-trade-integration", () => {
       })
       .rpc();
 
-    // Fund the vault with USDC (needed for protocol fee transfers)
-    const ownerUsdcAta = await createAssociatedTokenAccount(
-      connection,
+    // Fund the vault with USDC
+    const ownerUsdcAta = createAtaHelper(
+      svm,
       (owner as any).payer,
       usdcMint,
       owner.publicKey
     );
-    await mintTo(
-      connection,
+    mintToHelper(
+      svm,
       (owner as any).payer,
       usdcMint,
       ownerUsdcAta,
       owner.publicKey,
-      2_000_000_000 // 2000 USDC
+      2_000_000_000n // 2000 USDC
     );
 
-    const depositSig = await program.methods
+    await program.methods
       .depositFunds(new BN(1_000_000_000)) // 1000 USDC
       .accountsPartial({
         owner: owner.publicKey,
@@ -295,11 +264,6 @@ describe("flash-trade-integration", () => {
         systemProgram: SystemProgram.programId,
       })
       .rpc();
-
-    // Wait for confirmed commitment — Anchor's default "processed" commitment
-    // can race with simulateTransaction's "confirmed" commitment, causing
-    // AccountNotInitialized (3012) when the ATA isn't visible yet.
-    await connection.confirmTransaction(depositSig, "confirmed");
   });
 
   // =========================================================================
@@ -377,8 +341,6 @@ describe("flash-trade-integration", () => {
         { openPosition: {} }, 2000
       );
 
-      await new Promise((r) => setTimeout(r, 500));
-
       await sendComposedAction(
         vaultPda, policyPda, trackerPda, agent, usdcMint,
         new BN(50_000_000), flashProtocol,
@@ -388,8 +350,6 @@ describe("flash-trade-integration", () => {
       // Verify we have 3 open positions
       let vault = await program.account.agentVault.fetch(vaultPda);
       expect(vault.openPositions).to.equal(3);
-
-      await new Promise((r) => setTimeout(r, 500));
 
       // 4th should fail
       try {
@@ -551,11 +511,10 @@ describe("flash-trade-integration", () => {
         .rpc();
 
       // Freeze vault
-      const revokeSig = await program.methods
+      await program.methods
         .revokeAgent()
         .accountsPartial({ owner: owner.publicKey, vault: frozenVault })
         .rpc();
-      await connection.confirmTransaction(revokeSig, "confirmed");
     });
 
     it("rejects open position on frozen vault", async () => {
@@ -639,7 +598,7 @@ describe("flash-trade-integration", () => {
         .rpc();
 
       // Disable position opening
-      const updateSig = await program.methods
+      await program.methods
         .updatePolicy(
           null, // dailySpendingCap
           null, // maxTransactionSize
@@ -657,8 +616,6 @@ describe("flash-trade-integration", () => {
         })
         .rpc();
 
-      // Wait for confirmation and verify update took effect
-      await connection.confirmTransaction(updateSig, "confirmed");
       const policyState = await program.account.policyConfig.fetch(disabledPolicy);
       if (policyState.canOpenPositions !== false) {
         throw new Error(
