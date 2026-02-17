@@ -7,9 +7,13 @@
   "types": "dist/index.d.ts",
   "files": ["dist", "README.md"],
   "sideEffects": false,
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf dist",
+    "test": "mocha --require ts-node/register tests/**/*.test.ts --timeout 30000",
     "prepublishOnly": "npm run clean && npm run build"
   },
   "dependencies": {
@@ -24,6 +28,11 @@
   },
   "devDependencies": {
     "@types/bn.js": "^5.1.5",
+    "@types/chai": "^4.3.11",
+    "@types/mocha": "^10.0.6",
+    "chai": "^4.4.1",
+    "mocha": "^10.3.0",
+    "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
   },
   "license": "MIT",

@@ -11,6 +11,7 @@ export type {
   PolicyCheckResult,
   TransactionAnalysis,
   TokenTransfer,
+  ResolvedPolicies,
 } from "./policies";
 export { parseSpendLimit, resolvePolicies, DEFAULT_POLICIES } from "./policies";
 
@@ -38,11 +39,14 @@ export {
 
 // Client-side state (re-exported from @agent-shield/core)
 export { ShieldState } from "./state";
-export type { ShieldStorage } from "./state";
+export type { ShieldStorage, SpendEntry, TxEntry } from "./state";
 
 // Policy engine (wrapper versions — accept PublicKey-based TransactionAnalysis)
-export { evaluatePolicy, enforcePolicy } from "./engine";
+export { evaluatePolicy, enforcePolicy, recordTransaction } from "./engine";
+
+// Transaction instruction extraction
+export { extractInstructions } from "./inspector";
 
 // On-chain upgrade (optional — requires @agent-shield/sdk)
-export { harden } from "./harden";
-export type { HardenOptions } from "./harden";
+export { harden, withVault, mapPoliciesToVaultParams, findNextVaultId } from "./harden";
+export type { HardenOptions, HardenResult } from "./harden";

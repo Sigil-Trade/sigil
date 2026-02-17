@@ -5,7 +5,7 @@ import {
   Transaction,
   VersionedTransaction,
 } from "@solana/web3.js";
-import { ShieldPolicies, SpendingSummary, resolvePolicies } from "./policies";
+import { ShieldPolicies, SpendingSummary, ResolvedPolicies, resolvePolicies } from "./policies";
 import {
   analyzeTransaction,
   resolveTransactionAddressLookupTables,
@@ -39,6 +39,8 @@ export interface ShieldedWallet extends WalletLike {
   readonly shieldState: ShieldState;
   /** Whether this wallet has been hardened (on-chain enforcement) */
   readonly isHardened: boolean;
+  /** The currently active resolved policies */
+  readonly resolvedPolicies: ResolvedPolicies;
   /** Whether policy enforcement is currently paused */
   readonly isPaused: boolean;
   /** Update policies at runtime */
@@ -106,6 +108,10 @@ export function shield(
     innerWallet: wallet,
     shieldState: state,
     isHardened: false,
+
+    get resolvedPolicies(): ResolvedPolicies {
+      return resolved;
+    },
 
     get isPaused(): boolean {
       return paused;

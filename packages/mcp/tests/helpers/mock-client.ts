@@ -127,6 +127,27 @@ export function createMockClient(overrides: {
       return [TEST_VAULT_PDA, 255];
     },
 
+    getPolicyPDA(vault: PublicKey): [PublicKey, number] {
+      calls.push({ method: "getPolicyPDA", args: [vault] });
+      return [Keypair.generate().publicKey, 254];
+    },
+
+    getTrackerPDA(vault: PublicKey): [PublicKey, number] {
+      calls.push({ method: "getTrackerPDA", args: [vault] });
+      return [Keypair.generate().publicKey, 253];
+    },
+
+    getSessionPDA(vault: PublicKey, agent: PublicKey): [PublicKey, number] {
+      calls.push({ method: "getSessionPDA", args: [vault, agent] });
+      return [Keypair.generate().publicKey, 252];
+    },
+
+    async fetchVault(owner: PublicKey, vaultId: BN) {
+      calls.push({ method: "fetchVault", args: [owner, vaultId] });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return vaultData;
+    },
+
     async fetchVaultByAddress(address: PublicKey) {
       calls.push({ method: "fetchVaultByAddress", args: [address] });
       if (overrides.shouldThrow) throw overrides.shouldThrow;
@@ -139,8 +160,20 @@ export function createMockClient(overrides: {
       return policyData;
     },
 
+    async fetchPolicyByAddress(address: PublicKey) {
+      calls.push({ method: "fetchPolicyByAddress", args: [address] });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return policyData;
+    },
+
     async fetchTracker(vault: PublicKey) {
       calls.push({ method: "fetchTracker", args: [vault] });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return trackerData;
+    },
+
+    async fetchTrackerByAddress(address: PublicKey) {
+      calls.push({ method: "fetchTrackerByAddress", args: [address] });
       if (overrides.shouldThrow) throw overrides.shouldThrow;
       return trackerData;
     },
@@ -190,6 +223,72 @@ export function createMockClient(overrides: {
       return "mock-sig-reactivate";
     },
 
+    async authorizeAction(vault: PublicKey, params: any) {
+      calls.push({ method: "authorizeAction", args: [vault, params] });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return "mock-sig-authorize";
+    },
+
+    async finalizeSession(
+      vault: PublicKey,
+      agent: PublicKey,
+      success: boolean,
+      ...rest: any[]
+    ) {
+      calls.push({
+        method: "finalizeSession",
+        args: [vault, agent, success, ...rest],
+      });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return "mock-sig-finalize";
+    },
+
+    async closeVault(vault: PublicKey) {
+      calls.push({ method: "closeVault", args: [vault] });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return "mock-sig-close";
+    },
+
+    async composePermittedAction(params: any, computeUnits?: number) {
+      calls.push({
+        method: "composePermittedAction",
+        args: [params, computeUnits],
+      });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return [];
+    },
+
+    async composePermittedTransaction(params: any, computeUnits?: number) {
+      calls.push({
+        method: "composePermittedTransaction",
+        args: [params, computeUnits],
+      });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return {} as any;
+    },
+
+    async composePermittedSwap(params: any, computeUnits?: number) {
+      calls.push({
+        method: "composePermittedSwap",
+        args: [params, computeUnits],
+      });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return [];
+    },
+
+    async composeAndSend(
+      params: any,
+      signers?: any[],
+      computeUnits?: number
+    ) {
+      calls.push({
+        method: "composeAndSend",
+        args: [params, signers, computeUnits],
+      });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return "mock-sig-compose-send";
+    },
+
     async getJupiterQuote(params: any) {
       calls.push({ method: "getJupiterQuote", args: [params] });
       if (overrides.shouldThrow) throw overrides.shouldThrow;
@@ -203,6 +302,12 @@ export function createMockClient(overrides: {
         slippageBps: params.slippageBps,
         routePlan: [],
       };
+    },
+
+    async jupiterSwap(params: any) {
+      calls.push({ method: "jupiterSwap", args: [params] });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return {} as any;
     },
 
     async executeJupiterSwap(params: any, signers?: any[]) {
@@ -230,6 +335,39 @@ export function createMockClient(overrides: {
         instructions: [],
         additionalSigners: [],
       };
+    },
+
+    createFlashTradeClient(config?: any) {
+      calls.push({ method: "createFlashTradeClient", args: [config] });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return {} as any;
+    },
+
+    getFlashPoolConfig(poolName?: string, cluster?: string) {
+      calls.push({
+        method: "getFlashPoolConfig",
+        args: [poolName, cluster],
+      });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return {} as any;
+    },
+
+    async flashTradeIncrease(params: any, poolConfig?: any) {
+      calls.push({
+        method: "flashTradeIncrease",
+        args: [params, poolConfig],
+      });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return { instructions: [], additionalSigners: [] };
+    },
+
+    async flashTradeDecrease(params: any, poolConfig?: any) {
+      calls.push({
+        method: "flashTradeDecrease",
+        args: [params, poolConfig],
+      });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return { instructions: [], additionalSigners: [] };
     },
 
     async executeFlashTrade(result: any, agent: PublicKey, signers?: any[]) {

@@ -24,6 +24,9 @@ importers:
       '@types/bn.js':
         specifier: ^5.1.5
         version: 5.2.0
+      '@types/bs58':
+        specifier: ^4.0.4
+        version: 4.0.4
       '@types/chai':
         specifier: ^4.3.11
         version: 4.3.20
@@ -158,6 +161,21 @@ importers:
 
   sdk/core:
     devDependencies:
+      '@types/chai':
+        specifier: ^4.3.11
+        version: 4.3.20
+      '@types/mocha':
+        specifier: ^10.0.6
+        version: 10.0.10
+      chai:
+        specifier: ^4.4.1
+        version: 4.5.0
+      mocha:
+        specifier: ^10.3.0
+        version: 10.8.2
+      ts-node:
+        specifier: ^10.9.2
+        version: 10.9.2(@types/node@20.19.33)(typescript@5.9.3)
       typescript:
         specifier: ^5.3.3
         version: 5.9.3
@@ -177,6 +195,21 @@ importers:
       '@types/bn.js':
         specifier: ^5.1.5
         version: 5.2.0
+      '@types/chai':
+        specifier: ^4.3.11
+        version: 4.3.20
+      '@types/mocha':
+        specifier: ^10.0.6
+        version: 10.0.10
+      chai:
+        specifier: ^4.4.1
+        version: 4.5.0
+      mocha:
+        specifier: ^10.3.0
+        version: 10.8.2
+      ts-node:
+        specifier: ^10.9.2
+        version: 10.9.2(@types/node@20.19.33)(typescript@5.9.3)
       typescript:
         specifier: ^5.3.3
         version: 5.9.3
@@ -1044,6 +1077,9 @@ packages:
 
   '@types/bn.js@5.2.0':
     resolution: {integrity: sha512-DLbJ1BPqxvQhIGbeu8VbUC1DiAiahHtAYvA0ZEAa4P31F7IaArc8z3C3BRQdWX4mtLQuABG4yzp76ZrS02Ui1Q==}
+
+  '@types/bs58@4.0.4':
+    resolution: {integrity: sha512-0IEpMFXXQi2zXaXl9GJ3sRwQo0uEkD+yFOv+FnAU5lkPtcu6h61xb7jc2CFPEZ5BUOaiP13ThuGc9HD4R8lR5g==}
 
   '@types/chai@4.3.20':
     resolution: {integrity: sha512-/pC9HAB5I/xMlc5FP77qjCnI16ChlJfW0tGa0IUcFn38VJrTV6DeZ60NU5KZBtaOZqjdpwTWohz5HU1RrhiYxQ==}
@@ -4443,6 +4479,11 @@ snapshots:
   '@types/bn.js@5.2.0':
     dependencies:
       '@types/node': 20.19.33
+
+  '@types/bs58@4.0.4':
+    dependencies:
+      '@types/node': 20.19.33
+      base-x: 3.0.11
 
   '@types/chai@4.3.20': {}
 

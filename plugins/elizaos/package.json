@@ -14,6 +14,9 @@
     "dist/**/*",
     "README.md"
   ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "peerDependencies": {
     "@elizaos/core": ">=0.1.0",
     "@agent-shield/solana": ">=0.1.1",

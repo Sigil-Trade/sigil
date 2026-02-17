@@ -62,7 +62,7 @@ export function analyzeTransaction(
 /**
  * Extract instructions from either Transaction or VersionedTransaction.
  */
-function extractInstructions(
+export function extractInstructions(
   tx: Transaction | VersionedTransaction,
   addressLookupTableAccounts?: AddressLookupTableAccount[],
 ): TransactionInstruction[] {

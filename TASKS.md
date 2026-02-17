@@ -240,13 +240,14 @@
 
 | Suite | File | Tests |
 |-------|------|-------|
-| Core (Phase 1) | `tests/agent-shield.ts` | 39 |
+| Core (Phase 1) | `tests/agent-shield.ts` | 51 |
 | Jupiter (Phase 2) | `tests/jupiter-integration.ts` | 9 |
 | Flash Trade (Phase 3) | `tests/flash-trade-integration.ts` | 9 |
-| Wrapper SDK (Phase A) | `sdk/wrapper/tests/wrapper.test.ts` | 49 |
-| SAK Plugin (Phase B) | `plugins/solana-agent-kit/tests/plugin.test.ts` | 23 |
-| ElizaOS Plugin (Phase B) | `plugins/elizaos/tests/plugin.test.ts` | 30 |
-| **Total** | | **159** |
+| Wrapper SDK (Phase A) | `sdk/wrapper/tests/wrapper.test.ts` | 73 |
+| SAK Plugin (Phase B) | `plugins/solana-agent-kit/tests/plugin.test.ts` | 25 |
+| ElizaOS Plugin (Phase B) | `plugins/elizaos/tests/plugin.test.ts` | 32 |
+| MCP Server (Phase C) | `packages/mcp/tests/` | 82 |
+| **Total** | | **280** |
 
 ---
 

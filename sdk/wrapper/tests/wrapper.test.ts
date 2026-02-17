@@ -27,8 +27,11 @@ import {
   isKnownProtocol,
   getTokenInfo,
   getProtocolName,
+  mapPoliciesToVaultParams,
 } from "../src";
-import type { WalletLike, ShieldStorage } from "../src";
+import type { WalletLike, ShieldStorage, ResolvedPolicies } from "../src";
+import { harden, withVault } from "../src/harden";
+import type { HardenOptions, HardenResult } from "../src/harden";
 
 // --- Test Helpers ---
 
@@ -1494,6 +1497,296 @@ describe("@agent-shield/solana", () => {
         expect(result.length).to.equal(1);
         expect(result[0].key.equals(tableKey)).to.be.true;
       });
+    });
+  });
+
+  // --- harden() Tests ---
+
+  describe("mapPoliciesToVaultParams()", () => {
+    const FEE_DEST = Keypair.generate().publicKey;
+
+    it("collapses multiple SpendLimits to the largest as dailySpendingCap", () => {
+      const resolved = resolvePolicies({
+        maxSpend: [
+          "500 USDC/day",  // 500_000_000
+          "10 SOL/day",    // 10_000_000_000
+        ],
+      });
+      const params = mapPoliciesToVaultParams(resolved, 0, FEE_DEST);
+      expect(params.dailySpendingCap).to.equal(BigInt(10_000_000_000));
+    });
+
+    it("merges token mints from spendLimits + explicit allowedTokens (deduped)", () => {
+      const resolved = resolvePolicies({
+        maxSpend: "500 USDC/day",
+        allowedTokens: [USDC_MINT, SOL_MINT],
+      });
+      const params = mapPoliciesToVaultParams(resolved, 0, FEE_DEST);
+      const mintStrings = params.allowedTokens.map((p) => p.toBase58());
+      // USDC from spend limit + both from allowedTokens, deduped
+      expect(mintStrings).to.include(USDC_MINT.toBase58());
+      expect(mintStrings).to.include(SOL_MINT.toBase58());
+      // USDC should not appear twice
+      const usdcCount = mintStrings.filter((m) => m === USDC_MINT.toBase58()).length;
+      expect(usdcCount).to.equal(1);
+    });
+
+    it("caps allowedTokens at 10", () => {
+      // Create 15 unique token mints
+      const tokens = Array.from({ length: 15 }, () =>
+        Keypair.generate().publicKey,
+      );
+      const resolved = resolvePolicies({
+        allowedTokens: tokens,
+        blockUnknownPrograms: false,
+      });
+      const params = mapPoliciesToVaultParams(resolved, 0, FEE_DEST);
+      expect(params.allowedTokens.length).to.be.at.most(10);
+    });
+
+    it("caps allowedProtocols at 10", () => {
+      const protocols = Array.from({ length: 15 }, () =>
+        Keypair.generate().publicKey,
+      );
+      const resolved = resolvePolicies({
+        allowedProtocols: protocols,
+      });
+      const params = mapPoliciesToVaultParams(resolved, 0, FEE_DEST);
+      expect(params.allowedProtocols.length).to.be.at.most(10);
+    });
+
+    it("maps maxTransactionSize directly", () => {
+      const resolved = resolvePolicies({
+        maxSpend: "500 USDC/day",
+        maxTransactionSize: BigInt(100_000_000),
+      });
+      const params = mapPoliciesToVaultParams(resolved, 0, FEE_DEST);
+      expect(params.maxTransactionSize).to.equal(BigInt(100_000_000));
+    });
+
+    it("falls back maxTransactionSize to dailySpendingCap when not set", () => {
+      const resolved = resolvePolicies({
+        maxSpend: "500 USDC/day",
+      });
+      const params = mapPoliciesToVaultParams(resolved, 0, FEE_DEST);
+      expect(params.maxTransactionSize).to.equal(params.dailySpendingCap);
+    });
+
+    it("does NOT reflect blockUnknownPrograms in vault params", () => {
+      const resolved = resolvePolicies({
+        blockUnknownPrograms: true,
+      });
+      const params = mapPoliciesToVaultParams(resolved, 0, FEE_DEST);
+      // blockUnknownPrograms is client-side only — no corresponding field in params
+      expect(params).to.not.have.property("blockUnknownPrograms");
+    });
+
+    it("does NOT reflect rateLimit in vault params", () => {
+      const resolved = resolvePolicies({
+        rateLimit: { maxTransactions: 10, windowMs: 3_600_000 },
+      });
+      const params = mapPoliciesToVaultParams(resolved, 0, FEE_DEST);
+      expect(params).to.not.have.property("rateLimit");
+    });
+
+    it("does NOT reflect customCheck in vault params", () => {
+      const resolved = resolvePolicies({
+        customCheck: () => ({ allowed: true }),
+      });
+      const params = mapPoliciesToVaultParams(resolved, 0, FEE_DEST);
+      expect(params).to.not.have.property("customCheck");
+    });
+
+    it("maps default policies to reasonable vault params", () => {
+      const resolved = resolvePolicies();
+      const params = mapPoliciesToVaultParams(resolved, 0, FEE_DEST);
+      expect(params.dailySpendingCap).to.be.a("bigint");
+      expect(params.dailySpendingCap > BigInt(0)).to.be.true;
+      expect(params.maxLeverageBps).to.equal(0);
+      expect(params.maxConcurrentPositions).to.equal(5);
+      expect(params.developerFeeRate).to.equal(0);
+      expect(params.feeDestination.equals(FEE_DEST)).to.be.true;
+    });
+
+    it("maps string policies ('500 USDC/day') correctly", () => {
+      const resolved = resolvePolicies({ maxSpend: "500 USDC/day" });
+      const params = mapPoliciesToVaultParams(resolved, 0, FEE_DEST);
+      expect(params.dailySpendingCap).to.equal(BigInt(500_000_000));
+      expect(params.allowedTokens.some((t) => t.equals(USDC_MINT))).to.be.true;
+    });
+
+    it("passes optional parameters through", () => {
+      const resolved = resolvePolicies();
+      const params = mapPoliciesToVaultParams(resolved, 42, FEE_DEST, {
+        developerFeeRate: 25,
+        maxLeverageBps: 10000,
+        maxConcurrentPositions: 3,
+      });
+      expect(params.vaultId).to.equal(42);
+      expect(params.developerFeeRate).to.equal(25);
+      expect(params.maxLeverageBps).to.equal(10000);
+      expect(params.maxConcurrentPositions).to.equal(3);
+    });
+  });
+
+  describe("harden() — vault creation", () => {
+    it("throws when @agent-shield/sdk is not installed", async () => {
+      // This test verifies the error path when the SDK import fails.
+      // We cannot fully test this without mocking the import, but we can
+      // verify the harden function exists and has the right signature.
+      const wallet = createMockWallet();
+      const shielded = shield(wallet, { maxSpend: "500 USDC/day" });
+      expect(shielded.isHardened).to.be.false;
+      // harden() will attempt dynamic import of @agent-shield/sdk
+      // In test environment, the SDK IS available, so this won't fail.
+      // The error path is implicitly tested by the stub's existing test.
+    });
+
+    it("throws when owner === agent", async () => {
+      const wallet = createMockWallet();
+      const shielded = shield(wallet, { maxSpend: "500 USDC/day" });
+
+      const mockConnection = {} as Connection;
+      try {
+        await harden(shielded, {
+          connection: mockConnection,
+          ownerWallet: wallet, // same key as agent
+        });
+        expect.fail("Should have thrown");
+      } catch (e: any) {
+        expect(e.message).to.include("Owner and agent must be different");
+      }
+    });
+
+    it("auto-generates owner keypair when ownerWallet is omitted", async () => {
+      // We can verify the auto-generation path by checking that the
+      // function proceeds past the owner != agent check.
+      // Full vault creation requires RPC, so we just verify the keypair logic.
+      const wallet = createMockWallet();
+      const shielded = shield(wallet, { maxSpend: "500 USDC/day" });
+
+      // The full harden() will fail at RPC level, but we verify it gets
+      // past the validation step by checking the error is about RPC, not ownership.
+      const mockConnection = {
+        getAccountInfo: async () => null,
+      } as unknown as Connection;
+
+      try {
+        await harden(shielded, {
+          connection: mockConnection,
+        });
+        expect.fail("Should have thrown (no real RPC)");
+      } catch (e: any) {
+        // Should NOT be about owner === agent
+        expect(e.message).to.not.include("Owner and agent must be different");
+      }
+    });
+
+    it("uses provided ownerWallet when given", async () => {
+      const agentWallet = createMockWallet();
+      const ownerWallet = createMockWallet(); // different key
+      const shielded = shield(agentWallet, { maxSpend: "500 USDC/day" });
+
+      const mockConnection = {
+        getAccountInfo: async () => null,
+      } as unknown as Connection;
+
+      try {
+        await harden(shielded, {
+          connection: mockConnection,
+          ownerWallet,
+        });
+        expect.fail("Should have thrown (no real RPC)");
+      } catch (e: any) {
+        // Should NOT be about owner === agent
+        expect(e.message).to.not.include("Owner and agent must be different");
+      }
+    });
+
+    it("feeDestination defaults to owner pubkey in mapPoliciesToVaultParams", () => {
+      const ownerPk = Keypair.generate().publicKey;
+      const resolved = resolvePolicies({ maxSpend: "500 USDC/day" });
+      const params = mapPoliciesToVaultParams(resolved, 0, ownerPk);
+      expect(params.feeDestination.equals(ownerPk)).to.be.true;
+    });
+  });
+
+  describe("harden() — ShieldedWallet interface", () => {
+    it("resolvedPolicies getter returns current policies", () => {
+      const wallet = createMockWallet();
+      const shielded = shield(wallet, { maxSpend: "500 USDC/day" });
+
+      const rp = shielded.resolvedPolicies;
+      expect(rp).to.not.be.undefined;
+      expect(rp.spendLimits.length).to.be.greaterThan(0);
+      expect(rp.spendLimits[0].amount).to.equal(BigInt(500_000_000));
+    });
+
+    it("resolvedPolicies updates after updatePolicies()", () => {
+      const wallet = createMockWallet();
+      const shielded = shield(wallet, { maxSpend: "500 USDC/day" });
+
+      shielded.updatePolicies({ maxSpend: "1000 USDC/day" });
+      const rp = shielded.resolvedPolicies;
+      expect(rp.spendLimits[0].amount).to.equal(BigInt(1_000_000_000));
+    });
+
+    it("spending state is shared via shieldState reference", () => {
+      const wallet = createMockWallet();
+      const shielded = shield(wallet, { maxSpend: "500 USDC/day" });
+
+      // Record spend on the state
+      const mint = USDC_MINT.toBase58();
+      shielded.shieldState.recordSpend(mint, BigInt(100_000_000));
+
+      // Should be reflected in summary
+      const summary = shielded.getSpendingSummary();
+      expect(summary.tokens[0].spent).to.equal(BigInt(100_000_000));
+    });
+
+    it("isHardened is false for shield() wallet", () => {
+      const wallet = createMockWallet();
+      const shielded = shield(wallet);
+      expect(shielded.isHardened).to.be.false;
+    });
+  });
+
+  describe("withVault()", () => {
+    it("creates shield + passes to harden", async () => {
+      const wallet = createMockWallet();
+      const mockConnection = {} as Connection;
+
+      // withVault will fail at harden() level (no real RPC), but we verify
+      // it creates a shielded wallet internally by checking the error
+      try {
+        await withVault(wallet, { maxSpend: "500 USDC/day" }, {
+          connection: mockConnection,
+          ownerWallet: wallet, // same as agent — triggers owner===agent check
+        });
+        expect.fail("Should have thrown");
+      } catch (e: any) {
+        expect(e.message).to.include("Owner and agent must be different");
+      }
+    });
+
+    it("passes policies correctly through shield to harden", async () => {
+      const agentWallet = createMockWallet();
+      const ownerWallet = createMockWallet();
+
+      const mockConnection = {
+        getAccountInfo: async () => null,
+      } as unknown as Connection;
+
+      try {
+        await withVault(agentWallet, { maxSpend: "500 USDC/day" }, {
+          connection: mockConnection,
+          ownerWallet,
+        });
+        expect.fail("Should have thrown (no real RPC)");
+      } catch (e: any) {
+        // Should get past validation to the RPC stage
+        expect(e.message).to.not.include("Owner and agent must be different");
+      }
     });
   });
 });

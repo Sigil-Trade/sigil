@@ -120,13 +120,14 @@ anchor build --no-idl
 # Generate IDL separately (requires nightly Rust — anchor-syn 0.32.1 bug)
 RUSTUP_TOOLCHAIN=nightly anchor idl build -o target/idl/agent_shield.json
 
-# Run on-chain tests (57 tests across 3 suites)
-anchor test
+# Run on-chain tests (68 tests across 3 suites)
+npx ts-mocha -p ./tsconfig.json -t 300000 \
+  tests/agent-shield.ts tests/jupiter-integration.ts tests/flash-trade-integration.ts
 
-# Run wrapper tests (49 tests)
+# Run wrapper tests (73 tests)
 cd sdk/wrapper && pnpm test
 
-# Run plugin tests (53 tests)
+# Run plugin tests (57 tests)
 cd plugins/solana-agent-kit && pnpm test
 cd plugins/elizaos && pnpm test
 
@@ -139,13 +140,14 @@ cargo fmt --check --manifest-path programs/agent-shield/Cargo.toml
 
 | Suite | Tests |
 |-------|-------|
-| Core vault management & permission engine | 39 |
+| Core vault management & permission engine | 51 |
 | Jupiter integration (composed swaps) | 9 |
 | Flash Trade integration (leveraged perps) | 9 |
-| Wrapper SDK (`@agent-shield/solana`) | 49 |
-| SAK plugin (`@agent-shield/plugin-solana-agent-kit`) | 23 |
-| ElizaOS plugin (`@agent-shield/plugin-elizaos`) | 30 |
-| **Total** | **159** |
+| Wrapper SDK (`@agent-shield/solana`) | 73 |
+| SAK plugin (`@agent-shield/plugin-solana-agent-kit`) | 25 |
+| ElizaOS plugin (`@agent-shield/plugin-elizaos`) | 32 |
+| MCP server (`@agent-shield/mcp`) | 82 |
+| **Total** | **280** |
 
 ## License
 

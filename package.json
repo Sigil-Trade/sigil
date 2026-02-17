@@ -3,6 +3,9 @@
   "version": "0.1.1",
   "description": "AI Agent Financial Middleware for Solana",
   "private": true,
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "lint:fix": "prettier */*.js \"*/**/*{.js,.ts}\" -w",
     "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check",
@@ -16,6 +19,7 @@
   },
   "devDependencies": {
     "@types/bn.js": "^5.1.5",
+    "@types/bs58": "^4.0.4",
     "@types/chai": "^4.3.11",
     "@types/mocha": "^10.0.6",
     "chai": "^4.4.1",
