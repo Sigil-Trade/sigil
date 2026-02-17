@@ -1,4 +1,7 @@
 import {
+  AddressLookupTableAccount,
+  Connection,
+  MessageV0,
   PublicKey,
   Transaction,
   TransactionInstruction,
@@ -25,8 +28,9 @@ const TOKEN_2022_PROGRAM_ID = new PublicKey(
 export function analyzeTransaction(
   tx: Transaction | VersionedTransaction,
   signerPubkey: PublicKey,
+  addressLookupTableAccounts?: AddressLookupTableAccount[],
 ): TransactionAnalysis {
-  const instructions = extractInstructions(tx);
+  const instructions = extractInstructions(tx, addressLookupTableAccounts);
   const programIds: PublicKey[] = [];
   const transfers: TokenTransfer[] = [];
   const seenPrograms = new Set<string>();
@@ -60,30 +64,41 @@ export function analyzeTransaction(
  */
 function extractInstructions(
   tx: Transaction | VersionedTransaction,
+  addressLookupTableAccounts?: AddressLookupTableAccount[],
 ): TransactionInstruction[] {
   if (tx instanceof Transaction) {
     return tx.instructions;
   }
 
   // VersionedTransaction — need to resolve from compiled message
-  return extractFromVersionedMessage(tx.message);
+  return extractFromVersionedMessage(tx.message, addressLookupTableAccounts);
 }
 
 /**
  * Extract TransactionInstruction-like objects from a VersionedMessage.
+ * When addressLookupTableAccounts are provided, resolves account keys
+ * referenced through Address Lookup Tables (ALTs) in V0 messages.
  */
 function extractFromVersionedMessage(
   message: VersionedMessage,
+  addressLookupTableAccounts?: AddressLookupTableAccount[],
 ): TransactionInstruction[] {
-  const accountKeys = message.staticAccountKeys;
+  // MessageV0 (version === 0) supports ALT resolution via
+  // getAccountKeys({ addressLookupTableAccounts }).
+  // Legacy Message (version === 'legacy') does not accept ALT args.
+  const accountKeys =
+    addressLookupTableAccounts?.length && message.version === 0
+      ? (message as MessageV0).getAccountKeys({ addressLookupTableAccounts })
+      : message.getAccountKeys();
+
   const instructions: TransactionInstruction[] = [];
 
   for (const compiled of message.compiledInstructions) {
-    const programId = accountKeys[compiled.programIdIndex];
+    const programId = accountKeys.get(compiled.programIdIndex);
     if (!programId) continue;
 
     const keys = compiled.accountKeyIndexes.map((idx) => ({
-      pubkey: accountKeys[idx] ?? PublicKey.default,
+      pubkey: accountKeys.get(idx) ?? PublicKey.default,
       isSigner: message.isAccountSigner(idx),
       isWritable: message.isAccountWritable(idx),
     }));
@@ -98,6 +113,28 @@ function extractFromVersionedMessage(
   }
 
   return instructions;
+}
+
+/**
+ * Resolve Address Lookup Table accounts for a VersionedTransaction.
+ * Returns empty array if the transaction has no ALT references.
+ */
+export async function resolveTransactionAddressLookupTables(
+  tx: VersionedTransaction,
+  connection: Connection,
+): Promise<AddressLookupTableAccount[]> {
+  const lookups = tx.message.addressTableLookups;
+  if (!lookups || lookups.length === 0) return [];
+
+  const results = await Promise.all(
+    lookups.map((lookup) =>
+      connection.getAddressLookupTable(lookup.accountKey),
+    ),
+  );
+
+  return results
+    .filter((r) => r.value !== null)
+    .map((r) => r.value as AddressLookupTableAccount);
 }
 
 /**

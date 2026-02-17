@@ -1,8 +1,11 @@
 import { expect } from "chai";
 import {
+  AddressLookupTableAccount,
+  Connection,
   Keypair,
   PublicKey,
   Transaction,
+  TransactionMessage,
   VersionedTransaction,
   TransactionInstruction,
   SystemProgram,
@@ -17,6 +20,7 @@ import {
   analyzeTransaction,
   evaluatePolicy,
   resolvePolicies,
+  resolveTransactionAddressLookupTables,
   KNOWN_PROTOCOLS,
   KNOWN_TOKENS,
   isSystemProgram,
@@ -28,12 +32,8 @@ import type { WalletLike, ShieldStorage } from "../src";
 
 // --- Test Helpers ---
 
-const USDC_MINT = new PublicKey(
-  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-);
-const SOL_MINT = new PublicKey(
-  "So11111111111111111111111111111111111111112",
-);
+const USDC_MINT = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+const SOL_MINT = new PublicKey("So11111111111111111111111111111111111111112");
 const JUPITER_PROGRAM = new PublicKey(
   "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
 );
@@ -45,11 +45,15 @@ function createMockWallet(): WalletLike & { signCount: number } {
   return {
     publicKey: kp.publicKey,
     signCount: 0,
-    async signTransaction<T extends Transaction | VersionedTransaction>(tx: T): Promise<T> {
+    async signTransaction<T extends Transaction | VersionedTransaction>(
+      tx: T,
+    ): Promise<T> {
       this.signCount++;
       return tx;
     },
-    async signAllTransactions<T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> {
+    async signAllTransactions<T extends Transaction | VersionedTransaction>(
+      txs: T[],
+    ): Promise<T[]> {
       this.signCount += txs.length;
       return txs;
     },
@@ -138,10 +142,7 @@ function buildSplTransferTx(
 }
 
 /** Build a transaction interacting with a specific program */
-function buildProgramTx(
-  payer: PublicKey,
-  programId: PublicKey,
-): Transaction {
+function buildProgramTx(payer: PublicKey, programId: PublicKey): Transaction {
   const tx = new Transaction();
   tx.add(
     new TransactionInstruction({
@@ -204,9 +205,8 @@ describe("@agent-shield/solana", () => {
 
   describe("registry", () => {
     it("has Jupiter in KNOWN_PROTOCOLS", () => {
-      expect(
-        KNOWN_PROTOCOLS.has("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"),
-      ).to.be.true;
+      expect(KNOWN_PROTOCOLS.has("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"))
+        .to.be.true;
     });
 
     it("has USDC in KNOWN_TOKENS", () => {
@@ -425,9 +425,7 @@ describe("@agent-shield/solana", () => {
       const analysis = analyzeTransaction(tx, wallet.publicKey);
       // Only allow Flash Trade, not Jupiter
       const policies = resolvePolicies({
-        allowedProtocols: [
-          "PERPHjGBqRHArX4DySjwM6UJHiR3sWAatqfdBS2qQJu",
-        ],
+        allowedProtocols: ["PERPHjGBqRHArX4DySjwM6UJHiR3sWAatqfdBS2qQJu"],
       });
       const state = new ShieldState();
 
@@ -817,16 +815,16 @@ describe("@agent-shield/solana", () => {
       expect(summary.tokens[0].remaining).to.equal(BigInt(300_000_000));
 
       expect(summary.rateLimit.count).to.equal(1);
-      expect(summary.rateLimit.remaining).to.equal(
-        summary.rateLimit.limit - 1,
-      );
+      expect(summary.rateLimit.remaining).to.equal(summary.rateLimit.limit - 1);
     });
 
     it("onPause callback fires on pause", () => {
       const wallet = createMockWallet();
       let pauseCalled = false;
       const protected_ = shield(wallet, undefined, {
-        onPause: () => { pauseCalled = true; },
+        onPause: () => {
+          pauseCalled = true;
+        },
       });
 
       protected_.pause();
@@ -837,7 +835,9 @@ describe("@agent-shield/solana", () => {
       const wallet = createMockWallet();
       let resumeCalled = false;
       const protected_ = shield(wallet, undefined, {
-        onResume: () => { resumeCalled = true; },
+        onResume: () => {
+          resumeCalled = true;
+        },
       });
 
       protected_.pause();
@@ -849,7 +849,9 @@ describe("@agent-shield/solana", () => {
       const wallet = createMockWallet();
       let updatedPolicies: any = null;
       const protected_ = shield(wallet, undefined, {
-        onPolicyUpdate: (p) => { updatedPolicies = p; },
+        onPolicyUpdate: (p) => {
+          updatedPolicies = p;
+        },
       });
 
       const newPolicies = { maxSpend: "1000 USDC/day" as const };
@@ -896,12 +898,7 @@ describe("@agent-shield/solana", () => {
         maxSpend: "100 USDC/day",
       });
 
-      const tx = buildSplTransferTx(
-        wallet.publicKey,
-        USDC_MINT,
-        BigInt(0),
-        6,
-      );
+      const tx = buildSplTransferTx(wallet.publicKey, USDC_MINT, BigInt(0), 6);
       await protected_.signTransaction(tx);
       expect(wallet.signCount).to.equal(1);
     });
@@ -913,12 +910,7 @@ describe("@agent-shield/solana", () => {
         blockUnknownPrograms: false,
       });
 
-      const tx = buildSplTransferTx(
-        wallet.publicKey,
-        USDC_MINT,
-        large,
-        6,
-      );
+      const tx = buildSplTransferTx(wallet.publicKey, USDC_MINT, large, 6);
 
       const analysis = analyzeTransaction(tx, wallet.publicKey);
       expect(analysis.transfers[0].amount).to.equal(large);
@@ -933,6 +925,575 @@ describe("@agent-shield/solana", () => {
       const result = await protected_.signAllTransactions!([]);
       expect(result).to.deep.equal([]);
       expect(wallet.signCount).to.equal(0);
+    });
+  });
+
+  // --- VersionedTransaction Helpers ---
+
+  const RECENT_BLOCKHASH = "EETubP5AKHgjPAhzPkA6E6Q25CUVpCzSEbNqhU7vBd8b";
+
+  /** Build a VersionedTransaction (V0 message, no ALTs) with system transfer */
+  function buildVersionedSystemTx(from: PublicKey): VersionedTransaction {
+    const ix = SystemProgram.transfer({
+      fromPubkey: from,
+      toPubkey: Keypair.generate().publicKey,
+      lamports: 1_000_000,
+    });
+    const messageV0 = new TransactionMessage({
+      payerKey: from,
+      recentBlockhash: RECENT_BLOCKHASH,
+      instructions: [ix],
+    }).compileToV0Message();
+    return new VersionedTransaction(messageV0);
+  }
+
+  /** Build a VersionedTransaction with SPL TransferChecked */
+  function buildVersionedSplTransferTx(
+    authority: PublicKey,
+    mint: PublicKey,
+    amount: bigint,
+    decimals: number,
+  ): VersionedTransaction {
+    const ix = buildTransferCheckedIx(
+      authority,
+      Keypair.generate().publicKey,
+      mint,
+      Keypair.generate().publicKey,
+      amount,
+      decimals,
+    );
+    const messageV0 = new TransactionMessage({
+      payerKey: authority,
+      recentBlockhash: RECENT_BLOCKHASH,
+      instructions: [ix],
+    }).compileToV0Message();
+    return new VersionedTransaction(messageV0);
+  }
+
+  /** Build a VersionedTransaction interacting with a specific program */
+  function buildVersionedProgramTx(
+    payer: PublicKey,
+    programId: PublicKey,
+  ): VersionedTransaction {
+    const ix = new TransactionInstruction({
+      programId,
+      keys: [{ pubkey: payer, isSigner: true, isWritable: true }],
+      data: Buffer.from([1, 2, 3]),
+    });
+    const messageV0 = new TransactionMessage({
+      payerKey: payer,
+      recentBlockhash: RECENT_BLOCKHASH,
+      instructions: [ix],
+    }).compileToV0Message();
+    return new VersionedTransaction(messageV0);
+  }
+
+  /** Build a VersionedTransaction with Address Lookup Tables */
+  function buildVersionedTxWithALT(
+    payer: PublicKey,
+    instructions: TransactionInstruction[],
+    addressLookupTableAccounts: AddressLookupTableAccount[],
+  ): VersionedTransaction {
+    const messageV0 = new TransactionMessage({
+      payerKey: payer,
+      recentBlockhash: RECENT_BLOCKHASH,
+      instructions,
+    }).compileToV0Message(addressLookupTableAccounts);
+    return new VersionedTransaction(messageV0);
+  }
+
+  /** Create a mock AddressLookupTableAccount */
+  function createMockALT(
+    tableKey: PublicKey,
+    addresses: PublicKey[],
+  ): AddressLookupTableAccount {
+    return new AddressLookupTableAccount({
+      key: tableKey,
+      state: {
+        deactivationSlot: BigInt("18446744073709551615"), // u64::MAX = active
+        lastExtendedSlot: 0,
+        lastExtendedSlotStartIndex: 0,
+        authority: undefined,
+        addresses,
+      },
+    });
+  }
+
+  // --- VersionedTransaction Tests ---
+
+  describe("VersionedTransaction Support", () => {
+    describe("analyzeTransaction — VersionedTransaction (no ALTs)", () => {
+      it("extracts system program from V0 message", () => {
+        const wallet = createMockWallet();
+        const tx = buildVersionedSystemTx(wallet.publicKey);
+        const analysis = analyzeTransaction(tx, wallet.publicKey);
+
+        const hasSystemProgram = analysis.programIds.some((p) =>
+          p.equals(SystemProgram.programId),
+        );
+        expect(hasSystemProgram).to.be.true;
+      });
+
+      it("extracts SPL TransferChecked from V0 message", () => {
+        const wallet = createMockWallet();
+        const tx = buildVersionedSplTransferTx(
+          wallet.publicKey,
+          USDC_MINT,
+          BigInt(100_000_000),
+          6,
+        );
+        const analysis = analyzeTransaction(tx, wallet.publicKey);
+
+        expect(analysis.transfers.length).to.equal(1);
+        expect(analysis.transfers[0].mint.equals(USDC_MINT)).to.be.true;
+        expect(analysis.transfers[0].amount).to.equal(BigInt(100_000_000));
+      });
+
+      it("detects outgoing transfer amount from V0 message", () => {
+        const wallet = createMockWallet();
+        const tx = buildVersionedSplTransferTx(
+          wallet.publicKey,
+          USDC_MINT,
+          BigInt(50_000_000),
+          6,
+        );
+        const analysis = analyzeTransaction(tx, wallet.publicKey);
+
+        expect(analysis.transfers[0].direction).to.equal("outgoing");
+        expect(analysis.estimatedValueLamports).to.equal(BigInt(50_000_000));
+      });
+
+      it("extracts DeFi program ID from V0 message", () => {
+        const wallet = createMockWallet();
+        const tx = buildVersionedProgramTx(wallet.publicKey, JUPITER_PROGRAM);
+        const analysis = analyzeTransaction(tx, wallet.publicKey);
+
+        const hasJupiter = analysis.programIds.some((p) =>
+          p.equals(JUPITER_PROGRAM),
+        );
+        expect(hasJupiter).to.be.true;
+      });
+    });
+
+    describe("analyzeTransaction — VersionedTransaction with ALTs", () => {
+      it("resolves program IDs referenced through ALT", () => {
+        const wallet = createMockWallet();
+        const programId = Keypair.generate().publicKey;
+        const tableKey = Keypair.generate().publicKey;
+        const alt = createMockALT(tableKey, [programId]);
+
+        // Build an instruction referencing the program from the ALT
+        const ix = new TransactionInstruction({
+          programId,
+          keys: [
+            { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
+          ],
+          data: Buffer.from([1, 2, 3]),
+        });
+        const tx = buildVersionedTxWithALT(wallet.publicKey, [ix], [alt]);
+
+        // Without ALTs — program should fallback (may not resolve correctly)
+        const withoutALT = analyzeTransaction(tx, wallet.publicKey);
+        // With ALTs — program should resolve correctly
+        const withALT = analyzeTransaction(tx, wallet.publicKey, [alt]);
+
+        const hasProgram = withALT.programIds.some((p) => p.equals(programId));
+        expect(hasProgram).to.be.true;
+      });
+
+      it("resolves SPL transfer mint referenced through ALT", () => {
+        const wallet = createMockWallet();
+        const source = Keypair.generate().publicKey;
+        const destination = Keypair.generate().publicKey;
+        const tableKey = Keypair.generate().publicKey;
+        const alt = createMockALT(tableKey, [source, USDC_MINT, destination]);
+
+        const ix = buildTransferCheckedIx(
+          wallet.publicKey,
+          source,
+          USDC_MINT,
+          destination,
+          BigInt(250_000_000),
+          6,
+        );
+        const tx = buildVersionedTxWithALT(wallet.publicKey, [ix], [alt]);
+        const analysis = analyzeTransaction(tx, wallet.publicKey, [alt]);
+
+        expect(analysis.transfers.length).to.equal(1);
+        expect(analysis.transfers[0].mint.equals(USDC_MINT)).to.be.true;
+        expect(analysis.transfers[0].amount).to.equal(BigInt(250_000_000));
+      });
+
+      it("resolves transfer destination referenced through ALT", () => {
+        const wallet = createMockWallet();
+        const source = Keypair.generate().publicKey;
+        const destination = Keypair.generate().publicKey;
+        const tableKey = Keypair.generate().publicKey;
+        const alt = createMockALT(tableKey, [source, USDC_MINT, destination]);
+
+        const ix = buildTransferCheckedIx(
+          wallet.publicKey,
+          source,
+          USDC_MINT,
+          destination,
+          BigInt(100_000_000),
+          6,
+        );
+        const tx = buildVersionedTxWithALT(wallet.publicKey, [ix], [alt]);
+        const analysis = analyzeTransaction(tx, wallet.publicKey, [alt]);
+
+        expect(analysis.transfers[0].direction).to.equal("outgoing");
+        expect(analysis.transfers[0].destination!.equals(destination)).to.be
+          .true;
+      });
+
+      it("handles mixed static + ALT accounts correctly", () => {
+        const wallet = createMockWallet();
+        const altKey1 = Keypair.generate().publicKey;
+        const altKey2 = Keypair.generate().publicKey;
+        const tableKey = Keypair.generate().publicKey;
+        const alt = createMockALT(tableKey, [altKey1, altKey2]);
+
+        // System transfer uses only static keys
+        const systemIx = SystemProgram.transfer({
+          fromPubkey: wallet.publicKey,
+          toPubkey: Keypair.generate().publicKey,
+          lamports: 1_000,
+        });
+        // Custom ix with account from ALT
+        const customIx = new TransactionInstruction({
+          programId: JUPITER_PROGRAM,
+          keys: [
+            { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
+            { pubkey: altKey1, isSigner: false, isWritable: true },
+          ],
+          data: Buffer.from([0]),
+        });
+
+        const tx = buildVersionedTxWithALT(
+          wallet.publicKey,
+          [systemIx, customIx],
+          [alt],
+        );
+        const analysis = analyzeTransaction(tx, wallet.publicKey, [alt]);
+
+        // Should see both system program and Jupiter
+        const hasSystem = analysis.programIds.some((p) =>
+          p.equals(SystemProgram.programId),
+        );
+        const hasJupiter = analysis.programIds.some((p) =>
+          p.equals(JUPITER_PROGRAM),
+        );
+        expect(hasSystem).to.be.true;
+        expect(hasJupiter).to.be.true;
+      });
+
+      it("falls back to static keys when no ALTs provided", () => {
+        const wallet = createMockWallet();
+        // Simple V0 tx with no ALT references — should work fine without ALTs
+        const tx = buildVersionedSystemTx(wallet.publicKey);
+        const analysis = analyzeTransaction(tx, wallet.publicKey);
+
+        expect(analysis.programIds.length).to.be.greaterThanOrEqual(1);
+        const hasSystem = analysis.programIds.some((p) =>
+          p.equals(SystemProgram.programId),
+        );
+        expect(hasSystem).to.be.true;
+      });
+    });
+
+    describe("shield() — VersionedTransaction", () => {
+      it("signs V0 transaction within policy", async () => {
+        const wallet = createMockWallet();
+        const protected_ = shield(wallet, {
+          blockUnknownPrograms: false,
+        });
+
+        const tx = buildVersionedSystemTx(wallet.publicKey);
+        await protected_.signTransaction(tx);
+        expect(wallet.signCount).to.equal(1);
+      });
+
+      it("blocks V0 transaction over spending cap", async () => {
+        const wallet = createMockWallet();
+        const protected_ = shield(wallet, {
+          maxSpend: "100 USDC/day",
+        });
+
+        const tx = buildVersionedSplTransferTx(
+          wallet.publicKey,
+          USDC_MINT,
+          BigInt(200_000_000), // 200 USDC > 100 cap
+          6,
+        );
+
+        try {
+          await protected_.signTransaction(tx);
+          expect.fail("Should have thrown ShieldDeniedError");
+        } catch (e) {
+          expect(e).to.be.instanceOf(ShieldDeniedError);
+          const err = e as ShieldDeniedError;
+          expect(err.violations[0].rule).to.equal("spending_cap");
+        }
+        expect(wallet.signCount).to.equal(0);
+      });
+
+      it("blocks V0 transaction with unknown program", async () => {
+        const wallet = createMockWallet();
+        const protected_ = shield(wallet);
+        const unknownProg = Keypair.generate().publicKey;
+
+        const tx = buildVersionedProgramTx(wallet.publicKey, unknownProg);
+
+        try {
+          await protected_.signTransaction(tx);
+          expect.fail("Should have thrown ShieldDeniedError");
+        } catch (e) {
+          expect(e).to.be.instanceOf(ShieldDeniedError);
+          const err = e as ShieldDeniedError;
+          expect(err.violations[0].rule).to.equal("unknown_program");
+        }
+        expect(wallet.signCount).to.equal(0);
+      });
+
+      it("allows V0 transaction with known Jupiter program", async () => {
+        const wallet = createMockWallet();
+        const protected_ = shield(wallet);
+
+        const tx = buildVersionedProgramTx(wallet.publicKey, JUPITER_PROGRAM);
+        await protected_.signTransaction(tx);
+        expect(wallet.signCount).to.equal(1);
+      });
+
+      it("tracks cumulative spend across V0 transactions", async () => {
+        const wallet = createMockWallet();
+        const protected_ = shield(wallet, {
+          maxSpend: "500 USDC/day",
+        });
+
+        // First: 300 USDC — should pass
+        const tx1 = buildVersionedSplTransferTx(
+          wallet.publicKey,
+          USDC_MINT,
+          BigInt(300_000_000),
+          6,
+        );
+        await protected_.signTransaction(tx1);
+        expect(wallet.signCount).to.equal(1);
+
+        // Second: 300 USDC — total 600 > 500, should fail
+        const tx2 = buildVersionedSplTransferTx(
+          wallet.publicKey,
+          USDC_MINT,
+          BigInt(300_000_000),
+          6,
+        );
+
+        try {
+          await protected_.signTransaction(tx2);
+          expect.fail("Should have thrown ShieldDeniedError");
+        } catch (e) {
+          expect(e).to.be.instanceOf(ShieldDeniedError);
+        }
+        expect(wallet.signCount).to.equal(1);
+      });
+
+      it("handles V0 in signAllTransactions batch", async () => {
+        const wallet = createMockWallet();
+        const protected_ = shield(wallet, {
+          blockUnknownPrograms: false,
+        });
+
+        const txs = [
+          buildVersionedSystemTx(wallet.publicKey),
+          buildVersionedSystemTx(wallet.publicKey),
+        ];
+        const result = await protected_.signAllTransactions!(txs);
+        expect(result.length).to.equal(2);
+        expect(wallet.signCount).to.equal(2);
+      });
+    });
+
+    describe("shield() — VersionedTransaction with ALTs", () => {
+      it("resolves ALT accounts when connection provided", async () => {
+        const wallet = createMockWallet();
+        const altAddr = Keypair.generate().publicKey;
+        const tableKey = Keypair.generate().publicKey;
+        const alt = createMockALT(tableKey, [altAddr]);
+
+        // Build a V0 tx that references accounts from the ALT
+        const ix = new TransactionInstruction({
+          programId: JUPITER_PROGRAM,
+          keys: [
+            { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
+            { pubkey: altAddr, isSigner: false, isWritable: true },
+          ],
+          data: Buffer.from([0]),
+        });
+        const tx = buildVersionedTxWithALT(wallet.publicKey, [ix], [alt]);
+
+        // Mock connection that returns our ALT
+        const mockConnection = {
+          getAddressLookupTable: async (key: PublicKey) => {
+            if (key.equals(tableKey)) {
+              return { context: { slot: 0 }, value: alt };
+            }
+            return { context: { slot: 0 }, value: null };
+          },
+        } as unknown as Connection;
+
+        const protected_ = shield(wallet, undefined, {
+          connection: mockConnection,
+        });
+        await protected_.signTransaction(tx);
+        expect(wallet.signCount).to.equal(1);
+      });
+
+      it("correctly identifies program from ALT for allowlist check", async () => {
+        const wallet = createMockWallet();
+        const unknownProg = Keypair.generate().publicKey;
+        const tableKey = Keypair.generate().publicKey;
+        const alt = createMockALT(tableKey, [unknownProg]);
+
+        const ix = new TransactionInstruction({
+          programId: unknownProg,
+          keys: [
+            { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
+          ],
+          data: Buffer.from([1]),
+        });
+        const tx = buildVersionedTxWithALT(wallet.publicKey, [ix], [alt]);
+
+        const mockConnection = {
+          getAddressLookupTable: async (key: PublicKey) => {
+            if (key.equals(tableKey)) {
+              return { context: { slot: 0 }, value: alt };
+            }
+            return { context: { slot: 0 }, value: null };
+          },
+        } as unknown as Connection;
+
+        // Default policy blocks unknown programs
+        const protected_ = shield(wallet, undefined, {
+          connection: mockConnection,
+        });
+
+        try {
+          await protected_.signTransaction(tx);
+          expect.fail("Should have thrown ShieldDeniedError");
+        } catch (e) {
+          expect(e).to.be.instanceOf(ShieldDeniedError);
+          const err = e as ShieldDeniedError;
+          expect(err.violations[0].rule).to.equal("unknown_program");
+        }
+        expect(wallet.signCount).to.equal(0);
+      });
+
+      it("correctly identifies token from ALT for spending cap", async () => {
+        const wallet = createMockWallet();
+        const source = Keypair.generate().publicKey;
+        const destination = Keypair.generate().publicKey;
+        const tableKey = Keypair.generate().publicKey;
+        const alt = createMockALT(tableKey, [source, USDC_MINT, destination]);
+
+        const ix = buildTransferCheckedIx(
+          wallet.publicKey,
+          source,
+          USDC_MINT,
+          destination,
+          BigInt(200_000_000), // 200 USDC
+          6,
+        );
+        const tx = buildVersionedTxWithALT(wallet.publicKey, [ix], [alt]);
+
+        const mockConnection = {
+          getAddressLookupTable: async (key: PublicKey) => {
+            if (key.equals(tableKey)) {
+              return { context: { slot: 0 }, value: alt };
+            }
+            return { context: { slot: 0 }, value: null };
+          },
+        } as unknown as Connection;
+
+        // 100 USDC cap — 200 USDC tx should be blocked
+        const protected_ = shield(
+          wallet,
+          { maxSpend: "100 USDC/day" },
+          { connection: mockConnection },
+        );
+
+        try {
+          await protected_.signTransaction(tx);
+          expect.fail("Should have thrown ShieldDeniedError");
+        } catch (e) {
+          expect(e).to.be.instanceOf(ShieldDeniedError);
+          const err = e as ShieldDeniedError;
+          expect(err.violations[0].rule).to.equal("spending_cap");
+        }
+        expect(wallet.signCount).to.equal(0);
+      });
+
+      it("works without connection (static-key fallback)", async () => {
+        const wallet = createMockWallet();
+        // Simple V0 tx with no ALT references, no connection
+        const protected_ = shield(wallet, {
+          blockUnknownPrograms: false,
+        });
+
+        const tx = buildVersionedSystemTx(wallet.publicKey);
+        await protected_.signTransaction(tx);
+        expect(wallet.signCount).to.equal(1);
+      });
+    });
+
+    describe("resolveTransactionAddressLookupTables", () => {
+      it("returns empty array for tx with no ALT lookups", async () => {
+        const tx = buildVersionedSystemTx(Keypair.generate().publicKey);
+        const mockConnection = {
+          getAddressLookupTable: async () => {
+            throw new Error("Should not be called");
+          },
+        } as unknown as Connection;
+
+        const result = await resolveTransactionAddressLookupTables(
+          tx,
+          mockConnection,
+        );
+        expect(result).to.deep.equal([]);
+      });
+
+      it("returns resolved ALT accounts from connection", async () => {
+        const payer = Keypair.generate().publicKey;
+        const altAddr = Keypair.generate().publicKey;
+        const tableKey = Keypair.generate().publicKey;
+        const alt = createMockALT(tableKey, [altAddr]);
+
+        const ix = new TransactionInstruction({
+          programId: JUPITER_PROGRAM,
+          keys: [
+            { pubkey: payer, isSigner: true, isWritable: true },
+            { pubkey: altAddr, isSigner: false, isWritable: true },
+          ],
+          data: Buffer.from([0]),
+        });
+        const tx = buildVersionedTxWithALT(payer, [ix], [alt]);
+
+        const mockConnection = {
+          getAddressLookupTable: async (key: PublicKey) => {
+            if (key.equals(tableKey)) {
+              return { context: { slot: 0 }, value: alt };
+            }
+            return { context: { slot: 0 }, value: null };
+          },
+        } as unknown as Connection;
+
+        const result = await resolveTransactionAddressLookupTables(
+          tx,
+          mockConnection,
+        );
+        expect(result.length).to.equal(1);
+        expect(result[0].key.equals(tableKey)).to.be.true;
+      });
     });
   });
 });

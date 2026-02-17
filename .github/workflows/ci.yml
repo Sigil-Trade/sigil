@@ -57,7 +57,7 @@ jobs:
         # TODO: enable repo-wide after running `npx prettier --write .`
         run: npx prettier --check "sdk/core/src/**/*.ts" "sdk/wrapper/src/**/*.ts"
 
-      - name: Wrapper tests (52 tests, no validator needed)
+      - name: Wrapper tests (73 tests, no validator needed)
         working-directory: sdk/wrapper
         run: pnpm test
 

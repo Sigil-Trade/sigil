@@ -19,7 +19,11 @@ export { ShieldDeniedError, ShieldConfigError } from "./errors";
 export type { PolicyViolation } from "./errors";
 
 // Transaction inspection (Solana-specific)
-export { analyzeTransaction, getNonSystemProgramIds } from "./inspector";
+export {
+  analyzeTransaction,
+  getNonSystemProgramIds,
+  resolveTransactionAddressLookupTables,
+} from "./inspector";
 
 // Protocol & token registry (wrapper versions — accept PublicKey | string)
 export {

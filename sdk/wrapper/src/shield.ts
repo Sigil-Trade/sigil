@@ -1,6 +1,15 @@
-import { PublicKey, Transaction, VersionedTransaction } from "@solana/web3.js";
+import {
+  AddressLookupTableAccount,
+  Connection,
+  PublicKey,
+  Transaction,
+  VersionedTransaction,
+} from "@solana/web3.js";
 import { ShieldPolicies, SpendingSummary, resolvePolicies } from "./policies";
-import { analyzeTransaction } from "./inspector";
+import {
+  analyzeTransaction,
+  resolveTransactionAddressLookupTables,
+} from "./inspector";
 import { evaluatePolicy, recordTransaction } from "./engine";
 import { ShieldDeniedError } from "./errors";
 import { ShieldState, ShieldStorage } from "./state";
@@ -45,6 +54,8 @@ export interface ShieldedWallet extends WalletLike {
 }
 
 export interface ShieldOptions {
+  /** Solana RPC connection — enables Address Lookup Table resolution for VersionedTransactions */
+  connection?: Connection;
   /** Custom storage backend for state persistence. Default: auto-detect (localStorage in browser, in-memory in Node.js) */
   storage?: ShieldStorage;
   /** Event handler called when a transaction is denied */
@@ -81,6 +92,7 @@ export function shield(
   options?: ShieldOptions,
 ): ShieldedWallet {
   let resolved = resolvePolicies(policies);
+  const connection = options?.connection;
   const state = new ShieldState(options?.storage);
   const onDenied = options?.onDenied;
   const onApproved = options?.onApproved;
@@ -106,7 +118,24 @@ export function shield(
         return wallet.signTransaction(tx);
       }
 
-      const analysis = analyzeTransaction(tx, wallet.publicKey);
+      // Resolve ALTs for VersionedTransactions when connection is available
+      let lookupTableAccounts: AddressLookupTableAccount[] | undefined;
+      if (
+        connection &&
+        tx instanceof VersionedTransaction &&
+        tx.message.addressTableLookups.length > 0
+      ) {
+        lookupTableAccounts = await resolveTransactionAddressLookupTables(
+          tx,
+          connection,
+        );
+      }
+
+      const analysis = analyzeTransaction(
+        tx,
+        wallet.publicKey,
+        lookupTableAccounts,
+      );
       const violations = evaluatePolicy(analysis, resolved, state);
 
       if (violations.length > 0) {
@@ -135,11 +164,49 @@ export function shield(
         return Promise.all(txs.map((tx) => wallet.signTransaction(tx)));
       }
 
-      // Evaluate each transaction sequentially, recording spends into state
-      // as we go so cumulative caps are enforced across the batch.
-      const analyses = txs.map((tx) =>
-        analyzeTransaction(tx, wallet.publicKey),
-      );
+      // Resolve ALTs for any VersionedTransactions in the batch,
+      // caching resolved ALTs across the batch to avoid redundant RPCs.
+      const altCache = new Map<string, AddressLookupTableAccount>();
+      const analyses = [];
+      for (const tx of txs) {
+        let lookupTableAccounts: AddressLookupTableAccount[] | undefined;
+        if (
+          connection &&
+          tx instanceof VersionedTransaction &&
+          tx.message.addressTableLookups.length > 0
+        ) {
+          const cached: AddressLookupTableAccount[] = [];
+          let hasMissing = false;
+          for (const lookup of tx.message.addressTableLookups) {
+            const key = lookup.accountKey.toBase58();
+            const existing = altCache.get(key);
+            if (existing) {
+              cached.push(existing);
+            } else {
+              hasMissing = true;
+            }
+          }
+          if (hasMissing) {
+            const fetched = await resolveTransactionAddressLookupTables(
+              tx,
+              connection,
+            );
+            for (const alt of fetched) {
+              altCache.set(alt.key.toBase58(), alt);
+            }
+            // Rebuild from cache to get all ALTs in order
+            cached.length = 0;
+            for (const lookup of tx.message.addressTableLookups) {
+              const alt = altCache.get(lookup.accountKey.toBase58());
+              if (alt) cached.push(alt);
+            }
+          }
+          lookupTableAccounts = cached;
+        }
+        analyses.push(
+          analyzeTransaction(tx, wallet.publicKey, lookupTableAccounts),
+        );
+      }
 
       for (const analysis of analyses) {
         const violations = evaluatePolicy(analysis, resolved, state);
