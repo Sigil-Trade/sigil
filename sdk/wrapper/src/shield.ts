@@ -5,7 +5,12 @@ import {
   Transaction,
   VersionedTransaction,
 } from "@solana/web3.js";
-import { ShieldPolicies, SpendingSummary, ResolvedPolicies, resolvePolicies } from "./policies";
+import {
+  ShieldPolicies,
+  SpendingSummary,
+  ResolvedPolicies,
+  resolvePolicies,
+} from "./policies";
 import {
   analyzeTransaction,
   resolveTransactionAddressLookupTables,

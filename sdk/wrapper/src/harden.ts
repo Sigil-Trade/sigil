@@ -176,9 +176,7 @@ export async function findNextVaultId(
  * Uses the first outgoing transfer's mint, falls back to SOL mint.
  */
 function inferTokenMint(analysis: TransactionAnalysis): PublicKey {
-  const SOL_MINT = new PublicKey(
-    "So11111111111111111111111111111111111111112",
-  );
+  const SOL_MINT = new PublicKey("So11111111111111111111111111111111111111112");
   const outgoing = analysis.transfers.find((t) => t.direction === "outgoing");
   if (outgoing && !outgoing.mint.equals(PublicKey.default)) {
     return outgoing.mint;
@@ -200,9 +198,7 @@ function inferAmount(analysis: TransactionAnalysis): bigint {
  * Returns the first non-system program ID, or SystemProgram.
  */
 function inferTargetProtocol(analysis: TransactionAnalysis): PublicKey {
-  const SYSTEM_PROGRAM = new PublicKey(
-    "11111111111111111111111111111111",
-  );
+  const SYSTEM_PROGRAM = new PublicKey("11111111111111111111111111111111");
   for (const pid of analysis.programIds) {
     if (!pid.equals(SYSTEM_PROGRAM)) {
       return pid;
@@ -365,11 +361,9 @@ async function createProgram(
   programId?: PublicKey,
 ): Promise<any> {
   const { AnchorProvider, Program } = await import("@coral-xyz/anchor");
-  const provider = new AnchorProvider(
-    connection,
-    wallet as any,
-    { commitment: "confirmed" },
-  );
+  const provider = new AnchorProvider(connection, wallet as any, {
+    commitment: "confirmed",
+  });
   const idl = { ...sdk.IDL } as any;
   if (programId) {
     idl.address = programId.toBase58();
@@ -388,7 +382,8 @@ function toAnchorWallet(wallet: WalletLike): any {
     signTransaction: wallet.signTransaction.bind(wallet),
     signAllTransactions:
       wallet.signAllTransactions?.bind(wallet) ??
-      ((txs: any[]) => Promise.all(txs.map((tx: any) => wallet.signTransaction(tx)))),
+      ((txs: any[]) =>
+        Promise.all(txs.map((tx: any) => wallet.signTransaction(tx)))),
   };
 }
 
@@ -465,8 +460,14 @@ export async function harden(
   );
 
   // Find next vault ID if not provided
-  const vaultId = options.vaultId ??
-    await findNextVaultId(sdk, options.connection, ownerPubkey, options.programId);
+  const vaultId =
+    options.vaultId ??
+    (await findNextVaultId(
+      sdk,
+      options.connection,
+      ownerPubkey,
+      options.programId,
+    ));
 
   // Map policies to vault params
   const feeDestination = options.feeDestination ?? ownerPubkey;

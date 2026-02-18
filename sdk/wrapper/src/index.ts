@@ -48,5 +48,10 @@ export { evaluatePolicy, enforcePolicy, recordTransaction } from "./engine";
 export { extractInstructions } from "./inspector";
 
 // On-chain upgrade (optional — requires @agent-shield/sdk)
-export { harden, withVault, mapPoliciesToVaultParams, findNextVaultId } from "./harden";
+export {
+  harden,
+  withVault,
+  mapPoliciesToVaultParams,
+  findNextVaultId,
+} from "./harden";
 export type { HardenOptions, HardenResult } from "./harden";
