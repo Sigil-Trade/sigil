@@ -6,6 +6,7 @@ export {
   updatePolicyAction,
   pauseResumeAction,
   transactionHistoryAction,
+  provisionAction,
 } from "./actions";
 export { shieldStatusProvider, spendTrackingProvider } from "./providers";
 export { policyCheckEvaluator } from "./evaluators";

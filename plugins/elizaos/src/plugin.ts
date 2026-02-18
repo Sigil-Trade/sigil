@@ -3,6 +3,7 @@ import {
   updatePolicyAction,
   pauseResumeAction,
   transactionHistoryAction,
+  provisionAction,
 } from "./actions";
 import { shieldStatusProvider, spendTrackingProvider } from "./providers";
 import { policyCheckEvaluator } from "./evaluators";
@@ -34,6 +35,7 @@ export const agentShieldPlugin = {
     updatePolicyAction,
     pauseResumeAction,
     transactionHistoryAction,
+    provisionAction,
   ],
 
   providers: [shieldStatusProvider, spendTrackingProvider],

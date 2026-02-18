@@ -8,6 +8,8 @@ import {
   pauseResumeSchema,
   transactionHistory,
   transactionHistorySchema,
+  provision,
+  provisionSchema,
 } from "./tools";
 
 export {
@@ -82,6 +84,14 @@ export function createAgentShieldPlugin(config: AgentShieldPluginConfig) {
         schema: transactionHistorySchema,
         handler: (agent: any, input: any) =>
           transactionHistory(agent, resolved, input),
+      },
+      shield_provision: {
+        description:
+          "Generate a Solana Action URL for one-click vault provisioning " +
+          "with a TEE-backed agent wallet. User clicks to approve.",
+        schema: provisionSchema,
+        handler: (agent: any, input: any) =>
+          provision(agent, resolved, input),
       },
     },
   };

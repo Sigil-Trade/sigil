@@ -19,6 +19,7 @@ import { reactivateVault } from "./tools/reactivate-vault";
 import { executeSwap } from "./tools/execute-swap";
 import { openPosition } from "./tools/open-position";
 import { closePosition } from "./tools/close-position";
+import { provision } from "./tools/provision";
 
 // Resources
 import { getPolicyResource } from "./resources/policy";
@@ -256,6 +257,22 @@ async function main() {
     },
     async (input) => ({
       content: [{ type: "text", text: await closePosition(client, config, input) }],
+    })
+  );
+
+  // ── Platform Tools ─────────────────────────────────────────
+
+  registerTool(
+    server,
+    "shield_provision",
+    "Generate a Solana Action URL for one-click vault provisioning with a TEE-backed agent wallet. The user clicks the link to approve — no agent signing needed.",
+    {
+      platformUrl: z.string().optional().default("https://app.agentshield.dev").describe("AgentShield platform URL"),
+      template: z.enum(["conservative", "moderate", "aggressive"]).optional().default("conservative").describe("Policy template"),
+      dailyCap: z.number().optional().describe("Custom daily spending cap in USDC"),
+    },
+    async (input) => ({
+      content: [{ type: "text", text: await provision(client, input) }],
     })
   );
 
