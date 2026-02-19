@@ -51,7 +51,7 @@ provisionTee.post("/api/actions/provision-tee", async (c) => {
       },
       body: JSON.stringify({
         type: "solana-mpc-wallet",
-        linkedUser: `user:agent-shield-${Date.now()}`,
+        linkedUser: `userId:agent-shield-${Date.now()}`,
       }),
     });
 
@@ -72,10 +72,11 @@ provisionTee.post("/api/actions/provision-tee", async (c) => {
       address?: string;
       locator?: string;
       id?: string;
+      linkedUser?: string;
     };
 
     const publicKey = result.publicKey || result.address;
-    const locator = result.locator || result.id;
+    const locator = result.locator || result.id || result.linkedUser;
 
     if (!publicKey || !locator) {
       console.error(
