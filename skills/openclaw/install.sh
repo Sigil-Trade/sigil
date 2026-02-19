@@ -5,7 +5,7 @@ set -euo pipefail
 # Idempotent — safe to run multiple times.
 # Does NOT execute remote code. Only copies files and merges JSON config.
 
-MCP_VERSION="0.3.1"
+MCP_VERSION="0.4.0"
 SKILL_DIR="${HOME}/.openclaw/workspace/skills/agent-shield"
 CONFIG_FILE="${HOME}/.openclaw/openclaw.json"
 SHIELD_DIR="${HOME}/.agentshield"

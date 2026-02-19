@@ -1,6 +1,6 @@
 {
   "name": "@agent-shield/actions-server",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Solana Actions server for AgentShield vault provisioning via Blinks",
   "private": true,
   "main": "dist/index.js",
