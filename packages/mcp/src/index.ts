@@ -20,6 +20,11 @@ import { executeSwap } from "./tools/execute-swap";
 import { openPosition } from "./tools/open-position";
 import { closePosition } from "./tools/close-position";
 import { provision } from "./tools/provision";
+import { queuePolicyUpdate } from "./tools/queue-policy-update";
+import { applyPendingPolicy } from "./tools/apply-pending-policy";
+import { cancelPendingPolicy } from "./tools/cancel-pending-policy";
+import { checkPendingPolicy } from "./tools/check-pending-policy";
+import { agentTransfer } from "./tools/agent-transfer";
 
 // Resources
 import { getPolicyResource } from "./resources/policy";
@@ -110,6 +115,20 @@ async function main() {
     }),
   );
 
+  registerTool(
+    server,
+    "shield_check_pending_policy",
+    "Check if a pending timelocked policy update exists for a vault",
+    {
+      vault: z.string().describe("Vault PDA address (base58)"),
+    },
+    async (input) => ({
+      content: [
+        { type: "text", text: await checkPendingPolicy(client, input) },
+      ],
+    }),
+  );
+
   // ── Owner-Signed Write Tools ────────────────────────────────
 
   registerTool(
@@ -144,6 +163,15 @@ async function main() {
         .optional()
         .default(0)
         .describe("Developer fee rate (max 50 = 0.5 BPS)"),
+      allowedDestinations: z
+        .array(z.string())
+        .optional()
+        .describe("Allowed destination addresses for agent transfers (base58). Max 10."),
+      timelockDuration: z
+        .number()
+        .optional()
+        .default(0)
+        .describe("Timelock duration in seconds (0 = immediate policy updates)"),
     },
     async (input) => ({
       content: [{ type: "text", text: await createVault(client, input) }],
@@ -226,9 +254,96 @@ async function main() {
         .number()
         .optional()
         .describe("New developer fee rate (max 50)"),
+      allowedDestinations: z
+        .array(z.string())
+        .optional()
+        .describe("New allowed destinations (base58)"),
+      timelockDuration: z
+        .number()
+        .optional()
+        .describe("New timelock duration in seconds"),
     },
     async (input) => ({
       content: [{ type: "text", text: await updatePolicy(client, input) }],
+    }),
+  );
+
+  registerTool(
+    server,
+    "shield_queue_policy_update",
+    "Queue a timelocked policy change (required when timelock_duration > 0)",
+    {
+      vault: z.string().describe("Vault PDA address (base58)"),
+      dailySpendingCapUsd: z
+        .string()
+        .optional()
+        .describe("New daily spending cap in USD"),
+      maxTransactionSizeUsd: z
+        .string()
+        .optional()
+        .describe("New max transaction size in USD"),
+      allowedTokens: z
+        .array(z.string())
+        .optional()
+        .describe("New allowed token mints (base58)"),
+      allowedProtocols: z
+        .array(z.string())
+        .optional()
+        .describe("New allowed protocols (base58)"),
+      allowedDestinations: z
+        .array(z.string())
+        .optional()
+        .describe("New allowed destinations (base58)"),
+      maxLeverageBps: z.number().optional().describe("New max leverage in BPS"),
+      canOpenPositions: z
+        .boolean()
+        .optional()
+        .describe("Whether agent can open positions"),
+      maxConcurrentPositions: z
+        .number()
+        .optional()
+        .describe("New max concurrent positions"),
+      timelockDuration: z
+        .number()
+        .optional()
+        .describe("New timelock duration in seconds"),
+      developerFeeRate: z
+        .number()
+        .optional()
+        .describe("New developer fee rate (max 50)"),
+    },
+    async (input) => ({
+      content: [
+        { type: "text", text: await queuePolicyUpdate(client, input) },
+      ],
+    }),
+  );
+
+  registerTool(
+    server,
+    "shield_apply_pending_policy",
+    "Apply a pending timelocked policy update after timelock expires",
+    {
+      vault: z.string().describe("Vault PDA address (base58)"),
+    },
+    async (input) => ({
+      content: [
+        { type: "text", text: await applyPendingPolicy(client, input) },
+      ],
+    }),
+  );
+
+  registerTool(
+    server,
+    "shield_cancel_pending_policy",
+    "Cancel a pending timelocked policy update before it takes effect",
+    {
+      vault: z.string().describe("Vault PDA address (base58)"),
+    },
+    async (input) => ({
+      content: [
+        { type: "text", text: await cancelPendingPolicy(client, input) },
+      ],
     }),
   );
 
@@ -261,6 +376,27 @@ async function main() {
   );
 
   // ── Agent-Signed Tools ──────────────────────────────────────
+
+  registerTool(
+    server,
+    "shield_agent_transfer",
+    "Transfer tokens from a vault to an allowed destination (agent-signed)",
+    {
+      vault: z.string().describe("Vault PDA address (base58)"),
+      destination: z
+        .string()
+        .describe(
+          "Destination wallet address (base58). Must be in allowed_destinations if configured.",
+        ),
+      mint: z.string().describe("Token mint address (base58)"),
+      amount: z.string().describe("Amount in token base units"),
+    },
+    async (input) => ({
+      content: [
+        { type: "text", text: await agentTransfer(client, input) },
+      ],
+    }),
+  );
 
   registerTool(
     server,
@@ -337,13 +473,13 @@ async function main() {
   registerTool(
     server,
     "shield_provision",
-    "Generate a Solana Action URL for one-click vault provisioning with a TEE-backed agent wallet. The user clicks the link to approve — no agent signing needed.",
+    "Generate a Solana Action URL (Blink) for one-click vault provisioning. The user clicks the link to approve — no agent signing needed.",
     {
       platformUrl: z
         .string()
         .optional()
-        .default("https://app.agentshield.dev")
-        .describe("AgentShield platform URL"),
+        .default("https://agent-middleware.vercel.app")
+        .describe("AgentShield Actions server URL"),
       template: z
         .enum(["conservative", "moderate", "aggressive"])
         .optional()
@@ -353,6 +489,18 @@ async function main() {
         .number()
         .optional()
         .describe("Custom daily spending cap in USDC"),
+      agentPubkey: z
+        .string()
+        .optional()
+        .describe("Agent public key (base58) to register in the vault"),
+      allowedProtocols: z
+        .array(z.string())
+        .optional()
+        .describe("Custom allowed protocol program IDs (base58)"),
+      maxLeverageBps: z
+        .number()
+        .optional()
+        .describe("Custom max leverage in basis points"),
     },
     async (input) => ({
       content: [{ type: "text", text: await provision(client, input) }],

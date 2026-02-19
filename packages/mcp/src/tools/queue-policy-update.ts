@@ -1,12 +1,11 @@
 import { z } from "zod";
 import { BN } from "@coral-xyz/anchor";
 import { PublicKey } from "@solana/web3.js";
-import type { AgentShieldClient } from "@agent-shield/sdk";
-import type { UpdatePolicyParams } from "@agent-shield/sdk";
+import type { AgentShieldClient, QueuePolicyUpdateParams } from "@agent-shield/sdk";
 import { toPublicKey, toBN } from "../utils";
 import { formatError } from "../errors";
 
-export const updatePolicySchema = z.object({
+export const queuePolicyUpdateSchema = z.object({
   vault: z.string().describe("Vault PDA address (base58)"),
   dailySpendingCapUsd: z
     .string()
@@ -19,15 +18,15 @@ export const updatePolicySchema = z.object({
   allowedTokens: z
     .array(z.string())
     .optional()
-    .describe(
-      "New allowed token mints (base58). Max 10. Replaces existing list.",
-    ),
+    .describe("New allowed token mints (base58). Max 10."),
   allowedProtocols: z
     .array(z.string())
     .optional()
-    .describe(
-      "New allowed protocol IDs (base58). Max 10. Replaces existing list.",
-    ),
+    .describe("New allowed protocol IDs (base58). Max 10."),
+  allowedDestinations: z
+    .array(z.string())
+    .optional()
+    .describe("New allowed destination addresses (base58). Max 10."),
   maxLeverageBps: z
     .number()
     .optional()
@@ -40,39 +39,30 @@ export const updatePolicySchema = z.object({
     .number()
     .optional()
     .describe("New max concurrent positions"),
+  timelockDuration: z
+    .number()
+    .optional()
+    .describe("New timelock duration in seconds"),
   developerFeeRate: z
     .number()
     .optional()
     .describe("New developer fee rate (max 50 = 0.5 BPS)"),
-  allowedDestinations: z
-    .array(z.string())
-    .optional()
-    .describe(
-      "New allowed destination addresses for agent transfers (base58). Max 10.",
-    ),
-  timelockDuration: z
-    .number()
-    .optional()
-    .describe(
-      "New timelock duration in seconds. Note: if the vault already has a timelock > 0, " +
-      "this call will fail — use shield_queue_policy_update instead.",
-    ),
 });
 
-export type UpdatePolicyInput = z.infer<typeof updatePolicySchema>;
+export type QueuePolicyUpdateInput = z.infer<typeof queuePolicyUpdateSchema>;
 
-export async function updatePolicy(
+export async function queuePolicyUpdate(
   client: AgentShieldClient,
-  input: UpdatePolicyInput,
+  input: QueuePolicyUpdateInput,
 ): Promise<string> {
   try {
-    const params: UpdatePolicyParams = {};
+    const params: QueuePolicyUpdateParams = {};
 
     if (input.dailySpendingCapUsd !== undefined) {
       params.dailySpendingCapUsd = toBN(input.dailySpendingCapUsd);
     }
     if (input.maxTransactionSizeUsd !== undefined) {
-      params.maxTransactionSizeUsd = toBN(input.maxTransactionSizeUsd);
+      params.maxTransactionAmountUsd = toBN(input.maxTransactionSizeUsd);
     }
     if (input.allowedTokens !== undefined) {
       params.allowedTokens = input.allowedTokens.map((addr) => ({
@@ -86,6 +76,9 @@ export async function updatePolicy(
     if (input.allowedProtocols !== undefined) {
       params.allowedProtocols = input.allowedProtocols.map(toPublicKey);
     }
+    if (input.allowedDestinations !== undefined) {
+      params.allowedDestinations = input.allowedDestinations.map(toPublicKey);
+    }
     if (input.maxLeverageBps !== undefined) {
       params.maxLeverageBps = input.maxLeverageBps;
     }
@@ -95,36 +88,41 @@ export async function updatePolicy(
     if (input.maxConcurrentPositions !== undefined) {
       params.maxConcurrentPositions = input.maxConcurrentPositions;
     }
-    if (input.developerFeeRate !== undefined) {
-      params.developerFeeRate = input.developerFeeRate;
-    }
-    if (input.allowedDestinations !== undefined) {
-      params.allowedDestinations = input.allowedDestinations.map(toPublicKey);
-    }
     if (input.timelockDuration !== undefined) {
       params.timelockDuration = new BN(input.timelockDuration);
     }
+    if (input.developerFeeRate !== undefined) {
+      params.developerFeeRate = input.developerFeeRate;
+    }
 
-    const sig = await client.updatePolicy(toPublicKey(input.vault), params);
+    const sig = await client.queuePolicyUpdate(
+      toPublicKey(input.vault),
+      params,
+    );
 
     const updated = Object.keys(params).join(", ") || "none";
 
     return [
-      "## Policy Updated",
+      "## Policy Update Queued",
       `- **Vault:** ${input.vault}`,
-      `- **Fields Updated:** ${updated}`,
+      `- **Fields Queued:** ${updated}`,
       `- **Transaction:** ${sig}`,
+      "",
+      "The policy change is now pending. Use `shield_check_pending_policy` to view status.",
+      "Use `shield_apply_pending_policy` after the timelock expires to apply the changes.",
+      "Use `shield_cancel_pending_policy` to cancel before it takes effect.",
     ].join("\n");
   } catch (error) {
     return formatError(error);
   }
 }
 
-export const updatePolicyTool = {
-  name: "shield_update_policy",
+export const queuePolicyUpdateTool = {
+  name: "shield_queue_policy_update",
   description:
-    "Update the policy configuration for an AgentShield vault. " +
-    "Only the fields you provide will be changed. Owner-only operation.",
-  schema: updatePolicySchema,
-  handler: updatePolicy,
+    "Queue a timelocked policy change for an AgentShield vault. " +
+    "Required when the vault has a timelock_duration > 0. " +
+    "The change will not take effect until the timelock expires and shield_apply_pending_policy is called.",
+  schema: queuePolicyUpdateSchema,
+  handler: queuePolicyUpdate,
 };

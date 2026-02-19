@@ -53,6 +53,30 @@ export async function checkVault(
       policy.allowedTokens.map((t) => t.mint.toBase58()).join(", ") || "Any";
     const allowedProtocols =
       policy.allowedProtocols.map((p) => p.toBase58()).join(", ") || "Any";
+    const allowedDestinations =
+      policy.allowedDestinations && policy.allowedDestinations.length > 0
+        ? policy.allowedDestinations.map((d) => d.toBase58()).join(", ")
+        : "Any";
+    const timelockDuration = policy.timelockDuration
+      ? formatBN(policy.timelockDuration)
+      : "0";
+
+    // Check for pending policy update
+    let pendingStatus = "None";
+    try {
+      const pending = await client.fetchPendingPolicy(vaultAddress);
+      if (pending) {
+        const executesAt = pending.executesAt.toNumber();
+        const now = Math.floor(Date.now() / 1000);
+        const remaining = executesAt - now;
+        pendingStatus =
+          remaining > 0
+            ? `Yes (executes in ${Math.floor(remaining / 3600)}h ${Math.floor((remaining % 3600) / 60)}m)`
+            : "Yes (ready to apply)";
+      }
+    } catch {
+      // fetchPendingPolicy returns null if not found
+    }
 
     return [
       `## Vault: ${vaultAddress.toBase58()}`,
@@ -71,10 +95,13 @@ export async function checkVault(
       `- **Max Transaction Size:** ${formatBN(policy.maxTransactionSizeUsd)}`,
       `- **Allowed Tokens:** ${allowedTokens}`,
       `- **Allowed Protocols:** ${allowedProtocols}`,
+      `- **Allowed Destinations:** ${allowedDestinations}`,
       `- **Max Leverage:** ${policy.maxLeverageBps} BPS`,
       `- **Can Open Positions:** ${policy.canOpenPositions}`,
       `- **Max Concurrent Positions:** ${policy.maxConcurrentPositions}`,
       `- **Developer Fee Rate:** ${policy.developerFeeRate}`,
+      `- **Timelock Duration:** ${timelockDuration}s`,
+      `- **Pending Policy Update:** ${pendingStatus}`,
     ].join("\n");
   } catch (error) {
     return formatError(error);

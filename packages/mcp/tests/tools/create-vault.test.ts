@@ -18,6 +18,7 @@ describe("shield_create_vault", () => {
     maxConcurrentPositions: 5,
     feeDestination: feeDest,
     developerFeeRate: 10,
+    timelockDuration: 0,
   };
 
   it("creates vault successfully", async () => {

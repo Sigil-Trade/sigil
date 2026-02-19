@@ -3,6 +3,7 @@ import { BN } from "@coral-xyz/anchor";
 import type {
   AgentVaultAccount,
   PolicyConfigAccount,
+  PendingPolicyUpdateAccount,
   SpendTrackerAccount,
   VaultStatus,
   ActionType,
@@ -50,6 +51,8 @@ export function makePolicyAccount(
     canOpenPositions: true,
     maxConcurrentPositions: 5,
     developerFeeRate: 10,
+    timelockDuration: new BN(0),
+    allowedDestinations: [],
     bump: 254,
     ...overrides,
   };
@@ -90,6 +93,28 @@ export function makeTrackerAccount(
     rollingSpends: [makeSpendEntry()],
     recentTransactions: [makeTransactionRecord()],
     bump: 253,
+    ...overrides,
+  };
+}
+
+export function makePendingPolicyAccount(
+  overrides: Partial<PendingPolicyUpdateAccount> = {}
+): PendingPolicyUpdateAccount {
+  return {
+    vault: TEST_VAULT_PDA,
+    queuedAt: new BN(1700000000),
+    executesAt: new BN(1700003600),
+    dailySpendingCapUsd: null,
+    maxTransactionAmountUsd: null,
+    allowedTokens: null,
+    allowedProtocols: null,
+    maxLeverageBps: null,
+    canOpenPositions: null,
+    maxConcurrentPositions: null,
+    developerFeeRate: null,
+    timelockDuration: null,
+    allowedDestinations: null,
+    bump: 252,
     ...overrides,
   };
 }
@@ -248,6 +273,36 @@ export function createMockClient(overrides: {
       calls.push({ method: "closeVault", args: [vault] });
       if (overrides.shouldThrow) throw overrides.shouldThrow;
       return "mock-sig-close";
+    },
+
+    async fetchPendingPolicy(vault: PublicKey) {
+      calls.push({ method: "fetchPendingPolicy", args: [vault] });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return (overrides as any).pendingPolicy ?? null;
+    },
+
+    async queuePolicyUpdate(vault: PublicKey, params: any) {
+      calls.push({ method: "queuePolicyUpdate", args: [vault, params] });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return "mock-sig-queue";
+    },
+
+    async applyPendingPolicy(vault: PublicKey) {
+      calls.push({ method: "applyPendingPolicy", args: [vault] });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return "mock-sig-apply";
+    },
+
+    async cancelPendingPolicy(vault: PublicKey) {
+      calls.push({ method: "cancelPendingPolicy", args: [vault] });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return "mock-sig-cancel";
+    },
+
+    async agentTransfer(vault: PublicKey, params: any, oracleFeedAccount?: PublicKey) {
+      calls.push({ method: "agentTransfer", args: [vault, params, oracleFeedAccount] });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return "mock-sig-transfer";
     },
 
     async composePermittedAction(params: any, computeUnits?: number) {

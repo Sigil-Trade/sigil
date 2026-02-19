@@ -19,3 +19,4 @@ test-ledger/
 # Internal development docs (not for public repo)
 docs/
 CLAUDE.md
+.vercel

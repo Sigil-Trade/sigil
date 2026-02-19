@@ -2,11 +2,11 @@
 #
 # Runs on every push to main and on pull requests.
 # Three parallel jobs:
-#   1. build-lint-test  — TypeScript builds, Prettier (8 packages), 371 TS tests across 7 suites
+#   1. build-lint-test  — TypeScript builds, Prettier (10 packages), 400 TS tests across 9 suites
 #   2. rust-checks      — cargo fmt + cargo clippy
-#   3. on-chain-tests   — Anchor build + LiteSVM in-process + 68 on-chain tests
+#   3. on-chain-tests   — Anchor build + LiteSVM in-process + 93 on-chain tests
 #
-# Total: 439 tests across 11 suites (371 TS + 68 on-chain)
+# Total: 493 tests across 12 suites (400 TS + 93 on-chain)
 
 name: CI
 
@@ -28,7 +28,7 @@ env:
 
 jobs:
   # ──────────────────────────────────────────────────────────────
-  # Job 1: TypeScript build, lint, and tests (7 suites, 371 tests)
+  # Job 1: TypeScript build, lint, and tests (9 suites, 400 tests)
   # ──────────────────────────────────────────────────────────────
   build-lint-test:
     name: Build, Lint & TS Tests
@@ -54,7 +54,7 @@ jobs:
       - name: Build all packages
         run: pnpm -r run build
 
-      - name: Lint (Prettier — 8 packages)
+      - name: Lint (Prettier — 10 packages)
         run: |
           npx prettier --check \
             "sdk/core/src/**/*.ts" \
@@ -64,13 +64,15 @@ jobs:
             "sdk/custody/crossmint/src/**/*.ts" \
             "plugins/solana-agent-kit/src/**/*.ts" \
             "plugins/elizaos/src/**/*.ts" \
-            "packages/mcp/src/**/*.ts"
+            "packages/mcp/src/**/*.ts" \
+            "apps/actions-server/src/**/*.ts" \
+            "apps/actions-server/tests/**/*.ts"
 
       - name: Core policy engine tests (66 tests)
         working-directory: sdk/core
         run: pnpm test
 
-      - name: SDK type & account tests (24 tests)
+      - name: SDK type & account tests (31 tests)
         working-directory: sdk/typescript
         run: pnpm test
 
@@ -96,6 +98,10 @@ jobs:
 
       - name: MCP server tests (82 tests)
         working-directory: packages/mcp
+        run: pnpm test
+
+      - name: Actions server tests (22 tests)
+        working-directory: apps/actions-server
         run: pnpm test
 
   # ──────────────────────────────────────────────────────────────
@@ -141,7 +147,7 @@ jobs:
   # Job 3: On-chain tests (LiteSVM in-process, no validator)
   # ──────────────────────────────────────────────────────────────
   on-chain-tests:
-    name: On-Chain Tests (68 tests, LiteSVM)
+    name: On-Chain Tests (93 tests, LiteSVM)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

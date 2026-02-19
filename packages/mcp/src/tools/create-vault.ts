@@ -35,6 +35,19 @@ export const createVaultSchema = z.object({
     .optional()
     .default(0)
     .describe("Developer fee rate (max 50 = 0.5 BPS)"),
+  allowedDestinations: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Allowed destination addresses for agent transfers (base58). Max 10.",
+    ),
+  timelockDuration: z
+    .number()
+    .optional()
+    .default(0)
+    .describe(
+      "Timelock duration in seconds. When > 0, policy updates require queue → wait → apply.",
+    ),
 });
 
 export type CreateVaultInput = z.infer<typeof createVaultSchema>;
@@ -60,6 +73,12 @@ export async function createVault(
       maxConcurrentPositions: input.maxConcurrentPositions,
       feeDestination: toPublicKey(input.feeDestination),
       developerFeeRate: input.developerFeeRate,
+      timelockDuration: input.timelockDuration
+        ? new BN(input.timelockDuration)
+        : new BN(0),
+      allowedDestinations: input.allowedDestinations
+        ? input.allowedDestinations.map(toPublicKey)
+        : [],
     };
 
     const sig = await client.createVault(params);

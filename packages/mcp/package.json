@@ -27,6 +27,7 @@
     "@agent-shield/sdk": ">=0.1.5",
     "@agent-shield/custody-crossmint": ">=0.1.0",
     "@coral-xyz/anchor": ">=0.32.1",
+    "@solana/spl-token": ">=0.4.0",
     "@solana/web3.js": ">=1.95.0",
     "zod": ">=3.25.0"
   },
@@ -39,6 +40,7 @@
     "@agent-shield/sdk": "workspace:*",
     "@agent-shield/custody-crossmint": "workspace:*",
     "@coral-xyz/anchor": "^0.32.1",
+    "@solana/spl-token": "^0.4.0",
     "@solana/web3.js": "^1.95.0",
     "@types/chai": "^4.3.11",
     "@types/mocha": "^10.0.6",

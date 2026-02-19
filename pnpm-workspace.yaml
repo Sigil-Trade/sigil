@@ -3,3 +3,4 @@ packages:
   - 'sdk/custody/*'
   - 'plugins/*'
   - 'packages/*'
+  - 'apps/*'

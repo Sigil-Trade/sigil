@@ -4,9 +4,9 @@ export const provisionSchema = z.object({
   platformUrl: z
     .string()
     .optional()
-    .default("https://app.agentshield.dev")
+    .default("https://agent-middleware.vercel.app")
     .describe(
-      "AgentShield platform URL (default: https://app.agentshield.dev)",
+      "AgentShield Actions server URL (default: https://agent-middleware.vercel.app)",
     ),
   template: z
     .enum(["conservative", "moderate", "aggressive"])
@@ -19,6 +19,21 @@ export const provisionSchema = z.object({
     .number()
     .optional()
     .describe("Custom daily spending cap in USDC (overrides template default)"),
+  agentPubkey: z
+    .string()
+    .optional()
+    .describe(
+      "Agent public key (base58) to register in the vault. " +
+      "If not provided, uses the MCP server's agent keypair.",
+    ),
+  allowedProtocols: z
+    .array(z.string())
+    .optional()
+    .describe("Custom allowed protocol program IDs (base58). Overrides template."),
+  maxLeverageBps: z
+    .number()
+    .optional()
+    .describe("Custom max leverage in basis points. Overrides template."),
 });
 
 export type ProvisionInput = z.infer<typeof provisionSchema>;
@@ -40,6 +55,9 @@ export async function provision(
   params.set("template", input.template);
   if (input.dailyCap) {
     params.set("dailyCap", input.dailyCap.toString());
+  }
+  if (input.agentPubkey) {
+    params.set("agentPubkey", input.agentPubkey);
   }
 
   const actionUrl = `${baseUrl}/api/actions/provision?${params.toString()}`;
@@ -64,7 +82,7 @@ export async function provision(
     `1. **Blink URL** (paste in any blink-compatible app): ${blinkUrl}`,
     `2. **Action URL** (for Solana Actions-compatible wallets): ${actionUrl}`,
     "",
-    "The transaction atomically creates an on-chain vault with a TEE-backed agent wallet.",
+    "The transaction atomically creates an on-chain vault and registers the agent.",
     "You sign ONE transaction — if anything fails, everything reverts.",
     "",
     "After you sign, I'll be able to trade within your policy limits.",
