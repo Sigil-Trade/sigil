@@ -290,7 +290,7 @@ jobs:
   # ──────────────────────────────────────────────────────────────
   # Job 5: Formal verification (Certora Solana Prover)
   #
-  # NON-BLOCKING (continue-on-error: true) until confirmed green.
+  # BLOCKING — all 16 rules must pass (16/16 Verified).
   #
   # Uses platform-tools v1.51 (Rust 1.84.1+) via the conf file's
   # cargo_tools_version field. This resolves the Cargo.lock v4
@@ -301,7 +301,6 @@ jobs:
   formal-verification:
     name: Formal Verification (Certora)
     runs-on: ubuntu-latest
-    continue-on-error: true
     environment: Certora
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
