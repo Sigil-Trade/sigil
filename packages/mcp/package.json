@@ -1,6 +1,6 @@
 {
   "name": "@agent-shield/mcp",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "author": "Kaleb Rupe (https://x.com/MightieMags)",
   "homepage": "https://github.com/Kaleb-Rupe/agentshield#readme",
   "bugs": {
@@ -35,7 +35,7 @@
     "@coral-xyz/anchor": ">=0.32.1",
     "@solana/spl-token": ">=0.4.0",
     "@solana/web3.js": ">=1.95.0",
-    "zod": ">=3.25.0"
+    "zod": "^3.25.0 || ^4.0.0"
   },
   "peerDependenciesMeta": {
     "@agent-shield/custody-crossmint": {
@@ -51,7 +51,7 @@
     "@types/chai": "^4.3.11",
     "@types/mocha": "^10.0.6",
     "@types/sinon": "^17.0.3",
-    "zod": "^3.25.0",
+    "zod": "^4.3.6",
     "chai": "^4.4.1",
     "mocha": "^10.3.0",
     "sinon": "^17.0.1",
