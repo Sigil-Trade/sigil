@@ -9,7 +9,11 @@
   "scripts": {
     "lint:fix": "prettier */*.js \"*/**/*{.js,.ts}\" -w",
     "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check",
-    "test": "anchor test"
+    "test": "anchor test",
+    "security:xray": "docker run --rm --volume \"$(pwd):/workspace\" ghcr.io/sec3-product/x-ray:latest /workspace/programs/agent-shield",
+    "security:fuzz": "cd trident-tests && trident fuzz run fuzz_0",
+    "security:verify": "source .certora-venv/bin/activate && certoraSolanaProver certora/conf/agent_shield.conf",
+    "update-readme": "node scripts/update-test-counts.js"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",

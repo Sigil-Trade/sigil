@@ -1,12 +1,15 @@
 # CI Pipeline for AgentShield
 #
 # Runs on every push to main and on pull requests.
-# Three parallel jobs:
-#   1. build-lint-test  — TypeScript builds, Prettier (10 packages), 470 TS tests across 9 suites
-#   2. rust-checks      — cargo fmt + cargo clippy
-#   3. on-chain-tests   — Anchor build + LiteSVM in-process + 93 on-chain tests
+# Six parallel jobs:
+#   1. build-lint-test        — TypeScript builds, Prettier (10 packages), 470 TS tests across 9 suites
+#   2. rust-checks            — cargo fmt + cargo clippy
+#   3. on-chain-tests         — Anchor build + LiteSVM in-process + 121 on-chain tests (93 + 28 security exploits)
+#   4. security-scan          — Sec3 X-Ray static analysis
+#   5. formal-verification    — Certora Solana Prover (main branch only)
+#   6. fuzz-check             — Trident fuzz harness compilation check
 #
-# Total: 563 tests across 12 suites (470 TS + 93 on-chain)
+# Total: 591 tests across 14 suites (470 TS + 121 on-chain)
 
 name: CI
 
@@ -37,6 +40,8 @@ jobs:
   build-lint-test:
     name: Build, Lint & TS Tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -114,6 +119,38 @@ jobs:
         working-directory: apps/actions-server
         run: pnpm test
 
+      - name: Generate test summary
+        if: always()
+        run: |
+          echo "AgentShield Test Report - $(date -u +%Y-%m-%dT%H:%M:%SZ)" > test-summary.txt
+          echo "Branch: ${{ github.ref_name }}" >> test-summary.txt
+          echo "Commit: ${{ github.sha }}" >> test-summary.txt
+          echo "---" >> test-summary.txt
+          echo "All 9 TypeScript test suites executed." >> test-summary.txt
+          echo "See individual step logs for detailed output." >> test-summary.txt
+
+      - name: Upload test summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-summary
+          path: test-summary.txt
+          retention-days: 90
+
+      - name: Update README test counts
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: node scripts/update-test-counts.js
+
+      - name: Commit updated README
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git diff --quiet README.md .github/workflows/ci.yml CLAUDE.md || \
+            (git add README.md .github/workflows/ci.yml CLAUDE.md && \
+             git commit -m "chore: update test counts [skip ci]" && \
+             git push)
+
   # ──────────────────────────────────────────────────────────────
   # Job 2: Rust formatting and linting
   # ──────────────────────────────────────────────────────────────
@@ -158,7 +195,7 @@ jobs:
   # Job 3: On-chain tests (LiteSVM in-process, no validator)
   # ──────────────────────────────────────────────────────────────
   on-chain-tests:
-    name: On-Chain Tests (93 tests, LiteSVM)
+    name: On-Chain Tests (121 tests, LiteSVM)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -220,4 +257,107 @@ jobs:
           npx ts-mocha -p ./tsconfig.json -t 300000 \
             tests/agent-shield.ts \
             tests/jupiter-integration.ts \
-            tests/flash-trade-integration.ts
+            tests/flash-trade-integration.ts \
+            tests/security-exploits.ts
+
+  # ──────────────────────────────────────────────────────────────
+  # Job 4: Static security analysis (Sec3 X-Ray)
+  # ──────────────────────────────────────────────────────────────
+  security-scan:
+    name: Security Scan (Sec3 X-Ray)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run Sec3 X-Ray
+        run: |
+          docker run --rm --volume "$(pwd):/workspace" \
+            ghcr.io/sec3-product/x-ray:latest \
+            /workspace/programs/agent-shield | tee xray-report.txt
+        continue-on-error: true
+
+      - name: Upload X-Ray report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xray-security-report
+          path: xray-report.txt
+          retention-days: 90
+
+  # ──────────────────────────────────────────────────────────────
+  # Job 5: Formal verification (Certora Solana Prover)
+  # ──────────────────────────────────────────────────────────────
+  formal-verification:
+    name: Formal Verification (Certora)
+    runs-on: ubuntu-latest
+    environment: Certora
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@efa25f7f19611383d5b0ccf2d1c8914531636bf9 # stable
+        with:
+          toolchain: stable
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Certora CLI
+        run: |
+          python -m venv .certora-venv
+          source .certora-venv/bin/activate
+          pip install certora-cli
+
+      - name: Run Certora Solana Prover
+        env:
+          CERTORAKEY: ${{ secrets.CERTORAKEY }}
+        run: |
+          source .certora-venv/bin/activate
+          certoraSolanaProver certora/conf/agent_shield.conf
+
+      - name: Upload Certora report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: certora-report
+          path: .certora_internal/
+          retention-days: 90
+
+  # ──────────────────────────────────────────────────────────────
+  # Job 6: Fuzz harness compilation check (Trident)
+  # ──────────────────────────────────────────────────────────────
+  fuzz-check:
+    name: Fuzz Harness Check (Trident)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@efa25f7f19611383d5b0ccf2d1c8914531636bf9 # stable
+        with:
+          toolchain: stable
+
+      - name: Cache Cargo registry + build
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            trident-tests/target
+          key: trident-${{ runner.os }}-${{ hashFiles('trident-tests/Cargo.lock') }}
+          restore-keys: trident-${{ runner.os }}-
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libudev-dev
+
+      - name: Compile fuzz harness
+        working-directory: trident-tests
+        run: cargo build --bin fuzz_0

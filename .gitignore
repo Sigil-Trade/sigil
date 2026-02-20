@@ -20,3 +20,12 @@ test-ledger/
 docs/
 CLAUDE.md
 .vercel
+
+# Trident fuzz testing artifacts
+trident-tests/target/
+trident-tests/fuzz_tests/fuzzing/hfuzz_workspace/
+
+# Certora formal verification artifacts
+.certora-venv/
+.certora_internal/
+certora/output/

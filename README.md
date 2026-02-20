@@ -1,5 +1,9 @@
 # AgentShield
 
+[![CI](https://github.com/Kaleb-Rupe/agentshield/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Kaleb-Rupe/agentshield/actions/workflows/ci.yml)
+![Tests](https://img.shields.io/badge/tests-591-brightgreen)
+![License](https://img.shields.io/badge/license-MIT-blue)
+
 Financial guardrails for AI agents on Solana — spending caps, protocol whitelists, oracle-priced limits, timelocked policy changes, and kill switches.
 
 ## The Problem
@@ -200,20 +204,29 @@ cargo fmt --check --manifest-path programs/agent-shield/Cargo.toml
 
 | Suite                                                | Tests   |
 | ---------------------------------------------------- | ------- |
-| Core vault management & permission engine            | 51      |
-| Jupiter integration (composed swaps)                 | 9       |
-| Flash Trade integration (leveraged perps)            | 8       |
-| Oracle + delegation + timelock + transfers           | 25      |
-| Core policy engine (`@agent-shield/core`)            | 66      |
-| SDK type & account tests (`@agent-shield/sdk`)       | 31      |
-| Platform client tests (`@agent-shield/platform`)     | 17      |
-| Crossmint custody adapter                            | 29      |
-| Wrapper SDK (`@agent-shield/solana`)                 | 96      |
-| SAK plugin (`@agent-shield/plugin-solana-agent-kit`) | 25      |
-| ElizaOS plugin (`@agent-shield/plugin-elizaos`)      | 32      |
-| MCP server (`@agent-shield/mcp`)                     | 124     |
-| Actions server (`@agent-shield/actions-server`)      | 50      |
-| **Total**                                            | **563** |
+| Core vault management & permission engine            |      51 |
+| Jupiter integration (composed swaps)                 |       9 |
+| Flash Trade integration (leveraged perps)            |       8 |
+| Oracle + delegation + timelock + transfers           |      25 |
+| Security exploit scenarios                           |      28 |
+| Core policy engine (`@agent-shield/core`)            |      66 |
+| SDK type & account tests (`@agent-shield/sdk`)       |      31 |
+| Platform client tests (`@agent-shield/platform`)     |      17 |
+| Crossmint custody adapter                            |      29 |
+| Wrapper SDK (`@agent-shield/solana`)                 |      96 |
+| SAK plugin (`@agent-shield/plugin-solana-agent-kit`) |      25 |
+| ElizaOS plugin (`@agent-shield/plugin-elizaos`)      |      32 |
+| MCP server (`@agent-shield/mcp`)                     |     124 |
+| Actions server (`@agent-shield/actions-server`)      |      50 |
+| **Total**                                            | **591** |
+
+## Security
+
+- [Vulnerability Disclosure Policy](./SECURITY.md)
+- [Security Tools & Scanning](./docs/SECURITY-TOOLS.md)
+- [Published Audit Reports](./docs/audits/)
+
+Raw scan output is stored as private CI artifacts (accessible to repo collaborators only). Published audit reports are added to `docs/audits/` after auditor release.
 
 ## License
 
