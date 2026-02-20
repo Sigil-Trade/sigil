@@ -29,6 +29,5 @@ certora = { package = "cvlr", version = "0.5", optional = true }
 [package.metadata.certora]
 sources = [
     "Cargo.toml",
-    "src/**/*.rs",
-    "../../certora/specs/*.rs"
+    "src/**/*.rs"
 ]

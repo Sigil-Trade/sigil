@@ -8,6 +8,9 @@ pub mod instructions;
 pub mod oracle;
 pub mod state;
 
+#[cfg(feature = "certora")]
+mod certora;
+
 use instructions::*;
 
 declare_id!("4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL");
