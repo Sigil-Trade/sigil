@@ -5,7 +5,7 @@
 
 use crate::instructions::utils::stablecoin_to_usd;
 use crate::state::USD_DECIMALS;
-use certora::prelude::*;
+use cvlr::prelude::*;
 
 // ─────────────────────────────────────────────────────────────────
 // Rule 1: USDC/USDT conversion is identity

@@ -4,7 +4,7 @@
 // the actual program function with nondeterministic inputs.
 
 use crate::state::{SessionAuthority, SESSION_EXPIRY_SLOTS};
-use certora::prelude::*;
+use cvlr::prelude::*;
 
 // ─────────────────────────────────────────────────────────────────
 // Rule 1: calculate_expiry never returns less than the input slot

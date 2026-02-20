@@ -8,7 +8,7 @@ use crate::state::{
     MAX_ALLOWED_TOKENS, MAX_DEVELOPER_FEE_RATE, MAX_RECENT_TRANSACTIONS, ROLLING_WINDOW_SECONDS,
     SESSION_EXPIRY_SLOTS,
 };
-use certora::prelude::*;
+use cvlr::prelude::*;
 
 // ─────────────────────────────────────────────────────────────────
 // Rule 1: Developer fee rate ceiling
