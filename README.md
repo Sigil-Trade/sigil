@@ -188,7 +188,7 @@ RUSTUP_TOOLCHAIN=nightly anchor idl build -o target/idl/agent_shield.json
 npx ts-mocha -p ./tsconfig.json -t 300000 \
   tests/agent-shield.ts tests/jupiter-integration.ts tests/flash-trade-integration.ts
 
-# Run all TypeScript tests (442 tests across 10 suites)
+# Run all TypeScript tests (470 tests across 9 suites)
 pnpm -r run test
 
 # Lint
