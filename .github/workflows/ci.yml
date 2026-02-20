@@ -328,9 +328,11 @@ jobs:
       - name: Install cargo-certora-sbf
         run: cargo install cargo-certora-sbf
 
-      - name: Downgrade Cargo.lock to v3 (cargo-certora-sbf doesn't support v4)
+      - name: Prepare lockfile for Certora SBF compiler (rustc 1.75)
         run: |
           sed -i 's/^version = 4$/version = 3/' Cargo.lock
+          cargo +1.89.0 update indexmap@2.13.0 --precise 2.7.1
+        working-directory: .
 
       - name: Run Certora Solana Prover
         env:
