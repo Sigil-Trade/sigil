@@ -10,15 +10,34 @@ npm install -g @agent-shield/mcp
 npx @agent-shield/mcp
 ```
 
+## Security Tiers
+
+AgentShield uses a three-tier security model. The MCP server supports all three and guides you through setup.
+
+| Tier | Name                 | Enforcement                                              | Use Case                                                                                                             |
+| ---- | -------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| 1    | Shield               | Client-side only                                         | Development and testing only — not suitable for real funds                                                           |
+| 2    | Shield + TEE         | Client-side + hardware enclave key custody               | Improved key security, but policies still enforced off-chain                                                         |
+| 3    | Shield + TEE + Vault | On-chain PDA vault with cryptographic policy enforcement | **Recommended for production** — owner kill-switch, immutable audit trail, policies enforced at the blockchain level |
+
+Only Tier 3 enforces spending limits and protocol allowlists on-chain where they cannot be bypassed by a compromised agent. For any deployment handling real funds, use Tier 3.
+
+## Quickstart
+
+1. Install and add to your MCP client (see Configuration below)
+2. Ask your AI assistant: _"What's my AgentShield setup status?"_ — it will call `shield_setup_status`
+3. Follow the guided flow: _"Set up AgentShield"_ — the assistant walks you through tier selection, wallet creation, and policy configuration
+4. For programmatic/CI deployments, use `shield_configure_from_file` with a pre-written JSON config
+
 ## Configuration
 
 ### Environment Variables
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `AGENTSHIELD_WALLET_PATH` | No | — | Path to Solana keypair JSON (vault owner). Not required — server starts in setup mode without it. |
-| `AGENTSHIELD_RPC_URL` | No | devnet | Solana RPC endpoint URL |
-| `AGENTSHIELD_AGENT_KEYPAIR_PATH` | No | — | Path to agent keypair JSON (needed for swap/position tools) |
+| Variable                         | Required | Default | Description                                                                                       |
+| -------------------------------- | -------- | ------- | ------------------------------------------------------------------------------------------------- |
+| `AGENTSHIELD_WALLET_PATH`        | No       | —       | Path to Solana keypair JSON (vault owner). Not required — server starts in setup mode without it. |
+| `AGENTSHIELD_RPC_URL`            | No       | devnet  | Solana RPC endpoint URL                                                                           |
+| `AGENTSHIELD_AGENT_KEYPAIR_PATH` | No       | —       | Path to agent keypair JSON (needed for swap/position tools)                                       |
 
 ### Claude Desktop
 
@@ -57,59 +76,60 @@ Add to `.cursor/mcp.json` in your project:
 }
 ```
 
-## Tools (22)
+## Tools (23)
 
 ### Setup & Onboarding (always available — no wallet required)
 
-| Tool | Description |
-|------|-------------|
-| `shield_setup_status` | Check current setup status — which security tiers are active |
-| `shield_configure` | Set up AgentShield with any tier (1=Shield, 2=TEE, 3=Vault) |
-| `shield_fund_wallet` | Generate funding links (Blink URL, Solana Pay, raw address) |
-| `shield_upgrade_tier` | Upgrade from current tier to a higher one |
+| Tool                         | Description                                                                   |
+| ---------------------------- | ----------------------------------------------------------------------------- |
+| `shield_setup_status`        | Check current setup status — which security tiers are active                  |
+| `shield_configure`           | Set up AgentShield with any tier (1=Shield, 2=TEE, 3=Vault)                   |
+| `shield_configure_from_file` | Apply a pre-written JSON config file (for CI/CD and programmatic deployments) |
+| `shield_fund_wallet`         | Generate funding links (Blink URL, Solana Pay, raw address)                   |
+| `shield_upgrade_tier`        | Upgrade from current tier to a higher one                                     |
 
 ### Read-Only
 
-| Tool | Description |
-|------|-------------|
-| `shield_check_vault` | Check vault status, owner, agent, and policy configuration |
-| `shield_check_spending` | Check rolling 24h spending and recent transaction history |
-| `shield_check_pending_policy` | Check pending timelocked policy update status |
+| Tool                          | Description                                                |
+| ----------------------------- | ---------------------------------------------------------- |
+| `shield_check_vault`          | Check vault status, owner, agent, and policy configuration |
+| `shield_check_spending`       | Check rolling 24h spending and recent transaction history  |
+| `shield_check_pending_policy` | Check pending timelocked policy update status              |
 
 ### Owner-Signed (Write)
 
-| Tool | Description |
-|------|-------------|
-| `shield_create_vault` | Create a new vault with policy configuration |
-| `shield_deposit` | Deposit tokens into a vault |
-| `shield_withdraw` | Withdraw tokens from a vault |
-| `shield_register_agent` | Register an agent signing key |
-| `shield_update_policy` | Update spending caps, token/protocol allowlists, leverage limits |
-| `shield_queue_policy_update` | Queue a timelocked policy change |
-| `shield_apply_pending_policy` | Apply a queued policy change after timelock expires |
-| `shield_cancel_pending_policy` | Cancel a queued policy change |
-| `shield_revoke_agent` | Emergency kill switch — freezes vault immediately |
-| `shield_reactivate_vault` | Unfreeze a vault, optionally with a new agent |
-| `shield_provision` | Provision a vault via Solana Actions |
+| Tool                           | Description                                                      |
+| ------------------------------ | ---------------------------------------------------------------- |
+| `shield_create_vault`          | Create a new vault with policy configuration                     |
+| `shield_deposit`               | Deposit tokens into a vault                                      |
+| `shield_withdraw`              | Withdraw tokens from a vault                                     |
+| `shield_register_agent`        | Register an agent signing key                                    |
+| `shield_update_policy`         | Update spending caps, token/protocol allowlists, leverage limits |
+| `shield_queue_policy_update`   | Queue a timelocked policy change                                 |
+| `shield_apply_pending_policy`  | Apply a queued policy change after timelock expires              |
+| `shield_cancel_pending_policy` | Cancel a queued policy change                                    |
+| `shield_revoke_agent`          | Emergency kill switch — freezes vault immediately                |
+| `shield_reactivate_vault`      | Unfreeze a vault, optionally with a new agent                    |
+| `shield_provision`             | Provision a vault via Solana Actions                             |
 
 ### Agent-Signed (Requires `AGENTSHIELD_AGENT_KEYPAIR_PATH`)
 
-| Tool | Description |
-|------|-------------|
-| `shield_execute_swap` | Execute a Jupiter token swap through the vault |
-| `shield_open_position` | Open a Flash Trade leveraged perpetual position |
-| `shield_close_position` | Close a Flash Trade perpetual position |
-| `shield_agent_transfer` | Transfer tokens to an allowlisted destination |
+| Tool                    | Description                                     |
+| ----------------------- | ----------------------------------------------- |
+| `shield_execute_swap`   | Execute a Jupiter token swap through the vault  |
+| `shield_open_position`  | Open a Flash Trade leveraged perpetual position |
+| `shield_close_position` | Close a Flash Trade perpetual position          |
+| `shield_agent_transfer` | Transfer tokens to an allowlisted destination   |
 
 ## Resources (3)
 
 Dynamic resources using vault address as URI parameter:
 
-| URI Template | Description |
-|-------------|-------------|
-| `shield://vault/{address}/policy` | Current policy configuration (JSON) |
-| `shield://vault/{address}/spending` | Rolling 24h spending state (JSON) |
-| `shield://vault/{address}/activity` | Recent transaction history (JSON) |
+| URI Template                        | Description                         |
+| ----------------------------------- | ----------------------------------- |
+| `shield://vault/{address}/policy`   | Current policy configuration (JSON) |
+| `shield://vault/{address}/spending` | Rolling 24h spending state (JSON)   |
+| `shield://vault/{address}/activity` | Recent transaction history (JSON)   |
 
 ## Development
 
@@ -120,7 +140,7 @@ pnpm install
 # Build
 pnpm build
 
-# Run tests (107 tests)
+# Run tests (124 tests)
 pnpm test
 
 # Smoke test
@@ -133,6 +153,8 @@ AGENTSHIELD_WALLET_PATH=~/.config/solana/id.json node dist/index.js
 - **Credentials**: Environment variables (keypair file paths)
 - **SDK**: Wraps `AgentShieldClient` from `@agent-shield/sdk` — every tool delegates to a client method
 - **Setup mode**: Starts without a wallet — only setup/onboarding tools available until configured
+- **Programmatic config**: `shield_configure_from_file` reads a JSON config matching the `ShieldLocalConfig` schema — for CI/CD pipelines and orchestrator platforms where interactive setup is not practical
+- **Local config**: `~/.agentshield/config.json` stores tier, wallet, and policy state across sessions
 - **Error handling**: All 40 Anchor error codes (6000–6039) mapped to human-readable messages with actionable suggestions
 
 ## Support

@@ -34,6 +34,7 @@ import { agentTransfer } from "./tools/agent-transfer";
 // Setup & onboarding tools (work without SDK client)
 import { setupStatus } from "./tools/setup-status";
 import { configure } from "./tools/configure";
+import { configureFromFile } from "./tools/configure-from-file";
 import { fundWallet } from "./tools/fund-wallet";
 import { upgradeTier } from "./tools/upgrade-tier";
 
@@ -180,6 +181,22 @@ async function main() {
     },
     async (input) => ({
       content: [{ type: "text", text: await fundWallet(null, input) }],
+    }),
+  );
+
+  registerTool(
+    server,
+    "shield_configure_from_file",
+    "Apply AgentShield configuration from a pre-written JSON file. For CI/CD pipelines and orchestrator platforms that need non-interactive setup. The config file must match the ShieldLocalConfig schema (same format as ~/.agentshield/config.json).",
+    {
+      configFile: z
+        .string()
+        .describe(
+          "Absolute or ~-relative path to a JSON config file matching the ShieldLocalConfig schema",
+        ),
+    },
+    async (input) => ({
+      content: [{ type: "text", text: await configureFromFile(null, input) }],
     }),
   );
 

@@ -2,11 +2,11 @@
 #
 # Runs on every push to main and on pull requests.
 # Three parallel jobs:
-#   1. build-lint-test  — TypeScript builds, Prettier (10 packages), 444 TS tests across 9 suites
+#   1. build-lint-test  — TypeScript builds, Prettier (10 packages), 470 TS tests across 9 suites
 #   2. rust-checks      — cargo fmt + cargo clippy
 #   3. on-chain-tests   — Anchor build + LiteSVM in-process + 93 on-chain tests
 #
-# Total: 537 tests across 12 suites (444 TS + 93 on-chain)
+# Total: 563 tests across 12 suites (470 TS + 93 on-chain)
 
 name: CI
 
@@ -32,7 +32,7 @@ env:
 
 jobs:
   # ──────────────────────────────────────────────────────────────
-  # Job 1: TypeScript build, lint, and tests (9 suites, 444 tests)
+  # Job 1: TypeScript build, lint, and tests (9 suites, 470 tests)
   # ──────────────────────────────────────────────────────────────
   build-lint-test:
     name: Build, Lint & TS Tests
@@ -106,11 +106,11 @@ jobs:
         working-directory: plugins/elizaos
         run: pnpm test
 
-      - name: MCP server tests (109 tests)
+      - name: MCP server tests (124 tests)
         working-directory: packages/mcp
         run: pnpm test
 
-      - name: Actions server tests (39 tests)
+      - name: Actions server tests (50 tests)
         working-directory: apps/actions-server
         run: pnpm test
 
@@ -127,6 +127,7 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@efa25f7f19611383d5b0ccf2d1c8914531636bf9 # stable
         with:
+          toolchain: stable
           components: rustfmt, clippy
 
       - name: Cache Cargo registry + build
@@ -165,6 +166,8 @@ jobs:
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@efa25f7f19611383d5b0ccf2d1c8914531636bf9 # stable
+        with:
+          toolchain: stable
 
       - name: Cache Cargo registry + build
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
