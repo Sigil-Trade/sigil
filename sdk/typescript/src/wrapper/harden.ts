@@ -449,11 +449,7 @@ export async function harden(
   // Find next vault ID if not provided
   const vaultId =
     options.vaultId ??
-    (await findNextVaultId(
-      options.connection,
-      ownerPubkey,
-      options.programId,
-    ));
+    (await findNextVaultId(options.connection, ownerPubkey, options.programId));
 
   // Map policies to vault params
   const feeDestination = options.feeDestination ?? ownerPubkey;

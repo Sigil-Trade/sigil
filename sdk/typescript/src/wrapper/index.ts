@@ -29,7 +29,11 @@ export type {
 export { parseSpendLimit, resolvePolicies, DEFAULT_POLICIES } from "./policies";
 
 // Errors (re-exported from @agent-shield/core + TeeRequiredError)
-export { ShieldDeniedError, ShieldConfigError, TeeRequiredError } from "./errors";
+export {
+  ShieldDeniedError,
+  ShieldConfigError,
+  TeeRequiredError,
+} from "./errors";
 export type { PolicyViolation } from "./errors";
 
 // Transaction inspection (Solana-specific)
