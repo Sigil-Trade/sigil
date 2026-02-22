@@ -1,49 +1,42 @@
-# Release workflow for publishing @agent-shield packages to npm.
+# Automated release workflow using Changesets.
 #
-# Triggered manually via workflow_dispatch. Select the package to publish.
-# Uses npm Trusted Publishing (OIDC) — no stored npm token required.
-# GitHub Actions exchanges a short-lived OIDC token with npm for publish auth.
-# Provenance attestation links each published package to this exact commit.
+# Dual behavior on push to main:
+#   1. Changeset files exist  → opens/updates a "Version Packages" PR
+#      (bumps versions, generates changelogs, deletes consumed changesets)
+#   2. No changeset files     → publishes changed packages to npm
+#      (runs after the Version Packages PR is merged)
 #
-# Setup: each @agent-shield package must have Trusted Publishing configured
+# Uses npm OIDC Trusted Publishing (provenance) — no stored npm token.
+# Each @agent-shield package must have Trusted Publishing configured
 # on npmjs.com → Package Settings → Publishing access → Trusted Publishers.
 
 name: Release
 
 on:
-  workflow_dispatch:
-    inputs:
-      package:
-        description: "Package to publish (directory name)"
-        required: true
-        type: choice
-        options:
-          - sdk/core
-          - sdk/typescript
-          - sdk/wrapper
-          - sdk/platform
-          - sdk/custody/crossmint
-          - packages/mcp
-          - plugins/solana-agent-kit
-          - plugins/elizaos
-      dry-run:
-        description: "Dry run (skip actual publish)"
-        required: false
-        type: boolean
-        default: true
+  push:
+    branches: [main]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false # Never cancel a publish in progress
 
 permissions:
-  contents: read
-  id-token: write # Required for OIDC token exchange with npm (Trusted Publishing)
+  contents: write # Push tags, update Version Packages PR
+  pull-requests: write # Open/update the Version Packages PR
+  id-token: write # npm OIDC Trusted Publishing (provenance)
 
 jobs:
-  publish:
-    name: Publish ${{ inputs.package }}
+  release:
+    name: Release
     runs-on: ubuntu-latest
+    # Prevent infinite loops from bot commits (Version Packages PR merge)
+    if: github.actor != 'github-actions[bot]'
     environment: production
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
 
       - name: Install pnpm
         uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # v4
@@ -63,20 +56,47 @@ jobs:
       - name: Build all packages
         run: pnpm -r run build
 
-      - name: Run package tests
-        working-directory: ${{ inputs.package }}
+      - name: Run core policy engine tests (66 tests)
+        working-directory: sdk/core
         run: pnpm test
 
-      - name: Verify package contents
-        working-directory: ${{ inputs.package }}
-        run: pnpm pack --dry-run
+      - name: Run SDK tests (165 tests)
+        working-directory: sdk/typescript
+        run: pnpm test
 
-      - name: Publish (dry run)
-        if: ${{ inputs.dry-run }}
-        working-directory: ${{ inputs.package }}
-        run: npm publish --access public --dry-run --provenance
+      - name: Run platform client tests (17 tests)
+        working-directory: sdk/platform
+        run: pnpm test
 
-      - name: Publish to npm
-        if: ${{ !inputs.dry-run }}
-        working-directory: ${{ inputs.package }}
-        run: npm publish --access public --provenance
+      - name: Run Crossmint custody adapter tests (29 tests)
+        working-directory: sdk/custody/crossmint
+        run: pnpm test
+
+      - name: Run SAK plugin tests (29 tests)
+        working-directory: plugins/solana-agent-kit
+        run: pnpm test
+
+      - name: Run ElizaOS plugin tests (35 tests)
+        working-directory: plugins/elizaos
+        run: pnpm test
+
+      - name: Run MCP server tests (123 tests)
+        working-directory: packages/mcp
+        run: pnpm test
+
+      - name: Run actions server tests (48 tests)
+        working-directory: apps/actions-server
+        run: pnpm test
+
+      - name: Create Release Pull Request or Publish
+        id: changesets
+        uses: changesets/action@v1.4.9
+        with:
+          version: pnpm changeset version
+          publish: pnpm changeset publish
+          title: "chore: version packages"
+          commit: "chore: version packages"
+          createGithubReleases: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true
