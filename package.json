@@ -10,6 +10,9 @@
     "lint:fix": "prettier */*.js \"*/**/*{.js,.ts}\" -w",
     "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check",
     "test": "anchor test",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "pnpm -r run build && changeset publish",
     "security:xray": "docker run --rm --volume \"$(pwd):/workspace\" ghcr.io/sec3-product/x-ray:latest /workspace/programs/agent-shield",
     "security:fuzz": "cd trident-tests && trident fuzz run fuzz_0",
     "security:verify": "source .certora-venv/bin/activate && certoraSolanaProver certora/conf/agent_shield.conf",
@@ -28,6 +31,8 @@
     }
   },
   "devDependencies": {
+    "@changesets/changelog-github": "^0.5.1",
+    "@changesets/cli": "^2.29.4",
     "@types/bn.js": "^5.1.5",
     "@types/bs58": "^4.0.4",
     "@types/chai": "^4.3.11",
