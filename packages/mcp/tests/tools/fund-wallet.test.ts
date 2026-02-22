@@ -5,8 +5,12 @@ import * as os from "os";
 import { fundWallet } from "../../src/tools/fund-wallet";
 
 describe("shield_fund_wallet", () => {
-  const tmpHome = path.join(os.tmpdir(), `home-fund-${Date.now()}`);
+  let tmpHome: string;
   const origHome = process.env.HOME;
+
+  before(() => {
+    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "home-fund-"));
+  });
 
   beforeEach(() => {
     const shieldDir = path.join(tmpHome, ".agentshield");

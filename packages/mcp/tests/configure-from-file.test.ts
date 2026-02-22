@@ -5,11 +5,11 @@ import * as os from "os";
 import { configureFromFile } from "../src/tools/configure-from-file";
 
 describe("shield_configure_from_file", () => {
-  const tmpDir = path.join(os.tmpdir(), "agentshield-test-" + Date.now());
+  let tmpDir: string;
   const origConfigDir = process.env.HOME;
 
   // Redirect config writes to temp dir to avoid polluting real config
-  const testConfigDir = path.join(tmpDir, ".agentshield");
+  let testConfigDir: string;
 
   function makeValidConfig(overrides?: Partial<any>): any {
     return {
@@ -49,7 +49,8 @@ describe("shield_configure_from_file", () => {
   }
 
   before(() => {
-    fs.mkdirSync(tmpDir, { recursive: true });
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agentshield-test-"));
+    testConfigDir = path.join(tmpDir, ".agentshield");
     fs.mkdirSync(testConfigDir, { recursive: true, mode: 0o700 });
     // Override HOME so saveShieldConfig writes to tmp
     process.env.HOME = tmpDir;

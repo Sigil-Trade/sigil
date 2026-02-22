@@ -11,9 +11,13 @@ const MOCK_TEE_RESPONSE = {
 };
 
 describe("shield_configure", () => {
-  const tmpHome = path.join(os.tmpdir(), `home-configure-${Date.now()}`);
+  let tmpHome: string;
   const origHome = process.env.HOME;
   let fetchStub: sinon.SinonStub;
+
+  before(() => {
+    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "home-configure-"));
+  });
 
   beforeEach(() => {
     const shieldDir = path.join(tmpHome, ".agentshield");

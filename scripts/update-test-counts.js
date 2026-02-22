@@ -146,13 +146,15 @@ fs.writeFileSync(releasePath, release);
 
 // ── CLAUDE.md ──────────────────────────────────────────────────
 const claudePath = path.join(ROOT, "CLAUDE.md");
-if (fs.existsSync(claudePath)) {
+try {
   let claude = fs.readFileSync(claudePath, "utf8");
   claude = claude.replace(
     /\d+ tests passing across \d+ suites/,
     `${total} tests passing across ${data.suites.length} suites`,
   );
   fs.writeFileSync(claudePath, claude);
+} catch {
+  // CLAUDE.md not present — skip
 }
 
 console.log(

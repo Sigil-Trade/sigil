@@ -5,12 +5,14 @@ import * as os from "os";
 import { setupStatus } from "../../src/tools/setup-status";
 
 describe("shield_setup_status", () => {
-  const configDir = path.join(os.tmpdir(), `.agentshield-test-${Date.now()}`);
-  const configPath = path.join(configDir, "config.json");
   const origHome = process.env.HOME;
 
   // Override HOME so getConfigPath() resolves to our temp dir
-  const tmpHome = path.join(os.tmpdir(), `home-test-${Date.now()}`);
+  let tmpHome: string;
+
+  before(() => {
+    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "home-test-"));
+  });
 
   beforeEach(() => {
     // Create temp home dir structure
