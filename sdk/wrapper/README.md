@@ -441,4 +441,4 @@ All three layers are bundled into `withVault()`. TEE wallets are required for pr
 
 ## License
 
-MIT
+Apache-2.0

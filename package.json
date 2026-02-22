@@ -3,6 +3,7 @@
   "version": "0.1.1",
   "description": "On-chain guardrails for AI agents on Solana",
   "private": true,
+  "license": "Apache-2.0",
   "engines": {
     "node": ">=18.0.0"
   },

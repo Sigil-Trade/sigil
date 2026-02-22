@@ -294,4 +294,4 @@ IDL account: `Ev3gSzxLw6RwExAMpTHUKvn2o9YVULxiWehrHee7aepP`
 
 ## License
 
-MIT
+Apache-2.0

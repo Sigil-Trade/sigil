@@ -27,11 +27,6 @@ const onChainCount = onChainSuites.reduce((sum, s) => sum + s.count, 0);
 const tsCount = tsSuites.reduce((sum, s) => sum + s.count, 0);
 const tsSuiteCount = tsSuites.length;
 
-// Derive security exploit count from data (not hardcoded)
-const securityExploitCount =
-  data.suites.find((s) => s.name.includes("Security exploit"))?.count || 0;
-const coreOnChainCount = onChainCount - securityExploitCount;
-
 // Escape regex special characters
 function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -58,6 +53,12 @@ let readme = fs.readFileSync(readmePath, "utf8");
 readme = readme.replace(
   /tests-\d+-brightgreen/,
   `tests-${total}-brightgreen`,
+);
+
+// Inline comment: "Run all TypeScript tests (N tests across M suites)"
+readme = readme.replace(
+  /Run all TypeScript tests \(\d+ tests across \d+ suites\)/,
+  `Run all TypeScript tests (${tsCount} tests across ${tsSuiteCount} suites)`,
 );
 
 // Rebuild table between "### Test Suites" and "## Security"
@@ -96,10 +97,10 @@ ci = ci.replace(
   `${tsCount} TS tests across ${tsSuiteCount} suites`,
 );
 
-// Header: on-chain test count
+// Header: on-chain test count (simplified — no breakdown)
 ci = ci.replace(
-  /\d+ on-chain tests \(\d+ (?:core )?\+ \d+ security exploits\)/,
-  `${onChainCount} on-chain tests (${coreOnChainCount} core + ${securityExploitCount} security exploits)`,
+  /\d+ on-chain tests(?:\s*\([^)]*\))?/,
+  `${onChainCount} on-chain tests`,
 );
 
 // Header: total

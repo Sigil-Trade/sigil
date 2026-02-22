@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Kaleb-Rupe/agentshield/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Kaleb-Rupe/agentshield/actions/workflows/ci.yml)
 ![Tests](https://img.shields.io/badge/tests-686-brightgreen)
-![License](https://img.shields.io/badge/license-MIT-blue)
+![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 
 On-chain guardrails for AI agents on Solana. Your policies are enforced by Solana validators, not software promises.
 
@@ -176,7 +176,7 @@ npx ts-mocha -p ./tsconfig.json -t 300000 \
   tests/agent-shield.ts tests/jupiter-integration.ts \
   tests/flash-trade-integration.ts tests/security-exploits.ts
 
-# Run all TypeScript tests (470 tests across 8 suites)
+# Run all TypeScript tests (512 tests across 8 suites)
 pnpm -r run test
 
 # Lint
@@ -213,4 +213,4 @@ Raw scan output is stored as private CI artifacts (accessible to repo collaborat
 
 ## License
 
-MIT
+This project is licensed under the [Apache License 2.0](./LICENSE).

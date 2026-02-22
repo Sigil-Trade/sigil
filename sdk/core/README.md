@@ -303,4 +303,4 @@ For Solana-specific integrations, use `@agent-shield/sdk` which wraps this packa
 
 ## License
 
-MIT
+Apache-2.0

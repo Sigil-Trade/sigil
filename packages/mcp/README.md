@@ -164,4 +164,4 @@ AGENTSHIELD_WALLET_PATH=~/.config/solana/id.json node dist/index.js
 
 ## License
 
-MIT
+Apache-2.0
