@@ -48,17 +48,37 @@ jobs:
           echo '${{ secrets.DEVNET_WALLET_KEYPAIR }}' > "$HOME/.config/solana/id.json"
           solana config set --url "${{ secrets.DEVNET_RPC_URL }}" --keypair "$HOME/.config/solana/id.json"
 
-      - name: Fund wallet
+      - name: Fund wallet (public faucet)
         run: |
           echo "Current balance: $(solana balance)"
-          echo "Requesting airdrops..."
-          solana airdrop 2 || true
-          sleep 6
-          solana airdrop 2 || true
-          sleep 6
-          solana airdrop 2 || true
-          sleep 6
+          echo "Requesting airdrops from public faucet..."
+          for i in $(seq 1 6); do
+            BAL=$(solana balance | awk '{print int($1)}')
+            if [ "$BAL" -ge 5 ]; then
+              echo "Balance is ${BAL} SOL (>= 5). Sufficient."
+              break
+            fi
+            echo "Attempt $i/6 — balance: ${BAL} SOL"
+            if solana airdrop 0.5 --url https://api.devnet.solana.com; then
+              echo "Success. Waiting 30s..."
+              sleep 30
+            else
+              echo "Failed (likely rate limit). Waiting 120s..."
+              sleep 120
+            fi
+          done
           echo "Final balance: $(solana balance)"
+
+      - name: Balance gate
+        run: |
+          BAL=$(solana balance | awk '{print int($1)}')
+          if [ "$BAL" -lt 1 ]; then
+            echo "::error::Insufficient SOL for devnet tests. Balance: $(solana balance). Need >= 1 SOL."
+            echo "Top up manually: solana airdrop 2 --url https://api.devnet.solana.com"
+            echo "Or run the Devnet SOL Funder workflow manually."
+            exit 1
+          fi
+          echo "Balance gate passed: $(solana balance)"
 
       - name: Export wallet path
         run: |

@@ -1,0 +1,46 @@
+name: Devnet SOL Funder
+
+on:
+  schedule:
+    - cron: "0 6 * * *" # 6 AM UTC daily
+  workflow_dispatch:
+
+jobs:
+  fund-wallet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Install Solana CLI
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+
+      - name: Configure wallet
+        run: |
+          mkdir -p "$HOME/.config/solana"
+          echo '${{ secrets.DEVNET_WALLET_KEYPAIR }}' > "$HOME/.config/solana/id.json"
+          solana config set --url "${{ secrets.DEVNET_RPC_URL }}" --keypair "$HOME/.config/solana/id.json"
+
+      - name: Airdrop with backoff
+        run: |
+          echo "=== Starting balance: $(solana balance) ==="
+          for i in $(seq 1 6); do
+            BAL=$(solana balance | awk '{print int($1)}')
+            if [ "$BAL" -ge 200 ]; then
+              echo "Balance is ${BAL} SOL (>= 200). Done."
+              break
+            fi
+            echo "Attempt $i/6 — balance: ${BAL} SOL"
+            if solana airdrop 0.5 --url https://api.devnet.solana.com; then
+              echo "Success. Waiting 30s before next attempt..."
+              sleep 30
+            else
+              echo "Failed (likely rate limit). Waiting 120s before retry..."
+              sleep 120
+            fi
+          done
+          echo "=== Final balance: $(solana balance) ==="
+
+      - name: Cleanup wallet
+        if: always()
+        run: rm -f "$HOME/.config/solana/id.json"
