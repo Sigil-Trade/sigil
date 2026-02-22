@@ -99,8 +99,7 @@ export function createAgentShieldPlugin(config: AgentShieldPluginConfig) {
           "Fetch a URL with automatic x402 (HTTP 402) payment support. " +
           "If the server requires payment, the shielded wallet signs and retries.",
         schema: x402FetchSchema,
-        handler: (agent: any, input: any) =>
-          x402Fetch(agent, resolved, input),
+        handler: (agent: any, input: any) => x402Fetch(agent, resolved, input),
       },
     },
   };

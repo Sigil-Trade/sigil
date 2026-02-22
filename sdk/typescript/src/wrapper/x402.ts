@@ -145,9 +145,7 @@ function base64Decode(encoded: string): string {
 /**
  * Decode a base64-encoded PAYMENT-REQUIRED header value.
  */
-export function decodePaymentRequiredHeader(
-  header: string,
-): PaymentRequired {
+export function decodePaymentRequiredHeader(header: string): PaymentRequired {
   try {
     const json = base64Decode(header);
     const parsed = JSON.parse(json) as PaymentRequired;
@@ -165,18 +163,14 @@ export function decodePaymentRequiredHeader(
 /**
  * Encode a PaymentPayload as a base64 string for PAYMENT-SIGNATURE header.
  */
-export function encodePaymentSignatureHeader(
-  payload: PaymentPayload,
-): string {
+export function encodePaymentSignatureHeader(payload: PaymentPayload): string {
   return base64Encode(JSON.stringify(payload));
 }
 
 /**
  * Decode a base64-encoded PAYMENT-RESPONSE header value.
  */
-export function decodePaymentResponseHeader(
-  header: string,
-): SettleResponse {
+export function decodePaymentResponseHeader(header: string): SettleResponse {
   try {
     return JSON.parse(base64Decode(header)) as SettleResponse;
   } catch (err: any) {
@@ -286,9 +280,7 @@ export function encodeX402Payload(
   resource: ResourceInfo,
   accepted: PaymentRequirements,
 ): string {
-  const txBase64 = base64Encode(
-    String.fromCharCode(...signedTx),
-  );
+  const txBase64 = base64Encode(String.fromCharCode(...signedTx));
   const payload: PaymentPayload = {
     x402Version: 2,
     resource,
@@ -392,7 +384,9 @@ export async function shieldedFetch(
 
   // Step 6: Dry run — return metadata without paying
   if (dryRun) {
-    const dryResponse = new Response(null, { status: 402 }) as ShieldedFetchResponse;
+    const dryResponse = new Response(null, {
+      status: 402,
+    }) as ShieldedFetchResponse;
     dryResponse.x402 = {
       paid: false,
       amountPaid: selected.amount,
@@ -447,10 +441,10 @@ export async function shieldedFetch(
   const retryHeaders = new Headers(init.headers as any);
   retryHeaders.set("PAYMENT-SIGNATURE", encodedPayload);
 
-  const retryResponse = await globalThis.fetch(url.toString(), {
+  const retryResponse = (await globalThis.fetch(url.toString(), {
     ...init,
     headers: retryHeaders,
-  }) as ShieldedFetchResponse;
+  })) as ShieldedFetchResponse;
 
   // Step 10: Parse PAYMENT-RESPONSE header if present
   const paymentResponseHeader =
