@@ -24,6 +24,40 @@ import {
 import { expect } from "chai";
 import BN from "bn.js";
 
+// ─── RPC Rate Limiter (prevents 429s from Helius devnet 10 RPS limit) ───────
+
+const RPC_MAX_RPS = 5; // Conservative: 5 RPS against 10 RPS limit
+const RPC_MIN_GAP_MS = Math.ceil(1000 / RPC_MAX_RPS); // 200ms between requests
+let rateLimitInstalled = false;
+
+/**
+ * Patches globalThis.fetch with a queue that enforces minimum spacing between
+ * requests. JavaScript's single-threaded model makes the slot reservation atomic.
+ */
+export function installRateLimit(): void {
+  if (rateLimitInstalled) return;
+  rateLimitInstalled = true;
+
+  let nextSlot = 0;
+  const original = globalThis.fetch.bind(globalThis);
+
+  globalThis.fetch = async function throttledFetch(
+    ...args: Parameters<typeof fetch>
+  ): Promise<Response> {
+    // Atomically reserve next time slot (single-threaded = no race)
+    const now = Date.now();
+    const mySlot = Math.max(now, nextSlot);
+    nextSlot = mySlot + RPC_MIN_GAP_MS;
+
+    const wait = mySlot - now;
+    if (wait > 0) {
+      await new Promise((r) => setTimeout(r, wait));
+    }
+
+    return original(...args);
+  } as typeof fetch;
+}
+
 // ─── Constants (mirrors programs/agent-shield/src/state/mod.rs) ─────────────
 
 export const PROTOCOL_TREASURY = new PublicKey(
@@ -112,6 +146,7 @@ export function deriveSessionPda(
 // ─── Provider setup ─────────────────────────────────────────────────────────
 
 export function getDevnetProvider() {
+  installRateLimit(); // Throttle RPC to stay under Helius 10 RPS limit
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
   const program = anchor.workspace.AgentShield as Program<AgentShield>;

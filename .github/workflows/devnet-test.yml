@@ -9,14 +9,6 @@ on:
       - "tests/helpers/devnet-setup.ts"
       - ".github/workflows/devnet-test.yml"
       - "Anchor.toml"
-  pull_request:
-    branches: [main]
-    paths:
-      - "programs/agent-shield/src/**"
-      - "tests/devnet-*.ts"
-      - "tests/helpers/devnet-setup.ts"
-      - ".github/workflows/devnet-test.yml"
-      - "Anchor.toml"
   workflow_dispatch:
 
 jobs:
