@@ -21,7 +21,6 @@
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf dist",
-    "prepublishOnly": "pnpm run clean && pnpm run build",
     "test": "TS_NODE_PROJECT=tsconfig.test.json mocha --require ts-node/register tests/**/*.test.ts --timeout 30000"
   },
   "dependencies": {

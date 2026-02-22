@@ -22,8 +22,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "clean": "rm -rf dist",
-    "prepublishOnly": "pnpm run clean && pnpm run build"
+    "clean": "rm -rf dist"
   },
   "dependencies": {
     "@agent-shield/sdk": "workspace:*"

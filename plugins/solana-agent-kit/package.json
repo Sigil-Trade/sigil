@@ -15,8 +15,7 @@
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf dist",
-    "test": "mocha --require ts-node/register tests/**/*.test.ts --timeout 30000",
-    "prepublishOnly": "pnpm run build"
+    "test": "mocha --require ts-node/register tests/**/*.test.ts --timeout 30000"
   },
   "files": [
     "dist/**/*",
