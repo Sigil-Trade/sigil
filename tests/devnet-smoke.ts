@@ -319,8 +319,9 @@ describe("devnet-smoke-test", () => {
   });
 
   it("9. reactivate_vault", async () => {
+    // revokeAgent clears the agent, so we must provide a new one
     await program.methods
-      .reactivateVault(null) // no agent rotation
+      .reactivateVault(agent.publicKey)
       .accounts({
         owner: owner.publicKey,
         vault: vaultPda,

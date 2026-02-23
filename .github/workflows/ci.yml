@@ -5,7 +5,7 @@
 #   0. changes                — Detect which file groups changed (package-level path filtering)
 #   1. build-lint-test        — TypeScript builds, Prettier, 512 TS tests (conditional: any-ts or push)
 #   2. rust-checks            — cargo fmt + cargo clippy (conditional: rust changes or push)
-#   3. on-chain-tests         — Anchor build + LiteSVM 174 tests (conditional: rust changes or push)
+#   3. on-chain-tests         — Anchor build + LiteSVM 213 tests (conditional: rust changes or push)
 #   4. security-scan          — Sec3 X-Ray static analysis (always, BLOCKING)
 #   5. formal-verification    — Certora Solana Prover (conditional: certora changes, BLOCKING)
 #   6. fuzz-test              — Trident fuzz 1K iterations (conditional: rust changes or push, BLOCKING)
@@ -22,7 +22,7 @@
 #   apps/ → Actions server tests
 #   sdk/typescript → all downstream suites (everything depends on SDK)
 #
-# Total: 747 tests across 14 suites (512 TS + 174 on-chain + 61 devnet)
+# Total: 795 tests across 14 suites (512 TS + 213 on-chain + 70 devnet)
 # All security checks are BLOCKING — zero tolerance for known issues.
 
 name: CI
@@ -75,6 +75,7 @@ jobs:
               - 'programs/**'
               - 'certora/**'
               - 'trident-tests/**'
+              - 'tests/**'
             certora:
               - 'programs/**'
               - 'certora/**'
@@ -97,6 +98,7 @@ jobs:
               - 'plugins/**'
               - 'packages/**'
               - 'apps/**'
+              - 'tests/**'
               - 'package.json'
               - 'pnpm-lock.yaml'
               - 'tsconfig*.json'

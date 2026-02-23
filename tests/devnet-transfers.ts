@@ -22,6 +22,7 @@ import {
   nextVaultId,
   deriveOracleRegistryPda,
   initializeOracleRegistry,
+  updateOracleRegistry,
   makeOracleEntry,
   createFullVault,
   fundKeypair,

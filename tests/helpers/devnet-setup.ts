@@ -60,13 +60,22 @@ function createThrottledFetch(): typeof fetch {
 // ─── Constants (mirrors programs/agent-shield/src/state/mod.rs) ─────────────
 
 export const PROTOCOL_TREASURY = new PublicKey(
-  "ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT"
+  "ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT",
 );
 export const PROTOCOL_FEE_RATE = 200;
 export const FEE_RATE_DENOMINATOR = 1_000_000;
 export const MAX_DEVELOPER_FEE_RATE = 500;
 export const SESSION_EXPIRY_SLOTS = 20;
 export const ROLLING_WINDOW_SECONDS = 86_400;
+
+// ─── Pyth devnet feed constants ─────────────────────────────────────────────
+
+export const PYTH_SOL_USD_FEED = new PublicKey(
+  "7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE",
+);
+export const NATIVE_SOL_MINT = new PublicKey(
+  "So11111111111111111111111111111111111111112",
+);
 
 // ─── Oracle Registry helpers ────────────────────────────────────────────────
 
@@ -96,39 +105,61 @@ export function makeOracleEntry(
 
 /**
  * Initialize the protocol-level oracle registry with the given entries.
- * Must be called once before any vault can validate transactions.
+ * Idempotent: if the registry already exists, falls back to update.
  */
 export async function initializeOracleRegistry(
   program: Program<AgentShield>,
   owner: anchor.Wallet,
-  entries: { mint: PublicKey; oracleFeed: PublicKey; isStablecoin: boolean; fallbackFeed: PublicKey }[],
+  entries: {
+    mint: PublicKey;
+    oracleFeed: PublicKey;
+    isStablecoin: boolean;
+    fallbackFeed: PublicKey;
+  }[],
 ): Promise<PublicKey> {
   const [registryPda] = deriveOracleRegistryPda(program.programId);
 
-  await program.methods
-    .initializeOracleRegistry(entries)
-    .accounts({
-      authority: owner.publicKey,
-      oracleRegistry: registryPda,
-      systemProgram: SystemProgram.programId,
-    } as any)
-    .rpc();
+  try {
+    await program.methods
+      .initializeOracleRegistry(entries)
+      .accounts({
+        authority: owner.publicKey,
+        oracleRegistry: registryPda,
+        systemProgram: SystemProgram.programId,
+      } as any)
+      .rpc();
+  } catch {
+    // Registry already exists — update entries instead
+    await program.methods
+      .updateOracleRegistry(entries, [])
+      .accounts({
+        authority: owner.publicKey,
+        oracleRegistry: registryPda,
+      } as any)
+      .rpc();
+  }
 
   return registryPda;
 }
 
 /**
- * Update the oracle registry with additional entries.
+ * Update the oracle registry with additional entries and optional removals.
  */
 export async function updateOracleRegistry(
   program: Program<AgentShield>,
   owner: anchor.Wallet,
-  entries: { mint: PublicKey; oracleFeed: PublicKey; isStablecoin: boolean; fallbackFeed: PublicKey }[],
+  entries: {
+    mint: PublicKey;
+    oracleFeed: PublicKey;
+    isStablecoin: boolean;
+    fallbackFeed: PublicKey;
+  }[],
+  mintsToRemove: PublicKey[] = [],
 ): Promise<void> {
   const [registryPda] = deriveOracleRegistryPda(program.programId);
 
   await program.methods
-    .updateOracleRegistry(entries)
+    .updateOracleRegistry(entries, mintsToRemove)
     .accounts({
       authority: owner.publicKey,
       oracleRegistry: registryPda,
@@ -146,7 +177,7 @@ let vaultIdCounter = 0;
  */
 export function nextVaultId(filePrefix: number): BN {
   return new BN(
-    filePrefix * 1_000_000 + (Date.now() % 1_000_000) + vaultIdCounter++
+    filePrefix * 1_000_000 + (Date.now() % 1_000_000) + vaultIdCounter++,
   );
 }
 
@@ -203,7 +234,8 @@ export function deriveSessionPda(
 export function getDevnetProvider() {
   // Build a Connection with scoped throttled fetch (no globalThis monkey-patch).
   // The `fetch` option in ConnectionConfig passes our limiter directly to web3.js.
-  const rpcUrl = process.env.ANCHOR_PROVIDER_URL || "https://api.devnet.solana.com";
+  const rpcUrl =
+    process.env.ANCHOR_PROVIDER_URL || "https://api.devnet.solana.com";
   const connection = new Connection(rpcUrl, {
     commitment: "confirmed",
     fetch: createThrottledFetch(),
@@ -410,6 +442,11 @@ export interface AuthorizeOpts {
   protocol: PublicKey;
   actionType?: any;
   leverageBps?: number | null;
+  remainingAccounts?: {
+    pubkey: PublicKey;
+    isWritable: boolean;
+    isSigner: boolean;
+  }[];
 }
 
 export async function authorize(opts: AuthorizeOpts): Promise<string> {
@@ -427,6 +464,7 @@ export async function authorize(opts: AuthorizeOpts): Promise<string> {
     protocol,
     actionType = { swap: {} },
     leverageBps = null,
+    remainingAccounts = [],
   } = opts;
   return program.methods
     .validateAndAuthorize(
@@ -448,6 +486,7 @@ export async function authorize(opts: AuthorizeOpts): Promise<string> {
       tokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
     } as any)
+    .remainingAccounts(remainingAccounts)
     .signers([agent])
     .rpc();
 }
@@ -602,4 +641,33 @@ export async function getTokenBalance(
 ): Promise<number> {
   const account = await getAccount(connection, ata);
   return Number(account.amount);
+}
+
+// ─── Oracle-aware authorize wrapper ─────────────────────────────────────────
+
+/**
+ * Convenience wrapper around `authorize` that pre-fills `remainingAccounts`
+ * with the primary (and optional fallback) oracle feed accounts.
+ */
+export async function authorizeWithOracle(
+  opts: AuthorizeOpts & {
+    primaryOracleFeed: PublicKey;
+    fallbackOracleFeed?: PublicKey;
+  },
+): Promise<string> {
+  const remaining: {
+    pubkey: PublicKey;
+    isWritable: boolean;
+    isSigner: boolean;
+  }[] = [
+    { pubkey: opts.primaryOracleFeed, isWritable: false, isSigner: false },
+  ];
+  if (opts.fallbackOracleFeed) {
+    remaining.push({
+      pubkey: opts.fallbackOracleFeed,
+      isWritable: false,
+      isSigner: false,
+    });
+  }
+  return authorize({ ...opts, remainingAccounts: remaining });
 }
