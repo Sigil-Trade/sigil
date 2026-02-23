@@ -37,17 +37,6 @@ import {
   FailedTransactionMetadata,
 } from "./helpers/litesvm-setup";
 
-// Helper to build AllowedToken objects for the IDL
-function makeAllowedToken(
-  mint: PublicKey,
-  oracleFeed: PublicKey = PublicKey.default, // default = stablecoin
-  decimals: number = 6,
-  dailyCapBase: BN = new BN(0),
-  maxTxBase: BN = new BN(0),
-) {
-  return { mint, oracleFeed, decimals, dailyCapBase, maxTxBase };
-}
-
 /**
  * Jupiter Integration Tests
  *
@@ -80,6 +69,7 @@ describe("jupiter-integration", () => {
   let vaultPda: PublicKey;
   let policyPda: PublicKey;
   let trackerPda: PublicKey;
+  let oracleRegistryPda: PublicKey;
 
   // Protocol treasury (must match hardcoded constant in program)
   const protocolTreasury = new PublicKey("ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT");
@@ -147,6 +137,7 @@ describe("jupiter-integration", () => {
         vault,
         policy,
         tracker,
+        oracleRegistry: oracleRegistryPda,
         session,
         vaultTokenAccount: effectiveVaultAta,
         tokenMintAccount: tokenMint,
@@ -165,7 +156,6 @@ describe("jupiter-integration", () => {
         payer: agentKp.publicKey,
         vault,
         policy,
-        tracker,
         session,
         sessionRentRecipient: agentKp.publicKey,
         vaultTokenAccount: effectiveVaultAta,
@@ -238,20 +228,36 @@ describe("jupiter-integration", () => {
       true
     );
 
+    // Derive oracle registry PDA and initialize it
+    [oracleRegistryPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("oracle_registry")],
+      program.programId
+    );
+
+    await program.methods
+      .initializeOracleRegistry([
+        { mint: usdcMint, oracleFeed: PublicKey.default, isStablecoin: true, fallbackFeed: PublicKey.default },
+      ])
+      .accounts({
+        authority: owner.publicKey,
+        oracleRegistry: oracleRegistryPda,
+        systemProgram: SystemProgram.programId,
+      } as any)
+      .rpc();
+
     // Initialize vault
     await program.methods
       .initializeVault(
         vaultId,
         new BN(500_000_000), // daily cap
         new BN(200_000_000), // max tx size
-        [makeAllowedToken(usdcMint)], // allowed tokens
-        [jupiterProtocol],   // allowed protocols
+        1,                   // protocolMode: 1 = allowlist
+        [jupiterProtocol],   // protocols
         0,                   // max leverage (0 = disabled)
         1,                   // max concurrent positions
         0,                   // developer fee rate (0 = none)
         new BN(0),           // timelockDuration
         [],                  // allowedDestinations
-        0, // tracker_tier: Standard
       )
       .accountsPartial({
         owner: owner.publicKey,
@@ -329,13 +335,6 @@ describe("jupiter-integration", () => {
       const vault = await program.account.agentVault.fetch(vaultPda);
       expect(vault.totalTransactions.toNumber()).to.equal(1);
       expect(vault.totalVolume.toNumber()).to.equal(50_000_000);
-
-      // Verify spend tracker
-      const tracker = await program.account.spendTracker.fetch(trackerPda);
-      expect(tracker.rollingSpends.length).to.be.greaterThanOrEqual(1);
-      expect(tracker.recentTransactions.length).to.equal(1);
-      expect(tracker.recentTransactions[0].success).to.equal(true);
-      expect(tracker.recentTransactions[0].amount.toNumber()).to.equal(50_000_000);
     });
 
     it("records multiple composed swaps correctly", async () => {
@@ -354,9 +353,6 @@ describe("jupiter-integration", () => {
       const vault = await program.account.agentVault.fetch(vaultPda);
       expect(vault.totalTransactions.toNumber()).to.equal(2);
       expect(vault.totalVolume.toNumber()).to.equal(80_000_000); // 50 + 30
-
-      const tracker = await program.account.spendTracker.fetch(trackerPda);
-      expect(tracker.recentTransactions.length).to.equal(2);
     });
   });
 
@@ -418,7 +414,7 @@ describe("jupiter-integration", () => {
   describe("disallowed token", () => {
     it("reverts when token is not in policy allowlist", async () => {
       // Create vault ATA for solMint so Anchor account validation passes,
-      // allowing the handler's TokenNotAllowed check to fire.
+      // allowing the handler's TokenNotRegistered check to fire.
       const vaultSolAta = createAtaIdempotentHelper(
         svm,
         (owner as any).payer,
@@ -432,7 +428,7 @@ describe("jupiter-integration", () => {
           policyPda,
           trackerPda,
           agent,
-          solMint, // not in allowed_tokens
+          solMint, // not registered in oracle registry
           new BN(1_000_000),
           jupiterProtocol,
           true,
@@ -441,7 +437,7 @@ describe("jupiter-integration", () => {
         expect.fail("Should have thrown");
       } catch (err: any) {
         if (err.message === "Should have thrown") throw err;
-        expect(err.message || err.toString()).to.include("TokenNotAllowed");
+        expect(err.message || err.toString()).to.include("TokenNotRegistered");
       }
     });
   });
@@ -504,14 +500,13 @@ describe("jupiter-integration", () => {
           frozenVaultId,
           new BN(500_000_000),
           new BN(200_000_000),
-          [makeAllowedToken(usdcMint)],
-          [jupiterProtocol],
+          0,                   // protocolMode
+          [jupiterProtocol],   // protocols
           0,
           1,
           0, // developer fee rate
           new BN(0),
           [],
-          0, // tracker_tier: Standard
         )
         .accountsPartial({
           owner: owner.publicKey,
@@ -617,14 +612,13 @@ describe("jupiter-integration", () => {
           rollingVaultId,
           new BN(100_000_000), // 100 USDC daily cap
           new BN(60_000_000),  // 60 USDC max tx
-          [makeAllowedToken(usdcMint)],
-          [jupiterProtocol],
+          0,                   // protocolMode
+          [jupiterProtocol],   // protocols
           0,
           1,
           0, // developer fee rate
           new BN(0),
           [],
-          0, // tracker_tier: Standard
         )
         .accountsPartial({
           owner: owner.publicKey,
@@ -679,8 +673,8 @@ describe("jupiter-integration", () => {
         rollingVaultUsdcAta
       );
 
-      let tracker = await program.account.spendTracker.fetch(rollingTracker);
-      expect(tracker.recentTransactions.length).to.equal(1);
+      let vault = await program.account.agentVault.fetch(rollingVault);
+      expect(vault.totalTransactions.toNumber()).to.equal(1);
 
       // Swap 2: 40 USDC (total: 80 / 100)
       await sendComposedSwap(
@@ -695,8 +689,8 @@ describe("jupiter-integration", () => {
         rollingVaultUsdcAta
       );
 
-      tracker = await program.account.spendTracker.fetch(rollingTracker);
-      expect(tracker.recentTransactions.length).to.equal(2);
+      vault = await program.account.agentVault.fetch(rollingVault);
+      expect(vault.totalTransactions.toNumber()).to.equal(2);
 
       // Swap 3: 30 USDC (total: 110 > 100 cap) — should fail
       try {
@@ -718,10 +712,7 @@ describe("jupiter-integration", () => {
       }
 
       // Verify state wasn't modified by the failed tx
-      tracker = await program.account.spendTracker.fetch(rollingTracker);
-      expect(tracker.recentTransactions.length).to.equal(2);
-
-      const vault = await program.account.agentVault.fetch(rollingVault);
+      vault = await program.account.agentVault.fetch(rollingVault);
       expect(vault.totalTransactions.toNumber()).to.equal(2);
     });
   });

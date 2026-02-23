@@ -10,6 +10,7 @@ export {
   getTrackerPDA,
   getSessionPDA,
   getPendingPolicyPDA,
+  getOracleRegistryPDA,
   fetchVault,
   fetchPolicy,
   fetchTracker,
@@ -18,9 +19,12 @@ export {
   fetchPolicyByAddress,
   fetchTrackerByAddress,
   fetchPendingPolicy,
+  fetchOracleRegistry,
 } from "./accounts";
 
 export {
+  buildInitializeOracleRegistry,
+  buildUpdateOracleRegistry,
   buildInitializeVault,
   buildDepositFunds,
   buildRegisterAgent,
@@ -48,8 +52,6 @@ export { rewriteVaultAuthority, validateRewrite } from "./rewriter";
 export {
   wrapTransaction,
   wrapInstructions,
-  classifyToken,
-  findAllowedToken,
   type WrapTransactionParams,
 } from "./wrap";
 
@@ -64,18 +66,20 @@ export {
 
 export {
   AGENT_SHIELD_PROGRAM_ID,
-  UNPRICED_SENTINEL,
   USD_DECIMALS,
-  TrackerTier,
+  EPOCH_DURATION,
+  NUM_EPOCHS,
+  PROTOCOL_MODE_ALL,
+  PROTOCOL_MODE_ALLOWLIST,
+  PROTOCOL_MODE_DENYLIST,
   type AgentShield,
   type AgentVaultAccount,
   type PolicyConfigAccount,
   type SpendTrackerAccount,
+  type OracleRegistryAccount,
   type SessionAuthorityAccount,
-  type AllowedToken,
-  type TokenClassification,
-  type SpendEntry,
-  type TransactionRecord,
+  type OracleEntry,
+  type EpochBucket,
   type VaultStatus,
   type ActionType,
   type PendingPolicyUpdateAccount,
@@ -86,6 +90,8 @@ export {
   type AuthorizeParams,
   type OracleSource,
   type ComposeActionParams,
+  type InitializeOracleRegistryParams,
+  type UpdateOracleRegistryParams,
 } from "./types";
 
 export {
@@ -134,9 +140,9 @@ export {
 export {
   harden,
   withVault,
-  shieldWallet,
   mapPoliciesToVaultParams,
   findNextVaultId,
+  shieldWallet,
 } from "./wrapper";
 export type { HardenOptions, HardenResult } from "./wrapper";
 

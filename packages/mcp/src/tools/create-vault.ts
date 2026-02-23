@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { BN } from "@coral-xyz/anchor";
-import { PublicKey } from "@solana/web3.js";
 import type { AgentShieldClient } from "@agent-shield/sdk";
 import { toPublicKey, toBN } from "../utils";
 import { formatError } from "../errors";
@@ -13,12 +12,20 @@ export const createVaultSchema = z.object({
   maxTransactionSizeUsd: z
     .string()
     .describe("Maximum single transaction size in USD base units"),
-  allowedTokens: z
+  protocolMode: z
+    .number()
+    .optional()
+    .default(0)
+    .describe(
+      "Protocol access mode: 0 = all allowed, 1 = allowlist, 2 = denylist",
+    ),
+  protocols: z
     .array(z.string())
-    .describe("Array of allowed token mint addresses (base58). Max 10."),
-  allowedProtocols: z
-    .array(z.string())
-    .describe("Array of allowed protocol program IDs (base58). Max 10."),
+    .optional()
+    .default([])
+    .describe(
+      "Protocol program IDs (base58) for allowlist/denylist. Max 10. Ignored when protocolMode=0.",
+    ),
   maxLeverageBps: z
     .number()
     .describe("Maximum leverage in basis points (e.g. 30000 = 3x)"),
@@ -61,14 +68,8 @@ export async function createVault(
       vaultId: toBN(input.vaultId),
       dailySpendingCapUsd: toBN(input.dailySpendingCapUsd),
       maxTransactionSizeUsd: toBN(input.maxTransactionSizeUsd),
-      allowedTokens: input.allowedTokens.map((addr) => ({
-        mint: toPublicKey(addr),
-        oracleFeed: PublicKey.default,
-        decimals: 6,
-        dailyCapBase: new BN(0),
-        maxTxBase: new BN(0),
-      })),
-      allowedProtocols: input.allowedProtocols.map(toPublicKey),
+      protocolMode: input.protocolMode ?? 0,
+      protocols: input.protocols ? input.protocols.map(toPublicKey) : [],
       maxLeverageBps: input.maxLeverageBps,
       maxConcurrentPositions: input.maxConcurrentPositions,
       feeDestination: toPublicKey(input.feeDestination),
@@ -104,7 +105,8 @@ export const createVaultTool = {
   name: "shield_create_vault",
   description:
     "Create a new AgentShield vault with policy configuration. " +
-    "Sets spending caps, allowed tokens/protocols, leverage limits, and fee settings.",
+    "Sets spending caps, protocol mode, leverage limits, and fee settings. " +
+    "Tokens are managed via the global OracleRegistry.",
   schema: createVaultSchema,
   handler: createVault,
 };

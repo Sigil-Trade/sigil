@@ -1,10 +1,14 @@
 /**
- * Devnet Timelock Tests — 5 tests
+ * Devnet Timelock Tests — 4 tests (V2)
  *
  * Timelock policy governance: queue, apply (after delay), cancel,
- * and tracker reset on token list change via timelock.
+ * and early-apply rejection.
  *
  * Uses timelockDuration=5 (5 seconds) for fast testing.
+ *
+ * V2: No makeAllowedToken, no allowedTokens in policy, no tracker in
+ *     updatePolicy/applyPendingPolicy accounts. Tokens via OracleRegistry.
+ *     queuePolicyUpdate takes 10 optional args matching updatePolicy V2.
  */
 import * as anchor from "@coral-xyz/anchor";
 import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
@@ -13,9 +17,11 @@ import { expect } from "chai";
 import BN from "bn.js";
 import {
   getDevnetProvider,
-  makeAllowedToken,
   nextVaultId,
   deriveSessionPda,
+  deriveOracleRegistryPda,
+  initializeOracleRegistry,
+  makeOracleEntry,
   createFullVault,
   authorizeAndFinalize,
   fundKeypair,
@@ -34,12 +40,16 @@ describe("devnet-timelock", () => {
   const jupiterProgramId = Keypair.generate().publicKey;
 
   let mint: PublicKey;
-  let mint2: PublicKey;
+  let oracleRegistryPda: PublicKey;
 
   before(async () => {
     await fundKeypair(provider, agent.publicKey);
     mint = await createTestMint(connection, payer, owner.publicKey, 6);
-    mint2 = await createTestMint(connection, payer, owner.publicKey, 6);
+
+    // Initialize oracle registry with mint as stablecoin
+    oracleRegistryPda = await initializeOracleRegistry(program, owner, [
+      makeOracleEntry(mint),
+    ]);
   });
 
   /** Create a vault with timelock enabled */
@@ -81,7 +91,6 @@ describe("devnet-timelock", () => {
           owner: owner.publicKey,
           vault: vault.vaultPda,
           policy: vault.policyPda,
-          tracker: vault.trackerPda,
         } as any)
         .rpc();
       expect.fail("Should have thrown");
@@ -95,7 +104,7 @@ describe("devnet-timelock", () => {
     const vault = await createTimelockVault(5);
     const newDailyCap = new BN(999_000_000);
 
-    // Queue policy change
+    // Queue policy change (V2: 10 optional args, no allowedTokens)
     await program.methods
       .queuePolicyUpdate(
         newDailyCap,
@@ -132,14 +141,13 @@ describe("devnet-timelock", () => {
     // Wait for timelock to expire (5s + 2s buffer)
     await sleep(7000);
 
-    // Apply
+    // Apply (V2: no tracker in accounts)
     await program.methods
       .applyPendingPolicy()
       .accounts({
         owner: owner.publicKey,
         vault: vault.vaultPda,
         policy: vault.policyPda,
-        tracker: vault.trackerPda,
         pendingPolicy: vault.pendingPolicyPda,
       } as any)
       .rpc();
@@ -184,7 +192,7 @@ describe("devnet-timelock", () => {
       } as any)
       .rpc();
 
-    // Immediately try apply
+    // Immediately try apply (V2: no tracker in accounts)
     try {
       await program.methods
         .applyPendingPolicy()
@@ -192,7 +200,6 @@ describe("devnet-timelock", () => {
           owner: owner.publicKey,
           vault: vault.vaultPda,
           policy: vault.policyPda,
-          tracker: vault.trackerPda,
           pendingPolicy: vault.pendingPolicyPda,
         } as any)
         .rpc();
@@ -259,82 +266,5 @@ describe("devnet-timelock", () => {
     const policy = await program.account.policyConfig.fetch(vault.policyPda);
     expect(policy.dailySpendingCapUsd.toNumber()).to.equal(500_000_000);
     console.log("    cancel_pending_policy: PDA closed, policy unchanged");
-  });
-
-  it("5. queue with allowed_tokens change clears tracker on apply", async () => {
-    const vault = await createTimelockVault(5);
-
-    // Spend some tokens to populate rolling_spends
-    const sessionPda = deriveSessionPda(
-      vault.vaultPda,
-      agent.publicKey,
-      mint,
-      program.programId,
-    );
-    await authorizeAndFinalize({
-      program,
-      agent,
-      vaultPda: vault.vaultPda,
-      policyPda: vault.policyPda,
-      trackerPda: vault.trackerPda,
-      sessionPda,
-      vaultTokenAta: vault.vaultTokenAta,
-      mint,
-      amount: new BN(50_000_000),
-      protocol: jupiterProgramId,
-      feeDestinationAta: null,
-      protocolTreasuryAta: vault.protocolTreasuryAta,
-    });
-
-    // Verify tracker has spend entries
-    const trackerBefore = await program.account.spendTracker.fetch(
-      vault.trackerPda,
-    );
-    expect(trackerBefore.rollingSpends.length).to.be.greaterThan(0);
-
-    // Queue allowed_tokens change (add a second mint)
-    await program.methods
-      .queuePolicyUpdate(
-        null,
-        null,
-        [makeAllowedToken(mint), makeAllowedToken(mint2)],
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-      )
-      .accounts({
-        owner: owner.publicKey,
-        vault: vault.vaultPda,
-        policy: vault.policyPda,
-        pendingPolicy: vault.pendingPolicyPda,
-        systemProgram: SystemProgram.programId,
-      } as any)
-      .rpc();
-
-    // Wait for timelock
-    await sleep(7000);
-
-    // Apply
-    await program.methods
-      .applyPendingPolicy()
-      .accounts({
-        owner: owner.publicKey,
-        vault: vault.vaultPda,
-        policy: vault.policyPda,
-        tracker: vault.trackerPda,
-        pendingPolicy: vault.pendingPolicyPda,
-      } as any)
-      .rpc();
-
-    // Verify rolling_spends cleared
-    const trackerAfter = await program.account.spendTracker.fetch(
-      vault.trackerPda,
-    );
-    expect(trackerAfter.rollingSpends.length).to.equal(0);
-    console.log("    Token list change via timelock cleared rolling_spends");
   });
 });

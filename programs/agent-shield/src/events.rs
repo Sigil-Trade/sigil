@@ -29,8 +29,8 @@ pub struct PolicyUpdated {
     pub vault: Pubkey,
     pub daily_cap_usd: u64,
     pub max_transaction_size_usd: u64,
-    pub allowed_tokens_count: u8,
-    pub allowed_protocols_count: u8,
+    pub protocol_mode: u8,
+    pub protocols_count: u8,
     pub max_leverage_bps: u16,
     pub developer_fee_rate: u16,
     pub timestamp: i64,
@@ -50,14 +50,6 @@ pub struct ActionAuthorized {
     pub delegated: bool,
     pub oracle_price: Option<i128>,
     pub oracle_source: Option<u8>,
-    pub timestamp: i64,
-}
-
-#[event]
-pub struct ActionDenied {
-    pub vault: Pubkey,
-    pub agent: Pubkey,
-    pub reason: String,
     pub timestamp: i64,
 }
 
@@ -145,4 +137,17 @@ pub struct AgentTransferExecuted {
     pub destination: Pubkey,
     pub amount: u64,
     pub mint: Pubkey,
+}
+
+#[event]
+pub struct OracleRegistryInitialized {
+    pub authority: Pubkey,
+    pub entry_count: u16,
+}
+
+#[event]
+pub struct OracleRegistryUpdated {
+    pub added_count: u16,
+    pub removed_count: u16,
+    pub total_entries: u16,
 }

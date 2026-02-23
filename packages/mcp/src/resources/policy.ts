@@ -9,13 +9,16 @@ export async function getPolicyResource(
     const vault = toPublicKey(vaultAddress);
     const policy = await client.fetchPolicy(vault);
 
+    const protocolModeLabels = ["all", "allowlist", "denylist"];
     return JSON.stringify(
       {
         vault: vaultAddress,
         dailySpendingCapUsd: formatBN(policy.dailySpendingCapUsd),
         maxTransactionSizeUsd: formatBN(policy.maxTransactionSizeUsd),
-        allowedTokens: policy.allowedTokens.map((t) => t.mint.toBase58()),
-        allowedProtocols: policy.allowedProtocols.map((p) => p.toBase58()),
+        protocolMode:
+          protocolModeLabels[policy.protocolMode] ??
+          `unknown(${policy.protocolMode})`,
+        protocols: policy.protocols.map((p) => p.toBase58()),
         maxLeverageBps: policy.maxLeverageBps,
         canOpenPositions: policy.canOpenPositions,
         maxConcurrentPositions: policy.maxConcurrentPositions,
@@ -31,8 +34,8 @@ export async function getPolicyResource(
         error: "Policy not found — vault may not exist",
         dailySpendingCapUsd: "0",
         maxTransactionSizeUsd: "0",
-        allowedTokens: [],
-        allowedProtocols: [],
+        protocolMode: "all",
+        protocols: [],
         maxLeverageBps: 0,
         canOpenPositions: false,
         maxConcurrentPositions: 0,

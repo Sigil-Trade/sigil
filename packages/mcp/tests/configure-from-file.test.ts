@@ -17,8 +17,9 @@ describe("shield_configure_from_file", () => {
       layers: {
         shield: {
           enabled: true,
-          dailyCapUsd: 500,
-          allowedProtocols: ["JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"],
+          dailySpendingCapUsd: 500,
+          protocolMode: 1,
+          protocols: ["JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"],
           maxLeverageBps: 0,
           rateLimit: 60,
         },
@@ -171,10 +172,10 @@ describe("shield_configure_from_file", () => {
 
   it("validates shield layer fields", async () => {
     const config = makeValidConfig();
-    config.layers.shield.dailyCapUsd = "not a number";
+    config.layers.shield.dailySpendingCapUsd = "not a number";
     const filePath = writeConfigFile("bad-shield.json", config);
     const result = await configureFromFile(null, { configFile: filePath });
-    expect(result).to.include("dailyCapUsd");
+    expect(result).to.include("dailySpendingCapUsd");
     expect(result).to.include("must be a number");
   });
 

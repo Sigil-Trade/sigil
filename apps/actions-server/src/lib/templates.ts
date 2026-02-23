@@ -99,16 +99,8 @@ export async function buildParamsFromTemplate(
     vaultId,
     dailySpendingCapUsd: usd(dailyCap),
     maxTransactionSizeUsd: usd(maxTx),
-    allowedTokens: [
-      {
-        mint: new PublicKey(USDC_MINT_STR),
-        oracleFeed: PublicKey.default,
-        decimals: 6,
-        dailyCapBase: new BN(0),
-        maxTxBase: new BN(0),
-      },
-    ],
-    allowedProtocols: config.protocols.map((p) => new PublicKey(p)),
+    protocolMode: 1, // allowlist
+    protocols: config.protocols.map((p) => new PublicKey(p)),
     maxLeverageBps: config.maxLeverageBps,
     maxConcurrentPositions: config.maxConcurrentPositions,
     feeDestination,

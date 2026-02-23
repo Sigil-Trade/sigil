@@ -30,15 +30,22 @@ describe("shield_update_policy", () => {
     expect(params.dailySpendingCapUsd).to.be.undefined;
   });
 
-  it("handles allowedTokens update", async () => {
-    const mint1 = Keypair.generate().publicKey.toBase58();
-    const mint2 = Keypair.generate().publicKey.toBase58();
+  it("handles protocolMode and protocols update", async () => {
+    const protocol1 = Keypair.generate().publicKey.toBase58();
+    const protocol2 = Keypair.generate().publicKey.toBase58();
     const client = createMockClient();
     const result = await updatePolicy(client as any, {
       vault: TEST_VAULT_PDA.toBase58(),
-      allowedTokens: [mint1, mint2],
+      protocolMode: 1,
+      protocols: [protocol1, protocol2],
     });
-    expect(result).to.include("allowedTokens");
+    expect(result).to.include("protocolMode");
+    expect(result).to.include("protocols");
+    const call = client.calls.find((c) => c.method === "updatePolicy");
+    expect(call).to.exist;
+    const params = call!.args[1];
+    expect(params.protocolMode).to.equal(1);
+    expect(params.protocols).to.have.length(2);
   });
 
   it("returns error on SDK failure", async () => {
@@ -47,8 +54,9 @@ describe("shield_update_policy", () => {
     });
     const result = await updatePolicy(client as any, {
       vault: TEST_VAULT_PDA.toBase58(),
-      allowedTokens: [],
+      protocolMode: 1,
+      protocols: [],
     });
-    expect(result).to.include("TooManyAllowedTokens");
+    expect(result).to.include("TooManyAllowedProtocols");
   });
 });

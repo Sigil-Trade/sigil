@@ -49,10 +49,12 @@ export async function checkVault(
     const vault = await client.fetchVaultByAddress(vaultAddress);
     const policy = await client.fetchPolicy(vaultAddress);
 
-    const allowedTokens =
-      policy.allowedTokens.map((t) => t.mint.toBase58()).join(", ") || "Any";
-    const allowedProtocols =
-      policy.allowedProtocols.map((p) => p.toBase58()).join(", ") || "Any";
+    const protocolModeLabels = ["All Allowed", "Allowlist", "Denylist"];
+    const protocolModeLabel =
+      protocolModeLabels[policy.protocolMode] ??
+      `Unknown (${policy.protocolMode})`;
+    const protocols =
+      policy.protocols.map((p) => p.toBase58()).join(", ") || "None";
     const allowedDestinations =
       policy.allowedDestinations && policy.allowedDestinations.length > 0
         ? policy.allowedDestinations.map((d) => d.toBase58()).join(", ")
@@ -93,8 +95,8 @@ export async function checkVault(
       "### Policy",
       `- **Daily Spending Cap:** ${formatBN(policy.dailySpendingCapUsd)}`,
       `- **Max Transaction Size:** ${formatBN(policy.maxTransactionSizeUsd)}`,
-      `- **Allowed Tokens:** ${allowedTokens}`,
-      `- **Allowed Protocols:** ${allowedProtocols}`,
+      `- **Protocol Mode:** ${protocolModeLabel}`,
+      `- **Protocols:** ${protocols}`,
       `- **Allowed Destinations:** ${allowedDestinations}`,
       `- **Max Leverage:** ${policy.maxLeverageBps} BPS`,
       `- **Can Open Positions:** ${policy.canOpenPositions}`,

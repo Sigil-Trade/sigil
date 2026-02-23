@@ -11,10 +11,9 @@ describe("resource: shield://vault/{address}/activity", () => {
     );
     const data = JSON.parse(json);
     expect(data.vault).to.equal(TEST_VAULT_PDA.toBase58());
-    expect(data.totalTransactions).to.equal(1);
-    expect(data.transactions).to.be.an("array").with.length(1);
-    expect(data.transactions[0].actionType).to.equal("Swap");
-    expect(data.transactions[0].success).to.be.true;
+    expect(data.totalTransactions).to.equal("42");
+    expect(data.totalVolume).to.equal("1000000000");
+    expect(data.note).to.include("Anchor events");
   });
 
   it("returns default state for missing vault", async () => {
@@ -27,8 +26,8 @@ describe("resource: shield://vault/{address}/activity", () => {
     );
     const data = JSON.parse(json);
     expect(data.error).to.include("not found");
-    expect(data.transactions).to.deep.equal([]);
-    expect(data.totalTransactions).to.equal(0);
+    expect(data.totalTransactions).to.equal("0");
+    expect(data.totalVolume).to.equal("0");
   });
 
   it("returns well-formed JSON with all fields", async () => {
@@ -38,15 +37,11 @@ describe("resource: shield://vault/{address}/activity", () => {
       TEST_VAULT_PDA.toBase58(),
     );
     const data = JSON.parse(json);
-    const tx = data.transactions[0];
-    expect(tx).to.have.all.keys(
-      "timestamp",
-      "actionType",
-      "tokenMint",
-      "amount",
-      "protocol",
-      "success",
-      "slot",
+    expect(data).to.have.all.keys(
+      "vault",
+      "totalTransactions",
+      "totalVolume",
+      "note",
     );
   });
 });

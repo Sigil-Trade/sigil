@@ -20,36 +20,53 @@ declare_id!("4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL");
 pub mod agent_shield {
     use super::*;
 
+    /// Initialize the protocol-level oracle registry.
+    /// Only called once. The authority becomes the registry admin.
+    pub fn initialize_oracle_registry(
+        ctx: Context<InitializeOracleRegistry>,
+        entries: Vec<state::OracleEntry>,
+    ) -> Result<()> {
+        instructions::initialize_oracle_registry::handler(ctx, entries)
+    }
+
+    /// Add or remove entries from the oracle registry.
+    /// Only the registry authority can call this.
+    pub fn update_oracle_registry(
+        ctx: Context<UpdateOracleRegistry>,
+        entries_to_add: Vec<state::OracleEntry>,
+        mints_to_remove: Vec<Pubkey>,
+    ) -> Result<()> {
+        instructions::update_oracle_registry::handler(ctx, entries_to_add, mints_to_remove)
+    }
+
     /// Initialize a new agent vault with policy configuration.
-    /// Only the owner can call this. Creates vault PDA, policy PDA, and spend tracker PDA.
-    /// `tracker_tier`: 0 = Standard (200 entries), 1 = Pro (500), 2 = Max (1000).
+    /// Only the owner can call this. Creates vault PDA, policy PDA,
+    /// and zero-copy spend tracker PDA.
     pub fn initialize_vault(
         ctx: Context<InitializeVault>,
         vault_id: u64,
         daily_spending_cap_usd: u64,
         max_transaction_size_usd: u64,
-        allowed_tokens: Vec<state::AllowedToken>,
-        allowed_protocols: Vec<Pubkey>,
+        protocol_mode: u8,
+        protocols: Vec<Pubkey>,
         max_leverage_bps: u16,
         max_concurrent_positions: u8,
         developer_fee_rate: u16,
         timelock_duration: u64,
         allowed_destinations: Vec<Pubkey>,
-        tracker_tier: u8,
     ) -> Result<()> {
         instructions::initialize_vault::handler(
             ctx,
             vault_id,
             daily_spending_cap_usd,
             max_transaction_size_usd,
-            allowed_tokens,
-            allowed_protocols,
+            protocol_mode,
+            protocols,
             max_leverage_bps,
             max_concurrent_positions,
             developer_fee_rate,
             timelock_duration,
             allowed_destinations,
-            tracker_tier,
         )
     }
 
@@ -66,14 +83,13 @@ pub mod agent_shield {
     }
 
     /// Update the policy configuration for a vault.
-    /// Only the owner can call this. Cannot be called by the agent.
-    /// Blocked when timelock_duration > 0 — use queue_policy_update instead.
+    /// Only the owner can call this. Blocked when timelock > 0.
     pub fn update_policy(
         ctx: Context<UpdatePolicy>,
         daily_spending_cap_usd: Option<u64>,
         max_transaction_size_usd: Option<u64>,
-        allowed_tokens: Option<Vec<state::AllowedToken>>,
-        allowed_protocols: Option<Vec<Pubkey>>,
+        protocol_mode: Option<u8>,
+        protocols: Option<Vec<Pubkey>>,
         max_leverage_bps: Option<u16>,
         can_open_positions: Option<bool>,
         max_concurrent_positions: Option<u8>,
@@ -85,8 +101,8 @@ pub mod agent_shield {
             ctx,
             daily_spending_cap_usd,
             max_transaction_size_usd,
-            allowed_tokens,
-            allowed_protocols,
+            protocol_mode,
+            protocols,
             max_leverage_bps,
             can_open_positions,
             max_concurrent_positions,
@@ -97,10 +113,8 @@ pub mod agent_shield {
     }
 
     /// Core permission check. Called by the agent before a DeFi action.
-    /// Validates the action against all policy constraints (USD caps, per-token caps).
-    /// If approved, creates a SessionAuthority PDA, delegates tokens to agent,
-    /// and updates spend tracking.
-    /// If denied, reverts the entire transaction (including subsequent DeFi instructions).
+    /// Validates against policy constraints + oracle registry.
+    /// Creates a SessionAuthority PDA, delegates tokens to agent.
     pub fn validate_and_authorize(
         ctx: Context<ValidateAndAuthorize>,
         action_type: state::ActionType,
@@ -120,21 +134,18 @@ pub mod agent_shield {
     }
 
     /// Finalize a session after the DeFi action completes.
-    /// Revokes token delegation, collects fees, closes the SessionAuthority PDA,
-    /// and records the transaction in the audit log.
-    /// Can be called by the agent or permissionlessly (for cleanup of expired sessions).
+    /// Revokes delegation, collects fees, closes the SessionAuthority PDA.
     pub fn finalize_session(ctx: Context<FinalizeSession>, success: bool) -> Result<()> {
         instructions::finalize_session::handler(ctx, success)
     }
 
-    /// Kill switch. Immediately freezes the vault, preventing all agent actions.
-    /// Only the owner can call this. Funds can still be withdrawn by the owner.
+    /// Kill switch. Immediately freezes the vault.
+    /// Only the owner can call this.
     pub fn revoke_agent(ctx: Context<RevokeAgent>) -> Result<()> {
         instructions::revoke_agent::handler(ctx)
     }
 
     /// Reactivate a frozen vault. Optionally rotate the agent key.
-    /// Only the owner can call this.
     pub fn reactivate_vault(
         ctx: Context<ReactivateVault>,
         new_agent: Option<Pubkey>,
@@ -143,26 +154,22 @@ pub mod agent_shield {
     }
 
     /// Withdraw tokens from the vault back to the owner.
-    /// Works in any vault status (Active or Frozen). Only the owner can call this.
     pub fn withdraw_funds(ctx: Context<WithdrawFunds>, amount: u64) -> Result<()> {
         instructions::withdraw_funds::handler(ctx, amount)
     }
 
-    /// Close the vault entirely. Withdraws all remaining funds and closes all PDAs.
-    /// Reclaims rent. Vault must have no open positions. Only the owner can call this.
+    /// Close the vault entirely. Reclaims rent from all PDAs.
     pub fn close_vault(ctx: Context<CloseVault>) -> Result<()> {
         instructions::close_vault::handler(ctx)
     }
 
     /// Queue a policy update when timelock is active.
-    /// Creates a PendingPolicyUpdate PDA that becomes executable after
-    /// the timelock period expires.
     pub fn queue_policy_update(
         ctx: Context<QueuePolicyUpdate>,
         daily_spending_cap_usd: Option<u64>,
         max_transaction_amount_usd: Option<u64>,
-        allowed_tokens: Option<Vec<state::AllowedToken>>,
-        allowed_protocols: Option<Vec<Pubkey>>,
+        protocol_mode: Option<u8>,
+        protocols: Option<Vec<Pubkey>>,
         max_leverage_bps: Option<u16>,
         can_open_positions: Option<bool>,
         max_concurrent_positions: Option<u8>,
@@ -174,8 +181,8 @@ pub mod agent_shield {
             ctx,
             daily_spending_cap_usd,
             max_transaction_amount_usd,
-            allowed_tokens,
-            allowed_protocols,
+            protocol_mode,
+            protocols,
             max_leverage_bps,
             can_open_positions,
             max_concurrent_positions,
@@ -185,21 +192,18 @@ pub mod agent_shield {
         )
     }
 
-    /// Apply a queued policy update after the timelock period has expired.
-    /// Closes the PendingPolicyUpdate PDA and returns rent to the owner.
+    /// Apply a queued policy update after the timelock expires.
     pub fn apply_pending_policy(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
         instructions::apply_pending_policy::handler(ctx)
     }
 
-    /// Cancel a queued policy update. Closes the PendingPolicyUpdate PDA
-    /// and returns rent to the owner.
+    /// Cancel a queued policy update.
     pub fn cancel_pending_policy(ctx: Context<CancelPendingPolicy>) -> Result<()> {
         instructions::cancel_pending_policy::handler(ctx)
     }
 
     /// Transfer tokens from the vault to an allowed destination.
-    /// Only the agent can call this. Respects destination allowlist,
-    /// spending caps, and per-token limits.
+    /// Only the agent can call this.
     pub fn agent_transfer(ctx: Context<AgentTransfer>, amount: u64) -> Result<()> {
         instructions::agent_transfer::handler(ctx, amount)
     }

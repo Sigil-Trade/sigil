@@ -1,3 +1,15 @@
+/**
+ * Devnet Smoke Tests — 10 tests (V2)
+ *
+ * Full lifecycle: initialize_vault -> deposit -> register_agent ->
+ * update_policy -> validate_and_authorize -> finalize_session ->
+ * withdraw -> revoke -> reactivate -> close_vault.
+ *
+ * V2: No makeAllowedToken, no trackerTier. initializeVault takes 10 args.
+ *     updatePolicy takes 10 optional args, no tracker in accounts.
+ *     validate_and_authorize requires oracleRegistry + tokenMintAccount.
+ *     finalizeSession has no tracker account.
+ */
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { AgentShield } from "../target/types/agent_shield";
@@ -19,10 +31,12 @@ import { expect } from "chai";
 import BN from "bn.js";
 import {
   PROTOCOL_TREASURY,
-  makeAllowedToken,
   getDevnetProvider,
   derivePDAs,
   deriveSessionPda,
+  deriveOracleRegistryPda,
+  initializeOracleRegistry,
+  makeOracleEntry,
   fundKeypair,
   createTestMint,
   nextVaultId,
@@ -44,6 +58,7 @@ describe("devnet-smoke-test", () => {
   let ownerUsdcAta: PublicKey;
   let vaultUsdcAta: PublicKey;
   let protocolTreasuryUsdcAta: PublicKey;
+  let oracleRegistryPda: PublicKey;
 
   const jupiterProgramId = Keypair.generate().publicKey;
 
@@ -64,6 +79,11 @@ describe("devnet-smoke-test", () => {
       6,
     );
     console.log("  Test mint:", usdcMint.toString());
+
+    // Initialize oracle registry with mint as stablecoin
+    oracleRegistryPda = await initializeOracleRegistry(program, owner, [
+      makeOracleEntry(usdcMint),
+    ]);
 
     // Create owner token account and mint tokens
     ownerUsdcAta = await createAssociatedTokenAccount(
@@ -112,19 +132,19 @@ describe("devnet-smoke-test", () => {
   });
 
   it("1. initialize_vault", async () => {
+    // V2: 10 args (no allowedTokens, no trackerTier)
     await program.methods
       .initializeVault(
         vaultId,
         new BN(500_000_000), // daily cap: 500
         new BN(100_000_000), // max tx: 100
-        [makeAllowedToken(usdcMint)],
+        1, // protocolMode: allowlist
         [jupiterProgramId],
         new BN(0) as any, // max_leverage_bps
         3, // max_concurrent_positions
         0, // developer_fee_rate: 0 bps
         new BN(0), // timelockDuration
         [], // allowedDestinations
-        0, // tracker_tier: Standard
       )
       .accounts({
         owner: owner.publicKey,
@@ -177,11 +197,12 @@ describe("devnet-smoke-test", () => {
   });
 
   it("4. update_policy", async () => {
+    // V2: 10 optional args, no tracker in accounts
     await program.methods
       .updatePolicy(
         null, // keep daily cap
         null, // keep max tx
-        null, // keep tokens
+        null, // keep protocolMode
         null, // keep protocols
         new BN(5000) as any, // set leverage to 50x
         null, // keep can_open_positions
@@ -194,7 +215,6 @@ describe("devnet-smoke-test", () => {
         owner: owner.publicKey,
         vault: vaultPda,
         policy: policyPda,
-        tracker: trackerPda,
       } as any)
       .rpc();
 
@@ -204,6 +224,7 @@ describe("devnet-smoke-test", () => {
   });
 
   it("5. validate_and_authorize", async () => {
+    // V2: requires oracleRegistry + tokenMintAccount
     await program.methods
       .validateAndAuthorize(
         { swap: {} },
@@ -217,6 +238,7 @@ describe("devnet-smoke-test", () => {
         vault: vaultPda,
         policy: policyPda,
         tracker: trackerPda,
+        oracleRegistry: oracleRegistryPda,
         session: sessionPda,
         vaultTokenAccount: vaultUsdcAta,
         tokenMintAccount: usdcMint,
@@ -233,13 +255,13 @@ describe("devnet-smoke-test", () => {
   });
 
   it("6. finalize_session", async () => {
+    // V2: no tracker in accounts
     await program.methods
       .finalizeSession(true)
       .accounts({
         payer: agent.publicKey,
         vault: vaultPda,
         policy: policyPda,
-        tracker: trackerPda,
         session: sessionPda,
         sessionRentRecipient: agent.publicKey,
         vaultTokenAccount: vaultUsdcAta,

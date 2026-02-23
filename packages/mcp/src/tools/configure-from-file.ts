@@ -33,7 +33,7 @@ export type ConfigureFromFileInput = z.infer<typeof configureFromFileSchema>;
  * {
  *   "version": 1,
  *   "layers": {
- *     "shield": { "enabled": true, "dailyCapUsd": 500, "allowedProtocols": [], "maxLeverageBps": 0, "rateLimit": 60 },
+ *     "shield": { "enabled": true, "dailySpendingCapUsd": 500, "protocolMode": 0, "protocols": [], "maxLeverageBps": 0, "rateLimit": 60 },
  *     "tee": { "enabled": false, "locator": null, "publicKey": null },
  *     "vault": { "enabled": false, "address": null, "owner": null, "vaultId": null }
  *   },
@@ -106,7 +106,7 @@ export async function configureFromFile(
       `**Network:** ${config.network}`,
       `**Template:** ${config.template}`,
       `**Wallet:** ${config.wallet.publicKey}`,
-      `**Daily Cap:** $${config.layers.shield.dailyCapUsd}`,
+      `**Daily Cap:** $${config.layers.shield.dailySpendingCapUsd}`,
     ];
 
     if (!fullyConfigured) {
@@ -151,11 +151,17 @@ function validateConfig(obj: any): string[] {
       if (typeof obj.layers.shield.enabled !== "boolean") {
         errors.push('"layers.shield.enabled" must be a boolean');
       }
-      if (typeof obj.layers.shield.dailyCapUsd !== "number") {
-        errors.push('"layers.shield.dailyCapUsd" must be a number');
+      if (typeof obj.layers.shield.dailySpendingCapUsd !== "number") {
+        errors.push('"layers.shield.dailySpendingCapUsd" must be a number');
       }
-      if (!Array.isArray(obj.layers.shield.allowedProtocols)) {
-        errors.push('"layers.shield.allowedProtocols" must be an array');
+      if (
+        obj.layers.shield.protocolMode !== undefined &&
+        typeof obj.layers.shield.protocolMode !== "number"
+      ) {
+        errors.push('"layers.shield.protocolMode" must be a number (0/1/2)');
+      }
+      if (!Array.isArray(obj.layers.shield.protocols)) {
+        errors.push('"layers.shield.protocols" must be an array');
       }
       if (typeof obj.layers.shield.maxLeverageBps !== "number") {
         errors.push('"layers.shield.maxLeverageBps" must be a number');

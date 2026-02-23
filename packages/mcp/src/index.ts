@@ -145,8 +145,17 @@ async function main() {
         .optional()
         .default("conservative")
         .describe("Policy template"),
-      dailyCapUsd: z.number().optional().describe("Custom daily cap in USD"),
-      allowedProtocols: z
+      dailySpendingCapUsd: z
+        .number()
+        .optional()
+        .describe("Custom daily cap in USD"),
+      protocolMode: z
+        .number()
+        .optional()
+        .describe(
+          "Protocol access mode: 0 = all allowed, 1 = allowlist, 2 = denylist",
+        ),
+      protocols: z
         .array(z.string())
         .optional()
         .describe("Custom protocol IDs (base58)"),
@@ -227,7 +236,7 @@ async function main() {
   registerTool(
     server,
     "shield_check_spending",
-    "Check the rolling 24h spending and recent transactions for a vault",
+    "Check the rolling 24h spending for a vault (epoch-based circular buffer)",
     {
       vault: z.string().describe("Vault PDA address (base58)"),
     },
@@ -258,12 +267,20 @@ async function main() {
       maxTransactionSizeUsd: z
         .string()
         .describe("Max single transaction size in USD base units"),
-      allowedTokens: z
+      protocolMode: z
+        .number()
+        .optional()
+        .default(0)
+        .describe(
+          "Protocol access mode: 0 = all allowed, 1 = allowlist, 2 = denylist",
+        ),
+      protocols: z
         .array(z.string())
-        .describe("Allowed token mint addresses (base58). Max 10."),
-      allowedProtocols: z
-        .array(z.string())
-        .describe("Allowed protocol program IDs (base58). Max 10."),
+        .optional()
+        .default([])
+        .describe(
+          "Protocol program IDs (base58) for allowlist/denylist. Max 10.",
+        ),
       maxLeverageBps: z
         .number()
         .describe("Max leverage in basis points (e.g. 30000 = 3x)"),
@@ -344,14 +361,16 @@ async function main() {
         .string()
         .optional()
         .describe("New max transaction size in USD"),
-      allowedTokens: z
+      protocolMode: z
+        .number()
+        .optional()
+        .describe(
+          "New protocol access mode: 0 = all allowed, 1 = allowlist, 2 = denylist",
+        ),
+      protocols: z
         .array(z.string())
         .optional()
-        .describe("New allowed token mints (base58)"),
-      allowedProtocols: z
-        .array(z.string())
-        .optional()
-        .describe("New allowed protocols (base58)"),
+        .describe("New protocol program IDs (base58)"),
       maxLeverageBps: z.number().optional().describe("New max leverage in BPS"),
       canOpenPositions: z
         .boolean()
@@ -391,14 +410,16 @@ async function main() {
         .string()
         .optional()
         .describe("New max transaction size in USD"),
-      allowedTokens: z
+      protocolMode: z
+        .number()
+        .optional()
+        .describe(
+          "New protocol access mode: 0 = all allowed, 1 = allowlist, 2 = denylist",
+        ),
+      protocols: z
         .array(z.string())
         .optional()
-        .describe("New allowed token mints (base58)"),
-      allowedProtocols: z
-        .array(z.string())
-        .optional()
-        .describe("New allowed protocols (base58)"),
+        .describe("New protocol program IDs (base58)"),
       allowedDestinations: z
         .array(z.string())
         .optional()
@@ -570,10 +591,16 @@ async function main() {
         .string()
         .optional()
         .describe("Agent public key (base58) to register in the vault"),
-      allowedProtocols: z
+      protocolMode: z
+        .number()
+        .optional()
+        .describe(
+          "Protocol access mode: 0 = all allowed, 1 = allowlist, 2 = denylist",
+        ),
+      protocols: z
         .array(z.string())
         .optional()
-        .describe("Custom allowed protocol program IDs (base58)"),
+        .describe("Custom protocol program IDs (base58)"),
       maxLeverageBps: z
         .number()
         .optional()

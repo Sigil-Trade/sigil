@@ -15,12 +15,15 @@ import type {
   PolicyConfigAccount,
   SpendTrackerAccount,
   PendingPolicyUpdateAccount,
+  OracleRegistryAccount,
   InitializeVaultParams,
   UpdatePolicyParams,
   QueuePolicyUpdateParams,
   AgentTransferParams,
   AuthorizeParams,
   ComposeActionParams,
+  InitializeOracleRegistryParams,
+  UpdateOracleRegistryParams,
 } from "./types";
 import {
   getVaultPDA,
@@ -28,6 +31,7 @@ import {
   getTrackerPDA,
   getSessionPDA,
   getPendingPolicyPDA,
+  getOracleRegistryPDA,
   fetchVault,
   fetchPolicy,
   fetchTracker,
@@ -35,8 +39,11 @@ import {
   fetchPolicyByAddress,
   fetchTrackerByAddress,
   fetchPendingPolicy,
+  fetchOracleRegistry,
 } from "./accounts";
 import {
+  buildInitializeOracleRegistry,
+  buildUpdateOracleRegistry,
   buildInitializeVault,
   buildDepositFunds,
   buildRegisterAgent,
@@ -156,6 +163,10 @@ export class AgentShieldClient {
     return getPendingPolicyPDA(vault, this.program.programId);
   }
 
+  getOracleRegistryPDA(): [PublicKey, number] {
+    return getOracleRegistryPDA(this.program.programId);
+  }
+
   // --- Account Fetching ---
 
   async fetchVault(owner: PublicKey, vaultId: BN): Promise<AgentVaultAccount> {
@@ -188,6 +199,26 @@ export class AgentShieldClient {
     vault: PublicKey,
   ): Promise<PendingPolicyUpdateAccount | null> {
     return fetchPendingPolicy(this.program, vault);
+  }
+
+  async fetchOracleRegistry(): Promise<OracleRegistryAccount> {
+    return fetchOracleRegistry(this.program);
+  }
+
+  // --- Oracle Registry ---
+
+  async initializeOracleRegistry(
+    params: InitializeOracleRegistryParams,
+  ): Promise<string> {
+    const authority = this.provider.wallet.publicKey;
+    return buildInitializeOracleRegistry(this.program, authority, params).rpc();
+  }
+
+  async updateOracleRegistry(
+    params: UpdateOracleRegistryParams,
+  ): Promise<string> {
+    const authority = this.provider.wallet.publicKey;
+    return buildUpdateOracleRegistry(this.program, authority, params).rpc();
   }
 
   // --- Instruction Execution (sends + confirms) ---

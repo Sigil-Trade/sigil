@@ -11,10 +11,10 @@ pub enum AgentShieldError {
     #[msg("Unauthorized: signer is not the vault owner")]
     UnauthorizedOwner,
 
-    #[msg("Token not in allowed list")]
-    TokenNotAllowed,
+    #[msg("Token not registered in oracle registry")]
+    TokenNotRegistered,
 
-    #[msg("Protocol not in allowed list")]
+    #[msg("Protocol not allowed by policy")]
     ProtocolNotAllowed,
 
     #[msg("Transaction exceeds maximum single transaction size")]
@@ -44,9 +44,6 @@ pub enum AgentShieldError {
     #[msg("Vault has open positions, cannot close")]
     OpenPositionsExist,
 
-    #[msg("Policy configuration invalid: too many allowed tokens")]
-    TooManyAllowedTokens,
-
     #[msg("Policy configuration invalid: too many allowed protocols")]
     TooManyAllowedProtocols,
 
@@ -74,9 +71,6 @@ pub enum AgentShieldError {
     #[msg("Protocol treasury account does not match expected address")]
     InvalidProtocolTreasury,
 
-    #[msg("Spend entry limit reached (too many active entries in rolling window)")]
-    TooManySpendEntries,
-
     #[msg("Invalid agent: cannot be the zero address")]
     InvalidAgentKey,
 
@@ -99,6 +93,7 @@ pub enum AgentShieldError {
     #[msg("Cannot parse oracle feed data")]
     OracleFeedInvalid,
 
+    // V1 legacy — not emitted in V2 (kept to preserve error code ordering)
     #[msg("Unpriced token cannot be spent (receive-only)")]
     TokenSpendBlocked,
 
@@ -107,12 +102,6 @@ pub enum AgentShieldError {
 
     #[msg("Oracle-priced token requires feed account in remaining_accounts")]
     OracleAccountMissing,
-
-    #[msg("Per-token daily spending cap would be exceeded")]
-    PerTokenCapExceeded,
-
-    #[msg("Per-token single transaction limit exceeded")]
-    PerTokenTxLimitExceeded,
 
     #[msg("Oracle price confidence interval too wide")]
     OracleConfidenceTooWide,
@@ -139,6 +128,19 @@ pub enum AgentShieldError {
     #[msg("Too many destinations (max 10)")]
     TooManyDestinations,
 
-    #[msg("Invalid tracker tier (must be 0, 1, or 2)")]
-    InvalidTrackerTier,
+    // --- V2 errors ---
+    #[msg("Invalid protocol mode (must be 0, 1, or 2)")]
+    InvalidProtocolMode,
+
+    #[msg("Oracle registry is full (max 105 entries)")]
+    OracleRegistryFull,
+
+    #[msg("Unauthorized: not the oracle registry authority")]
+    UnauthorizedRegistryAdmin,
+
+    #[msg("Primary and fallback oracle prices diverge beyond threshold")]
+    OraclePriceDivergence,
+
+    #[msg("Both primary and fallback oracle feeds failed")]
+    OracleBothFeedsFailed,
 }

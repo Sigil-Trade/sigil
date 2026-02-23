@@ -7,6 +7,7 @@ import type {
   SpendTrackerAccount,
   SessionAuthorityAccount,
   PendingPolicyUpdateAccount,
+  OracleRegistryAccount,
 } from "./types";
 import { AGENT_SHIELD_PROGRAM_ID } from "./types";
 
@@ -70,6 +71,15 @@ export function getPendingPolicyPDA(
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("pending_policy"), vault.toBuffer()],
+    programId,
+  );
+}
+
+export function getOracleRegistryPDA(
+  programId: PublicKey = AGENT_SHIELD_PROGRAM_ID,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("oracle_registry")],
     programId,
   );
 }
@@ -170,4 +180,13 @@ export async function fetchPendingPolicy(
   } catch {
     return null;
   }
+}
+
+export async function fetchOracleRegistry(
+  program: Program<AgentShield>,
+): Promise<OracleRegistryAccount> {
+  const [pda] = getOracleRegistryPDA(program.programId);
+  return (await accounts(program).oracleRegistry.fetch(
+    pda,
+  )) as OracleRegistryAccount;
 }

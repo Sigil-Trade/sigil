@@ -27,14 +27,14 @@ pub struct CloseVault<'info> {
     )]
     pub policy: Account<'info, PolicyConfig>,
 
+    /// Zero-copy SpendTracker — close returns rent to owner
     #[account(
         mut,
-        has_one = vault,
         seeds = [b"tracker", vault.key().as_ref()],
-        bump = tracker.bump,
+        bump,
         close = owner,
     )]
-    pub tracker: Account<'info, SpendTracker>,
+    pub tracker: AccountLoader<'info, SpendTracker>,
 
     pub system_program: Program<'info, System>,
 }
