@@ -34,7 +34,7 @@
     "@solana/web3.js": "^1.95.0"
   },
   "optionalDependencies": {
-    "flash-sdk": "^14.1.1"
+    "flash-sdk": "^15.1.2"
   },
   "devDependencies": {
     "@types/bn.js": "^5.1.5",

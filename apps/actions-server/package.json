@@ -14,7 +14,7 @@
     "deploy:preview": "vercel"
   },
   "dependencies": {
-    "hono": "^4.11.10",
+    "hono": "^4.12.2",
     "@hono/node-server": "^1.13.0",
     "@solana/actions": "^1.6.0",
     "@solana/spl-token": "^0.4.0",
