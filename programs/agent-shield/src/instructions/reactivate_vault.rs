@@ -20,13 +20,13 @@ pub struct ReactivateVault<'info> {
 pub fn handler(ctx: Context<ReactivateVault>, new_agent: Option<Pubkey>) -> Result<()> {
     let vault = &mut ctx.accounts.vault;
 
+    // 1. Check frozen
     require!(
         vault.status == VaultStatus::Frozen,
         AgentShieldError::VaultNotFrozen
     );
 
-    vault.status = VaultStatus::Active;
-
+    // 2. Optionally assign new agent
     if let Some(agent_key) = new_agent {
         require!(
             agent_key != Pubkey::default(),
@@ -35,6 +35,15 @@ pub fn handler(ctx: Context<ReactivateVault>, new_agent: Option<Pubkey>) -> Resu
         require!(agent_key != vault.owner, AgentShieldError::AgentIsOwner);
         vault.agent = agent_key;
     }
+
+    // 3. Guard against soft-lock: cannot activate with no usable agent
+    require!(
+        vault.agent != Pubkey::default(),
+        AgentShieldError::NoAgentRegistered
+    );
+
+    // 4. Mutate status only after all checks pass
+    vault.status = VaultStatus::Active;
 
     let clock = Clock::get()?;
     emit!(VaultReactivated {

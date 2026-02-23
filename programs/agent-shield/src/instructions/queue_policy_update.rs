@@ -40,8 +40,8 @@ pub fn handler(
     ctx: Context<QueuePolicyUpdate>,
     daily_spending_cap_usd: Option<u64>,
     max_transaction_amount_usd: Option<u64>,
-    allowed_tokens: Option<Vec<AllowedToken>>,
-    allowed_protocols: Option<Vec<Pubkey>>,
+    protocol_mode: Option<u8>,
+    protocols: Option<Vec<Pubkey>>,
     max_leverage_bps: Option<u16>,
     can_open_positions: Option<bool>,
     max_concurrent_positions: Option<u8>,
@@ -64,15 +64,15 @@ pub fn handler(
     );
 
     // Validate bounded vectors if provided
-    if let Some(ref tokens) = allowed_tokens {
+    if let Some(ref mode) = protocol_mode {
         require!(
-            tokens.len() <= MAX_ALLOWED_TOKENS,
-            AgentShieldError::TooManyAllowedTokens
+            *mode <= PROTOCOL_MODE_DENYLIST,
+            AgentShieldError::InvalidProtocolMode
         );
     }
-    if let Some(ref protocols) = allowed_protocols {
+    if let Some(ref protos) = protocols {
         require!(
-            protocols.len() <= MAX_ALLOWED_PROTOCOLS,
+            protos.len() <= MAX_ALLOWED_PROTOCOLS,
             AgentShieldError::TooManyAllowedProtocols
         );
     }
@@ -101,8 +101,8 @@ pub fn handler(
     pending.executes_at = executes_at;
     pending.daily_spending_cap_usd = daily_spending_cap_usd;
     pending.max_transaction_amount_usd = max_transaction_amount_usd;
-    pending.allowed_tokens = allowed_tokens;
-    pending.allowed_protocols = allowed_protocols;
+    pending.protocol_mode = protocol_mode;
+    pending.protocols = protocols;
     pending.max_leverage_bps = max_leverage_bps;
     pending.can_open_positions = can_open_positions;
     pending.max_concurrent_positions = max_concurrent_positions;

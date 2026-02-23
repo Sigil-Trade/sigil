@@ -28,7 +28,7 @@ describe("shield_revoke_agent", () => {
 
   it("returns error when no agent registered", async () => {
     const client = createMockClient({
-      shouldThrow: Object.assign(new Error("test"), { code: 6017 }),
+      shouldThrow: Object.assign(new Error("test"), { code: 6016 }),
     });
     const result = await revokeAgent(client as any, {
       vault: TEST_VAULT_PDA.toBase58(),

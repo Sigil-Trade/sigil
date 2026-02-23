@@ -27,14 +27,6 @@ pub struct ApplyPendingPolicy<'info> {
     #[account(
         mut,
         has_one = vault,
-        seeds = [b"tracker", vault.key().as_ref()],
-        bump = tracker.bump,
-    )]
-    pub tracker: Account<'info, SpendTracker>,
-
-    #[account(
-        mut,
-        has_one = vault,
         seeds = [b"pending_policy", vault.key().as_ref()],
         bump = pending_policy.bump,
         close = owner,
@@ -61,13 +53,11 @@ pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
     if let Some(max_tx) = pending.max_transaction_amount_usd {
         policy.max_transaction_size_usd = max_tx;
     }
-    if let Some(ref tokens) = pending.allowed_tokens {
-        policy.allowed_tokens = tokens.clone();
-        // Token list changed — clear rolling_spends to prevent stale indices
-        ctx.accounts.tracker.rolling_spends.clear();
+    if let Some(mode) = pending.protocol_mode {
+        policy.protocol_mode = mode;
     }
-    if let Some(ref protocols) = pending.allowed_protocols {
-        policy.allowed_protocols = protocols.clone();
+    if let Some(ref protos) = pending.protocols {
+        policy.protocols = protos.clone();
     }
     if let Some(leverage) = pending.max_leverage_bps {
         policy.max_leverage_bps = leverage;

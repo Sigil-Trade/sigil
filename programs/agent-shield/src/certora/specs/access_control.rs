@@ -2,10 +2,11 @@
 //
 // Verifies safety-critical constants and pure helper functions
 // that underpin AgentShield's authorization model.
+// V2: TrackerTier removed — epoch-based circular buffer replaces tiered tracking.
 
 use crate::state::{
-    TrackerTier, MAX_ALLOWED_DESTINATIONS, MAX_ALLOWED_PROTOCOLS, MAX_ALLOWED_TOKENS,
-    MAX_DEVELOPER_FEE_RATE, MAX_RECENT_TRANSACTIONS, ROLLING_WINDOW_SECONDS, SESSION_EXPIRY_SLOTS,
+    EPOCH_DURATION, MAX_ALLOWED_DESTINATIONS, MAX_ALLOWED_PROTOCOLS, MAX_DEVELOPER_FEE_RATE,
+    MAX_ORACLE_ENTRIES, NUM_EPOCHS, ROLLING_WINDOW_SECONDS, SESSION_EXPIRY_SLOTS,
 };
 use cvlr::prelude::*;
 
@@ -52,53 +53,51 @@ pub fn rule_rolling_window_is_24h() {
 //
 // All on-chain vectors must have bounded max sizes. Verifies the
 // constants that enforce account size limits.
+// V2: MAX_ALLOWED_TOKENS removed (tokens use global OracleRegistry).
+//     MAX_RECENT_TRANSACTIONS removed (tracker uses fixed epoch array).
+//     MAX_ORACLE_ENTRIES added (global registry capacity).
 // ─────────────────────────────────────────────────────────────────
 
 #[rule]
 pub fn rule_vector_bounds_finite() {
-    cvlr_assert!(MAX_ALLOWED_TOKENS == 10);
     cvlr_assert!(MAX_ALLOWED_PROTOCOLS == 10);
     cvlr_assert!(MAX_ALLOWED_DESTINATIONS == 10);
-    cvlr_assert!(MAX_RECENT_TRANSACTIONS == 50);
+    cvlr_assert!(MAX_ORACLE_ENTRIES == 105);
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Rule 5: Tracker tier capacity matches specification
+// Rule 5: Epoch buffer constants are internally consistent
 //
-// Each TrackerTier variant must return the correct max_spend_entries
-// value. Standard=200, Pro=500, Max=1000.
+// V2 replaced TrackerTier with a fixed 144-epoch circular buffer.
+// Each epoch covers EPOCH_DURATION seconds (600 = 10 minutes).
+// NUM_EPOCHS × EPOCH_DURATION must equal ROLLING_WINDOW_SECONDS
+// so the buffer covers exactly the rolling 24h window.
 // ─────────────────────────────────────────────────────────────────
 
 #[rule]
-pub fn rule_tracker_tier_capacities() {
-    cvlr_assert!(TrackerTier::Standard.max_spend_entries() == 200);
-    cvlr_assert!(TrackerTier::Pro.max_spend_entries() == 500);
-    cvlr_assert!(TrackerTier::Max.max_spend_entries() == 1000);
+pub fn rule_epoch_buffer_constants() {
+    cvlr_assert!(EPOCH_DURATION == 600);
+    cvlr_assert!(NUM_EPOCHS == 144);
+    // Invariant: buffer covers exactly the rolling window
+    cvlr_assert!((EPOCH_DURATION as usize) * NUM_EPOCHS == (ROLLING_WINDOW_SECONDS as usize));
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Rule 6: TrackerTier::from_u8 roundtrip
+// Rule 6: Oracle registry capacity within CPI account size limit
 //
-// Valid tier values (0, 1, 2) must round-trip through from_u8,
-// and invalid values must return None.
+// V2 introduced a protocol-level OracleRegistry PDA shared across
+// all vaults. MAX_ORACLE_ENTRIES must fit within the 10,240-byte
+// CPI account creation limit.
+// Each OracleEntry is 97 bytes (32 mint + 32 oracle_feed + 1 bool + 32 fallback_feed).
 // ─────────────────────────────────────────────────────────────────
 
 #[rule]
-pub fn rule_tracker_tier_from_u8_valid() {
-    let val: u8 = nondet();
-    cvlr_assume!(val <= 2);
-
-    let tier = TrackerTier::from_u8(val);
-    // Valid values must produce Some
-    cvlr_assert!(tier.is_some());
-}
-
-#[rule]
-pub fn rule_tracker_tier_from_u8_invalid() {
-    let val: u8 = nondet();
-    cvlr_assume!(val > 2);
-
-    let tier = TrackerTier::from_u8(val);
-    // Invalid values must produce None
-    cvlr_assert!(tier.is_none());
+pub fn rule_oracle_registry_fits_cpi_limit() {
+    // OracleEntry::SIZE = 97 bytes
+    let entry_size: usize = 97;
+    // Account overhead: discriminator (8) + authority (32) + vec prefix (4) + bump (1) = 45
+    let overhead: usize = 45;
+    let total = overhead + entry_size * MAX_ORACLE_ENTRIES;
+    // Must fit in 10,240 byte CPI account creation limit
+    cvlr_assert!(total <= 10_240);
 }

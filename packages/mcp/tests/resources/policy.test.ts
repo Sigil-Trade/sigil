@@ -13,7 +13,8 @@ describe("resource: shield://vault/{address}/policy", () => {
     expect(data.vault).to.equal(TEST_VAULT_PDA.toBase58());
     expect(data.dailySpendingCapUsd).to.equal("10000000000");
     expect(data.maxLeverageBps).to.equal(30000);
-    expect(data.allowedTokens).to.be.an("array");
+    expect(data.protocolMode).to.equal("allowlist");
+    expect(data.protocols).to.be.an("array");
     expect(data.canOpenPositions).to.be.true;
   });
 
@@ -28,7 +29,8 @@ describe("resource: shield://vault/{address}/policy", () => {
     const data = JSON.parse(json);
     expect(data.error).to.include("not found");
     expect(data.dailySpendingCapUsd).to.equal("0");
-    expect(data.allowedTokens).to.deep.equal([]);
+    expect(data.protocols).to.deep.equal([]);
+    expect(data.protocolMode).to.equal("all");
   });
 
   it("returns well-formed JSON", async () => {

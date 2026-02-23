@@ -51,8 +51,9 @@ describe("shield_setup_status", () => {
       layers: {
         shield: {
           enabled: true,
-          dailyCapUsd: 500,
-          allowedProtocols: [],
+          dailySpendingCapUsd: 500,
+          protocolMode: 0,
+          protocols: [],
           maxLeverageBps: 0,
           rateLimit: 60,
         },
@@ -86,8 +87,9 @@ describe("shield_setup_status", () => {
       layers: {
         shield: {
           enabled: true,
-          dailyCapUsd: 2000,
-          allowedProtocols: [],
+          dailySpendingCapUsd: 2000,
+          protocolMode: 0,
+          protocols: [],
           maxLeverageBps: 20000,
           rateLimit: 120,
         },
@@ -123,8 +125,9 @@ describe("shield_setup_status", () => {
       layers: {
         shield: {
           enabled: true,
-          dailyCapUsd: 10000,
-          allowedProtocols: [],
+          dailySpendingCapUsd: 10000,
+          protocolMode: 0,
+          protocols: [],
           maxLeverageBps: 50000,
           rateLimit: 300,
         },
@@ -167,8 +170,9 @@ describe("shield_setup_status", () => {
       layers: {
         shield: {
           enabled: true,
-          dailyCapUsd: 500,
-          allowedProtocols: [],
+          dailySpendingCapUsd: 500,
+          protocolMode: 0,
+          protocols: [],
           maxLeverageBps: 0,
           rateLimit: 60,
         },

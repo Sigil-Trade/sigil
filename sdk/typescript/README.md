@@ -30,10 +30,8 @@ await client.createVault({
   vaultId: new BN(1),
   dailySpendingCapUsd: new BN(500_000_000),   // $500 USD (6 decimals)
   maxTransactionSizeUsd: new BN(100_000_000),  // $100 per tx
-  allowedTokens: [
-    { mint: USDC_MINT, oracleFeed: PublicKey.default, decimals: 6, dailyCapBase: new BN(0), maxTxBase: new BN(0) },
-  ],
-  allowedProtocols: [JUPITER_PROGRAM_ID],
+  protocolMode: 1,                             // 1 = allowlist
+  protocols: [JUPITER_PROGRAM_ID],
   maxLeverageBps: 0,
   maxConcurrentPositions: 0,
   feeDestination: feeWallet.publicKey,
@@ -61,15 +59,16 @@ const sig = await client.executeJupiterSwap({
 
 ## On-Chain Account Model
 
-AgentShield uses 5 PDA account types:
+AgentShield uses 6 PDA account types:
 
 | Account | Seeds | Description |
 |---------|-------|-------------|
 | **AgentVault** | `[b"vault", owner, vault_id]` | Holds owner/agent pubkeys, vault status, fee destination |
-| **PolicyConfig** | `[b"policy", vault]` | Spending caps, token/protocol whitelists, leverage limits |
-| **SpendTracker** | `[b"tracker", vault]` | Rolling 24h spend entries + bounded audit log (max 50 txs) |
+| **PolicyConfig** | `[b"policy", vault]` | Spending caps, protocol mode + protocols, leverage limits, destinations |
+| **SpendTracker** | `[b"tracker", vault]` | Zero-copy 144-epoch circular buffer for rolling 24h USD spend tracking |
 | **SessionAuthority** | `[b"session", vault, agent, token_mint]` | Ephemeral PDA for atomic transaction validation (expires after 20 slots) |
 | **PendingPolicyUpdate** | `[b"pending_policy", vault]` | Queued policy change with timelock, applied after delay |
+| **OracleRegistry** | `[b"oracle_registry"]` | Protocol-level PDA mapping token mints to oracle feeds (max 105 entries) |
 
 ## Instruction Composition Pattern
 
@@ -166,7 +165,7 @@ const tracker = await client.fetchTrackerByAddress(trackerPDA);
 
 ### Instruction Parameters
 
-- **`InitializeVaultParams`** — `vaultId`, `dailySpendingCapUsd`, `maxTransactionSizeUsd`, `allowedTokens` (`AllowedToken[]`), `allowedProtocols`, `maxLeverageBps`, `maxConcurrentPositions`, `feeDestination`, `trackerTier?` (`TrackerTier` — defaults to Standard)
+- **`InitializeVaultParams`** — `vaultId`, `dailySpendingCapUsd`, `maxTransactionSizeUsd`, `protocolMode` (0=all, 1=allowlist, 2=denylist), `protocols`, `maxLeverageBps`, `maxConcurrentPositions`, `feeDestination`, `developerFeeRate?`, `timelockDuration?`, `allowedDestinations?`
 - **`UpdatePolicyParams`** — All policy fields as optionals (only set fields are updated)
 - **`AuthorizeParams`** — `actionType`, `tokenMint`, `amount`, `targetProtocol`, `leverageBps?`
 - **`ComposeActionParams`** — Full params for composed transactions including `defiInstructions`, `success?`, token accounts
@@ -174,8 +173,9 @@ const tracker = await client.fetchTrackerByAddress(trackerPDA);
 ### Account Types
 
 - **`AgentVaultAccount`** — owner, agent, feeDestination, vaultId, status, stats (totalTransactions, totalVolume)
-- **`PolicyConfigAccount`** — dailySpendingCapUsd, maxTransactionSizeUsd, allowedTokens (`AllowedToken[]`), allowedProtocols, maxLeverageBps, maxConcurrentPositions, developerFeeRate
-- **`SpendTrackerAccount`** — trackerTier, maxSpendEntries, rollingSpends (`SpendEntry[]` with tokenIndex, usdAmount, baseAmount, timestamp), recentTransactions (audit log, max 50)
+- **`PolicyConfigAccount`** — dailySpendingCapUsd, maxTransactionSizeUsd, protocolMode, protocols, maxLeverageBps, maxConcurrentPositions, developerFeeRate, timelockDuration, allowedDestinations
+- **`SpendTrackerAccount`** — vault, buckets (`EpochBucket[]` — 144 epochs, epoch_id + usd_amount per bucket)
+- **`OracleRegistryAccount`** — authority, entries (`OracleEntry[]` — mint, oracleFeed, isStablecoin)
 - **`SessionAuthorityAccount`** — vault, agent, actionType, expiresAt, delegated, delegationTokenAccount
 
 ### Enums
@@ -240,7 +240,7 @@ Owner creates vault with policy → Agent operates within policy constraints
 | Rolling 24h window | Not calendar-day. Prevents edge-case burst at midnight. |
 | Fees at finalization only | Not at authorization. Prevents fee charging on failed txs. |
 | Immutable fee destination | Prevents owner from changing fee recipient after vault creation. |
-| Bounded vectors | Max 10 tokens, 10 protocols, 200/500/1000 spend entries (by TrackerTier), 50 audit records. |
+| Bounded vectors | Max 10 protocols, 10 destinations, 105 oracle entries. SpendTracker uses fixed 144-epoch circular buffer. |
 
 ### Policy Constraints
 
@@ -248,11 +248,13 @@ Owner creates vault with policy → Agent operates within policy constraints
 |-------|-------|-------------|
 | `dailySpendingCapUsd` | `u64` | Max aggregate USD spend in rolling 24h window (6 decimals) |
 | `maxTransactionSizeUsd` | `u64` | Max single transaction USD value (6 decimals) |
-| `allowedTokens` | max 10 | `AllowedToken[]` — mint, oracleFeed, decimals, dailyCapBase, maxTxBase |
-| `allowedProtocols` | max 10 | Program ID whitelist |
+| `protocolMode` | 0, 1, 2 | 0=allow all, 1=allowlist, 2=denylist |
+| `protocols` | max 10 | Program IDs for allowlist/denylist |
 | `maxLeverageBps` | `u16` | Max leverage in basis points |
 | `maxConcurrentPositions` | `u8` | Max open positions |
 | `developerFeeRate` | 0–500 | Developer fee in BPS (max 5%) |
+| `timelockDuration` | `u64` | Seconds before policy changes take effect (0 = instant) |
+| `allowedDestinations` | max 10 | Allowed destination addresses for agent transfers |
 
 ## Security Model
 

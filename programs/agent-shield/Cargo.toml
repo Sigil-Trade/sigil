@@ -21,6 +21,7 @@ certora = ["no-entrypoint", "dep:cvlr"]
 [dependencies]
 anchor-lang = { version = "0.32.1", features = ["init-if-needed"] }
 anchor-spl = { version = "0.32.1", features = ["token", "associated_token"] }
+bytemuck = { version = "1.14", features = ["derive", "min_const_generics"] }
 
 # Pin blake3 to avoid constant_time_eq 0.4.2 which requires edition 2024
 # (BPF platform-tools cargo 1.84 doesn't support edition 2024)

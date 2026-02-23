@@ -1,9 +1,10 @@
 import { expect } from "chai";
 import { checkSpending } from "../../src/tools/check-spending";
 import { createMockClient, TEST_VAULT_PDA } from "../helpers/mock-client";
+import { BN } from "@coral-xyz/anchor";
 
 describe("shield_check_spending", () => {
-  it("returns spending report with rolling spends", async () => {
+  it("returns spending report with epoch buckets", async () => {
     const client = createMockClient();
     const result = await checkSpending(client as any, {
       vault: TEST_VAULT_PDA.toBase58(),
@@ -15,23 +16,29 @@ describe("shield_check_spending", () => {
 
   it("handles empty spending data", async () => {
     const client = createMockClient({
-      tracker: { rollingSpends: [], recentTransactions: [] },
+      tracker: { buckets: [] },
     });
     const result = await checkSpending(client as any, {
       vault: TEST_VAULT_PDA.toBase58(),
     });
     expect(result).to.include("No spending activity");
-    expect(result).to.include("No recent transactions");
   });
 
-  it("shows recent transactions", async () => {
-    const client = createMockClient();
+  it("shows total 24h spend and active buckets", async () => {
+    const client = createMockClient({
+      tracker: {
+        buckets: [
+          { epochId: new BN(100), usdAmount: new BN("300000000") },
+          { epochId: new BN(101), usdAmount: new BN("200000000") },
+        ],
+      },
+    });
     const result = await checkSpending(client as any, {
       vault: TEST_VAULT_PDA.toBase58(),
     });
-    expect(result).to.include("Recent Transactions");
-    expect(result).to.include("OK");
-    expect(result).to.include("Swap");
+    expect(result).to.include("Total 24h Spend");
+    expect(result).to.include("500000000");
+    expect(result).to.include("Active Epoch Buckets");
   });
 
   it("returns error on fetch failure", async () => {
@@ -42,5 +49,13 @@ describe("shield_check_spending", () => {
       vault: TEST_VAULT_PDA.toBase58(),
     });
     expect(result).to.include("Account not found");
+  });
+
+  it("notes transaction history via Anchor events", async () => {
+    const client = createMockClient();
+    const result = await checkSpending(client as any, {
+      vault: TEST_VAULT_PDA.toBase58(),
+    });
+    expect(result).to.include("Anchor events");
   });
 });

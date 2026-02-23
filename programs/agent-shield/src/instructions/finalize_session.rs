@@ -24,16 +24,7 @@ pub struct FinalizeSession<'info> {
     )]
     pub policy: Account<'info, PolicyConfig>,
 
-    #[account(
-        mut,
-        has_one = vault,
-        seeds = [b"tracker", vault.key().as_ref()],
-        bump = tracker.bump,
-    )]
-    pub tracker: Account<'info, SpendTracker>,
-
-    /// Session rent is returned to the session's agent (who paid for it),
-    /// not the arbitrary payer, to prevent rent theft.
+    /// Session rent is returned to the session's agent (who paid for it).
     /// Seeds include token_mint for per-token concurrent sessions.
     #[account(
         mut,
@@ -50,19 +41,18 @@ pub struct FinalizeSession<'info> {
     pub session: Account<'info, SessionAuthority>,
 
     /// CHECK: Set to session.agent at runtime; receives rent from closed session.
-    /// Validated in handler to equal session.agent.
     #[account(mut)]
     pub session_rent_recipient: UncheckedAccount<'info>,
 
-    /// Vault's PDA token account for the session's token (fee source + delegation revocation)
+    /// Vault's PDA token account for the session's token
     #[account(mut)]
     pub vault_token_account: Option<Account<'info, TokenAccount>>,
 
-    /// Developer fee destination token account — must match vault.fee_destination
+    /// Developer fee destination token account
     #[account(mut)]
     pub fee_destination_token_account: Option<Account<'info, TokenAccount>>,
 
-    /// Protocol treasury token account — must be owned by PROTOCOL_TREASURY
+    /// Protocol treasury token account
     #[account(mut)]
     pub protocol_treasury_token_account: Option<Account<'info, TokenAccount>>,
 
@@ -76,7 +66,7 @@ pub fn handler(ctx: Context<FinalizeSession>, success: bool) -> Result<()> {
 
     let is_expired = session.is_expired(clock.slot);
 
-    // Rent recipient must be the session's agent (prevents rent theft)
+    // Rent recipient must be the session's agent
     require!(
         ctx.accounts.session_rent_recipient.key() == session.agent,
         AgentShieldError::InvalidSession
@@ -99,7 +89,6 @@ pub fn handler(ctx: Context<FinalizeSession>, success: bool) -> Result<()> {
     let session_agent = session.agent;
     let session_amount = session.authorized_amount;
     let session_token = session.authorized_token;
-    let session_protocol = session.authorized_protocol;
     let session_action_type = session.action_type;
     let session_delegated = session.delegated;
 
@@ -168,7 +157,7 @@ pub fn handler(ctx: Context<FinalizeSession>, success: bool) -> Result<()> {
                 .as_ref()
                 .ok_or(error!(AgentShieldError::InvalidFeeDestination))?;
 
-            // Validate vault token account authority and mint
+            // Validate vault token account
             require!(
                 vault_token.owner == vault.key(),
                 AgentShieldError::InvalidFeeDestination
@@ -285,18 +274,6 @@ pub fn handler(ctx: Context<FinalizeSession>, success: bool) -> Result<()> {
             _ => {}
         }
     }
-
-    // Record in audit log
-    let tracker = &mut ctx.accounts.tracker;
-    tracker.record_transaction(TransactionRecord {
-        timestamp: clock.unix_timestamp,
-        action_type: session_action_type,
-        token_mint: session_token,
-        amount: session_amount,
-        protocol: session_protocol,
-        success,
-        slot: clock.slot,
-    });
 
     emit!(SessionFinalized {
         vault: vault.key(),

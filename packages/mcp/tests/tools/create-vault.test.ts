@@ -5,15 +5,14 @@ import { createMockClient } from "../helpers/mock-client";
 
 describe("shield_create_vault", () => {
   const feeDest = Keypair.generate().publicKey.toBase58();
-  const mint = Keypair.generate().publicKey.toBase58();
   const protocol = Keypair.generate().publicKey.toBase58();
 
   const validInput = {
     vaultId: "1",
     dailySpendingCapUsd: "10000000000",
     maxTransactionSizeUsd: "1000000000",
-    allowedTokens: [mint],
-    allowedProtocols: [protocol],
+    protocolMode: 1,
+    protocols: [protocol],
     maxLeverageBps: 30000,
     maxConcurrentPositions: 5,
     feeDestination: feeDest,
@@ -37,6 +36,8 @@ describe("shield_create_vault", () => {
     const params = call!.args[0];
     expect(params.vaultId.toString()).to.equal("1");
     expect(params.maxLeverageBps).to.equal(30000);
+    expect(params.protocolMode).to.equal(1);
+    expect(params.protocols).to.have.length(1);
   });
 
   it("returns error on invalid public key", async () => {
@@ -50,21 +51,22 @@ describe("shield_create_vault", () => {
 
   it("returns error on SDK failure", async () => {
     const client = createMockClient({
-      shouldThrow: Object.assign(new Error("test"), { code: 6021 }),
+      shouldThrow: Object.assign(new Error("test"), { code: 6020 }),
     });
     const result = await createVault(client as any, validInput);
     expect(result).to.include("DeveloperFeeTooHigh");
   });
 
-  it("handles empty allowedTokens array gracefully", async () => {
+  it("handles empty protocols array gracefully", async () => {
     const client = createMockClient();
     const result = await createVault(client as any, {
       ...validInput,
-      allowedTokens: [],
+      protocolMode: 0,
+      protocols: [],
     });
     expect(result).to.include("Vault Created Successfully");
     const call = client.calls.find((c) => c.method === "createVault");
-    expect(call!.args[0].allowedTokens).to.have.length(0);
+    expect(call!.args[0].protocols).to.have.length(0);
   });
 
   it("handles amount = '0' for dailySpendingCapUsd", async () => {

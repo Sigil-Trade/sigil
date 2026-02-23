@@ -1,9 +1,13 @@
 /**
- * Devnet Fee Tests — 8 tests
+ * Devnet Fee Tests — 8 tests (V2)
  *
  * Verifies fee collection correctness: protocol fees to treasury,
  * developer fees to feeDestination, combined deductions, failure paths,
  * dust amounts, and agent_transfer fee parity.
+ *
+ * V2: No makeAllowedToken. Tokens managed via OracleRegistry.
+ *     agentTransfer requires oracleRegistry + tokenMintAccount accounts.
+ *     finalizeSession has no tracker account.
  */
 import * as anchor from "@coral-xyz/anchor";
 import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
@@ -12,10 +16,12 @@ import { expect } from "chai";
 import BN from "bn.js";
 import {
   getDevnetProvider,
-  makeAllowedToken,
   nextVaultId,
   derivePDAs,
   deriveSessionPda,
+  deriveOracleRegistryPda,
+  initializeOracleRegistry,
+  makeOracleEntry,
   createFullVault,
   authorize,
   finalize,
@@ -42,6 +48,7 @@ describe("devnet-fees", () => {
   let mint: PublicKey;
   let vaultA: FullVaultResult; // devFeeRate=500 (max)
   let vaultB: FullVaultResult; // devFeeRate=0
+  let oracleRegistryPda: PublicKey;
 
   let vaultIdA: BN;
   let vaultIdB: BN;
@@ -51,6 +58,11 @@ describe("devnet-fees", () => {
     await fundKeypair(provider, agentB.publicKey);
 
     mint = await createTestMint(connection, payer, owner.publicKey, 6);
+
+    // Initialize oracle registry with mint as stablecoin
+    oracleRegistryPda = await initializeOracleRegistry(program, owner, [
+      makeOracleEntry(mint),
+    ]);
 
     vaultIdA = nextVaultId(2);
     vaultIdB = nextVaultId(2);
@@ -111,6 +123,7 @@ describe("devnet-fees", () => {
       vaultPda: vaultB.vaultPda,
       policyPda: vaultB.policyPda,
       trackerPda: vaultB.trackerPda,
+      oracleRegistryPda: vaultB.oracleRegistryPda,
       sessionPda,
       vaultTokenAta: vaultB.vaultTokenAta,
       mint,
@@ -122,7 +135,6 @@ describe("devnet-fees", () => {
       payer: agentB,
       vaultPda: vaultB.vaultPda,
       policyPda: vaultB.policyPda,
-      trackerPda: vaultB.trackerPda,
       sessionPda,
       agentPubkey: agentB.publicKey,
       vaultTokenAta: vaultB.vaultTokenAta,
@@ -161,6 +173,7 @@ describe("devnet-fees", () => {
       vaultPda: vaultA.vaultPda,
       policyPda: vaultA.policyPda,
       trackerPda: vaultA.trackerPda,
+      oracleRegistryPda: vaultA.oracleRegistryPda,
       sessionPda,
       vaultTokenAta: vaultA.vaultTokenAta,
       mint,
@@ -172,7 +185,6 @@ describe("devnet-fees", () => {
       payer: agentA,
       vaultPda: vaultA.vaultPda,
       policyPda: vaultA.policyPda,
-      trackerPda: vaultA.trackerPda,
       sessionPda,
       agentPubkey: agentA.publicKey,
       vaultTokenAta: vaultA.vaultTokenAta,
@@ -212,6 +224,7 @@ describe("devnet-fees", () => {
       vaultPda: vaultA.vaultPda,
       policyPda: vaultA.policyPda,
       trackerPda: vaultA.trackerPda,
+      oracleRegistryPda: vaultA.oracleRegistryPda,
       sessionPda,
       vaultTokenAta: vaultA.vaultTokenAta,
       mint,
@@ -223,7 +236,6 @@ describe("devnet-fees", () => {
       payer: agentA,
       vaultPda: vaultA.vaultPda,
       policyPda: vaultA.policyPda,
-      trackerPda: vaultA.trackerPda,
       sessionPda,
       agentPubkey: agentA.publicKey,
       vaultTokenAta: vaultA.vaultTokenAta,
@@ -260,6 +272,7 @@ describe("devnet-fees", () => {
       vaultPda: vaultA.vaultPda,
       policyPda: vaultA.policyPda,
       trackerPda: vaultA.trackerPda,
+      oracleRegistryPda: vaultA.oracleRegistryPda,
       sessionPda,
       vaultTokenAta: vaultA.vaultTokenAta,
       mint,
@@ -271,7 +284,6 @@ describe("devnet-fees", () => {
       payer: agentA,
       vaultPda: vaultA.vaultPda,
       policyPda: vaultA.policyPda,
-      trackerPda: vaultA.trackerPda,
       sessionPda,
       agentPubkey: agentA.publicKey,
       vaultTokenAta: vaultA.vaultTokenAta,
@@ -312,6 +324,7 @@ describe("devnet-fees", () => {
       vaultPda: vaultA.vaultPda,
       policyPda: vaultA.policyPda,
       trackerPda: vaultA.trackerPda,
+      oracleRegistryPda: vaultA.oracleRegistryPda,
       sessionPda,
       vaultTokenAta: vaultA.vaultTokenAta,
       mint,
@@ -323,7 +336,6 @@ describe("devnet-fees", () => {
       payer: agentA,
       vaultPda: vaultA.vaultPda,
       policyPda: vaultA.policyPda,
-      trackerPda: vaultA.trackerPda,
       sessionPda,
       agentPubkey: agentA.publicKey,
       vaultTokenAta: vaultA.vaultTokenAta,
@@ -385,7 +397,9 @@ describe("devnet-fees", () => {
         vault: vaultA.vaultPda,
         policy: vaultA.policyPda,
         tracker: vaultA.trackerPda,
+        oracleRegistry: vaultA.oracleRegistryPda,
         vaultTokenAccount: vaultA.vaultTokenAta,
+        tokenMintAccount: mint,
         destinationTokenAccount: destAta.address,
         feeDestinationTokenAccount: vaultA.feeDestinationAta,
         protocolTreasuryTokenAccount: vaultA.protocolTreasuryAta,
@@ -424,6 +438,7 @@ describe("devnet-fees", () => {
       vaultPda: vaultB.vaultPda,
       policyPda: vaultB.policyPda,
       trackerPda: vaultB.trackerPda,
+      oracleRegistryPda: vaultB.oracleRegistryPda,
       sessionPda,
       vaultTokenAta: vaultB.vaultTokenAta,
       mint,
@@ -437,7 +452,6 @@ describe("devnet-fees", () => {
       payer: agentB,
       vaultPda: vaultB.vaultPda,
       policyPda: vaultB.policyPda,
-      trackerPda: vaultB.trackerPda,
       sessionPda,
       agentPubkey: agentB.publicKey,
       vaultTokenAta: vaultB.vaultTokenAta,

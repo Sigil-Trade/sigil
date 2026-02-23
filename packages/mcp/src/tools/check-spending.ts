@@ -1,11 +1,6 @@
 import { z } from "zod";
 import type { AgentShieldClient } from "@agent-shield/sdk";
-import {
-  toPublicKey,
-  formatBN,
-  formatTimestamp,
-  formatActionType,
-} from "../utils";
+import { toPublicKey, formatBN } from "../utils";
 import { formatError } from "../errors";
 
 export const checkSpendingSchema = z.object({
@@ -28,40 +23,32 @@ export async function checkSpending(
       `## Spending Report: ${vaultAddress.toBase58()}`,
       `- **Daily Cap:** ${cap}`,
       "",
-      "### Rolling 24h Spend by Token",
+      "### Rolling 24h Spend (Epoch Buckets)",
     ];
 
-    if (tracker.rollingSpends.length === 0) {
+    // Filter to non-zero buckets only
+    const activeBuckets = tracker.buckets.filter((b) => !b.usdAmount.isZero());
+
+    if (activeBuckets.length === 0) {
       lines.push("No spending activity in the last 24 hours.");
     } else {
-      for (const entry of tracker.rollingSpends) {
+      let totalUsd = activeBuckets[0].usdAmount.clone();
+      for (let i = 1; i < activeBuckets.length; i++) {
+        totalUsd = totalUsd.add(activeBuckets[i].usdAmount);
+      }
+      lines.push(`- **Total 24h Spend (USD):** ${formatBN(totalUsd)}`);
+      lines.push(`- **Active Epoch Buckets:** ${activeBuckets.length}`);
+      for (const bucket of activeBuckets) {
         lines.push(
-          `- **Token #${entry.tokenIndex}**: ${formatBN(entry.usdAmount)} ` +
-            `(at ${formatTimestamp(entry.timestamp)})`,
+          `  - Epoch ${formatBN(bucket.epochId)}: $${formatBN(bucket.usdAmount)}`,
         );
       }
     }
 
     lines.push("");
     lines.push(
-      `### Recent Transactions (${tracker.recentTransactions.length})`,
+      "Transaction history is available via Anchor events (use an explorer or event listener).",
     );
-
-    if (tracker.recentTransactions.length === 0) {
-      lines.push("No recent transactions.");
-    } else {
-      for (const tx of tracker.recentTransactions.slice(-10)) {
-        const status = tx.success ? "OK" : "FAIL";
-        lines.push(
-          `- [${status}] ${formatActionType(tx.actionType)} — ` +
-            `${formatBN(tx.amount)} at ${formatTimestamp(tx.timestamp)} ` +
-            `(slot ${formatBN(tx.slot)})`,
-        );
-      }
-      if (tracker.recentTransactions.length > 10) {
-        lines.push(`... and ${tracker.recentTransactions.length - 10} more`);
-      }
-    }
 
     return lines.join("\n");
   } catch (error) {
@@ -72,7 +59,8 @@ export async function checkSpending(
 export const checkSpendingTool = {
   name: "shield_check_spending",
   description:
-    "Check the rolling 24h spending and recent transaction history for an AgentShield vault.",
+    "Check the rolling 24h spending for an AgentShield vault. " +
+    "Uses epoch-based circular buffer. Transaction history is available via Anchor events.",
   schema: checkSpendingSchema,
   handler: checkSpending,
 };

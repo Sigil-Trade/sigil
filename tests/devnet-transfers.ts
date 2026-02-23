@@ -1,8 +1,12 @@
 /**
- * Devnet Transfer Tests — 7 tests
+ * Devnet Transfer Tests — 6 tests (V2)
  *
  * Exercises agent_transfer: destination allowlist enforcement,
  * fee correctness, access control, and spending cap interaction.
+ *
+ * V2: No makeAllowedToken. Tokens via OracleRegistry.
+ *     agentTransfer requires oracleRegistry + tokenMintAccount accounts.
+ *     Removed per-token max_tx_base test (V1 concept not in V2).
  */
 import * as anchor from "@coral-xyz/anchor";
 import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
@@ -15,8 +19,10 @@ import { expect } from "chai";
 import BN from "bn.js";
 import {
   getDevnetProvider,
-  makeAllowedToken,
   nextVaultId,
+  deriveOracleRegistryPda,
+  initializeOracleRegistry,
+  makeOracleEntry,
   createFullVault,
   fundKeypair,
   createTestMint,
@@ -41,6 +47,7 @@ describe("devnet-transfers", () => {
   let mint: PublicKey;
   let destAAta: PublicKey;
   let destBAta: PublicKey;
+  let oracleRegistryPda: PublicKey;
 
   // Vault with allowlist = [destA]
   let vaultAllowlist: FullVaultResult;
@@ -52,6 +59,11 @@ describe("devnet-transfers", () => {
     await fundKeypair(provider, attacker.publicKey);
 
     mint = await createTestMint(connection, payer, owner.publicKey, 6);
+
+    // Initialize oracle registry with mint as stablecoin
+    oracleRegistryPda = await initializeOracleRegistry(program, owner, [
+      makeOracleEntry(mint),
+    ]);
 
     // Create destination ATAs
     const ataA = await getOrCreateAssociatedTokenAccount(
@@ -117,7 +129,9 @@ describe("devnet-transfers", () => {
         vault: vaultAllowlist.vaultPda,
         policy: vaultAllowlist.policyPda,
         tracker: vaultAllowlist.trackerPda,
+        oracleRegistry: vaultAllowlist.oracleRegistryPda,
         vaultTokenAccount: vaultAllowlist.vaultTokenAta,
+        tokenMintAccount: mint,
         destinationTokenAccount: destAAta,
         feeDestinationTokenAccount: vaultAllowlist.feeDestinationAta,
         protocolTreasuryTokenAccount: vaultAllowlist.protocolTreasuryAta,
@@ -141,7 +155,9 @@ describe("devnet-transfers", () => {
           vault: vaultAllowlist.vaultPda,
           policy: vaultAllowlist.policyPda,
           tracker: vaultAllowlist.trackerPda,
+          oracleRegistry: vaultAllowlist.oracleRegistryPda,
           vaultTokenAccount: vaultAllowlist.vaultTokenAta,
+          tokenMintAccount: mint,
           destinationTokenAccount: destBAta, // destB not in allowlist
           feeDestinationTokenAccount: vaultAllowlist.feeDestinationAta,
           protocolTreasuryTokenAccount: vaultAllowlist.protocolTreasuryAta,
@@ -172,7 +188,9 @@ describe("devnet-transfers", () => {
         vault: vaultAnyDest.vaultPda,
         policy: vaultAnyDest.policyPda,
         tracker: vaultAnyDest.trackerPda,
+        oracleRegistry: vaultAnyDest.oracleRegistryPda,
         vaultTokenAccount: vaultAnyDest.vaultTokenAta,
+        tokenMintAccount: mint,
         destinationTokenAccount: randomDestAta.address,
         feeDestinationTokenAccount: null,
         protocolTreasuryTokenAccount: vaultAnyDest.protocolTreasuryAta,
@@ -210,7 +228,9 @@ describe("devnet-transfers", () => {
         vault: vaultAllowlist.vaultPda,
         policy: vaultAllowlist.policyPda,
         tracker: vaultAllowlist.trackerPda,
+        oracleRegistry: vaultAllowlist.oracleRegistryPda,
         vaultTokenAccount: vaultAllowlist.vaultTokenAta,
+        tokenMintAccount: mint,
         destinationTokenAccount: destAAta,
         feeDestinationTokenAccount: vaultAllowlist.feeDestinationAta,
         protocolTreasuryTokenAccount: vaultAllowlist.protocolTreasuryAta,
@@ -246,7 +266,9 @@ describe("devnet-transfers", () => {
           vault: vaultAllowlist.vaultPda,
           policy: vaultAllowlist.policyPda,
           tracker: vaultAllowlist.trackerPda,
+          oracleRegistry: vaultAllowlist.oracleRegistryPda,
           vaultTokenAccount: vaultAllowlist.vaultTokenAta,
+          tokenMintAccount: mint,
           destinationTokenAccount: destAAta,
           feeDestinationTokenAccount: vaultAllowlist.feeDestinationAta,
           protocolTreasuryTokenAccount: vaultAllowlist.protocolTreasuryAta,
@@ -286,7 +308,9 @@ describe("devnet-transfers", () => {
         vault: smallCapVault.vaultPda,
         policy: smallCapVault.policyPda,
         tracker: smallCapVault.trackerPda,
+        oracleRegistry: smallCapVault.oracleRegistryPda,
         vaultTokenAccount: smallCapVault.vaultTokenAta,
+        tokenMintAccount: mint,
         destinationTokenAccount: destAAta,
         feeDestinationTokenAccount: null,
         protocolTreasuryTokenAccount: smallCapVault.protocolTreasuryAta,
@@ -304,7 +328,9 @@ describe("devnet-transfers", () => {
           vault: smallCapVault.vaultPda,
           policy: smallCapVault.policyPda,
           tracker: smallCapVault.trackerPda,
+          oracleRegistry: smallCapVault.oracleRegistryPda,
           vaultTokenAccount: smallCapVault.vaultTokenAta,
+          tokenMintAccount: mint,
           destinationTokenAccount: destAAta,
           feeDestinationTokenAccount: null,
           protocolTreasuryTokenAccount: smallCapVault.protocolTreasuryAta,
@@ -317,53 +343,5 @@ describe("devnet-transfers", () => {
       expectError(err, "DailyCapExceeded", "cap");
     }
     console.log("    agent_transfer respects daily cap");
-  });
-
-  it("7. agent_transfer respects per-token max_tx_base", async () => {
-    const vault = await createFullVault({
-      program,
-      connection,
-      owner,
-      agent,
-      feeDestination: feeDestination.publicKey,
-      mint,
-      vaultId: nextVaultId(6),
-      dailyCap: new BN(500_000_000),
-      maxTx: new BN(200_000_000),
-      allowedTokens: [
-        makeAllowedToken(
-          mint,
-          PublicKey.default,
-          6,
-          new BN(0),
-          new BN(50_000_000), // maxTxBase=50 USDC
-        ),
-      ],
-      allowedProtocols: [jupiterProgramId],
-      allowedDestinations: [],
-      depositAmount: new BN(1_000_000_000),
-    });
-
-    try {
-      await program.methods
-        .agentTransfer(new BN(51_000_000)) // 51 > maxTxBase=50
-        .accounts({
-          agent: agent.publicKey,
-          vault: vault.vaultPda,
-          policy: vault.policyPda,
-          tracker: vault.trackerPda,
-          vaultTokenAccount: vault.vaultTokenAta,
-          destinationTokenAccount: destAAta,
-          feeDestinationTokenAccount: null,
-          protocolTreasuryTokenAccount: vault.protocolTreasuryAta,
-          tokenProgram: TOKEN_PROGRAM_ID,
-        } as any)
-        .signers([agent])
-        .rpc();
-      expect.fail("Should have thrown");
-    } catch (err: any) {
-      expectError(err, "PerTokenTxLimitExceeded", "limit");
-    }
-    console.log("    agent_transfer respects per-token max_tx_base");
   });
 });

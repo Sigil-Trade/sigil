@@ -1,29 +1,22 @@
 pub mod pending_policy;
 pub mod policy;
+pub mod registry;
 pub mod session;
 pub mod tracker;
 pub mod vault;
 
 pub use pending_policy::*;
 pub use policy::*;
+pub use registry::*;
 pub use session::*;
 pub use tracker::*;
 pub use vault::*;
-
-/// Maximum number of allowed tokens in a policy
-pub const MAX_ALLOWED_TOKENS: usize = 10;
 
 /// Maximum number of allowed protocols in a policy
 pub const MAX_ALLOWED_PROTOCOLS: usize = 10;
 
 /// Maximum number of allowed destination addresses for agent transfers
 pub const MAX_ALLOWED_DESTINATIONS: usize = 10;
-
-/// Maximum number of recent transactions stored on-chain
-pub const MAX_RECENT_TRANSACTIONS: usize = 50;
-
-/// Rolling window duration in seconds (24 hours)
-pub const ROLLING_WINDOW_SECONDS: i64 = 86_400;
 
 /// Session expiry in slots (~20 slots ≈ 8 seconds)
 pub const SESSION_EXPIRY_SLOTS: u64 = 20;
@@ -60,15 +53,29 @@ pub const SWITCHBOARD_ON_DEMAND_PROGRAM: Pubkey = Pubkey::new_from_array([
     116, 218, 135, 71, 111, 70, 92, 4, 12, 101, 115,
 ]);
 
-/// Maximum staleness for Switchboard feed values (in slots).
-/// At ~400ms per slot, 100 slots ≈ 40 seconds.
-pub const MAX_ORACLE_STALE_SLOTS: u32 = 100;
+/// Maximum staleness for oracle feed values (in slots).
+/// 50 slots ≈ 20s normal, ~37s congested. Pyth updates every slot.
+/// Drift uses 10% conf threshold (no separate staleness gate in public docs).
+/// LIVENESS TRADEOFF: During oracle outages, vault transactions requiring
+/// oracle pricing will be blocked until fresh data is available. This is
+/// the correct security posture for a spending cap system — stale prices
+/// create greater risk than temporary unavailability. The fallback oracle
+/// mitigates single-provider outages when configured.
+pub const MAX_ORACLE_STALE_SLOTS: u32 = 50;
 
 /// Minimum number of oracle samples required for a valid price.
-pub const MIN_ORACLE_SAMPLES: u32 = 3;
+/// Switchboard examples commonly use 5; higher values improve median
+/// robustness.
+pub const MIN_ORACLE_SAMPLES: u32 = 5;
 
-/// Maximum confidence/price ratio in BPS. 1000 = 10%.
-pub const MAX_CONFIDENCE_BPS: u64 = 1000;
+/// Maximum confidence/price ratio in BPS. 500 = 5%.
+/// Marginfi default is 10% (configurable per-bank); we use a tighter 5%
+/// as a fixed threshold appropriate for spending cap enforcement.
+pub const MAX_CONFIDENCE_BPS: u64 = 500;
+
+/// Max divergence between primary and fallback oracle (BPS).
+/// 500 = 5%. Rejects if both return valid but divergent prices.
+pub const MAX_ORACLE_DIVERGENCE_BPS: u64 = 500;
 
 /// USD amounts use 6 decimal places (matching USDC/USDT precision).
 /// $1.00 = 1_000_000, $500.00 = 500_000_000
@@ -76,6 +83,8 @@ pub const USD_DECIMALS: u8 = 6;
 
 /// 10^6 — base multiplier for USD amounts with 6 decimals
 pub const USD_BASE: u64 = 1_000_000;
+
+use anchor_lang::prelude::*;
 
 /// Vault status enum
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default, PartialEq, Eq)]
@@ -94,7 +103,7 @@ pub enum VaultStatus {
 pub enum ActionType {
     /// Token swap (e.g., Jupiter)
     Swap,
-    /// Open a perpetual position (e.g., Flash Trade)
+    /// Open a perpetual position (e.g., Flash Trade, Drift)
     OpenPosition,
     /// Close a perpetual position
     ClosePosition,
@@ -102,44 +111,10 @@ pub enum ActionType {
     IncreasePosition,
     /// Decrease position size
     DecreasePosition,
-    /// Deposit into a lending/yield protocol (e.g., Kamino)
+    /// Deposit into a lending/yield protocol
     Deposit,
     /// Withdraw from a lending/yield protocol
     Withdraw,
     /// Direct token transfer to an allowed destination
     Transfer,
-}
-
-use anchor_lang::prelude::*;
-
-/// Tracker capacity tiers — chosen at vault creation, determines
-/// max rolling spend entries and SpendTracker account size.
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default, PartialEq, Eq)]
-pub enum TrackerTier {
-    /// 200 entries (~16 KB)
-    #[default]
-    Standard,
-    /// 500 entries (~33 KB)
-    Pro,
-    /// 1000 entries (~61 KB)
-    Max,
-}
-
-impl TrackerTier {
-    pub fn max_spend_entries(&self) -> usize {
-        match self {
-            TrackerTier::Standard => 200,
-            TrackerTier::Pro => 500,
-            TrackerTier::Max => 1000,
-        }
-    }
-
-    pub fn from_u8(val: u8) -> Option<TrackerTier> {
-        match val {
-            0 => Some(TrackerTier::Standard),
-            1 => Some(TrackerTier::Pro),
-            2 => Some(TrackerTier::Max),
-            _ => None,
-        }
-    }
 }

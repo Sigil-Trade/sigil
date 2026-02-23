@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Token, TokenAccount, Transfer};
+use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
 use crate::errors::AgentShieldError;
 use crate::events::{AgentTransferExecuted, FeesCollected};
@@ -27,13 +27,20 @@ pub struct AgentTransfer<'info> {
     )]
     pub policy: Account<'info, PolicyConfig>,
 
+    /// Zero-copy SpendTracker
     #[account(
         mut,
-        has_one = vault,
         seeds = [b"tracker", vault.key().as_ref()],
-        bump = tracker.bump,
+        bump,
     )]
-    pub tracker: Account<'info, SpendTracker>,
+    pub tracker: AccountLoader<'info, SpendTracker>,
+
+    /// Protocol-level oracle registry
+    #[account(
+        seeds = [b"oracle_registry"],
+        bump = oracle_registry.bump,
+    )]
+    pub oracle_registry: Account<'info, OracleRegistry>,
 
     /// Vault's PDA-owned token account (source)
     #[account(
@@ -43,11 +50,19 @@ pub struct AgentTransfer<'info> {
     )]
     pub vault_token_account: Account<'info, TokenAccount>,
 
-    /// Destination token account (must be in allowed destinations if configured)
+    /// Token mint account for decimals validation
+    #[account(
+        constraint = token_mint_account.key()
+            == vault_token_account.mint
+            @ AgentShieldError::InvalidTokenAccount,
+    )]
+    pub token_mint_account: Account<'info, Mint>,
+
+    /// Destination token account (must be in allowed destinations)
     #[account(mut)]
     pub destination_token_account: Account<'info, TokenAccount>,
 
-    /// Developer fee destination token account — must match vault.fee_destination
+    /// Developer fee destination token account
     #[account(mut)]
     pub fee_destination_token_account: Option<Account<'info, TokenAccount>>,
 
@@ -56,12 +71,13 @@ pub struct AgentTransfer<'info> {
     pub protocol_treasury_token_account: Option<Account<'info, TokenAccount>>,
 
     pub token_program: Program<'info, Token>,
-    // Oracle feed (Pyth/Switchboard) passed via remaining_accounts[0] for oracle-priced tokens
+    // Oracle feed (Pyth/Switchboard) via remaining_accounts[0]
 }
 
 pub fn handler(ctx: Context<AgentTransfer>, amount: u64) -> Result<()> {
     let vault = &ctx.accounts.vault;
     let policy = &ctx.accounts.policy;
+    let registry = &ctx.accounts.oracle_registry;
     let clock = Clock::get()?;
 
     // 1. Vault must be active
@@ -72,33 +88,36 @@ pub fn handler(ctx: Context<AgentTransfer>, amount: u64) -> Result<()> {
 
     let token_mint = ctx.accounts.vault_token_account.mint;
 
-    // 3. Token must be whitelisted — find entry + index
-    let (token_index, allowed_token_ref) = policy
-        .find_token_with_index(&token_mint)
-        .ok_or(error!(AgentShieldError::TokenNotAllowed))?;
-    let allowed_token = allowed_token_ref.clone();
+    // 3. Token must be in the oracle registry
+    let oracle_entry = registry
+        .find_entry(&token_mint)
+        .ok_or(error!(AgentShieldError::TokenNotRegistered))?;
 
-    // 4. Unpriced tokens cannot be spent
-    require!(
-        !allowed_token.is_unpriced(),
-        AgentShieldError::TokenSpendBlocked
-    );
-
-    // 5. Destination must be allowed
+    // 4. Destination must be allowed
     require!(
         policy.is_destination_allowed(&ctx.accounts.destination_token_account.owner),
         AgentShieldError::DestinationNotAllowed
     );
 
-    // 6. Mint consistency
+    // 5. Mint consistency
     require!(
         ctx.accounts.destination_token_account.mint == token_mint,
         AgentShieldError::InvalidTokenAccount
     );
 
+    // 6. Get token decimals from validated mint account
+    let token_decimals = ctx.accounts.token_mint_account.decimals;
+
     // 7. Convert to USD
-    let (usd_amount, _oracle_price, _oracle_source) =
-        convert_to_usd(&allowed_token, amount, ctx.remaining_accounts, &clock)?;
+    let (usd_amount, _oracle_price, _oracle_source) = convert_to_usd(
+        oracle_entry.is_stablecoin,
+        &oracle_entry.oracle_feed,
+        &oracle_entry.fallback_feed,
+        token_decimals,
+        amount,
+        ctx.remaining_accounts,
+        &clock,
+    )?;
 
     // 8. Single tx USD check
     require!(
@@ -107,8 +126,8 @@ pub fn handler(ctx: Context<AgentTransfer>, amount: u64) -> Result<()> {
     );
 
     // 9. Rolling 24h USD check
-    let tracker = &mut ctx.accounts.tracker;
-    let rolling_usd = tracker.get_rolling_spend_usd(clock.unix_timestamp)?;
+    let mut tracker = ctx.accounts.tracker.load_mut()?;
+    let rolling_usd = tracker.get_rolling_24h_usd(&clock);
     let new_total_usd = rolling_usd
         .checked_add(usd_amount)
         .ok_or(AgentShieldError::Overflow)?;
@@ -117,28 +136,9 @@ pub fn handler(ctx: Context<AgentTransfer>, amount: u64) -> Result<()> {
         AgentShieldError::DailyCapExceeded
     );
 
-    // 10. Per-token base cap check
-    if allowed_token.daily_cap_base > 0 {
-        let rolling_base = tracker.get_rolling_spend_by_token(token_index, clock.unix_timestamp)?;
-        let new_total_base = rolling_base
-            .checked_add(amount)
-            .ok_or(AgentShieldError::Overflow)?;
-        require!(
-            new_total_base <= allowed_token.daily_cap_base,
-            AgentShieldError::PerTokenCapExceeded
-        );
-    }
-
-    // 11. Per-token single tx check
-    if allowed_token.max_tx_base > 0 {
-        require!(
-            amount <= allowed_token.max_tx_base,
-            AgentShieldError::PerTokenTxLimitExceeded
-        );
-    }
-
     // Record spend
-    tracker.record_spend(token_index, usd_amount, amount, clock.unix_timestamp)?;
+    tracker.record_spend(&clock, usd_amount)?;
+    drop(tracker);
 
     // Build vault PDA signer seeds
     let owner_key = vault.owner;
@@ -262,17 +262,6 @@ pub fn handler(ctx: Context<AgentTransfer>, amount: u64) -> Result<()> {
             .checked_add(developer_fee)
             .ok_or(AgentShieldError::Overflow)?;
     }
-
-    // Record in audit log
-    tracker.record_transaction(TransactionRecord {
-        timestamp: clock.unix_timestamp,
-        action_type: ActionType::Transfer,
-        token_mint,
-        amount,
-        protocol: Pubkey::default(),
-        success: true,
-        slot: clock.slot,
-    });
 
     // Emit fee event if fees were collected
     if protocol_fee > 0 || developer_fee > 0 {

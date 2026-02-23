@@ -1,10 +1,5 @@
 import type { AgentShieldClient } from "@agent-shield/sdk";
-import {
-  toPublicKey,
-  formatBN,
-  formatTimestamp,
-  formatActionType,
-} from "../utils";
+import { toPublicKey, formatBN } from "../utils";
 
 export async function getActivityResource(
   client: AgentShieldClient,
@@ -12,23 +7,18 @@ export async function getActivityResource(
 ): Promise<string> {
   try {
     const vault = toPublicKey(vaultAddress);
-    const tracker = await client.fetchTracker(vault);
+    const vaultAccount = await client.fetchVaultByAddress(vault);
 
-    const transactions = tracker.recentTransactions.map((tx) => ({
-      timestamp: formatTimestamp(tx.timestamp),
-      actionType: formatActionType(tx.actionType),
-      tokenMint: tx.tokenMint.toBase58(),
-      amount: formatBN(tx.amount),
-      protocol: tx.protocol.toBase58(),
-      success: tx.success,
-      slot: formatBN(tx.slot),
-    }));
-
+    // V2: Transaction history is available via Anchor events, not on-chain state.
+    // We expose aggregate stats from the vault account itself.
     return JSON.stringify(
       {
         vault: vaultAddress,
-        totalTransactions: transactions.length,
-        transactions,
+        totalTransactions: formatBN(vaultAccount.totalTransactions),
+        totalVolume: formatBN(vaultAccount.totalVolume),
+        note:
+          "Detailed transaction history is available via Anchor events. " +
+          "Use an explorer or event listener to view individual transactions.",
       },
       null,
       2,
@@ -38,8 +28,9 @@ export async function getActivityResource(
       {
         vault: vaultAddress,
         error: "Activity data not found — vault may not exist",
-        totalTransactions: 0,
-        transactions: [],
+        totalTransactions: "0",
+        totalVolume: "0",
+        note: "Detailed transaction history is available via Anchor events.",
       },
       null,
       2,

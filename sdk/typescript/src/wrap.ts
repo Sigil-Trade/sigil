@@ -9,9 +9,8 @@ import {
 } from "@solana/web3.js";
 import { BN, Program } from "@coral-xyz/anchor";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
-import type { AgentShield, ActionType, AllowedToken } from "./types";
-import { UNPRICED_SENTINEL } from "./types";
-import { getVaultPDA, getPolicyPDA, fetchPolicy } from "./accounts";
+import type { AgentShield, ActionType } from "./types";
+import { getVaultPDA, getPolicyPDA } from "./accounts";
 import {
   buildValidateAndAuthorize,
   buildFinalizeSession,
@@ -50,7 +49,7 @@ export interface WrapTransactionParams {
   feeDestinationTokenAccount?: PublicKey | null;
   /** Protocol treasury token account (optional) */
   protocolTreasuryTokenAccount?: PublicKey | null;
-  /** Oracle feed account for oracle-priced tokens (auto-resolved from policy if omitted) */
+  /** Oracle feed account for oracle-priced tokens (Pyth or Switchboard) */
   oracleFeedAccount?: PublicKey;
 }
 
@@ -110,16 +109,6 @@ export async function wrapInstructions(
     units: computeUnits,
   });
 
-  // Auto-resolve oracle feed from policy if not explicitly provided
-  let oracleFeed = params.oracleFeedAccount;
-  if (!oracleFeed) {
-    const policy = await fetchPolicy(program, params.vault);
-    const token = findAllowedToken(policy.allowedTokens, params.tokenMint);
-    if (token && classifyToken(token) === "oracle-priced") {
-      oracleFeed = token.oracleFeed;
-    }
-  }
-
   // Validate and authorize (includes token delegation CPI)
   const validateIx = await buildValidateAndAuthorize(
     program,
@@ -133,7 +122,7 @@ export async function wrapInstructions(
       targetProtocol: params.targetProtocol,
       leverageBps: params.leverageBps,
     },
-    oracleFeed,
+    params.oracleFeedAccount,
   ).instruction();
 
   // Finalize session (revokes delegation, collects fees)
@@ -150,29 +139,4 @@ export async function wrapInstructions(
   ).instruction();
 
   return [computeIx, validateIx, ...rewrittenDefi, finalizeIx];
-}
-
-/**
- * Classify a token based on its AllowedToken oracle_feed value.
- */
-export function classifyToken(
-  token: AllowedToken,
-): "stablecoin" | "oracle-priced" | "unpriced" {
-  if (token.oracleFeed.equals(PublicKey.default)) {
-    return "stablecoin";
-  }
-  if (token.oracleFeed.equals(UNPRICED_SENTINEL)) {
-    return "unpriced";
-  }
-  return "oracle-priced";
-}
-
-/**
- * Find an AllowedToken in a policy by mint address.
- */
-export function findAllowedToken(
-  allowedTokens: AllowedToken[],
-  mint: PublicKey,
-): AllowedToken | undefined {
-  return allowedTokens.find((t) => t.mint.equals(mint));
 }

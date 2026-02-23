@@ -27,9 +27,8 @@ export const x402FetchSchema = z.object({
 export type X402FetchInput = z.input<typeof x402FetchSchema>;
 
 // Module-level cache: persistent wallet + config fingerprint
-type ShieldedWallet = Awaited<
-  ReturnType<typeof import("@agent-shield/sdk").shieldWallet>
->;
+// Use ShieldedWallet type from SDK (V2: shield function is internal, type is public)
+import type { ShieldedWallet } from "@agent-shield/sdk";
 let _cachedWallet: ShieldedWallet | null = null;
 let _cachedConfigKey: string | null = null;
 
@@ -44,7 +43,13 @@ export async function x402Fetch(
   input: X402FetchInput,
 ): Promise<string> {
   try {
-    const { shieldWallet, shieldedFetch } = await import("@agent-shield/sdk");
+    const { shieldedFetch } = await import("@agent-shield/sdk");
+    // V2: shield() is internal to the wrapper. We access it from the compiled
+    // dist output since the MCP server runs in the same monorepo.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const wrapperMod = require("@agent-shield/sdk/dist/wrapper/index");
+    const shieldWallet: (w: any, p?: any, o?: any) => ShieldedWallet =
+      wrapperMod.shieldWallet;
     const { Connection, Keypair } = await import("@solana/web3.js");
 
     const configKey = getConfigKey(config);

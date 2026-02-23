@@ -33,16 +33,27 @@ pub enum OracleSource {
 /// Parse an oracle price from the provided account, auto-detecting the
 /// oracle type by checking the account owner program.
 ///
-/// Returns the price as an i128 mantissa with 18 implicit decimals
-/// (same format for both Pyth and Switchboard), plus the oracle source.
+/// Returns `(adjusted_price, midpoint, OracleSource)` where:
+/// - `adjusted_price`: conservative upper-bound price for USD conversion
+///   (Pyth: price+conf, Switchboard: median — no spread adjustment)
+/// - `midpoint`: raw midpoint price for cross-oracle divergence checks
+///   (Pyth: price without conf, Switchboard: median)
+///
+/// Both values are i128 mantissas with 18 implicit decimals.
+///
+/// The separation prevents asymmetric confidence from corrupting
+/// cross-oracle divergence checks. When Pyth (price+conf) is compared
+/// against Switchboard (median), the confidence band creates false
+/// divergence of ~1-5%. By comparing midpoint-to-midpoint, the
+/// divergence check measures actual oracle disagreement.
 pub fn parse_oracle_price(
     account_info: &AccountInfo,
     expected_feed: &Pubkey,
     current_slot: u64,
-) -> Result<(i128, OracleSource)> {
+) -> Result<(i128, i128, OracleSource)> {
     if *account_info.owner == PYTH_RECEIVER_PROGRAM {
-        let price = parse_pyth_price(account_info, expected_feed, current_slot)?;
-        Ok((price, OracleSource::Pyth))
+        let (adjusted, midpoint) = parse_pyth_price(account_info, expected_feed, current_slot)?;
+        Ok((adjusted, midpoint, OracleSource::Pyth))
     } else if *account_info.owner == SWITCHBOARD_ON_DEMAND_PROGRAM {
         let price = parse_switchboard_price(
             account_info,
@@ -51,7 +62,8 @@ pub fn parse_oracle_price(
             MIN_ORACLE_SAMPLES,
             current_slot,
         )?;
-        Ok((price, OracleSource::Switchboard))
+        // Switchboard: median IS the midpoint; no confidence adjustment
+        Ok((price, price, OracleSource::Switchboard))
     } else {
         Err(error!(AgentShieldError::OracleUnsupportedType))
     }
@@ -63,7 +75,7 @@ pub fn parse_oracle_price(
 //
 //   Offset   0: discriminator      [8 bytes]
 //   Offset   8: write_authority     [32 bytes]  (Pubkey)
-//   Offset  40: verification_level  [1 byte]    (0=Partial, 1=Full)
+//   Offset  40: verification_level  [1 byte]    (0=Partial, 1=Full; Borsh enum, variable-width)
 //   Offset  41: feed_id             [32 bytes]
 //   Offset  73: price               [8 bytes]   (i64, LE)
 //   Offset  81: conf                [8 bytes]   (u64, LE)
@@ -82,21 +94,27 @@ const PYTH_CONF_OFFSET: usize = 81;
 const PYTH_EXPONENT_OFFSET: usize = 89;
 const PYTH_POSTED_SLOT_OFFSET: usize = 125;
 
-/// Parse a Pyth PriceUpdateV2 account and return the price as an i128
-/// mantissa with 18 implicit decimals.
+/// Parse a Pyth PriceUpdateV2 account and return `(adjusted, midpoint)`
+/// as i128 mantissas with 18 implicit decimals.
+///
+/// - `adjusted`: `(price + conf) * 10^(18+exp)` — conservative upper bound
+///   for USD conversion (spending caps should overcount, not undercount).
+/// - `midpoint`: `price * 10^(18+exp)` — raw midpoint for cross-oracle
+///   divergence checks (comparing midpoint-to-midpoint avoids asymmetric
+///   confidence artifacts between Pyth and Switchboard).
 ///
 /// # Security
 /// - Account key must match `expected_feed`
 /// - Account owner must be PYTH_RECEIVER_PROGRAM (checked by dispatcher)
 /// - Verification level must be Full (1) — Wormhole-verified
 /// - Staleness: `posted_slot` must be within `MAX_ORACLE_STALE_SLOTS` of current slot
-/// - Confidence: `conf / |price|` must be ≤ `MAX_CONFIDENCE_BPS` (10%)
+/// - Confidence: `conf / |price|` must be ≤ `MAX_CONFIDENCE_BPS` (5%)
 /// - Price must be positive
 fn parse_pyth_price(
     account_info: &AccountInfo,
     expected_feed: &Pubkey,
     current_slot: u64,
-) -> Result<i128> {
+) -> Result<(i128, i128)> {
     // 1. Key must match expected feed
     require!(
         account_info.key() == *expected_feed,
@@ -155,9 +173,23 @@ fn parse_pyth_price(
         AgentShieldError::OracleConfidenceTooWide
     );
 
-    // 8. Normalize to i128 with 18 implicit decimals.
-    //    Pyth: price * 10^exponent = USD price.
-    //    Normalized: price * 10^(18 + exponent).
+    // 8. Conservative directional pricing: price + conf (upper bound).
+    //    1x confidence per Pyth Best Practices for outgoing asset valuation.
+    //    Under Pyth's Laplace distribution model, P(X ≤ μ+conf) ≈ 82%
+    //    one-sided coverage (1 - e^(-1)/2 ≈ 0.816). Pyth recommends 2.12x
+    //    for 95% coverage, but that's designed for lending/liquidation
+    //    protocols where a single mispricing causes loss. For spending caps,
+    //    per-tx undercount risk averages across many transactions. 1x conf
+    //    is the deliberate tradeoff: agents won't hit caps ~2x sooner than
+    //    their actual spending warrants.
+    //    Both price (positive i64) and conf (u64) are in Pyth exponent units.
+    let adjusted_price = (price as i128)
+        .checked_add(conf as i128)
+        .ok_or(AgentShieldError::Overflow)?;
+
+    // 9. Normalize to i128 with 18 implicit decimals.
+    //    Pyth: price_value * 10^exponent = USD price.
+    //    Normalized: price_value * 10^(18 + exponent).
     //    exponent is typically -8, so 10^(18 + (-8)) = 10^10.
     let norm_exp = 18i32
         .checked_add(exponent)
@@ -167,13 +199,18 @@ fn parse_pyth_price(
     let multiplier = 10i128
         .checked_pow(norm_exp as u32)
         .ok_or(AgentShieldError::Overflow)?;
-    let normalized = (price as i128)
+
+    let normalized_adjusted = adjusted_price
+        .checked_mul(multiplier)
+        .ok_or(AgentShieldError::Overflow)?;
+    let normalized_midpoint = (price as i128)
         .checked_mul(multiplier)
         .ok_or(AgentShieldError::Overflow)?;
 
-    require!(normalized > 0, AgentShieldError::OracleFeedInvalid);
+    require!(normalized_adjusted > 0, AgentShieldError::OracleFeedInvalid);
+    require!(normalized_midpoint > 0, AgentShieldError::OracleFeedInvalid);
 
-    Ok(normalized)
+    Ok((normalized_adjusted, normalized_midpoint))
 }
 
 // ─── Switchboard PullFeed parsing ────────────────────────────────────────────
@@ -184,7 +221,7 @@ fn parse_pyth_price(
 //   OracleSubmission (64 bytes, stride 64):
 //     offset  0: oracle    (Pubkey, 32 bytes)
 //     offset 32: slot      (u64, 8 bytes)
-//     offset 40: _padding0 ([u8; 8])
+//     offset 40: landed_at (u64, 8 bytes)
 //     offset 48: value     (i128, 16 bytes — price with 18 implicit decimals)
 
 /// Number of oracle submissions in a PullFeed account
@@ -210,6 +247,12 @@ const MIN_PULL_FEED_SIZE: usize = DISCRIMINATOR_SIZE + SUBMISSION_COUNT * SUBMIS
 
 /// Parse a Switchboard PullFeed account and return the median price
 /// as an i128 mantissa with 18 implicit decimals.
+///
+/// NOTE: Switchboard returns the bare median (no confidence adjustment).
+/// This is intentional — Switchboard's security model relies on median
+/// robustness, not confidence bands. For conservative spending cap
+/// enforcement, pair Switchboard with a Pyth fallback; the max-price
+/// selection in convert_to_usd() provides the upward adjustment.
 ///
 /// # Security
 /// - `expected_feed`: must match account key (set by vault owner in PolicyConfig)

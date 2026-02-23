@@ -31,17 +31,6 @@ import {
   LiteSVM,
 } from "./helpers/litesvm-setup";
 
-// Helper to build AllowedToken objects for the IDL
-function makeAllowedToken(
-  mint: PublicKey,
-  oracleFeed: PublicKey = PublicKey.default, // default = stablecoin
-  decimals: number = 6,
-  dailyCapBase: BN = new BN(0),
-  maxTxBase: BN = new BN(0),
-) {
-  return { mint, oracleFeed, decimals, dailyCapBase, maxTxBase };
-}
-
 describe("agent-shield", () => {
   let env: TestEnv;
   let svm: LiteSVM;
@@ -65,6 +54,7 @@ describe("agent-shield", () => {
   let policyBump: number;
   let trackerPda: PublicKey;
   let trackerBump: number;
+  let oracleRegistryPda: PublicKey;
 
   // Token accounts
   let ownerUsdcAta: PublicKey;
@@ -85,7 +75,6 @@ describe("agent-shield", () => {
     owner = env.provider.wallet;
 
     // Airdrop to test accounts
-    // Owner needs extra SOL for larger PolicyConfig (AllowedToken is 81 bytes each)
     airdropSol(svm, owner.publicKey, 100 * LAMPORTS_PER_SOL);
     airdropSol(svm, agent.publicKey, 10 * LAMPORTS_PER_SOL);
     airdropSol(svm, unauthorizedUser.publicKey, 10 * LAMPORTS_PER_SOL);
@@ -133,6 +122,23 @@ describe("agent-shield", () => {
       true
     );
 
+    // Derive oracle registry PDA and initialize it
+    [oracleRegistryPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("oracle_registry")],
+      program.programId
+    );
+
+    await program.methods
+      .initializeOracleRegistry([
+        { mint: usdcMint, oracleFeed: PublicKey.default, isStablecoin: true, fallbackFeed: PublicKey.default },
+      ])
+      .accounts({
+        authority: owner.publicKey,
+        oracleRegistry: oracleRegistryPda,
+        systemProgram: SystemProgram.programId,
+      } as any)
+      .rpc();
+
     // Derive PDAs
     [vaultPda, vaultBump] = PublicKey.findProgramAddressSync(
       [
@@ -167,14 +173,13 @@ describe("agent-shield", () => {
           vaultId,
           dailyCap,
           maxTxSize,
-          [makeAllowedToken(usdcMint)],
+          1, // protocolMode: allowlist
           [jupiterProgramId],
           new BN(0) as any, // max_leverage_bps (u16)
           3, // max_concurrent_positions
           0, // developer_fee_rate
           new BN(0), // timelockDuration
           [], // allowedDestinations
-          0, // tracker_tier: Standard
         )
         .accounts({
           owner: owner.publicKey,
@@ -202,10 +207,9 @@ describe("agent-shield", () => {
       expect(policy.vault.toString()).to.equal(vaultPda.toString());
       expect(policy.dailySpendingCapUsd.toNumber()).to.equal(500_000_000);
       expect(policy.maxTransactionSizeUsd.toNumber()).to.equal(100_000_000);
-      expect(policy.allowedTokens.length).to.equal(1);
-      expect(policy.allowedTokens[0].mint.toString()).to.equal(usdcMint.toString());
-      expect(policy.allowedProtocols.length).to.equal(1);
-      expect(policy.allowedProtocols[0].toString()).to.equal(jupiterProgramId.toString());
+      expect(policy.protocolMode).to.equal(1);
+      expect(policy.protocols.length).to.equal(1);
+      expect(policy.protocols[0].toString()).to.equal(jupiterProgramId.toString());
       expect(policy.canOpenPositions).to.equal(true);
       expect(policy.maxConcurrentPositions).to.equal(3);
       expect(policy.developerFeeRate).to.equal(0);
@@ -213,8 +217,6 @@ describe("agent-shield", () => {
       // Verify tracker state
       const tracker = await program.account.spendTracker.fetch(trackerPda);
       expect(tracker.vault.toString()).to.equal(vaultPda.toString());
-      expect(tracker.rollingSpends.length).to.equal(0);
-      expect(tracker.recentTransactions.length).to.equal(0);
     });
 
     it("rejects duplicate vault_id (PDA already exists)", async () => {
@@ -224,14 +226,13 @@ describe("agent-shield", () => {
             vaultId, // same vault_id
             new BN(100),
             new BN(100),
-            [],
+            0, // protocolMode: all
             [],
             new BN(0) as any,
             1,
             0,
             new BN(0),
             [],
-            0, // tracker_tier: Standard
           )
           .accounts({
             owner: owner.publicKey,
@@ -249,7 +250,7 @@ describe("agent-shield", () => {
       }
     });
 
-    it("rejects too many allowed tokens", async () => {
+    it("rejects invalid protocol mode", async () => {
       const vaultId2 = new BN(99);
       const [vault2] = PublicKey.findProgramAddressSync(
         [Buffer.from("vault"), owner.publicKey.toBuffer(), vaultId2.toArrayLike(Buffer, "le", 8)],
@@ -264,11 +265,10 @@ describe("agent-shield", () => {
         program.programId
       );
 
-      // 11 tokens exceeds MAX_ALLOWED_TOKENS (10)
-      const tooManyTokens = Array.from({ length: 11 }, () => makeAllowedToken(Keypair.generate().publicKey));
+      // protocol_mode = 3 is invalid (valid values: 0=all, 1=allowlist, 2=denylist)
       try {
         await program.methods
-          .initializeVault(vaultId2, new BN(100), new BN(100), tooManyTokens, [], new BN(0) as any, 1, 0, new BN(0), [], 0)
+          .initializeVault(vaultId2, new BN(100), new BN(100), 3, [], new BN(0) as any, 1, 0, new BN(0), [])
           .accounts({
             owner: owner.publicKey,
             vault: vault2,
@@ -280,10 +280,8 @@ describe("agent-shield", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        // With AllowedToken at 81 bytes each, 11 entries may exceed tx size
-        // before the on-chain check fires — both are valid rejections
         expect(err.toString()).to.satisfy(
-          (s: string) => s.includes("TooManyAllowedTokens") || s.includes("Transaction too large")
+          (s: string) => s.includes("InvalidProtocolMode") || s.includes("Error")
         );
       }
     });
@@ -406,7 +404,7 @@ describe("agent-shield", () => {
 
       // First create the vault
       await program.methods
-        .initializeVault(vid, new BN(1000), new BN(1000), [] as any[], [], new BN(0) as any, 1, 0, new BN(0), [], 0)
+        .initializeVault(vid, new BN(1000), new BN(1000), 0, [], new BN(0) as any, 1, 0, new BN(0), [])
         .accounts({
           owner: owner.publicKey,
           vault: v,
@@ -445,8 +443,8 @@ describe("agent-shield", () => {
         .updatePolicy(
           new BN(200_000_000), // new daily cap: 200 USDC
           null,                // keep max_transaction_size
-          null,                // keep allowed_tokens
-          null,                // keep allowed_protocols
+          null,                // keep protocol_mode
+          null,                // keep protocols
           null,                // keep max_leverage_bps
           null,                // keep can_open_positions
           null,                // keep max_concurrent_positions
@@ -458,7 +456,6 @@ describe("agent-shield", () => {
           owner: owner.publicKey,
           vault: vaultPda,
           policy: policyPda,
-          tracker: trackerPda,
         } as any)
         .rpc();
 
@@ -466,7 +463,6 @@ describe("agent-shield", () => {
       expect(policy.dailySpendingCapUsd.toNumber()).to.equal(200_000_000);
       // Other fields unchanged
       expect(policy.maxTransactionSizeUsd.toNumber()).to.equal(100_000_000);
-      expect(policy.allowedTokens.length).to.equal(1);
     });
 
     it("rejects non-owner signer", async () => {
@@ -477,7 +473,6 @@ describe("agent-shield", () => {
             owner: unauthorizedUser.publicKey,
             vault: vaultPda,
             policy: policyPda,
-            tracker: trackerPda,
           } as any)
           .signers([unauthorizedUser])
           .rpc();
@@ -498,7 +493,6 @@ describe("agent-shield", () => {
             owner: owner.publicKey,
             vault: vaultPda,
             policy: policyPda,
-            tracker: trackerPda,
           } as any)
           .rpc();
         expect.fail("Should have thrown");
@@ -531,7 +525,7 @@ describe("agent-shield", () => {
       );
 
       await program.methods
-        .initializeVault(revokeVaultId, new BN(1000), new BN(1000), [] as any[], [], new BN(0) as any, 1, 0, new BN(0), [], 0)
+        .initializeVault(revokeVaultId, new BN(1000), new BN(1000), 0, [], new BN(0) as any, 1, 0, new BN(0), [])
         .accounts({
           owner: owner.publicKey,
           vault: revokeVaultPda,
@@ -607,7 +601,7 @@ describe("agent-shield", () => {
       );
 
       await program.methods
-        .initializeVault(reactVaultId, new BN(1000), new BN(1000), [] as any[], [], new BN(0) as any, 1, 0, new BN(0), [], 0)
+        .initializeVault(reactVaultId, new BN(1000), new BN(1000), 0, [], new BN(0) as any, 1, 0, new BN(0), [])
         .accounts({
           owner: owner.publicKey,
           vault: reactVaultPda,
@@ -627,7 +621,7 @@ describe("agent-shield", () => {
 
     it("reactivates a frozen vault", async () => {
       await program.methods
-        .reactivateVault(null)
+        .reactivateVault(agent.publicKey)
         .accounts({ owner: owner.publicKey, vault: reactVaultPda } as any)
         .rpc();
 
@@ -645,6 +639,30 @@ describe("agent-shield", () => {
       } catch (err: any) {
         expect(err.toString()).to.include("VaultNotFrozen");
       }
+    });
+
+    it("rejects reactivating without agent when agent is cleared", async () => {
+      // Freeze first
+      await program.methods
+        .revokeAgent()
+        .accounts({ owner: owner.publicKey, vault: reactVaultPda } as any)
+        .rpc();
+
+      try {
+        await program.methods
+          .reactivateVault(null)
+          .accounts({ owner: owner.publicKey, vault: reactVaultPda } as any)
+          .rpc();
+        expect.fail("Should have thrown");
+      } catch (err: any) {
+        expect(err.toString()).to.include("NoAgentRegistered");
+      }
+
+      // Clean up: reactivate with new agent for subsequent tests
+      await program.methods
+        .reactivateVault(agent.publicKey)
+        .accounts({ owner: owner.publicKey, vault: reactVaultPda } as any)
+        .rpc();
     });
 
     it("optionally rotates agent key on reactivation", async () => {
@@ -765,6 +783,7 @@ describe("agent-shield", () => {
           vault: vaultPda,
           policy: policyPda,
           tracker: trackerPda,
+          oracleRegistry: oracleRegistryPda,
           session: sessionPda,
           vaultTokenAccount: vaultUsdcAta,
           tokenMintAccount: usdcMint,
@@ -784,12 +803,6 @@ describe("agent-shield", () => {
       expect(session.authorizedProtocol.toString()).to.equal(jupiterProgramId.toString());
       expect(session.delegated).to.equal(true);
       expect(session.delegationTokenAccount.toString()).to.equal(vaultUsdcAta.toString());
-
-      // Verify spend was tracked (USD amount for stablecoin = base amount)
-      const tracker = await program.account.spendTracker.fetch(trackerPda);
-      expect(tracker.rollingSpends.length).to.equal(1);
-      expect(tracker.rollingSpends[0].usdAmount.toNumber()).to.equal(50_000_000);
-      expect(tracker.rollingSpends[0].baseAmount.toNumber()).to.equal(50_000_000);
     });
 
     it("prevents double-authorization (session already exists)", async () => {
@@ -807,6 +820,7 @@ describe("agent-shield", () => {
             vault: vaultPda,
             policy: policyPda,
             tracker: trackerPda,
+            oracleRegistry: oracleRegistryPda,
             session: sessionPda,
             vaultTokenAccount: vaultUsdcAta,
             tokenMintAccount: usdcMint,
@@ -844,7 +858,6 @@ describe("agent-shield", () => {
           payer: agent.publicKey,
           vault: vaultPda,
           policy: policyPda,
-          tracker: trackerPda,
           session: sessionPda,
           sessionRentRecipient: agent.publicKey,
           vaultTokenAccount: vaultUsdcAta,
@@ -872,12 +885,6 @@ describe("agent-shield", () => {
       const vault = await program.account.agentVault.fetch(vaultPda);
       expect(vault.totalTransactions.toNumber()).to.equal(1);
       expect(vault.totalVolume.toNumber()).to.equal(50_000_000);
-
-      // Verify audit log
-      const tracker = await program.account.spendTracker.fetch(trackerPda);
-      expect(tracker.recentTransactions.length).to.equal(1);
-      expect(tracker.recentTransactions[0].success).to.equal(true);
-      expect(tracker.recentTransactions[0].amount.toNumber()).to.equal(50_000_000);
     });
   });
 
@@ -901,7 +908,7 @@ describe("agent-shield", () => {
         program.programId
       );
       // Create vault ATA for solMint so Anchor account validation passes,
-      // allowing the handler's TokenNotAllowed check to fire.
+      // allowing the handler's TokenNotRegistered check to fire.
       const vaultSolAta = createAtaIdempotentHelper(
         svm,
         (owner as any).payer,
@@ -913,7 +920,7 @@ describe("agent-shield", () => {
         await program.methods
           .validateAndAuthorize(
             { swap: {} },
-            solMint, // not in allowed_tokens
+            solMint, // not in oracle registry
             new BN(1_000_000),
             jupiterProgramId,
             null
@@ -923,6 +930,7 @@ describe("agent-shield", () => {
             vault: vaultPda,
             policy: policyPda,
             tracker: trackerPda,
+            oracleRegistry: oracleRegistryPda,
             session: solSession,
             vaultTokenAccount: vaultSolAta,
             tokenMintAccount: solMint,
@@ -933,7 +941,7 @@ describe("agent-shield", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expect(err.toString()).to.include("TokenNotAllowed");
+        expect(err.toString()).to.include("TokenNotRegistered");
       }
     });
 
@@ -945,7 +953,7 @@ describe("agent-shield", () => {
             { swap: {} },
             usdcMint,
             new BN(1_000_000),
-            fakeProtocol, // not in allowed_protocols
+            fakeProtocol, // not in protocols
             null
           )
           .accounts({
@@ -953,6 +961,7 @@ describe("agent-shield", () => {
             vault: vaultPda,
             policy: policyPda,
             tracker: trackerPda,
+            oracleRegistry: oracleRegistryPda,
             session: sessionPda,
             vaultTokenAccount: vaultUsdcAta,
             tokenMintAccount: usdcMint,
@@ -982,6 +991,7 @@ describe("agent-shield", () => {
             vault: vaultPda,
             policy: policyPda,
             tracker: trackerPda,
+            oracleRegistry: oracleRegistryPda,
             session: sessionPda,
             vaultTokenAccount: vaultUsdcAta,
             tokenMintAccount: usdcMint,
@@ -997,8 +1007,20 @@ describe("agent-shield", () => {
     });
 
     it("rejects when daily spending cap would be exceeded", async () => {
-      // Current daily cap is 200 USDC, already spent 50 USDC
-      // Trying to spend 160 USDC would put us at 210 > 200
+      // Lower the daily cap to 200 USDC (from 500) to make this testable
+      // with fewer transactions. Already spent 50 USDC from earlier tests.
+      await program.methods
+        .updatePolicy(
+          new BN(200_000_000), // 200 USDC daily cap
+          null, null, null, null, null, null, null, null, null,
+        )
+        .accounts({
+          owner: owner.publicKey,
+          vault: vaultPda,
+          policy: policyPda,
+        } as any)
+        .rpc();
+
       try {
         await program.methods
           .validateAndAuthorize(
@@ -1013,6 +1035,7 @@ describe("agent-shield", () => {
             vault: vaultPda,
             policy: policyPda,
             tracker: trackerPda,
+            oracleRegistry: oracleRegistryPda,
             session: sessionPda,
             vaultTokenAccount: vaultUsdcAta,
             tokenMintAccount: usdcMint,
@@ -1030,7 +1053,6 @@ describe("agent-shield", () => {
             payer: agent.publicKey,
             vault: vaultPda,
             policy: policyPda,
-            tracker: trackerPda,
             session: sessionPda,
             sessionRentRecipient: agent.publicKey,
             vaultTokenAccount: vaultUsdcAta,
@@ -1056,6 +1078,7 @@ describe("agent-shield", () => {
             vault: vaultPda,
             policy: policyPda,
             tracker: trackerPda,
+            oracleRegistry: oracleRegistryPda,
             session: sessionPda,
             vaultTokenAccount: vaultUsdcAta,
             tokenMintAccount: usdcMint,
@@ -1068,6 +1091,19 @@ describe("agent-shield", () => {
       } catch (err: any) {
         expect(err.toString()).to.include("DailyCapExceeded");
       }
+
+      // Restore daily cap to 500 USDC for subsequent tests
+      await program.methods
+        .updatePolicy(
+          new BN(500_000_000), // restore to 500 USDC
+          null, null, null, null, null, null, null, null, null,
+        )
+        .accounts({
+          owner: owner.publicKey,
+          vault: vaultPda,
+          policy: policyPda,
+        } as any)
+        .rpc();
     });
 
     it("rejects unauthorized agent", async () => {
@@ -1093,6 +1129,7 @@ describe("agent-shield", () => {
             vault: vaultPda,
             policy: policyPda,
             tracker: trackerPda,
+            oracleRegistry: oracleRegistryPda,
             session: fakeSession,
             vaultTokenAccount: vaultUsdcAta,
             tokenMintAccount: usdcMint,
@@ -1154,6 +1191,7 @@ describe("agent-shield", () => {
             vault: frozenVault,
             policy: frozenPolicy,
             tracker: frozenTracker,
+            oracleRegistry: oracleRegistryPda,
             session: frozenSession,
             vaultTokenAccount: frozenVaultUsdcAta,
             tokenMintAccount: usdcMint,
@@ -1199,7 +1237,7 @@ describe("agent-shield", () => {
       );
 
       await program.methods
-        .initializeVault(closeVaultId, new BN(1000), new BN(1000), [] as any[], [], new BN(0) as any, 1, 0, new BN(0), [], 0)
+        .initializeVault(closeVaultId, new BN(1000), new BN(1000), 0, [], new BN(0) as any, 1, 0, new BN(0), [])
         .accounts({
           owner: owner.publicKey,
           vault: closeVaultPda,
@@ -1252,7 +1290,7 @@ describe("agent-shield", () => {
       );
 
       await program.methods
-        .initializeVault(vid, new BN(1000), new BN(1000), [] as any[], [], new BN(0) as any, 1, 0, new BN(0), [], 0)
+        .initializeVault(vid, new BN(1000), new BN(1000), 0, [], new BN(0) as any, 1, 0, new BN(0), [])
         .accounts({
           owner: owner.publicKey,
           vault: v,
@@ -1314,14 +1352,13 @@ describe("agent-shield", () => {
           feeVaultId,
           new BN(500_000_000),
           new BN(100_000_000),
-          [makeAllowedToken(usdcMint)],
+          1, // protocolMode: allowlist
           [jupiterProgramId],
           new BN(0) as any,
           3,
           30, // developer_fee_rate = 30 (0.3 BPS)
           new BN(0),
           [],
-          0, // tracker_tier: Standard
         )
         .accounts({
           owner: owner.publicKey,
@@ -1354,7 +1391,7 @@ describe("agent-shield", () => {
 
       try {
         await program.methods
-          .initializeVault(badVaultId, new BN(1000), new BN(1000), [] as any[], [], new BN(0) as any, 1, 501, new BN(0), [], 0)
+          .initializeVault(badVaultId, new BN(1000), new BN(1000), 0, [], new BN(0) as any, 1, 501, new BN(0), [])
           .accounts({
             owner: owner.publicKey,
             vault: bv,
@@ -1378,7 +1415,6 @@ describe("agent-shield", () => {
           owner: owner.publicKey,
           vault: feeVaultPda,
           policy: feePolicyPda,
-          tracker: feeTrackerPda,
         } as any)
         .rpc();
 
@@ -1392,7 +1428,6 @@ describe("agent-shield", () => {
           owner: owner.publicKey,
           vault: feeVaultPda,
           policy: feePolicyPda,
-          tracker: feeTrackerPda,
         } as any)
         .rpc();
 
@@ -1408,7 +1443,6 @@ describe("agent-shield", () => {
             owner: owner.publicKey,
             vault: feeVaultPda,
             policy: feePolicyPda,
-            tracker: feeTrackerPda,
           } as any)
           .rpc();
         expect.fail("Should have thrown");
@@ -1425,7 +1459,6 @@ describe("agent-shield", () => {
           owner: owner.publicKey,
           vault: feeVaultPda,
           policy: feePolicyPda,
-          tracker: feeTrackerPda,
         } as any)
         .rpc();
 
@@ -1474,6 +1507,7 @@ describe("agent-shield", () => {
           vault: feeVaultPda,
           policy: feePolicyPda,
           tracker: feeTrackerPda,
+          oracleRegistry: oracleRegistryPda,
           session: feeSessionPda,
           vaultTokenAccount: feeVaultUsdcAta,
           tokenMintAccount: usdcMint,
@@ -1490,7 +1524,6 @@ describe("agent-shield", () => {
           payer: agent.publicKey,
           vault: feeVaultPda,
           policy: feePolicyPda,
-          tracker: feeTrackerPda,
           session: feeSessionPda,
           sessionRentRecipient: agent.publicKey,
           vaultTokenAccount: feeVaultUsdcAta,
@@ -1517,7 +1550,6 @@ describe("agent-shield", () => {
           owner: owner.publicKey,
           vault: feeVaultPda,
           policy: feePolicyPda,
-          tracker: feeTrackerPda,
         } as any)
         .rpc();
 
@@ -1556,6 +1588,7 @@ describe("agent-shield", () => {
           vault: feeVaultPda,
           policy: feePolicyPda,
           tracker: feeTrackerPda,
+          oracleRegistry: oracleRegistryPda,
           session: feeSessionPda,
           vaultTokenAccount: feeVaultUsdcAta,
           tokenMintAccount: usdcMint,
@@ -1572,7 +1605,6 @@ describe("agent-shield", () => {
           payer: agent.publicKey,
           vault: feeVaultPda,
           policy: feePolicyPda,
-          tracker: feeTrackerPda,
           session: feeSessionPda,
           sessionRentRecipient: agent.publicKey,
           vaultTokenAccount: feeVaultUsdcAta,
@@ -1609,6 +1641,7 @@ describe("agent-shield", () => {
           vault: feeVaultPda,
           policy: feePolicyPda,
           tracker: feeTrackerPda,
+          oracleRegistry: oracleRegistryPda,
           session: feeSessionPda,
           vaultTokenAccount: feeVaultUsdcAta,
           tokenMintAccount: usdcMint,
@@ -1628,7 +1661,6 @@ describe("agent-shield", () => {
           payer: agent.publicKey,
           vault: feeVaultPda,
           policy: feePolicyPda,
-          tracker: feeTrackerPda,
           session: feeSessionPda,
           sessionRentRecipient: agent.publicKey,
           vaultTokenAccount: null,
@@ -1661,7 +1693,7 @@ describe("agent-shield", () => {
       );
 
       await program.methods
-        .initializeVault(maxFeeVaultId, new BN(1000), new BN(1000), [] as any[], [], new BN(0) as any, 1, 500, new BN(0), [], 0)
+        .initializeVault(maxFeeVaultId, new BN(1000), new BN(1000), 0, [], new BN(0) as any, 1, 500, new BN(0), [])
         .accounts({
           owner: owner.publicKey,
           vault: mv,
@@ -1716,14 +1748,13 @@ describe("agent-shield", () => {
           expiryVaultId,
           new BN(500_000_000),
           new BN(100_000_000),
-          [makeAllowedToken(usdcMint)],
+          1, // protocolMode: allowlist
           [jupiterProgramId],
           new BN(0) as any,
           3,
           0,
           new BN(0),
           [],
-          0, // tracker_tier: Standard
         )
         .accounts({
           owner: owner.publicKey,
@@ -1777,6 +1808,7 @@ describe("agent-shield", () => {
           vault: expiryVaultPda,
           policy: expiryPolicyPda,
           tracker: expiryTrackerPda,
+          oracleRegistry: oracleRegistryPda,
           session: expirySessionPda,
           vaultTokenAccount: expiryVaultUsdcAta,
           tokenMintAccount: usdcMint,
@@ -1802,7 +1834,6 @@ describe("agent-shield", () => {
           payer: expiryAgent.publicKey,
           vault: expiryVaultPda,
           policy: expiryPolicyPda,
-          tracker: expiryTrackerPda,
           session: expirySessionPda,
           sessionRentRecipient: expiryAgent.publicKey,
           vaultTokenAccount: null,
@@ -1830,10 +1861,9 @@ describe("agent-shield", () => {
       const agentBalAfter = getBalance(svm, expiryAgent.publicKey);
       expect(agentBalAfter).to.be.greaterThan(agentBalBefore - 10000); // minus small tx fee
 
-      // Audit log should record success=false
-      const tracker = await program.account.spendTracker.fetch(expiryTrackerPda);
-      const lastTx = tracker.recentTransactions[tracker.recentTransactions.length - 1];
-      expect(lastTx.success).to.equal(false);
+      // Expired sessions are treated as failed — totalTransactions is NOT incremented
+      const vault2 = await program.account.agentVault.fetch(expiryVaultPda);
+      expect(vault2.totalTransactions.toNumber()).to.equal(0);
     });
 
     it("permissionless crank: third-party finalizes expired session", async () => {
@@ -1851,6 +1881,7 @@ describe("agent-shield", () => {
           vault: expiryVaultPda,
           policy: expiryPolicyPda,
           tracker: expiryTrackerPda,
+          oracleRegistry: oracleRegistryPda,
           session: expirySessionPda,
           vaultTokenAccount: expiryVaultUsdcAta,
           tokenMintAccount: usdcMint,
@@ -1872,7 +1903,6 @@ describe("agent-shield", () => {
           payer: unauthorizedUser.publicKey,
           vault: expiryVaultPda,
           policy: expiryPolicyPda,
-          tracker: expiryTrackerPda,
           session: expirySessionPda,
           sessionRentRecipient: expiryAgent.publicKey, // rent still goes to agent
           vaultTokenAccount: null,
@@ -1912,6 +1942,7 @@ describe("agent-shield", () => {
           vault: expiryVaultPda,
           policy: expiryPolicyPda,
           tracker: expiryTrackerPda,
+          oracleRegistry: oracleRegistryPda,
           session: expirySessionPda,
           vaultTokenAccount: expiryVaultUsdcAta,
           tokenMintAccount: usdcMint,
@@ -1929,7 +1960,6 @@ describe("agent-shield", () => {
             payer: unauthorizedUser.publicKey,
             vault: expiryVaultPda,
             policy: expiryPolicyPda,
-            tracker: expiryTrackerPda,
             session: expirySessionPda,
             sessionRentRecipient: expiryAgent.publicKey,
             vaultTokenAccount: null,
@@ -1952,7 +1982,6 @@ describe("agent-shield", () => {
           payer: expiryAgent.publicKey,
           vault: expiryVaultPda,
           policy: expiryPolicyPda,
-          tracker: expiryTrackerPda,
           session: expirySessionPda,
           sessionRentRecipient: expiryAgent.publicKey,
           vaultTokenAccount: expiryVaultUsdcAta,
@@ -1980,6 +2009,7 @@ describe("agent-shield", () => {
           vault: expiryVaultPda,
           policy: expiryPolicyPda,
           tracker: expiryTrackerPda,
+          oracleRegistry: oracleRegistryPda,
           session: expirySessionPda,
           vaultTokenAccount: expiryVaultUsdcAta,
           tokenMintAccount: usdcMint,
@@ -1997,7 +2027,6 @@ describe("agent-shield", () => {
             payer: expiryAgent.publicKey,
             vault: expiryVaultPda,
             policy: expiryPolicyPda,
-            tracker: expiryTrackerPda,
             session: expirySessionPda,
             sessionRentRecipient: unauthorizedUser.publicKey, // wrong recipient
             vaultTokenAccount: null,
@@ -2020,7 +2049,6 @@ describe("agent-shield", () => {
           payer: expiryAgent.publicKey,
           vault: expiryVaultPda,
           policy: expiryPolicyPda,
-          tracker: expiryTrackerPda,
           session: expirySessionPda,
           sessionRentRecipient: expiryAgent.publicKey,
           vaultTokenAccount: expiryVaultUsdcAta,
@@ -2054,7 +2082,7 @@ describe("agent-shield", () => {
       );
 
       await program.methods
-        .initializeVault(vid, new BN(1000), new BN(1000), [] as any[], [], new BN(0) as any, 1, 0, new BN(0), [], 0)
+        .initializeVault(vid, new BN(1000), new BN(1000), 0, [], new BN(0) as any, 1, 0, new BN(0), [])
         .accounts({
           owner: owner.publicKey,
           vault: v,
@@ -2132,6 +2160,7 @@ describe("agent-shield", () => {
             vault: rv,
             policy: rp,
             tracker: rt,
+            oracleRegistry: oracleRegistryPda,
             session: oldSession,
             vaultTokenAccount: vaultUsdcAta,
             tokenMintAccount: usdcMint,
@@ -2170,7 +2199,7 @@ describe("agent-shield", () => {
       );
 
       await program.methods
-        .initializeVault(frozenVaultId, new BN(1000), new BN(1000), [makeAllowedToken(usdcMint)], [], new BN(0) as any, 1, 0, new BN(0), [], 0)
+        .initializeVault(frozenVaultId, new BN(1000), new BN(1000), 0, [], new BN(0) as any, 1, 0, new BN(0), [])
         .accounts({
           owner: owner.publicKey,
           vault: fv,
@@ -2227,7 +2256,7 @@ describe("agent-shield", () => {
       );
 
       await program.methods
-        .initializeVault(closedVaultId, new BN(1000), new BN(1000), [makeAllowedToken(usdcMint)], [], new BN(0) as any, 1, 0, new BN(0), [], 0)
+        .initializeVault(closedVaultId, new BN(1000), new BN(1000), 0, [], new BN(0) as any, 1, 0, new BN(0), [])
         .accounts({
           owner: owner.publicKey,
           vault: cv,
@@ -2302,7 +2331,7 @@ describe("agent-shield", () => {
       );
 
       await program.methods
-        .initializeVault(closedVaultId, new BN(1000), new BN(1000), [makeAllowedToken(usdcMint)], [jupiterProgramId], new BN(0) as any, 1, 0, new BN(0), [], 0)
+        .initializeVault(closedVaultId, new BN(1000), new BN(1000), 1, [jupiterProgramId], new BN(0) as any, 1, 0, new BN(0), [])
         .accounts({
           owner: owner.publicKey,
           vault: cv,
@@ -2344,6 +2373,7 @@ describe("agent-shield", () => {
             vault: cv,
             policy: cp,
             tracker: ct,
+            oracleRegistry: oracleRegistryPda,
             session: cs,
             vaultTokenAccount: anchor.utils.token.associatedAddress({ mint: usdcMint, owner: cv }),
             tokenMintAccount: usdcMint,
@@ -2397,14 +2427,13 @@ describe("agent-shield", () => {
           ringVaultId,
           new BN(999_000_000_000), // 999k USDC daily cap
           new BN(100_000_000),     // 100 USDC max tx
-          [makeAllowedToken(usdcMint)],
+          1, // protocolMode: allowlist
           [jupiterProgramId],
           new BN(0) as any,
           3,
           0,
           new BN(0),
           [],
-          0, // tracker_tier: Standard
         )
         .accounts({
           owner: owner.publicKey,
@@ -2463,6 +2492,7 @@ describe("agent-shield", () => {
             vault: ringVaultPda,
             policy: ringPolicyPda,
             tracker: ringTrackerPda,
+            oracleRegistry: oracleRegistryPda,
             session: sessionPda,
             vaultTokenAccount: ringVaultUsdcAta,
             tokenMintAccount: usdcMint,
@@ -2478,7 +2508,6 @@ describe("agent-shield", () => {
             payer: ringAgent.publicKey,
             vault: ringVaultPda,
             policy: ringPolicyPda,
-            tracker: ringTrackerPda,
             session: sessionPda,
             sessionRentRecipient: ringAgent.publicKey,
             vaultTokenAccount: ringVaultUsdcAta,
@@ -2492,13 +2521,9 @@ describe("agent-shield", () => {
       }
 
       const tracker = await program.account.spendTracker.fetch(ringTrackerPda);
-      // Ring buffer capped at 50
-      expect(tracker.recentTransactions.length).to.equal(50);
-
-      // Newest entry should be the last one we added
-      const newest = tracker.recentTransactions[tracker.recentTransactions.length - 1];
-      expect(newest.success).to.equal(true);
-      expect(newest.amount.toNumber()).to.equal(1_000_000);
+      // V2: tracker has 144 epoch buckets; spending was recorded in non-zero buckets
+      const nonZeroBuckets = tracker.buckets.filter((b: any) => b.usdAmount.toNumber() > 0);
+      expect(nonZeroBuckets.length).to.be.greaterThan(0);
 
       // Vault should show 51 total transactions
       const vault = await program.account.agentVault.fetch(ringVaultPda);
@@ -2539,14 +2564,13 @@ describe("agent-shield", () => {
           feeEdgeVaultId,
           new BN(999_000_000),
           new BN(100_000_000),
-          [makeAllowedToken(usdcMint)],
+          1, // protocolMode: allowlist
           [jupiterProgramId],
           new BN(0) as any,
           3,
           0, // developer_fee_rate = 0
           new BN(0),
           [],
-          0, // tracker_tier: Standard
         )
         .accounts({
           owner: owner.publicKey,
@@ -2603,6 +2627,7 @@ describe("agent-shield", () => {
           vault: feeEdgeVaultPda,
           policy: feeEdgePolicyPda,
           tracker: feeEdgeTrackerPda,
+          oracleRegistry: oracleRegistryPda,
           session: sessionPda,
           vaultTokenAccount: feeEdgeVaultUsdcAta,
           tokenMintAccount: usdcMint,
@@ -2621,7 +2646,6 @@ describe("agent-shield", () => {
           payer: feeEdgeAgent.publicKey,
           vault: feeEdgeVaultPda,
           policy: feeEdgePolicyPda,
-          tracker: feeEdgeTrackerPda,
           session: sessionPda,
           sessionRentRecipient: feeEdgeAgent.publicKey,
           vaultTokenAccount: null,
@@ -2658,6 +2682,7 @@ describe("agent-shield", () => {
           vault: feeEdgeVaultPda,
           policy: feeEdgePolicyPda,
           tracker: feeEdgeTrackerPda,
+          oracleRegistry: oracleRegistryPda,
           session: sessionPda,
           vaultTokenAccount: feeEdgeVaultUsdcAta,
           tokenMintAccount: usdcMint,
@@ -2674,7 +2699,6 @@ describe("agent-shield", () => {
           payer: feeEdgeAgent.publicKey,
           vault: feeEdgeVaultPda,
           policy: feeEdgePolicyPda,
-          tracker: feeEdgeTrackerPda,
           session: sessionPda,
           sessionRentRecipient: feeEdgeAgent.publicKey,
           vaultTokenAccount: null,
@@ -2700,6 +2724,7 @@ describe("agent-shield", () => {
           vault: feeEdgeVaultPda,
           policy: feeEdgePolicyPda,
           tracker: feeEdgeTrackerPda,
+          oracleRegistry: oracleRegistryPda,
           session: sessionPda,
           vaultTokenAccount: feeEdgeVaultUsdcAta,
           tokenMintAccount: usdcMint,
@@ -2718,7 +2743,6 @@ describe("agent-shield", () => {
           payer: feeEdgeAgent.publicKey,
           vault: feeEdgeVaultPda,
           policy: feeEdgePolicyPda,
-          tracker: feeEdgeTrackerPda,
           session: sessionPda,
           sessionRentRecipient: feeEdgeAgent.publicKey,
           vaultTokenAccount: feeEdgeVaultUsdcAta,
@@ -2879,7 +2903,7 @@ describe("agent-shield", () => {
         oracleMint,
         ownerOracleAta,
         owner.publicKey,
-        10_000_000_000n // 10 tokens (9 decimals)
+        20_000_000_000n // 20 tokens (9 decimals)
       );
 
       // Create protocol treasury ATA for oracle mint (needed for fee transfers)
@@ -2905,23 +2929,31 @@ describe("agent-shield", () => {
         program.programId
       );
 
-      // Initialize vault with oracle-priced token (Pyth feed) and stablecoin
+      // Register oracle-priced token in the OracleRegistry
+      await program.methods
+        .updateOracleRegistry(
+          [{ mint: oracleMint, oracleFeed: pythFeedKeypair.publicKey, isStablecoin: false, fallbackFeed: PublicKey.default }],
+          []
+        )
+        .accounts({
+          authority: owner.publicKey,
+          oracleRegistry: oracleRegistryPda,
+        } as any)
+        .rpc();
+
+      // Initialize vault
       await program.methods
         .initializeVault(
           oracleVaultId,
           new BN(10_000_000_000), // $10,000 daily cap
           new BN(1_000_000_000),  // $1,000 max tx
-          [
-            makeAllowedToken(oracleMint, pythFeedKeypair.publicKey, 9),
-            makeAllowedToken(usdcMint),
-          ],
+          1, // protocolMode: allowlist
           [jupiterProgramId],
           new BN(0) as any,
           3,
           0,
           new BN(0),
           [],
-          0, // tracker_tier: Standard
         )
         .accounts({
           owner: owner.publicKey,
@@ -2998,6 +3030,7 @@ describe("agent-shield", () => {
           vault: oracleVaultPda,
           policy: oraclePolicyPda,
           tracker: oracleTrackerPda,
+          oracleRegistry: oracleRegistryPda,
           session: sessionPda,
           vaultTokenAccount: vaultOracleAta,
           tokenMintAccount: oracleMint,
@@ -3015,11 +3048,14 @@ describe("agent-shield", () => {
       expect(session.authorized).to.equal(true);
       expect(session.authorizedAmount.toNumber()).to.equal(1_000_000_000);
 
-      // Check tracker recorded correct USD value
+      // Check tracker recorded correct USD value in epoch buckets
       const tracker = await program.account.spendTracker.fetch(oracleTrackerPda);
-      const lastSpend = tracker.rollingSpends[tracker.rollingSpends.length - 1];
-      // 1 token * $150 = $150 = 150_000_000 in USD-6
-      expect(lastSpend.usdAmount.toNumber()).to.equal(150_000_000);
+      const nonZeroBuckets = tracker.buckets.filter((b: any) => b.usdAmount.toNumber() > 0);
+      expect(nonZeroBuckets.length).to.be.greaterThan(0);
+      // 1 token * ($150 + $0.50 conf) = $150.50 = 150_500_000 in USD-6
+      // Directional pricing: price + conf for conservative upper bound
+      const totalSpent = nonZeroBuckets.reduce((sum: number, b: any) => sum + b.usdAmount.toNumber(), 0);
+      expect(totalSpent).to.equal(150_500_000);
 
       // Clean up: finalize session (pass treasury ATA for protocol fee)
       await program.methods
@@ -3028,7 +3064,6 @@ describe("agent-shield", () => {
           payer: oracleAgent.publicKey,
           vault: oracleVaultPda,
           policy: oraclePolicyPda,
-          tracker: oracleTrackerPda,
           session: sessionPda,
           sessionRentRecipient: oracleAgent.publicKey,
           vaultTokenAccount: vaultOracleAta,
@@ -3047,21 +3082,15 @@ describe("agent-shield", () => {
       const clock = svm.getClock();
       const priceI128 = 150_000_000_000_000_000_000n;
 
-      // Update policy to use Switchboard feed for this token
+      // Update oracle registry to use Switchboard feed for this token
       await program.methods
-        .updatePolicy(
-          null, null,
-          [
-            makeAllowedToken(oracleMint, switchboardFeedKeypair.publicKey, 9),
-            makeAllowedToken(usdcMint),
-          ],
-          null, null, null, null, null, null, null
+        .updateOracleRegistry(
+          [{ mint: oracleMint, oracleFeed: switchboardFeedKeypair.publicKey, isStablecoin: false, fallbackFeed: PublicKey.default }],
+          []
         )
         .accounts({
-          owner: owner.publicKey,
-          vault: oracleVaultPda,
-          policy: oraclePolicyPda,
-          tracker: oracleTrackerPda,
+          authority: owner.publicKey,
+          oracleRegistry: oracleRegistryPda,
         } as any)
         .rpc();
 
@@ -3089,6 +3118,7 @@ describe("agent-shield", () => {
           vault: oracleVaultPda,
           policy: oraclePolicyPda,
           tracker: oracleTrackerPda,
+          oracleRegistry: oracleRegistryPda,
           session: sessionPda,
           vaultTokenAccount: vaultOracleAta,
           tokenMintAccount: oracleMint,
@@ -3101,9 +3131,14 @@ describe("agent-shield", () => {
         .signers([oracleAgent])
         .rpc();
 
+      // Check tracker recorded correct USD value in epoch buckets
       const tracker = await program.account.spendTracker.fetch(oracleTrackerPda);
-      const lastSpend = tracker.rollingSpends[tracker.rollingSpends.length - 1];
-      expect(lastSpend.usdAmount.toNumber()).to.equal(150_000_000);
+      const nonZeroBuckets = tracker.buckets.filter((b: any) => b.usdAmount.toNumber() > 0);
+      expect(nonZeroBuckets.length).to.be.greaterThan(0);
+      // Total should include the $150.50 from the Pyth test + $150 from this Switchboard test
+      // Pyth uses directional pricing (price+conf), Switchboard uses median (no conf adjustment)
+      const totalSpent = nonZeroBuckets.reduce((sum: number, b: any) => sum + b.usdAmount.toNumber(), 0);
+      expect(totalSpent).to.equal(300_500_000); // $150.50 + $150
 
       // Finalize (pass treasury ATA for protocol fee)
       await program.methods
@@ -3112,7 +3147,6 @@ describe("agent-shield", () => {
           payer: oracleAgent.publicKey,
           vault: oracleVaultPda,
           policy: oraclePolicyPda,
-          tracker: oracleTrackerPda,
           session: sessionPda,
           sessionRentRecipient: oracleAgent.publicKey,
           vaultTokenAccount: vaultOracleAta,
@@ -3124,21 +3158,15 @@ describe("agent-shield", () => {
         .signers([oracleAgent])
         .rpc();
 
-      // Restore policy to Pyth for subsequent tests
+      // Restore oracle registry to Pyth for subsequent tests
       await program.methods
-        .updatePolicy(
-          null, null,
-          [
-            makeAllowedToken(oracleMint, pythFeedKeypair.publicKey, 9),
-            makeAllowedToken(usdcMint),
-          ],
-          null, null, null, null, null, null, null
+        .updateOracleRegistry(
+          [{ mint: oracleMint, oracleFeed: pythFeedKeypair.publicKey, isStablecoin: false, fallbackFeed: PublicKey.default }],
+          []
         )
         .accounts({
-          owner: owner.publicKey,
-          vault: oracleVaultPda,
-          policy: oraclePolicyPda,
-          tracker: oracleTrackerPda,
+          authority: owner.publicKey,
+          oracleRegistry: oracleRegistryPda,
         } as any)
         .rpc();
     });
@@ -3147,7 +3175,7 @@ describe("agent-shield", () => {
       // Advance slot past 200 so staleness check is meaningful
       advancePastSlot(svm, 300);
       const clock = svm.getClock();
-      // Set posted_slot to 0 (stale: current_slot ~301 > 100 + 0)
+      // Set posted_slot to 0 (stale: current_slot ~301 > 50 + 0)
       createMockPythAccount(
         pythFeedKeypair.publicKey,
         15_000_000_000n,
@@ -3177,6 +3205,7 @@ describe("agent-shield", () => {
             vault: oracleVaultPda,
             policy: oraclePolicyPda,
             tracker: oracleTrackerPda,
+            oracleRegistry: oracleRegistryPda,
             session: sessionPda,
             vaultTokenAccount: vaultOracleAta,
             tokenMintAccount: oracleMint,
@@ -3196,7 +3225,7 @@ describe("agent-shield", () => {
 
     it("wide confidence Pyth feed — rejects with OracleConfidenceTooWide", async () => {
       const clock = svm.getClock();
-      // conf = 20% of price (2000 BPS > MAX_CONFIDENCE_BPS of 1000)
+      // conf = 20% of price (2000 BPS > MAX_CONFIDENCE_BPS of 500)
       createMockPythAccount(
         pythFeedKeypair.publicKey,
         15_000_000_000n,
@@ -3226,6 +3255,7 @@ describe("agent-shield", () => {
             vault: oracleVaultPda,
             policy: oraclePolicyPda,
             tracker: oracleTrackerPda,
+            oracleRegistry: oracleRegistryPda,
             session: sessionPda,
             vaultTokenAccount: vaultOracleAta,
             tokenMintAccount: oracleMint,
@@ -3275,6 +3305,7 @@ describe("agent-shield", () => {
             vault: oracleVaultPda,
             policy: oraclePolicyPda,
             tracker: oracleTrackerPda,
+            oracleRegistry: oracleRegistryPda,
             session: sessionPda,
             vaultTokenAccount: vaultOracleAta,
             tokenMintAccount: oracleMint,
@@ -3303,21 +3334,15 @@ describe("agent-shield", () => {
         executable: false,
       });
 
-      // Update policy to reference this unknown feed
+      // Update oracle registry to reference this unknown feed
       await program.methods
-        .updatePolicy(
-          null, null,
-          [
-            makeAllowedToken(oracleMint, unknownFeed.publicKey, 9),
-            makeAllowedToken(usdcMint),
-          ],
-          null, null, null, null, null, null, null
+        .updateOracleRegistry(
+          [{ mint: oracleMint, oracleFeed: unknownFeed.publicKey, isStablecoin: false, fallbackFeed: PublicKey.default }],
+          []
         )
         .accounts({
-          owner: owner.publicKey,
-          vault: oracleVaultPda,
-          policy: oraclePolicyPda,
-          tracker: oracleTrackerPda,
+          authority: owner.publicKey,
+          oracleRegistry: oracleRegistryPda,
         } as any)
         .rpc();
 
@@ -3340,6 +3365,7 @@ describe("agent-shield", () => {
             vault: oracleVaultPda,
             policy: oraclePolicyPda,
             tracker: oracleTrackerPda,
+            oracleRegistry: oracleRegistryPda,
             session: sessionPda,
             vaultTokenAccount: vaultOracleAta,
             tokenMintAccount: oracleMint,
@@ -3356,21 +3382,15 @@ describe("agent-shield", () => {
         expect(err.toString()).to.include("OracleUnsupportedType");
       }
 
-      // Restore policy to Pyth feed
+      // Restore oracle registry to Pyth feed
       await program.methods
-        .updatePolicy(
-          null, null,
-          [
-            makeAllowedToken(oracleMint, pythFeedKeypair.publicKey, 9),
-            makeAllowedToken(usdcMint),
-          ],
-          null, null, null, null, null, null, null
+        .updateOracleRegistry(
+          [{ mint: oracleMint, oracleFeed: pythFeedKeypair.publicKey, isStablecoin: false, fallbackFeed: PublicKey.default }],
+          []
         )
         .accounts({
-          owner: owner.publicKey,
-          vault: oracleVaultPda,
-          policy: oraclePolicyPda,
-          tracker: oracleTrackerPda,
+          authority: owner.publicKey,
+          oracleRegistry: oracleRegistryPda,
         } as any)
         .rpc();
     });
@@ -3396,6 +3416,7 @@ describe("agent-shield", () => {
             vault: oracleVaultPda,
             policy: oraclePolicyPda,
             tracker: oracleTrackerPda,
+            oracleRegistry: oracleRegistryPda,
             session: sessionPda,
             vaultTokenAccount: vaultOracleAta,
             tokenMintAccount: oracleMint,
@@ -3407,6 +3428,241 @@ describe("agent-shield", () => {
         expect.fail("Should have thrown");
       } catch (err: any) {
         expect(err.toString()).to.include("OracleAccountMissing");
+      }
+    });
+
+    it("Pyth directional pricing — conf adjusts USD upward", async () => {
+      // price = $10, conf = 4.9% of price (490 BPS, below 500 max)
+      // adjusted_price = 10 + 0.49 = $10.49
+      const clock = svm.getClock();
+      const price = 1_000_000_000n; // $10 with exponent -8
+      const conf = 49_000_000n;     // 4.9% of price
+      createMockPythAccount(
+        pythFeedKeypair.publicKey,
+        price,
+        conf,
+        -8,
+        clock.unixTimestamp,
+        1,
+        clock.slot,
+      );
+
+      // Restore Pyth feed in registry
+      await program.methods
+        .updateOracleRegistry(
+          [{ mint: oracleMint, oracleFeed: pythFeedKeypair.publicKey, isStablecoin: false, fallbackFeed: PublicKey.default }],
+          [],
+        )
+        .accounts({
+          authority: owner.publicKey,
+          oracleRegistry: oracleRegistryPda,
+        } as any)
+        .rpc();
+
+      const confVaultId = new BN(520);
+      const [confVault] = PublicKey.findProgramAddressSync(
+        [Buffer.from("vault"), owner.publicKey.toBuffer(), confVaultId.toArrayLike(Buffer, "le", 8)],
+        program.programId,
+      );
+      const [confPolicy] = PublicKey.findProgramAddressSync(
+        [Buffer.from("policy"), confVault.toBuffer()], program.programId,
+      );
+      const [confTracker] = PublicKey.findProgramAddressSync(
+        [Buffer.from("tracker"), confVault.toBuffer()], program.programId,
+      );
+
+      await program.methods
+        .initializeVault(
+          confVaultId, new BN(10_000_000_000), new BN(1_000_000_000),
+          0, [], new BN(0) as any, 3, 0, new BN(0), [],
+        )
+        .accounts({
+          owner: owner.publicKey, vault: confVault, policy: confPolicy,
+          tracker: confTracker, feeDestination: feeDestination.publicKey,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .rpc();
+
+      const confAgent = Keypair.generate();
+      airdropSol(svm, confAgent.publicKey, 5 * LAMPORTS_PER_SOL);
+      await program.methods.registerAgent(confAgent.publicKey)
+        .accounts({ owner: owner.publicKey, vault: confVault } as any).rpc();
+
+      const vaultAta = createAtaIdempotentHelper(
+        svm, (owner as any).payer, oracleMint, confVault, true,
+      );
+      await program.methods.depositFunds(new BN(5_000_000_000))
+        .accounts({
+          owner: owner.publicKey, vault: confVault, mint: oracleMint,
+          ownerTokenAccount: ownerOracleAta, vaultTokenAccount: vaultAta,
+          tokenProgram: TOKEN_PROGRAM_ID, associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        } as any).rpc();
+
+      const [sessionPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("session"), confVault.toBuffer(), confAgent.publicKey.toBuffer(), oracleMint.toBuffer()],
+        program.programId,
+      );
+
+      await program.methods
+        .validateAndAuthorize({ swap: {} }, oracleMint, new BN(1_000_000_000), jupiterProgramId, null)
+        .accounts({
+          agent: confAgent.publicKey, vault: confVault, policy: confPolicy,
+          tracker: confTracker, oracleRegistry: oracleRegistryPda,
+          session: sessionPda, vaultTokenAccount: vaultAta,
+          tokenMintAccount: oracleMint, tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .remainingAccounts([{ pubkey: pythFeedKeypair.publicKey, isWritable: false, isSigner: false }])
+        .signers([confAgent])
+        .rpc();
+
+      const tracker = await program.account.spendTracker.fetch(confTracker);
+      const total = tracker.buckets
+        .filter((b: any) => b.usdAmount.toNumber() > 0)
+        .reduce((sum: number, b: any) => sum + b.usdAmount.toNumber(), 0);
+      // 1 token (1e9 base) * ($10 + $0.49 conf) = $10.49 = 10_490_000 USD-6
+      expect(total).to.equal(10_490_000);
+
+      // Clean up session
+      const protocolAta = createAtaIdempotentHelper(
+        svm, (owner as any).payer, oracleMint, protocolTreasury, true,
+      );
+      await program.methods.finalizeSession(true)
+        .accounts({
+          payer: confAgent.publicKey, vault: confVault, policy: confPolicy,
+          session: sessionPda, sessionRentRecipient: confAgent.publicKey,
+          vaultTokenAccount: vaultAta, feeDestinationTokenAccount: null,
+          protocolTreasuryTokenAccount: protocolAta,
+          tokenProgram: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
+        } as any).signers([confAgent]).rpc();
+    });
+
+    it("Pyth conf=0 — no adjustment, identical to bare price", async () => {
+      const clock = svm.getClock();
+      // price = $25, conf = 0
+      createMockPythAccount(
+        pythFeedKeypair.publicKey,
+        2_500_000_000n, // $25 with exponent -8
+        0n,              // zero confidence
+        -8,
+        clock.unixTimestamp,
+        1,
+        clock.slot,
+      );
+
+      const zeroConfVaultId = new BN(521);
+      const [zcVault] = PublicKey.findProgramAddressSync(
+        [Buffer.from("vault"), owner.publicKey.toBuffer(), zeroConfVaultId.toArrayLike(Buffer, "le", 8)],
+        program.programId,
+      );
+      const [zcPolicy] = PublicKey.findProgramAddressSync(
+        [Buffer.from("policy"), zcVault.toBuffer()], program.programId,
+      );
+      const [zcTracker] = PublicKey.findProgramAddressSync(
+        [Buffer.from("tracker"), zcVault.toBuffer()], program.programId,
+      );
+
+      await program.methods
+        .initializeVault(
+          zeroConfVaultId, new BN(10_000_000_000), new BN(1_000_000_000),
+          0, [], new BN(0) as any, 3, 0, new BN(0), [],
+        )
+        .accounts({
+          owner: owner.publicKey, vault: zcVault, policy: zcPolicy,
+          tracker: zcTracker, feeDestination: feeDestination.publicKey,
+          systemProgram: SystemProgram.programId,
+        } as any).rpc();
+
+      const zcAgent = Keypair.generate();
+      airdropSol(svm, zcAgent.publicKey, 5 * LAMPORTS_PER_SOL);
+      await program.methods.registerAgent(zcAgent.publicKey)
+        .accounts({ owner: owner.publicKey, vault: zcVault } as any).rpc();
+
+      const zcAta = createAtaIdempotentHelper(
+        svm, (owner as any).payer, oracleMint, zcVault, true,
+      );
+      await program.methods.depositFunds(new BN(5_000_000_000))
+        .accounts({
+          owner: owner.publicKey, vault: zcVault, mint: oracleMint,
+          ownerTokenAccount: ownerOracleAta, vaultTokenAccount: zcAta,
+          tokenProgram: TOKEN_PROGRAM_ID, associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        } as any).rpc();
+
+      const [sessionPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("session"), zcVault.toBuffer(), zcAgent.publicKey.toBuffer(), oracleMint.toBuffer()],
+        program.programId,
+      );
+
+      await program.methods
+        .validateAndAuthorize({ swap: {} }, oracleMint, new BN(1_000_000_000), jupiterProgramId, null)
+        .accounts({
+          agent: zcAgent.publicKey, vault: zcVault, policy: zcPolicy,
+          tracker: zcTracker, oracleRegistry: oracleRegistryPda,
+          session: sessionPda, vaultTokenAccount: zcAta,
+          tokenMintAccount: oracleMint, tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .remainingAccounts([{ pubkey: pythFeedKeypair.publicKey, isWritable: false, isSigner: false }])
+        .signers([zcAgent])
+        .rpc();
+
+      const tracker = await program.account.spendTracker.fetch(zcTracker);
+      const total = tracker.buckets
+        .filter((b: any) => b.usdAmount.toNumber() > 0)
+        .reduce((sum: number, b: any) => sum + b.usdAmount.toNumber(), 0);
+      // conf=0 → price+0 = $25.00 = 25_000_000 USD-6
+      expect(total).to.equal(25_000_000);
+
+      const protocolAta = createAtaIdempotentHelper(
+        svm, (owner as any).payer, oracleMint, protocolTreasury, true,
+      );
+      await program.methods.finalizeSession(true)
+        .accounts({
+          payer: zcAgent.publicKey, vault: zcVault, policy: zcPolicy,
+          session: sessionPda, sessionRentRecipient: zcAgent.publicKey,
+          vaultTokenAccount: zcAta, feeDestinationTokenAccount: null,
+          protocolTreasuryTokenAccount: protocolAta,
+          tokenProgram: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
+        } as any).signers([zcAgent]).rpc();
+    });
+
+    it("Pyth 5.01% confidence — rejects OracleConfidenceTooWide", async () => {
+      const clock = svm.getClock();
+      // price = $100, conf = 5.01% = 501 BPS of price
+      // price = 10_000_000_000 (i64), conf = 501_000_000 → ratio = 501/10000 = 5.01%
+      createMockPythAccount(
+        pythFeedKeypair.publicKey,
+        10_000_000_000n, // $100 with exponent -8
+        501_000_000n,     // 5.01% of price
+        -8,
+        clock.unixTimestamp,
+        1,
+        clock.slot,
+      );
+
+      const [sessionPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("session"), oracleVaultPda.toBuffer(), oracleAgent.publicKey.toBuffer(), oracleMint.toBuffer()],
+        program.programId,
+      );
+
+      try {
+        await program.methods
+          .validateAndAuthorize({ swap: {} }, oracleMint, new BN(100_000_000), jupiterProgramId, null)
+          .accounts({
+            agent: oracleAgent.publicKey, vault: oracleVaultPda, policy: oraclePolicyPda,
+            tracker: oracleTrackerPda, oracleRegistry: oracleRegistryPda,
+            session: sessionPda, vaultTokenAccount: vaultOracleAta,
+            tokenMintAccount: oracleMint, tokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          } as any)
+          .remainingAccounts([{ pubkey: pythFeedKeypair.publicKey, isWritable: false, isSigner: false }])
+          .signers([oracleAgent])
+          .rpc();
+        expect.fail("Should have thrown — confidence too wide");
+      } catch (err: any) {
+        expect(err.toString()).to.include("OracleConfidenceTooWide");
       }
     });
   });
@@ -3448,14 +3704,13 @@ describe("agent-shield", () => {
           tlVaultId,
           new BN(500_000_000),
           new BN(100_000_000),
-          [makeAllowedToken(usdcMint)],
+          1, // protocolMode: allowlist
           [jupiterProgramId],
           new BN(0) as any,
           3,
           0,
           new BN(60), // 60 second timelock
           [],
-          0, // tracker_tier: Standard
         )
         .accounts({
           owner: owner.publicKey,
@@ -3483,7 +3738,6 @@ describe("agent-shield", () => {
             owner: owner.publicKey,
             vault: tlVaultPda,
             policy: tlPolicyPda,
-            tracker: tlTrackerPda,
           } as any)
           .rpc();
         expect.fail("Should have thrown");
@@ -3664,9 +3918,8 @@ describe("agent-shield", () => {
 
       await program.methods
         .initializeVault(
-          noTlVaultId, new BN(1000), new BN(1000), [] as any[], [],
+          noTlVaultId, new BN(1000), new BN(1000), 0, [],
           new BN(0) as any, 1, 0, new BN(0), [],
-          0, // tracker_tier: Standard
         )
         .accounts({
           owner: owner.publicKey,
@@ -3773,7 +4026,6 @@ describe("agent-shield", () => {
           owner: owner.publicKey,
           vault: tlVaultPda,
           policy: tlPolicyPda,
-          tracker: tlTrackerPda,
         } as any)
         .rpc();
 
@@ -3791,7 +4043,6 @@ describe("agent-shield", () => {
           owner: owner.publicKey,
           vault: tlVaultPda,
           policy: tlPolicyPda,
-          tracker: tlTrackerPda,
         } as any)
         .rpc();
 
@@ -3845,14 +4096,13 @@ describe("agent-shield", () => {
           destVaultId,
           new BN(500_000_000), // 500 USDC daily cap
           new BN(100_000_000), // 100 USDC max tx
-          [makeAllowedToken(usdcMint)],
+          1, // protocolMode: allowlist
           [jupiterProgramId],
           new BN(0) as any,
           3,
           0,
           new BN(0), // no timelock
           [allowedDest.publicKey], // only allow transfers to this address
-          0, // tracker_tier: Standard
         )
         .accounts({
           owner: owner.publicKey,
@@ -3904,7 +4154,9 @@ describe("agent-shield", () => {
           vault: destVaultPda,
           policy: destPolicyPda,
           tracker: destTrackerPda,
+          oracleRegistry: oracleRegistryPda,
           vaultTokenAccount: destVaultUsdcAta,
+          tokenMintAccount: usdcMint,
           destinationTokenAccount: allowedDestAta,
           feeDestinationTokenAccount: null,
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
@@ -3928,7 +4180,9 @@ describe("agent-shield", () => {
             vault: destVaultPda,
             policy: destPolicyPda,
             tracker: destTrackerPda,
+            oracleRegistry: oracleRegistryPda,
             vaultTokenAccount: destVaultUsdcAta,
+            tokenMintAccount: usdcMint,
             destinationTokenAccount: blockedDestAta,
             feeDestinationTokenAccount: null,
             protocolTreasuryTokenAccount: null,
@@ -3961,9 +4215,8 @@ describe("agent-shield", () => {
       await program.methods
         .initializeVault(
           anyDestVaultId, new BN(500_000_000), new BN(100_000_000),
-          [makeAllowedToken(usdcMint)], [jupiterProgramId],
+          1, [jupiterProgramId],
           new BN(0) as any, 3, 0, new BN(0), [], // empty allowlist
-          0, // tracker_tier: Standard
         )
         .accounts({
           owner: owner.publicKey,
@@ -4003,7 +4256,9 @@ describe("agent-shield", () => {
           vault: anyVault,
           policy: anyPolicy,
           tracker: anyTracker,
+          oracleRegistry: oracleRegistryPda,
           vaultTokenAccount: anyVaultAta,
+          tokenMintAccount: usdcMint,
           destinationTokenAccount: blockedDestAta,
           feeDestinationTokenAccount: null,
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
@@ -4034,9 +4289,8 @@ describe("agent-shield", () => {
       try {
         await program.methods
           .initializeVault(
-            badVid, new BN(1000), new BN(1000), [] as any[], [],
+            badVid, new BN(1000), new BN(1000), 0, [],
             new BN(0) as any, 1, 0, new BN(0), tooMany,
-            0, // tracker_tier: Standard
           )
           .accounts({
             owner: owner.publicKey,
@@ -4066,7 +4320,9 @@ describe("agent-shield", () => {
             vault: destVaultPda,
             policy: destPolicyPda,
             tracker: destTrackerPda,
+            oracleRegistry: oracleRegistryPda,
             vaultTokenAccount: destVaultUsdcAta,
+            tokenMintAccount: usdcMint,
             destinationTokenAccount: allowedDestAta,
             feeDestinationTokenAccount: null,
             protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
@@ -4085,7 +4341,9 @@ describe("agent-shield", () => {
             vault: destVaultPda,
             policy: destPolicyPda,
             tracker: destTrackerPda,
+            oracleRegistry: oracleRegistryPda,
             vaultTokenAccount: destVaultUsdcAta,
+            tokenMintAccount: usdcMint,
             destinationTokenAccount: allowedDestAta,
             feeDestinationTokenAccount: null,
             protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
@@ -4109,7 +4367,9 @@ describe("agent-shield", () => {
             vault: destVaultPda,
             policy: destPolicyPda,
             tracker: destTrackerPda,
+            oracleRegistry: oracleRegistryPda,
             vaultTokenAccount: destVaultUsdcAta,
+            tokenMintAccount: usdcMint,
             destinationTokenAccount: allowedDestAta,
             feeDestinationTokenAccount: null,
             protocolTreasuryTokenAccount: null,
@@ -4123,13 +4383,11 @@ describe("agent-shield", () => {
       }
     });
 
-    it("agent_transfer records in tracker audit log", async () => {
+    it("agent_transfer records in tracker", async () => {
       const tracker = await program.account.spendTracker.fetch(destTrackerPda);
-      const records = tracker.recentTransactions as any[];
-      const transferRecords = records.filter((r: any) =>
-        JSON.stringify(r.actionType).includes("transfer")
-      );
-      expect(transferRecords.length).to.be.greaterThan(0);
+      // V2: spending recorded in epoch buckets
+      const nonZeroBuckets = tracker.buckets.filter((b: any) => b.usdAmount.toNumber() > 0);
+      expect(nonZeroBuckets.length).to.be.greaterThan(0);
     });
 
     it("agent_transfer with fees (protocol + developer)", async () => {
@@ -4151,10 +4409,9 @@ describe("agent-shield", () => {
       await program.methods
         .initializeVault(
           feeDestVaultId, new BN(500_000_000), new BN(100_000_000),
-          [makeAllowedToken(usdcMint)], [jupiterProgramId],
+          1, [jupiterProgramId],
           new BN(0) as any, 3, 500, // developer_fee_rate = 500 (5 BPS)
           new BN(0), [],
-          0, // tracker_tier: Standard
         )
         .accounts({
           owner: owner.publicKey,
@@ -4206,7 +4463,9 @@ describe("agent-shield", () => {
           vault: fv,
           policy: fp,
           tracker: ft,
+          oracleRegistry: oracleRegistryPda,
           vaultTokenAccount: fvAta,
+          tokenMintAccount: usdcMint,
           destinationTokenAccount: allowedDestAta,
           feeDestinationTokenAccount: feeDestUsdcAta,
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,

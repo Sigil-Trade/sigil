@@ -3,8 +3,8 @@ import { lookupError, formatError, ERROR_MAP } from "../src/errors";
 
 describe("errors", () => {
   describe("ERROR_MAP", () => {
-    it("has entries for error codes 6000–6039", () => {
-      for (let code = 6000; code <= 6039; code++) {
+    it("has entries for error codes 6000–6045", () => {
+      for (let code = 6000; code <= 6045; code++) {
         expect(ERROR_MAP[code], `Missing error code ${code}`).to.exist;
         expect(ERROR_MAP[code].code).to.equal(code);
         expect(ERROR_MAP[code].name).to.be.a("string");
@@ -13,8 +13,8 @@ describe("errors", () => {
       }
     });
 
-    it("has exactly 40 entries", () => {
-      expect(Object.keys(ERROR_MAP)).to.have.length(40);
+    it("has exactly 46 entries", () => {
+      expect(Object.keys(ERROR_MAP)).to.have.length(46);
     });
   });
 
@@ -32,8 +32,8 @@ describe("errors", () => {
       expect(info.suggestion).to.include("rolling window");
     });
 
-    it("returns Overflow for code 6027", () => {
-      const info = lookupError(6027);
+    it("returns Overflow for code 6025", () => {
+      const info = lookupError(6025);
       expect(info.name).to.equal("Overflow");
     });
 
@@ -48,7 +48,7 @@ describe("errors", () => {
     it("formats Anchor errors with code and suggestion", () => {
       const error = { code: 6003 };
       const msg = formatError(error);
-      expect(msg).to.include("TokenNotAllowed");
+      expect(msg).to.include("TokenNotRegistered");
       expect(msg).to.include("Suggestion:");
     });
 
@@ -94,12 +94,36 @@ describe("errors", () => {
     });
 
     it("includes suggestion for every Anchor error", () => {
-      for (let code = 6000; code <= 6039; code++) {
+      for (let code = 6000; code <= 6045; code++) {
         const msg = formatError({ code });
         expect(msg, `Code ${code} missing suggestion`).to.include(
           "Suggestion:",
         );
       }
+    });
+
+    it("formatError maps code 6042 to OracleRegistryFull", () => {
+      const msg = formatError({ code: 6042 });
+      expect(msg).to.include("OracleRegistryFull");
+      expect(msg).to.include("105");
+    });
+
+    it("formatError maps code 6044 to OraclePriceDivergence", () => {
+      const msg = formatError({ code: 6044 });
+      expect(msg).to.include("OraclePriceDivergence");
+      expect(msg).to.include("diverge");
+    });
+
+    it("formatError maps code 6045 to OracleBothFeedsFailed", () => {
+      const msg = formatError({ code: 6045 });
+      expect(msg).to.include("OracleBothFeedsFailed");
+      expect(msg).to.include("failed");
+    });
+
+    it("formatError maps code 6043 to UnauthorizedRegistryAdmin", () => {
+      const msg = formatError({ code: 6043 });
+      expect(msg).to.include("UnauthorizedRegistryAdmin");
+      expect(msg).to.include("authority");
     });
   });
 });

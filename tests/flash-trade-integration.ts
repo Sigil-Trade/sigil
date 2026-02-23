@@ -36,17 +36,6 @@ import {
   FailedTransactionMetadata,
 } from "./helpers/litesvm-setup";
 
-// Helper to build AllowedToken objects for the IDL
-function makeAllowedToken(
-  mint: PublicKey,
-  oracleFeed: PublicKey = PublicKey.default, // default = stablecoin
-  decimals: number = 6,
-  dailyCapBase: BN = new BN(0),
-  maxTxBase: BN = new BN(0),
-) {
-  return { mint, oracleFeed, decimals, dailyCapBase, maxTxBase };
-}
-
 /**
  * Flash Trade Integration Tests
  *
@@ -87,6 +76,7 @@ describe("flash-trade-integration", () => {
   let vaultPda: PublicKey;
   let policyPda: PublicKey;
   let trackerPda: PublicKey;
+  let oracleRegistryPda: PublicKey;
 
   /**
    * Create a mock DeFi instruction (no-op transfer to self).
@@ -145,6 +135,7 @@ describe("flash-trade-integration", () => {
         vault,
         policy,
         tracker,
+        oracleRegistry: oracleRegistryPda,
         session,
         vaultTokenAccount: effectiveVaultAta,
         tokenMintAccount: tokenMint,
@@ -161,7 +152,6 @@ describe("flash-trade-integration", () => {
         payer: agentKp.publicKey,
         vault,
         policy,
-        tracker,
         session,
         sessionRentRecipient: agentKp.publicKey,
         vaultTokenAccount: effectiveVaultAta,
@@ -208,6 +198,23 @@ describe("flash-trade-integration", () => {
       true
     );
 
+    // Derive oracle registry PDA and initialize it
+    [oracleRegistryPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("oracle_registry")],
+      program.programId
+    );
+
+    await program.methods
+      .initializeOracleRegistry([
+        { mint: usdcMint, oracleFeed: PublicKey.default, isStablecoin: true, fallbackFeed: PublicKey.default },
+      ])
+      .accounts({
+        authority: owner.publicKey,
+        oracleRegistry: oracleRegistryPda,
+        systemProgram: SystemProgram.programId,
+      } as any)
+      .rpc();
+
     // Derive PDAs
     [vaultPda] = PublicKey.findProgramAddressSync(
       [
@@ -235,14 +242,13 @@ describe("flash-trade-integration", () => {
         vaultId,
         new BN(1_000_000_000), // daily cap: 1000 USDC
         new BN(500_000_000),   // max tx: 500 USDC
-        [makeAllowedToken(usdcMint)],
-        [flashProtocol],
+        0,                     // protocolMode
+        [flashProtocol],       // protocols
         10000, // max leverage: 100x (10000 bps)
         3,     // max concurrent positions
         0,     // developer fee rate
         new BN(0), // timelockDuration
         [],    // allowedDestinations
-        0, // tracker_tier: Standard
       )
       .accountsPartial({
         owner: owner.publicKey,
@@ -320,14 +326,6 @@ describe("flash-trade-integration", () => {
       expect(vault.openPositions).to.equal(1);
       expect(vault.totalTransactions.toNumber()).to.equal(1);
       expect(vault.totalVolume.toNumber()).to.equal(100_000_000);
-
-      // Verify action type recorded correctly in audit log
-      const tracker = await program.account.spendTracker.fetch(trackerPda);
-      expect(tracker.recentTransactions.length).to.equal(1);
-      const record = tracker.recentTransactions[0];
-      expect(record.success).to.equal(true);
-      expect(record.amount.toNumber()).to.equal(100_000_000);
-      expect(JSON.stringify(record.actionType)).to.include("openPosition");
     });
   });
 
@@ -419,12 +417,6 @@ describe("flash-trade-integration", () => {
 
       const vaultAfter = await program.account.agentVault.fetch(vaultPda);
       expect(vaultAfter.openPositions).to.equal(positionsBefore - 1);
-
-      // Verify action type in audit log
-      const tracker = await program.account.spendTracker.fetch(trackerPda);
-      const lastRecord =
-        tracker.recentTransactions[tracker.recentTransactions.length - 1];
-      expect(JSON.stringify(lastRecord.actionType)).to.include("closePosition");
     });
   });
 
@@ -446,14 +438,6 @@ describe("flash-trade-integration", () => {
       );
 
       expect(sig).to.be.a("string");
-
-      const tracker = await program.account.spendTracker.fetch(trackerPda);
-      const lastRecord =
-        tracker.recentTransactions[tracker.recentTransactions.length - 1];
-      expect(JSON.stringify(lastRecord.actionType)).to.include(
-        "increasePosition"
-      );
-      expect(lastRecord.success).to.equal(true);
     });
   });
 
@@ -474,14 +458,6 @@ describe("flash-trade-integration", () => {
       );
 
       expect(sig).to.be.a("string");
-
-      const tracker = await program.account.spendTracker.fetch(trackerPda);
-      const lastRecord =
-        tracker.recentTransactions[tracker.recentTransactions.length - 1];
-      expect(JSON.stringify(lastRecord.actionType)).to.include(
-        "decreasePosition"
-      );
-      expect(lastRecord.success).to.equal(true);
     });
   });
 
@@ -517,14 +493,13 @@ describe("flash-trade-integration", () => {
           frozenVaultId,
           new BN(1_000_000_000),
           new BN(500_000_000),
-          [makeAllowedToken(usdcMint)],
-          [flashProtocol],
+          0,                   // protocolMode
+          [flashProtocol],     // protocols
           10000,
           3,
           0, // developer fee rate
           new BN(0),
           [],
-          0, // tracker_tier: Standard
         )
         .accountsPartial({
           owner: owner.publicKey,
@@ -621,14 +596,13 @@ describe("flash-trade-integration", () => {
           disabledVaultId,
           new BN(1_000_000_000),
           new BN(500_000_000),
-          [makeAllowedToken(usdcMint)],
-          [flashProtocol],
+          0,                   // protocolMode
+          [flashProtocol],     // protocols
           10000,
           3,
           0, // developer fee rate
           new BN(0),
           [],
-          0, // tracker_tier: Standard
         )
         .accountsPartial({
           owner: owner.publicKey,
@@ -668,8 +642,8 @@ describe("flash-trade-integration", () => {
         .updatePolicy(
           null, // dailySpendingCapUsd
           null, // maxTransactionSizeUsd
-          null, // allowedTokens
-          null, // allowedProtocols
+          null, // protocolMode
+          null, // protocols
           null, // maxLeverageBps
           false, // canOpenPositions = false
           null,  // maxConcurrentPositions
@@ -681,7 +655,6 @@ describe("flash-trade-integration", () => {
           owner: owner.publicKey,
           vault: disabledVault,
           policy: disabledPolicy,
-          tracker: disabledTracker,
         })
         .rpc();
 
@@ -719,48 +692,44 @@ describe("flash-trade-integration", () => {
   });
 
   // =========================================================================
-  // Action type recorded correctly (not hardcoded Swap)
+  // Spend tracking recorded correctly (V2 epoch buckets)
   // =========================================================================
-  describe("action type recording", () => {
-    it("records the correct action type for each perpetual action", async () => {
-      // The main vault already has several transactions from earlier tests.
-      // Verify that none of the perpetual transactions were recorded as Swap.
+  describe("spend tracking", () => {
+    it("records spending from perpetual actions in tracker buckets", async () => {
+      // The main vault already has several transactions from earlier tests
+      // (open, close, increase, decrease). V2 SpendTracker uses epoch
+      // buckets instead of per-transaction records.
       const tracker = await program.account.spendTracker.fetch(trackerPda);
 
-      // Find all records — should have openPosition, closePosition,
-      // increasePosition, decreasePosition (not all Swap)
-      const actionTypes = tracker.recentTransactions.map((r: any) =>
-        JSON.stringify(r.actionType)
+      // At least one bucket should have non-zero USD spend
+      const nonZeroBuckets = tracker.buckets.filter(
+        (b: any) => b.usdAmount.toNumber() > 0
       );
-
-      const hasOpenPosition = actionTypes.some((a: string) =>
-        a.includes("openPosition")
-      );
-      const hasClosePosition = actionTypes.some((a: string) =>
-        a.includes("closePosition")
-      );
-      const hasIncreasePosition = actionTypes.some((a: string) =>
-        a.includes("increasePosition")
-      );
-      const hasDecreasePosition = actionTypes.some((a: string) =>
-        a.includes("decreasePosition")
-      );
-
-      expect(hasOpenPosition, "should have openPosition records").to.be.true;
-      expect(hasClosePosition, "should have closePosition records").to.be.true;
-      expect(hasIncreasePosition, "should have increasePosition records").to.be
-        .true;
-      expect(hasDecreasePosition, "should have decreasePosition records").to.be
-        .true;
-
-      // None should be hardcoded Swap (the old bug)
-      const swapCount = actionTypes.filter((a: string) =>
-        a.includes('"swap"')
-      ).length;
       expect(
-        swapCount,
-        "no perpetual actions should be recorded as Swap"
-      ).to.equal(0);
+        nonZeroBuckets.length,
+        "should have at least one non-zero bucket"
+      ).to.be.greaterThan(0);
+
+      // The aggregate spend should reflect all transactions
+      const totalBucketSpend = nonZeroBuckets.reduce(
+        (acc: number, b: any) => acc + b.usdAmount.toNumber(),
+        0
+      );
+      expect(
+        totalBucketSpend,
+        "total bucket spend should be greater than zero"
+      ).to.be.greaterThan(0);
+
+      // Verify vault-level counters confirm all actions executed
+      const vault = await program.account.agentVault.fetch(vaultPda);
+      expect(
+        vault.totalTransactions.toNumber(),
+        "vault should have recorded multiple transactions"
+      ).to.be.greaterThanOrEqual(4); // open + close + increase + decrease (+ extras)
+      expect(
+        vault.totalVolume.toNumber(),
+        "vault should have recorded total volume"
+      ).to.be.greaterThan(0);
     });
   });
 });
