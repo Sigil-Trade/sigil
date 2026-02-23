@@ -22,14 +22,6 @@ pub struct UpdatePolicy<'info> {
         bump = policy.bump,
     )]
     pub policy: Account<'info, PolicyConfig>,
-
-    #[account(
-        mut,
-        has_one = vault,
-        seeds = [b"tracker", vault.key().as_ref()],
-        bump = tracker.bump,
-    )]
-    pub tracker: Account<'info, SpendTracker>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -37,8 +29,8 @@ pub fn handler(
     ctx: Context<UpdatePolicy>,
     daily_spending_cap_usd: Option<u64>,
     max_transaction_size_usd: Option<u64>,
-    allowed_tokens: Option<Vec<AllowedToken>>,
-    allowed_protocols: Option<Vec<Pubkey>>,
+    protocol_mode: Option<u8>,
+    protocols: Option<Vec<Pubkey>>,
     max_leverage_bps: Option<u16>,
     can_open_positions: Option<bool>,
     max_concurrent_positions: Option<u8>,
@@ -66,23 +58,19 @@ pub fn handler(
     if let Some(max_tx) = max_transaction_size_usd {
         policy.max_transaction_size_usd = max_tx;
     }
-    if let Some(tokens) = allowed_tokens {
+    if let Some(mode) = protocol_mode {
         require!(
-            tokens.len() <= MAX_ALLOWED_TOKENS,
-            AgentShieldError::TooManyAllowedTokens
+            mode <= PROTOCOL_MODE_DENYLIST,
+            AgentShieldError::InvalidProtocolMode
         );
-        policy.allowed_tokens = tokens;
-        // Token list changed — spend entries use token_index so clear
-        // rolling_spends to prevent stale indices. USD cap resets to 0
-        // for the remainder of the current 24h window.
-        ctx.accounts.tracker.rolling_spends.clear();
+        policy.protocol_mode = mode;
     }
-    if let Some(protocols) = allowed_protocols {
+    if let Some(protos) = protocols {
         require!(
-            protocols.len() <= MAX_ALLOWED_PROTOCOLS,
+            protos.len() <= MAX_ALLOWED_PROTOCOLS,
             AgentShieldError::TooManyAllowedProtocols
         );
-        policy.allowed_protocols = protocols;
+        policy.protocols = protos;
     }
     if let Some(leverage) = max_leverage_bps {
         policy.max_leverage_bps = leverage;
@@ -116,8 +104,8 @@ pub fn handler(
         vault: vault.key(),
         daily_cap_usd: policy.daily_spending_cap_usd,
         max_transaction_size_usd: policy.max_transaction_size_usd,
-        allowed_tokens_count: policy.allowed_tokens.len() as u8,
-        allowed_protocols_count: policy.allowed_protocols.len() as u8,
+        protocol_mode: policy.protocol_mode,
+        protocols_count: policy.protocols.len() as u8,
         max_leverage_bps: policy.max_leverage_bps,
         developer_fee_rate: policy.developer_fee_rate,
         timestamp: clock.unix_timestamp,

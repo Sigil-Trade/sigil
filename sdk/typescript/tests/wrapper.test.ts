@@ -1519,35 +1519,25 @@ describe("wrapper — shieldWallet() & harden()", () => {
       expect(params.dailySpendingCap).to.equal(BigInt(10_000_000_000));
     });
 
-    it("merges token mints from spendLimits + explicit allowedTokens (deduped)", () => {
+    it("sets protocolMode=1 (allowlist) when protocols are specified", () => {
+      const resolved = resolvePolicies({
+        allowedProtocols: [Keypair.generate().publicKey],
+      });
+      const params = mapPoliciesToVaultParams(resolved, 0, FEE_DEST);
+      expect(params.protocolMode).to.equal(1);
+      expect(params.protocols.length).to.equal(1);
+    });
+
+    it("sets protocolMode=0 (all allowed) when no protocols specified", () => {
       const resolved = resolvePolicies({
         maxSpend: "500 USDC/day",
-        allowedTokens: [USDC_MINT, SOL_MINT],
       });
       const params = mapPoliciesToVaultParams(resolved, 0, FEE_DEST);
-      const mintStrings = params.allowedTokens.map((p) => p.toBase58());
-      // USDC from spend limit + both from allowedTokens, deduped
-      expect(mintStrings).to.include(USDC_MINT.toBase58());
-      expect(mintStrings).to.include(SOL_MINT.toBase58());
-      // USDC should not appear twice
-      const usdcCount = mintStrings.filter((m) => m === USDC_MINT.toBase58()).length;
-      expect(usdcCount).to.equal(1);
+      expect(params.protocolMode).to.equal(0);
+      expect(params.protocols.length).to.equal(0);
     });
 
-    it("caps allowedTokens at 10", () => {
-      // Create 15 unique token mints
-      const tokens = Array.from({ length: 15 }, () =>
-        Keypair.generate().publicKey,
-      );
-      const resolved = resolvePolicies({
-        allowedTokens: tokens,
-        blockUnknownPrograms: false,
-      });
-      const params = mapPoliciesToVaultParams(resolved, 0, FEE_DEST);
-      expect(params.allowedTokens.length).to.be.at.most(10);
-    });
-
-    it("caps allowedProtocols at 10", () => {
+    it("caps protocols at 10", () => {
       const protocols = Array.from({ length: 15 }, () =>
         Keypair.generate().publicKey,
       );
@@ -1555,7 +1545,7 @@ describe("wrapper — shieldWallet() & harden()", () => {
         allowedProtocols: protocols,
       });
       const params = mapPoliciesToVaultParams(resolved, 0, FEE_DEST);
-      expect(params.allowedProtocols.length).to.be.at.most(10);
+      expect(params.protocols.length).to.be.at.most(10);
     });
 
     it("maps maxTransactionSize directly", () => {
@@ -1615,7 +1605,6 @@ describe("wrapper — shieldWallet() & harden()", () => {
       const resolved = resolvePolicies({ maxSpend: "500 USDC/day" });
       const params = mapPoliciesToVaultParams(resolved, 0, FEE_DEST);
       expect(params.dailySpendingCap).to.equal(BigInt(500_000_000));
-      expect(params.allowedTokens.some((t) => t.equals(USDC_MINT))).to.be.true;
     });
 
     it("passes optional parameters through", () => {

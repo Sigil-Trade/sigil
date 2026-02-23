@@ -6,9 +6,7 @@ import type {
   PendingPolicyUpdateAccount,
   SpendTrackerAccount,
   VaultStatus,
-  ActionType,
-  SpendEntry,
-  TransactionRecord,
+  EpochBucket,
 } from "@agent-shield/sdk";
 
 // Re-usable test fixtures
@@ -34,7 +32,6 @@ export function makeVaultAccount(
     totalVolume: new BN("1000000000"),
     openPositions: 0,
     totalFeesCollected: new BN(5000),
-    trackerTier: { standard: {} } as AgentVaultAccount["trackerTier"],
     ...overrides,
   };
 }
@@ -46,16 +43,8 @@ export function makePolicyAccount(
     vault: TEST_VAULT_PDA,
     dailySpendingCapUsd: new BN("10000000000"),
     maxTransactionSizeUsd: new BN("1000000000"),
-    allowedTokens: [
-      {
-        mint: TEST_MINT,
-        oracleFeed: PublicKey.default,
-        decimals: 6,
-        dailyCapBase: new BN(0),
-        maxTxBase: new BN(0),
-      },
-    ],
-    allowedProtocols: [TEST_PROTOCOL],
+    protocolMode: 1,
+    protocols: [TEST_PROTOCOL],
     maxLeverageBps: 30000,
     canOpenPositions: true,
     maxConcurrentPositions: 5,
@@ -67,29 +56,12 @@ export function makePolicyAccount(
   };
 }
 
-export function makeSpendEntry(
-  overrides: Partial<SpendEntry> = {},
-): SpendEntry {
+export function makeEpochBucket(
+  overrides: Partial<EpochBucket> = {},
+): EpochBucket {
   return {
-    tokenIndex: 0,
+    epochId: new BN(100),
     usdAmount: new BN("500000000"),
-    baseAmount: new BN("500000000"),
-    timestamp: new BN(1700000100),
-    ...overrides,
-  };
-}
-
-export function makeTransactionRecord(
-  overrides: Partial<TransactionRecord> = {},
-): TransactionRecord {
-  return {
-    timestamp: new BN(1700000200),
-    actionType: { swap: {} } as ActionType,
-    tokenMint: TEST_MINT,
-    amount: new BN("100000000"),
-    protocol: TEST_PROTOCOL,
-    success: true,
-    slot: new BN(12345),
     ...overrides,
   };
 }
@@ -99,10 +71,7 @@ export function makeTrackerAccount(
 ): SpendTrackerAccount {
   return {
     vault: TEST_VAULT_PDA,
-    trackerTier: { standard: {} } as SpendTrackerAccount["trackerTier"],
-    maxSpendEntries: 200,
-    rollingSpends: [makeSpendEntry()],
-    recentTransactions: [makeTransactionRecord()],
+    buckets: [makeEpochBucket()],
     bump: 253,
     ...overrides,
   };
@@ -117,8 +86,8 @@ export function makePendingPolicyAccount(
     executesAt: new BN(1700003600),
     dailySpendingCapUsd: null,
     maxTransactionAmountUsd: null,
-    allowedTokens: null,
-    allowedProtocols: null,
+    protocolMode: null,
+    protocols: null,
     maxLeverageBps: null,
     canOpenPositions: null,
     maxConcurrentPositions: null,
@@ -144,6 +113,7 @@ export function createMockClient(
     vault?: Partial<AgentVaultAccount>;
     policy?: Partial<PolicyConfigAccount>;
     tracker?: Partial<SpendTrackerAccount>;
+    pendingPolicy?: PendingPolicyUpdateAccount | null;
     shouldThrow?: Error;
   } = {},
 ) {
@@ -295,7 +265,7 @@ export function createMockClient(
     async fetchPendingPolicy(vault: PublicKey) {
       calls.push({ method: "fetchPendingPolicy", args: [vault] });
       if (overrides.shouldThrow) throw overrides.shouldThrow;
-      return (overrides as any).pendingPolicy ?? null;
+      return overrides.pendingPolicy ?? null;
     },
 
     async queuePolicyUpdate(vault: PublicKey, params: any) {

@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { BN } from "@coral-xyz/anchor";
-import { PublicKey } from "@solana/web3.js";
 import type {
   AgentShieldClient,
   QueuePolicyUpdateParams,
@@ -18,14 +17,16 @@ export const queuePolicyUpdateSchema = z.object({
     .string()
     .optional()
     .describe("New max transaction size in USD base units"),
-  allowedTokens: z
+  protocolMode: z
+    .number()
+    .optional()
+    .describe(
+      "New protocol access mode: 0 = all allowed, 1 = allowlist, 2 = denylist",
+    ),
+  protocols: z
     .array(z.string())
     .optional()
-    .describe("New allowed token mints (base58). Max 10."),
-  allowedProtocols: z
-    .array(z.string())
-    .optional()
-    .describe("New allowed protocol IDs (base58). Max 10."),
+    .describe("New protocol program IDs (base58). Max 10."),
   allowedDestinations: z
     .array(z.string())
     .optional()
@@ -67,17 +68,11 @@ export async function queuePolicyUpdate(
     if (input.maxTransactionSizeUsd !== undefined) {
       params.maxTransactionAmountUsd = toBN(input.maxTransactionSizeUsd);
     }
-    if (input.allowedTokens !== undefined) {
-      params.allowedTokens = input.allowedTokens.map((addr) => ({
-        mint: toPublicKey(addr),
-        oracleFeed: PublicKey.default,
-        decimals: 6,
-        dailyCapBase: new BN(0),
-        maxTxBase: new BN(0),
-      }));
+    if (input.protocolMode !== undefined) {
+      params.protocolMode = input.protocolMode;
     }
-    if (input.allowedProtocols !== undefined) {
-      params.allowedProtocols = input.allowedProtocols.map(toPublicKey);
+    if (input.protocols !== undefined) {
+      params.protocols = input.protocols.map(toPublicKey);
     }
     if (input.allowedDestinations !== undefined) {
       params.allowedDestinations = input.allowedDestinations.map(toPublicKey);

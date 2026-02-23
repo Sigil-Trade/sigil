@@ -6,7 +6,7 @@ export interface ErrorInfo {
 }
 
 /**
- * Maps all 40 AgentShield Anchor error codes (6000–6039) to
+ * Maps all 46 AgentShield Anchor error codes (6000–6045) to
  * human-readable messages with actionable suggestions for AI tools.
  */
 const ERROR_MAP: Record<number, ErrorInfo> = {
@@ -33,17 +33,17 @@ const ERROR_MAP: Record<number, ErrorInfo> = {
   },
   6003: {
     code: 6003,
-    name: "TokenNotAllowed",
-    message: "Token not in allowed list",
+    name: "TokenNotRegistered",
+    message: "Token not registered in oracle registry",
     suggestion:
-      "Use shield_update_policy to add the token to allowedTokens, or use an allowed token.",
+      "Register the token in the oracle registry before using it, or use a token that is already registered.",
   },
   6004: {
     code: 6004,
     name: "ProtocolNotAllowed",
-    message: "Protocol not in allowed list",
+    message: "Protocol not allowed by policy",
     suggestion:
-      "Use shield_update_policy to add the protocol to allowedProtocols.",
+      "Use shield_update_policy to add the protocol to the allowlist, or switch protocolMode to allow-all (mode 0).",
   },
   6005: {
     code: 6005,
@@ -108,179 +108,222 @@ const ERROR_MAP: Record<number, ErrorInfo> = {
   },
   6014: {
     code: 6014,
-    name: "TooManyAllowedTokens",
-    message: "Policy configuration invalid: too many allowed tokens",
-    suggestion: "Maximum 10 allowed tokens. Remove tokens you no longer need.",
-  },
-  6015: {
-    code: 6015,
     name: "TooManyAllowedProtocols",
     message: "Policy configuration invalid: too many allowed protocols",
     suggestion:
       "Maximum 10 allowed protocols. Remove protocols you no longer need.",
   },
-  6016: {
-    code: 6016,
+  6015: {
+    code: 6015,
     name: "AgentAlreadyRegistered",
     message: "Agent already registered for this vault",
     suggestion: "Use shield_revoke_agent first, then register the new agent.",
   },
-  6017: {
-    code: 6017,
+  6016: {
+    code: 6016,
     name: "NoAgentRegistered",
     message: "No agent registered for this vault",
     suggestion:
       "Use shield_register_agent to register an agent before executing trades.",
   },
-  6018: {
-    code: 6018,
+  6017: {
+    code: 6017,
     name: "VaultNotFrozen",
     message: "Vault is not frozen (expected frozen for reactivation)",
     suggestion:
       "Only frozen vaults can be reactivated. The vault may already be active.",
   },
-  6019: {
-    code: 6019,
+  6018: {
+    code: 6018,
     name: "VaultAlreadyClosed",
     message: "Vault is already closed",
     suggestion:
       "This vault has been permanently closed. Create a new vault instead.",
   },
-  6020: {
-    code: 6020,
+  6019: {
+    code: 6019,
     name: "InsufficientBalance",
     message: "Insufficient vault balance for withdrawal",
     suggestion:
       "Use shield_check_vault to verify balances. Deposit more funds or reduce the withdrawal amount.",
   },
-  6021: {
-    code: 6021,
+  6020: {
+    code: 6020,
     name: "DeveloperFeeTooHigh",
     message: "Developer fee rate exceeds maximum (500 / 1,000,000 = 5 BPS)",
     suggestion: "Set developerFeeRate to 500 or less (maximum 0.05%).",
   },
-  6022: {
-    code: 6022,
+  6021: {
+    code: 6021,
     name: "InvalidFeeDestination",
     message: "Fee destination account invalid",
     suggestion: "Provide a valid Solana public key for the fee destination.",
   },
-  6023: {
-    code: 6023,
+  6022: {
+    code: 6022,
     name: "InvalidProtocolTreasury",
     message: "Protocol treasury account does not match expected address",
     suggestion:
       "This is an internal error. The protocol treasury address is hardcoded.",
   },
-  6024: {
-    code: 6024,
-    name: "TooManySpendEntries",
-    message:
-      "Spend entry limit reached (too many active entries in rolling window)",
-    suggestion: "Wait for older entries to expire from the 24h rolling window.",
-  },
-  6025: {
-    code: 6025,
+  6023: {
+    code: 6023,
     name: "InvalidAgentKey",
     message: "Invalid agent: cannot be the zero address",
     suggestion: "Provide a valid Solana public key for the agent.",
   },
-  6026: {
-    code: 6026,
+  6024: {
+    code: 6024,
     name: "AgentIsOwner",
     message: "Invalid agent: agent cannot be the vault owner",
     suggestion:
       "The agent key must be different from the vault owner. Use a separate keypair.",
   },
-  6027: {
-    code: 6027,
+  6025: {
+    code: 6025,
     name: "Overflow",
     message: "Arithmetic overflow",
     suggestion: "The amount is too large. Reduce the value and try again.",
   },
-  6028: {
-    code: 6028,
+  6026: {
+    code: 6026,
     name: "DelegationFailed",
     message: "Token delegation approval failed",
     suggestion:
       "The vault may not have sufficient token balance. Check vault balance and try again.",
   },
-  6029: {
-    code: 6029,
+  6027: {
+    code: 6027,
     name: "RevocationFailed",
     message: "Token delegation revocation failed",
     suggestion:
       "The session may have already been finalized. Check session status.",
   },
-  6030: {
-    code: 6030,
+  6028: {
+    code: 6028,
     name: "OracleFeedStale",
     message: "Oracle feed value is too stale",
     suggestion:
-      "The oracle price data is outdated. Wait for a fresh price update and retry.",
+      "The oracle price data is outdated (exceeds 100-slot staleness window). Wait for a fresh price update and retry.",
   },
-  6031: {
-    code: 6031,
+  6029: {
+    code: 6029,
     name: "OracleFeedInvalid",
     message: "Cannot parse oracle feed data",
     suggestion:
-      "The oracle feed account data is malformed or the account key doesn't match the policy. Verify the oracle configuration.",
+      "The oracle feed account data is malformed. Verify the oracle configuration in the oracle registry.",
   },
-  6032: {
-    code: 6032,
+  6030: {
+    code: 6030,
     name: "TokenSpendBlocked",
     message: "Unpriced token cannot be spent (receive-only)",
     suggestion:
-      "This token is configured as receive-only and cannot be used for spending.",
+      "This token has no oracle price feed and is configured as receive-only. It cannot be used for spending.",
   },
-  6033: {
-    code: 6033,
+  6031: {
+    code: 6031,
     name: "InvalidTokenAccount",
     message: "Token account does not belong to vault or has wrong mint",
     suggestion:
       "Ensure the token account is owned by the vault PDA and matches the token mint.",
   },
-  6034: {
-    code: 6034,
+  6032: {
+    code: 6032,
     name: "OracleAccountMissing",
     message: "Oracle-priced token requires feed account in remaining_accounts",
     suggestion:
       "Pass the oracle feed account when transacting with oracle-priced tokens. The SDK resolves this automatically.",
   },
-  6035: {
-    code: 6035,
-    name: "PerTokenCapExceeded",
-    message: "Per-token daily spending cap would be exceeded",
-    suggestion:
-      "Wait for the 24h rolling window to reset, or use shield_update_policy to increase the per-token cap.",
-  },
-  6036: {
-    code: 6036,
-    name: "PerTokenTxLimitExceeded",
-    message: "Per-token single transaction limit exceeded",
-    suggestion:
-      "Reduce the amount or use shield_update_policy to increase the per-token transaction limit.",
-  },
-  6037: {
-    code: 6037,
+  6033: {
+    code: 6033,
     name: "OracleConfidenceTooWide",
     message: "Oracle price confidence interval too wide",
     suggestion:
       "The oracle price has high uncertainty (>10% confidence interval). Wait for more stable market conditions and retry.",
   },
-  6038: {
-    code: 6038,
+  6034: {
+    code: 6034,
     name: "OracleUnsupportedType",
     message: "Oracle account owner is not a recognized oracle program",
     suggestion:
-      "The oracle feed account must be owned by either Pyth Receiver or Switchboard On-Demand program. Check the policy configuration.",
+      "The oracle feed account must be owned by either Pyth Receiver or Switchboard On-Demand program. Check the oracle registry.",
   },
-  6039: {
-    code: 6039,
+  6035: {
+    code: 6035,
     name: "OracleNotVerified",
     message: "Pyth price update not fully verified by Wormhole",
     suggestion:
       "The Pyth price update has not been verified by Wormhole guardians. Use a fully verified price feed.",
+  },
+  6036: {
+    code: 6036,
+    name: "TimelockNotExpired",
+    message: "Timelock period has not expired yet",
+    suggestion:
+      "Wait for the timelock period to expire before applying the pending policy update.",
+  },
+  6037: {
+    code: 6037,
+    name: "TimelockActive",
+    message: "Vault has timelock active — use queue_policy_update instead",
+    suggestion:
+      "This vault has a timelock configured. Use shield_queue_policy_update to queue changes, then apply after the timelock expires.",
+  },
+  6038: {
+    code: 6038,
+    name: "NoTimelockConfigured",
+    message: "No timelock configured on this vault",
+    suggestion:
+      "This vault does not have a timelock. Use shield_update_policy directly instead of queue_policy_update.",
+  },
+  6039: {
+    code: 6039,
+    name: "DestinationNotAllowed",
+    message: "Destination not in allowed list",
+    suggestion:
+      "Use shield_update_policy to add the destination address to allowedDestinations.",
+  },
+  6040: {
+    code: 6040,
+    name: "TooManyDestinations",
+    message: "Too many destinations (max 10)",
+    suggestion:
+      "Maximum 10 allowed destinations. Remove destinations you no longer need before adding new ones.",
+  },
+  6041: {
+    code: 6041,
+    name: "InvalidProtocolMode",
+    message: "Invalid protocol mode (must be 0, 1, or 2)",
+    suggestion:
+      "Set protocolMode to 0 (allow all), 1 (allowlist), or 2 (denylist).",
+  },
+  6042: {
+    code: 6042,
+    name: "OracleRegistryFull",
+    message: "Oracle registry is full (max 105 entries)",
+    suggestion:
+      "The oracle registry has reached its maximum capacity of 105 token entries. Remove unused entries before adding new ones.",
+  },
+  6043: {
+    code: 6043,
+    name: "UnauthorizedRegistryAdmin",
+    message: "Unauthorized: not the oracle registry authority",
+    suggestion:
+      "Only the oracle registry authority can modify the registry. Verify you are using the correct admin wallet.",
+  },
+  6044: {
+    code: 6044,
+    name: "OraclePriceDivergence",
+    message: "Primary and fallback oracle prices diverge beyond threshold",
+    suggestion:
+      "The primary and fallback oracle feeds report prices that differ too much. Wait for price convergence or verify oracle feed configuration.",
+  },
+  6045: {
+    code: 6045,
+    name: "OracleBothFeedsFailed",
+    message: "Both primary and fallback oracle feeds failed",
+    suggestion:
+      "Neither oracle feed returned a valid price. Check that the oracle accounts are valid and not stale.",
   },
 };
 

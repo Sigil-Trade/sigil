@@ -65,6 +65,7 @@ dependencies = [
  "anchor-lang",
  "anchor-spl",
  "blake3",
+ "bytemuck",
 ]
 
 [[package]]

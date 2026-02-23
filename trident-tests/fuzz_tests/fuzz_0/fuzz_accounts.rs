@@ -38,4 +38,6 @@ pub struct AccountAddresses {
     pub destination_token_account_c: AddressStorage,
     // Oracle account for token C (mock Pyth PriceUpdateV2)
     pub oracle_c: AddressStorage,
+    // Protocol-level oracle registry PDA (V2)
+    pub oracle_registry: AddressStorage,
 }

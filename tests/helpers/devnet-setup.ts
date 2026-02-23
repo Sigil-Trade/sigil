@@ -2,6 +2,9 @@
  * Devnet Test Helpers — shared constants, PDA derivation, vault factory, and utilities.
  *
  * Used by all devnet-*.ts test files.
+ *
+ * V2: Tokens managed via global OracleRegistry, not per-vault AllowedToken arrays.
+ *     No tracker tier model. SpendTracker is zero-copy with epoch buckets.
  */
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
@@ -65,16 +68,72 @@ export const MAX_DEVELOPER_FEE_RATE = 500;
 export const SESSION_EXPIRY_SLOTS = 20;
 export const ROLLING_WINDOW_SECONDS = 86_400;
 
-// ─── AllowedToken builder ───────────────────────────────────────────────────
+// ─── Oracle Registry helpers ────────────────────────────────────────────────
 
-export function makeAllowedToken(
+export function deriveOracleRegistryPda(
+  programId: PublicKey,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("oracle_registry")],
+    programId,
+  );
+}
+
+/**
+ * Build an OracleEntry object for the IDL.
+ * @param mint    Token mint address
+ * @param oracleFeed  Oracle feed account (PublicKey.default = stablecoin)
+ * @param isStablecoin  Whether this is a stablecoin (1:1 USD)
+ */
+export function makeOracleEntry(
   mint: PublicKey,
   oracleFeed: PublicKey = PublicKey.default,
-  decimals: number = 6,
-  dailyCapBase: BN = new BN(0),
-  maxTxBase: BN = new BN(0),
+  isStablecoin: boolean = true,
+  fallbackFeed: PublicKey = PublicKey.default,
 ) {
-  return { mint, oracleFeed, decimals, dailyCapBase, maxTxBase };
+  return { mint, oracleFeed, isStablecoin, fallbackFeed };
+}
+
+/**
+ * Initialize the protocol-level oracle registry with the given entries.
+ * Must be called once before any vault can validate transactions.
+ */
+export async function initializeOracleRegistry(
+  program: Program<AgentShield>,
+  owner: anchor.Wallet,
+  entries: { mint: PublicKey; oracleFeed: PublicKey; isStablecoin: boolean; fallbackFeed: PublicKey }[],
+): Promise<PublicKey> {
+  const [registryPda] = deriveOracleRegistryPda(program.programId);
+
+  await program.methods
+    .initializeOracleRegistry(entries)
+    .accounts({
+      authority: owner.publicKey,
+      oracleRegistry: registryPda,
+      systemProgram: SystemProgram.programId,
+    } as any)
+    .rpc();
+
+  return registryPda;
+}
+
+/**
+ * Update the oracle registry with additional entries.
+ */
+export async function updateOracleRegistry(
+  program: Program<AgentShield>,
+  owner: anchor.Wallet,
+  entries: { mint: PublicKey; oracleFeed: PublicKey; isStablecoin: boolean; fallbackFeed: PublicKey }[],
+): Promise<void> {
+  const [registryPda] = deriveOracleRegistryPda(program.programId);
+
+  await program.methods
+    .updateOracleRegistry(entries)
+    .accounts({
+      authority: owner.publicKey,
+      oracleRegistry: registryPda,
+    } as any)
+    .rpc();
 }
 
 // ─── Collision-free vault ID generator ──────────────────────────────────────
@@ -172,7 +231,7 @@ export interface CreateFullVaultOpts {
   vaultId: BN;
   dailyCap?: BN;
   maxTx?: BN;
-  allowedTokens?: ReturnType<typeof makeAllowedToken>[];
+  protocolMode?: number;
   allowedProtocols?: PublicKey[];
   maxLevBps?: number;
   maxPositions?: number;
@@ -180,7 +239,6 @@ export interface CreateFullVaultOpts {
   devFeeRate?: number;
   timelockDuration?: BN;
   allowedDestinations?: PublicKey[];
-  trackerTier?: number;
   depositAmount?: BN;
   skipDeposit?: boolean;
   skipAgent?: boolean;
@@ -195,6 +253,7 @@ export interface FullVaultResult {
   ownerTokenAta: PublicKey;
   protocolTreasuryAta: PublicKey;
   feeDestinationAta: PublicKey | null;
+  oracleRegistryPda: PublicKey;
 }
 
 export async function createFullVault(
@@ -210,14 +269,13 @@ export async function createFullVault(
     vaultId,
     dailyCap = new BN(500_000_000),
     maxTx = new BN(100_000_000),
-    allowedTokens,
+    protocolMode = 1, // allowlist
     allowedProtocols = [Keypair.generate().publicKey],
     maxLevBps = 0,
     maxPositions = 3,
     devFeeRate = 0,
     timelockDuration = new BN(0),
     allowedDestinations = [],
-    trackerTier = 0,
     depositAmount = new BN(1_000_000_000),
     skipDeposit = false,
     skipAgent = false,
@@ -225,7 +283,7 @@ export async function createFullVault(
 
   const payer = (owner as any).payer;
   const pdas = derivePDAs(owner.publicKey, vaultId, program.programId);
-  const tokens = allowedTokens ?? [makeAllowedToken(mint)];
+  const [oracleRegistryPda] = deriveOracleRegistryPda(program.programId);
 
   // Derive vault token ATA
   const vaultTokenAta = anchor.utils.token.associatedAddress({
@@ -274,20 +332,19 @@ export async function createFullVault(
     feeDestinationAta = feeAtaAccount.address;
   }
 
-  // Initialize vault
+  // Initialize vault (V2: 10 args, no allowedTokens, no trackerTier)
   await program.methods
     .initializeVault(
       vaultId,
       dailyCap,
       maxTx,
-      tokens,
+      protocolMode,
       allowedProtocols,
       new BN(maxLevBps) as any,
       maxPositions,
       devFeeRate,
       timelockDuration,
       allowedDestinations,
-      trackerTier,
     )
     .accounts({
       owner: owner.publicKey,
@@ -333,6 +390,7 @@ export async function createFullVault(
     ownerTokenAta,
     protocolTreasuryAta,
     feeDestinationAta,
+    oracleRegistryPda,
   };
 }
 
@@ -344,6 +402,7 @@ export interface AuthorizeOpts {
   vaultPda: PublicKey;
   policyPda: PublicKey;
   trackerPda: PublicKey;
+  oracleRegistryPda: PublicKey;
   sessionPda: PublicKey;
   vaultTokenAta: PublicKey;
   mint: PublicKey;
@@ -360,6 +419,7 @@ export async function authorize(opts: AuthorizeOpts): Promise<string> {
     vaultPda,
     policyPda,
     trackerPda,
+    oracleRegistryPda,
     sessionPda,
     vaultTokenAta,
     mint,
@@ -381,6 +441,7 @@ export async function authorize(opts: AuthorizeOpts): Promise<string> {
       vault: vaultPda,
       policy: policyPda,
       tracker: trackerPda,
+      oracleRegistry: oracleRegistryPda,
       session: sessionPda,
       vaultTokenAccount: vaultTokenAta,
       tokenMintAccount: mint,
@@ -396,7 +457,6 @@ export interface FinalizeOpts {
   payer: Keypair;
   vaultPda: PublicKey;
   policyPda: PublicKey;
-  trackerPda: PublicKey;
   sessionPda: PublicKey;
   agentPubkey: PublicKey;
   vaultTokenAta: PublicKey | null;
@@ -411,7 +471,6 @@ export async function finalize(opts: FinalizeOpts): Promise<string> {
     payer,
     vaultPda,
     policyPda,
-    trackerPda,
     sessionPda,
     agentPubkey,
     vaultTokenAta,
@@ -425,7 +484,6 @@ export async function finalize(opts: FinalizeOpts): Promise<string> {
       payer: payer.publicKey,
       vault: vaultPda,
       policy: policyPda,
-      tracker: trackerPda,
       session: sessionPda,
       sessionRentRecipient: agentPubkey,
       vaultTokenAccount: vaultTokenAta,
@@ -451,7 +509,6 @@ export async function authorizeAndFinalize(
     payer: opts.agent,
     vaultPda: opts.vaultPda,
     policyPda: opts.policyPda,
-    trackerPda: opts.trackerPda,
     sessionPda: opts.sessionPda,
     agentPubkey: opts.agent.publicKey,
     vaultTokenAta: opts.vaultTokenAta,

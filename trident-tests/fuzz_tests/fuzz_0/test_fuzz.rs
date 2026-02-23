@@ -6,20 +6,23 @@
 // The #[init] method bootstraps a vault with 3 tokens so subsequent
 // flows have state to operate on.
 //
-// 11 invariants are checked after each instruction:
-//   INV-1:  Rolling spend never exceeds daily cap (single token)
+// 10 invariants are checked after each instruction:
+//   INV-1:  Rolling spend never exceeds daily cap (aggregate USD)
 //   INV-2:  Only owner can modify policy/pause/withdraw
 //   INV-3:  Session PDA expires within 20 slots
 //   INV-4:  Fee destination is immutable after creation
 //   INV-5:  Frozen→Active only by owner
-//   INV-6:  Cross-token aggregate USD ≤ daily cap
-//   INV-7:  Per-token base-unit spend ≤ daily_cap_base
+//   INV-6:  Cross-token aggregate USD ≤ daily cap (same as INV-1 in V2)
 //   INV-8:  Stale oracle rejection (dedicated flow)
 //   INV-9:  Invalid oracle verification rejection (dedicated flow)
 //   INV-10: Post-finalize session closure
 //   INV-11: Double-finalize detection (dedicated flow)
 //
-// Coverage: 14/14 instructions, 11/11 invariants active, 17 fuzzed flows.
+// V2: INV-7 (per-token base cap) removed — V2 uses aggregate USD only.
+//     Tokens use global OracleRegistry, not per-vault AllowedToken arrays.
+//     SpendTracker is zero-copy with epoch buckets.
+//
+// Coverage: 16/16 instructions, 10/10 invariants active, 17 fuzzed flows.
 //
 // Run: `trident fuzz run fuzz_0` or `pnpm security:fuzz` from repo root.
 
@@ -29,7 +32,7 @@ use trident_fuzz::fuzzing::*;
 mod fuzz_accounts;
 
 use agent_shield::state::{
-    ActionType, AgentVault, AllowedToken, PolicyConfig, SessionAuthority, SpendTracker, VaultStatus,
+    ActionType, AgentVault, OracleEntry, PolicyConfig, SessionAuthority, SpendTracker, VaultStatus,
 };
 use anchor_lang::prelude::Pubkey;
 use anchor_lang::{AccountDeserialize, InstructionData, ToAccountMetas};
@@ -57,10 +60,6 @@ const PYTH_MIN_SIZE: usize = 133;
 const ORACLE_C_PRICE: i64 = 15_000_000_000;
 const ORACLE_C_CONF: u64 = 5_000_000;
 const ORACLE_C_EXPONENT: i32 = -8;
-
-/// Per-token base caps for token C (exercising INV-7)
-const TOKEN_C_DAILY_CAP_BASE: u64 = 5_000_000_000;
-const TOKEN_C_MAX_TX_BASE: u64 = 1_000_000_000;
 
 fn program_id() -> Pubkey {
     "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL"
@@ -177,22 +176,20 @@ impl FuzzTest {
         let fee_rate = self
             .trident
             .random_from_range(0..MAX_DEVELOPER_FEE_RATE as u64) as u16;
-        let tier = self.trident.random_from_range(0..3) as u8;
 
-        // ── Step 1: InitializeVault (empty tokens/protocols — updated below) ──
+        // ── Step 1: InitializeVault (V2: 10 args, no allowedTokens/trackerTier) ──
 
         let data = agent_shield::instruction::InitializeVault {
             vault_id,
             daily_spending_cap_usd: cap,
             max_transaction_size_usd: cap,
-            allowed_tokens: vec![],
-            allowed_protocols: vec![],
+            protocol_mode: 0, // all protocols allowed
+            protocols: vec![],
             max_leverage_bps: 10_000,
             max_concurrent_positions: 5,
             developer_fee_rate: fee_rate,
             timelock_duration: 0,
             allowed_destinations: vec![],
-            tracker_tier: tier,
         };
 
         let accounts = agent_shield::accounts::InitializeVault {
@@ -330,37 +327,65 @@ impl FuzzTest {
             .trident
             .process_transaction(&[reg_ix], Some("RegisterAgent"));
 
-        // ── Step 7: UpdatePolicy with 3 tokens + allowed_destinations ──
+        // ── Step 7: Initialize oracle registry with 3 tokens ──
 
-        let stablecoin_a = AllowedToken {
-            mint: mint_a,
-            oracle_feed: Pubkey::default(), // stablecoin = 1:1 USD
-            decimals: TOKEN_DECIMALS_A,
-            daily_cap_base: 0,
-            max_tx_base: 0,
-        };
+        let (oracle_registry, _) = Pubkey::find_program_address(
+            &[b"oracle_registry"],
+            &program_id(),
+        );
+        self.fuzz_accounts.oracle_registry.insert(
+            &mut self.trident,
+            Some(PdaSeeds {
+                seeds: &[b"oracle_registry"],
+                program_id: program_id(),
+            }),
+        );
 
-        let stablecoin_b = AllowedToken {
-            mint: mint_b,
-            oracle_feed: Pubkey::default(), // stablecoin = 1:1 USD
-            decimals: TOKEN_DECIMALS_B,
-            daily_cap_base: 0,
-            max_tx_base: 0,
-        };
+        let oracle_entries = vec![
+            OracleEntry {
+                mint: mint_a,
+                oracle_feed: Pubkey::default(),
+                is_stablecoin: true,
+                fallback_feed: Pubkey::default(),
+            },
+            OracleEntry {
+                mint: mint_b,
+                oracle_feed: Pubkey::default(),
+                is_stablecoin: true,
+                fallback_feed: Pubkey::default(),
+            },
+            OracleEntry {
+                mint: mint_c,
+                oracle_feed: oracle_c,
+                is_stablecoin: false,
+                fallback_feed: Pubkey::default(),
+            },
+        ];
 
-        let oracle_priced_c = AllowedToken {
-            mint: mint_c,
-            oracle_feed: oracle_c, // Pyth oracle
-            decimals: TOKEN_DECIMALS_C,
-            daily_cap_base: TOKEN_C_DAILY_CAP_BASE,
-            max_tx_base: TOKEN_C_MAX_TX_BASE,
+        let registry_data = agent_shield::instruction::InitializeOracleRegistry {
+            entries: oracle_entries,
         };
+        let registry_accounts = agent_shield::accounts::InitializeOracleRegistry {
+            authority: owner,
+            oracle_registry,
+            system_program: solana_sdk::system_program::ID,
+        };
+        let registry_ix = Instruction::new_with_bytes(
+            program_id(),
+            &registry_data.data(),
+            registry_accounts.to_account_metas(None),
+        );
+        let _ = self
+            .trident
+            .process_transaction(&[registry_ix], Some("InitializeOracleRegistry"));
+
+        // ── Step 7b: UpdatePolicy with allowed_destinations ──
 
         let policy_data = agent_shield::instruction::UpdatePolicy {
             daily_spending_cap_usd: None,
             max_transaction_size_usd: None,
-            allowed_tokens: Some(vec![stablecoin_a, stablecoin_b, oracle_priced_c]),
-            allowed_protocols: Some(vec![]),
+            protocol_mode: None,
+            protocols: None,
             max_leverage_bps: None,
             can_open_positions: None,
             max_concurrent_positions: None,
@@ -373,7 +398,6 @@ impl FuzzTest {
             owner,
             vault,
             policy,
-            tracker,
         };
 
         let policy_ix = Instruction::new_with_bytes(
@@ -384,7 +408,7 @@ impl FuzzTest {
 
         let _ = self
             .trident
-            .process_transaction(&[policy_ix], Some("UpdatePolicy+tokens"));
+            .process_transaction(&[policy_ix], Some("UpdatePolicy+destinations"));
 
         // ── Step 8: Deposit funds for all 3 tokens ──
 
@@ -699,7 +723,6 @@ impl FuzzTest {
         let owner = unwrap_or_ret!(self.fuzz_accounts.owner.get(&mut self.trident));
         let vault = unwrap_or_ret!(self.fuzz_accounts.vault.get(&mut self.trident));
         let policy = unwrap_or_ret!(self.fuzz_accounts.policy.get(&mut self.trident));
-        let tracker = unwrap_or_ret!(self.fuzz_accounts.tracker.get(&mut self.trident));
 
         let new_cap: u64 = self.trident.random_from_range(1_000_000..2_000_000_000);
 
@@ -709,8 +732,8 @@ impl FuzzTest {
         let data = agent_shield::instruction::UpdatePolicy {
             daily_spending_cap_usd: Some(new_cap),
             max_transaction_size_usd: Some(new_cap),
-            allowed_tokens: None,
-            allowed_protocols: None,
+            protocol_mode: None,
+            protocols: None,
             max_leverage_bps: None,
             can_open_positions: None,
             max_concurrent_positions: None,
@@ -723,7 +746,6 @@ impl FuzzTest {
             owner,
             vault,
             policy,
-            tracker,
         };
 
         let ix = Instruction::new_with_bytes(
@@ -846,11 +868,16 @@ impl FuzzTest {
             leverage_bps: None,
         };
 
+        let oracle_registry = unwrap_or_ret!(
+            self.fuzz_accounts.oracle_registry.get(&mut self.trident)
+        );
+
         let base_accounts = agent_shield::accounts::ValidateAndAuthorize {
             agent,
             vault,
             policy: policy_addr,
             tracker: tracker_addr,
+            oracle_registry,
             session: session_pda,
             vault_token_account: vault_ata,
             token_mint_account: mint,
@@ -885,7 +912,6 @@ impl FuzzTest {
         check_inv1_spending_cap(&post_policy, &post_tracker);
         check_inv2_agent_cannot_modify_policy(&pre_policy, &post_policy, true);
         check_inv6_cross_token_aggregate(&post_policy, &post_tracker);
-        check_inv7_per_token_cap(&post_policy, &post_tracker);
 
         // INV-3: Check session expiry is bounded (only if tx succeeded)
         if result.is_success() {
@@ -904,7 +930,6 @@ impl FuzzTest {
         let agent = unwrap_or_ret!(self.fuzz_accounts.agent.get(&mut self.trident));
         let vault = unwrap_or_ret!(self.fuzz_accounts.vault.get(&mut self.trident));
         let policy_addr = unwrap_or_ret!(self.fuzz_accounts.policy.get(&mut self.trident));
-        let tracker_addr = unwrap_or_ret!(self.fuzz_accounts.tracker.get(&mut self.trident));
         let session = unwrap_or_ret!(self.fuzz_accounts.session.get(&mut self.trident));
 
         // We need to figure out which token's ATAs to use based on session
@@ -945,7 +970,6 @@ impl FuzzTest {
             payer: agent,
             vault,
             policy: policy_addr,
-            tracker: tracker_addr,
             session,
             session_rent_recipient: agent,
             vault_token_account: Some(vault_ata),
@@ -967,13 +991,13 @@ impl FuzzTest {
 
         let post_vault = self.snapshot_vault(&vault);
         let post_policy = self.snapshot_policy(&policy_addr);
+        let tracker_addr = unwrap_or_ret!(self.fuzz_accounts.tracker.get(&mut self.trident));
         let post_tracker = self.snapshot_tracker(&tracker_addr);
 
         check_inv4_fee_immutability(&pre_vault, &post_vault);
         check_inv1_spending_cap(&post_policy, &post_tracker);
         check_inv2_agent_cannot_modify_policy(&pre_policy, &post_policy, true);
         check_inv6_cross_token_aggregate(&post_policy, &post_tracker);
-        check_inv7_per_token_cap(&post_policy, &post_tracker);
 
         // INV-10: Session PDA should be closed after finalize
         if result.is_success() {
@@ -1039,8 +1063,11 @@ impl FuzzTest {
         let vault = unwrap_or_ret!(self.fuzz_accounts.vault.get(&mut self.trident));
         let policy_addr = unwrap_or_ret!(self.fuzz_accounts.policy.get(&mut self.trident));
         let tracker_addr = unwrap_or_ret!(self.fuzz_accounts.tracker.get(&mut self.trident));
+        let oracle_registry = unwrap_or_ret!(
+            self.fuzz_accounts.oracle_registry.get(&mut self.trident)
+        );
 
-        let (_, vault_ata, _, dest_ata, _) = unwrap_or_ret!(self.select_random_token());
+        let (mint, vault_ata, _, dest_ata, _) = unwrap_or_ret!(self.select_random_token());
         let fee_dest_ata = unwrap_or_ret!(
             self.fuzz_accounts.fee_dest_token_account.get(&mut self.trident)
         );
@@ -1056,7 +1083,9 @@ impl FuzzTest {
             vault,
             policy: policy_addr,
             tracker: tracker_addr,
+            oracle_registry,
             vault_token_account: vault_ata,
+            token_mint_account: mint,
             destination_token_account: dest_ata,
             fee_destination_token_account: Some(fee_dest_ata),
             protocol_treasury_token_account: None,
@@ -1081,7 +1110,6 @@ impl FuzzTest {
         check_inv1_spending_cap(&post_policy, &post_tracker);
         check_inv2_agent_cannot_modify_policy(&pre_policy, &post_policy, true);
         check_inv6_cross_token_aggregate(&post_policy, &post_tracker);
-        check_inv7_per_token_cap(&post_policy, &post_tracker);
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -1167,8 +1195,8 @@ impl FuzzTest {
         let data = agent_shield::instruction::QueuePolicyUpdate {
             daily_spending_cap_usd: Some(new_cap),
             max_transaction_amount_usd: None,
-            allowed_tokens: None,
-            allowed_protocols: None,
+            protocol_mode: None,
+            protocols: None,
             max_leverage_bps: None,
             can_open_positions: None,
             max_concurrent_positions: None,
@@ -1208,7 +1236,6 @@ impl FuzzTest {
         let owner = unwrap_or_ret!(self.fuzz_accounts.owner.get(&mut self.trident));
         let vault = unwrap_or_ret!(self.fuzz_accounts.vault.get(&mut self.trident));
         let policy = unwrap_or_ret!(self.fuzz_accounts.policy.get(&mut self.trident));
-        let tracker = unwrap_or_ret!(self.fuzz_accounts.tracker.get(&mut self.trident));
         let pending = unwrap_or_ret!(
             self.fuzz_accounts.pending_policy.get(&mut self.trident)
         );
@@ -1220,7 +1247,6 @@ impl FuzzTest {
             owner,
             vault,
             policy,
-            tracker,
             pending_policy: pending,
         };
 
@@ -1319,6 +1345,9 @@ impl FuzzTest {
         let vault = unwrap_or_ret!(self.fuzz_accounts.vault.get(&mut self.trident));
         let policy_addr = unwrap_or_ret!(self.fuzz_accounts.policy.get(&mut self.trident));
         let tracker_addr = unwrap_or_ret!(self.fuzz_accounts.tracker.get(&mut self.trident));
+        let oracle_registry = unwrap_or_ret!(
+            self.fuzz_accounts.oracle_registry.get(&mut self.trident)
+        );
         let mint_c = unwrap_or_ret!(self.fuzz_accounts.token_mint_c.get(&mut self.trident));
         let vault_ata_c = unwrap_or_ret!(
             self.fuzz_accounts.vault_token_account_c.get(&mut self.trident)
@@ -1365,6 +1394,7 @@ impl FuzzTest {
             vault,
             policy: policy_addr,
             tracker: tracker_addr,
+            oracle_registry,
             session: session_pda,
             vault_token_account: vault_ata_c,
             token_mint_account: mint_c,
@@ -1405,6 +1435,9 @@ impl FuzzTest {
         let vault = unwrap_or_ret!(self.fuzz_accounts.vault.get(&mut self.trident));
         let policy_addr = unwrap_or_ret!(self.fuzz_accounts.policy.get(&mut self.trident));
         let tracker_addr = unwrap_or_ret!(self.fuzz_accounts.tracker.get(&mut self.trident));
+        let oracle_registry = unwrap_or_ret!(
+            self.fuzz_accounts.oracle_registry.get(&mut self.trident)
+        );
         let mint_c = unwrap_or_ret!(self.fuzz_accounts.token_mint_c.get(&mut self.trident));
         let vault_ata_c = unwrap_or_ret!(
             self.fuzz_accounts.vault_token_account_c.get(&mut self.trident)
@@ -1448,6 +1481,7 @@ impl FuzzTest {
             vault,
             policy: policy_addr,
             tracker: tracker_addr,
+            oracle_registry,
             session: session_pda,
             vault_token_account: vault_ata_c,
             token_mint_account: mint_c,
@@ -1487,7 +1521,6 @@ impl FuzzTest {
         let agent = unwrap_or_ret!(self.fuzz_accounts.agent.get(&mut self.trident));
         let vault = unwrap_or_ret!(self.fuzz_accounts.vault.get(&mut self.trident));
         let policy_addr = unwrap_or_ret!(self.fuzz_accounts.policy.get(&mut self.trident));
-        let tracker_addr = unwrap_or_ret!(self.fuzz_accounts.tracker.get(&mut self.trident));
         let session_addr = unwrap_or_ret!(self.fuzz_accounts.session.get(&mut self.trident));
 
         // Check if session exists
@@ -1526,7 +1559,6 @@ impl FuzzTest {
             payer: agent,
             vault,
             policy: policy_addr,
-            tracker: tracker_addr,
             session: session_addr,
             session_rent_recipient: agent,
             vault_token_account: Some(vault_ata),
@@ -1561,7 +1593,6 @@ impl FuzzTest {
         let agent = unwrap_or_ret!(self.fuzz_accounts.agent.get(&mut self.trident));
         let vault = unwrap_or_ret!(self.fuzz_accounts.vault.get(&mut self.trident));
         let policy_addr = unwrap_or_ret!(self.fuzz_accounts.policy.get(&mut self.trident));
-        let tracker_addr = unwrap_or_ret!(self.fuzz_accounts.tracker.get(&mut self.trident));
         let session_addr = unwrap_or_ret!(self.fuzz_accounts.session.get(&mut self.trident));
 
         // Check if session is already closed (no data)
@@ -1584,7 +1615,6 @@ impl FuzzTest {
             payer: agent,
             vault,
             policy: policy_addr,
-            tracker: tracker_addr,
             session: session_addr,
             session_rent_recipient: agent,
             vault_token_account: Some(vault_ata),
@@ -1696,12 +1726,15 @@ impl FuzzTest {
 }
 
 /// INV-1: Aggregate rolling 24h USD spend never exceeds daily cap.
+/// V2: Uses epoch buckets instead of rolling_spends. Sums all non-zero buckets
+/// as an upper bound (correct within a single fuzz iteration).
 fn check_inv1_spending_cap(policy: &Option<PolicyConfig>, tracker: &Option<SpendTracker>) {
     if let (Some(p), Some(t)) = (policy, tracker) {
         let total: u64 = t
-            .rolling_spends
+            .buckets
             .iter()
-            .map(|e| e.usd_amount)
+            .filter(|b| b.usd_amount > 0)
+            .map(|b| b.usd_amount)
             .fold(0u64, |acc, x| acc.saturating_add(x));
         assert!(
             total <= p.daily_spending_cap_usd,
@@ -1737,18 +1770,18 @@ fn check_inv2_agent_cannot_modify_policy(
                 pre.developer_fee_rate, post.developer_fee_rate,
             );
             assert_eq!(
-                pre.allowed_tokens.len(),
-                post.allowed_tokens.len(),
-                "INV-2 violated: agent changed allowed_tokens count ({} -> {})",
-                pre.allowed_tokens.len(),
-                post.allowed_tokens.len(),
+                pre.protocol_mode,
+                post.protocol_mode,
+                "INV-2 violated: agent changed protocol_mode ({} -> {})",
+                pre.protocol_mode,
+                post.protocol_mode,
             );
             assert_eq!(
-                pre.allowed_protocols.len(),
-                post.allowed_protocols.len(),
-                "INV-2 violated: agent changed allowed_protocols count ({} -> {})",
-                pre.allowed_protocols.len(),
-                post.allowed_protocols.len(),
+                pre.protocols.len(),
+                post.protocols.len(),
+                "INV-2 violated: agent changed protocols count ({} -> {})",
+                pre.protocols.len(),
+                post.protocols.len(),
             );
             assert_eq!(
                 pre.timelock_duration, post.timelock_duration,
@@ -1810,15 +1843,17 @@ fn check_inv5_revoke_permanence(
 }
 
 /// INV-6: Aggregate rolling USD spend across ALL tokens never exceeds daily cap.
+/// V2: Same as INV-1 — epoch buckets are already aggregate USD.
 fn check_inv6_cross_token_aggregate(
     policy: &Option<PolicyConfig>,
     tracker: &Option<SpendTracker>,
 ) {
     if let (Some(p), Some(t)) = (policy, tracker) {
         let total_usd: u64 = t
-            .rolling_spends
+            .buckets
             .iter()
-            .map(|e| e.usd_amount)
+            .filter(|b| b.usd_amount > 0)
+            .map(|b| b.usd_amount)
             .fold(0u64, |acc, x| acc.saturating_add(x));
         assert!(
             total_usd <= p.daily_spending_cap_usd,
@@ -1829,31 +1864,8 @@ fn check_inv6_cross_token_aggregate(
     }
 }
 
-/// INV-7: Per-token base-unit spend never exceeds its daily_cap_base (when configured).
-fn check_inv7_per_token_cap(
-    policy: &Option<PolicyConfig>,
-    tracker: &Option<SpendTracker>,
-) {
-    if let (Some(p), Some(t)) = (policy, tracker) {
-        for (idx, token) in p.allowed_tokens.iter().enumerate() {
-            if token.daily_cap_base > 0 {
-                let token_base_total: u64 = t
-                    .rolling_spends
-                    .iter()
-                    .filter(|e| e.token_index == idx as u8)
-                    .map(|e| e.base_amount)
-                    .fold(0u64, |acc, x| acc.saturating_add(x));
-                assert!(
-                    token_base_total <= token.daily_cap_base,
-                    "INV-7 violated: token[{}] base spend {} > cap {}",
-                    idx,
-                    token_base_total,
-                    token.daily_cap_base,
-                );
-            }
-        }
-    }
-}
+// INV-7: Removed in V2 — per-token base cap no longer exists.
+// V2 uses aggregate USD only via epoch buckets.
 
 /// INV-10: FinalizeSession closes the session PDA account.
 fn check_inv10_session_closed(trident: &mut Trident, session_addr: &Pubkey) {

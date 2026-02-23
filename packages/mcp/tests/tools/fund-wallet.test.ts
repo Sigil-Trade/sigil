@@ -40,8 +40,9 @@ describe("shield_fund_wallet", () => {
       layers: {
         shield: {
           enabled: true,
-          dailyCapUsd: 500,
-          allowedProtocols: [],
+          dailySpendingCapUsd: 500,
+          protocolMode: 0,
+          protocols: [],
           maxLeverageBps: 0,
           rateLimit: 60,
         },

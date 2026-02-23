@@ -12,9 +12,9 @@ describe("resource: shield://vault/{address}/spending", () => {
     const data = JSON.parse(json);
     expect(data.vault).to.equal(TEST_VAULT_PDA.toBase58());
     expect(data.dailySpendingCapUsd).to.equal("10000000000");
-    expect(data.rollingSpends).to.be.an("array").with.length(1);
-    expect(data.rollingSpends[0].usdAmount).to.equal("500000000");
-    expect(data.totalRecentTransactions).to.equal(1);
+    expect(data.buckets).to.be.an("array").with.length(1);
+    expect(data.buckets[0].usdAmount).to.equal("500000000");
+    expect(data.totalRolling24hUsd).to.equal("500000000");
   });
 
   it("returns default state for missing vault", async () => {
@@ -27,7 +27,7 @@ describe("resource: shield://vault/{address}/spending", () => {
     );
     const data = JSON.parse(json);
     expect(data.error).to.include("not found");
-    expect(data.rollingSpends).to.deep.equal([]);
+    expect(data.buckets).to.deep.equal([]);
   });
 
   it("includes percent-of-cap calculation", async () => {
@@ -38,6 +38,6 @@ describe("resource: shield://vault/{address}/spending", () => {
     );
     const data = JSON.parse(json);
     // 500000000 / 10000000000 = 5%
-    expect(data.rollingSpends[0].percentOfCap).to.equal("5%");
+    expect(data.percentOfCap).to.equal("5%");
   });
 });

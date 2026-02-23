@@ -1,9 +1,15 @@
 /**
- * Devnet Security Tests — 12 tests
+ * Devnet Security Tests — 11 tests (V2)
  *
  * Adversarial access control tests against the live deployed program.
  * Confirms the same constraints that LiteSVM tests verify actually hold
  * on the deployed devnet binary.
+ *
+ * V2: No makeAllowedToken. Tokens via OracleRegistry.
+ *     validate_and_authorize requires oracleRegistry + tokenMintAccount.
+ *     Removed per-token tx limit test (V1 concept, replaced by aggregate
+ *     TransactionTooLarge). Token not in registry -> TokenNotRegistered.
+ *     updatePolicy: no tracker in accounts.
  */
 import * as anchor from "@coral-xyz/anchor";
 import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
@@ -18,10 +24,12 @@ import { expect } from "chai";
 import BN from "bn.js";
 import {
   getDevnetProvider,
-  makeAllowedToken,
   nextVaultId,
   derivePDAs,
   deriveSessionPda,
+  deriveOracleRegistryPda,
+  initializeOracleRegistry,
+  makeOracleEntry,
   createFullVault,
   authorize,
   finalize,
@@ -40,22 +48,28 @@ describe("devnet-security", () => {
   const jupiterProgramId = Keypair.generate().publicKey;
 
   let mint: PublicKey;
-  let disallowedMint: PublicKey;
+  let unregisteredMint: PublicKey; // mint NOT in oracle registry
   let vault: FullVaultResult;
   let vaultId: BN;
+  let oracleRegistryPda: PublicKey;
 
   before(async () => {
     await fundKeypair(provider, agent.publicKey);
     await fundKeypair(provider, attacker.publicKey);
 
     mint = await createMint(connection, payer, owner.publicKey, null, 6);
-    disallowedMint = await createMint(
+    unregisteredMint = await createMint(
       connection,
       payer,
       owner.publicKey,
       null,
       6,
     );
+
+    // Initialize oracle registry with only `mint` (not unregisteredMint)
+    oracleRegistryPda = await initializeOracleRegistry(program, owner, [
+      makeOracleEntry(mint),
+    ]);
 
     vaultId = nextVaultId(4);
 
@@ -69,15 +83,6 @@ describe("devnet-security", () => {
       vaultId,
       dailyCap: new BN(100_000_000), // 100 USDC
       maxTx: new BN(50_000_000), // 50 USDC max per tx
-      allowedTokens: [
-        makeAllowedToken(
-          mint,
-          PublicKey.default,
-          6,
-          new BN(0),
-          new BN(40_000_000), // maxTxBase=40 USDC
-        ),
-      ],
       allowedProtocols: [jupiterProgramId],
       depositAmount: new BN(1_000_000_000),
     });
@@ -105,7 +110,6 @@ describe("devnet-security", () => {
           owner: attacker.publicKey,
           vault: vault.vaultPda,
           policy: vault.policyPda,
-          tracker: vault.trackerPda,
         } as any)
         .signers([attacker])
         .rpc();
@@ -202,6 +206,7 @@ describe("devnet-security", () => {
           vault: vault.vaultPda,
           policy: vault.policyPda,
           tracker: vault.trackerPda,
+          oracleRegistry: vault.oracleRegistryPda,
           session: sessionPda,
           vaultTokenAccount: vault.vaultTokenAta,
           tokenMintAccount: mint,
@@ -236,7 +241,6 @@ describe("devnet-security", () => {
           owner: agent.publicKey,
           vault: vault.vaultPda,
           policy: vault.policyPda,
-          tracker: vault.trackerPda,
         } as any)
         .signers([agent])
         .rpc();
@@ -248,7 +252,7 @@ describe("devnet-security", () => {
   });
 
   it("7. over-cap spending blocked with DailyCapExceeded", async () => {
-    // Spend exactly at cap (100 USDC) — need two transactions since maxTx=50
+    // Spend 40 USDC (within maxTx=50)
     const sessionPda1 = deriveSessionPda(
       vault.vaultPda,
       agent.publicKey,
@@ -262,10 +266,11 @@ describe("devnet-security", () => {
       vaultPda: vault.vaultPda,
       policyPda: vault.policyPda,
       trackerPda: vault.trackerPda,
+      oracleRegistryPda: vault.oracleRegistryPda,
       sessionPda: sessionPda1,
       vaultTokenAta: vault.vaultTokenAta,
       mint,
-      amount: new BN(40_000_000), // 40 USDC (within maxTxBase=40)
+      amount: new BN(40_000_000), // 40 USDC
       protocol: jupiterProgramId,
     });
     await finalize({
@@ -273,7 +278,6 @@ describe("devnet-security", () => {
       payer: agent,
       vaultPda: vault.vaultPda,
       policyPda: vault.policyPda,
-      trackerPda: vault.trackerPda,
       sessionPda: sessionPda1,
       agentPubkey: agent.publicKey,
       vaultTokenAta: vault.vaultTokenAta,
@@ -294,6 +298,7 @@ describe("devnet-security", () => {
       vaultPda: vault.vaultPda,
       policyPda: vault.policyPda,
       trackerPda: vault.trackerPda,
+      oracleRegistryPda: vault.oracleRegistryPda,
       sessionPda: sessionPda2,
       vaultTokenAta: vault.vaultTokenAta,
       mint,
@@ -305,7 +310,6 @@ describe("devnet-security", () => {
       payer: agent,
       vaultPda: vault.vaultPda,
       policyPda: vault.policyPda,
-      trackerPda: vault.trackerPda,
       sessionPda: sessionPda2,
       agentPubkey: agent.publicKey,
       vaultTokenAta: vault.vaultTokenAta,
@@ -328,6 +332,7 @@ describe("devnet-security", () => {
         vaultPda: vault.vaultPda,
         policyPda: vault.policyPda,
         trackerPda: vault.trackerPda,
+        oracleRegistryPda: vault.oracleRegistryPda,
         sessionPda: sessionPda3,
         vaultTokenAta: vault.vaultTokenAta,
         mint,
@@ -341,8 +346,8 @@ describe("devnet-security", () => {
     console.log("    Over-cap spending correctly blocked");
   });
 
-  it("8. per-token single tx limit enforced", async () => {
-    // maxTxBase=40 USDC for mint — try 41
+  it("8. aggregate TransactionTooLarge enforced (maxTx=50)", async () => {
+    // maxTx=50 USDC for the vault — try 51
     // Need a fresh vault since the cap on the main vault is spent
     const freshVaultId = nextVaultId(4);
     const freshAgent = Keypair.generate();
@@ -357,16 +362,7 @@ describe("devnet-security", () => {
       mint,
       vaultId: freshVaultId,
       dailyCap: new BN(500_000_000),
-      maxTx: new BN(200_000_000),
-      allowedTokens: [
-        makeAllowedToken(
-          mint,
-          PublicKey.default,
-          6,
-          new BN(0),
-          new BN(40_000_000),
-        ),
-      ],
+      maxTx: new BN(50_000_000), // 50 USDC max per tx
       allowedProtocols: [jupiterProgramId],
       depositAmount: new BN(500_000_000),
     });
@@ -385,17 +381,18 @@ describe("devnet-security", () => {
         vaultPda: freshVault.vaultPda,
         policyPda: freshVault.policyPda,
         trackerPda: freshVault.trackerPda,
+        oracleRegistryPda: freshVault.oracleRegistryPda,
         sessionPda,
         vaultTokenAta: freshVault.vaultTokenAta,
         mint,
-        amount: new BN(41_000_000), // 41 > maxTxBase=40
+        amount: new BN(51_000_000), // 51 > maxTx=50
         protocol: jupiterProgramId,
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectError(err, "PerTokenTxLimitExceeded", "limit");
+      expectError(err, "TransactionTooLarge", "maximum");
     }
-    console.log("    Per-token tx limit enforced");
+    console.log("    Aggregate TransactionTooLarge enforced");
   });
 
   it("9. double-finalize same session fails", async () => {
@@ -430,6 +427,7 @@ describe("devnet-security", () => {
       vaultPda: freshVault.vaultPda,
       policyPda: freshVault.policyPda,
       trackerPda: freshVault.trackerPda,
+      oracleRegistryPda: freshVault.oracleRegistryPda,
       sessionPda,
       vaultTokenAta: freshVault.vaultTokenAta,
       mint,
@@ -443,7 +441,6 @@ describe("devnet-security", () => {
       payer: freshAgent,
       vaultPda: freshVault.vaultPda,
       policyPda: freshVault.policyPda,
-      trackerPda: freshVault.trackerPda,
       sessionPda,
       agentPubkey: freshAgent.publicKey,
       vaultTokenAta: freshVault.vaultTokenAta,
@@ -459,7 +456,6 @@ describe("devnet-security", () => {
         payer: freshAgent,
         vaultPda: freshVault.vaultPda,
         policyPda: freshVault.policyPda,
-        trackerPda: freshVault.trackerPda,
         sessionPda,
         agentPubkey: freshAgent.publicKey,
         vaultTokenAta: freshVault.vaultTokenAta,
@@ -521,6 +517,7 @@ describe("devnet-security", () => {
         vaultPda: freshVault.vaultPda,
         policyPda: freshVault.policyPda,
         trackerPda: freshVault.trackerPda,
+        oracleRegistryPda: freshVault.oracleRegistryPda,
         sessionPda,
         vaultTokenAta: freshVault.vaultTokenAta,
         mint,
@@ -599,96 +596,5 @@ describe("devnet-security", () => {
       .rpc();
 
     console.log("    Frozen vault: deposit + withdraw succeeded");
-  });
-
-  it("12. disallowed token rejected with TokenNotAllowed", async () => {
-    const freshVaultId = nextVaultId(4);
-    const freshAgent = Keypair.generate();
-    await fundKeypair(provider, freshAgent.publicKey);
-
-    const freshVault = await createFullVault({
-      program,
-      connection,
-      owner,
-      agent: freshAgent,
-      feeDestination: feeDestination.publicKey,
-      mint,
-      vaultId: freshVaultId,
-      dailyCap: new BN(500_000_000),
-      maxTx: new BN(200_000_000),
-      allowedTokens: [makeAllowedToken(mint)], // only mint, not disallowedMint
-      allowedProtocols: [jupiterProgramId],
-      depositAmount: new BN(500_000_000),
-    });
-
-    // Create vault ATA for the disallowed mint and deposit
-    const disallowedVaultAta = anchor.utils.token.associatedAddress({
-      mint: disallowedMint,
-      owner: freshVault.vaultPda,
-    });
-    const ownerDisallowedAtaAccount = await getOrCreateAssociatedTokenAccount(
-      connection,
-      payer,
-      disallowedMint,
-      owner.publicKey,
-    );
-    const ownerDisallowedAta = ownerDisallowedAtaAccount.address;
-    await mintTo(
-      connection,
-      payer,
-      disallowedMint,
-      ownerDisallowedAta,
-      owner.publicKey,
-      500_000_000,
-    );
-    await program.methods
-      .depositFunds(new BN(500_000_000))
-      .accounts({
-        owner: owner.publicKey,
-        vault: freshVault.vaultPda,
-        mint: disallowedMint,
-        ownerTokenAccount: ownerDisallowedAta,
-        vaultTokenAccount: disallowedVaultAta,
-        tokenProgram: TOKEN_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-      } as any)
-      .rpc();
-
-    // Try to authorize a swap with the disallowed token
-    const sessionPda = deriveSessionPda(
-      freshVault.vaultPda,
-      freshAgent.publicKey,
-      disallowedMint,
-      program.programId,
-    );
-
-    try {
-      await program.methods
-        .validateAndAuthorize(
-          { swap: {} },
-          disallowedMint,
-          new BN(10_000_000),
-          jupiterProgramId,
-          null,
-        )
-        .accounts({
-          agent: freshAgent.publicKey,
-          vault: freshVault.vaultPda,
-          policy: freshVault.policyPda,
-          tracker: freshVault.trackerPda,
-          session: sessionPda,
-          vaultTokenAccount: disallowedVaultAta,
-          tokenMintAccount: disallowedMint,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .signers([freshAgent])
-        .rpc();
-      expect.fail("Should have thrown");
-    } catch (err: any) {
-      expectError(err, "TokenNotAllowed", "not in allowed");
-    }
-    console.log("    Disallowed token correctly rejected");
   });
 });

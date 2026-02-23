@@ -1,4 +1,4 @@
-use super::{TrackerTier, VaultStatus};
+use super::VaultStatus;
 use anchor_lang::prelude::*;
 
 #[account]
@@ -9,10 +9,8 @@ pub struct AgentVault {
     /// The registered agent's signing key (Pubkey::default() if not yet registered)
     pub agent: Pubkey,
 
-    /// Developer fee destination — the wallet that receives developer fees
-    /// on every finalized transaction. IMMUTABLE after initialization — only
-    /// `initialize_vault` writes this field. This prevents a compromised owner
-    /// key from redirecting fees. Protocol fees go to PROTOCOL_TREASURY separately.
+    /// Developer fee destination — IMMUTABLE after initialization.
+    /// Prevents a compromised owner from redirecting fees.
     pub fee_destination: Pubkey,
 
     /// Unique vault identifier (allows one owner to have multiple vaults)
@@ -36,19 +34,16 @@ pub struct AgentVault {
     /// Number of currently open positions (for perps tracking)
     pub open_positions: u8,
 
-    /// Cumulative developer fees collected from this vault (token base units).
-    /// Protocol fees are tracked separately via events.
+    /// Cumulative developer fees collected from this vault (token base units)
     pub total_fees_collected: u64,
-
-    /// Tracker capacity tier chosen at vault creation
-    pub tracker_tier: TrackerTier,
 }
 
 impl AgentVault {
-    /// Account discriminator (8) + owner (32) + agent (32) + fee_destination (32) +
-    /// vault_id (8) + status (1) + bump (1) + created_at (8) + total_transactions (8) +
-    /// total_volume (8) + open_positions (1) + total_fees_collected (8) + tracker_tier (1)
-    pub const SIZE: usize = 8 + 32 + 32 + 32 + 8 + 1 + 1 + 8 + 8 + 8 + 1 + 8 + 1;
+    /// Account discriminator (8) + owner (32) + agent (32) +
+    /// fee_destination (32) + vault_id (8) + status (1) + bump (1) +
+    /// created_at (8) + total_transactions (8) + total_volume (8) +
+    /// open_positions (1) + total_fees_collected (8)
+    pub const SIZE: usize = 8 + 32 + 32 + 32 + 8 + 1 + 1 + 8 + 8 + 8 + 1 + 8;
 
     pub fn is_active(&self) -> bool {
         self.status == VaultStatus::Active

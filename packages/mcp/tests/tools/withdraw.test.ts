@@ -41,7 +41,7 @@ describe("shield_withdraw", () => {
 
   it("returns error when balance insufficient", async () => {
     const client = createMockClient({
-      shouldThrow: Object.assign(new Error("test"), { code: 6020 }),
+      shouldThrow: Object.assign(new Error("test"), { code: 6019 }),
     });
     const result = await withdraw(client as any, {
       vault: TEST_VAULT_PDA.toBase58(),

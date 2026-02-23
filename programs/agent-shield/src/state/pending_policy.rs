@@ -1,4 +1,4 @@
-use super::{AllowedToken, MAX_ALLOWED_DESTINATIONS, MAX_ALLOWED_PROTOCOLS, MAX_ALLOWED_TOKENS};
+use super::{MAX_ALLOWED_DESTINATIONS, MAX_ALLOWED_PROTOCOLS};
 use anchor_lang::prelude::*;
 
 /// Queued policy update that becomes executable after a timelock period.
@@ -20,8 +20,8 @@ pub struct PendingPolicyUpdate {
     // All policy fields as Option<T> — only non-None fields are applied
     pub daily_spending_cap_usd: Option<u64>,
     pub max_transaction_amount_usd: Option<u64>,
-    pub allowed_tokens: Option<Vec<AllowedToken>>,
-    pub allowed_protocols: Option<Vec<Pubkey>>,
+    pub protocol_mode: Option<u8>,
+    pub protocols: Option<Vec<Pubkey>>,
     pub max_leverage_bps: Option<u16>,
     pub can_open_positions: Option<bool>,
     pub max_concurrent_positions: Option<u8>,
@@ -37,23 +37,24 @@ impl PendingPolicyUpdate {
     /// Worst-case size with all Option fields populated at max capacity.
     ///
     /// discriminator (8) + vault (32) + queued_at (8) + executes_at (8) +
-    /// Option<u64> (1+8) * 2 + Option<Vec<AllowedToken>> (1+4+81*10) +
-    /// Option<Vec<Pubkey>> (1+4+32*10) + Option<u16> (1+2) +
-    /// Option<bool> (1+1) + Option<u8> (1+1) + Option<u16> (1+2) +
+    /// Option<u64> (1+8) * 2 + Option<u8> (1+1) +
+    /// Option<Vec<Pubkey>> (1+4+32*10) +
+    /// Option<u16> (1+2) + Option<bool> (1+1) +
+    /// Option<u8> (1+1) + Option<u16> (1+2) +
     /// Option<u64> (1+8) + Option<Vec<Pubkey>> (1+4+32*10) + bump (1)
     pub const SIZE: usize = 8
         + 32
         + 8
         + 8
-        + (1 + 8)  // daily_spending_cap_usd
-        + (1 + 8)  // max_transaction_amount_usd
-        + (1 + 4 + AllowedToken::SIZE * MAX_ALLOWED_TOKENS) // allowed_tokens
-        + (1 + 4 + 32 * MAX_ALLOWED_PROTOCOLS) // allowed_protocols
-        + (1 + 2)  // max_leverage_bps
-        + (1 + 1)  // can_open_positions
-        + (1 + 1)  // max_concurrent_positions
-        + (1 + 2)  // developer_fee_rate
-        + (1 + 8)  // timelock_duration
+        + (1 + 8) // daily_spending_cap_usd
+        + (1 + 8) // max_transaction_amount_usd
+        + (1 + 1) // protocol_mode
+        + (1 + 4 + 32 * MAX_ALLOWED_PROTOCOLS) // protocols
+        + (1 + 2) // max_leverage_bps
+        + (1 + 1) // can_open_positions
+        + (1 + 1) // max_concurrent_positions
+        + (1 + 2) // developer_fee_rate
+        + (1 + 8) // timelock_duration
         + (1 + 4 + 32 * MAX_ALLOWED_DESTINATIONS) // allowed_destinations
         + 1; // bump
 

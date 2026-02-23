@@ -19,40 +19,37 @@ export const PROTOCOL_TREASURY = new PublicKey(
 // USD decimals (6) — $500 = 500_000_000
 export const USD_DECIMALS = 6;
 
-// Sentinel for unpriced (receive-only) tokens — all 0xFF bytes
-export const UNPRICED_SENTINEL = new PublicKey(new Uint8Array(32).fill(0xff));
+// SpendTracker constants (matching on-chain values)
+export const EPOCH_DURATION = 600; // 10 minutes in seconds
+export const NUM_EPOCHS = 144; // 144 × 10 min = 24h
 
-/** Tracker capacity tier — determines max rolling spend entries */
-export enum TrackerTier {
-  /** 200 entries (~16 KB, ~0.11 SOL rent) */
-  Standard = 0,
-  /** 500 entries (~33 KB, ~0.23 SOL rent) */
-  Pro = 1,
-  /** 1000 entries (~61 KB, ~0.42 SOL rent) */
-  Max = 2,
-}
+// Protocol mode constants (matching on-chain values)
+export const PROTOCOL_MODE_ALL = 0;
+export const PROTOCOL_MODE_ALLOWLIST = 1;
+export const PROTOCOL_MODE_DENYLIST = 2;
 
 /** Oracle source types */
 export type OracleSource = "pyth" | "switchboard";
 
-/** Per-token configuration stored in PolicyConfig */
-export interface AllowedToken {
+/** Oracle registry entry — maps token mint to its oracle feed */
+export interface OracleEntry {
   /** Token mint address */
   mint: PublicKey;
   /** Oracle feed account (Pyth PriceUpdateV2 or Switchboard PullFeed).
-   *  Pubkey.default = stablecoin (1:1 USD).
-   *  UNPRICED_SENTINEL = unpriced (receive-only). */
+   *  Pubkey.default = stablecoin (1:1 USD, no oracle read needed). */
   oracleFeed: PublicKey;
-  /** Token decimals (e.g., 6 for USDC, 9 for SOL) */
-  decimals: number;
-  /** Per-token daily cap in base units (0 = no per-token limit) */
-  dailyCapBase: BN;
-  /** Per-token max single tx in base units (0 = no per-token limit) */
-  maxTxBase: BN;
+  /** Whether this token is a stablecoin (1:1 USD conversion) */
+  isStablecoin: boolean;
+  /** Optional fallback oracle feed. PublicKey.default = no fallback.
+   *  Used when primary is stale/invalid. Cross-checked for divergence. */
+  fallbackFeed: PublicKey;
 }
 
-/** Token classification for oracle routing */
-export type TokenClassification = "stablecoin" | "oracle-priced" | "unpriced";
+/** Epoch bucket in the zero-copy circular spend tracker */
+export type EpochBucket = {
+  epochId: BN;
+  usdAmount: BN;
+};
 
 // Re-export IDL types for convenience
 export type AgentVaultAccount = {
@@ -67,18 +64,14 @@ export type AgentVaultAccount = {
   totalVolume: BN;
   openPositions: number;
   totalFeesCollected: BN;
-  trackerTier:
-    | { standard: Record<string, never> }
-    | { pro: Record<string, never> }
-    | { max: Record<string, never> };
 };
 
 export type PolicyConfigAccount = {
   vault: PublicKey;
   dailySpendingCapUsd: BN;
   maxTransactionSizeUsd: BN;
-  allowedTokens: AllowedToken[];
-  allowedProtocols: PublicKey[];
+  protocolMode: number;
+  protocols: PublicKey[];
   maxLeverageBps: number;
   canOpenPositions: boolean;
   maxConcurrentPositions: number;
@@ -94,8 +87,8 @@ export type PendingPolicyUpdateAccount = {
   executesAt: BN;
   dailySpendingCapUsd: BN | null;
   maxTransactionAmountUsd: BN | null;
-  allowedTokens: AllowedToken[] | null;
-  allowedProtocols: PublicKey[] | null;
+  protocolMode: number | null;
+  protocols: PublicKey[] | null;
   maxLeverageBps: number | null;
   canOpenPositions: boolean | null;
   maxConcurrentPositions: number | null;
@@ -105,33 +98,16 @@ export type PendingPolicyUpdateAccount = {
   bump: number;
 };
 
-export type SpendTrackerAccount = {
-  vault: PublicKey;
-  trackerTier:
-    | { standard: Record<string, never> }
-    | { pro: Record<string, never> }
-    | { max: Record<string, never> };
-  maxSpendEntries: number;
-  rollingSpends: SpendEntry[];
-  recentTransactions: TransactionRecord[];
+export type OracleRegistryAccount = {
+  authority: PublicKey;
+  entries: OracleEntry[];
   bump: number;
 };
 
-export type SpendEntry = {
-  tokenIndex: number;
-  usdAmount: BN;
-  baseAmount: BN;
-  timestamp: BN;
-};
-
-export type TransactionRecord = {
-  timestamp: BN;
-  actionType: ActionType;
-  tokenMint: PublicKey;
-  amount: BN;
-  protocol: PublicKey;
-  success: boolean;
-  slot: BN;
+export type SpendTrackerAccount = {
+  vault: PublicKey;
+  buckets: EpochBucket[];
+  bump: number;
 };
 
 export type SessionAuthorityAccount = {
@@ -169,23 +145,23 @@ export interface InitializeVaultParams {
   vaultId: BN;
   dailySpendingCapUsd: BN;
   maxTransactionSizeUsd: BN;
-  allowedTokens: AllowedToken[];
-  allowedProtocols: PublicKey[];
+  /** Protocol mode: 0=all allowed, 1=allowlist, 2=denylist. Default: 0 */
+  protocolMode?: number;
+  /** Protocol pubkeys for allowlist/denylist (ignored when mode=0) */
+  protocols?: PublicKey[];
   maxLeverageBps: number;
   maxConcurrentPositions: number;
   feeDestination: PublicKey;
   developerFeeRate?: number;
   timelockDuration?: BN;
   allowedDestinations?: PublicKey[];
-  /** Tracker capacity tier (default: Standard = 0) */
-  trackerTier?: TrackerTier;
 }
 
 export interface UpdatePolicyParams {
   dailySpendingCapUsd?: BN | null;
   maxTransactionSizeUsd?: BN | null;
-  allowedTokens?: AllowedToken[] | null;
-  allowedProtocols?: PublicKey[] | null;
+  protocolMode?: number | null;
+  protocols?: PublicKey[] | null;
   maxLeverageBps?: number | null;
   canOpenPositions?: boolean | null;
   maxConcurrentPositions?: number | null;
@@ -197,8 +173,8 @@ export interface UpdatePolicyParams {
 export interface QueuePolicyUpdateParams {
   dailySpendingCapUsd?: BN | null;
   maxTransactionAmountUsd?: BN | null;
-  allowedTokens?: AllowedToken[] | null;
-  allowedProtocols?: PublicKey[] | null;
+  protocolMode?: number | null;
+  protocols?: PublicKey[] | null;
   maxLeverageBps?: number | null;
   canOpenPositions?: boolean | null;
   maxConcurrentPositions?: number | null;
@@ -210,10 +186,13 @@ export interface QueuePolicyUpdateParams {
 export interface AgentTransferParams {
   amount: BN;
   vaultTokenAccount: PublicKey;
+  tokenMintAccount: PublicKey;
   destinationTokenAccount: PublicKey;
   feeDestinationTokenAccount?: PublicKey | null;
   protocolTreasuryTokenAccount?: PublicKey | null;
   oracleFeedAccount?: PublicKey;
+  /** Fallback oracle feed account (optional, for cross-validation) */
+  fallbackOracleFeedAccount?: PublicKey;
 }
 
 export interface AuthorizeParams {
@@ -246,4 +225,15 @@ export interface ComposeActionParams {
   protocolTreasuryTokenAccount?: PublicKey | null;
   /** Oracle feed account for oracle-priced tokens (Pyth or Switchboard) */
   oracleFeedAccount?: PublicKey;
+  /** Fallback oracle feed account (optional, for cross-validation) */
+  fallbackOracleFeedAccount?: PublicKey;
+}
+
+export interface InitializeOracleRegistryParams {
+  entries: OracleEntry[];
+}
+
+export interface UpdateOracleRegistryParams {
+  entriesToAdd: OracleEntry[];
+  mintsToRemove: PublicKey[];
 }

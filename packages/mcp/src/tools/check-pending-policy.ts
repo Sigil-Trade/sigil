@@ -45,17 +45,15 @@ export async function checkPendingPolicy(
         `  - Max Transaction Size: → ${formatBN(pending.maxTransactionAmountUsd)}`,
       );
     }
-    if (pending.allowedTokens !== null) {
-      const mints = pending.allowedTokens
-        .map((t) => t.mint.toBase58())
-        .join(", ");
-      changes.push(`  - Allowed Tokens: → [${mints}]`);
+    if (pending.protocolMode !== null) {
+      const modeLabels = ["All Allowed", "Allowlist", "Denylist"];
+      changes.push(
+        `  - Protocol Mode: → ${modeLabels[pending.protocolMode] ?? `Unknown (${pending.protocolMode})`}`,
+      );
     }
-    if (pending.allowedProtocols !== null) {
-      const protocols = pending.allowedProtocols
-        .map((p) => p.toBase58())
-        .join(", ");
-      changes.push(`  - Allowed Protocols: → [${protocols}]`);
+    if (pending.protocols !== null) {
+      const protocols = pending.protocols.map((p) => p.toBase58()).join(", ");
+      changes.push(`  - Protocols: → [${protocols}]`);
     }
     if (pending.allowedDestinations !== null) {
       const dests = pending.allowedDestinations

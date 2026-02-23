@@ -80,6 +80,9 @@ export interface HardenResult {
  * on-chain dailySpendingCap (conservative ceiling). Per-token granularity
  * is enforced client-side. Fields with no on-chain equivalent
  * (blockUnknownPrograms, rateLimit, customCheck) stay client-side only.
+ *
+ * V2: No per-token allowlists on-chain — tokens are validated via the
+ * global OracleRegistry. Protocol mode determines allowlist/denylist behavior.
  */
 export function mapPoliciesToVaultParams(
   resolved: ResolvedPolicies,
@@ -94,8 +97,8 @@ export function mapPoliciesToVaultParams(
   vaultId: any; // BN — constructed at call site
   dailySpendingCap: bigint;
   maxTransactionSize: bigint;
-  allowedTokens: PublicKey[];
-  allowedProtocols: PublicKey[];
+  protocolMode: number;
+  protocols: PublicKey[];
   maxLeverageBps: number;
   maxConcurrentPositions: number;
   feeDestination: PublicKey;
@@ -103,35 +106,21 @@ export function mapPoliciesToVaultParams(
 } {
   // Collapse multiple spend limits to the largest (ceiling cap)
   let maxCap = BigInt(0);
-  const tokenMintSet = new Set<string>();
 
   for (const limit of resolved.spendLimits) {
     if (limit.amount > maxCap) {
       maxCap = limit.amount;
     }
-    // Collect token mints from spend limits
-    tokenMintSet.add(limit.mint);
   }
-
-  // Merge explicitly allowed tokens (deduped) — allowedTokens is Set<string>|undefined
-  if (resolved.allowedTokens) {
-    for (const t of resolved.allowedTokens) {
-      tokenMintSet.add(t);
-    }
-  }
-
-  // Cap at 10 tokens (on-chain limit)
-  const allowedTokens = Array.from(tokenMintSet)
-    .slice(0, 10)
-    .map((s) => new PublicKey(s));
 
   // Allowed protocols (Set<string>|undefined), cap at 10
   const protocolArr = resolved.allowedProtocols
     ? Array.from(resolved.allowedProtocols)
     : [];
-  const allowedProtocols = protocolArr
-    .slice(0, 10)
-    .map((s) => new PublicKey(s));
+  const protocols = protocolArr.slice(0, 10).map((s) => new PublicKey(s));
+
+  // Protocol mode: if protocols specified, use allowlist (1); else allow all (0)
+  const protocolMode = protocols.length > 0 ? 1 : 0;
 
   // maxTransactionSize: use resolved value, fall back to dailySpendingCap
   const maxTransactionSize = resolved.maxTransactionSize ?? maxCap;
@@ -140,8 +129,8 @@ export function mapPoliciesToVaultParams(
     vaultId,
     dailySpendingCap: maxCap,
     maxTransactionSize,
-    allowedTokens,
-    allowedProtocols,
+    protocolMode,
+    protocols,
     maxLeverageBps: opts?.maxLeverageBps ?? 0,
     maxConcurrentPositions: opts?.maxConcurrentPositions ?? 5,
     feeDestination,
@@ -504,19 +493,13 @@ export async function harden(
     },
   );
 
-  // Convert bigints to BN and wrap tokens as AllowedToken for the SDK
+  // Convert bigints to BN for the SDK
   const vaultParams = {
     vaultId: new BN(mapped.vaultId),
     dailySpendingCapUsd: new BN(mapped.dailySpendingCap.toString()),
     maxTransactionSizeUsd: new BN(mapped.maxTransactionSize.toString()),
-    allowedTokens: mapped.allowedTokens.map((mint: PublicKey) => ({
-      mint,
-      oracleFeed: PublicKey.default, // stablecoin (1:1 USD) by default
-      decimals: 6,
-      dailyCapBase: new BN(0),
-      maxTxBase: new BN(0),
-    })),
-    allowedProtocols: mapped.allowedProtocols,
+    protocolMode: mapped.protocolMode,
+    protocols: mapped.protocols,
     maxLeverageBps: mapped.maxLeverageBps,
     maxConcurrentPositions: mapped.maxConcurrentPositions,
     feeDestination: mapped.feeDestination,
@@ -596,16 +579,4 @@ export async function withVault(
 ): Promise<HardenResult> {
   const shielded = shield(wallet, policies);
   return harden(shielded, options);
-}
-
-/**
- * Public API for client-side-only shielding (no on-chain vault).
- * For most users, prefer withVault() for full enforcement.
- */
-export function shieldWallet(
-  wallet: WalletLike,
-  policies?: ShieldPolicies,
-  options?: import("./shield").ShieldOptions,
-): ShieldedWallet {
-  return shield(wallet, policies, options);
 }

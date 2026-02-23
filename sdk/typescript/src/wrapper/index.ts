@@ -4,7 +4,6 @@
 export {
   harden,
   withVault,
-  shieldWallet,
   mapPoliciesToVaultParams,
   findNextVaultId,
 } from "./harden";
@@ -14,6 +13,9 @@ export type { HardenOptions, HardenResult } from "./harden";
 export type { ShieldedWallet, WalletLike, ShieldOptions } from "./shield";
 export { isTeeWallet } from "./shield";
 export type { TeeWallet } from "./shield";
+
+// Public client-side-only API (re-export shield() under its public name)
+export { shield as shieldWallet } from "./shield";
 
 // Policy configuration (wrapper types — accepts PublicKey | string)
 export type {

@@ -15,14 +15,16 @@ import {
  */
 const CONFIGURE_TEMPLATES = {
   conservative: {
-    dailyCapUsd: 500,
-    allowedProtocols: ["JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"],
+    dailySpendingCapUsd: 500,
+    protocolMode: 1 as number,
+    protocols: ["JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"],
     maxLeverageBps: 0,
     rateLimit: 60,
   },
   moderate: {
-    dailyCapUsd: 2000,
-    allowedProtocols: [
+    dailySpendingCapUsd: 2000,
+    protocolMode: 1 as number,
+    protocols: [
       "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
       "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",
       "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",
@@ -32,8 +34,9 @@ const CONFIGURE_TEMPLATES = {
     rateLimit: 120,
   },
   aggressive: {
-    dailyCapUsd: 10000,
-    allowedProtocols: [
+    dailySpendingCapUsd: 10000,
+    protocolMode: 0 as number,
+    protocols: [
       "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
       "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",
       "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",
@@ -60,14 +63,20 @@ export const configureSchema = z.object({
     .optional()
     .default("conservative")
     .describe("Policy template (default: conservative)"),
-  dailyCapUsd: z
+  dailySpendingCapUsd: z
     .number()
     .optional()
     .describe("Custom daily spending cap in USD (overrides template)"),
-  allowedProtocols: z
+  protocolMode: z
+    .number()
+    .optional()
+    .describe(
+      "Protocol access mode: 0 = all allowed, 1 = allowlist, 2 = denylist (overrides template)",
+    ),
+  protocols: z
     .array(z.string())
     .optional()
-    .describe("Custom allowed protocol program IDs (base58)"),
+    .describe("Custom protocol program IDs (base58, overrides template)"),
   maxLeverageBps: z
     .number()
     .optional()
@@ -104,10 +113,10 @@ export async function configure(
       CONFIGURE_TEMPLATES[templateName as ConfigureTemplate] ??
       CONFIGURE_TEMPLATES.conservative;
 
-    const dailyCapUsd = input.dailyCapUsd ?? template.dailyCapUsd;
-    const allowedProtocols = input.allowedProtocols ?? [
-      ...template.allowedProtocols,
-    ];
+    const dailySpendingCapUsd =
+      input.dailySpendingCapUsd ?? template.dailySpendingCapUsd;
+    const protocolMode = input.protocolMode ?? template.protocolMode;
+    const protocols = input.protocols ?? [...template.protocols];
     const maxLeverageBps = input.maxLeverageBps ?? template.maxLeverageBps;
     const rateLimit = input.rateLimit ?? template.rateLimit;
 
@@ -142,8 +151,9 @@ export async function configure(
       layers: {
         shield: {
           enabled: true,
-          dailyCapUsd,
-          allowedProtocols,
+          dailySpendingCapUsd,
+          protocolMode,
+          protocols,
           maxLeverageBps,
           rateLimit,
         },
@@ -171,8 +181,9 @@ export async function configure(
       `**Wallet:** ${walletPublicKey}`,
       `**Network:** ${config.network}`,
       `**Template:** ${templateName}`,
-      `**Daily Cap:** $${dailyCapUsd}`,
-      `**Protocols:** ${allowedProtocols.length}`,
+      `**Daily Cap:** $${dailySpendingCapUsd}`,
+      `**Protocol Mode:** ${protocolMode === 0 ? "All Allowed" : protocolMode === 1 ? "Allowlist" : "Denylist"}`,
+      `**Protocols:** ${protocols.length}`,
       `**Max Leverage:** ${maxLeverageBps} BPS`,
     ];
 
@@ -219,8 +230,8 @@ export async function configure(
     // ── Step 3: Generate vault Blink URL ──────────────────────────
     const params = new URLSearchParams();
     params.set("template", templateName);
-    if (input.dailyCapUsd) {
-      params.set("dailyCap", input.dailyCapUsd.toString());
+    if (input.dailySpendingCapUsd) {
+      params.set("dailyCap", input.dailySpendingCapUsd.toString());
     }
     params.set("agentPubkey", config.wallet.publicKey);
 

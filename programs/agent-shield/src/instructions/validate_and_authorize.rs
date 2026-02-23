@@ -28,13 +28,20 @@ pub struct ValidateAndAuthorize<'info> {
     )]
     pub policy: Account<'info, PolicyConfig>,
 
+    /// Zero-copy SpendTracker
     #[account(
         mut,
-        has_one = vault,
         seeds = [b"tracker", vault.key().as_ref()],
-        bump = tracker.bump,
+        bump,
     )]
-    pub tracker: Account<'info, SpendTracker>,
+    pub tracker: AccountLoader<'info, SpendTracker>,
+
+    /// Protocol-level oracle registry (shared across all vaults)
+    #[account(
+        seeds = [b"oracle_registry"],
+        bump = oracle_registry.bump,
+    )]
+    pub oracle_registry: Account<'info, OracleRegistry>,
 
     /// Ephemeral session PDA — `init` ensures no double-authorization.
     /// Seeds include token_mint for per-token concurrent sessions.
@@ -52,7 +59,7 @@ pub struct ValidateAndAuthorize<'info> {
     )]
     pub session: Account<'info, SessionAuthority>,
 
-    /// Vault's PDA-owned token account for the spend token (delegation source)
+    /// Vault's PDA-owned token account for the spend token
     #[account(
         mut,
         constraint = vault_token_account.owner == vault.key()
@@ -67,7 +74,7 @@ pub struct ValidateAndAuthorize<'info> {
 
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
-    // Oracle feed (Pyth PriceUpdateV2 or Switchboard PullFeed) passed via remaining_accounts[0]
+    // Oracle feed (Pyth/Switchboard) passed via remaining_accounts[0]
     // for oracle-priced tokens
 }
 
@@ -81,6 +88,7 @@ pub fn handler(
 ) -> Result<()> {
     let vault = &ctx.accounts.vault;
     let policy = &ctx.accounts.policy;
+    let registry = &ctx.accounts.oracle_registry;
     let clock = Clock::get()?;
 
     // 1. Vault must be active
@@ -89,37 +97,38 @@ pub fn handler(
     // 1b. Amount must be positive
     require!(amount > 0, AgentShieldError::TransactionTooLarge);
 
-    // 2. Token must be whitelisted — find the AllowedToken entry + index
-    let (token_index, allowed_token_ref) = policy
-        .find_token_with_index(&token_mint)
-        .ok_or(error!(AgentShieldError::TokenNotAllowed))?;
-    let allowed_token = allowed_token_ref.clone();
+    // 2. Token must be in the oracle registry
+    let oracle_entry = registry
+        .find_entry(&token_mint)
+        .ok_or(error!(AgentShieldError::TokenNotRegistered))?;
 
-    // 3. Unpriced tokens are receive-only — cannot be spent
-    require!(
-        !allowed_token.is_unpriced(),
-        AgentShieldError::TokenSpendBlocked
-    );
-
-    // 4. Protocol must be whitelisted
+    // 3. Protocol must be allowed (mode-based check)
     require!(
         policy.is_protocol_allowed(&target_protocol),
         AgentShieldError::ProtocolNotAllowed
     );
 
-    // 5. USD CONVERSION
-    let (usd_amount, oracle_price, oracle_source) =
-        convert_to_usd(&allowed_token, amount, ctx.remaining_accounts, &clock)?;
+    // 4. USD CONVERSION — using registry entry + mint decimals
+    let token_decimals = ctx.accounts.token_mint_account.decimals;
+    let (usd_amount, oracle_price, oracle_source) = convert_to_usd(
+        oracle_entry.is_stablecoin,
+        &oracle_entry.oracle_feed,
+        &oracle_entry.fallback_feed,
+        token_decimals,
+        amount,
+        ctx.remaining_accounts,
+        &clock,
+    )?;
 
-    // 6. Single tx USD check
+    // 5. Single tx USD check
     require!(
         usd_amount <= policy.max_transaction_size_usd,
         AgentShieldError::TransactionTooLarge
     );
 
-    // 7. Rolling 24h USD check (aggregate across all tokens)
-    let tracker = &mut ctx.accounts.tracker;
-    let rolling_usd = tracker.get_rolling_spend_usd(clock.unix_timestamp)?;
+    // 6. Rolling 24h USD check (aggregate across all tokens)
+    let mut tracker = ctx.accounts.tracker.load_mut()?;
+    let rolling_usd = tracker.get_rolling_24h_usd(&clock);
     let new_total_usd = rolling_usd
         .checked_add(usd_amount)
         .ok_or(AgentShieldError::Overflow)?;
@@ -128,27 +137,7 @@ pub fn handler(
         AgentShieldError::DailyCapExceeded
     );
 
-    // 8. Per-token base cap check (if configured)
-    if allowed_token.daily_cap_base > 0 {
-        let rolling_base = tracker.get_rolling_spend_by_token(token_index, clock.unix_timestamp)?;
-        let new_total_base = rolling_base
-            .checked_add(amount)
-            .ok_or(AgentShieldError::Overflow)?;
-        require!(
-            new_total_base <= allowed_token.daily_cap_base,
-            AgentShieldError::PerTokenCapExceeded
-        );
-    }
-
-    // 9. Per-token single tx check (if configured)
-    if allowed_token.max_tx_base > 0 {
-        require!(
-            amount <= allowed_token.max_tx_base,
-            AgentShieldError::PerTokenTxLimitExceeded
-        );
-    }
-
-    // 10. Leverage check (for perp actions)
+    // 7. Leverage check (for perp actions)
     if let Some(lev) = leverage_bps {
         require!(
             policy.is_leverage_within_limit(lev),
@@ -156,7 +145,7 @@ pub fn handler(
         );
     }
 
-    // 11. Position opening checks
+    // 8. Position opening checks
     if action_type == ActionType::OpenPosition {
         require!(
             policy.can_open_positions,
@@ -168,10 +157,12 @@ pub fn handler(
         );
     }
 
-    // All checks passed — record spend with both USD and base amounts
-    tracker.record_spend(token_index, usd_amount, amount, clock.unix_timestamp)?;
+    // All checks passed — record spend
+    tracker.record_spend(&clock, usd_amount)?;
+    // Drop the mutable borrow before using ctx.accounts
+    drop(tracker);
 
-    // Create session PDA with delegation fields
+    // Create session PDA
     let session = &mut ctx.accounts.session;
     session.vault = vault.key();
     session.agent = ctx.accounts.agent.key();

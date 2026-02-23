@@ -1,6 +1,3 @@
-// Auto-generated — do not edit. Regenerate with:
-//   RUSTUP_TOOLCHAIN=nightly anchor idl build -o target/idl/agent_shield.json
-//   Then copy JSON into this file.
 export const IDL = {
   address: "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL",
   metadata: {
@@ -15,8 +12,7 @@ export const IDL = {
       name: "agent_transfer",
       docs: [
         "Transfer tokens from the vault to an allowed destination.",
-        "Only the agent can call this. Respects destination allowlist,",
-        "spending caps, and per-token limits.",
+        "Only the agent can call this.",
       ],
       discriminator: [199, 111, 151, 49, 124, 13, 150, 44],
       accounts: [
@@ -46,7 +42,7 @@ export const IDL = {
               },
             ],
           },
-          relations: ["policy", "tracker"],
+          relations: ["policy"],
         },
         {
           name: "policy",
@@ -65,6 +61,7 @@ export const IDL = {
         },
         {
           name: "tracker",
+          docs: ["Zero-copy SpendTracker"],
           writable: true,
           pda: {
             seeds: [
@@ -80,22 +77,37 @@ export const IDL = {
           },
         },
         {
+          name: "oracle_registry",
+          docs: ["Protocol-level oracle registry"],
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [
+                  111, 114, 97, 99, 108, 101, 95, 114, 101, 103, 105, 115, 116,
+                  114, 121,
+                ],
+              },
+            ],
+          },
+        },
+        {
           name: "vault_token_account",
           docs: ["Vault's PDA-owned token account (source)"],
           writable: true,
         },
         {
+          name: "token_mint_account",
+          docs: ["Token mint account for decimals validation"],
+        },
+        {
           name: "destination_token_account",
-          docs: [
-            "Destination token account (must be in allowed destinations if configured)",
-          ],
+          docs: ["Destination token account (must be in allowed destinations)"],
           writable: true,
         },
         {
           name: "fee_destination_token_account",
-          docs: [
-            "Developer fee destination token account \u2014 must match vault.fee_destination",
-          ],
+          docs: ["Developer fee destination token account"],
           writable: true,
           optional: true,
         },
@@ -119,10 +131,7 @@ export const IDL = {
     },
     {
       name: "apply_pending_policy",
-      docs: [
-        "Apply a queued policy update after the timelock period has expired.",
-        "Closes the PendingPolicyUpdate PDA and returns rent to the owner.",
-      ],
+      docs: ["Apply a queued policy update after the timelock expires."],
       discriminator: [114, 212, 19, 227, 89, 199, 74, 62],
       accounts: [
         {
@@ -150,7 +159,7 @@ export const IDL = {
               },
             ],
           },
-          relations: ["policy", "tracker", "pending_policy"],
+          relations: ["policy", "pending_policy"],
         },
         {
           name: "policy",
@@ -160,22 +169,6 @@ export const IDL = {
               {
                 kind: "const",
                 value: [112, 111, 108, 105, 99, 121],
-              },
-              {
-                kind: "account",
-                path: "vault",
-              },
-            ],
-          },
-        },
-        {
-          name: "tracker",
-          writable: true,
-          pda: {
-            seeds: [
-              {
-                kind: "const",
-                value: [116, 114, 97, 99, 107, 101, 114],
               },
               {
                 kind: "account",
@@ -208,10 +201,7 @@ export const IDL = {
     },
     {
       name: "cancel_pending_policy",
-      docs: [
-        "Cancel a queued policy update. Closes the PendingPolicyUpdate PDA",
-        "and returns rent to the owner.",
-      ],
+      docs: ["Cancel a queued policy update."],
       discriminator: [153, 36, 104, 200, 50, 94, 207, 33],
       accounts: [
         {
@@ -265,10 +255,7 @@ export const IDL = {
     },
     {
       name: "close_vault",
-      docs: [
-        "Close the vault entirely. Withdraws all remaining funds and closes all PDAs.",
-        "Reclaims rent. Vault must have no open positions. Only the owner can call this.",
-      ],
+      docs: ["Close the vault entirely. Reclaims rent from all PDAs."],
       discriminator: [141, 103, 17, 126, 72, 75, 29, 29],
       accounts: [
         {
@@ -297,7 +284,7 @@ export const IDL = {
               },
             ],
           },
-          relations: ["policy", "tracker"],
+          relations: ["policy"],
         },
         {
           name: "policy",
@@ -317,6 +304,7 @@ export const IDL = {
         },
         {
           name: "tracker",
+          docs: ["Zero-copy SpendTracker \u2014 close returns rent to owner"],
           writable: true,
           pda: {
             seeds: [
@@ -465,9 +453,7 @@ export const IDL = {
       name: "finalize_session",
       docs: [
         "Finalize a session after the DeFi action completes.",
-        "Revokes token delegation, collects fees, closes the SessionAuthority PDA,",
-        "and records the transaction in the audit log.",
-        "Can be called by the agent or permissionlessly (for cleanup of expired sessions).",
+        "Revokes delegation, collects fees, closes the SessionAuthority PDA.",
       ],
       discriminator: [34, 148, 144, 47, 37, 130, 206, 161],
       accounts: [
@@ -497,7 +483,7 @@ export const IDL = {
               },
             ],
           },
-          relations: ["policy", "tracker", "session"],
+          relations: ["policy", "session"],
         },
         {
           name: "policy",
@@ -515,26 +501,9 @@ export const IDL = {
           },
         },
         {
-          name: "tracker",
-          writable: true,
-          pda: {
-            seeds: [
-              {
-                kind: "const",
-                value: [116, 114, 97, 99, 107, 101, 114],
-              },
-              {
-                kind: "account",
-                path: "vault",
-              },
-            ],
-          },
-        },
-        {
           name: "session",
           docs: [
-            "Session rent is returned to the session's agent (who paid for it),",
-            "not the arbitrary payer, to prevent rent theft.",
+            "Session rent is returned to the session's agent (who paid for it).",
             "Seeds include token_mint for per-token concurrent sessions.",
           ],
           writable: true,
@@ -563,30 +532,23 @@ export const IDL = {
         },
         {
           name: "session_rent_recipient",
-          docs: ["Validated in handler to equal session.agent."],
           writable: true,
         },
         {
           name: "vault_token_account",
-          docs: [
-            "Vault's PDA token account for the session's token (fee source + delegation revocation)",
-          ],
+          docs: ["Vault's PDA token account for the session's token"],
           writable: true,
           optional: true,
         },
         {
           name: "fee_destination_token_account",
-          docs: [
-            "Developer fee destination token account \u2014 must match vault.fee_destination",
-          ],
+          docs: ["Developer fee destination token account"],
           writable: true,
           optional: true,
         },
         {
           name: "protocol_treasury_token_account",
-          docs: [
-            "Protocol treasury token account \u2014 must be owned by PROTOCOL_TREASURY",
-          ],
+          docs: ["Protocol treasury token account"],
           writable: true,
           optional: true,
         },
@@ -607,11 +569,57 @@ export const IDL = {
       ],
     },
     {
+      name: "initialize_oracle_registry",
+      docs: [
+        "Initialize the protocol-level oracle registry.",
+        "Only called once. The authority becomes the registry admin.",
+      ],
+      discriminator: [190, 92, 228, 114, 56, 71, 101, 220],
+      accounts: [
+        {
+          name: "authority",
+          writable: true,
+          signer: true,
+        },
+        {
+          name: "oracle_registry",
+          writable: true,
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [
+                  111, 114, 97, 99, 108, 101, 95, 114, 101, 103, 105, 115, 116,
+                  114, 121,
+                ],
+              },
+            ],
+          },
+        },
+        {
+          name: "system_program",
+          address: "11111111111111111111111111111111",
+        },
+      ],
+      args: [
+        {
+          name: "entries",
+          type: {
+            vec: {
+              defined: {
+                name: "OracleEntry",
+              },
+            },
+          },
+        },
+      ],
+    },
+    {
       name: "initialize_vault",
       docs: [
         "Initialize a new agent vault with policy configuration.",
-        "Only the owner can call this. Creates vault PDA, policy PDA, and spend tracker PDA.",
-        "`tracker_tier`: 0 = Standard (200 entries), 1 = Pro (500), 2 = Max (1000).",
+        "Only the owner can call this. Creates vault PDA, policy PDA,",
+        "and zero-copy spend tracker PDA.",
       ],
       discriminator: [48, 191, 163, 44, 71, 129, 63, 164],
       accounts: [
@@ -658,6 +666,7 @@ export const IDL = {
         },
         {
           name: "tracker",
+          docs: ["Zero-copy SpendTracker \u2014 2,352 bytes fixed size"],
           writable: true,
           pda: {
             seeds: [
@@ -674,7 +683,6 @@ export const IDL = {
         },
         {
           name: "fee_destination",
-          docs: ["The protocol treasury that receives fees"],
         },
         {
           name: "system_program",
@@ -695,17 +703,11 @@ export const IDL = {
           type: "u64",
         },
         {
-          name: "allowed_tokens",
-          type: {
-            vec: {
-              defined: {
-                name: "AllowedToken",
-              },
-            },
-          },
+          name: "protocol_mode",
+          type: "u8",
         },
         {
-          name: "allowed_protocols",
+          name: "protocols",
           type: {
             vec: "pubkey",
           },
@@ -732,19 +734,11 @@ export const IDL = {
             vec: "pubkey",
           },
         },
-        {
-          name: "tracker_tier",
-          type: "u8",
-        },
       ],
     },
     {
       name: "queue_policy_update",
-      docs: [
-        "Queue a policy update when timelock is active.",
-        "Creates a PendingPolicyUpdate PDA that becomes executable after",
-        "the timelock period expires.",
-      ],
+      docs: ["Queue a policy update when timelock is active."],
       discriminator: [149, 18, 76, 197, 179, 193, 91, 77],
       accounts: [
         {
@@ -827,19 +821,13 @@ export const IDL = {
           },
         },
         {
-          name: "allowed_tokens",
+          name: "protocol_mode",
           type: {
-            option: {
-              vec: {
-                defined: {
-                  name: "AllowedToken",
-                },
-              },
-            },
+            option: "u8",
           },
         },
         {
-          name: "allowed_protocols",
+          name: "protocols",
           type: {
             option: {
               vec: "pubkey",
@@ -888,10 +876,7 @@ export const IDL = {
     },
     {
       name: "reactivate_vault",
-      docs: [
-        "Reactivate a frozen vault. Optionally rotate the agent key.",
-        "Only the owner can call this.",
-      ],
+      docs: ["Reactivate a frozen vault. Optionally rotate the agent key."],
       discriminator: [245, 50, 143, 70, 114, 220, 25, 251],
       accounts: [
         {
@@ -975,8 +960,8 @@ export const IDL = {
     {
       name: "revoke_agent",
       docs: [
-        "Kill switch. Immediately freezes the vault, preventing all agent actions.",
-        "Only the owner can call this. Funds can still be withdrawn by the owner.",
+        "Kill switch. Immediately freezes the vault.",
+        "Only the owner can call this.",
       ],
       discriminator: [227, 60, 209, 125, 240, 117, 163, 73],
       accounts: [
@@ -1010,11 +995,57 @@ export const IDL = {
       args: [],
     },
     {
+      name: "update_oracle_registry",
+      docs: [
+        "Add or remove entries from the oracle registry.",
+        "Only the registry authority can call this.",
+      ],
+      discriminator: [184, 234, 19, 21, 41, 240, 100, 14],
+      accounts: [
+        {
+          name: "authority",
+          signer: true,
+        },
+        {
+          name: "oracle_registry",
+          writable: true,
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [
+                  111, 114, 97, 99, 108, 101, 95, 114, 101, 103, 105, 115, 116,
+                  114, 121,
+                ],
+              },
+            ],
+          },
+        },
+      ],
+      args: [
+        {
+          name: "entries_to_add",
+          type: {
+            vec: {
+              defined: {
+                name: "OracleEntry",
+              },
+            },
+          },
+        },
+        {
+          name: "mints_to_remove",
+          type: {
+            vec: "pubkey",
+          },
+        },
+      ],
+    },
+    {
       name: "update_policy",
       docs: [
         "Update the policy configuration for a vault.",
-        "Only the owner can call this. Cannot be called by the agent.",
-        "Blocked when timelock_duration > 0 \u2014 use queue_policy_update instead.",
+        "Only the owner can call this. Blocked when timelock > 0.",
       ],
       discriminator: [212, 245, 246, 7, 163, 151, 18, 57],
       accounts: [
@@ -1042,7 +1073,7 @@ export const IDL = {
               },
             ],
           },
-          relations: ["policy", "tracker"],
+          relations: ["policy"],
         },
         {
           name: "policy",
@@ -1052,22 +1083,6 @@ export const IDL = {
               {
                 kind: "const",
                 value: [112, 111, 108, 105, 99, 121],
-              },
-              {
-                kind: "account",
-                path: "vault",
-              },
-            ],
-          },
-        },
-        {
-          name: "tracker",
-          writable: true,
-          pda: {
-            seeds: [
-              {
-                kind: "const",
-                value: [116, 114, 97, 99, 107, 101, 114],
               },
               {
                 kind: "account",
@@ -1091,19 +1106,13 @@ export const IDL = {
           },
         },
         {
-          name: "allowed_tokens",
+          name: "protocol_mode",
           type: {
-            option: {
-              vec: {
-                defined: {
-                  name: "AllowedToken",
-                },
-              },
-            },
+            option: "u8",
           },
         },
         {
-          name: "allowed_protocols",
+          name: "protocols",
           type: {
             option: {
               vec: "pubkey",
@@ -1154,10 +1163,8 @@ export const IDL = {
       name: "validate_and_authorize",
       docs: [
         "Core permission check. Called by the agent before a DeFi action.",
-        "Validates the action against all policy constraints (USD caps, per-token caps).",
-        "If approved, creates a SessionAuthority PDA, delegates tokens to agent,",
-        "and updates spend tracking.",
-        "If denied, reverts the entire transaction (including subsequent DeFi instructions).",
+        "Validates against policy constraints + oracle registry.",
+        "Creates a SessionAuthority PDA, delegates tokens to agent.",
       ],
       discriminator: [22, 183, 48, 222, 218, 11, 197, 152],
       accounts: [
@@ -1187,7 +1194,7 @@ export const IDL = {
               },
             ],
           },
-          relations: ["policy", "tracker"],
+          relations: ["policy"],
         },
         {
           name: "policy",
@@ -1206,6 +1213,7 @@ export const IDL = {
         },
         {
           name: "tracker",
+          docs: ["Zero-copy SpendTracker"],
           writable: true,
           pda: {
             seeds: [
@@ -1216,6 +1224,21 @@ export const IDL = {
               {
                 kind: "account",
                 path: "vault",
+              },
+            ],
+          },
+        },
+        {
+          name: "oracle_registry",
+          docs: ["Protocol-level oracle registry (shared across all vaults)"],
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [
+                  111, 114, 97, 99, 108, 101, 95, 114, 101, 103, 105, 115, 116,
+                  114, 121,
+                ],
               },
             ],
           },
@@ -1250,9 +1273,7 @@ export const IDL = {
         },
         {
           name: "vault_token_account",
-          docs: [
-            "Vault's PDA-owned token account for the spend token (delegation source)",
-          ],
+          docs: ["Vault's PDA-owned token account for the spend token"],
           writable: true,
         },
         {
@@ -1299,10 +1320,7 @@ export const IDL = {
     },
     {
       name: "withdraw_funds",
-      docs: [
-        "Withdraw tokens from the vault back to the owner.",
-        "Works in any vault status (Active or Frozen). Only the owner can call this.",
-      ],
+      docs: ["Withdraw tokens from the vault back to the owner."],
       discriminator: [241, 36, 29, 111, 208, 31, 104, 217],
       accounts: [
         {
@@ -1419,6 +1437,10 @@ export const IDL = {
       discriminator: [232, 220, 237, 164, 157, 9, 215, 194],
     },
     {
+      name: "OracleRegistry",
+      discriminator: [94, 153, 19, 250, 94, 0, 12, 172],
+    },
+    {
       name: "PendingPolicyUpdate",
       discriminator: [77, 255, 2, 51, 79, 237, 183, 239],
     },
@@ -1439,10 +1461,6 @@ export const IDL = {
     {
       name: "ActionAuthorized",
       discriminator: [85, 90, 59, 218, 126, 8, 179, 63],
-    },
-    {
-      name: "ActionDenied",
-      discriminator: [243, 239, 240, 51, 151, 100, 10, 100],
     },
     {
       name: "AgentRegistered",
@@ -1471,6 +1489,14 @@ export const IDL = {
     {
       name: "FundsWithdrawn",
       discriminator: [56, 130, 230, 154, 35, 92, 11, 118],
+    },
+    {
+      name: "OracleRegistryInitialized",
+      discriminator: [88, 111, 7, 92, 74, 14, 114, 205],
+    },
+    {
+      name: "OracleRegistryUpdated",
+      discriminator: [25, 85, 137, 57, 175, 133, 14, 77],
     },
     {
       name: "PolicyChangeApplied",
@@ -1523,13 +1549,13 @@ export const IDL = {
     },
     {
       code: 6003,
-      name: "TokenNotAllowed",
-      msg: "Token not in allowed list",
+      name: "TokenNotRegistered",
+      msg: "Token not registered in oracle registry",
     },
     {
       code: 6004,
       name: "ProtocolNotAllowed",
-      msg: "Protocol not in allowed list",
+      msg: "Protocol not allowed by policy",
     },
     {
       code: 6005,
@@ -1578,163 +1604,163 @@ export const IDL = {
     },
     {
       code: 6014,
-      name: "TooManyAllowedTokens",
-      msg: "Policy configuration invalid: too many allowed tokens",
-    },
-    {
-      code: 6015,
       name: "TooManyAllowedProtocols",
       msg: "Policy configuration invalid: too many allowed protocols",
     },
     {
-      code: 6016,
+      code: 6015,
       name: "AgentAlreadyRegistered",
       msg: "Agent already registered for this vault",
     },
     {
-      code: 6017,
+      code: 6016,
       name: "NoAgentRegistered",
       msg: "No agent registered for this vault",
     },
     {
-      code: 6018,
+      code: 6017,
       name: "VaultNotFrozen",
       msg: "Vault is not frozen (expected frozen for reactivation)",
     },
     {
-      code: 6019,
+      code: 6018,
       name: "VaultAlreadyClosed",
       msg: "Vault is already closed",
     },
     {
-      code: 6020,
+      code: 6019,
       name: "InsufficientBalance",
       msg: "Insufficient vault balance for withdrawal",
     },
     {
-      code: 6021,
+      code: 6020,
       name: "DeveloperFeeTooHigh",
       msg: "Developer fee rate exceeds maximum (500 / 1,000,000 = 5 BPS)",
     },
     {
-      code: 6022,
+      code: 6021,
       name: "InvalidFeeDestination",
       msg: "Fee destination account invalid",
     },
     {
-      code: 6023,
+      code: 6022,
       name: "InvalidProtocolTreasury",
       msg: "Protocol treasury account does not match expected address",
     },
     {
-      code: 6024,
-      name: "TooManySpendEntries",
-      msg: "Spend entry limit reached (too many active entries in rolling window)",
-    },
-    {
-      code: 6025,
+      code: 6023,
       name: "InvalidAgentKey",
       msg: "Invalid agent: cannot be the zero address",
     },
     {
-      code: 6026,
+      code: 6024,
       name: "AgentIsOwner",
       msg: "Invalid agent: agent cannot be the vault owner",
     },
     {
-      code: 6027,
+      code: 6025,
       name: "Overflow",
       msg: "Arithmetic overflow",
     },
     {
-      code: 6028,
+      code: 6026,
       name: "DelegationFailed",
       msg: "Token delegation approval failed",
     },
     {
-      code: 6029,
+      code: 6027,
       name: "RevocationFailed",
       msg: "Token delegation revocation failed",
     },
     {
-      code: 6030,
+      code: 6028,
       name: "OracleFeedStale",
       msg: "Oracle feed value is too stale",
     },
     {
-      code: 6031,
+      code: 6029,
       name: "OracleFeedInvalid",
       msg: "Cannot parse oracle feed data",
     },
     {
-      code: 6032,
+      code: 6030,
       name: "TokenSpendBlocked",
       msg: "Unpriced token cannot be spent (receive-only)",
     },
     {
-      code: 6033,
+      code: 6031,
       name: "InvalidTokenAccount",
       msg: "Token account does not belong to vault or has wrong mint",
     },
     {
-      code: 6034,
+      code: 6032,
       name: "OracleAccountMissing",
       msg: "Oracle-priced token requires feed account in remaining_accounts",
     },
     {
-      code: 6035,
-      name: "PerTokenCapExceeded",
-      msg: "Per-token daily spending cap would be exceeded",
-    },
-    {
-      code: 6036,
-      name: "PerTokenTxLimitExceeded",
-      msg: "Per-token single transaction limit exceeded",
-    },
-    {
-      code: 6037,
+      code: 6033,
       name: "OracleConfidenceTooWide",
       msg: "Oracle price confidence interval too wide",
     },
     {
-      code: 6038,
+      code: 6034,
       name: "OracleUnsupportedType",
       msg: "Oracle account owner is not a recognized oracle program",
     },
     {
-      code: 6039,
+      code: 6035,
       name: "OracleNotVerified",
       msg: "Pyth price update not fully verified by Wormhole",
     },
     {
-      code: 6040,
+      code: 6036,
       name: "TimelockNotExpired",
       msg: "Timelock period has not expired yet",
     },
     {
-      code: 6041,
+      code: 6037,
       name: "TimelockActive",
       msg: "Vault has timelock active \u2014 use queue_policy_update instead",
     },
     {
-      code: 6042,
+      code: 6038,
       name: "NoTimelockConfigured",
       msg: "No timelock configured on this vault",
     },
     {
-      code: 6043,
+      code: 6039,
       name: "DestinationNotAllowed",
       msg: "Destination not in allowed list",
     },
     {
-      code: 6044,
+      code: 6040,
       name: "TooManyDestinations",
       msg: "Too many destinations (max 10)",
     },
     {
+      code: 6041,
+      name: "InvalidProtocolMode",
+      msg: "Invalid protocol mode (must be 0, 1, or 2)",
+    },
+    {
+      code: 6042,
+      name: "OracleRegistryFull",
+      msg: "Oracle registry is full (max 105 entries)",
+    },
+    {
+      code: 6043,
+      name: "UnauthorizedRegistryAdmin",
+      msg: "Unauthorized: not the oracle registry authority",
+    },
+    {
+      code: 6044,
+      name: "OraclePriceDivergence",
+      msg: "Primary and fallback oracle prices diverge beyond threshold",
+    },
+    {
       code: 6045,
-      name: "InvalidTrackerTier",
-      msg: "Invalid tracker tier (must be 0, 1, or 2)",
+      name: "OracleBothFeedsFailed",
+      msg: "Both primary and fallback oracle feeds failed",
     },
   ],
   types: [
@@ -1798,30 +1824,6 @@ export const IDL = {
             type: {
               option: "u8",
             },
-          },
-          {
-            name: "timestamp",
-            type: "i64",
-          },
-        ],
-      },
-    },
-    {
-      name: "ActionDenied",
-      type: {
-        kind: "struct",
-        fields: [
-          {
-            name: "vault",
-            type: "pubkey",
-          },
-          {
-            name: "agent",
-            type: "pubkey",
-          },
-          {
-            name: "reason",
-            type: "string",
           },
           {
             name: "timestamp",
@@ -1947,10 +1949,8 @@ export const IDL = {
           {
             name: "fee_destination",
             docs: [
-              "Developer fee destination \u2014 the wallet that receives developer fees",
-              "on every finalized transaction. IMMUTABLE after initialization \u2014 only",
-              "`initialize_vault` writes this field. This prevents a compromised owner",
-              "key from redirecting fees. Protocol fees go to PROTOCOL_TREASURY separately.",
+              "Developer fee destination \u2014 IMMUTABLE after initialization.",
+              "Prevents a compromised owner from redirecting fees.",
             ],
             type: "pubkey",
           },
@@ -2000,69 +2000,7 @@ export const IDL = {
           {
             name: "total_fees_collected",
             docs: [
-              "Cumulative developer fees collected from this vault (token base units).",
-              "Protocol fees are tracked separately via events.",
-            ],
-            type: "u64",
-          },
-          {
-            name: "tracker_tier",
-            docs: ["Tracker capacity tier chosen at vault creation"],
-            type: {
-              defined: {
-                name: "TrackerTier",
-              },
-            },
-          },
-        ],
-      },
-    },
-    {
-      name: "AllowedToken",
-      docs: [
-        "Per-token configuration including oracle feed and per-token caps.",
-        "Replaces the old `Vec<Pubkey>` allowed_tokens with richer metadata.",
-        "",
-        "Oracle feed classification:",
-        "- `Pubkey::default()` = stablecoin (1:1 USD, no oracle needed)",
-        "- `UNPRICED_SENTINEL` ([0xFF; 32]) = unpriced token (receive-only)",
-        "- Any other pubkey = Oracle feed account (Pyth PriceUpdateV2 or Switchboard PullFeed)",
-      ],
-      type: {
-        kind: "struct",
-        fields: [
-          {
-            name: "mint",
-            docs: ["Token mint address"],
-            type: "pubkey",
-          },
-          {
-            name: "oracle_feed",
-            docs: [
-              "Oracle feed account (Pyth PriceUpdateV2 or Switchboard PullFeed) for USD pricing.",
-              "`Pubkey::default()` = stablecoin (1:1 USD).",
-              "`UNPRICED_SENTINEL` = unpriced (receive-only, cannot be spent).",
-            ],
-            type: "pubkey",
-          },
-          {
-            name: "decimals",
-            docs: ["Token decimals (e.g., 6 for USDC, 9 for SOL)"],
-            type: "u8",
-          },
-          {
-            name: "daily_cap_base",
-            docs: [
-              "Per-token daily cap in base units (0 = no per-token limit,",
-              "only the aggregate USD cap applies)",
-            ],
-            type: "u64",
-          },
-          {
-            name: "max_tx_base",
-            docs: [
-              "Per-token max single transaction in base units",
-              "(0 = no per-token tx limit, only USD tx limit applies)",
+              "Cumulative developer fees collected from this vault (token base units)",
             ],
             type: "u64",
           },
@@ -2085,6 +2023,32 @@ export const IDL = {
           {
             name: "timestamp",
             type: "i64",
+          },
+        ],
+      },
+    },
+    {
+      name: "EpochBucket",
+      docs: [
+        "A single epoch bucket tracking aggregate USD spend.",
+        "16 bytes per bucket. USD-only \u2014 rate limiting stays client-side.",
+      ],
+      serialization: "bytemuck",
+      repr: {
+        kind: "c",
+      },
+      type: {
+        kind: "struct",
+        fields: [
+          {
+            name: "epoch_id",
+            docs: ["Epoch identifier: unix_timestamp / EPOCH_DURATION"],
+            type: "i64",
+          },
+          {
+            name: "usd_amount",
+            docs: ["Aggregate USD spent in this epoch (6 decimals)"],
+            type: "u64",
           },
         ],
       },
@@ -2194,6 +2158,116 @@ export const IDL = {
       },
     },
     {
+      name: "OracleEntry",
+      docs: ["Individual entry mapping a token mint to its oracle feed."],
+      type: {
+        kind: "struct",
+        fields: [
+          {
+            name: "mint",
+            docs: ["SPL token mint address"],
+            type: "pubkey",
+          },
+          {
+            name: "oracle_feed",
+            docs: [
+              "Pyth or Switchboard oracle feed account.",
+              "Ignored when is_stablecoin is true.",
+            ],
+            type: "pubkey",
+          },
+          {
+            name: "is_stablecoin",
+            docs: ["If true, token is 1:1 USD (no oracle read needed)"],
+            type: "bool",
+          },
+          {
+            name: "fallback_feed",
+            docs: [
+              "Optional fallback oracle feed. Pubkey::default() = no fallback.",
+              "Used when primary is stale/invalid. Cross-checked for divergence",
+              "when both are available.",
+            ],
+            type: "pubkey",
+          },
+        ],
+      },
+    },
+    {
+      name: "OracleRegistry",
+      docs: [
+        "Protocol-level oracle registry \u2014 maps token mints to oracle feeds.",
+        "Maintained by protocol admin. Shared across ALL vaults.",
+        "Any vault can use any registered token without per-vault configuration.",
+        "",
+        'Seeds: `[b"oracle_registry"]`',
+      ],
+      type: {
+        kind: "struct",
+        fields: [
+          {
+            name: "authority",
+            docs: [
+              "Authority who can add/remove entries (upgradeable to multisig/DAO)",
+            ],
+            type: "pubkey",
+          },
+          {
+            name: "entries",
+            docs: ["Token mint \u2192 oracle feed mappings"],
+            type: {
+              vec: {
+                defined: {
+                  name: "OracleEntry",
+                },
+              },
+            },
+          },
+          {
+            name: "bump",
+            docs: ["Bump seed for PDA"],
+            type: "u8",
+          },
+        ],
+      },
+    },
+    {
+      name: "OracleRegistryInitialized",
+      type: {
+        kind: "struct",
+        fields: [
+          {
+            name: "authority",
+            type: "pubkey",
+          },
+          {
+            name: "entry_count",
+            type: "u16",
+          },
+        ],
+      },
+    },
+    {
+      name: "OracleRegistryUpdated",
+      type: {
+        kind: "struct",
+        fields: [
+          {
+            name: "added_count",
+            type: "u16",
+          },
+          {
+            name: "removed_count",
+            type: "u16",
+          },
+          {
+            name: "total_entries",
+            type: "u16",
+          },
+        ],
+      },
+    },
+    {
       name: "PendingPolicyUpdate",
       docs: [
         "Queued policy update that becomes executable after a timelock period.",
@@ -2233,19 +2307,13 @@ export const IDL = {
             },
           },
           {
-            name: "allowed_tokens",
+            name: "protocol_mode",
             type: {
-              option: {
-                vec: {
-                  defined: {
-                    name: "AllowedToken",
-                  },
-                },
-              },
+              option: "u8",
             },
           },
           {
-            name: "allowed_protocols",
+            name: "protocols",
             type: {
               option: {
                 vec: "pubkey",
@@ -2366,24 +2434,20 @@ export const IDL = {
             type: "u64",
           },
           {
-            name: "allowed_tokens",
+            name: "protocol_mode",
             docs: [
-              "Allowed token mints with oracle feeds and per-token caps.",
-              "Bounded to MAX_ALLOWED_TOKENS entries.",
+              "Protocol access control mode:",
+              "0 = all allowed (protocols list ignored)",
+              "1 = allowlist (only protocols in list)",
+              "2 = denylist (all except protocols in list)",
             ],
-            type: {
-              vec: {
-                defined: {
-                  name: "AllowedToken",
-                },
-              },
-            },
+            type: "u8",
           },
           {
-            name: "allowed_protocols",
+            name: "protocols",
             docs: [
-              "Allowed program IDs the agent can call (Jupiter, Flash Trade, etc.)",
-              "Bounded to MAX_ALLOWED_PROTOCOLS entries",
+              "Protocol pubkeys for allowlist/denylist.",
+              "Bounded to MAX_ALLOWED_PROTOCOLS entries.",
             ],
             type: {
               vec: "pubkey",
@@ -2392,7 +2456,7 @@ export const IDL = {
           {
             name: "max_leverage_bps",
             docs: [
-              "Maximum leverage multiplier in basis points (e.g., 10000 = 100x, 1000 = 10x)",
+              "Maximum leverage multiplier in basis points (e.g., 10000 = 100x)",
               "Set to 0 to disallow leveraged positions entirely",
             ],
             type: "u16",
@@ -2413,19 +2477,14 @@ export const IDL = {
             name: "developer_fee_rate",
             docs: [
               "Developer fee rate (rate / 1,000,000). Applied to every finalized",
-              "transaction. Fee deducted from vault, transferred to vault's",
-              "fee_destination. Max MAX_DEVELOPER_FEE_RATE (500 = 5 BPS).",
-              "Set to 0 for no developer fee. Protocol fee is always applied",
-              "separately at PROTOCOL_FEE_RATE.",
+              "transaction. Max MAX_DEVELOPER_FEE_RATE (500 = 5 BPS).",
             ],
             type: "u16",
           },
           {
             name: "timelock_duration",
             docs: [
-              "Timelock duration in seconds for policy changes. 0 = no timelock",
-              "(immediate updates allowed). When > 0, policy changes must go",
-              "through queue_policy_update \u2192 apply_pending_policy.",
+              "Timelock duration in seconds for policy changes. 0 = no timelock.",
             ],
             type: "u64",
           },
@@ -2465,11 +2524,11 @@ export const IDL = {
             type: "u64",
           },
           {
-            name: "allowed_tokens_count",
+            name: "protocol_mode",
             type: "u8",
           },
           {
-            name: "allowed_protocols_count",
+            name: "protocols_count",
             type: "u8",
           },
           {
@@ -2588,42 +2647,19 @@ export const IDL = {
       },
     },
     {
-      name: "SpendEntry",
-      type: {
-        kind: "struct",
-        fields: [
-          {
-            name: "token_index",
-            docs: [
-              "Index into PolicyConfig.allowed_tokens[] (0-9).",
-              "Compact representation \u2014 avoids storing full 32-byte Pubkey per entry.",
-              "Invalidated when token list changes (rolling_spends is cleared).",
-            ],
-            type: "u8",
-          },
-          {
-            name: "usd_amount",
-            docs: [
-              "USD value of this spend (6 decimals, e.g., $500 = 500_000_000)",
-            ],
-            type: "u64",
-          },
-          {
-            name: "base_amount",
-            docs: [
-              "Original amount in token base units (for per-token cap checks)",
-            ],
-            type: "u64",
-          },
-          {
-            name: "timestamp",
-            type: "i64",
-          },
-        ],
-      },
-    },
-    {
       name: "SpendTracker",
+      docs: [
+        "Zero-copy 144-epoch circular buffer for rolling 24h USD spend tracking.",
+        "Each bucket covers a 10-minute epoch. Boundary correction ensures",
+        "functionally exact accuracy (~$0.000001 worst-case rounding).",
+        "Rounding direction: slightly permissive (under-counts by at most $0.000001).",
+        "",
+        'Seeds: `[b"tracker", vault.key().as_ref()]`',
+      ],
+      serialization: "bytemuck",
+      repr: {
+        kind: "c",
+      },
       type: {
         kind: "struct",
         fields: [
@@ -2633,47 +2669,17 @@ export const IDL = {
             type: "pubkey",
           },
           {
-            name: "tracker_tier",
-            docs: ["Tracker capacity tier (Standard/Pro/Max)"],
+            name: "buckets",
+            docs: ["144 epoch buckets for rolling 24h spend tracking"],
             type: {
-              defined: {
-                name: "TrackerTier",
-              },
-            },
-          },
-          {
-            name: "max_spend_entries",
-            docs: [
-              "Maximum spend entries for this tracker (derived from tier at init)",
-            ],
-            type: "u32",
-          },
-          {
-            name: "rolling_spends",
-            docs: [
-              "Rolling spend entries: (token_mint, usd_amount, base_amount, timestamp)",
-              "Entries older than ROLLING_WINDOW_SECONDS are pruned on each access",
-            ],
-            type: {
-              vec: {
-                defined: {
-                  name: "SpendEntry",
+              array: [
+                {
+                  defined: {
+                    name: "EpochBucket",
+                  },
                 },
-              },
-            },
-          },
-          {
-            name: "recent_transactions",
-            docs: [
-              "Recent transaction log for on-chain audit trail",
-              "Bounded to MAX_RECENT_TRANSACTIONS, oldest entries evicted (ring buffer)",
-            ],
-            type: {
-              vec: {
-                defined: {
-                  name: "TransactionRecord",
-                },
-              },
+                144,
+              ],
             },
           },
           {
@@ -2681,66 +2687,12 @@ export const IDL = {
             docs: ["Bump seed for PDA"],
             type: "u8",
           },
-        ],
-      },
-    },
-    {
-      name: "TrackerTier",
-      docs: [
-        "Tracker capacity tiers \u2014 chosen at vault creation, determines",
-        "max rolling spend entries and SpendTracker account size.",
-      ],
-      type: {
-        kind: "enum",
-        variants: [
           {
-            name: "Standard",
-          },
-          {
-            name: "Pro",
-          },
-          {
-            name: "Max",
-          },
-        ],
-      },
-    },
-    {
-      name: "TransactionRecord",
-      type: {
-        kind: "struct",
-        fields: [
-          {
-            name: "timestamp",
-            type: "i64",
-          },
-          {
-            name: "action_type",
+            name: "_padding",
+            docs: ["Padding for 8-byte alignment"],
             type: {
-              defined: {
-                name: "ActionType",
-              },
+              array: ["u8", 7],
             },
-          },
-          {
-            name: "token_mint",
-            type: "pubkey",
-          },
-          {
-            name: "amount",
-            type: "u64",
-          },
-          {
-            name: "protocol",
-            type: "pubkey",
-          },
-          {
-            name: "success",
-            type: "bool",
-          },
-          {
-            name: "slot",
-            type: "u64",
           },
         ],
       },
@@ -2830,4 +2782,4 @@ export const IDL = {
       },
     },
   ],
-} as const;
+};

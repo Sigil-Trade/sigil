@@ -64,9 +64,13 @@ export async function setupStatus(
   const shield = config.layers.shield;
   lines.push(`- **Enabled:** ${shield.enabled}`);
   if (shield.enabled) {
-    lines.push(`- **Daily Cap:** $${shield.dailyCapUsd}`);
+    lines.push(`- **Daily Cap:** $${shield.dailySpendingCapUsd}`);
+    const protocolModeLabels = ["All Allowed", "Allowlist", "Denylist"];
     lines.push(
-      `- **Allowed Protocols:** ${shield.allowedProtocols.length > 0 ? shield.allowedProtocols.join(", ") : "Any"}`,
+      `- **Protocol Mode:** ${protocolModeLabels[shield.protocolMode] ?? `Unknown (${shield.protocolMode})`}`,
+    );
+    lines.push(
+      `- **Protocols:** ${shield.protocols.length > 0 ? shield.protocols.join(", ") : "None"}`,
     );
     lines.push(`- **Max Leverage:** ${shield.maxLeverageBps} BPS`);
     lines.push(`- **Rate Limit:** ${shield.rateLimit} tx/min`);

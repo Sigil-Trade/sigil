@@ -41,6 +41,7 @@ export async function agentTransfer(
     const params: AgentTransferParams = {
       amount,
       vaultTokenAccount,
+      tokenMintAccount: mint,
       destinationTokenAccount,
     };
 

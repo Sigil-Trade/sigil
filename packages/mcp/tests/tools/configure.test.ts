@@ -78,7 +78,7 @@ describe("shield_configure", () => {
     const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
     expect(config.version).to.equal(1);
     expect(config.layers.shield.enabled).to.be.true;
-    expect(config.layers.shield.dailyCapUsd).to.equal(500);
+    expect(config.layers.shield.dailySpendingCapUsd).to.equal(500);
     // Full setup provisions TEE and vault
     expect(config.layers.tee.enabled).to.be.true;
     expect(config.layers.vault.enabled).to.be.true;
@@ -123,16 +123,16 @@ describe("shield_configure", () => {
     expect(result).to.include(kp.publicKey.toBase58());
   });
 
-  it("applies custom dailyCapUsd override", async () => {
+  it("applies custom dailySpendingCapUsd override", async () => {
     await configure(null, {
       template: "conservative",
-      dailyCapUsd: 1000,
+      dailySpendingCapUsd: 1000,
       network: "devnet",
     });
 
     const configPath = path.join(tmpHome, ".agentshield", "config.json");
     const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    expect(config.layers.shield.dailyCapUsd).to.equal(1000);
+    expect(config.layers.shield.dailySpendingCapUsd).to.equal(1000);
   });
 
   it("applies moderate template defaults", async () => {
@@ -143,9 +143,9 @@ describe("shield_configure", () => {
 
     const configPath = path.join(tmpHome, ".agentshield", "config.json");
     const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    expect(config.layers.shield.dailyCapUsd).to.equal(2000);
+    expect(config.layers.shield.dailySpendingCapUsd).to.equal(2000);
     expect(config.layers.shield.maxLeverageBps).to.equal(20000);
-    expect(config.layers.shield.allowedProtocols.length).to.equal(4);
+    expect(config.layers.shield.protocols.length).to.equal(4);
   });
 
   it("applies aggressive template defaults", async () => {
@@ -156,9 +156,9 @@ describe("shield_configure", () => {
 
     const configPath = path.join(tmpHome, ".agentshield", "config.json");
     const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    expect(config.layers.shield.dailyCapUsd).to.equal(10000);
+    expect(config.layers.shield.dailySpendingCapUsd).to.equal(10000);
     expect(config.layers.shield.maxLeverageBps).to.equal(50000);
-    expect(config.layers.shield.allowedProtocols.length).to.equal(5);
+    expect(config.layers.shield.protocols.length).to.equal(5);
   });
 
   it("sets network to mainnet-beta when specified", async () => {
