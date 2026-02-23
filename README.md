@@ -138,17 +138,15 @@ Add to your Claude Desktop config (`claude_desktop_config.json`):
   "mcpServers": {
     "agent-shield": {
       "command": "npx",
-      "args": ["@agent-shield/mcp"],
-      "env": {
-        "SOLANA_RPC_URL": "https://api.devnet.solana.com",
-        "SOLANA_PRIVATE_KEY": "your-base58-private-key"
-      }
+      "args": ["@agent-shield/mcp"]
     }
   }
 }
 ```
 
 Then ask Claude: _"Set up AgentShield"_
+
+The `shield_configure` tool handles everything automatically — generates a keypair, provisions a TEE wallet, and creates your on-chain vault. No env vars or private keys needed.
 
 ## Program
 
