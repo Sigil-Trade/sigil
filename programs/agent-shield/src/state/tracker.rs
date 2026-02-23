@@ -98,9 +98,8 @@ impl SpendTracker {
             } else {
                 // Boundary bucket — proportional scaling
                 let overlap = (bucket_end - window_start_ts) as u128;
-                let scaled = (bucket.usd_amount as u128)
-                    .saturating_mul(overlap)
-                    / EPOCH_DURATION as u128;
+                let scaled =
+                    (bucket.usd_amount as u128).saturating_mul(overlap) / EPOCH_DURATION as u128;
                 total = total.saturating_add(scaled);
             }
         }
