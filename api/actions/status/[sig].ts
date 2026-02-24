@@ -1,12 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
-const RPC_URL =
-  process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com";
+const RPC_URL = process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com";
 
-export default async function handler(
-  req: VercelRequest,
-  res: VercelResponse,
-) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { sig } = req.query;
 
   if (!sig || typeof sig !== "string") {
@@ -70,10 +66,7 @@ export default async function handler(
 
     return res.status(200).json({ status: "pending" });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown error";
-    return res
-      .status(500)
-      .json({ status: "not_found", error: message });
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return res.status(500).json({ status: "not_found", error: message });
   }
 }

@@ -27,15 +27,13 @@ describe("AgentShieldPlatform", () => {
     it("includes template param", () => {
       const url = platform.getProvisionActionUrl({ template: "moderate" });
       expect(url).to.equal(
-        `${BASE_URL}/api/actions/provision?template=moderate`
+        `${BASE_URL}/api/actions/provision?template=moderate`,
       );
     });
 
     it("includes dailyCap param", () => {
       const url = platform.getProvisionActionUrl({ dailyCap: 1000 });
-      expect(url).to.equal(
-        `${BASE_URL}/api/actions/provision?dailyCap=1000`
-      );
+      expect(url).to.equal(`${BASE_URL}/api/actions/provision?dailyCap=1000`);
     });
 
     it("includes both params", () => {
@@ -84,7 +82,7 @@ describe("AgentShieldPlatform", () => {
       expect(result.title).to.equal("Create AgentShield Protected Vault");
       expect(fetchStub.calledOnce).to.be.true;
       expect(fetchStub.firstCall.args[0]).to.equal(
-        `${BASE_URL}/api/actions/provision`
+        `${BASE_URL}/api/actions/provision`,
       );
       expect(fetchStub.firstCall.args[1]?.method).to.equal("GET");
     });
@@ -162,7 +160,7 @@ describe("AgentShieldPlatform", () => {
       expect(result.status).to.equal("confirmed");
       expect(result.vaultAddress).to.equal("vault123");
       expect(fetchStub.firstCall.args[0]).to.equal(
-        `${BASE_URL}/api/actions/status/tx-sig`
+        `${BASE_URL}/api/actions/status/tx-sig`,
       );
     });
   });

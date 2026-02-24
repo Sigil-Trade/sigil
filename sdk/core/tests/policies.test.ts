@@ -11,7 +11,7 @@ describe("Policies", () => {
     it("parses '500 USDC/day' correctly", () => {
       const limit = parseSpendLimit("500 USDC/day");
       expect(limit.mint).to.equal(
-        "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+        "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
       );
       expect(limit.amount).to.equal(BigInt(500_000_000));
       expect(limit.windowMs).to.equal(86_400_000);
@@ -20,7 +20,7 @@ describe("Policies", () => {
     it("parses '10 SOL/hour' correctly", () => {
       const limit = parseSpendLimit("10 SOL/hour");
       expect(limit.mint).to.equal(
-        "So11111111111111111111111111111111111111112"
+        "So11111111111111111111111111111111111111112",
       );
       expect(limit.amount).to.equal(BigInt(10_000_000_000));
       expect(limit.windowMs).to.equal(3_600_000);
@@ -29,7 +29,7 @@ describe("Policies", () => {
     it("parses '0.5 wBTC/day' with fractional amount", () => {
       const limit = parseSpendLimit("0.5 wBTC/day");
       expect(limit.mint).to.equal(
-        "3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh"
+        "3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh",
       );
       expect(limit.amount).to.equal(BigInt(50_000_000));
     });
@@ -49,7 +49,7 @@ describe("Policies", () => {
 
     it("throws ShieldConfigError for unknown time window", () => {
       expect(() => parseSpendLimit("100 USDC/week")).to.throw(
-        ShieldConfigError
+        ShieldConfigError,
       );
     });
   });

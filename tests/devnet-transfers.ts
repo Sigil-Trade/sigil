@@ -204,10 +204,7 @@ describe("devnet-transfers", () => {
 
   it("4. agent_transfer developer + protocol fees correct", async () => {
     const amount = 100_000_000; // 100 USDC
-    const { protocolFee, developerFee, netAmount } = calculateFees(
-      amount,
-      500,
-    );
+    const { protocolFee, developerFee, netAmount } = calculateFees(amount, 500);
 
     const treasuryBefore = await getTokenBalance(
       connection,

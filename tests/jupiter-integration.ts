@@ -72,7 +72,9 @@ describe("jupiter-integration", () => {
   let oracleRegistryPda: PublicKey;
 
   // Protocol treasury (must match hardcoded constant in program)
-  const protocolTreasury = new PublicKey("ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT");
+  const protocolTreasury = new PublicKey(
+    "ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT",
+  );
   let protocolTreasuryUsdcAta: PublicKey;
 
   // Token accounts
@@ -110,7 +112,7 @@ describe("jupiter-integration", () => {
     amount: BN,
     targetProtocol: PublicKey,
     success: boolean = true,
-    overrideVaultTokenAta?: PublicKey
+    overrideVaultTokenAta?: PublicKey,
   ): Promise<string> {
     const effectiveVaultAta = overrideVaultTokenAta ?? vaultUsdcAta;
 
@@ -121,7 +123,7 @@ describe("jupiter-integration", () => {
         agentKp.publicKey.toBuffer(),
         tokenMint.toBuffer(),
       ],
-      program.programId
+      program.programId,
     );
 
     // 1. Compute budget
@@ -131,7 +133,13 @@ describe("jupiter-integration", () => {
 
     // 2. Validate and authorize
     const validateIx = await program.methods
-      .validateAndAuthorize({ swap: {} }, tokenMint, amount, targetProtocol, null)
+      .validateAndAuthorize(
+        { swap: {} },
+        tokenMint,
+        amount,
+        targetProtocol,
+        null,
+      )
       .accountsPartial({
         agent: agentKp.publicKey,
         vault,
@@ -170,7 +178,7 @@ describe("jupiter-integration", () => {
     return sendVersionedTx(
       svm,
       [computeIx, validateIx, mockSwapIx, finalizeIx],
-      agentKp
+      agentKp,
     );
   }
 
@@ -186,20 +194,10 @@ describe("jupiter-integration", () => {
     airdropSol(svm, feeDestination.publicKey, 2 * LAMPORTS_PER_SOL);
 
     // Create USDC-like mint (6 decimals)
-    usdcMint = createMintHelper(
-      svm,
-      (owner as any).payer,
-      owner.publicKey,
-      6
-    );
+    usdcMint = createMintHelper(svm, (owner as any).payer, owner.publicKey, 6);
 
     // Create disallowed token mint
-    solMint = createMintHelper(
-      svm,
-      (owner as any).payer,
-      owner.publicKey,
-      9
-    );
+    solMint = createMintHelper(svm, (owner as any).payer, owner.publicKey, 9);
 
     // Derive PDAs
     [vaultPda] = PublicKey.findProgramAddressSync(
@@ -208,15 +206,15 @@ describe("jupiter-integration", () => {
         owner.publicKey.toBuffer(),
         vaultId.toArrayLike(Buffer, "le", 8),
       ],
-      program.programId
+      program.programId,
     );
     [policyPda] = PublicKey.findProgramAddressSync(
       [Buffer.from("policy"), vaultPda.toBuffer()],
-      program.programId
+      program.programId,
     );
     [trackerPda] = PublicKey.findProgramAddressSync(
       [Buffer.from("tracker"), vaultPda.toBuffer()],
-      program.programId
+      program.programId,
     );
 
     // Create protocol treasury ATA (needed for fee transfers)
@@ -225,18 +223,23 @@ describe("jupiter-integration", () => {
       (owner as any).payer,
       usdcMint,
       protocolTreasury,
-      true
+      true,
     );
 
     // Derive oracle registry PDA and initialize it
     [oracleRegistryPda] = PublicKey.findProgramAddressSync(
       [Buffer.from("oracle_registry")],
-      program.programId
+      program.programId,
     );
 
     await program.methods
       .initializeOracleRegistry([
-        { mint: usdcMint, oracleFeed: PublicKey.default, isStablecoin: true, fallbackFeed: PublicKey.default },
+        {
+          mint: usdcMint,
+          oracleFeed: PublicKey.default,
+          isStablecoin: true,
+          fallbackFeed: PublicKey.default,
+        },
       ])
       .accounts({
         authority: owner.publicKey,
@@ -251,13 +254,13 @@ describe("jupiter-integration", () => {
         vaultId,
         new BN(500_000_000), // daily cap
         new BN(200_000_000), // max tx size
-        1,                   // protocolMode: 1 = allowlist
-        [jupiterProtocol],   // protocols
-        0,                   // max leverage (0 = disabled)
-        1,                   // max concurrent positions
-        0,                   // developer fee rate (0 = none)
-        new BN(0),           // timelockDuration
-        [],                  // allowedDestinations
+        1, // protocolMode: 1 = allowlist
+        [jupiterProtocol], // protocols
+        0, // max leverage (0 = disabled)
+        1, // max concurrent positions
+        0, // developer fee rate (0 = none)
+        new BN(0), // timelockDuration
+        [], // allowedDestinations
       )
       .accountsPartial({
         owner: owner.publicKey,
@@ -283,7 +286,7 @@ describe("jupiter-integration", () => {
       svm,
       (owner as any).payer,
       usdcMint,
-      owner.publicKey
+      owner.publicKey,
     );
     mintToHelper(
       svm,
@@ -291,7 +294,7 @@ describe("jupiter-integration", () => {
       usdcMint,
       ownerUsdcAta,
       owner.publicKey,
-      1_000_000_000n // 1000 USDC
+      1_000_000_000n, // 1000 USDC
     );
 
     // Derive vault ATA and deposit
@@ -326,7 +329,7 @@ describe("jupiter-integration", () => {
         agent,
         usdcMint,
         amount,
-        jupiterProtocol
+        jupiterProtocol,
       );
 
       expect(sig).to.be.a("string");
@@ -347,7 +350,7 @@ describe("jupiter-integration", () => {
         agent,
         usdcMint,
         amount,
-        jupiterProtocol
+        jupiterProtocol,
       );
 
       const vault = await program.account.agentVault.fetch(vaultPda);
@@ -364,12 +367,22 @@ describe("jupiter-integration", () => {
       // Already spent 80 USDC (50 + 30). Cap is 500 USDC. Max tx = 200 USDC.
       // First spend 200 USDC twice more (80+200+200 = 480, under 500 cap)
       await sendComposedSwap(
-        vaultPda, policyPda, trackerPda, agent,
-        usdcMint, new BN(200_000_000), jupiterProtocol
+        vaultPda,
+        policyPda,
+        trackerPda,
+        agent,
+        usdcMint,
+        new BN(200_000_000),
+        jupiterProtocol,
       );
       await sendComposedSwap(
-        vaultPda, policyPda, trackerPda, agent,
-        usdcMint, new BN(200_000_000), jupiterProtocol
+        vaultPda,
+        policyPda,
+        trackerPda,
+        agent,
+        usdcMint,
+        new BN(200_000_000),
+        jupiterProtocol,
       );
 
       // Now at 480 spent. Try 50 USDC — total would be 530 > 500 cap
@@ -380,13 +393,18 @@ describe("jupiter-integration", () => {
           agent.publicKey.toBuffer(),
           usdcMint.toBuffer(),
         ],
-        program.programId
+        program.programId,
       );
 
       try {
         await sendComposedSwap(
-          vaultPda, policyPda, trackerPda, agent,
-          usdcMint, new BN(50_000_000), jupiterProtocol
+          vaultPda,
+          policyPda,
+          trackerPda,
+          agent,
+          usdcMint,
+          new BN(50_000_000),
+          jupiterProtocol,
         );
         expect.fail("Should have thrown");
       } catch (err: any) {
@@ -402,7 +420,9 @@ describe("jupiter-integration", () => {
         // LiteSVM proxy returns "Account does not exist"; Anchor provider
         // returns "Could not find". Both confirm the session PDA was closed.
         expect(err.toString()).to.satisfy(
-          (s: string) => s.includes("Account does not exist") || s.includes("Could not find")
+          (s: string) =>
+            s.includes("Account does not exist") ||
+            s.includes("Could not find"),
         );
       }
     });
@@ -432,7 +452,7 @@ describe("jupiter-integration", () => {
           new BN(1_000_000),
           jupiterProtocol,
           true,
-          vaultSolAta
+          vaultSolAta,
         );
         expect.fail("Should have thrown");
       } catch (err: any) {
@@ -457,7 +477,7 @@ describe("jupiter-integration", () => {
           agent,
           usdcMint,
           new BN(1_000_000),
-          fakeProtocol // not in allowed_protocols
+          fakeProtocol, // not in allowed_protocols
         );
         expect.fail("Should have thrown");
       } catch (err: any) {
@@ -483,15 +503,15 @@ describe("jupiter-integration", () => {
           owner.publicKey.toBuffer(),
           frozenVaultId.toArrayLike(Buffer, "le", 8),
         ],
-        program.programId
+        program.programId,
       );
       [frozenPolicy] = PublicKey.findProgramAddressSync(
         [Buffer.from("policy"), frozenVault.toBuffer()],
-        program.programId
+        program.programId,
       );
       [frozenTracker] = PublicKey.findProgramAddressSync(
         [Buffer.from("tracker"), frozenVault.toBuffer()],
-        program.programId
+        program.programId,
       );
 
       // Create and freeze vault
@@ -500,8 +520,8 @@ describe("jupiter-integration", () => {
           frozenVaultId,
           new BN(500_000_000),
           new BN(200_000_000),
-          0,                   // protocolMode
-          [jupiterProtocol],   // protocols
+          0, // protocolMode
+          [jupiterProtocol], // protocols
           0,
           1,
           0, // developer fee rate
@@ -532,7 +552,9 @@ describe("jupiter-integration", () => {
       // Verify frozen immediately
       const checkVault = await program.account.agentVault.fetch(frozenVault);
       if (!checkVault.status.hasOwnProperty("frozen")) {
-        throw new Error(`Vault 101 should be frozen but is: ${JSON.stringify(checkVault.status)}`);
+        throw new Error(
+          `Vault 101 should be frozen but is: ${JSON.stringify(checkVault.status)}`,
+        );
       }
     });
 
@@ -560,7 +582,7 @@ describe("jupiter-integration", () => {
           new BN(1_000_000),
           jupiterProtocol,
           true,
-          frozenVaultAta
+          frozenVaultAta,
         );
         expect.fail("Should have thrown");
       } catch (err: any) {
@@ -570,9 +592,8 @@ describe("jupiter-integration", () => {
         const msg = err.message || err.toString();
         expect(msg).to.satisfy(
           (s: string) =>
-            s.includes("UnauthorizedAgent") ||
-            s.includes("ConstraintRaw"),
-          `Expected an unauthorized-agent error but got: ${msg}`
+            s.includes("UnauthorizedAgent") || s.includes("ConstraintRaw"),
+          `Expected an unauthorized-agent error but got: ${msg}`,
         );
       }
     });
@@ -595,15 +616,15 @@ describe("jupiter-integration", () => {
           owner.publicKey.toBuffer(),
           rollingVaultId.toArrayLike(Buffer, "le", 8),
         ],
-        program.programId
+        program.programId,
       );
       [rollingPolicy] = PublicKey.findProgramAddressSync(
         [Buffer.from("policy"), rollingVault.toBuffer()],
-        program.programId
+        program.programId,
       );
       [rollingTracker] = PublicKey.findProgramAddressSync(
         [Buffer.from("tracker"), rollingVault.toBuffer()],
-        program.programId
+        program.programId,
       );
 
       // Create vault with tight cap: 100 USDC daily, 60 USDC max tx
@@ -611,9 +632,9 @@ describe("jupiter-integration", () => {
         .initializeVault(
           rollingVaultId,
           new BN(100_000_000), // 100 USDC daily cap
-          new BN(60_000_000),  // 60 USDC max tx
-          0,                   // protocolMode
-          [jupiterProtocol],   // protocols
+          new BN(60_000_000), // 60 USDC max tx
+          0, // protocolMode
+          [jupiterProtocol], // protocols
           0,
           1,
           0, // developer fee rate
@@ -636,7 +657,11 @@ describe("jupiter-integration", () => {
         .rpc();
 
       // Deposit USDC into rolling vault (needed for protocol fee transfers)
-      rollingVaultUsdcAta = getAssociatedTokenAddressSync(usdcMint, rollingVault, true);
+      rollingVaultUsdcAta = getAssociatedTokenAddressSync(
+        usdcMint,
+        rollingVault,
+        true,
+      );
       await program.methods
         .depositFunds(new BN(200_000_000)) // 200 USDC
         .accountsPartial({
@@ -657,7 +682,7 @@ describe("jupiter-integration", () => {
       const vaultState = await program.account.agentVault.fetch(rollingVault);
       expect(vaultState.agent.toString()).to.equal(
         agent.publicKey.toString(),
-        "Agent should be registered for rolling window vault"
+        "Agent should be registered for rolling window vault",
       );
 
       // Swap 1: 40 USDC (total: 40 / 100)
@@ -670,7 +695,7 @@ describe("jupiter-integration", () => {
         new BN(40_000_000),
         jupiterProtocol,
         true,
-        rollingVaultUsdcAta
+        rollingVaultUsdcAta,
       );
 
       let vault = await program.account.agentVault.fetch(rollingVault);
@@ -686,7 +711,7 @@ describe("jupiter-integration", () => {
         new BN(40_000_000),
         jupiterProtocol,
         true,
-        rollingVaultUsdcAta
+        rollingVaultUsdcAta,
       );
 
       vault = await program.account.agentVault.fetch(rollingVault);
@@ -703,7 +728,7 @@ describe("jupiter-integration", () => {
           new BN(30_000_000),
           jupiterProtocol,
           true,
-          rollingVaultUsdcAta
+          rollingVaultUsdcAta,
         );
         expect.fail("Should have thrown");
       } catch (err: any) {

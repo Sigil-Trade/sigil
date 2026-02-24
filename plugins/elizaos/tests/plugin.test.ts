@@ -264,13 +264,7 @@ describe("ElizaOS Plugin", () => {
     it("returns formatted transaction history", async () => {
       const { runtime } = createMockRuntime();
       const { responses, callback } = captureCallback();
-      await transactionHistoryAction.handler(
-        runtime,
-        {},
-        null,
-        null,
-        callback,
-      );
+      await transactionHistoryAction.handler(runtime, {}, null, null, callback);
 
       expect(responses).to.have.length(1);
       expect(responses[0].text).to.include("Transaction History");
@@ -288,7 +282,9 @@ describe("ElizaOS Plugin", () => {
 
     it("validates with x402 keywords", async () => {
       const { runtime } = createMockRuntime();
-      const message = { content: { text: "x402 fetch https://api.example.com/data" } };
+      const message = {
+        content: { text: "x402 fetch https://api.example.com/data" },
+      };
       const valid = await x402FetchAction.validate(runtime, message);
       expect(valid).to.be.true;
     });
@@ -331,14 +327,14 @@ describe("ElizaOS Plugin", () => {
 
   describe("evaluator", () => {
     it("policyCheckEvaluator has correct name", () => {
-      expect(policyCheckEvaluator.name).to.equal(
-        "AGENT_SHIELD_POLICY_CHECK",
-      );
+      expect(policyCheckEvaluator.name).to.equal("AGENT_SHIELD_POLICY_CHECK");
     });
 
     it("validates on shield keywords", async () => {
       const { runtime } = createMockRuntime();
-      const message = { content: { text: "agentshield transaction completed" } };
+      const message = {
+        content: { text: "agentshield transaction completed" },
+      };
       const valid = await policyCheckEvaluator.validate(runtime, message);
       expect(valid).to.be.true;
     });
@@ -380,19 +376,25 @@ describe("ElizaOS Plugin", () => {
 
       wallet.pause();
       const pauseLog = logs.find(
-        (l) => l.level === "info" && l.args.some((a: any) => String(a).includes("paused")),
+        (l) =>
+          l.level === "info" &&
+          l.args.some((a: any) => String(a).includes("paused")),
       );
       expect(pauseLog).to.exist;
 
       wallet.resume();
       const resumeLog = logs.find(
-        (l) => l.level === "info" && l.args.some((a: any) => String(a).includes("resumed")),
+        (l) =>
+          l.level === "info" &&
+          l.args.some((a: any) => String(a).includes("resumed")),
       );
       expect(resumeLog).to.exist;
 
       wallet.updatePolicies({ maxSpend: "200 USDC/day" });
       const updateLog = logs.find(
-        (l) => l.level === "info" && l.args.some((a: any) => String(a).includes("updated")),
+        (l) =>
+          l.level === "info" &&
+          l.args.some((a: any) => String(a).includes("updated")),
       );
       expect(updateLog).to.exist;
     });

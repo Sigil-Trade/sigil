@@ -19,9 +19,7 @@ import {
 } from "@solana/spl-token";
 import { expect } from "chai";
 import BN from "bn.js";
-import {
-  FLASH_TRADE_PROGRAM_ID,
-} from "../sdk/typescript/src/integrations/flash-trade";
+import { FLASH_TRADE_PROGRAM_ID } from "../sdk/typescript/src/integrations/flash-trade";
 import {
   createTestEnv,
   airdropSol,
@@ -63,7 +61,9 @@ describe("flash-trade-integration", () => {
   let usdcMint: PublicKey;
 
   // Protocol treasury (must match hardcoded constant in program)
-  const protocolTreasury = new PublicKey("ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT");
+  const protocolTreasury = new PublicKey(
+    "ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT",
+  );
   let protocolTreasuryUsdcAta: PublicKey;
   let ownerUsdcAta: PublicKey;
   let vaultUsdcAta: PublicKey;
@@ -104,7 +104,7 @@ describe("flash-trade-integration", () => {
     actionType: any,
     leverageBps: number | null = null,
     success: boolean = true,
-    overrideVaultTokenAta?: PublicKey
+    overrideVaultTokenAta?: PublicKey,
   ): Promise<string> {
     const effectiveVaultAta = overrideVaultTokenAta ?? vaultUsdcAta;
 
@@ -115,7 +115,7 @@ describe("flash-trade-integration", () => {
         agentKp.publicKey.toBuffer(),
         tokenMint.toBuffer(),
       ],
-      program.programId
+      program.programId,
     );
 
     const computeIx = ComputeBudgetProgram.setComputeUnitLimit({
@@ -128,7 +128,7 @@ describe("flash-trade-integration", () => {
         tokenMint,
         amount,
         targetProtocol,
-        leverageBps
+        leverageBps,
       )
       .accountsPartial({
         agent: agentKp.publicKey,
@@ -166,7 +166,7 @@ describe("flash-trade-integration", () => {
     return sendVersionedTx(
       svm,
       [computeIx, validateIx, mockDefiIx, finalizeIx],
-      agentKp
+      agentKp,
     );
   }
 
@@ -182,12 +182,7 @@ describe("flash-trade-integration", () => {
     airdropSol(svm, feeDestination.publicKey, 2 * LAMPORTS_PER_SOL);
 
     // Create USDC-like mint
-    usdcMint = createMintHelper(
-      svm,
-      (owner as any).payer,
-      owner.publicKey,
-      6
-    );
+    usdcMint = createMintHelper(svm, (owner as any).payer, owner.publicKey, 6);
 
     // Create protocol treasury ATA
     protocolTreasuryUsdcAta = createAtaIdempotentHelper(
@@ -195,18 +190,23 @@ describe("flash-trade-integration", () => {
       (owner as any).payer,
       usdcMint,
       protocolTreasury,
-      true
+      true,
     );
 
     // Derive oracle registry PDA and initialize it
     [oracleRegistryPda] = PublicKey.findProgramAddressSync(
       [Buffer.from("oracle_registry")],
-      program.programId
+      program.programId,
     );
 
     await program.methods
       .initializeOracleRegistry([
-        { mint: usdcMint, oracleFeed: PublicKey.default, isStablecoin: true, fallbackFeed: PublicKey.default },
+        {
+          mint: usdcMint,
+          oracleFeed: PublicKey.default,
+          isStablecoin: true,
+          fallbackFeed: PublicKey.default,
+        },
       ])
       .accounts({
         authority: owner.publicKey,
@@ -222,15 +222,15 @@ describe("flash-trade-integration", () => {
         owner.publicKey.toBuffer(),
         vaultId.toArrayLike(Buffer, "le", 8),
       ],
-      program.programId
+      program.programId,
     );
     [policyPda] = PublicKey.findProgramAddressSync(
       [Buffer.from("policy"), vaultPda.toBuffer()],
-      program.programId
+      program.programId,
     );
     [trackerPda] = PublicKey.findProgramAddressSync(
       [Buffer.from("tracker"), vaultPda.toBuffer()],
-      program.programId
+      program.programId,
     );
 
     // Derive vault ATA
@@ -241,14 +241,14 @@ describe("flash-trade-integration", () => {
       .initializeVault(
         vaultId,
         new BN(1_000_000_000), // daily cap: 1000 USDC
-        new BN(500_000_000),   // max tx: 500 USDC
-        0,                     // protocolMode
-        [flashProtocol],       // protocols
+        new BN(500_000_000), // max tx: 500 USDC
+        0, // protocolMode
+        [flashProtocol], // protocols
         10000, // max leverage: 100x (10000 bps)
-        3,     // max concurrent positions
-        0,     // developer fee rate
+        3, // max concurrent positions
+        0, // developer fee rate
         new BN(0), // timelockDuration
-        [],    // allowedDestinations
+        [], // allowedDestinations
       )
       .accountsPartial({
         owner: owner.publicKey,
@@ -274,7 +274,7 @@ describe("flash-trade-integration", () => {
       svm,
       (owner as any).payer,
       usdcMint,
-      owner.publicKey
+      owner.publicKey,
     );
     mintToHelper(
       svm,
@@ -282,7 +282,7 @@ describe("flash-trade-integration", () => {
       usdcMint,
       ownerUsdcAta,
       owner.publicKey,
-      2_000_000_000n // 2000 USDC
+      2_000_000_000n, // 2000 USDC
     );
 
     await program.methods
@@ -316,7 +316,7 @@ describe("flash-trade-integration", () => {
         amount,
         flashProtocol,
         { openPosition: {} },
-        5000 // 50x leverage (within 100x limit)
+        5000, // 50x leverage (within 100x limit)
       );
 
       expect(sig).to.be.a("string");
@@ -344,7 +344,7 @@ describe("flash-trade-integration", () => {
           new BN(50_000_000),
           flashProtocol,
           { openPosition: {} },
-          15000 // 150x leverage — exceeds 100x (10000 bps) limit
+          15000, // 150x leverage — exceeds 100x (10000 bps) limit
         );
         expect.fail("Should have thrown");
       } catch (err: any) {
@@ -362,15 +362,27 @@ describe("flash-trade-integration", () => {
       // Already have 1 open position from the first test.
       // Open 2 more (max is 3).
       await sendComposedAction(
-        vaultPda, policyPda, trackerPda, agent, usdcMint,
-        new BN(50_000_000), flashProtocol,
-        { openPosition: {} }, 2000
+        vaultPda,
+        policyPda,
+        trackerPda,
+        agent,
+        usdcMint,
+        new BN(50_000_000),
+        flashProtocol,
+        { openPosition: {} },
+        2000,
       );
 
       await sendComposedAction(
-        vaultPda, policyPda, trackerPda, agent, usdcMint,
-        new BN(50_000_000), flashProtocol,
-        { openPosition: {} }, 2000
+        vaultPda,
+        policyPda,
+        trackerPda,
+        agent,
+        usdcMint,
+        new BN(50_000_000),
+        flashProtocol,
+        { openPosition: {} },
+        2000,
       );
 
       // Verify we have 3 open positions
@@ -380,9 +392,15 @@ describe("flash-trade-integration", () => {
       // 4th should fail
       try {
         await sendComposedAction(
-          vaultPda, policyPda, trackerPda, agent, usdcMint,
-          new BN(50_000_000), flashProtocol,
-          { openPosition: {} }, 2000
+          vaultPda,
+          policyPda,
+          trackerPda,
+          agent,
+          usdcMint,
+          new BN(50_000_000),
+          flashProtocol,
+          { openPosition: {} },
+          2000,
         );
         expect.fail("Should have thrown");
       } catch (err: any) {
@@ -412,7 +430,7 @@ describe("flash-trade-integration", () => {
         usdcMint,
         new BN(100_000_000),
         flashProtocol,
-        { closePosition: {} }
+        { closePosition: {} },
       );
 
       const vaultAfter = await program.account.agentVault.fetch(vaultPda);
@@ -434,7 +452,7 @@ describe("flash-trade-integration", () => {
         new BN(30_000_000),
         flashProtocol,
         { increasePosition: {} },
-        3000
+        3000,
       );
 
       expect(sig).to.be.a("string");
@@ -454,7 +472,7 @@ describe("flash-trade-integration", () => {
         usdcMint,
         new BN(20_000_000),
         flashProtocol,
-        { decreasePosition: {} }
+        { decreasePosition: {} },
       );
 
       expect(sig).to.be.a("string");
@@ -477,15 +495,15 @@ describe("flash-trade-integration", () => {
           owner.publicKey.toBuffer(),
           frozenVaultId.toArrayLike(Buffer, "le", 8),
         ],
-        program.programId
+        program.programId,
       );
       [frozenPolicy] = PublicKey.findProgramAddressSync(
         [Buffer.from("policy"), frozenVault.toBuffer()],
-        program.programId
+        program.programId,
       );
       [frozenTracker] = PublicKey.findProgramAddressSync(
         [Buffer.from("tracker"), frozenVault.toBuffer()],
-        program.programId
+        program.programId,
       );
 
       await program.methods
@@ -493,8 +511,8 @@ describe("flash-trade-integration", () => {
           frozenVaultId,
           new BN(1_000_000_000),
           new BN(500_000_000),
-          0,                   // protocolMode
-          [flashProtocol],     // protocols
+          0, // protocolMode
+          [flashProtocol], // protocols
           10000,
           3,
           0, // developer fee rate
@@ -545,7 +563,7 @@ describe("flash-trade-integration", () => {
           { openPosition: {} },
           5000,
           true,
-          frozenVaultAta
+          frozenVaultAta,
         );
         expect.fail("Should have thrown");
       } catch (err: any) {
@@ -555,9 +573,8 @@ describe("flash-trade-integration", () => {
         const msg = err.message || err.toString();
         expect(msg).to.satisfy(
           (s: string) =>
-            s.includes("UnauthorizedAgent") ||
-            s.includes("ConstraintRaw"),
-          `Expected an unauthorized-agent error but got: ${msg}`
+            s.includes("UnauthorizedAgent") || s.includes("ConstraintRaw"),
+          `Expected an unauthorized-agent error but got: ${msg}`,
         );
       }
     });
@@ -580,15 +597,15 @@ describe("flash-trade-integration", () => {
           owner.publicKey.toBuffer(),
           disabledVaultId.toArrayLike(Buffer, "le", 8),
         ],
-        program.programId
+        program.programId,
       );
       [disabledPolicy] = PublicKey.findProgramAddressSync(
         [Buffer.from("policy"), disabledVault.toBuffer()],
-        program.programId
+        program.programId,
       );
       [disabledTracker] = PublicKey.findProgramAddressSync(
         [Buffer.from("tracker"), disabledVault.toBuffer()],
-        program.programId
+        program.programId,
       );
 
       await program.methods
@@ -596,8 +613,8 @@ describe("flash-trade-integration", () => {
           disabledVaultId,
           new BN(1_000_000_000),
           new BN(500_000_000),
-          0,                   // protocolMode
-          [flashProtocol],     // protocols
+          0, // protocolMode
+          [flashProtocol], // protocols
           10000,
           3,
           0, // developer fee rate
@@ -621,7 +638,9 @@ describe("flash-trade-integration", () => {
 
       // Deposit funds so vault token account exists (needed for delegation)
       disabledVaultUsdcAta = getAssociatedTokenAddressSync(
-        usdcMint, disabledVault, true
+        usdcMint,
+        disabledVault,
+        true,
       );
       await program.methods
         .depositFunds(new BN(100_000_000)) // 100 USDC
@@ -646,10 +665,10 @@ describe("flash-trade-integration", () => {
           null, // protocols
           null, // maxLeverageBps
           false, // canOpenPositions = false
-          null,  // maxConcurrentPositions
-          null,  // developerFeeRate
-          null,  // timelockDuration
-          null   // allowedDestinations
+          null, // maxConcurrentPositions
+          null, // developerFeeRate
+          null, // timelockDuration
+          null, // allowedDestinations
         )
         .accountsPartial({
           owner: owner.publicKey,
@@ -658,10 +677,11 @@ describe("flash-trade-integration", () => {
         })
         .rpc();
 
-      const policyState = await program.account.policyConfig.fetch(disabledPolicy);
+      const policyState =
+        await program.account.policyConfig.fetch(disabledPolicy);
       if (policyState.canOpenPositions !== false) {
         throw new Error(
-          `Expected canOpenPositions=false but got ${policyState.canOpenPositions}`
+          `Expected canOpenPositions=false but got ${policyState.canOpenPositions}`,
         );
       }
     });
@@ -679,13 +699,13 @@ describe("flash-trade-integration", () => {
           { openPosition: {} },
           5000,
           true,
-          disabledVaultUsdcAta
+          disabledVaultUsdcAta,
         );
         expect.fail("Should have thrown");
       } catch (err: any) {
         if (err.message === "Should have thrown") throw err;
         expect(err.message || err.toString()).to.include(
-          "PositionOpeningDisallowed"
+          "PositionOpeningDisallowed",
         );
       }
     });
@@ -703,32 +723,32 @@ describe("flash-trade-integration", () => {
 
       // At least one bucket should have non-zero USD spend
       const nonZeroBuckets = tracker.buckets.filter(
-        (b: any) => b.usdAmount.toNumber() > 0
+        (b: any) => b.usdAmount.toNumber() > 0,
       );
       expect(
         nonZeroBuckets.length,
-        "should have at least one non-zero bucket"
+        "should have at least one non-zero bucket",
       ).to.be.greaterThan(0);
 
       // The aggregate spend should reflect all transactions
       const totalBucketSpend = nonZeroBuckets.reduce(
         (acc: number, b: any) => acc + b.usdAmount.toNumber(),
-        0
+        0,
       );
       expect(
         totalBucketSpend,
-        "total bucket spend should be greater than zero"
+        "total bucket spend should be greater than zero",
       ).to.be.greaterThan(0);
 
       // Verify vault-level counters confirm all actions executed
       const vault = await program.account.agentVault.fetch(vaultPda);
       expect(
         vault.totalTransactions.toNumber(),
-        "vault should have recorded multiple transactions"
+        "vault should have recorded multiple transactions",
       ).to.be.greaterThanOrEqual(4); // open + close + increase + decrease (+ extras)
       expect(
         vault.totalVolume.toNumber(),
-        "vault should have recorded total volume"
+        "vault should have recorded total volume",
       ).to.be.greaterThan(0);
     });
   });

@@ -30,7 +30,7 @@ describe("ShieldState", () => {
         "agentshield:spends",
         JSON.stringify([
           { mint: "USDC", amount: "1000000", timestamp: Date.now() },
-        ])
+        ]),
       );
       storage.setItem("agentshield:txs", JSON.stringify([]));
 
@@ -56,7 +56,7 @@ describe("ShieldState", () => {
         "agentshield:spends",
         JSON.stringify([
           { mint: "USDC", amount: "1000000", timestamp: oldTimestamp },
-        ])
+        ]),
       );
       storage.setItem("agentshield:txs", JSON.stringify([]));
 
@@ -101,7 +101,7 @@ describe("ShieldState", () => {
       const oldTimestamp = Date.now() - 7_200_000; // 2 hours ago
       storage.setItem(
         "agentshield:txs",
-        JSON.stringify([{ timestamp: oldTimestamp }])
+        JSON.stringify([{ timestamp: oldTimestamp }]),
       );
       storage.setItem("agentshield:spends", JSON.stringify([]));
 
@@ -120,14 +120,11 @@ describe("ShieldState", () => {
         JSON.stringify([
           { mint: "USDC", amount: "100", timestamp: now - 200_000 },
           { mint: "USDC", amount: "200", timestamp: now },
-        ])
+        ]),
       );
       storage.setItem(
         "agentshield:txs",
-        JSON.stringify([
-          { timestamp: now - 200_000 },
-          { timestamp: now },
-        ])
+        JSON.stringify([{ timestamp: now - 200_000 }, { timestamp: now }]),
       );
 
       const state = new ShieldState(storage);
@@ -164,7 +161,7 @@ describe("ShieldState", () => {
       // Create new state with same storage
       const state2 = new ShieldState(storage);
       expect(state2.getSpendInWindow("USDC", 86_400_000)).to.equal(
-        BigInt(250_000)
+        BigInt(250_000),
       );
       expect(state2.getTransactionCountInWindow(3_600_000)).to.equal(1);
     });
@@ -182,7 +179,7 @@ describe("ShieldState", () => {
 
       // Verify via storage — should have exactly 500 entries
       const persisted = JSON.parse(
-        storage.data["agentshield:spends"]
+        storage.data["agentshield:spends"],
       ) as unknown[];
       expect(persisted.length).to.equal(500);
     });

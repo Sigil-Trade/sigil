@@ -198,7 +198,9 @@ describe("devnet-fees", () => {
       vaultA.feeDestinationAta!,
     );
     expect(feeDestAfter - feeDestBefore).to.equal(developerFee);
-    console.log(`    Developer fee: ${developerFee} credited to feeDestination`);
+    console.log(
+      `    Developer fee: ${developerFee} credited to feeDestination`,
+    );
   });
 
   it("3. combined fees: vault debited by protocol + developer", async () => {
@@ -206,10 +208,7 @@ describe("devnet-fees", () => {
     const { protocolFee, developerFee } = calculateFees(amount, 500);
     const totalFees = protocolFee + developerFee;
 
-    const vaultBefore = await getTokenBalance(
-      connection,
-      vaultA.vaultTokenAta,
-    );
+    const vaultBefore = await getTokenBalance(connection, vaultA.vaultTokenAta);
 
     const sessionPda = deriveSessionPda(
       vaultA.vaultPda,
@@ -371,9 +370,8 @@ describe("devnet-fees", () => {
 
     // Create destination keypair + ATA
     const dest = Keypair.generate();
-    const { getOrCreateAssociatedTokenAccount } = await import(
-      "@solana/spl-token"
-    );
+    const { getOrCreateAssociatedTokenAccount } =
+      await import("@solana/spl-token");
     const destAta = await getOrCreateAssociatedTokenAccount(
       connection,
       payer,

@@ -7,7 +7,9 @@ import {
   loadConfig,
   createClient,
   isConfigured,
+  resolveClient,
   type McpConfig,
+  type CustodyWalletLike,
 } from "./config";
 import type { AgentShieldClient } from "@agent-shield/sdk";
 
@@ -72,24 +74,36 @@ async function main() {
   // Try to load config, but don't exit if it fails — run in setup mode
   let config: McpConfig | null = null;
   let client: AgentShieldClient | null = null;
+  let custodyWallet: CustodyWalletLike | null = null;
 
   try {
-    config = loadConfig();
-    client = createClient(config);
+    const resolved = await resolveClient();
+    if (resolved) {
+      client = resolved.client;
+      config = resolved.config;
+      custodyWallet = resolved.custodyWallet;
+      console.error(
+        `[agent-shield-mcp] Connected to ${config.rpcUrl}, ` +
+          `wallet: ${client.provider.wallet.publicKey.toBase58()}` +
+          (custodyWallet ? " (custody)" : ""),
+      );
+    } else {
+      console.error(
+        "[agent-shield-mcp] No wallet configured — running in setup mode. " +
+          "Use shield_setup_status or shield_configure to get started.",
+      );
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
     console.error(
-      `[agent-shield-mcp] Connected to ${config.rpcUrl}, ` +
-        `wallet: ${client.provider.wallet.publicKey.toBase58()}`,
-    );
-  } catch {
-    console.error(
-      "[agent-shield-mcp] No wallet configured — running in setup mode. " +
-        "Use shield_setup_status or shield_configure to get started.",
+      `[agent-shield-mcp] Config error: ${msg} — running in setup mode.`,
     );
   }
 
   /**
    * Guard for tools that require a configured SDK client.
    * Returns the "not configured" message if no client is available.
+   * Re-checks at call time since config may be created after startup.
    */
   function requireClient(
     fn: (input: any) => Promise<string>,
@@ -98,12 +112,20 @@ async function main() {
       // Re-check at call time (config may have been created since startup)
       if (!client) {
         try {
-          const freshConfig = loadConfig();
-          client = createClient(freshConfig);
-          config = freshConfig;
-        } catch {
+          const resolved = await resolveClient();
+          if (resolved) {
+            client = resolved.client;
+            config = resolved.config;
+            custodyWallet = resolved.custodyWallet;
+          } else {
+            return {
+              content: [{ type: "text", text: NOT_CONFIGURED_MSG }],
+            };
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
           return {
-            content: [{ type: "text", text: NOT_CONFIGURED_MSG }],
+            content: [{ type: "text", text: `Configuration error: ${msg}` }],
           };
         }
       }
@@ -523,7 +545,9 @@ async function main() {
         .default(50)
         .describe("Slippage tolerance in BPS (default: 50)"),
     },
-    requireClient((input) => executeSwap(client!, config!, input)),
+    requireClient((input) =>
+      executeSwap(client!, config!, input, custodyWallet),
+    ),
   );
 
   registerTool(
@@ -545,7 +569,9 @@ async function main() {
         .number()
         .describe("Leverage in basis points (e.g. 20000 = 2x)"),
     },
-    requireClient((input) => openPosition(client!, config!, input)),
+    requireClient((input) =>
+      openPosition(client!, config!, input, custodyWallet),
+    ),
   );
 
   registerTool(
@@ -563,7 +589,9 @@ async function main() {
         .default(0)
         .describe("Price exponent (default: 0)"),
     },
-    requireClient((input) => closePosition(client!, config!, input)),
+    requireClient((input) =>
+      closePosition(client!, config!, input, custodyWallet),
+    ),
   );
 
   // ── Platform Tools ─────────────────────────────────────────
@@ -633,7 +661,7 @@ async function main() {
         .optional()
         .describe("Maximum payment in token base units"),
     },
-    requireClient((input) => x402Fetch(client!, config!, input)),
+    requireClient((input) => x402Fetch(client!, config!, input, custodyWallet)),
   );
 
   // ── MCP Resources ───────────────────────────────────────────

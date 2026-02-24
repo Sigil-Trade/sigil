@@ -527,7 +527,13 @@ describe("devnet-security", () => {
       expect.fail("Should have thrown");
     } catch (err: any) {
       // revokeAgent clears the agent, so the first constraint hit is UnauthorizedAgent
-      expectError(err, "UnauthorizedAgent", "VaultNotActive", "not active", "unauthorized");
+      expectError(
+        err,
+        "UnauthorizedAgent",
+        "VaultNotActive",
+        "not active",
+        "unauthorized",
+      );
     }
     console.log("    Frozen vault blocks authorize");
   });

@@ -97,7 +97,14 @@ describe("devnet-sessions", () => {
       owner.publicKey,
     );
     const ownerMintBAta = ownerMintBAtaAccount.address;
-    await mintTo(connection, payer, mintB, ownerMintBAta, owner.publicKey, 500_000_000);
+    await mintTo(
+      connection,
+      payer,
+      mintB,
+      ownerMintBAta,
+      owner.publicKey,
+      500_000_000,
+    );
     await program.methods
       .depositFunds(new BN(500_000_000))
       .accounts({
@@ -180,7 +187,9 @@ describe("devnet-sessions", () => {
     // totalTransactions should NOT increment (expired = forced failure)
     const vaultAfter = await program.account.agentVault.fetch(vault.vaultPda);
     expect(vaultAfter.totalTransactions.toNumber()).to.equal(txCountBefore);
-    console.log("    Expired session finalized as failure — no stats increment");
+    console.log(
+      "    Expired session finalized as failure — no stats increment",
+    );
   });
 
   it("2. permissionless cleanup of expired session", async () => {

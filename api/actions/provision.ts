@@ -23,8 +23,7 @@ const TEMPLATE_META: Record<
   },
   moderate: {
     label: "Moderate",
-    description:
-      "$2,000/day, Jupiter + Orca + Raydium + Meteora, 2x leverage",
+    description: "$2,000/day, Jupiter + Orca + Raydium + Meteora, 2x leverage",
   },
   aggressive: {
     label: "Aggressive",
@@ -33,9 +32,7 @@ const TEMPLATE_META: Record<
 };
 
 function setCors(res: VercelResponse) {
-  Object.entries(ACTIONS_CORS_HEADERS).forEach(([k, v]) =>
-    res.setHeader(k, v),
-  );
+  Object.entries(ACTIONS_CORS_HEADERS).forEach(([k, v]) => res.setHeader(k, v));
 }
 
 function handleGet(req: VercelRequest, res: VercelResponse) {
@@ -77,12 +74,10 @@ async function handlePost(req: VercelRequest, res: VercelResponse) {
 
   try {
     const { PublicKey } = await import("@solana/web3.js");
-    const {
-      buildProvisionTransaction,
-    } = await import("../../apps/actions-server/src/lib/build-tx");
-    const {
-      TEMPLATES,
-    } = await import("../../apps/actions-server/src/lib/templates");
+    const { buildProvisionTransaction } =
+      await import("../../apps/actions-server/src/lib/build-tx");
+    const { TEMPLATES } =
+      await import("../../apps/actions-server/src/lib/templates");
 
     const body = req.body as { account?: string };
 
@@ -105,9 +100,7 @@ async function handlePost(req: VercelRequest, res: VercelResponse) {
     const template =
       (url.searchParams.get("template") as TemplateName) || "conservative";
     if (!TEMPLATES[template]) {
-      return res
-        .status(400)
-        .json({ error: `Invalid template: ${template}` });
+      return res.status(400).json({ error: `Invalid template: ${template}` });
     }
 
     const dailyCapStr = url.searchParams.get("dailyCap");
@@ -153,16 +146,12 @@ async function handlePost(req: VercelRequest, res: VercelResponse) {
       message: `Vault created at ${vaultAddress}. Template: ${config.label} — ${config.description}`,
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown error";
+    const message = error instanceof Error ? error.message : "Unknown error";
     return res.status(500).json({ error: message });
   }
 }
 
-export default async function handler(
-  req: VercelRequest,
-  res: VercelResponse,
-) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "OPTIONS") {
     setCors(res);
     return res.status(200).end();

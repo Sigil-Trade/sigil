@@ -29,9 +29,7 @@ describe("Engine", () => {
 
     it("returns protocol_not_allowed for unlisted protocol with allowedProtocols set", () => {
       const policies = resolvePolicies({
-        allowedProtocols: [
-          "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
-        ],
+        allowedProtocols: ["JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"],
       });
       const state = new ShieldState(undefined);
       const analysis: TransactionAnalysis = {
@@ -59,9 +57,7 @@ describe("Engine", () => {
 
     it("allows system programs regardless of allowlist settings", () => {
       const policies = resolvePolicies({
-        allowedProtocols: [
-          "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
-        ],
+        allowedProtocols: ["JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"],
       });
       const state = new ShieldState(undefined);
       const analysis: TransactionAnalysis = {
@@ -78,9 +74,7 @@ describe("Engine", () => {
 
     it("returns token_not_allowed for unlisted token", () => {
       const policies = resolvePolicies({
-        allowedTokens: [
-          "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-        ],
+        allowedTokens: ["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"],
       });
       const state = new ShieldState(undefined);
       const analysis: TransactionAnalysis = {
@@ -110,7 +104,7 @@ describe("Engine", () => {
       // Pre-spend 90 USDC
       state.recordSpend(
         "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-        BigInt(90_000_000)
+        BigInt(90_000_000),
       );
 
       const analysis: TransactionAnalysis = {
@@ -156,9 +150,7 @@ describe("Engine", () => {
 
     it("returns multiple violations simultaneously", () => {
       const policies = resolvePolicies({
-        allowedTokens: [
-          "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-        ],
+        allowedTokens: ["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"],
         maxTransactionSize: BigInt(100),
         rateLimit: { maxTransactions: 0, windowMs: 3_600_000 },
       });
@@ -202,9 +194,9 @@ describe("Engine", () => {
         estimatedValueLamports: BigInt(0),
       };
       const violations = evaluatePolicy(analysis, policies, state);
-      expect(violations.filter((v) => v.rule === "spending_cap")).to.have.length(
-        0
-      );
+      expect(
+        violations.filter((v) => v.rule === "spending_cap"),
+      ).to.have.length(0);
     });
 
     it("spending cap boundary: exactly at limit triggers violation", () => {
@@ -219,7 +211,7 @@ describe("Engine", () => {
       const state = new ShieldState(undefined);
       state.recordSpend(
         "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-        BigInt(50_000_000)
+        BigInt(50_000_000),
       );
 
       // Attempt exactly at limit: 50M existing + 50M+1 = over
@@ -250,7 +242,7 @@ describe("Engine", () => {
       const state = new ShieldState(undefined);
       state.recordSpend(
         "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-        BigInt(50_000_000)
+        BigInt(50_000_000),
       );
 
       // Attempt exactly at limit: 50M existing + 50M = exactly 100M (allowed since totalAfterTx <= limit)
@@ -266,9 +258,9 @@ describe("Engine", () => {
         estimatedValueLamports: BigInt(50_000_000),
       };
       const violations = evaluatePolicy(analysis, policies, state);
-      expect(violations.filter((v) => v.rule === "spending_cap")).to.have.length(
-        0
-      );
+      expect(
+        violations.filter((v) => v.rule === "spending_cap"),
+      ).to.have.length(0);
     });
   });
 
@@ -278,16 +270,16 @@ describe("Engine", () => {
         rateLimit: { maxTransactions: 0, windowMs: 3_600_000 },
       });
       const state = new ShieldState(undefined);
-      expect(() =>
-        enforcePolicy(systemOnlyTx(), policies, state)
-      ).to.throw(ShieldDeniedError);
+      expect(() => enforcePolicy(systemOnlyTx(), policies, state)).to.throw(
+        ShieldDeniedError,
+      );
     });
 
     it("does not throw on compliant transaction", () => {
       const policies = resolvePolicies();
       const state = new ShieldState(undefined);
       expect(() =>
-        enforcePolicy(systemOnlyTx(), policies, state)
+        enforcePolicy(systemOnlyTx(), policies, state),
       ).to.not.throw();
     });
   });
@@ -309,7 +301,7 @@ describe("Engine", () => {
       recordTransaction(analysis, state);
       const spend = state.getSpendInWindow(
         "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-        86_400_000
+        86_400_000,
       );
       expect(spend).to.equal(BigInt(1_000_000));
     });
@@ -330,7 +322,7 @@ describe("Engine", () => {
       recordTransaction(analysis, state);
       const spend = state.getSpendInWindow(
         "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-        86_400_000
+        86_400_000,
       );
       expect(spend).to.equal(BigInt(0));
     });

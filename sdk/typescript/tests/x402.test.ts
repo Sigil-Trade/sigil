@@ -335,9 +335,13 @@ describe("x402 — shieldedFetch()", () => {
     it("passes through non-402 responses unchanged", async () => {
       mockFetchNon402(200, '{"ok":true}');
       const wallet = createMockWallet();
-      const shielded = shield(wallet, { maxSpend: "500 USDC/day" }, {
-        storage: createMemoryStorage(),
-      });
+      const shielded = shield(
+        wallet,
+        { maxSpend: "500 USDC/day" },
+        {
+          storage: createMemoryStorage(),
+        },
+      );
       const res = await shieldedFetch(shielded, "https://example.com/free");
       expect(res.status).to.equal(200);
       expect(wallet.signCount).to.equal(0);
@@ -346,9 +350,13 @@ describe("x402 — shieldedFetch()", () => {
     it("passes through 402 without PAYMENT-REQUIRED header", async () => {
       mockFetch402NoHeader();
       const wallet = createMockWallet();
-      const shielded = shield(wallet, { maxSpend: "500 USDC/day" }, {
-        storage: createMemoryStorage(),
-      });
+      const shielded = shield(
+        wallet,
+        { maxSpend: "500 USDC/day" },
+        {
+          storage: createMemoryStorage(),
+        },
+      );
       const res = await shieldedFetch(shielded, "https://example.com/plain402");
       expect(res.status).to.equal(402);
       expect(wallet.signCount).to.equal(0);
@@ -358,9 +366,13 @@ describe("x402 — shieldedFetch()", () => {
       const header = buildPaymentRequiredHeader();
       mockFetch402Then200(header);
       const wallet = createMockWallet();
-      const shielded = shield(wallet, { maxSpend: "500 USDC/day" }, {
-        storage: createMemoryStorage(),
-      });
+      const shielded = shield(
+        wallet,
+        { maxSpend: "500 USDC/day" },
+        {
+          storage: createMemoryStorage(),
+        },
+      );
       const res = await shieldedFetch(shielded, "https://example.com/paid", {
         connection: mockConnection,
       });
@@ -372,9 +384,13 @@ describe("x402 — shieldedFetch()", () => {
       const header = buildPaymentRequiredHeader();
       mockFetch402Then200(header);
       const wallet = createMockWallet();
-      const shielded = shield(wallet, { maxSpend: "500 USDC/day" }, {
-        storage: createMemoryStorage(),
-      });
+      const shielded = shield(
+        wallet,
+        { maxSpend: "500 USDC/day" },
+        {
+          storage: createMemoryStorage(),
+        },
+      );
       const res = await shieldedFetch(shielded, "https://example.com/paid", {
         connection: mockConnection,
       });
@@ -487,9 +503,13 @@ describe("x402 — shieldedFetch()", () => {
           headers: { "PAYMENT-REQUIRED": header },
         });
       const wallet = createMockWallet();
-      const shielded = shield(wallet, { maxSpend: "500 USDC/day" }, {
-        storage: createMemoryStorage(),
-      });
+      const shielded = shield(
+        wallet,
+        { maxSpend: "500 USDC/day" },
+        {
+          storage: createMemoryStorage(),
+        },
+      );
       const res = await shieldedFetch(shielded, "https://example.com/paid", {
         connection: mockConnection,
         dryRun: true,
@@ -508,9 +528,13 @@ describe("x402 — shieldedFetch()", () => {
           headers: { "PAYMENT-REQUIRED": header },
         });
       const wallet = createMockWallet();
-      const shielded = shield(wallet, { maxSpend: "500 USDC/day" }, {
-        storage: createMemoryStorage(),
-      });
+      const shielded = shield(
+        wallet,
+        { maxSpend: "500 USDC/day" },
+        {
+          storage: createMemoryStorage(),
+        },
+      );
       try {
         await shieldedFetch(shielded, "https://example.com/paid", {
           connection: mockConnection,
@@ -527,9 +551,13 @@ describe("x402 — shieldedFetch()", () => {
       const header = buildPaymentRequiredHeader();
       mockFetch402Then200(header);
       const wallet = createMockWallet();
-      const shielded = shield(wallet, { maxSpend: "500 USDC/day" }, {
-        storage: createMemoryStorage(),
-      });
+      const shielded = shield(
+        wallet,
+        { maxSpend: "500 USDC/day" },
+        {
+          storage: createMemoryStorage(),
+        },
+      );
       const res = await shieldedFetch(shielded, "https://example.com/paid", {
         connection: mockConnection,
       });
@@ -542,9 +570,13 @@ describe("x402 — shieldedFetch()", () => {
       const header = buildPaymentRequiredHeader();
       mockFetch402Then200(header);
       const wallet = createMockWallet();
-      const shielded = shield(wallet, { maxSpend: "500 USDC/day" }, {
-        storage: createMemoryStorage(),
-      });
+      const shielded = shield(
+        wallet,
+        { maxSpend: "500 USDC/day" },
+        {
+          storage: createMemoryStorage(),
+        },
+      );
       try {
         await shieldedFetch(shielded, "https://example.com/paid");
         expect.fail("Should have thrown");

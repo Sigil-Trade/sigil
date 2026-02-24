@@ -56,6 +56,21 @@ export function getConfigPath(): string {
   return path.join(getConfigDir(), "config.json");
 }
 
+/** Runtime guard — rejects corrupted or incompatible config files. */
+function isValidConfig(obj: any): obj is ShieldLocalConfig {
+  return (
+    typeof obj === "object" &&
+    obj !== null &&
+    obj.version === 1 &&
+    typeof obj.layers?.shield?.enabled === "boolean" &&
+    typeof obj.layers?.shield?.dailySpendingCapUsd === "number" &&
+    typeof obj.layers?.tee === "object" &&
+    typeof obj.layers?.vault === "object" &&
+    typeof obj.wallet?.publicKey === "string" &&
+    (obj.network === "devnet" || obj.network === "mainnet-beta")
+  );
+}
+
 /**
  * Load local shield config from ~/.agentshield/config.json.
  * Falls back to env vars for backwards compatibility with existing MCP installs.
@@ -68,7 +83,8 @@ export function loadShieldConfig(): ShieldLocalConfig | null {
   if (fs.existsSync(configPath)) {
     try {
       const raw = fs.readFileSync(configPath, "utf-8");
-      return JSON.parse(raw) as ShieldLocalConfig;
+      const parsed = JSON.parse(raw);
+      return isValidConfig(parsed) ? parsed : null;
     } catch {
       return null;
     }
@@ -192,10 +208,10 @@ export function loadConfig(): McpConfig {
   return { walletPath, rpcUrl, agentKeypairPath };
 }
 
-export function loadKeypair(path: string): Keypair {
-  const resolved = path.startsWith("~")
-    ? path.replace("~", process.env.HOME || "")
-    : path;
+export function loadKeypair(filePath: string): Keypair {
+  const resolved = filePath.startsWith("~")
+    ? filePath.replace("~", os.homedir())
+    : filePath;
   const raw = fs.readFileSync(resolved, "utf-8");
   const secretKey = Uint8Array.from(JSON.parse(raw));
   return Keypair.fromSecretKey(secretKey);
@@ -260,6 +276,104 @@ export async function createCustodyWallet(config: McpConfig): Promise<{
           "Supported: crossmint, turnkey, privy.",
       );
   }
+}
+
+/** Minimal interface for custody wallets (avoids hard dep on adapter types). */
+export interface CustodyWalletLike {
+  publicKey: import("@solana/web3.js").PublicKey;
+  signTransaction: <T>(tx: T) => Promise<T>;
+  signAllTransactions?: <T>(txs: T[]) => Promise<T[]>;
+}
+
+/** RPC URL helper: env override or clusterApiUrl fallback. */
+export function rpcUrlForNetwork(network: "devnet" | "mainnet-beta"): string {
+  return process.env.AGENTSHIELD_RPC_URL || clusterApiUrl(network);
+}
+
+/**
+ * Create an AgentShieldClient backed by a custody wallet.
+ * Duck-typed: CrossmintWallet has publicKey, signTransaction, signAllTransactions.
+ */
+export async function createCustodyClient(
+  config: McpConfig,
+): Promise<{ client: AgentShieldClient; custodyWallet: CustodyWalletLike }> {
+  const custodyWallet = (await createCustodyWallet(
+    config,
+  )) as CustodyWalletLike;
+  const connection = new Connection(config.rpcUrl, "confirmed");
+  const client = new AgentShieldClient(
+    connection,
+    custodyWallet as any as import("@coral-xyz/anchor").Wallet,
+  );
+  return { client, custodyWallet };
+}
+
+/**
+ * Resolve an AgentShieldClient from the best available config source.
+ *
+ * Priority:
+ * 1. File-based config (from shield_configure)
+ *    - crossmint type → needs CROSSMINT_API_KEY + locator → createCustodyClient
+ *    - keypair type → createClient
+ * 2. Env-var config (backwards compatible)
+ *    - custodyProvider set → createCustodyClient
+ *    - else → createClient (keypair)
+ * 3. null if nothing works
+ */
+export async function resolveClient(): Promise<{
+  client: AgentShieldClient;
+  config: McpConfig;
+  custodyWallet: CustodyWalletLike | null;
+} | null> {
+  // Priority 1: File-based config
+  const fileConfig = loadShieldConfig();
+  if (fileConfig) {
+    if (
+      fileConfig.wallet.type === "crossmint" &&
+      fileConfig.layers.tee.enabled
+    ) {
+      const apiKey = process.env.CROSSMINT_API_KEY;
+      if (!apiKey) {
+        throw new Error(
+          "Crossmint wallet configured but CROSSMINT_API_KEY is not set. " +
+            "Set CROSSMINT_API_KEY in your environment to use your custody wallet.",
+        );
+      }
+      const mcpConfig: McpConfig = {
+        rpcUrl: rpcUrlForNetwork(fileConfig.network),
+        custodyProvider: "crossmint",
+        crossmintApiKey: apiKey,
+        crossmintLocator: fileConfig.layers.tee.locator ?? undefined,
+      };
+      const { client, custodyWallet } = await createCustodyClient(mcpConfig);
+      return { client, config: mcpConfig, custodyWallet };
+    }
+
+    if (fileConfig.wallet.type === "keypair" && fileConfig.wallet.path) {
+      const mcpConfig: McpConfig = {
+        walletPath: fileConfig.wallet.path,
+        rpcUrl: rpcUrlForNetwork(fileConfig.network),
+        agentKeypairPath: fileConfig.wallet.path,
+      };
+      const client = createClient(mcpConfig);
+      return { client, config: mcpConfig, custodyWallet: null };
+    }
+  }
+
+  // Priority 2: Env-var config
+  try {
+    const envConfig = loadConfig();
+    if (envConfig.custodyProvider) {
+      const { client, custodyWallet } = await createCustodyClient(envConfig);
+      return { client, config: envConfig, custodyWallet };
+    }
+    const client = createClient(envConfig);
+    return { client, config: envConfig, custodyWallet: null };
+  } catch {
+    // loadConfig throws when no wallet path — that's fine, fall through
+  }
+
+  return null;
 }
 
 export function loadAgentKeypair(config: McpConfig): Keypair {

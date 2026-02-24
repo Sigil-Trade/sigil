@@ -12,7 +12,7 @@ describe("Types — Constants", () => {
   it("AGENT_SHIELD_PROGRAM_ID is a valid PublicKey", () => {
     expect(AGENT_SHIELD_PROGRAM_ID).to.be.instanceOf(PublicKey);
     expect(AGENT_SHIELD_PROGRAM_ID.toBase58()).to.equal(
-      "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL"
+      "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL",
     );
   });
 
@@ -31,7 +31,7 @@ describe("Types — Constants", () => {
   it("PROTOCOL_TREASURY is a valid PublicKey", () => {
     expect(PROTOCOL_TREASURY).to.be.instanceOf(PublicKey);
     expect(PROTOCOL_TREASURY.toBase58()).to.equal(
-      "ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT"
+      "ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT",
     );
   });
 });

@@ -134,9 +134,7 @@ describe("devnet-timelock", () => {
     expect(pending.dailySpendingCapUsd!.toNumber()).to.equal(
       newDailyCap.toNumber(),
     );
-    console.log(
-      `    Queued: executes at ${pending.executesAt.toNumber()}`,
-    );
+    console.log(`    Queued: executes at ${pending.executesAt.toNumber()}`);
 
     // Wait for timelock to expire (5s + 2s buffer)
     await sleep(7000);
@@ -159,9 +157,7 @@ describe("devnet-timelock", () => {
     );
 
     // Pending PDA should be closed
-    const pendingInfo = await connection.getAccountInfo(
-      vault.pendingPolicyPda,
-    );
+    const pendingInfo = await connection.getAccountInfo(vault.pendingPolicyPda);
     expect(pendingInfo).to.be.null;
     console.log("    Queue + apply succeeded after timelock expiry");
   });
@@ -257,9 +253,7 @@ describe("devnet-timelock", () => {
       .rpc();
 
     // Pending PDA closed
-    const pendingInfo = await connection.getAccountInfo(
-      vault.pendingPolicyPda,
-    );
+    const pendingInfo = await connection.getAccountInfo(vault.pendingPolicyPda);
     expect(pendingInfo).to.be.null;
 
     // Original policy unchanged

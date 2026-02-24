@@ -2,7 +2,11 @@ import { z } from "zod";
 import type { AgentShieldClient } from "@agent-shield/sdk";
 import { toPublicKey, toBN } from "../utils";
 import { formatError } from "../errors";
-import { loadAgentKeypair, type McpConfig } from "../config";
+import {
+  loadAgentKeypair,
+  type McpConfig,
+  type CustodyWalletLike,
+} from "../config";
 
 export const executeSwapSchema = z.object({
   vault: z.string().describe("Vault PDA address (base58)"),
@@ -22,9 +26,23 @@ export async function executeSwap(
   client: AgentShieldClient,
   config: McpConfig,
   input: ExecuteSwapInput,
+  custodyWallet?: CustodyWalletLike | null,
 ): Promise<string> {
   try {
-    const agentKeypair = loadAgentKeypair(config);
+    let agentPubkey: import("@solana/web3.js").PublicKey;
+    let signers: import("@solana/web3.js").Keypair[];
+
+    if (custodyWallet) {
+      // Custody: provider.wallet IS the agent signer
+      agentPubkey = custodyWallet.publicKey;
+      signers = []; // provider.wallet handles signing via custody API
+    } else {
+      // Keypair: load from config
+      const agentKeypair = loadAgentKeypair(config);
+      agentPubkey = agentKeypair.publicKey;
+      signers = [agentKeypair];
+    }
+
     const vaultAddress = toPublicKey(input.vault);
 
     // Fetch vault to get owner and vaultId for the swap params
@@ -36,13 +54,13 @@ export async function executeSwap(
       {
         owner: vault.owner,
         vaultId: vault.vaultId,
-        agent: agentKeypair.publicKey,
+        agent: agentPubkey,
         inputMint: toPublicKey(input.inputMint),
         outputMint: toPublicKey(input.outputMint),
         amount: toBN(input.amount),
         slippageBps: input.slippageBps,
       },
-      [agentKeypair],
+      signers,
     );
 
     return [

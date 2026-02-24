@@ -4,10 +4,7 @@ import { AgentShieldClient } from "../src/index";
 
 describe("Client — calculateFees", () => {
   it("calculates correct fees for amount=1_000_000, devRate=10", () => {
-    const result = AgentShieldClient.calculateFees(
-      new BN(1_000_000),
-      10
-    );
+    const result = AgentShieldClient.calculateFees(new BN(1_000_000), 10);
     // protocolFee = 1_000_000 * 200 / 1_000_000 = 200
     expect(result.protocolFee.toNumber()).to.equal(200);
     // developerFee = 1_000_000 * 10 / 1_000_000 = 10
@@ -24,10 +21,7 @@ describe("Client — calculateFees", () => {
   });
 
   it("calculates correct fee with MAX_DEVELOPER_FEE_RATE (500)", () => {
-    const result = AgentShieldClient.calculateFees(
-      new BN(1_000_000),
-      500
-    );
+    const result = AgentShieldClient.calculateFees(new BN(1_000_000), 500);
     // protocolFee = 200
     expect(result.protocolFee.toNumber()).to.equal(200);
     // developerFee = 1_000_000 * 500 / 1_000_000 = 500
@@ -36,10 +30,7 @@ describe("Client — calculateFees", () => {
   });
 
   it("returns zero dev fee with devRate=0", () => {
-    const result = AgentShieldClient.calculateFees(
-      new BN(1_000_000),
-      0
-    );
+    const result = AgentShieldClient.calculateFees(new BN(1_000_000), 0);
     expect(result.protocolFee.toNumber()).to.equal(200);
     expect(result.developerFee.toNumber()).to.equal(0);
     expect(result.totalFee.toNumber()).to.equal(200);
@@ -59,19 +50,12 @@ describe("Client — calculateFees", () => {
     const r1 = AgentShieldClient.calculateFees(new BN(2_000_000), 20);
     const r2 = AgentShieldClient.calculateFees(new BN(4_000_000), 20);
     // Double the amount should double the fees
-    expect(r2.protocolFee.toNumber()).to.equal(
-      r1.protocolFee.toNumber() * 2
-    );
-    expect(r2.developerFee.toNumber()).to.equal(
-      r1.developerFee.toNumber() * 2
-    );
+    expect(r2.protocolFee.toNumber()).to.equal(r1.protocolFee.toNumber() * 2);
+    expect(r2.developerFee.toNumber()).to.equal(r1.developerFee.toNumber() * 2);
   });
 
   it("totalFee equals protocolFee + developerFee", () => {
-    const result = AgentShieldClient.calculateFees(
-      new BN(123_456_789),
-      25
-    );
+    const result = AgentShieldClient.calculateFees(new BN(123_456_789), 25);
     expect(result.totalFee.eq(result.protocolFee.add(result.developerFee))).to
       .be.true;
   });

@@ -30,7 +30,12 @@ import {
   mapPoliciesToVaultParams,
   isTeeWallet,
 } from "../src";
-import type { WalletLike, ShieldStorage, ResolvedPolicies, TeeWallet } from "../src";
+import type {
+  WalletLike,
+  ShieldStorage,
+  ResolvedPolicies,
+  TeeWallet,
+} from "../src";
 import { harden, withVault } from "../src/wrapper/harden";
 import type { HardenOptions, HardenResult } from "../src/wrapper/harden";
 // shield() is internal — import from source for testing
@@ -1511,8 +1516,8 @@ describe("wrapper — shieldWallet() & harden()", () => {
     it("collapses multiple SpendLimits to the largest as dailySpendingCap", () => {
       const resolved = resolvePolicies({
         maxSpend: [
-          "500 USDC/day",  // 500_000_000
-          "10 SOL/day",    // 10_000_000_000
+          "500 USDC/day", // 500_000_000
+          "10 SOL/day", // 10_000_000_000
         ],
       });
       const params = mapPoliciesToVaultParams(resolved, 0, FEE_DEST);
@@ -1538,8 +1543,9 @@ describe("wrapper — shieldWallet() & harden()", () => {
     });
 
     it("caps protocols at 10", () => {
-      const protocols = Array.from({ length: 15 }, () =>
-        Keypair.generate().publicKey,
+      const protocols = Array.from(
+        { length: 15 },
+        () => Keypair.generate().publicKey,
       );
       const resolved = resolvePolicies({
         allowedProtocols: protocols,
@@ -1747,11 +1753,15 @@ describe("wrapper — shieldWallet() & harden()", () => {
       // withVault will fail at harden() level (no real RPC), but we verify
       // it creates a shielded wallet internally by checking the error
       try {
-        await withVault(wallet, { maxSpend: "500 USDC/day" }, {
-          connection: mockConnection,
-          ownerWallet: wallet, // same as agent — triggers owner===agent check
-          unsafeSkipTeeCheck: true,
-        });
+        await withVault(
+          wallet,
+          { maxSpend: "500 USDC/day" },
+          {
+            connection: mockConnection,
+            ownerWallet: wallet, // same as agent — triggers owner===agent check
+            unsafeSkipTeeCheck: true,
+          },
+        );
         expect.fail("Should have thrown");
       } catch (e: any) {
         expect(e.message).to.include("Owner and agent must be different");
@@ -1767,11 +1777,15 @@ describe("wrapper — shieldWallet() & harden()", () => {
       } as unknown as Connection;
 
       try {
-        await withVault(agentWallet, { maxSpend: "500 USDC/day" }, {
-          connection: mockConnection,
-          ownerWallet,
-          unsafeSkipTeeCheck: true,
-        });
+        await withVault(
+          agentWallet,
+          { maxSpend: "500 USDC/day" },
+          {
+            connection: mockConnection,
+            ownerWallet,
+            unsafeSkipTeeCheck: true,
+          },
+        );
         expect.fail("Should have thrown (no real RPC)");
       } catch (e: any) {
         // Should get past validation to the RPC stage
@@ -1786,7 +1800,9 @@ describe("wrapper — shieldWallet() & harden()", () => {
       const teeWallet: TeeWallet = {
         publicKey: kp.publicKey,
         provider: "crossmint",
-        async signTransaction<T extends Transaction | VersionedTransaction>(tx: T): Promise<T> {
+        async signTransaction<T extends Transaction | VersionedTransaction>(
+          tx: T,
+        ): Promise<T> {
           return tx;
         },
       };
@@ -1803,7 +1819,9 @@ describe("wrapper — shieldWallet() & harden()", () => {
       const wallet = {
         publicKey: kp.publicKey,
         provider: 42, // not a string
-        async signTransaction<T extends Transaction | VersionedTransaction>(tx: T): Promise<T> {
+        async signTransaction<T extends Transaction | VersionedTransaction>(
+          tx: T,
+        ): Promise<T> {
           return tx;
         },
       };
@@ -1861,7 +1879,9 @@ describe("wrapper — shieldWallet() & harden()", () => {
       const teeWallet: TeeWallet = {
         publicKey: kp.publicKey,
         provider: "crossmint",
-        async signTransaction<T extends Transaction | VersionedTransaction>(tx: T): Promise<T> {
+        async signTransaction<T extends Transaction | VersionedTransaction>(
+          tx: T,
+        ): Promise<T> {
           return tx;
         },
       };
@@ -1890,10 +1910,14 @@ describe("wrapper — shieldWallet() & harden()", () => {
       const mockConnection = {} as Connection;
 
       try {
-        await withVault(wallet, { maxSpend: "500 USDC/day" }, {
-          connection: mockConnection,
-          ownerWallet,
-        });
+        await withVault(
+          wallet,
+          { maxSpend: "500 USDC/day" },
+          {
+            connection: mockConnection,
+            ownerWallet,
+          },
+        );
         expect.fail("Should have thrown TeeRequiredError");
       } catch (e: any) {
         expect(e).to.be.instanceOf(TeeRequiredError);

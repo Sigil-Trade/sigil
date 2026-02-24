@@ -117,11 +117,7 @@ describe("devnet-oracle", () => {
       ),
     ];
 
-    oracleRegistryPda = await initializeOracleRegistry(
-      program,
-      owner,
-      entries,
-    );
+    oracleRegistryPda = await initializeOracleRegistry(program, owner, entries);
 
     // Log current Pyth SOL/USD price for debugging
     const pythInfo = await connection.getAccountInfo(PYTH_SOL_USD_FEED);
@@ -563,9 +559,8 @@ describe("devnet-oracle", () => {
   // ─── Test 7: oracle registry stores correct entries ─────────────────────
 
   it("7. oracle registry stores correct entries", async () => {
-    const registry = await program.account.oracleRegistry.fetch(
-      oracleRegistryPda,
-    );
+    const registry =
+      await program.account.oracleRegistry.fetch(oracleRegistryPda);
 
     expect(registry.entries.length).to.be.greaterThanOrEqual(2);
 
@@ -585,9 +580,8 @@ describe("devnet-oracle", () => {
   // ─── Test 8: update_oracle_registry adds new entry ──────────────────────
 
   it("8. update_oracle_registry adds new entry", async () => {
-    const regBefore = await program.account.oracleRegistry.fetch(
-      oracleRegistryPda,
-    );
+    const regBefore =
+      await program.account.oracleRegistry.fetch(oracleRegistryPda);
     const countBefore = regBefore.entries.length;
 
     const newMint = await createTestMint(connection, payer, owner.publicKey);
@@ -595,9 +589,8 @@ describe("devnet-oracle", () => {
       makeOracleEntry(newMint, PublicKey.default, true, PublicKey.default),
     ]);
 
-    const regAfter = await program.account.oracleRegistry.fetch(
-      oracleRegistryPda,
-    );
+    const regAfter =
+      await program.account.oracleRegistry.fetch(oracleRegistryPda);
     expect(regAfter.entries.length).to.equal(countBefore + 1);
 
     const found = regAfter.entries.find(
@@ -631,16 +624,14 @@ describe("devnet-oracle", () => {
       ]);
     }
 
-    const regBefore = await program.account.oracleRegistry.fetch(
-      oracleRegistryPda,
-    );
+    const regBefore =
+      await program.account.oracleRegistry.fetch(oracleRegistryPda);
     const countBefore = regBefore.entries.length;
 
     await updateOracleRegistry(program, owner, [], [mintToRemove]);
 
-    const regAfter = await program.account.oracleRegistry.fetch(
-      oracleRegistryPda,
-    );
+    const regAfter =
+      await program.account.oracleRegistry.fetch(oracleRegistryPda);
     expect(regAfter.entries.length).to.equal(countBefore - 1);
 
     const removed = regAfter.entries.find(
@@ -791,9 +782,8 @@ describe("devnet-oracle", () => {
   // ─── Test 12: update existing registry entry (overwrite in-place) ───────
 
   it("12. update existing registry entry (overwrite in-place)", async () => {
-    const regBefore = await program.account.oracleRegistry.fetch(
-      oracleRegistryPda,
-    );
+    const regBefore =
+      await program.account.oracleRegistry.fetch(oracleRegistryPda);
     const countBefore = regBefore.entries.length;
 
     // Find the stableMint entry and flip isStablecoin to false (for test)
@@ -801,9 +791,8 @@ describe("devnet-oracle", () => {
       makeOracleEntry(stableMint, PYTH_SOL_USD_FEED, false, PublicKey.default),
     ]);
 
-    const regAfter = await program.account.oracleRegistry.fetch(
-      oracleRegistryPda,
-    );
+    const regAfter =
+      await program.account.oracleRegistry.fetch(oracleRegistryPda);
     // Count should NOT increase (overwrite, not duplicate)
     expect(regAfter.entries.length).to.equal(countBefore);
 
@@ -942,9 +931,8 @@ describe("devnet-oracle", () => {
 
   it("14. fallback_feed=default works (no cross-validation)", async function () {
     // Verify WSOL entry has fallback_feed=default
-    const registry = await program.account.oracleRegistry.fetch(
-      oracleRegistryPda,
-    );
+    const registry =
+      await program.account.oracleRegistry.fetch(oracleRegistryPda);
     const wsolEntry = registry.entries.find(
       (e: any) => e.mint.toString() === NATIVE_SOL_MINT.toString(),
     );

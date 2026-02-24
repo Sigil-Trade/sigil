@@ -134,11 +134,15 @@ describe("@agent-shield/custody-crossmint", () => {
 
   describe("config", () => {
     it("validateConfig throws on empty apiKey", () => {
-      expect(() => validateConfig({ apiKey: "" })).to.throw("apiKey is required");
+      expect(() => validateConfig({ apiKey: "" })).to.throw(
+        "apiKey is required",
+      );
     });
 
     it("validateConfig throws on whitespace-only apiKey", () => {
-      expect(() => validateConfig({ apiKey: "   " })).to.throw("apiKey is required");
+      expect(() => validateConfig({ apiKey: "   " })).to.throw(
+        "apiKey is required",
+      );
     });
 
     it("validateConfig accepts a valid apiKey", () => {
@@ -178,7 +182,8 @@ describe("@agent-shield/custody-crossmint", () => {
       process.env[CROSSMINT_ENV_KEYS.API_KEY] = "sk_test_full";
       process.env[CROSSMINT_ENV_KEYS.LOCATOR] = "wallet:abc123";
       process.env[CROSSMINT_ENV_KEYS.SIGNER_TYPE] = "api-key";
-      process.env[CROSSMINT_ENV_KEYS.BASE_URL] = "https://staging.crossmint.com";
+      process.env[CROSSMINT_ENV_KEYS.BASE_URL] =
+        "https://staging.crossmint.com";
       process.env[CROSSMINT_ENV_KEYS.LINKED_USER] = "email:agent@test.com";
 
       const config = configFromEnv();
@@ -232,7 +237,9 @@ describe("@agent-shield/custody-crossmint", () => {
         client,
       );
 
-      expect(client.calls[0].args[0].linkedUser).to.equal("email:agent@test.com");
+      expect(client.calls[0].args[0].linkedUser).to.equal(
+        "email:agent@test.com",
+      );
     });
 
     it("uses existing wallet when locator provided", async () => {
@@ -382,9 +389,7 @@ describe("@agent-shield/custody-crossmint", () => {
       const tx = createTestTransaction();
       await wallet.signTransaction(tx);
 
-      const signCall = client.calls.find(
-        (c) => c.method === "signTransaction",
-      );
+      const signCall = client.calls.find((c) => c.method === "signTransaction");
       expect(signCall).to.exist;
       expect(signCall!.args[0]).to.equal(wallet.locator);
       expect(signCall!.args[2]).to.equal("base64");
@@ -457,7 +462,10 @@ describe("@agent-shield/custody-crossmint", () => {
   describe("shieldWallet() compatibility", () => {
     it("CrossmintWallet satisfies WalletLike interface shape", async () => {
       const client = createMockClient();
-      const wallet = await CrossmintWallet.create({ apiKey: "sk_test" }, client);
+      const wallet = await CrossmintWallet.create(
+        { apiKey: "sk_test" },
+        client,
+      );
 
       // Structural type check: has publicKey + signTransaction
       const walletLike: {
@@ -473,7 +481,10 @@ describe("@agent-shield/custody-crossmint", () => {
 
     it("exposes provider metadata", async () => {
       const client = createMockClient();
-      const wallet = await CrossmintWallet.create({ apiKey: "sk_test" }, client);
+      const wallet = await CrossmintWallet.create(
+        { apiKey: "sk_test" },
+        client,
+      );
 
       expect(wallet.provider).to.equal("crossmint");
       expect(wallet.locator).to.be.a("string");

@@ -47,11 +47,11 @@ import {
 
 // ─── Program constants ──────────────────────────────────────────────────────
 const PROGRAM_ID = new PublicKey(
-  "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL"
+  "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL",
 );
 const PROGRAM_SO_PATH = path.resolve(
   __dirname,
-  "../../target/deploy/agent_shield.so"
+  "../../target/deploy/agent_shield.so",
 );
 
 // ─── Connection proxy ────────────────────────────────────────────────────────
@@ -60,7 +60,7 @@ class LiteSVMConnectionProxy {
 
   async getAccountInfoAndContext(
     publicKey: PublicKey,
-    _commitmentOrConfig?: Commitment | GetAccountInfoConfig
+    _commitmentOrConfig?: Commitment | GetAccountInfoConfig,
   ): Promise<RpcResponseAndContext<AccountInfo<Buffer>>> {
     const acct = this.client.getAccount(publicKey);
     if (!acct) throw new Error(`Could not find ${publicKey.toBase58()}`);
@@ -72,7 +72,7 @@ class LiteSVMConnectionProxy {
 
   async getAccountInfo(
     publicKey: PublicKey,
-    _commitmentOrConfig?: Commitment | GetAccountInfoConfig
+    _commitmentOrConfig?: Commitment | GetAccountInfoConfig,
   ): Promise<AccountInfo<Buffer>> {
     const acct = this.client.getAccount(publicKey);
     if (!acct) throw new Error(`Could not find ${publicKey.toBase58()}`);
@@ -81,7 +81,7 @@ class LiteSVMConnectionProxy {
 
   async getMinimumBalanceForRentExemption(
     dataLength: number,
-    _commitment?: Commitment
+    _commitment?: Commitment,
   ): Promise<number> {
     const rent = this.client.getRent();
     return Number(rent.minimumBalance(BigInt(dataLength)));
@@ -89,7 +89,7 @@ class LiteSVMConnectionProxy {
 
   async getBalance(
     publicKey: PublicKey,
-    _commitmentOrConfig?: Commitment | GetAccountInfoConfig
+    _commitmentOrConfig?: Commitment | GetAccountInfoConfig,
   ): Promise<number> {
     const bal = this.client.getBalance(publicKey);
     return bal != null ? Number(bal) : 0;
@@ -103,12 +103,11 @@ class LiteSVMConnectionProxy {
 // ─── sendWithErr helper ──────────────────────────────────────────────────────
 function sendWithErr(
   tx: Transaction | VersionedTransaction,
-  client: LiteSVM
+  client: LiteSVM,
 ): void {
   const res = client.sendTransaction(tx);
   if (res instanceof FailedTransactionMetadata) {
-    const sigRaw =
-      tx instanceof Transaction ? tx.signature : tx.signatures[0];
+    const sigRaw = tx instanceof Transaction ? tx.signature : tx.signatures[0];
     const signature = sigRaw ? bs58.encode(sigRaw) : "unknown";
     throw new SendTransactionError({
       action: "send",
@@ -125,7 +124,10 @@ export class LiteSVMProvider implements Provider {
   connection: Connection;
   publicKey: PublicKey;
 
-  constructor(public client: LiteSVM, wallet?: Wallet) {
+  constructor(
+    public client: LiteSVM,
+    wallet?: Wallet,
+  ) {
     if (wallet == null) {
       const payer = new Keypair();
       client.airdrop(payer.publicKey, BigInt(LAMPORTS_PER_SOL));
@@ -134,7 +136,7 @@ export class LiteSVMProvider implements Provider {
       this.wallet = wallet;
     }
     this.connection = new LiteSVMConnectionProxy(
-      client
+      client,
     ) as unknown as Connection;
     this.publicKey = this.wallet.publicKey;
   }
@@ -142,7 +144,7 @@ export class LiteSVMProvider implements Provider {
   async send?(
     tx: Transaction | VersionedTransaction,
     signers?: Signer[],
-    _opts?: SendOptions
+    _opts?: SendOptions,
   ): Promise<string> {
     if ("version" in tx) {
       signers?.forEach((s) => tx.sign([s]));
@@ -167,7 +169,7 @@ export class LiteSVMProvider implements Provider {
   async sendAndConfirm?(
     tx: Transaction | VersionedTransaction,
     signers?: Signer[],
-    _opts?: ConfirmOptions
+    _opts?: ConfirmOptions,
   ): Promise<string> {
     if ("version" in tx) {
       signers?.forEach((s) => tx.sign([s]));
@@ -191,7 +193,7 @@ export class LiteSVMProvider implements Provider {
 
   async sendAll?<T extends Transaction | VersionedTransaction>(
     txWithSigners: { tx: T; signers?: Signer[] }[],
-    _opts?: ConfirmOptions
+    _opts?: ConfirmOptions,
   ): Promise<string[]> {
     const recentBlockhash = this.client.latestBlockhash();
     const txs = txWithSigners.map((r) => {
@@ -224,7 +226,7 @@ export class LiteSVMProvider implements Provider {
     tx: Transaction | VersionedTransaction,
     signers?: Signer[],
     _commitment?: Commitment,
-    includeAccounts?: boolean | PublicKey[]
+    includeAccounts?: boolean | PublicKey[],
   ): Promise<SuccessfulTxSimulationResponse> {
     if (includeAccounts !== undefined) {
       throw new Error("includeAccounts cannot be used with LiteSVMProvider");
@@ -286,7 +288,7 @@ export function createTestEnv(): TestEnv {
 
   const program = new Program<AgentShield>(
     require("../../target/idl/agent_shield.json"),
-    provider as unknown as Provider
+    provider as unknown as Provider,
   );
 
   return {
@@ -302,7 +304,7 @@ export function createTestEnv(): TestEnv {
 export function airdropSol(
   svm: LiteSVM,
   to: PublicKey,
-  lamports: number
+  lamports: number,
 ): void {
   svm.airdrop(to, BigInt(lamports));
 }
@@ -313,11 +315,11 @@ export function createMintHelper(
   svm: LiteSVM,
   payer: Keypair,
   mintAuthority: PublicKey,
-  decimals: number
+  decimals: number,
 ): PublicKey {
   const mint = Keypair.generate();
   const rentExempt = Number(
-    svm.minimumBalanceForRentExemption(BigInt(MINT_SIZE))
+    svm.minimumBalanceForRentExemption(BigInt(MINT_SIZE)),
   );
 
   const createAccountIx = SystemProgram.createAccount({
@@ -355,13 +357,9 @@ export function createAtaHelper(
   payer: Keypair,
   mint: PublicKey,
   owner: PublicKey,
-  allowOwnerOffCurve: boolean = false
+  allowOwnerOffCurve: boolean = false,
 ): PublicKey {
-  const ata = getAssociatedTokenAddressSync(
-    mint,
-    owner,
-    allowOwnerOffCurve
-  );
+  const ata = getAssociatedTokenAddressSync(mint, owner, allowOwnerOffCurve);
 
   // CreateAssociatedTokenAccount instruction
   const ix = new TransactionInstruction({
@@ -391,13 +389,9 @@ export function createAtaIdempotentHelper(
   payer: Keypair,
   mint: PublicKey,
   owner: PublicKey,
-  allowOwnerOffCurve: boolean = false
+  allowOwnerOffCurve: boolean = false,
 ): PublicKey {
-  const ata = getAssociatedTokenAddressSync(
-    mint,
-    owner,
-    allowOwnerOffCurve
-  );
+  const ata = getAssociatedTokenAddressSync(mint, owner, allowOwnerOffCurve);
 
   // CreateAssociatedTokenAccountIdempotent instruction (discriminator = 1)
   const ix = new TransactionInstruction({
@@ -428,7 +422,7 @@ export function mintToHelper(
   mint: PublicKey,
   destination: PublicKey,
   authority: PublicKey,
-  amount: bigint
+  amount: bigint,
 ): void {
   // MintTo instruction (discriminator = 7)
   const data = Buffer.alloc(9);
@@ -483,8 +477,8 @@ export function advancePastSlot(svm: LiteSVM, targetSlot: number): void {
       c.epochStartTimestamp,
       c.epoch,
       c.leaderScheduleEpoch,
-      c.unixTimestamp
-    )
+      c.unixTimestamp,
+    ),
   );
   svm.warpToSlot(newSlot);
 }
@@ -501,8 +495,8 @@ export function advanceTime(svm: LiteSVM, seconds: number): void {
       c.epochStartTimestamp,
       c.epoch,
       c.leaderScheduleEpoch,
-      c.unixTimestamp + BigInt(seconds)
-    )
+      c.unixTimestamp + BigInt(seconds),
+    ),
   );
 }
 
@@ -512,7 +506,7 @@ export function sendVersionedTx(
   svm: LiteSVM,
   instructions: TransactionInstruction[],
   payer: Keypair,
-  signers: Keypair[] = []
+  signers: Keypair[] = [],
 ): string {
   const messageV0 = new TransactionMessage({
     payerKey: payer.publicKey,
@@ -527,7 +521,7 @@ export function sendVersionedTx(
   if (res instanceof FailedTransactionMetadata) {
     const logs = res.meta().logs();
     throw new Error(
-      `SimulationFailed: ${res.err().toString()} Logs: ${logs.join(" ")}`
+      `SimulationFailed: ${res.err().toString()} Logs: ${logs.join(" ")}`,
     );
   }
 

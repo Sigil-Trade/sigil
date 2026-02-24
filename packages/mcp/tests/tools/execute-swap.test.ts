@@ -82,6 +82,43 @@ describe("shield_execute_swap", () => {
     expect(result).to.include("AGENTSHIELD_AGENT_KEYPAIR_PATH is required");
   });
 
+  it("executes swap with custody wallet (no keypair loading)", async () => {
+    const client = createMockClient();
+    const custodyPubkey = Keypair.generate().publicKey;
+    const mockCustodyWallet = {
+      publicKey: custodyPubkey,
+      signTransaction: async <T>(tx: T): Promise<T> => tx,
+    };
+    const noAgentConfig = {
+      walletPath: agentKeypairPath,
+      rpcUrl: "http://localhost:8899",
+      // No agentKeypairPath — custody wallet replaces it
+    };
+    const result = await executeSwap(
+      client as any,
+      noAgentConfig,
+      {
+        vault: TEST_VAULT_PDA.toBase58(),
+        inputMint: TEST_MINT.toBase58(),
+        outputMint,
+        amount: "1000000",
+        slippageBps: 50,
+      },
+      mockCustodyWallet,
+    );
+    expect(result).to.include("Swap Executed");
+    // Verify the swap used custody wallet's pubkey
+    const swapCall = client.calls.find(
+      (c) => c.method === "executeJupiterSwap",
+    );
+    expect(swapCall).to.exist;
+    expect(swapCall!.args[0].agent.toBase58()).to.equal(
+      custodyPubkey.toBase58(),
+    );
+    // Verify no signers passed (custody wallet signs via provider)
+    expect(swapCall!.args[1]).to.deep.equal([]);
+  });
+
   it("returns error on swap failure", async () => {
     const client = createMockClient({
       shouldThrow: Object.assign(new Error("test"), { code: 6003 }),

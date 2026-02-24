@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { checkRateLimit, getClientIp } from "../lib/rate-limiter";
 
 const provisionTee = new Hono();
 
@@ -21,11 +22,25 @@ provisionTee.options("/api/actions/provision-tee", (c) => {
  * Uses CROSSMINT_API_KEY server-side env var (already on Vercel dashboard).
  * User does NOT need their own Crossmint account.
  *
- * Body: { network?: "devnet" | "mainnet-beta" }
+ * Body: { network?: "devnet" | "mainnet-beta", publicKey?: string }
  * Returns: { publicKey, locator }
+ *
+ * When `publicKey` is provided, the Crossmint `linkedUser` is deterministic
+ * so the same caller always gets the same wallet (idempotent).
  */
 provisionTee.post("/api/actions/provision-tee", async (c) => {
   try {
+    // Rate limit check
+    const clientIp = getClientIp(c.req.raw.headers);
+    const limit = checkRateLimit(clientIp);
+    if (!limit.allowed) {
+      const retryAfterSec = Math.ceil((limit.retryAfterMs ?? 0) / 1000);
+      return c.json({ error: "Rate limit exceeded. Try again later." }, 429, {
+        ...CORS_HEADERS,
+        "Retry-After": String(retryAfterSec),
+      });
+    }
+
     const apiKey = process.env.CROSSMINT_API_KEY;
     if (!apiKey) {
       return c.json(
@@ -36,9 +51,23 @@ provisionTee.post("/api/actions/provision-tee", async (c) => {
     }
 
     const body = await c.req
-      .json<{ network?: string }>()
-      .catch(() => ({}) as { network?: string });
+      .json<{ network?: string; publicKey?: string }>()
+      .catch(() => ({}) as { network?: string; publicKey?: string });
+
+    if (
+      body.publicKey &&
+      (body.publicKey.length < 32 || body.publicKey.length > 44)
+    ) {
+      return c.json({ error: "Invalid publicKey format" }, 400, CORS_HEADERS);
+    }
+
     const network = body.network === "mainnet-beta" ? "mainnet" : "testnet";
+
+    // Deterministic linkedUser when publicKey provided (idempotent),
+    // otherwise fall back to timestamp (backwards compatible)
+    const linkedUser = body.publicKey
+      ? `userId:agent-shield-${body.publicKey}`
+      : `userId:agent-shield-${Date.now()}`;
 
     // Crossmint API: create a Solana wallet
     const crossmintUrl = `https://${network === "mainnet" ? "" : "staging."}crossmint.com/api/v1-alpha2/wallets`;
@@ -51,7 +80,7 @@ provisionTee.post("/api/actions/provision-tee", async (c) => {
       },
       body: JSON.stringify({
         type: "solana-mpc-wallet",
-        linkedUser: `userId:agent-shield-${Date.now()}`,
+        linkedUser,
       }),
     });
 

@@ -12,9 +12,7 @@ const ACTIONS_CORS_HEADERS: Record<string, string> = {
 };
 
 function setCors(res: VercelResponse) {
-  Object.entries(ACTIONS_CORS_HEADERS).forEach(([k, v]) =>
-    res.setHeader(k, v),
-  );
+  Object.entries(ACTIONS_CORS_HEADERS).forEach(([k, v]) => res.setHeader(k, v));
 }
 
 function handleGet(req: VercelRequest, res: VercelResponse) {
@@ -163,10 +161,7 @@ async function handlePost(req: VercelRequest, res: VercelResponse) {
   }
 }
 
-export default async function handler(
-  req: VercelRequest,
-  res: VercelResponse,
-) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "OPTIONS") {
     setCors(res);
     return res.status(200).end();

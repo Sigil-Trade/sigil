@@ -4,6 +4,7 @@ import * as path from "path";
 import * as os from "os";
 import {
   getConfigDir,
+  loadShieldConfig,
   saveShieldConfig,
   type ShieldLocalConfig,
 } from "../config";
@@ -188,43 +189,105 @@ export async function configure(
     ];
 
     // ── Step 2: Provision TEE wallet ──────────────────────────────
-    try {
-      const response = await fetch(
-        `${ACTIONS_SERVER_URL}/api/actions/provision-tee`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ network }),
-        },
-      );
-
-      if (!response.ok) {
-        const errorBody = await response.text();
-        return `Error provisioning TEE wallet: ${response.status} ${errorBody}`;
-      }
-
-      const teeResult = (await response.json()) as {
-        publicKey: string;
-        locator: string;
-      };
-      config.layers.tee = {
-        enabled: true,
-        locator: teeResult.locator,
-        publicKey: teeResult.publicKey,
-      };
+    // Dedup guard: if we already have a TEE wallet from a previous run, reuse it
+    const existingConfig = loadShieldConfig();
+    if (
+      existingConfig?.layers.tee.enabled &&
+      existingConfig.layers.tee.locator
+    ) {
+      config.layers.tee = { ...existingConfig.layers.tee };
       config.wallet.type = "crossmint";
-      config.wallet.publicKey = teeResult.publicKey;
+      config.wallet.publicKey =
+        existingConfig.layers.tee.publicKey ?? walletPublicKey;
 
       lines.push("");
-      lines.push("### TEE Custody");
-      lines.push(`- **TEE Public Key:** ${teeResult.publicKey}`);
-      lines.push(`- **Locator:** ${teeResult.locator}`);
+      lines.push("### TEE Custody (reused existing)");
+      lines.push(`- **TEE Public Key:** ${config.wallet.publicKey}`);
+      lines.push(`- **Locator:** ${config.layers.tee.locator}`);
       lines.push(
         "- Your agent's private key is protected in a hardware enclave.",
       );
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      return `Error connecting to AgentShield platform for TEE provisioning: ${msg}`;
+    } else if (process.env.CROSSMINT_API_KEY) {
+      // Local Crossmint creation — dev has their own API key
+      try {
+        let mod: any;
+        try {
+          mod = require("@agent-shield/custody-crossmint");
+        } catch {
+          return (
+            "Error: @agent-shield/custody-crossmint is not installed.\n" +
+            "Run: npm install @agent-shield/custody-crossmint"
+          );
+        }
+        const baseUrl =
+          network === "mainnet-beta"
+            ? "https://crossmint.com"
+            : "https://staging.crossmint.com";
+        const custodyWallet = await mod.crossmint({
+          apiKey: process.env.CROSSMINT_API_KEY,
+          baseUrl,
+          linkedUser: `userId:agent-shield-${walletPublicKey}`,
+        });
+
+        config.layers.tee = {
+          enabled: true,
+          locator: `userId:agent-shield-${walletPublicKey}`,
+          publicKey: custodyWallet.publicKey.toBase58(),
+        };
+        config.wallet.type = "crossmint";
+        config.wallet.publicKey = custodyWallet.publicKey.toBase58();
+
+        lines.push("");
+        lines.push("### TEE Custody (local Crossmint)");
+        lines.push(`- **TEE Public Key:** ${config.wallet.publicKey}`);
+        lines.push(`- **Locator:** ${config.layers.tee.locator}`);
+        lines.push(
+          "- Your agent's private key is protected in a hardware enclave.",
+        );
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        return `Error creating Crossmint wallet locally: ${msg}`;
+      }
+    } else {
+      // Fall back to hosted Actions Server
+      try {
+        const response = await fetch(
+          `${ACTIONS_SERVER_URL}/api/actions/provision-tee`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ network, publicKey: walletPublicKey }),
+          },
+        );
+
+        if (!response.ok) {
+          const errorBody = await response.text();
+          return `Error provisioning TEE wallet: ${response.status} ${errorBody}`;
+        }
+
+        const teeResult = (await response.json()) as {
+          publicKey: string;
+          locator: string;
+        };
+        config.layers.tee = {
+          enabled: true,
+          locator: teeResult.locator,
+          publicKey: teeResult.publicKey,
+        };
+        config.wallet.type = "crossmint";
+        config.wallet.publicKey = teeResult.publicKey;
+
+        lines.push("");
+        lines.push("### TEE Custody");
+        lines.push(`- **TEE Public Key:** ${teeResult.publicKey}`);
+        lines.push(`- **Locator:** ${teeResult.locator}`);
+        lines.push(
+          "- Your agent's private key is protected in a hardware enclave.",
+        );
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        return `Error connecting to AgentShield platform for TEE provisioning: ${msg}`;
+      }
     }
 
     // ── Step 3: Generate vault Blink URL ──────────────────────────

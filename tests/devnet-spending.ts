@@ -64,10 +64,7 @@ describe("devnet-spending", () => {
   });
 
   /** Helper to create a two-token vault and deposit both mints */
-  async function createDualTokenVault(opts: {
-    dailyCap: BN;
-    maxTx: BN;
-  }) {
+  async function createDualTokenVault(opts: { dailyCap: BN; maxTx: BN }) {
     const vaultId = nextVaultId(5);
 
     const vault = await createFullVault({
@@ -127,7 +124,11 @@ describe("devnet-spending", () => {
       true,
     );
 
-    return { ...vault, mintBVaultAta, mintBTreasuryAta: mintBTreasuryAccount.address };
+    return {
+      ...vault,
+      mintBVaultAta,
+      mintBTreasuryAta: mintBTreasuryAccount.address,
+    };
   }
 
   it("1. aggregate USD cap tracks across both tokens", async () => {
@@ -310,7 +311,9 @@ describe("devnet-spending", () => {
     // Verify vault stats reflect the 3 transactions
     const vaultData = await program.account.agentVault.fetch(vault.vaultPda);
     expect(vaultData.totalTransactions.toNumber()).to.equal(3);
-    console.log(`    Vault has ${vaultData.totalTransactions.toNumber()} transactions`);
+    console.log(
+      `    Vault has ${vaultData.totalTransactions.toNumber()} transactions`,
+    );
   });
 
   it("5. agent_transfer spends tracked alongside session spends", async () => {
@@ -343,9 +346,8 @@ describe("devnet-spending", () => {
     });
 
     // agent_transfer 50
-    const { getOrCreateAssociatedTokenAccount } = await import(
-      "@solana/spl-token"
-    );
+    const { getOrCreateAssociatedTokenAccount } =
+      await import("@solana/spl-token");
     const dest = Keypair.generate();
     const destAta = await getOrCreateAssociatedTokenAccount(
       connection,
@@ -396,9 +398,7 @@ describe("devnet-spending", () => {
     } catch (err: any) {
       expectError(err, "DailyCapExceeded", "cap");
     }
-    console.log(
-      "    Session + agent_transfer spends tracked together at cap",
-    );
+    console.log("    Session + agent_transfer spends tracked together at cap");
   });
 
   it("6. update_policy changes daily cap (V2: no tracker in updatePolicy)", async () => {

@@ -52,10 +52,7 @@ const readmePath = path.join(ROOT, "README.md");
 let readme = fs.readFileSync(readmePath, "utf8");
 
 // Badge
-readme = readme.replace(
-  /tests-\d+-brightgreen/,
-  `tests-${total}-brightgreen`,
-);
+readme = readme.replace(/tests-\d+-brightgreen/, `tests-${total}-brightgreen`);
 
 // Inline comment: "Run all TypeScript tests (N tests across M suites)"
 readme = readme.replace(

@@ -5,7 +5,7 @@ set -euo pipefail
 # Idempotent — safe to run multiple times.
 # Does NOT execute remote code. Only copies files and merges JSON config.
 
-MCP_VERSION="0.4.3"
+MCP_VERSION="0.4.7"
 SKILL_DIR="${HOME}/.openclaw/workspace/skills/agent-shield"
 CONFIG_FILE="${HOME}/.openclaw/openclaw.json"
 SHIELD_DIR="${HOME}/.agentshield"
@@ -43,8 +43,8 @@ JSONEOF
 )
 
 if [ -f "${CONFIG_FILE}" ]; then
-  if grep -q '"agent-shield"' "${CONFIG_FILE}" 2>/dev/null; then
-    echo "    MCP config already present in ${CONFIG_FILE} — skipping"
+  if grep -q "@agent-shield/mcp@${MCP_VERSION}" "${CONFIG_FILE}" 2>/dev/null; then
+    echo "    MCP config already present (v${MCP_VERSION}) in ${CONFIG_FILE} — skipping"
   else
     # Merge using node (available since npx check passed)
     node -e "

@@ -2,7 +2,11 @@ import { z } from "zod";
 import type { AgentShieldClient } from "@agent-shield/sdk";
 import { toPublicKey, toBN } from "../utils";
 import { formatError } from "../errors";
-import { loadAgentKeypair, type McpConfig } from "../config";
+import {
+  loadAgentKeypair,
+  type McpConfig,
+  type CustodyWalletLike,
+} from "../config";
 
 export const closePositionSchema = z.object({
   vault: z.string().describe("Vault PDA address (base58)"),
@@ -30,16 +34,28 @@ export async function closePosition(
   client: AgentShieldClient,
   config: McpConfig,
   input: ClosePositionInput,
+  custodyWallet?: CustodyWalletLike | null,
 ): Promise<string> {
   try {
-    const agentKeypair = loadAgentKeypair(config);
+    let agentPubkey: import("@solana/web3.js").PublicKey;
+    let signers: import("@solana/web3.js").Keypair[];
+
+    if (custodyWallet) {
+      agentPubkey = custodyWallet.publicKey;
+      signers = [];
+    } else {
+      const agentKeypair = loadAgentKeypair(config);
+      agentPubkey = agentKeypair.publicKey;
+      signers = [agentKeypair];
+    }
+
     const vaultAddress = toPublicKey(input.vault);
     const vault = await client.fetchVaultByAddress(vaultAddress);
 
     const result = await client.flashTradeClose({
       owner: vault.owner,
       vaultId: vault.vaultId,
-      agent: agentKeypair.publicKey,
+      agent: agentPubkey,
       targetSymbol: input.market,
       collateralSymbol: input.market,
       collateralAmount: toBN("0"),
@@ -50,9 +66,7 @@ export async function closePosition(
       },
     });
 
-    const sig = await client.executeFlashTrade(result, agentKeypair.publicKey, [
-      agentKeypair,
-    ]);
+    const sig = await client.executeFlashTrade(result, agentPubkey, signers);
 
     return [
       "## Position Closed",
