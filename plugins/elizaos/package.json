@@ -26,7 +26,7 @@
   },
   "peerDependencies": {
     "@agent-shield/custody-crossmint": ">=0.1.4",
-    "@agent-shield/sdk": ">=0.5.2",
+    "@agent-shield/sdk": ">=0.5.4",
     "@elizaos/core": ">=0.1.0",
     "@solana/web3.js": ">=1.90.0"
   },

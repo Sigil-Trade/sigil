@@ -1,5 +1,15 @@
 # @agent-shield/mcp
 
+## 0.4.6
+
+### Patch Changes
+
+- [#70](https://github.com/Kaleb-Rupe/agentshield/pull/70) [`23fa5d9`](https://github.com/Kaleb-Rupe/agentshield/commit/23fa5d9dd3f041d7611135fa67a91b34c279bc8e) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - Update @modelcontextprotocol/sdk dependency from ^1.12.1 to ^1.27.0
+
+- Updated dependencies [[`23fa5d9`](https://github.com/Kaleb-Rupe/agentshield/commit/23fa5d9dd3f041d7611135fa67a91b34c279bc8e)]:
+  - @agent-shield/sdk@0.5.4
+  - @agent-shield/custody-crossmint@0.1.4
+
 ## 0.4.4
 
 ### Patch Changes
