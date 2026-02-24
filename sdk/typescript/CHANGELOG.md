@@ -1,5 +1,11 @@
 # @agent-shield/sdk
 
+## 0.5.4
+
+### Patch Changes
+
+- [#70](https://github.com/Kaleb-Rupe/agentshield/pull/70) [`23fa5d9`](https://github.com/Kaleb-Rupe/agentshield/commit/23fa5d9dd3f041d7611135fa67a91b34c279bc8e) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - Update flash-sdk dependency from ^15.1.2 to ^15.1.4
+
 ## 0.5.2
 
 ### Patch Changes

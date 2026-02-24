@@ -1,6 +1,6 @@
 {
   "name": "@agent-shield/solana",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "deprecated": "Use @agent-shield/sdk instead. This package is a compatibility shim.",
   "author": "Kaleb Rupe (https://x.com/MightieMags)",
   "homepage": "https://github.com/Kaleb-Rupe/agentshield#readme",
