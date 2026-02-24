@@ -1,5 +1,11 @@
 # @agent-shield/mcp
 
+## 0.4.8
+
+### Patch Changes
+
+- [#74](https://github.com/Kaleb-Rupe/agentshield/pull/74) [`372805a`](https://github.com/Kaleb-Rupe/agentshield/commit/372805af5eec01dcd8ac4913d657c935cc78a9e6) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - fix(mcp): config hardening — tilde expansion uses os.homedir(), schema validation rejects corrupted configs
+
 ## 0.4.6
 
 ### Patch Changes
