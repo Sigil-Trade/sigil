@@ -37,9 +37,9 @@ compile_error!("Build requires --features mainnet OR --features devnet");
 #[cfg(all(feature = "mainnet", feature = "devnet"))]
 compile_error!("Cannot enable both mainnet and devnet simultaneously");
 
+#[cfg(feature = "devnet")]
 /// Protocol treasury address (devnet)
 /// Base58: ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT
-#[cfg(feature = "devnet")]
 pub const PROTOCOL_TREASURY: Pubkey = Pubkey::new_from_array([
     140, 51, 155, 5, 120, 99, 25, 69, 20, 4, 163, 87, 229, 124, 111, 239, 107, 28, 230, 192, 254,
     239, 33, 251, 37, 93, 179, 29, 45, 226, 14, 172,
