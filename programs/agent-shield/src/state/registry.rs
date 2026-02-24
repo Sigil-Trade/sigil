@@ -3,6 +3,7 @@ use anchor_lang::prelude::*;
 /// Maximum number of oracle entries in the registry.
 /// 104 entries (reduced from 105 to accommodate pending_authority + count
 /// + padding in the zero-copy layout).
+///
 /// NOTE: If >104 entries are needed, add a realloc_oracle_registry
 /// instruction to grow the account in a separate transaction (Solana
 /// allows 10,240 bytes per realloc, supporting up to ~210 entries at

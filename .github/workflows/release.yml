@@ -120,7 +120,7 @@ jobs:
         working-directory: sdk/core
         run: pnpm test
 
-      - name: Run SDK tests (165 tests)
+      - name: Run SDK tests (176 tests)
         working-directory: sdk/typescript
         run: pnpm test
 

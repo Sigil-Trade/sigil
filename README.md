@@ -1,7 +1,7 @@
 # AgentShield
 
 [![CI](https://github.com/Kaleb-Rupe/agentshield/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Kaleb-Rupe/agentshield/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-874-brightgreen)
+![Tests](https://img.shields.io/badge/tests-878-brightgreen)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 
 On-chain guardrails for AI agents on Solana. Your policies are enforced by Solana validators, not software promises.
@@ -173,7 +173,7 @@ npx ts-mocha -p ./tsconfig.json -t 300000 \
   tests/agent-shield.ts tests/jupiter-integration.ts \
   tests/flash-trade-integration.ts tests/security-exploits.ts
 
-# Run all TypeScript tests (569 tests across 8 suites)
+# Run all TypeScript tests (580 tests across 8 suites)
 pnpm -r run test
 
 # Lint
@@ -189,16 +189,16 @@ cargo fmt --check --manifest-path programs/agent-shield/Cargo.toml
 | Jupiter integration (composed swaps)                 |       8 |
 | Flash Trade integration (leveraged perps)            |       9 |
 | Security exploit scenarios                           |     118 |
-| Devnet integration tests (real network)              |      77 |
+| Devnet integration tests (real network)              |      70 |
 | Core policy engine (`@agent-shield/core`)            |      66 |
-| SDK tests (`@agent-shield/sdk`)                      |     165 |
+| SDK tests (`@agent-shield/sdk`)                      |     176 |
 | Platform client tests (`@agent-shield/platform`)     |      17 |
 | Crossmint custody adapter                            |      29 |
 | SAK plugin (`@agent-shield/plugin-solana-agent-kit`) |      29 |
 | ElizaOS plugin (`@agent-shield/plugin-elizaos`)      |      35 |
 | MCP server (`@agent-shield/mcp`)                     |     175 |
 | Actions server (`@agent-shield/actions-server`)      |      53 |
-| **Total**                                            | **874** |
+| **Total**                                            | **878** |
 
 ## Security
 

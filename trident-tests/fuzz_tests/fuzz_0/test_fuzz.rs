@@ -881,6 +881,8 @@ impl FuzzTest {
             session: session_pda,
             vault_token_account: vault_ata,
             token_mint_account: mint,
+            protocol_treasury_token_account: None,
+            fee_destination_token_account: None,
             token_program: spl_token::ID,
             system_program: solana_sdk::system_program::ID,
         };
@@ -941,22 +943,16 @@ impl FuzzTest {
         let session_data = session_state.unwrap();
         let session_token = session_data.authorized_token;
 
-        // Find matching ATAs
-        let (vault_ata, fee_dest_ata) = self
+        // Find matching vault ATA for delegation revocation
+        let vault_ata = self
             .find_atas_for_token(&session_token)
+            .map(|(v, _)| v)
             .unwrap_or_else(|| {
                 // Fallback to token A
-                let v = self
-                    .fuzz_accounts
+                self.fuzz_accounts
                     .vault_token_account
                     .get(&mut self.trident)
-                    .unwrap_or_default();
-                let f = self
-                    .fuzz_accounts
-                    .fee_dest_token_account
-                    .get(&mut self.trident)
-                    .unwrap_or_default();
-                (v, f)
+                    .unwrap_or_default()
             });
 
         let pre_vault = self.snapshot_vault(&vault);
@@ -969,12 +965,9 @@ impl FuzzTest {
         let accounts = agent_shield::accounts::FinalizeSession {
             payer: agent,
             vault,
-            policy: policy_addr,
             session,
             session_rent_recipient: agent,
             vault_token_account: Some(vault_ata),
-            fee_destination_token_account: Some(fee_dest_ata),
-            protocol_treasury_token_account: None,
             token_program: spl_token::ID,
             system_program: solana_sdk::system_program::ID,
         };
@@ -1398,6 +1391,8 @@ impl FuzzTest {
             session: session_pda,
             vault_token_account: vault_ata_c,
             token_mint_account: mint_c,
+            protocol_treasury_token_account: None,
+            fee_destination_token_account: None,
             token_program: spl_token::ID,
             system_program: solana_sdk::system_program::ID,
         };
@@ -1485,6 +1480,8 @@ impl FuzzTest {
             session: session_pda,
             vault_token_account: vault_ata_c,
             token_mint_account: mint_c,
+            protocol_treasury_token_account: None,
+            fee_destination_token_account: None,
             token_program: spl_token::ID,
             system_program: solana_sdk::system_program::ID,
         };
@@ -1520,7 +1517,6 @@ impl FuzzTest {
     fn finalize_expired_session(&mut self) {
         let agent = unwrap_or_ret!(self.fuzz_accounts.agent.get(&mut self.trident));
         let vault = unwrap_or_ret!(self.fuzz_accounts.vault.get(&mut self.trident));
-        let policy_addr = unwrap_or_ret!(self.fuzz_accounts.policy.get(&mut self.trident));
         let session_addr = unwrap_or_ret!(self.fuzz_accounts.session.get(&mut self.trident));
 
         // Check if session exists
@@ -1537,20 +1533,14 @@ impl FuzzTest {
         self.current_slot = expired_slot;
         self.trident.warp_to_slot(self.current_slot);
 
-        let (vault_ata, fee_dest_ata) = self
+        let vault_ata = self
             .find_atas_for_token(&session_token)
+            .map(|(v, _)| v)
             .unwrap_or_else(|| {
-                let v = self
-                    .fuzz_accounts
+                self.fuzz_accounts
                     .vault_token_account
                     .get(&mut self.trident)
-                    .unwrap_or_default();
-                let f = self
-                    .fuzz_accounts
-                    .fee_dest_token_account
-                    .get(&mut self.trident)
-                    .unwrap_or_default();
-                (v, f)
+                    .unwrap_or_default()
             });
 
         // Finalize with success=true — program should override to success=false
@@ -1558,12 +1548,9 @@ impl FuzzTest {
         let accounts = agent_shield::accounts::FinalizeSession {
             payer: agent,
             vault,
-            policy: policy_addr,
             session: session_addr,
             session_rent_recipient: agent,
             vault_token_account: Some(vault_ata),
-            fee_destination_token_account: Some(fee_dest_ata),
-            protocol_treasury_token_account: None,
             token_program: spl_token::ID,
             system_program: solana_sdk::system_program::ID,
         };
@@ -1592,7 +1579,6 @@ impl FuzzTest {
     fn double_finalize_session(&mut self) {
         let agent = unwrap_or_ret!(self.fuzz_accounts.agent.get(&mut self.trident));
         let vault = unwrap_or_ret!(self.fuzz_accounts.vault.get(&mut self.trident));
-        let policy_addr = unwrap_or_ret!(self.fuzz_accounts.policy.get(&mut self.trident));
         let session_addr = unwrap_or_ret!(self.fuzz_accounts.session.get(&mut self.trident));
 
         // Check if session is already closed (no data)
@@ -1606,20 +1592,14 @@ impl FuzzTest {
         let vault_ata = unwrap_or_ret!(
             self.fuzz_accounts.vault_token_account.get(&mut self.trident)
         );
-        let fee_dest_ata = unwrap_or_ret!(
-            self.fuzz_accounts.fee_dest_token_account.get(&mut self.trident)
-        );
 
         let data = agent_shield::instruction::FinalizeSession { success: true };
         let accounts = agent_shield::accounts::FinalizeSession {
             payer: agent,
             vault,
-            policy: policy_addr,
             session: session_addr,
             session_rent_recipient: agent,
             vault_token_account: Some(vault_ata),
-            fee_destination_token_account: Some(fee_dest_ata),
-            protocol_treasury_token_account: None,
             token_program: spl_token::ID,
             system_program: solana_sdk::system_program::ID,
         };
