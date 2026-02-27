@@ -17,6 +17,10 @@
     "security:xray": "docker run --rm --volume \"$(pwd):/workspace\" ghcr.io/sec3-product/x-ray:latest /workspace/programs/agent-shield",
     "security:fuzz": "cd trident-tests && trident fuzz run fuzz_0",
     "security:verify": "source .certora-venv/bin/activate && certoraSolanaProver certora/conf/agent_shield.conf",
+    "surfpool:start": "surfpool start --network devnet --slot-time 100",
+    "surfpool:start:ci": "surfpool start --network devnet --slot-time 100 --ci",
+    "test:surfpool": "npx ts-mocha -p ./tsconfig.json -t 300000 tests/surfpool-integration.ts",
+    "test:onchain": "npx ts-mocha -p ./tsconfig.json -t 300000 tests/agent-shield.ts tests/jupiter-integration.ts tests/flash-trade-integration.ts tests/security-exploits.ts",
     "update-readme": "node scripts/update-test-counts.js"
   },
   "dependencies": {

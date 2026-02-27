@@ -29,3 +29,11 @@ trident-tests/fuzz_tests/fuzzing/hfuzz_workspace/
 .certora-venv/
 .certora_internal/
 certora/output/
+
+.vscode
+
+# Surfpool
+.surfpool/
+
+# Claude Code skills (local development tools)
+.claude/skills/

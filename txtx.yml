@@ -1,0 +1,25 @@
+# Surfpool manifest — auto-deploys agent_shield.so from Anchor build output.
+#
+# Usage:
+#   surfpool start --network devnet --slot-time 100          # local dev (TUI + Studio)
+#   surfpool start --network devnet --slot-time 100 --ci     # CI (no TUI, no Studio)
+#
+# Surfpool auto-detects the Anchor project and deploys target/deploy/agent_shield.so.
+# The --network devnet flag enables lazy forking of devnet state (USDC/USDT mints
+# are cloned on-demand when accessed).
+#
+# IDL is registered programmatically in tests via surfnet_registerIdl cheatcode
+# (see tests/helpers/surfpool-setup.ts).
+
+name: agent-shield
+runbooks:
+  - name: Deploy AgentShield
+    description: Deploy agent_shield program to local Surfnet
+    location: .
+environments:
+  development:
+    network_id: localnet
+    rpc_api_url: http://localhost:8899
+  devnet:
+    network_id: devnet
+    rpc_api_url: https://api.devnet.solana.com

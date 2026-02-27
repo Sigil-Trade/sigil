@@ -1,11 +1,13 @@
 # CI Pipeline for AgentShield
 #
 # Runs on every push to main and on pull requests.
-# Eight jobs (1 detection + 6 parallel + 1 gate):
+# Nine jobs (1 detection + 7 parallel + 1 gate):
 #   0. changes                — Detect which file groups changed (package-level path filtering)
-#   1. build-lint-test        — TypeScript builds, Prettier, 564 TS tests (conditional: any-ts or push)
+#   1. build-lint-test        — TypeScript builds, Prettier, 682 TS tests (conditional: any-ts or push)
 #   2. rust-checks            — cargo fmt + cargo clippy (conditional: rust changes or push)
-#   3. on-chain-tests         — Anchor build + LiteSVM 213 tests (conditional: rust changes or push)
+#   3. on-chain-tests         — Anchor build + LiteSVM 219 tests (conditional: rust changes or push)
+#  3b. build-verification     — Feature flag safety net (conditional: rust changes or push)
+#  3c. surfpool-integration   — Surfpool integration tests, ~22 tests (conditional: rust changes or push)
 #   4. security-scan          — Sec3 X-Ray static analysis (always, BLOCKING)
 #   5. formal-verification    — Certora Solana Prover (conditional: certora changes, BLOCKING)
 #   6. fuzz-test              — Trident fuzz 1K iterations (conditional: rust changes or push, BLOCKING)
@@ -22,7 +24,7 @@
 #   apps/ → Actions server tests
 #   sdk/typescript → all downstream suites (everything depends on SDK)
 #
-# Total: 878 tests across 13 suites (580 TS + 228 on-chain + 70 devnet)
+# Total: ~999 tests across 15 suites (682 TS + 219 on-chain + 22 Surfpool + 70 devnet)
 # All security checks are BLOCKING — zero tolerance for known issues.
 
 name: CI
@@ -43,7 +45,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  SOLANA_VERSION: "stable"
+  SOLANA_VERSION: "v2.1.14"
   ANCHOR_VERSION: "0.32.1"
   NODE_VERSION: "24"
 
@@ -104,7 +106,7 @@ jobs:
               - 'tsconfig*.json'
 
   # ──────────────────────────────────────────────────────────────
-  # Job 1: TypeScript build, lint, and tests (8 suites, 580 tests)
+  # Job 1: TypeScript build, lint, and tests (8 suites, 682 tests)
   # ──────────────────────────────────────────────────────────────
   build-lint-test:
     name: Build, Lint & TS Tests
@@ -173,7 +175,7 @@ jobs:
         working-directory: sdk/core
         run: pnpm test
 
-      - name: SDK tests (176 tests)
+      - name: SDK tests (192 tests)
         if: >-
           needs.changes.outputs.sdk-typescript == 'true' ||
           github.event_name == 'push'
@@ -212,7 +214,7 @@ jobs:
         working-directory: plugins/elizaos
         run: pnpm test
 
-      - name: MCP server tests (175 tests)
+      - name: MCP server tests (249 tests)
         if: >-
           needs.changes.outputs.packages == 'true' ||
           needs.changes.outputs.sdk-typescript == 'true' ||
@@ -220,7 +222,7 @@ jobs:
         working-directory: packages/mcp
         run: pnpm test
 
-      - name: Actions server tests (53 tests)
+      - name: Actions server tests (65 tests)
         if: >-
           needs.changes.outputs.apps == 'true' ||
           needs.changes.outputs.sdk-typescript == 'true' ||
@@ -473,6 +475,110 @@ jobs:
           echo "No unguarded devnet addresses found."
 
   # ──────────────────────────────────────────────────────────────
+  # Job 3c: Surfpool integration tests (~22 tests)
+  #
+  # Runs against a local Surfnet (LiteSVM-backed validator with
+  # lazy devnet forking). Tests session expiry with real slots,
+  # time travel, token balance cheatcodes, and CU profiling.
+  # ──────────────────────────────────────────────────────────────
+  surfpool-integration:
+    name: Surfpool Integration Tests
+    needs: [changes, on-chain-tests]
+    if: needs.changes.outputs.rust == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@efa25f7f19611383d5b0ccf2d1c8914531636bf9 # stable
+        with:
+          toolchain: stable
+
+      - name: Cache Cargo registry + build
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+            target
+          key: surfpool-${{ runner.os }}-${{ hashFiles('programs/agent-shield/Cargo.lock') }}
+          restore-keys: surfpool-${{ runner.os }}-
+
+      - name: Install Solana CLI
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/${{ env.SOLANA_VERSION }}/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libudev-dev
+
+      - name: Install Anchor CLI
+        run: |
+          if ! command -v anchor &> /dev/null; then
+            cargo install --git https://github.com/coral-xyz/anchor --tag v${{ env.ANCHOR_VERSION }} anchor-cli --locked --force
+          fi
+
+      - name: Install Surfpool CLI
+        run: |
+          if ! command -v surfpool &> /dev/null; then
+            cargo install surfpool --locked
+          fi
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # v4
+        with:
+          version: 10
+
+      - name: Install Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build program
+        run: anchor build --no-idl
+
+      - name: Restore committed IDL
+        run: git checkout -- target/idl/ target/types/
+
+      - name: Start Surfpool in background
+        run: |
+          surfpool start --network devnet --slot-time 100 --ci &
+          SURFPOOL_PID=$!
+          echo "SURFPOOL_PID=$SURFPOOL_PID" >> $GITHUB_ENV
+
+          # Wait for Surfnet to be ready (up to 30 attempts)
+          for i in $(seq 1 30); do
+            if curl -s http://localhost:8899 -X POST \
+              -H "Content-Type: application/json" \
+              -d '{"jsonrpc":"2.0","id":1,"method":"getSlot"}' | grep -q result; then
+              echo "Surfnet ready after $i attempts"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "::error::Surfnet failed to start after 30 attempts"
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Run Surfpool integration tests
+        run: npx ts-mocha -p ./tsconfig.json -t 300000 tests/surfpool-integration.ts
+
+      - name: Stop Surfpool
+        if: always()
+        run: |
+          if [ -n "$SURFPOOL_PID" ]; then
+            kill $SURFPOOL_PID 2>/dev/null || true
+          fi
+
+  # ──────────────────────────────────────────────────────────────
   # Job 4: Static security analysis (Sec3 X-Ray)
   # ──────────────────────────────────────────────────────────────
   security-scan:
@@ -672,6 +778,7 @@ jobs:
       - rust-checks
       - on-chain-tests
       - build-verification
+      - surfpool-integration
       - security-scan
       - formal-verification
       - fuzz-test
@@ -684,6 +791,7 @@ jobs:
           echo "  rust-checks:           ${{ needs.rust-checks.result }}"
           echo "  on-chain-tests:        ${{ needs.on-chain-tests.result }}"
           echo "  build-verification:    ${{ needs.build-verification.result }}"
+          echo "  surfpool-integration:  ${{ needs.surfpool-integration.result }}"
           echo "  security-scan:         ${{ needs.security-scan.result }}"
           echo "  formal-verification:   ${{ needs.formal-verification.result }}"
           echo "  fuzz-test:             ${{ needs.fuzz-test.result }}"
@@ -723,14 +831,15 @@ jobs:
             fi
           fi
 
-          # rust-checks, on-chain-tests, build-verification, fuzz-test: required when Rust files changed
+          # rust-checks, on-chain-tests, build-verification, surfpool-integration, fuzz-test: required when Rust files changed
           RUST_CHANGED="${{ needs.changes.outputs.rust }}"
-          for job_name in rust-checks on-chain-tests build-verification fuzz-test; do
+          for job_name in rust-checks on-chain-tests build-verification surfpool-integration fuzz-test; do
             case "$job_name" in
-              rust-checks)        result="${{ needs.rust-checks.result }}" ;;
-              on-chain-tests)     result="${{ needs.on-chain-tests.result }}" ;;
-              build-verification) result="${{ needs.build-verification.result }}" ;;
-              fuzz-test)          result="${{ needs.fuzz-test.result }}" ;;
+              rust-checks)           result="${{ needs.rust-checks.result }}" ;;
+              on-chain-tests)        result="${{ needs.on-chain-tests.result }}" ;;
+              build-verification)    result="${{ needs.build-verification.result }}" ;;
+              surfpool-integration)  result="${{ needs.surfpool-integration.result }}" ;;
+              fuzz-test)             result="${{ needs.fuzz-test.result }}" ;;
             esac
 
             if [ "$RUST_CHANGED" = "true" ] || [ "${{ github.event_name }}" = "push" ]; then
