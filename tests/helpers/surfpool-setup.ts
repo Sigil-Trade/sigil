@@ -181,15 +181,28 @@ async function deployLocalProgram(connection: Connection): Promise<void> {
   ]);
 
   // 4. Deploy via solana CLI (properly updates SVM program cache)
+  //    Retry up to 3 times — Surfnet can be slow after reset or on cold CI cache
   const rpcUrl = (connection as any)._rpcEndpoint || SURFPOOL_RPC_URL;
-  execSync(
+  const deployCmd =
     `solana program deploy "${soPath}" ` +
-      `--program-id ${PROGRAM_ID.toString()} ` +
-      `--keypair "${deployerPath}" ` +
-      `--url ${rpcUrl} ` +
-      `--upgrade-authority "${deployerPath}"`,
-    { stdio: "pipe", timeout: 30_000 },
-  );
+    `--program-id ${PROGRAM_ID.toString()} ` +
+    `--keypair "${deployerPath}" ` +
+    `--url ${rpcUrl} ` +
+    `--upgrade-authority "${deployerPath}"`;
+
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      execSync(deployCmd, { stdio: "pipe", timeout: 120_000 });
+      return;
+    } catch (err) {
+      lastErr = err;
+      if (attempt < 3) {
+        await new Promise((r) => setTimeout(r, 3_000));
+      }
+    }
+  }
+  throw lastErr;
 }
 
 // ─── Test environment ───────────────────────────────────────────────────────
