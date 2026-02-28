@@ -116,11 +116,11 @@ jobs:
       - name: Build all packages
         run: pnpm -r run build
 
-      - name: Run core policy engine tests (66 tests)
+      - name: Run core policy engine tests (73 tests)
         working-directory: sdk/core
         run: pnpm test
 
-      - name: Run SDK tests (192 tests)
+      - name: Run SDK tests (199 tests)
         working-directory: sdk/typescript
         run: pnpm test
 
@@ -140,11 +140,11 @@ jobs:
         working-directory: plugins/elizaos
         run: pnpm test
 
-      - name: Run MCP server tests (280 tests)
+      - name: Run MCP server tests (291 tests)
         working-directory: packages/mcp
         run: pnpm test
 
-      - name: Run actions server tests (65 tests)
+      - name: Run actions server tests (61 tests)
         working-directory: apps/actions-server
         run: pnpm test
 

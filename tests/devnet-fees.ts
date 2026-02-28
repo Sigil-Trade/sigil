@@ -6,7 +6,7 @@
  * dust amounts, and agent_transfer fee parity.
  *
  *     Stablecoin-only architecture. agentTransfer requires tokenMintAccount.
- *     finalizeSession has no tracker account.
+ *     finalizeSession includes policy and tracker accounts.
  */
 import * as anchor from "@coral-xyz/anchor";
 import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
@@ -124,6 +124,7 @@ describe("devnet-fees", () => {
       payer: agentB,
       vaultPda: vaultB.vaultPda,
       policyPda: vaultB.policyPda,
+      trackerPda: vaultB.trackerPda,
       sessionPda,
       agentPubkey: agentB.publicKey,
       vaultTokenAta: vaultB.vaultTokenAta,
@@ -173,6 +174,7 @@ describe("devnet-fees", () => {
       payer: agentA,
       vaultPda: vaultA.vaultPda,
       policyPda: vaultA.policyPda,
+      trackerPda: vaultA.trackerPda,
       sessionPda,
       agentPubkey: agentA.publicKey,
       vaultTokenAta: vaultA.vaultTokenAta,
@@ -222,6 +224,7 @@ describe("devnet-fees", () => {
       payer: agentA,
       vaultPda: vaultA.vaultPda,
       policyPda: vaultA.policyPda,
+      trackerPda: vaultA.trackerPda,
       sessionPda,
       agentPubkey: agentA.publicKey,
       vaultTokenAta: vaultA.vaultTokenAta,
@@ -269,6 +272,7 @@ describe("devnet-fees", () => {
       payer: agentA,
       vaultPda: vaultA.vaultPda,
       policyPda: vaultA.policyPda,
+      trackerPda: vaultA.trackerPda,
       sessionPda,
       agentPubkey: agentA.publicKey,
       vaultTokenAta: vaultA.vaultTokenAta,
@@ -320,6 +324,7 @@ describe("devnet-fees", () => {
       payer: agentA,
       vaultPda: vaultA.vaultPda,
       policyPda: vaultA.policyPda,
+      trackerPda: vaultA.trackerPda,
       sessionPda,
       agentPubkey: agentA.publicKey,
       vaultTokenAta: vaultA.vaultTokenAta,
@@ -433,6 +438,7 @@ describe("devnet-fees", () => {
       payer: agentB,
       vaultPda: vaultB.vaultPda,
       policyPda: vaultB.policyPda,
+      trackerPda: vaultB.trackerPda,
       sessionPda,
       agentPubkey: agentB.publicKey,
       vaultTokenAta: vaultB.vaultTokenAta,

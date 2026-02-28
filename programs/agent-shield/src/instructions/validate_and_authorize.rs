@@ -208,8 +208,7 @@ pub fn handler(
             output_mint = stablecoin_acct.mint;
             stablecoin_balance_before = stablecoin_acct.amount;
 
-            // No fees or cap check for non-stablecoin input
-            // (tracked at finalize when stablecoin balance increases)
+            // No fees here — cap check deferred to finalize_session when stablecoin delta is known
             (0u64, 0u64, 0u64)
         }
     } else {
@@ -217,26 +216,26 @@ pub fn handler(
         (0u64, 0u64, 0u64)
     };
 
-    // --- Protocol slippage + dust deposit scanning ---
-    // Scan ALL instructions between validate and finalize to verify:
-    // 1. Slippage on every DeFi instruction (not just the next one)
-    // 2. No top-level SPL Token transfers to vault stablecoin ATA (dust deposit guard)
+    // --- Hardened instruction scan ---
+    // Scan ALL instructions between validate and finalize to enforce:
+    // 1. Block ALL top-level SPL Token Transfer/TransferChecked (theft prevention)
+    // 2. Whitelist infrastructure programs (ComputeBudget, SystemProgram)
+    // 3. Check all other programs against policy (protocolMode enforcement)
+    // 4. Slippage verification on recognized DeFi programs
+    // 5. Single DeFi instruction for non-stablecoin inputs (split-swap prevention)
     if is_spending {
         let ix_sysvar = &ctx.accounts.instructions_sysvar.to_account_info();
         let current_idx = load_current_index_checked(ix_sysvar)
             .map_err(|_| error!(AgentShieldError::MissingFinalizeInstruction))?;
         let finalize_hash: [u8; 8] = [34, 148, 144, 47, 37, 130, 206, 161];
 
-        // Pre-compute dust deposit guard values (non-stablecoin input only)
         let spl_token_id = ctx.accounts.token_program.key();
-        let stablecoin_key = if !is_stablecoin_input {
-            ctx.accounts
-                .output_stablecoin_account
-                .as_ref()
-                .map(|a| a.key())
-        } else {
-            None
-        };
+        // ComputeBudget111111111111111111111111111111
+        let compute_budget_id = Pubkey::new_from_array([
+            3, 6, 70, 111, 229, 33, 23, 50, 255, 236, 173, 186, 114, 195, 155, 231, 188, 140, 229,
+            187, 197, 247, 18, 107, 44, 67, 155, 58, 64, 0, 0, 0,
+        ]);
+        let mut defi_ix_count: u8 = 0;
 
         let mut scan_idx = (current_idx as usize).saturating_add(1);
         for _ in 0..20 {
@@ -250,8 +249,31 @@ pub fn handler(
                         break;
                     }
 
-                    // Protocol mismatch check: any recognized DeFi program
-                    // must match the declared target_protocol.
+                    // 1. Block ALL top-level SPL Token Transfer/TransferChecked.
+                    // Legitimate DeFi interactions move tokens via CPI, never
+                    // as top-level SPL Token instructions.
+                    if ix.program_id == spl_token_id
+                        && !ix.data.is_empty()
+                        && (ix.data[0] == 3 || ix.data[0] == 12)
+                    {
+                        return Err(error!(AgentShieldError::DustDepositDetected));
+                    }
+
+                    // 2. Whitelist infrastructure programs (no policy check needed)
+                    if ix.program_id == compute_budget_id
+                        || ix.program_id == anchor_lang::solana_program::system_program::ID
+                    {
+                        scan_idx = scan_idx.saturating_add(1);
+                        continue;
+                    }
+
+                    // 3. All other programs must pass policy check
+                    require!(
+                        policy.is_protocol_allowed(&ix.program_id),
+                        AgentShieldError::ProtocolNotAllowed
+                    );
+
+                    // 4. Recognized DeFi: protocol mismatch + slippage verification
                     let is_recognized_defi = ix.program_id == JUPITER_PROGRAM
                         || ix.program_id == FLASH_TRADE_PROGRAM
                         || ix.program_id == JUPITER_LEND_PROGRAM
@@ -263,9 +285,10 @@ pub fn handler(
                             ix.program_id == target_protocol,
                             AgentShieldError::ProtocolMismatch
                         );
+                        defi_ix_count = defi_ix_count.saturating_add(1);
                     }
 
-                    // Slippage verification on ALL DeFi instructions
+                    // Slippage verification on DeFi instructions
                     if ix.program_id == JUPITER_PROGRAM {
                         jupiter::verify_jupiter_slippage(&ix.data, policy.max_slippage_bps)?;
                     } else if ix.program_id == FLASH_TRADE_PROGRAM {
@@ -277,31 +300,19 @@ pub fn handler(
                         jupiter_lend::verify_jupiter_lend_instruction(&ix.data)?;
                     }
 
-                    // Dust deposit guard: reject top-level SPL Token Transfers
-                    // targeting the vault's stablecoin ATA (non-stablecoin only).
-                    // Legitimate swaps CPI-transfer through Jupiter's program,
-                    // not as top-level SPL Transfer instructions.
-                    if let Some(sc_key) = stablecoin_key {
-                        if ix.program_id == spl_token_id
-                            && !ix.data.is_empty()
-                            && (ix.data[0] == 3 || ix.data[0] == 12)
-                        {
-                            // SPL Transfer (disc=3) or TransferChecked (disc=12)
-                            // Transfer: accounts[1] = dest
-                            // TransferChecked: accounts[2] = dest
-                            let dest_idx = if ix.data[0] == 3 { 1 } else { 2 };
-                            if ix.accounts.len() > dest_idx
-                                && ix.accounts[dest_idx].pubkey == sc_key
-                            {
-                                return Err(error!(AgentShieldError::DustDepositDetected));
-                            }
-                        }
-                    }
-
                     scan_idx = scan_idx.saturating_add(1);
                 }
                 Err(_) => break,
             }
+        }
+
+        // 5. Non-stablecoin input: exactly 1 recognized DeFi instruction required.
+        // Prevents split-swap attacks (2+ swaps) and no-swap delegation theft (0 swaps).
+        if !is_stablecoin_input {
+            require!(
+                defi_ix_count == 1,
+                AgentShieldError::TooManyDeFiInstructions
+            );
         }
     }
 

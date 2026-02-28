@@ -129,7 +129,7 @@ pub enum AgentShieldError {
     #[msg("Flash Trade priceWithSlippage is zero")]
     FlashTradePriceZero,
 
-    #[msg("SPL Transfer to vault stablecoin ATA detected (dust deposit attack)")]
+    #[msg("Top-level SPL Token transfer not allowed between validate and finalize")]
     DustDepositDetected,
 
     #[msg("Cannot parse Jupiter Lend instruction data")]
@@ -140,4 +140,7 @@ pub enum AgentShieldError {
 
     #[msg("DeFi instruction program does not match declared target_protocol")]
     ProtocolMismatch,
+
+    #[msg("Non-stablecoin swap allows exactly one DeFi instruction")]
+    TooManyDeFiInstructions,
 }

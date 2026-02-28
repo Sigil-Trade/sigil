@@ -59,16 +59,15 @@ const sig = await client.executeJupiterSwap({
 
 ## On-Chain Account Model
 
-AgentShield uses 6 PDA account types:
+AgentShield uses 5 PDA account types:
 
 | Account | Seeds | Description |
 |---------|-------|-------------|
 | **AgentVault** | `[b"vault", owner, vault_id]` | Holds owner/agent pubkeys, vault status, fee destination |
-| **PolicyConfig** | `[b"policy", vault]` | Spending caps, protocol mode + protocols, leverage limits, destinations |
+| **PolicyConfig** | `[b"policy", vault]` | Spending caps, protocol mode + protocols, leverage limits, slippage limits, destinations |
 | **SpendTracker** | `[b"tracker", vault]` | Zero-copy 144-epoch circular buffer for rolling 24h USD spend tracking |
 | **SessionAuthority** | `[b"session", vault, agent, token_mint]` | Ephemeral PDA for atomic transaction validation (expires after 20 slots) |
 | **PendingPolicyUpdate** | `[b"pending_policy", vault]` | Queued policy change with timelock, applied after delay |
-| **OracleRegistry** | `[b"oracle_registry"]` | Protocol-level PDA mapping token mints to oracle feeds (max 104 entries) |
 
 ## Instruction Composition Pattern
 
@@ -173,10 +172,9 @@ const tracker = await client.fetchTrackerByAddress(trackerPDA);
 ### Account Types
 
 - **`AgentVaultAccount`** — owner, agent, feeDestination, vaultId, status, stats (totalTransactions, totalVolume)
-- **`PolicyConfigAccount`** — dailySpendingCapUsd, maxTransactionSizeUsd, protocolMode, protocols, maxLeverageBps, maxConcurrentPositions, developerFeeRate, timelockDuration, allowedDestinations
+- **`PolicyConfigAccount`** — dailySpendingCapUsd, maxTransactionSizeUsd, protocolMode, protocols, maxLeverageBps, maxConcurrentPositions, developerFeeRate, timelockDuration, allowedDestinations, maxSlippageBps
 - **`SpendTrackerAccount`** — vault, buckets (`EpochBucket[]` — 144 epochs, epoch_id + usd_amount per bucket)
-- **`OracleRegistryAccount`** — authority, entries (`OracleEntry[]` — mint, oracleFeed, isStablecoin)
-- **`SessionAuthorityAccount`** — vault, agent, actionType, expiresAt, delegated, delegationTokenAccount
+- **`SessionAuthorityAccount`** — vault, agent, actionType, expiresAt, delegated, delegationTokenAccount, outputMint, stablecoinBalanceBefore
 
 ### Enums
 
@@ -203,7 +201,7 @@ import {
   AGENT_SHIELD_PROGRAM_ID,  // 4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL
   JUPITER_V6_API,            // https://quote-api.jup.ag/v6
   JUPITER_PROGRAM_ID,        // JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4
-  FLASH_TRADE_PROGRAM_ID,    // PERPHjGBqRHArX4DySjwM6UJHiR3sWAatqfdBS2qQJu
+  FLASH_TRADE_PROGRAM_ID,    // FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn
 } from "@agent-shield/sdk";
 ```
 

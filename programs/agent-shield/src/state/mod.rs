@@ -114,10 +114,10 @@ pub const JUPITER_PROGRAM: Pubkey = Pubkey::new_from_array([
 ]);
 
 /// Flash Trade (Perpetuals) program
-/// Base58: PERPHjGBqRHArX4DySjwM6UJHiR3sWAatqfdBS2qQJu
+/// Base58: FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn
 pub const FLASH_TRADE_PROGRAM: Pubkey = Pubkey::new_from_array([
-    5, 177, 243, 202, 241, 148, 98, 239, 135, 96, 240, 171, 222, 117, 205, 61, 158, 227, 27, 58,
-    50, 198, 32, 232, 148, 18, 46, 156, 155, 129, 69, 250,
+    212, 236, 82, 74, 222, 71, 209, 50, 127, 252, 246, 137, 90, 104, 93, 148, 41, 240, 55, 144,
+    196, 35, 87, 71, 243, 123, 215, 163, 221, 165, 30, 221,
 ]);
 
 /// Jupiter Lend program (wraps deposits/withdrawals)

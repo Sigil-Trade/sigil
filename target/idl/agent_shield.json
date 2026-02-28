@@ -822,6 +822,58 @@
           "writable": true
         },
         {
+          "name": "policy",
+          "docs": [
+            "Policy config for cap checking during non-stablecoin swap finalization"
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "tracker",
+          "docs": [
+            "Zero-copy SpendTracker for recording non-stablecoin swap value"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  97,
+                  99,
+                  107,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
           "name": "vault_token_account",
           "docs": [
             "Vault's PDA token account for the session's token"
@@ -2550,7 +2602,7 @@
     {
       "code": 6041,
       "name": "DustDepositDetected",
-      "msg": "SPL Transfer to vault stablecoin ATA detected (dust deposit attack)"
+      "msg": "Top-level SPL Token transfer not allowed between validate and finalize"
     },
     {
       "code": 6042,
@@ -2566,6 +2618,11 @@
       "code": 6044,
       "name": "ProtocolMismatch",
       "msg": "DeFi instruction program does not match declared target_protocol"
+    },
+    {
+      "code": 6045,
+      "name": "TooManyDeFiInstructions",
+      "msg": "Non-stablecoin swap allows exactly one DeFi instruction"
     }
   ],
   "types": [

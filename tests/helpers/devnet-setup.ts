@@ -390,6 +390,7 @@ export interface FinalizeOpts {
   payer: Keypair;
   vaultPda: PublicKey;
   policyPda: PublicKey;
+  trackerPda: PublicKey;
   sessionPda: PublicKey;
   agentPubkey: PublicKey;
   vaultTokenAta: PublicKey | null;
@@ -404,6 +405,7 @@ export async function finalize(opts: FinalizeOpts): Promise<string> {
     payer,
     vaultPda,
     policyPda,
+    trackerPda,
     sessionPda,
     agentPubkey,
     vaultTokenAta,
@@ -416,9 +418,10 @@ export async function finalize(opts: FinalizeOpts): Promise<string> {
     .accounts({
       payer: payer.publicKey,
       vault: vaultPda,
-      policy: policyPda,
       session: sessionPda,
       sessionRentRecipient: agentPubkey,
+      policy: policyPda,
+      tracker: trackerPda,
       vaultTokenAccount: vaultTokenAta,
       feeDestinationTokenAccount: feeDestinationAta,
       protocolTreasuryTokenAccount: protocolTreasuryAta,
@@ -442,6 +445,7 @@ export async function authorizeAndFinalize(
     payer: opts.agent,
     vaultPda: opts.vaultPda,
     policyPda: opts.policyPda,
+    trackerPda: opts.trackerPda,
     sessionPda: opts.sessionPda,
     agentPubkey: opts.agent.publicKey,
     vaultTokenAta: opts.vaultTokenAta,

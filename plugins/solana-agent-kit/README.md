@@ -64,7 +64,7 @@ const protectedWallet = createShieldedWallet({
 
 ## Tools
 
-The plugin registers 5 monitoring/management tools on the agent:
+The plugin registers 6 monitoring/management tools on the agent:
 
 | Tool | Description | Parameters |
 |------|-------------|------------|
@@ -72,6 +72,8 @@ The plugin registers 5 monitoring/management tools on the agent:
 | `shield_update_policy` | Update spending limits or program blocking at runtime | `maxSpend?`, `blockUnknownPrograms?` |
 | `shield_pause_resume` | Pause or resume policy enforcement | `action: "pause" \| "resume"` |
 | `shield_transaction_history` | View per-token usage percentages and rate limit summary | *(none)* |
+| `shield_provision` | Provision a vault via Solana Actions | `vaultAddress` |
+| `shield_x402_fetch` | Fetch a URL with automatic x402 payment negotiation | `url`, `method?`, `body?` |
 
 ### Tool Details
 
@@ -170,7 +172,7 @@ When using `rawWallet`, the factory automatically wires event callbacks to the l
 
 | Export | Description |
 |--------|-------------|
-| `createAgentShieldPlugin(config)` | Create the SAK plugin with 4 tools |
+| `createAgentShieldPlugin(config)` | Create the SAK plugin with 6 tools |
 | `createShieldedWallet(config)` | Standalone factory for ShieldedWallet creation |
 | `resolveWallet(config)` | Resolve config to a `{ wallet: ShieldedWallet }` |
 | `status(agent, config, input)` | Status tool handler (for custom use) |

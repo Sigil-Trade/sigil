@@ -18,19 +18,19 @@ import { composePermittedAction } from "../composer";
 // ---------------------------------------------------------------------------
 
 export const FLASH_TRADE_PROGRAM_ID = new PublicKey(
-  "PERPHjGBqRHArX4DySjwM6UJHiR3sWAatqfdBS2qQJu",
+  "FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn",
 );
 
 export const FLASH_COMPOSABILITY_PROGRAM_ID = new PublicKey(
-  "FLCPaG22cpZBSdbmk6kBhHsGDfkJGHsSRhgSt9kPV7sG",
+  "FSWAPViR8ny5K96hezav8jynVubP2dJ2L7SbKzds2hwm",
 );
 
 export const FLASH_FB_NFT_REWARD_PROGRAM_ID = new PublicKey(
-  "FBnftwLhsQJPHkGEjVVgPXnxFjTsePDqQnmzixiJbsAV",
+  "FBRWDXSLysNbFQk64MQJcpkXP8e4fjezsGabV8jV7d7o",
 );
 
 export const FLASH_REWARD_DISTRIBUTION_PROGRAM_ID = new PublicKey(
-  "FLRDaTyVhUFJwdwtBjCKMDGNbMFrHm5GVXE1aVjMCaH1",
+  "FARNT7LL119pmy9vSkN9q1ApZESPaKHuuX5Acz1oBoME",
 );
 
 // Re-export flash-sdk types for consumers

@@ -22,8 +22,8 @@ export const KNOWN_PROTOCOLS: ReadonlyMap<string, string> = new Map([
   ["DecZY86MU5Gj7kppfUCEmd4LbXXuyZH1yHaP2NTqdiZB", "Openbook V2"],
 
   // Perpetuals / Leverage
-  ["PERPHjGBqRHArX4DySjwM6UJHiR3sWAatqfdBS2qQJu", "Flash Trade"],
-  ["FLCPaG22cpZBSdbmk6kBhHsGDfkJGHsSRhgSt9kPV7sG", "Flash Composability"],
+  ["FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn", "Flash Trade"],
+  ["FSWAPViR8ny5K96hezav8jynVubP2dJ2L7SbKzds2hwm", "Flash Composability"],
   ["dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH", "Drift Protocol"],
   ["MNGOHoFrnGrovWiCc9kHZB8xEBKM1XPYnZCpWFbRCev", "Mango Markets V4"],
 

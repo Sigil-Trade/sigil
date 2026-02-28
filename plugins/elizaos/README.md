@@ -41,7 +41,7 @@ The plugin reads environment variables to create a `ShieldedWallet` automaticall
 
 ## Actions
 
-The plugin provides 5 actions that agents can invoke conversationally:
+The plugin provides 6 actions that agents can invoke conversationally:
 
 ### `SHIELD_STATUS`
 
@@ -116,6 +116,18 @@ Enforcement: ACTIVE
   Remaining: 55
   Window: 1h"
 ```
+
+### `SHIELD_PROVISION`
+
+**Triggers:** "provision vault", "create vault", "set up vault", "provision shield"
+
+Provisions a new vault via Solana Actions Blink URL.
+
+### `SHIELD_X402_FETCH`
+
+**Triggers:** "fetch with payment", "x402 fetch", "paid fetch", "shielded fetch"
+
+Fetches a URL with automatic x402 payment negotiation, policy-enforced.
 
 ## Providers
 

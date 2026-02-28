@@ -1,7 +1,7 @@
 # AgentShield
 
 [![CI](https://github.com/Kaleb-Rupe/agentshield/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Kaleb-Rupe/agentshield/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-988-brightgreen)
+![Tests](https://img.shields.io/badge/tests-1032-brightgreen)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 
 On-chain guardrails for AI agents on Solana. Your policies are enforced by Solana validators, not software promises.
@@ -71,7 +71,7 @@ All instructions succeed or all revert atomically. The agent's signing key is va
 | **SessionAuthority**    | `[b"session", vault, agent, token_mint]` | Ephemeral PDA created per action, expires after 20 slots                                           |
 | **PendingPolicyUpdate** | `[b"pending_policy", vault]`             | Queued policy change with timelock, applied after delay                                            |
 
-### On-Chain Instructions (14)
+### On-Chain Instructions (15)
 
 | Instruction              | Signer | Description                                                    |
 | ------------------------ | ------ | -------------------------------------------------------------- |
@@ -89,6 +89,7 @@ All instructions succeed or all revert atomically. The agent's signing key is va
 | `apply_pending_policy`   | Owner  | Apply queued change after timelock expires                     |
 | `cancel_pending_policy`  | Owner  | Cancel queued policy change                                    |
 | `agent_transfer`         | Agent  | Transfer stablecoins to allowlisted destination                |
+| `sync_positions`         | Owner  | Correct open position counter if out of sync                   |
 
 ## Packages
 
@@ -170,12 +171,12 @@ anchor build --no-idl
 # Generate IDL separately (requires nightly Rust — anchor-syn 0.32.1 bug)
 RUSTUP_TOOLCHAIN=nightly anchor idl build -o target/idl/agent_shield.json
 
-# Run on-chain tests (225 LiteSVM tests — no validator needed)
+# Run on-chain tests (222 LiteSVM tests — no validator needed)
 npx ts-mocha -p ./tsconfig.json -t 300000 \
   tests/agent-shield.ts tests/jupiter-integration.ts \
   tests/flash-trade-integration.ts tests/security-exploits.ts
 
-# Run all TypeScript tests (713 tests across 8 suites)
+# Run all TypeScript tests (734 tests across 8 suites)
 pnpm -r run test
 
 # Lint
@@ -188,20 +189,21 @@ cargo fmt --check --manifest-path programs/agent-shield/Cargo.toml
 | Suite                                                | Tests   |
 | ---------------------------------------------------- | ------- |
 | Core vault management & permission engine            |      67 |
-| Jupiter integration (composed swaps)                 |       8 |
-| Jupiter Lend integration (deposit/withdraw)          |       6 |
-| Flash Trade integration (leveraged perps)            |      29 |
+| Jupiter integration (composed swaps)                 |       9 |
+| Jupiter Lend integration (deposit/withdraw)          |       7 |
+| Flash Trade integration (leveraged perps)            |      30 |
 | Security exploit scenarios                           |     109 |
 | Devnet integration tests (real network)              |      56 |
-| Core policy engine (`@agent-shield/core`)            |      66 |
-| SDK tests (`@agent-shield/sdk`)                      |     192 |
+| Surfpool integration tests (local Surfnet)           |      20 |
+| Core policy engine (`@agent-shield/core`)            |      73 |
+| SDK tests (`@agent-shield/sdk`)                      |     199 |
 | Platform client tests (`@agent-shield/platform`)     |      17 |
 | Crossmint custody adapter                            |      29 |
 | SAK plugin (`@agent-shield/plugin-solana-agent-kit`) |      29 |
 | ElizaOS plugin (`@agent-shield/plugin-elizaos`)      |      35 |
-| MCP server (`@agent-shield/mcp`)                     |     280 |
-| Actions server (`@agent-shield/actions-server`)      |      65 |
-| **Total**                                            | **988** |
+| MCP server (`@agent-shield/mcp`)                     |     291 |
+| Actions server (`@agent-shield/actions-server`)      |      61 |
+| **Total**                                            | **1032** |
 
 ## Security
 

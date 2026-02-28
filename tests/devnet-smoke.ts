@@ -1,8 +1,8 @@
 /**
- * Devnet Smoke Tests — 10 tests (V2)
+ * Devnet Smoke Tests — 9 tests (V2)
  *
  * Full lifecycle: initialize_vault -> deposit -> register_agent ->
- * update_policy -> validate_and_authorize -> finalize_session ->
+ * update_policy -> validate_and_authorize+finalize_session (composed) ->
  * withdraw -> revoke -> reactivate -> close_vault.
  *
  *     Stablecoin-only architecture. initializeVault takes 11 args.
@@ -15,6 +15,9 @@ import {
   PublicKey,
   SystemProgram,
   LAMPORTS_PER_SOL,
+  SYSVAR_INSTRUCTIONS_PUBKEY,
+  TransactionMessage,
+  VersionedTransaction,
 } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
@@ -210,8 +213,9 @@ describe("devnet-smoke-test", () => {
     console.log("    Policy updated: max_leverage_bps = 5000");
   });
 
-  it("5. validate_and_authorize", async () => {
-    await program.methods
+  it("5. validate_and_authorize + finalize_session (composed)", async () => {
+    // Build validate instruction
+    const validateIx = await program.methods
       .validateAndAuthorize(
         { swap: {} },
         usdcMint,
@@ -227,48 +231,61 @@ describe("devnet-smoke-test", () => {
         session: sessionPda,
         vaultTokenAccount: vaultUsdcAta,
         tokenMintAccount: usdcMint,
+        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+        feeDestinationTokenAccount: null,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
+        instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+        outputStablecoinAccount: null,
       } as any)
-      .signers([agent])
-      .rpc();
+      .instruction();
 
-    const session = await program.account.sessionAuthority.fetch(sessionPda);
-    expect(session.authorized).to.equal(true);
-    expect(session.authorizedAmount.toNumber()).to.equal(50_000_000);
-    console.log("    Session authorized for 50 tokens");
-  });
-
-  it("6. finalize_session", async () => {
-    // V2: no tracker in accounts
-    await program.methods
+    // Build finalize instruction
+    const finalizeIx = await program.methods
       .finalizeSession(true)
       .accounts({
         payer: agent.publicKey,
         vault: vaultPda,
-        policy: policyPda,
         session: sessionPda,
         sessionRentRecipient: agent.publicKey,
+        policy: policyPda,
+        tracker: trackerPda,
         vaultTokenAccount: vaultUsdcAta,
         feeDestinationTokenAccount: null,
         protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
+        instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+        outputStablecoinAccount: null,
       } as any)
-      .signers([agent])
-      .rpc();
+      .instruction();
 
-    // Session should be closed
+    // Compose into a single versioned transaction
+    const { blockhash } = await connection.getLatestBlockhash();
+    const messageV0 = new TransactionMessage({
+      payerKey: agent.publicKey,
+      recentBlockhash: blockhash,
+      instructions: [validateIx, finalizeIx],
+    }).compileToV0Message();
+
+    const tx = new VersionedTransaction(messageV0);
+    tx.sign([agent]);
+    const sig = await connection.sendTransaction(tx);
+    await connection.confirmTransaction(sig, "confirmed");
+
+    // Session should be closed (finalize closes it)
     const sessionInfo = await connection.getAccountInfo(sessionPda);
     expect(sessionInfo).to.be.null;
 
     const vault = await program.account.agentVault.fetch(vaultPda);
     expect(vault.totalTransactions.toNumber()).to.equal(1);
     expect(vault.totalVolume.toNumber()).to.equal(50_000_000);
-    console.log("    Session finalized, tx count = 1, volume = 50M");
+    console.log(
+      "    Session authorized + finalized in one tx, tx count = 1, volume = 50M",
+    );
   });
 
-  it("7. withdraw_funds", async () => {
+  it("6. withdraw_funds", async () => {
     await program.methods
       .withdrawFunds(new BN(50_000_000)) // withdraw 50 tokens
       .accounts({
@@ -289,7 +306,7 @@ describe("devnet-smoke-test", () => {
     console.log(`    Withdrew 50 tokens, vault balance = ${remainingBalance}`);
   });
 
-  it("8. revoke_agent (kill switch)", async () => {
+  it("7. revoke_agent (kill switch)", async () => {
     await program.methods
       .revokeAgent()
       .accounts({
@@ -303,7 +320,7 @@ describe("devnet-smoke-test", () => {
     console.log("    Vault frozen via kill switch");
   });
 
-  it("9. reactivate_vault", async () => {
+  it("8. reactivate_vault", async () => {
     // revokeAgent clears the agent, so we must provide a new one
     await program.methods
       .reactivateVault(agent.publicKey)
@@ -318,7 +335,7 @@ describe("devnet-smoke-test", () => {
     console.log("    Vault reactivated");
   });
 
-  it("10. withdraw remaining + close_vault", async () => {
+  it("9. withdraw remaining + close_vault", async () => {
     // Withdraw remaining balance (100M - protocolFee - 50M withdrawn)
     const remaining = await getAccount(connection, vaultUsdcAta);
     await program.methods
@@ -358,6 +375,6 @@ describe("devnet-smoke-test", () => {
     const balAfter = await connection.getBalance(owner.publicKey);
     expect(balAfter).to.be.greaterThan(balBefore);
     console.log("    Vault closed, rent reclaimed");
-    console.log("    All 10 lifecycle steps passed on devnet!");
+    console.log("    All 9 lifecycle steps passed on devnet!");
   });
 });

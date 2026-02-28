@@ -32,12 +32,16 @@ const total = data.suites.reduce((sum, s) => sum + s.count, 0);
 // Categorize suites
 const onChainSuites = data.suites.filter((s) => s.onChain);
 const devnetSuites = data.suites.filter((s) => s.devnet);
-const tsSuites = data.suites.filter((s) => !s.onChain && !s.devnet);
+const surfpoolSuites = data.suites.filter((s) => s.surfpool);
+const tsSuites = data.suites.filter(
+  (s) => !s.onChain && !s.devnet && !s.surfpool,
+);
 const onChainCount = onChainSuites.reduce((sum, s) => sum + s.count, 0);
 const devnetCount = devnetSuites.reduce((sum, s) => sum + s.count, 0);
+const surfpoolCount = surfpoolSuites.reduce((sum, s) => sum + s.count, 0);
 const tsCount = tsSuites.reduce((sum, s) => sum + s.count, 0);
 const tsSuiteCount = tsSuites.length;
-const ciCount = onChainCount + tsCount; // CI = on-chain + TS (no devnet)
+const ciCount = onChainCount + tsCount; // CI = on-chain + TS (no devnet/surfpool)
 
 // Escape regex special characters
 function escapeRegex(str) {
@@ -79,9 +83,9 @@ function updateFile(filePath, label, updater) {
 
 // ── 1. README.md ───────────────────────────────────────────────────
 updateFile("README.md", "root README", (content) => {
-  // Badge
+  // Badge (no commas in badge URLs)
   content = content.replace(
-    /tests-\d+-brightgreen/,
+    /tests-[\d,]+-brightgreen/,
     `tests-${total}-brightgreen`,
   );
 
@@ -93,8 +97,8 @@ updateFile("README.md", "root README", (content) => {
 
   // On-chain test count in development comment
   content = content.replace(
-    /Run on-chain tests \(\d+ tests,/,
-    `Run on-chain tests (${onChainCount} tests,`,
+    /Run on-chain tests \(\d+[^)]*tests/,
+    `Run on-chain tests (${onChainCount} LiteSVM tests`,
   );
 
   // Rebuild table between "### Test Suites" and "## Security"
@@ -139,9 +143,10 @@ updateFile(".github/workflows/ci.yml", "CI workflow", (content) => {
   );
 
   // Header: total (with breakdown in parentheses)
+  // Note: \d[\d,]* handles comma-formatted numbers like "1,032"
   content = content.replace(
-    /Total: \d+ tests across \d+ suites \([^)]*\)/,
-    `Total: ${total} tests across ${data.suites.length} suites (${tsCount} TS + ${onChainCount} on-chain + ${devnetCount} devnet)`,
+    /Total: ~?\d[\d,]* tests across \d+ suites \([^)]*\)/,
+    `Total: ~${total.toLocaleString()} tests across ${data.suites.length} suites (${tsCount} TS + ${onChainCount} on-chain + ${surfpoolCount} Surfpool + ${devnetCount} devnet)`,
   );
 
   // Job 1 comment
@@ -159,6 +164,18 @@ updateFile(".github/workflows/ci.yml", "CI workflow", (content) => {
     );
     content = content.replace(re, `$1 (${suite.count} tests)`);
   }
+
+  // Surfpool comment line: "N tests"
+  content = content.replace(
+    /surfpool-integration\s+—[^,]*,\s*\d+ tests/,
+    `surfpool-integration   — Surfpool integration tests, ${surfpoolCount} tests`,
+  );
+
+  // On-chain LiteSVM count in header
+  content = content.replace(
+    /LiteSVM \d+ tests/,
+    `LiteSVM ${onChainCount} tests`,
+  );
 
   return content;
 });
@@ -199,10 +216,11 @@ updateFile(
 
 // ── 5. CLAUDE.md ──────────────────────────────────────────────────
 updateFile("CLAUDE.md", "CLAUDE.md", (content) => {
-  // Total line: "N tests passing across M suites (X CI + Y devnet)"
+  // Total line: "N tests passing across M suites (X CI + Y Surfpool + Z devnet)"
+  // Note: \d[\d,]* handles comma-formatted numbers like "1,032"
   content = content.replace(
-    /\d+ tests passing across \d+ suites \(\d+ CI \+ \d+ devnet\)/,
-    `${total} tests passing across ${data.suites.length} suites (${ciCount} CI + ${devnetCount} devnet)`,
+    /~?\d[\d,]* tests passing across \d+ suites \([^)]*\)/,
+    `~${total.toLocaleString()} tests passing across ${data.suites.length} suites (${ciCount} CI + ${surfpoolCount} Surfpool + ${devnetCount} devnet)`,
   );
 
   // Devnet total line: "Devnet total: N tests across 8 files"

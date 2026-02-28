@@ -40,7 +40,6 @@ The following are in scope for security reports:
 - SDK transaction construction (`sdk/typescript/`)
 - MCP server tool handlers (`packages/mcp/`)
 - Serverless API endpoints (`api/`)
-- Oracle price parsing logic
 - Session authority lifecycle
 - Fee calculation and distribution
 

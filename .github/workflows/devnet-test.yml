@@ -2,7 +2,7 @@
 #
 # Triggers:
 #   - Push to main (path-filtered: programs, tests, workflow, Anchor.toml)
-#   - Nightly at 2 AM UTC (catches network/RPC drift, oracle staleness)
+#   - Nightly at 2 AM UTC (catches network/RPC drift)
 #   - Manual dispatch (optional: specific test file or verbose mode)
 #
 # 56 tests across 8 files. Costs SOL — never runs on PRs.

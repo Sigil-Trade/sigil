@@ -6,7 +6,7 @@ export interface ErrorInfo {
 }
 
 /**
- * Maps all 45 AgentShield Anchor error codes (6000–6044) to
+ * Maps all 46 AgentShield Anchor error codes (6000–6045) to
  * human-readable messages with actionable suggestions for AI tools.
  */
 const ERROR_MAP: Record<number, ErrorInfo> = {
@@ -296,9 +296,9 @@ const ERROR_MAP: Record<number, ErrorInfo> = {
     code: 6041,
     name: "DustDepositDetected",
     message:
-      "SPL Transfer to vault stablecoin ATA detected (dust deposit attack)",
+      "Top-level SPL Token transfer not allowed between validate and finalize",
     suggestion:
-      "A top-level SPL Token transfer to the vault's stablecoin account was detected between validate and finalize. Legitimate swaps use CPI through Jupiter/Flash Trade, not top-level transfers.",
+      "A top-level SPL Token Transfer or TransferChecked instruction was detected between validate and finalize. All token movements must happen via CPI through recognized DeFi programs (Jupiter, Flash Trade), not as top-level SPL Token instructions.",
   },
   6042: {
     code: 6042,
@@ -320,6 +320,13 @@ const ERROR_MAP: Record<number, ErrorInfo> = {
     message: "DeFi instruction program does not match declared target_protocol",
     suggestion:
       "The DeFi instruction targets a different program than declared in target_protocol. Ensure target_protocol matches the actual program ID of the DeFi instruction in the transaction.",
+  },
+  6045: {
+    code: 6045,
+    name: "TooManyDeFiInstructions",
+    message: "Non-stablecoin swap allows exactly one DeFi instruction",
+    suggestion:
+      "Non-stablecoin swaps allow exactly one DeFi instruction per session. Split multi-step swaps into separate transactions (e.g., WIF→USDC then USDC→BONK).",
   },
 };
 

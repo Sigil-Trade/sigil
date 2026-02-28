@@ -8,7 +8,7 @@ import {
 // Must match integrations/jupiter.ts and integrations/flash-trade.ts
 const JUPITER_PROGRAM = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4";
 const JUPITER_LEND_PROGRAM = "JLend2fEim9xUFcaHsyGePEoBzFLvkjMi3MnPcSuCdu";
-const FLASH_TRADE_PROGRAM = "PERPHjGBqRHArX4DySjwM6UJHiR3sWAatqfdBS2qQJu";
+const FLASH_TRADE_PROGRAM = "FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn";
 
 // ─── CU Budget Defaults ─────────────────────────────────────────────────────
 // Measured via LiteSVM. Shield overhead (validate+finalize) is 52–62K CU.

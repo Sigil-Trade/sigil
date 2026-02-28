@@ -1682,7 +1682,7 @@ export const IDL = {
     {
       code: 6041,
       name: "DustDepositDetected",
-      msg: "SPL Transfer to vault stablecoin ATA detected (dust deposit attack)",
+      msg: "Top-level SPL Token transfer not allowed between validate and finalize",
     },
     {
       code: 6042,
@@ -1698,6 +1698,11 @@ export const IDL = {
       code: 6044,
       name: "ProtocolMismatch",
       msg: "DeFi instruction program does not match declared target_protocol",
+    },
+    {
+      code: 6045,
+      name: "TooManyDeFiInstructions",
+      msg: "Non-stablecoin swap allows exactly one DeFi instruction",
     },
   ],
   types: [

@@ -5,7 +5,7 @@
  * On devnet, 20 slots = ~8-12 real seconds.
  *
  *     Stablecoin-only architecture.
- *     finalizeSession has no tracker account.
+ *     finalizeSession includes policy and tracker accounts.
  */
 import * as anchor from "@coral-xyz/anchor";
 import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
@@ -160,6 +160,7 @@ describe("devnet-sessions", () => {
       payer: agent,
       vaultPda: vault.vaultPda,
       policyPda: vault.policyPda,
+      trackerPda: vault.trackerPda,
       sessionPda,
       agentPubkey: agent.publicKey,
       vaultTokenAta: vault.vaultTokenAta,
@@ -211,6 +212,7 @@ describe("devnet-sessions", () => {
       payer: thirdParty,
       vaultPda: vault.vaultPda,
       policyPda: vault.policyPda,
+      trackerPda: vault.trackerPda,
       sessionPda,
       agentPubkey: agent.publicKey,
       vaultTokenAta: vault.vaultTokenAta,
@@ -252,6 +254,7 @@ describe("devnet-sessions", () => {
         payer: thirdParty,
         vaultPda: vault.vaultPda,
         policyPda: vault.policyPda,
+        trackerPda: vault.trackerPda,
         sessionPda,
         agentPubkey: agent.publicKey,
         vaultTokenAta: vault.vaultTokenAta,
@@ -270,6 +273,7 @@ describe("devnet-sessions", () => {
       payer: agent,
       vaultPda: vault.vaultPda,
       policyPda: vault.policyPda,
+      trackerPda: vault.trackerPda,
       sessionPda,
       agentPubkey: agent.publicKey,
       vaultTokenAta: vault.vaultTokenAta,
@@ -334,6 +338,7 @@ describe("devnet-sessions", () => {
       payer: agent,
       vaultPda: vault.vaultPda,
       policyPda: vault.policyPda,
+      trackerPda: vault.trackerPda,
       sessionPda: sessionPdaA,
       agentPubkey: agent.publicKey,
       vaultTokenAta: vault.vaultTokenAta,
@@ -346,6 +351,7 @@ describe("devnet-sessions", () => {
       payer: agent,
       vaultPda: vault.vaultPda,
       policyPda: vault.policyPda,
+      trackerPda: vault.trackerPda,
       sessionPda: sessionPdaB,
       agentPubkey: agent.publicKey,
       vaultTokenAta: mintBVaultAta,
@@ -405,6 +411,7 @@ describe("devnet-sessions", () => {
       payer: agent,
       vaultPda: vault.vaultPda,
       policyPda: vault.policyPda,
+      trackerPda: vault.trackerPda,
       sessionPda,
       agentPubkey: agent.publicKey,
       vaultTokenAta: vault.vaultTokenAta,
@@ -445,6 +452,7 @@ describe("devnet-sessions", () => {
       payer: agent,
       vaultPda: vault.vaultPda,
       policyPda: vault.policyPda,
+      trackerPda: vault.trackerPda,
       sessionPda,
       agentPubkey: agent.publicKey,
       vaultTokenAta: vault.vaultTokenAta,

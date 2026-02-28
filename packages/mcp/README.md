@@ -76,7 +76,7 @@ Add to `.cursor/mcp.json` in your project:
 }
 ```
 
-## Tools (22)
+## Tools (49)
 
 ### Setup & Onboarding (always available — no wallet required)
 
@@ -113,12 +113,58 @@ Add to `.cursor/mcp.json` in your project:
 
 ### Agent-Signed (Requires `AGENTSHIELD_AGENT_KEYPAIR_PATH`)
 
-| Tool                    | Description                                     |
-| ----------------------- | ----------------------------------------------- |
-| `shield_execute_swap`   | Execute a Jupiter token swap through the vault  |
-| `shield_open_position`  | Open a Flash Trade leveraged perpetual position |
-| `shield_close_position` | Close a Flash Trade perpetual position          |
-| `shield_agent_transfer` | Transfer tokens to an allowlisted destination   |
+| Tool                              | Description                                           |
+| --------------------------------- | ----------------------------------------------------- |
+| `shield_execute_swap`             | Execute a Jupiter token swap through the vault        |
+| `shield_agent_transfer`           | Transfer tokens to an allowlisted destination         |
+| `shield_open_position`            | Open a Flash Trade leveraged perpetual position       |
+| `shield_close_position`           | Close a Flash Trade perpetual position                |
+| `shield_increase_size`            | Increase an existing Flash Trade position             |
+| `shield_decrease_size`            | Decrease an existing Flash Trade position             |
+| `shield_add_collateral`           | Add collateral to a Flash Trade position              |
+| `shield_remove_collateral`        | Remove collateral from a Flash Trade position         |
+| `shield_place_trigger_order`      | Place a trigger order (take-profit/stop-loss)         |
+| `shield_cancel_trigger_order`     | Cancel a trigger order                                |
+| `shield_place_limit_order`        | Place a limit order                                   |
+| `shield_cancel_limit_order`       | Cancel a limit order                                  |
+| `shield_sync_positions`           | Sync vault open position counter                      |
+| `shield_swap_and_open`            | Swap token then open a Flash Trade position           |
+| `shield_close_and_swap`           | Close a Flash Trade position then swap output         |
+| `shield_lend_deposit`             | Deposit into Jupiter Lend                             |
+| `shield_lend_withdraw`            | Withdraw from Jupiter Lend                            |
+| `shield_create_trigger_order_jup` | Create a Jupiter trigger order                        |
+| `shield_cancel_trigger_order_jup` | Cancel a Jupiter trigger order                        |
+| `shield_create_recurring_order`   | Create a Jupiter recurring order (DCA)                |
+| `shield_cancel_recurring_order`   | Cancel a Jupiter recurring order                      |
+
+### Read-Only (Jupiter)
+
+| Tool                          | Description                                |
+| ----------------------------- | ------------------------------------------ |
+| `shield_get_prices`           | Get token prices from Jupiter              |
+| `shield_search_tokens`        | Search for tokens by name or symbol        |
+| `shield_trending_tokens`      | Get trending tokens from Jupiter           |
+| `shield_lend_tokens`          | Get available Jupiter Lend tokens/rates    |
+| `shield_get_trigger_orders_jup` | Get Jupiter trigger orders for a wallet  |
+| `shield_get_recurring_orders` | Get Jupiter recurring orders for a wallet  |
+| `shield_jupiter_portfolio`    | Get portfolio overview from Jupiter        |
+
+### Squads V4 Multisig Governance
+
+| Tool                              | Description                                  |
+| --------------------------------- | -------------------------------------------- |
+| `shield_squads_create_multisig`   | Create a Squads multisig                     |
+| `shield_squads_propose_action`    | Propose a vault action via multisig          |
+| `shield_squads_approve`           | Approve a multisig proposal                  |
+| `shield_squads_reject`            | Reject a multisig proposal                   |
+| `shield_squads_execute`           | Execute an approved multisig transaction     |
+| `shield_squads_status`            | Check multisig and proposal status           |
+
+### Utility
+
+| Tool                 | Description                                              |
+| -------------------- | -------------------------------------------------------- |
+| `shield_x402_fetch`  | Fetch a URL with automatic x402 payment negotiation      |
 
 ## Resources (3)
 
@@ -139,7 +185,7 @@ pnpm install
 # Build
 pnpm build
 
-# Run tests (280 tests)
+# Run tests (291 tests)
 pnpm test
 
 # Smoke test
@@ -154,7 +200,7 @@ AGENTSHIELD_WALLET_PATH=~/.config/solana/id.json node dist/index.js
 - **Setup mode**: Starts without a wallet — only setup/onboarding tools available until configured
 - **Programmatic config**: `shield_configure_from_file` reads a JSON config matching the `ShieldLocalConfig` schema — for CI/CD pipelines and orchestrator platforms where interactive setup is not practical
 - **Local config**: `~/.agentshield/config.json` stores wallet, layer status, and policy state across sessions
-- **Error handling**: All 40 Anchor error codes (6000-6039) mapped to human-readable messages with actionable suggestions
+- **Error handling**: All 46 Anchor error codes (6000-6045) mapped to human-readable messages with actionable suggestions
 
 ## Support
 

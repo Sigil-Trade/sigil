@@ -162,6 +162,8 @@ describe("flash-trade-integration", () => {
         vault,
         session,
         sessionRentRecipient: agentKp.publicKey,
+        policy,
+        tracker,
         vaultTokenAccount: effectiveVaultAta,
         outputStablecoinAccount: null,
         tokenProgram: TOKEN_PROGRAM_ID,

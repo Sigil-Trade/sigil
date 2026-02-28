@@ -446,7 +446,7 @@ describe("wrapper — shieldWallet() & harden()", () => {
       const analysis = analyzeTransaction(tx, wallet.publicKey);
       // Only allow Flash Trade, not Jupiter
       const policies = resolvePolicies({
-        allowedProtocols: ["PERPHjGBqRHArX4DySjwM6UJHiR3sWAatqfdBS2qQJu"],
+        allowedProtocols: ["FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn"],
       });
       const state = new ShieldState();
 

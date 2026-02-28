@@ -2,6 +2,8 @@ use anchor_lang::prelude::*;
 use anchor_lang::solana_program::instruction::get_stack_height;
 use anchor_spl::token::{self, Revoke, Token, TokenAccount};
 
+use anchor_lang::accounts::account_loader::AccountLoader;
+
 use crate::errors::AgentShieldError;
 use crate::events::{DelegationRevoked, SessionFinalized};
 use crate::state::{PositionEffect, *};
@@ -37,6 +39,21 @@ pub struct FinalizeSession<'info> {
     /// CHECK: Set to session.agent at runtime; receives rent from closed session.
     #[account(mut)]
     pub session_rent_recipient: UncheckedAccount<'info>,
+
+    /// Policy config for cap checking during non-stablecoin swap finalization
+    #[account(
+        seeds = [b"policy", vault.key().as_ref()],
+        bump = policy.bump,
+    )]
+    pub policy: Account<'info, PolicyConfig>,
+
+    /// Zero-copy SpendTracker for recording non-stablecoin swap value
+    #[account(
+        mut,
+        seeds = [b"tracker", vault.key().as_ref()],
+        bump,
+    )]
+    pub tracker: AccountLoader<'info, SpendTracker>,
 
     /// Vault's PDA token account for the session's token
     #[account(mut)]
@@ -167,6 +184,34 @@ pub fn handler(ctx: Context<FinalizeSession>, success: bool) -> Result<()> {
             stablecoin_account.amount > session_balance_before,
             AgentShieldError::NonTrackedSwapMustReturnStablecoin
         );
+
+        // Track stablecoin delta: how much USD the non-stablecoin swap produced
+        let stablecoin_delta = stablecoin_account
+            .amount
+            .checked_sub(session_balance_before)
+            .ok_or(AgentShieldError::Overflow)?;
+
+        // Single-transaction USD limit
+        let policy = &ctx.accounts.policy;
+        require!(
+            stablecoin_delta <= policy.max_transaction_size_usd,
+            AgentShieldError::TransactionTooLarge
+        );
+
+        // Rolling 24h cap check
+        let mut tracker = ctx.accounts.tracker.load_mut()?;
+        let rolling_usd = tracker.get_rolling_24h_usd(&clock);
+        let new_total = rolling_usd
+            .checked_add(stablecoin_delta)
+            .ok_or(AgentShieldError::Overflow)?;
+        require!(
+            new_total <= policy.daily_spending_cap_usd,
+            AgentShieldError::DailyCapExceeded
+        );
+
+        // Record spend in tracker
+        tracker.record_spend(&clock, stablecoin_delta)?;
+        drop(tracker);
     }
 
     // Update vault stats on success (fees already collected in validate)

@@ -3,9 +3,9 @@
 # Runs on every push to main and on pull requests.
 # Eight jobs (1 detection + 6 parallel + 1 gate):
 #   0. changes                — Detect which file groups changed (package-level path filtering)
-#   1. build-lint-test        — TypeScript builds, Prettier, 682 TS tests (conditional: any-ts or push)
+#   1. build-lint-test        — TypeScript builds, Prettier, 734 TS tests (conditional: any-ts or push)
 #   2. rust-checks            — cargo fmt + cargo clippy (conditional: rust changes or push)
-#   3. on-chain-tests         — Anchor build + LiteSVM 219 tests (conditional: rust changes or push)
+#   3. on-chain-tests         — Anchor build + LiteSVM 222 tests (conditional: rust changes or push)
 #  3b. build-verification     — Feature flag safety net (conditional: rust changes or push)
 #  3c. surfpool-integration   — Surfpool integration tests, 20 tests (conditional: rust changes or push)
 #   4. security-scan          — Sec3 X-Ray static analysis (always, BLOCKING)
@@ -24,7 +24,7 @@
 #   apps/ → Actions server tests
 #   sdk/typescript → all downstream suites (everything depends on SDK)
 #
-# Total: ~999 tests across 15 suites (682 TS + 219 on-chain + 22 Surfpool + 70 devnet)
+# Total: ~1,032 tests across 15 suites (734 TS + 222 on-chain + 20 Surfpool + 56 devnet)
 # All security checks are BLOCKING — zero tolerance for known issues.
 
 name: CI
@@ -106,7 +106,7 @@ jobs:
               - 'tsconfig*.json'
 
   # ──────────────────────────────────────────────────────────────
-  # Job 1: TypeScript build, lint, and tests (8 suites, 713 tests)
+  # Job 1: TypeScript build, lint, and tests (8 suites, 734 tests)
   # ──────────────────────────────────────────────────────────────
   build-lint-test:
     name: Build, Lint & TS Tests
@@ -167,7 +167,7 @@ jobs:
             "apps/actions-server/src/**/*.ts" \
             "apps/actions-server/tests/**/*.ts"
 
-      - name: Core policy engine tests (66 tests)
+      - name: Core policy engine tests (73 tests)
         if: >-
           needs.changes.outputs.sdk-core == 'true' ||
           needs.changes.outputs.sdk-typescript == 'true' ||
@@ -175,7 +175,7 @@ jobs:
         working-directory: sdk/core
         run: pnpm test
 
-      - name: SDK tests (192 tests)
+      - name: SDK tests (199 tests)
         if: >-
           needs.changes.outputs.sdk-typescript == 'true' ||
           github.event_name == 'push'
@@ -214,7 +214,7 @@ jobs:
         working-directory: plugins/elizaos
         run: pnpm test
 
-      - name: MCP server tests (280 tests)
+      - name: MCP server tests (291 tests)
         if: >-
           needs.changes.outputs.packages == 'true' ||
           needs.changes.outputs.sdk-typescript == 'true' ||
@@ -222,7 +222,7 @@ jobs:
         working-directory: packages/mcp
         run: pnpm test
 
-      - name: Actions server tests (65 tests)
+      - name: Actions server tests (61 tests)
         if: >-
           needs.changes.outputs.apps == 'true' ||
           needs.changes.outputs.sdk-typescript == 'true' ||
@@ -372,6 +372,7 @@ jobs:
           npx ts-mocha -p ./tsconfig.json -t 300000 \
             tests/agent-shield.ts \
             tests/jupiter-integration.ts \
+            tests/jupiter-lend-integration.ts \
             tests/flash-trade-integration.ts \
             tests/security-exploits.ts
 
@@ -475,7 +476,7 @@ jobs:
           echo "No unguarded devnet addresses found."
 
   # ──────────────────────────────────────────────────────────────
-  # Job 3c: Surfpool integration tests (~22 tests)
+  # Job 3c: Surfpool integration tests (20 tests)
   #
   # Runs against a local Surfnet (LiteSVM-backed validator with
   # lazy devnet forking). Tests session expiry with real slots,
