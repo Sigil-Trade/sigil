@@ -40,7 +40,7 @@
     "@agent-shield/sdk": "workspace:*",
     "@elizaos/core": "^1.7.2",
     "@solana/web3.js": "^1.95.0",
-    "@types/chai": "^4.3.11",
+    "@types/chai": "^5.2.3",
     "@types/mocha": "^10.0.6",
     "chai": "^6.2.2",
     "mocha": "^11.7.5",
