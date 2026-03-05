@@ -13,7 +13,7 @@ pub fn verify_data_constraints(ix_data: &[u8], constraints: &[DataConstraint]) -
         require!(
             offset
                 .checked_add(len)
-                .map_or(false, |end| end <= ix_data.len()),
+                .is_some_and(|end| end <= ix_data.len()),
             PhalnxError::ConstraintViolated
         );
         let actual = &ix_data[offset..offset + len];
