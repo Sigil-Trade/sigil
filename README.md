@@ -195,14 +195,14 @@ cargo fmt --check --manifest-path programs/phalnx/Cargo.toml
 | Security exploit scenarios                           |     109 |
 | Devnet integration tests (real network)              |      56 |
 | Surfpool integration tests (local Surfnet)           |      20 |
-| Core policy engine (`@phalnx/core`)            |      73 |
-| SDK tests (`@phalnx/sdk`)                      |     199 |
-| Platform client tests (`@phalnx/platform`)     |      17 |
+| Core policy engine (`@phalnx/core`)                  |      73 |
+| SDK tests (`@phalnx/sdk`)                            |     199 |
+| Platform client tests (`@phalnx/platform`)           |      17 |
 | Crossmint custody adapter                            |      29 |
-| SAK plugin (`@phalnx/plugin-solana-agent-kit`) |      29 |
-| ElizaOS plugin (`@phalnx/plugin-elizaos`)      |      35 |
-| MCP server (`@phalnx/mcp`)                     |     291 |
-| Actions server (`@phalnx/actions-server`)      |      61 |
+| SAK plugin (`@phalnx/plugin-solana-agent-kit`)       |      29 |
+| ElizaOS plugin (`@phalnx/plugin-elizaos`)            |      35 |
+| MCP server (`@phalnx/mcp`)                           |     291 |
+| Actions server (`@phalnx/actions-server`)            |      61 |
 | **Total**                                            | **1032** |
 
 ## Security
