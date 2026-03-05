@@ -1,29 +1,29 @@
-# @agent-shield/plugin-solana-agent-kit
+# @phalnx/plugin-solana-agent-kit
 
-AgentShield plugin for [Solana Agent Kit](https://github.com/sendaifun/solana-agent-kit) — adds shield monitoring, management, and transaction history tools to any SAK agent. The shield wraps wallet signing transparently, so SAK's built-in swap/position tools are automatically policy-guarded without any code changes.
+Phalnx plugin for [Solana Agent Kit](https://github.com/sendaifun/solana-agent-kit) — adds policy monitoring, management, and transaction history tools to any SAK agent. Phalnx wraps wallet signing transparently, so SAK's built-in swap/position tools are automatically policy-guarded without any code changes.
 
 ## Installation
 
 ```bash
-npm install @agent-shield/plugin-solana-agent-kit @agent-shield/sdk
+npm install @phalnx/plugin-solana-agent-kit @phalnx/sdk
 ```
 
-Peer dependencies: `solana-agent-kit >=2.0.0`, `@agent-shield/sdk >=0.1.0`, `@solana/web3.js >=1.90.0`
+Peer dependencies: `solana-agent-kit >=2.0.0`, `@phalnx/sdk >=0.1.0`, `@solana/web3.js >=1.90.0`
 
 ## Quick Start
 
 ### Option A: Pre-created ShieldedWallet
 
 ```typescript
-import { shieldWallet } from "@agent-shield/sdk";
-import { createAgentShieldPlugin } from "@agent-shield/plugin-solana-agent-kit";
+import { shieldWallet } from "@phalnx/sdk";
+import { createPhalnxPlugin } from "@phalnx/plugin-solana-agent-kit";
 import { SolanaAgentKit } from "solana-agent-kit";
 
 // 1. Wrap your wallet with spending controls
 const protectedWallet = shieldWallet(wallet, { maxSpend: "500 USDC/day" });
 
 // 2. Create the plugin (provides monitoring tools)
-const plugin = createAgentShieldPlugin({ wallet: protectedWallet });
+const plugin = createPhalnxPlugin({ wallet: protectedWallet });
 
 // 3. Create the agent — all actions are now policy-guarded
 const agent = new SolanaAgentKit(protectedWallet, rpcUrl, {
@@ -34,10 +34,10 @@ const agent = new SolanaAgentKit(protectedWallet, rpcUrl, {
 ### Option B: Factory (auto-creates ShieldedWallet)
 
 ```typescript
-import { createAgentShieldPlugin } from "@agent-shield/plugin-solana-agent-kit";
+import { createPhalnxPlugin } from "@phalnx/plugin-solana-agent-kit";
 
 // Pass a raw wallet + policies — the plugin creates the ShieldedWallet for you
-const plugin = createAgentShieldPlugin({
+const plugin = createPhalnxPlugin({
   rawWallet: keypairWallet,
   policies: { maxSpend: "500 USDC/day" },
   logger: console,
@@ -50,7 +50,7 @@ const plugin = createAgentShieldPlugin({
 ### Standalone Factory
 
 ```typescript
-import { createShieldedWallet } from "@agent-shield/plugin-solana-agent-kit";
+import { createShieldedWallet } from "@phalnx/plugin-solana-agent-kit";
 
 const protectedWallet = createShieldedWallet({
   wallet: keypairWallet,
@@ -87,7 +87,7 @@ Returns a formatted status report including:
 
 **Example output:**
 ```
-=== AgentShield Status ===
+=== Phalnx Status ===
 Paused: false
 
 --- Spending Limits ---
@@ -103,7 +103,7 @@ Paused: false
 
 #### `shield_update_policy`
 
-Updates shield policies at runtime. Both parameters are optional — only provided fields are changed.
+Updates Phalnx policies at runtime. Both parameters are optional — only provided fields are changed.
 
 **Schema:**
 ```typescript
@@ -130,7 +130,7 @@ Returns a detailed per-token usage summary with percentages and rolling window i
 
 **Example output:**
 ```
-=== AgentShield Transaction History ===
+=== Phalnx Transaction History ===
 Enforcement: ACTIVE
 
 --- Per-Token Usage ---
@@ -149,7 +149,7 @@ Enforcement: ACTIVE
 ## Configuration
 
 ```typescript
-interface AgentShieldPluginConfig {
+interface PhalnxPluginConfig {
   // Option A: Pre-created ShieldedWallet
   wallet?: ShieldedWallet;
 
@@ -172,7 +172,7 @@ When using `rawWallet`, the factory automatically wires event callbacks to the l
 
 | Export | Description |
 |--------|-------------|
-| `createAgentShieldPlugin(config)` | Create the SAK plugin with 6 tools |
+| `createPhalnxPlugin(config)` | Create the SAK plugin with 6 tools |
 | `createShieldedWallet(config)` | Standalone factory for ShieldedWallet creation |
 | `resolveWallet(config)` | Resolve config to a `{ wallet: ShieldedWallet }` |
 | `status(agent, config, input)` | Status tool handler (for custom use) |
@@ -184,9 +184,9 @@ All Zod schemas are also exported: `statusSchema`, `updatePolicySchema`, `pauseR
 
 ## How It Works
 
-The `shieldWallet()` wrapper intercepts `signTransaction` and `signAllTransactions` on the wallet. When the agent calls any SAK tool (swap, transfer, open position, etc.), the transaction passes through the shield's policy engine before signing. If a policy is violated (spending cap, rate limit, unknown program, etc.), the transaction is rejected with a descriptive `ShieldDeniedError`.
+The `shieldWallet()` wrapper intercepts `signTransaction` and `signAllTransactions` on the wallet. When the agent calls any SAK tool (swap, transfer, open position, etc.), the transaction passes through Phalnx's policy engine before signing. If a policy is violated (spending cap, rate limit, unknown program, etc.), the transaction is rejected with a descriptive `ShieldDeniedError`.
 
-The plugin's tools give the agent visibility into spending state and the ability to manage enforcement — no DeFi execution tools are needed since the shield guards signing transparently.
+The plugin's tools give the agent visibility into spending state and the ability to manage enforcement — no DeFi execution tools are needed since Phalnx guards signing transparently.
 
 ```
 Agent calls swap() → SAK builds transaction → shieldWallet() intercepts signTransaction
@@ -212,15 +212,15 @@ npm test
 
 | Package | Description |
 |---------|-------------|
-| [`@agent-shield/sdk`](https://www.npmjs.com/package/@agent-shield/sdk) | On-chain guardrails — `withVault()` primary API |
-| [`@agent-shield/core`](https://www.npmjs.com/package/@agent-shield/core) | Pure TypeScript policy engine |
-| [`@agent-shield/plugin-elizaos`](https://www.npmjs.com/package/@agent-shield/plugin-elizaos) | ElizaOS integration |
+| [`@phalnx/sdk`](https://www.npmjs.com/package/@phalnx/sdk) | On-chain guardrails — `withVault()` primary API |
+| [`@phalnx/core`](https://www.npmjs.com/package/@phalnx/core) | Pure TypeScript policy engine |
+| [`@phalnx/plugin-elizaos`](https://www.npmjs.com/package/@phalnx/plugin-elizaos) | ElizaOS integration |
 
 ## Support
 
 - X/Twitter: [@MightieMags](https://x.com/MightieMags)
 - Telegram: [MightyMags](https://t.me/MightyMags)
-- Issues: [GitHub Issues](https://github.com/Kaleb-Rupe/agentshield/issues)
+- Issues: [GitHub Issues](https://github.com/Kaleb-Rupe/phalnx/issues)
 
 ## License
 

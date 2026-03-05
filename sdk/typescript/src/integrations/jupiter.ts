@@ -8,7 +8,7 @@ import {
 } from "@solana/web3.js";
 import { BN, Program } from "@coral-xyz/anchor";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
-import type { AgentShield, ComposeActionParams } from "../types";
+import type { Phalnx, ComposeActionParams } from "../types";
 import { getVaultPDA } from "../accounts";
 import { composePermittedAction } from "../composer";
 import { jupiterFetch } from "./jupiter-api";
@@ -158,7 +158,7 @@ export async function fetchJupiterQuote(
  *
  * @param quote - A quote previously obtained from `fetchJupiterQuote`.
  * @param userPublicKey - The account that owns the input tokens. For
- *   AgentShield, this should be the **vault PDA** (the vault owns the ATAs).
+ *   Phalnx, this should be the **vault PDA** (the vault owns the ATAs).
  */
 export async function fetchJupiterSwapInstructions(
   quote: JupiterQuoteResponse,
@@ -202,7 +202,7 @@ export async function fetchAddressLookupTables(
 // ---------------------------------------------------------------------------
 
 /**
- * Build a full AgentShield-composed Jupiter swap transaction.
+ * Build a full Phalnx-composed Jupiter swap transaction.
  *
  * Returns an array of TransactionInstructions:
  * `[ComputeBudget, ValidateAndAuthorize, ...setupIxs, swapIx, cleanupIx?, FinalizeSession]`
@@ -210,13 +210,13 @@ export async function fetchAddressLookupTables(
  * The DeFi instructions (setup + swap + cleanup) are sandwiched between
  * validate and finalize, forming an atomic composed transaction.
  *
- * @param program - The AgentShield Anchor program instance.
+ * @param program - The Phalnx Anchor program instance.
  * @param connection - Solana connection (needed for address lookup tables).
  * @param params - Jupiter swap parameters including vault/agent info.
  * @returns Instructions array + address lookup tables for VersionedTransaction.
  */
 export async function composeJupiterSwap(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   connection: Connection,
   params: JupiterSwapParams,
 ): Promise<{
@@ -272,7 +272,7 @@ export async function composeJupiterSwap(
     swapResponse.addressLookupTableAddresses,
   );
 
-  // 5. Compose with AgentShield validate/finalize sandwich
+  // 5. Compose with Phalnx validate/finalize sandwich
   const vaultTokenAccount =
     params.vaultTokenAccount ??
     getAssociatedTokenAddressSync(params.inputMint, vault, true);
@@ -303,12 +303,12 @@ export async function composeJupiterSwap(
 }
 
 /**
- * Build a complete VersionedTransaction for a Jupiter swap through AgentShield.
+ * Build a complete VersionedTransaction for a Jupiter swap through Phalnx.
  *
  * The transaction is NOT signed — caller must sign with the agent keypair.
  */
 export async function composeJupiterSwapTransaction(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   connection: Connection,
   params: JupiterSwapParams,
 ): Promise<VersionedTransaction> {

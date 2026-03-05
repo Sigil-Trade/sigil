@@ -1,6 +1,6 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
-import { AgentShield } from "../target/types/agent_shield";
+import { Phalnx } from "../target/types/phalnx";
 import {
   Keypair,
   PublicKey,
@@ -42,11 +42,13 @@ import {
   FailedTransactionMetadata,
 } from "./helpers/litesvm-setup";
 
+const FULL_PERMISSIONS = new BN((1n << 21n) - 1n);
+
 /**
  * Flash Trade Integration Tests
  *
  * These tests verify that perpetual position actions (open, close, increase,
- * decrease) work correctly through AgentShield's atomic composition pattern.
+ * decrease) work correctly through Phalnx's atomic composition pattern.
  *
  * Since Flash Trade is not available on localnet, we use mock DeFi instructions
  * (SystemProgram.transfer with 0 lamports) — the on-chain program doesn't
@@ -60,7 +62,7 @@ import {
 describe("flash-trade-integration", () => {
   let env: TestEnv;
   let svm: LiteSVM;
-  let program: Program<AgentShield>;
+  let program: Program<Phalnx>;
 
   let owner: anchor.Wallet;
   const agent = Keypair.generate();
@@ -255,7 +257,7 @@ describe("flash-trade-integration", () => {
 
     // Register agent
     await program.methods
-      .registerAgent(agent.publicKey)
+      .registerAgent(agent.publicKey, FULL_PERMISSIONS)
       .accountsPartial({
         owner: owner.publicKey,
         vault: vaultPda,
@@ -524,13 +526,13 @@ describe("flash-trade-integration", () => {
         .rpc();
 
       await program.methods
-        .registerAgent(agent.publicKey)
+        .registerAgent(agent.publicKey, FULL_PERMISSIONS)
         .accountsPartial({ owner: owner.publicKey, vault: frozenVault })
         .rpc();
 
       // Freeze vault
       await program.methods
-        .revokeAgent()
+        .revokeAgent(agent.publicKey)
         .accountsPartial({ owner: owner.publicKey, vault: frozenVault })
         .rpc();
     });
@@ -627,7 +629,7 @@ describe("flash-trade-integration", () => {
         .rpc();
 
       await program.methods
-        .registerAgent(agent.publicKey)
+        .registerAgent(agent.publicKey, FULL_PERMISSIONS)
         .accountsPartial({ owner: owner.publicKey, vault: disabledVault })
         .rpc();
 
@@ -813,7 +815,7 @@ describe("flash-trade-integration", () => {
 
       // Register agent
       await program.methods
-        .registerAgent(capAgentKp.publicKey)
+        .registerAgent(capAgentKp.publicKey, FULL_PERMISSIONS)
         .accountsPartial({ owner: owner.publicKey, vault: capVault })
         .rpc();
 

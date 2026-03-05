@@ -16,19 +16,19 @@ describe("shield_setup_status", () => {
 
   beforeEach(() => {
     // Create temp home dir structure
-    const shieldDir = path.join(tmpHome, ".agentshield");
+    const shieldDir = path.join(tmpHome, ".phalnx");
     if (!fs.existsSync(shieldDir)) {
       fs.mkdirSync(shieldDir, { recursive: true });
     }
     process.env.HOME = tmpHome;
     // Remove env vars that could interfere
-    delete process.env.AGENTSHIELD_WALLET_PATH;
-    delete process.env.AGENTSHIELD_RPC_URL;
+    delete process.env.PHALNX_WALLET_PATH;
+    delete process.env.PHALNX_RPC_URL;
   });
 
   afterEach(() => {
     process.env.HOME = origHome;
-    const shieldConfig = path.join(tmpHome, ".agentshield", "config.json");
+    const shieldConfig = path.join(tmpHome, ".phalnx", "config.json");
     if (fs.existsSync(shieldConfig)) {
       fs.unlinkSync(shieldConfig);
     }
@@ -42,7 +42,7 @@ describe("shield_setup_status", () => {
   it("returns not-configured message when no config exists", async () => {
     const result = await setupStatus(null, {});
     expect(result).to.include("Not configured");
-    expect(result).to.include("Set up AgentShield");
+    expect(result).to.include("Set up Phalnx");
   });
 
   it("reports partially configured when only shield is enabled", async () => {
@@ -62,7 +62,7 @@ describe("shield_setup_status", () => {
       },
       wallet: {
         type: "keypair",
-        path: "~/.agentshield/wallets/agent.json",
+        path: "~/.phalnx/wallets/agent.json",
         publicKey: "11111111111111111111111111111111",
       },
       network: "devnet",
@@ -70,7 +70,7 @@ describe("shield_setup_status", () => {
       configuredAt: "2026-01-01T00:00:00Z",
     };
     fs.writeFileSync(
-      path.join(tmpHome, ".agentshield", "config.json"),
+      path.join(tmpHome, ".phalnx", "config.json"),
       JSON.stringify(config),
     );
 
@@ -110,7 +110,7 @@ describe("shield_setup_status", () => {
       configuredAt: "2026-01-01T00:00:00Z",
     };
     fs.writeFileSync(
-      path.join(tmpHome, ".agentshield", "config.json"),
+      path.join(tmpHome, ".phalnx", "config.json"),
       JSON.stringify(config),
     );
 
@@ -153,7 +153,7 @@ describe("shield_setup_status", () => {
       configuredAt: "2026-01-01T00:00:00Z",
     };
     fs.writeFileSync(
-      path.join(tmpHome, ".agentshield", "config.json"),
+      path.join(tmpHome, ".phalnx", "config.json"),
       JSON.stringify(config),
     );
 
@@ -181,7 +181,7 @@ describe("shield_setup_status", () => {
       },
       wallet: {
         type: "keypair",
-        path: "~/.agentshield/wallets/agent.json",
+        path: "~/.phalnx/wallets/agent.json",
         publicKey: "11111111111111111111111111111111",
       },
       network: "devnet",
@@ -189,7 +189,7 @@ describe("shield_setup_status", () => {
       configuredAt: "2026-01-01T00:00:00Z",
     };
     fs.writeFileSync(
-      path.join(tmpHome, ".agentshield", "config.json"),
+      path.join(tmpHome, ".phalnx", "config.json"),
       JSON.stringify(config),
     );
 

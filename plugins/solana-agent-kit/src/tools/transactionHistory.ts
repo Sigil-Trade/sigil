@@ -14,7 +14,7 @@ export async function transactionHistory(
   const summary = wallet.getSpendingSummary();
 
   const lines = [
-    `=== AgentShield Transaction History ===`,
+    `=== Phalnx Transaction History ===`,
     `Enforcement: ${summary.isPaused ? "PAUSED" : "ACTIVE"}`,
     ``,
     `--- Per-Token Usage ---`,

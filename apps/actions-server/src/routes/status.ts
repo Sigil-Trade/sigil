@@ -17,11 +17,11 @@ status.get("/api/actions/status/:sig", async (c) => {
 
   try {
     const { Connection, PublicKey } = await import("@solana/web3.js");
-    const { AGENT_SHIELD_PROGRAM_ID } = await import("@agent-shield/sdk");
+    const { PHALNX_PROGRAM_ID } = await import("@phalnx/sdk");
 
-    const PROGRAM_ID = process.env.AGENTSHIELD_PROGRAM_ID
-      ? new PublicKey(process.env.AGENTSHIELD_PROGRAM_ID)
-      : AGENT_SHIELD_PROGRAM_ID;
+    const PROGRAM_ID = process.env.PHALNX_PROGRAM_ID
+      ? new PublicKey(process.env.PHALNX_PROGRAM_ID)
+      : PHALNX_PROGRAM_ID;
 
     const connection = new Connection(RPC_URL, "confirmed");
     const txStatus = await connection.getSignatureStatus(sig, {
@@ -76,7 +76,7 @@ status.get("/api/actions/status/:sig", async (c) => {
 
     return c.json({ status: "pending" });
   } catch (error) {
-    console.error("[AgentShield] status error:", error);
+    console.error("[Phalnx] status error:", error);
     return c.json({ status: "not_found", error: "Internal server error" }, 500);
   }
 });

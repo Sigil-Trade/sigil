@@ -1,8 +1,8 @@
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { toPublicKey, formatBN } from "../utils";
 
 export async function getSpendingResource(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   vaultAddress: string,
 ): Promise<string> {
   try {

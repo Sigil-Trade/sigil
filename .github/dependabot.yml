@@ -17,7 +17,7 @@ updates:
 
   # Rust/Cargo dependencies
   - package-ecosystem: "cargo"
-    directory: "/programs/agent-shield"
+    directory: "/programs/phalnx"
     schedule:
       interval: "weekly"
       day: "monday"

@@ -4,7 +4,7 @@ import type { ResolvedConfig } from "../types";
 export const pauseResumeSchema = z.object({
   action: z
     .enum(["pause", "resume"])
-    .describe("Whether to pause or resume shield enforcement."),
+    .describe("Whether to pause or resume Phalnx enforcement."),
 });
 
 export type PauseResumeInput = z.infer<typeof pauseResumeSchema>;
@@ -16,9 +16,9 @@ export async function pauseResume(
 ): Promise<string> {
   if (input.action === "pause") {
     config.wallet.pause();
-    return "Shield enforcement paused. Transactions will pass through without policy checks.";
+    return "Phalnx enforcement paused. Transactions will pass through without policy checks.";
   } else {
     config.wallet.resume();
-    return "Shield enforcement resumed. Policy checks are active.";
+    return "Phalnx enforcement resumed. Policy checks are active.";
   }
 }

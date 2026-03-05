@@ -1,12 +1,12 @@
 /**
- * @agent-shield/platform
+ * @phalnx/platform
  *
  * Lightweight client for agents to request TEE wallet provisioning
- * via the AgentShield platform's Solana Actions endpoints.
+ * via the Phalnx platform's Solana Actions endpoints.
  *
  * @example
  * ```typescript
- * const platform = new AgentShieldPlatform("https://app.agentshield.dev");
+ * const platform = new PhalnxPlatform("https://app.phalnx.io");
  *
  * // 1. Generate Action URL for user to sign
  * const actionUrl = platform.getProvisionActionUrl({ dailyCap: 500 });
@@ -55,7 +55,7 @@ export interface ProvisionResult {
   error?: string;
 }
 
-export class AgentShieldPlatform {
+export class PhalnxPlatform {
   private readonly baseUrl: string;
 
   constructor(baseUrl: string) {

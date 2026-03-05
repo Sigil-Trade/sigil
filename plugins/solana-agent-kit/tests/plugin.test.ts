@@ -1,9 +1,9 @@
 import { expect } from "chai";
 import { Keypair, Transaction, VersionedTransaction } from "@solana/web3.js";
-import type { WalletLike, ShieldedWallet } from "@agent-shield/sdk";
-import { shieldWallet } from "@agent-shield/sdk";
+import type { WalletLike, ShieldedWallet } from "@phalnx/sdk";
+import { shieldWallet } from "@phalnx/sdk";
 import {
-  createAgentShieldPlugin,
+  createPhalnxPlugin,
   createShieldedWallet,
   resolveWallet,
   status,
@@ -33,14 +33,14 @@ function createMockWallet(): WalletLike {
 }
 
 describe("SAK Plugin", () => {
-  describe("createAgentShieldPlugin", () => {
+  describe("createPhalnxPlugin", () => {
     it("creates plugin with pre-created ShieldedWallet", () => {
       const wallet = shieldWallet(createMockWallet(), {
         maxSpend: "100 USDC/day",
       });
-      const plugin = createAgentShieldPlugin({ wallet });
+      const plugin = createPhalnxPlugin({ wallet });
 
-      expect(plugin.name).to.equal("agent-shield");
+      expect(plugin.name).to.equal("phalnx");
       expect(plugin.methods).to.have.property("shield_status");
       expect(plugin.methods).to.have.property("shield_update_policy");
       expect(plugin.methods).to.have.property("shield_pause_resume");
@@ -48,31 +48,31 @@ describe("SAK Plugin", () => {
     });
 
     it("creates plugin with rawWallet + policies (factory)", () => {
-      const plugin = createAgentShieldPlugin({
+      const plugin = createPhalnxPlugin({
         rawWallet: createMockWallet(),
         policies: { maxSpend: "500 USDC/day" },
       });
 
-      expect(plugin.name).to.equal("agent-shield");
+      expect(plugin.name).to.equal("phalnx");
       expect(plugin.methods).to.have.property("shield_status");
       expect(plugin.methods).to.have.property("shield_transaction_history");
     });
 
     it("throws if neither wallet nor rawWallet provided", () => {
-      expect(() => createAgentShieldPlugin({} as any)).to.throw(
+      expect(() => createPhalnxPlugin({} as any)).to.throw(
         "config must provide either",
       );
     });
 
     it("has 6 methods", () => {
       const wallet = shieldWallet(createMockWallet());
-      const plugin = createAgentShieldPlugin({ wallet });
+      const plugin = createPhalnxPlugin({ wallet });
       expect(Object.keys(plugin.methods)).to.have.length(6);
     });
 
     it("includes shield_x402_fetch method", () => {
       const wallet = shieldWallet(createMockWallet());
-      const plugin = createAgentShieldPlugin({ wallet });
+      const plugin = createPhalnxPlugin({ wallet });
       expect(plugin.methods).to.have.property("shield_x402_fetch");
     });
   });
@@ -150,7 +150,7 @@ describe("SAK Plugin", () => {
       const config = { wallet };
 
       const result = await status(null, config, {});
-      expect(result).to.include("AgentShield Status");
+      expect(result).to.include("Phalnx Status");
       expect(result).to.include("Spending Limits");
       expect(result).to.include("Rate Limit");
     });

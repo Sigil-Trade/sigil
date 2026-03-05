@@ -77,6 +77,6 @@ describe("shield_add_collateral", () => {
         positionPubKey: Keypair.generate().publicKey.toBase58(),
       },
     );
-    expect(result).to.include("AGENTSHIELD_AGENT_KEYPAIR_PATH is required");
+    expect(result).to.include("PHALNX_AGENT_KEYPAIR_PATH is required");
   });
 });

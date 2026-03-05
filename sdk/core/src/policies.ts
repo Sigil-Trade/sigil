@@ -1,7 +1,7 @@
 import { KNOWN_TOKENS } from "./registry";
 import { ShieldConfigError } from "./errors";
 
-/** Policy configuration for the shield wrapper (pure string addresses) */
+/** Policy configuration for the Phalnx wrapper (pure string addresses) */
 export interface ShieldPolicies {
   /** Maximum spend per rolling window, per token. e.g. "500 USDC/day" or { mint, amount } */
   maxSpend?: SpendLimit | SpendLimit[] | string | string[];

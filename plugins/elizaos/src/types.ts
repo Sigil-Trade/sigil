@@ -1,18 +1,18 @@
 /**
- * Environment variable keys used by the AgentShield ElizaOS plugin.
+ * Environment variable keys used by the Phalnx ElizaOS plugin.
  * Configure these in your ElizaOS `.env` or character settings.
  */
 export const ENV_KEYS = {
   /** Spending limit, e.g. "500 USDC/day" */
-  MAX_SPEND: "AGENT_SHIELD_MAX_SPEND",
+  MAX_SPEND: "PHALNX_MAX_SPEND",
   /** Block unknown programs: "true" or "false" (default: true) */
-  BLOCK_UNKNOWN: "AGENT_SHIELD_BLOCK_UNKNOWN",
+  BLOCK_UNKNOWN: "PHALNX_BLOCK_UNKNOWN",
   /** Solana RPC URL */
   RPC_URL: "SOLANA_RPC_URL",
   /** Solana wallet private key (base58 or JSON array) — not needed when using custody */
   WALLET_PRIVATE_KEY: "SOLANA_WALLET_PRIVATE_KEY",
   /** Custody provider: "crossmint", "turnkey", "privy" — if set, uses TEE-backed signing */
-  CUSTODY_PROVIDER: "AGENT_SHIELD_CUSTODY",
+  CUSTODY_PROVIDER: "PHALNX_CUSTODY",
   /** Crossmint server-side API key (required when CUSTODY=crossmint) */
   CROSSMINT_API_KEY: "CROSSMINT_API_KEY",
   /** Crossmint wallet locator (optional — creates new wallet if omitted) */
@@ -22,7 +22,7 @@ export const ENV_KEYS = {
 /** Supported custody provider identifiers. */
 export type CustodyProvider = "crossmint" | "turnkey" | "privy";
 
-export interface AgentShieldElizaConfig {
+export interface PhalnxElizaConfig {
   maxSpend?: string;
   blockUnknown: boolean;
   /** Raw private key — used when no custody provider is set. */

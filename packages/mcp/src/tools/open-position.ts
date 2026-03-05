@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { toPublicKey, toBN } from "../utils";
 import { formatError } from "../errors";
 import {
@@ -31,7 +31,7 @@ function parseSide(
 }
 
 export async function openPosition(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   config: McpConfig,
   input: OpenPositionInput,
   custodyWallet?: CustodyWalletLike | null,
@@ -85,8 +85,8 @@ export async function openPosition(
 export const openPositionTool = {
   name: "shield_open_position",
   description:
-    "Open a leveraged perpetual position via Flash Trade through an AgentShield vault. " +
-    "Requires AGENTSHIELD_AGENT_KEYPAIR_PATH. " +
+    "Open a leveraged perpetual position via Flash Trade through an Phalnx vault. " +
+    "Requires PHALNX_AGENT_KEYPAIR_PATH. " +
     "Policy-checked: leverage limits, position count, spending caps apply.",
   schema: openPositionSchema,
   handler: openPosition,

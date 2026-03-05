@@ -1,13 +1,13 @@
 {
-  "name": "@agent-shield/custody-crossmint",
+  "name": "@phalnx/custody-crossmint",
   "version": "0.1.4",
   "author": "Kaleb Rupe (https://x.com/MightieMags)",
-  "homepage": "https://github.com/Kaleb-Rupe/agentshield#readme",
+  "homepage": "https://github.com/Kaleb-Rupe/phalnx#readme",
   "bugs": {
-    "url": "https://github.com/Kaleb-Rupe/agentshield/issues",
+    "url": "https://github.com/Kaleb-Rupe/phalnx/issues",
     "email": "https://t.me/MightyMags"
   },
-  "description": "Crossmint TEE custody adapter for AgentShield — hardware-enclave signing for AI agents",
+  "description": "Crossmint TEE custody adapter for Phalnx — hardware-enclave signing for AI agents",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
@@ -28,15 +28,15 @@
     "@solana/web3.js": "^1.95.0"
   },
   "peerDependencies": {
-    "@agent-shield/sdk": ">=0.5.4"
+    "@phalnx/sdk": ">=0.5.4"
   },
   "peerDependenciesMeta": {
-    "@agent-shield/sdk": {
+    "@phalnx/sdk": {
       "optional": true
     }
   },
   "devDependencies": {
-    "@agent-shield/sdk": "workspace:*",
+    "@phalnx/sdk": "workspace:*",
     "@types/chai": "^4.3.11",
     "@types/mocha": "^10.0.6",
     "@types/node": "^25.3.0",
@@ -57,7 +57,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Kaleb-Rupe/agentshield",
+    "url": "https://github.com/Kaleb-Rupe/phalnx",
     "directory": "sdk/custody/crossmint"
   }
 }

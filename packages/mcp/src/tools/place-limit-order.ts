@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { toPublicKey, toBN } from "../utils";
 import { formatError } from "../errors";
 import {
@@ -47,7 +47,7 @@ function parseSide(
 }
 
 export async function placeLimitOrder(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   config: McpConfig,
   input: PlaceLimitOrderInput,
   custodyWallet?: CustodyWalletLike | null,
@@ -109,8 +109,8 @@ export async function placeLimitOrder(
 export const placeLimitOrderTool = {
   name: "shield_place_limit_order",
   description:
-    "Place a limit order via Flash Trade through an AgentShield vault. " +
-    "Requires AGENTSHIELD_AGENT_KEYPAIR_PATH. " +
+    "Place a limit order via Flash Trade through an Phalnx vault. " +
+    "Requires PHALNX_AGENT_KEYPAIR_PATH. " +
     "Spending-checked: counts toward daily cap. Increments position counter.",
   schema: placeLimitOrderSchema,
   handler: placeLimitOrder,

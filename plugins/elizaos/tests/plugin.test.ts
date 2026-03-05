@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { Keypair } from "@solana/web3.js";
 import {
-  agentShieldPlugin,
+  phalnxPlugin,
   getOrCreateShieldedWallet,
   getConfig,
   statusAction,
@@ -20,8 +20,8 @@ function createMockRuntime(overrides: Record<string, string> = {}) {
   const keypair = Keypair.generate();
   const settings: Record<string, string> = {
     SOLANA_WALLET_PRIVATE_KEY: JSON.stringify(Array.from(keypair.secretKey)),
-    AGENT_SHIELD_MAX_SPEND: "500 USDC/day",
-    AGENT_SHIELD_BLOCK_UNKNOWN: "true",
+    PHALNX_MAX_SPEND: "500 USDC/day",
+    PHALNX_BLOCK_UNKNOWN: "true",
     ...overrides,
   };
 
@@ -55,24 +55,24 @@ function captureCallback(): {
 describe("ElizaOS Plugin", () => {
   describe("plugin definition", () => {
     it("has correct name and description", () => {
-      expect(agentShieldPlugin.name).to.equal("agent-shield");
-      expect(agentShieldPlugin.description).to.include("guardrails");
+      expect(phalnxPlugin.name).to.equal("phalnx");
+      expect(phalnxPlugin.description).to.include("guardrails");
     });
 
     it("has 6 actions", () => {
-      expect(agentShieldPlugin.actions).to.have.length(6);
+      expect(phalnxPlugin.actions).to.have.length(6);
     });
 
     it("has 2 providers", () => {
-      expect(agentShieldPlugin.providers).to.have.length(2);
+      expect(phalnxPlugin.providers).to.have.length(2);
     });
 
     it("has 1 evaluator", () => {
-      expect(agentShieldPlugin.evaluators).to.have.length(1);
+      expect(phalnxPlugin.evaluators).to.have.length(1);
     });
 
     it("includes all actions", () => {
-      const names = agentShieldPlugin.actions.map((a: any) => a.name);
+      const names = phalnxPlugin.actions.map((a: any) => a.name);
       expect(names).to.include("SHIELD_STATUS");
       expect(names).to.include("SHIELD_UPDATE_POLICY");
       expect(names).to.include("SHIELD_PAUSE_RESUME");
@@ -100,7 +100,7 @@ describe("ElizaOS Plugin", () => {
 
     it("defaults blockUnknown to true", () => {
       const { runtime } = createMockRuntime({
-        AGENT_SHIELD_BLOCK_UNKNOWN: "",
+        PHALNX_BLOCK_UNKNOWN: "",
       });
       const config = getConfig(runtime);
       expect(config.blockUnknown).to.be.true;
@@ -108,7 +108,7 @@ describe("ElizaOS Plugin", () => {
 
     it("sets blockUnknown to false when 'false'", () => {
       const { runtime } = createMockRuntime({
-        AGENT_SHIELD_BLOCK_UNKNOWN: "false",
+        PHALNX_BLOCK_UNKNOWN: "false",
       });
       const config = getConfig(runtime);
       expect(config.blockUnknown).to.be.false;
@@ -163,7 +163,7 @@ describe("ElizaOS Plugin", () => {
       await statusAction.handler(runtime, {}, null, null, callback);
 
       expect(responses).to.have.length(1);
-      expect(responses[0].text).to.include("AgentShield Status");
+      expect(responses[0].text).to.include("Phalnx Status");
       expect(responses[0].text).to.include("Enforcement:");
     });
   });
@@ -315,7 +315,7 @@ describe("ElizaOS Plugin", () => {
       const { runtime } = createMockRuntime();
       const result = await shieldStatusProvider.get(runtime, {}, {});
       expect(result).to.have.property("text");
-      expect(result.text).to.include("AgentShield");
+      expect(result.text).to.include("Phalnx");
     });
 
     it("spendTrackingProvider returns tracking data", async () => {
@@ -327,13 +327,13 @@ describe("ElizaOS Plugin", () => {
 
   describe("evaluator", () => {
     it("policyCheckEvaluator has correct name", () => {
-      expect(policyCheckEvaluator.name).to.equal("AGENT_SHIELD_POLICY_CHECK");
+      expect(policyCheckEvaluator.name).to.equal("PHALNX_POLICY_CHECK");
     });
 
     it("validates on shield keywords", async () => {
       const { runtime } = createMockRuntime();
       const message = {
-        content: { text: "agentshield transaction completed" },
+        content: { text: "phalnx transaction completed" },
       };
       const valid = await policyCheckEvaluator.validate(runtime, message);
       expect(valid).to.be.true;
@@ -341,7 +341,7 @@ describe("ElizaOS Plugin", () => {
 
     it("warns at exactly 80% cap usage", async () => {
       const { runtime } = createMockRuntime({
-        AGENT_SHIELD_MAX_SPEND: "100 USDC/day",
+        PHALNX_MAX_SPEND: "100 USDC/day",
       });
       const { wallet } = await getOrCreateShieldedWallet(runtime);
 
@@ -357,7 +357,7 @@ describe("ElizaOS Plugin", () => {
 
     it("does not warn at 79% cap usage", async () => {
       const { runtime } = createMockRuntime({
-        AGENT_SHIELD_MAX_SPEND: "100 USDC/day",
+        PHALNX_MAX_SPEND: "100 USDC/day",
       });
       const { wallet } = await getOrCreateShieldedWallet(runtime);
 

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { toPublicKey } from "../utils";
 import { formatError } from "../errors";
 
@@ -12,7 +12,7 @@ export type CancelPendingPolicyInput = z.infer<
 >;
 
 export async function cancelPendingPolicy(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   input: CancelPendingPolicyInput,
 ): Promise<string> {
   try {
@@ -33,7 +33,7 @@ export async function cancelPendingPolicy(
 export const cancelPendingPolicyTool = {
   name: "shield_cancel_pending_policy",
   description:
-    "Cancel a pending (timelocked) policy update for an AgentShield vault. " +
+    "Cancel a pending (timelocked) policy update for an Phalnx vault. " +
     "Removes the queued changes without applying them. Owner-only operation.",
   schema: cancelPendingPolicySchema,
   handler: cancelPendingPolicy,

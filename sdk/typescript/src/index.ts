@@ -1,7 +1,7 @@
-// @agentshield/sdk — TypeScript SDK for AgentShield
+// @phalnx/sdk — TypeScript SDK for Phalnx
 // On-chain guardrails for AI agents on Solana
 
-export { AgentShieldClient, type AgentShieldClientOptions } from "./client";
+export { PhalnxClient, type PhalnxClientOptions } from "./client";
 export { IDL } from "./idl-json";
 
 export {
@@ -10,6 +10,9 @@ export {
   getTrackerPDA,
   getSessionPDA,
   getPendingPolicyPDA,
+  getEscrowPDA,
+  getConstraintsPDA,
+  getPendingConstraintsPDA,
   fetchVault,
   fetchPolicy,
   fetchTracker,
@@ -18,6 +21,10 @@ export {
   fetchPolicyByAddress,
   fetchTrackerByAddress,
   fetchPendingPolicy,
+  fetchEscrow,
+  fetchEscrowByAddress,
+  fetchConstraints,
+  fetchPendingConstraints,
 } from "./accounts";
 
 export {
@@ -36,6 +43,20 @@ export {
   buildCancelPendingPolicy,
   buildAgentTransfer,
   buildSyncPositions,
+  // Multi-agent
+  buildUpdateAgentPermissions,
+  // Escrow
+  buildCreateEscrow,
+  buildSettleEscrow,
+  buildRefundEscrow,
+  buildCloseSettledEscrow,
+  // Constraints
+  buildCreateInstructionConstraints,
+  buildCloseInstructionConstraints,
+  buildUpdateInstructionConstraints,
+  buildQueueConstraintsUpdate,
+  buildApplyConstraintsUpdate,
+  buildCancelConstraintsUpdate,
 } from "./instructions";
 
 export {
@@ -69,7 +90,7 @@ export {
 } from "./wrap";
 
 export {
-  AGENT_SHIELD_PROGRAM_ID,
+  PHALNX_PROGRAM_ID,
   USD_DECIMALS,
   EPOCH_DURATION,
   NUM_EPOCHS,
@@ -81,7 +102,18 @@ export {
   USDT_MINT_DEVNET,
   USDT_MINT_MAINNET,
   isStablecoinMint,
-  type AgentShield,
+  // Multi-agent constants
+  MAX_AGENTS_PER_VAULT,
+  FULL_PERMISSIONS,
+  SWAP_ONLY,
+  PERPS_ONLY,
+  TRANSFER_ONLY,
+  ESCROW_ONLY,
+  MAX_ESCROW_DURATION,
+  hasPermission,
+  // Type exports
+  type Phalnx,
+  type AgentEntry,
   type AgentVaultAccount,
   type PolicyConfigAccount,
   type SpendTrackerAccount,
@@ -90,12 +122,28 @@ export {
   type VaultStatus,
   type ActionType,
   type PendingPolicyUpdateAccount,
+  // Escrow types
+  type EscrowStatus,
+  type EscrowDepositAccount,
+  // Constraint types
+  type ConstraintOperator,
+  type DataConstraint,
+  type ConstraintEntry,
+  type InstructionConstraintsAccount,
+  type PendingConstraintsUpdateAccount,
+  // Param types
   type InitializeVaultParams,
   type UpdatePolicyParams,
   type QueuePolicyUpdateParams,
   type AgentTransferParams,
   type AuthorizeParams,
   type ComposeActionParams,
+  type CreateEscrowParams,
+  type SettleEscrowParams,
+  type RefundEscrowParams,
+  type CreateConstraintsParams,
+  type UpdateConstraintsParams,
+  type QueueConstraintsUpdateParams,
   type PositionEffect,
   isSpendingAction,
   getPositionEffect,
@@ -312,6 +360,19 @@ export {
   ShieldDeniedError,
   ShieldConfigError,
   TeeRequiredError,
+  // TEE Remote Attestation
+  TeeAttestationError,
+  AttestationCertChainError,
+  AttestationPcrMismatchError,
+  AttestationStatus,
+  AttestationCache,
+  DEFAULT_CACHE_TTL_MS,
+  verifyTeeAttestation,
+  clearAttestationCache,
+  deleteFromAttestationCache,
+  verifyCrossmint,
+  verifyPrivy,
+  verifyTurnkey,
   analyzeTransaction,
   getNonSystemProgramIds,
   resolveTransactionAddressLookupTables,
@@ -351,4 +412,13 @@ export type {
   PaymentPayload,
   ResourceInfo,
   SettleResponse,
+  // TEE Remote Attestation types
+  TeeProvider,
+  AttestationResult,
+  AttestationConfig,
+  AttestationMetadata,
+  AttestationLevel,
+  VerifiedTeeWallet,
+  NitroPcrValues,
+  TurnkeyAttestationBundle,
 } from "./wrapper";

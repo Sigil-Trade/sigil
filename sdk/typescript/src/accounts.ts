@@ -1,21 +1,24 @@
 import { PublicKey } from "@solana/web3.js";
 import { BN, Program } from "@coral-xyz/anchor";
 import type {
-  AgentShield,
+  Phalnx,
   AgentVaultAccount,
   PolicyConfigAccount,
   SpendTrackerAccount,
   SessionAuthorityAccount,
   PendingPolicyUpdateAccount,
+  EscrowDepositAccount,
+  InstructionConstraintsAccount,
+  PendingConstraintsUpdateAccount,
 } from "./types";
-import { AGENT_SHIELD_PROGRAM_ID } from "./types";
+import { PHALNX_PROGRAM_ID } from "./types";
 
 // --- PDA Derivation ---
 
 export function getVaultPDA(
   owner: PublicKey,
   vaultId: BN,
-  programId: PublicKey = AGENT_SHIELD_PROGRAM_ID,
+  programId: PublicKey = PHALNX_PROGRAM_ID,
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [
@@ -29,7 +32,7 @@ export function getVaultPDA(
 
 export function getPolicyPDA(
   vault: PublicKey,
-  programId: PublicKey = AGENT_SHIELD_PROGRAM_ID,
+  programId: PublicKey = PHALNX_PROGRAM_ID,
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("policy"), vault.toBuffer()],
@@ -39,7 +42,7 @@ export function getPolicyPDA(
 
 export function getTrackerPDA(
   vault: PublicKey,
-  programId: PublicKey = AGENT_SHIELD_PROGRAM_ID,
+  programId: PublicKey = PHALNX_PROGRAM_ID,
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("tracker"), vault.toBuffer()],
@@ -51,7 +54,7 @@ export function getSessionPDA(
   vault: PublicKey,
   agent: PublicKey,
   tokenMint: PublicKey,
-  programId: PublicKey = AGENT_SHIELD_PROGRAM_ID,
+  programId: PublicKey = PHALNX_PROGRAM_ID,
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [
@@ -66,7 +69,7 @@ export function getSessionPDA(
 
 export function getPendingPolicyPDA(
   vault: PublicKey,
-  programId: PublicKey = AGENT_SHIELD_PROGRAM_ID,
+  programId: PublicKey = PHALNX_PROGRAM_ID,
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("pending_policy"), vault.toBuffer()],
@@ -79,12 +82,12 @@ export function getPendingPolicyPDA(
 // properties at runtime. We cast through `any` to bridge this mismatch.
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function accounts(program: Program<AgentShield>): any {
+function accounts(program: Program<Phalnx>): any {
   return program.account;
 }
 
 export async function fetchVault(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   owner: PublicKey,
   vaultId: BN,
 ): Promise<AgentVaultAccount> {
@@ -95,7 +98,7 @@ export async function fetchVault(
 }
 
 export async function fetchPolicy(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   vault: PublicKey,
 ): Promise<PolicyConfigAccount> {
   const [policyPda] = getPolicyPDA(vault, program.programId);
@@ -105,7 +108,7 @@ export async function fetchPolicy(
 }
 
 export async function fetchTracker(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   vault: PublicKey,
 ): Promise<SpendTrackerAccount> {
   const [trackerPda] = getTrackerPDA(vault, program.programId);
@@ -115,7 +118,7 @@ export async function fetchTracker(
 }
 
 export async function fetchSession(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   vault: PublicKey,
   agent: PublicKey,
   tokenMint: PublicKey,
@@ -132,7 +135,7 @@ export async function fetchSession(
 }
 
 export async function fetchVaultByAddress(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   address: PublicKey,
 ): Promise<AgentVaultAccount> {
   return (await accounts(program).agentVault.fetch(
@@ -141,7 +144,7 @@ export async function fetchVaultByAddress(
 }
 
 export async function fetchPolicyByAddress(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   address: PublicKey,
 ): Promise<PolicyConfigAccount> {
   return (await accounts(program).policyConfig.fetch(
@@ -150,7 +153,7 @@ export async function fetchPolicyByAddress(
 }
 
 export async function fetchTrackerByAddress(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   address: PublicKey,
 ): Promise<SpendTrackerAccount> {
   return (await accounts(program).spendTracker.fetch(
@@ -159,7 +162,7 @@ export async function fetchTrackerByAddress(
 }
 
 export async function fetchPendingPolicy(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   vault: PublicKey,
 ): Promise<PendingPolicyUpdateAccount | null> {
   const [pda] = getPendingPolicyPDA(vault, program.programId);
@@ -167,6 +170,101 @@ export async function fetchPendingPolicy(
     return (await accounts(program).pendingPolicyUpdate.fetch(
       pda,
     )) as PendingPolicyUpdateAccount;
+  } catch {
+    return null;
+  }
+}
+
+// --- Escrow PDAs ---
+
+export function getEscrowPDA(
+  sourceVault: PublicKey,
+  destinationVault: PublicKey,
+  escrowId: BN,
+  programId: PublicKey = PHALNX_PROGRAM_ID,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [
+      Buffer.from("escrow"),
+      sourceVault.toBuffer(),
+      destinationVault.toBuffer(),
+      escrowId.toArrayLike(Buffer, "le", 8),
+    ],
+    programId,
+  );
+}
+
+export async function fetchEscrow(
+  program: Program<Phalnx>,
+  sourceVault: PublicKey,
+  destinationVault: PublicKey,
+  escrowId: BN,
+): Promise<EscrowDepositAccount> {
+  const [pda] = getEscrowPDA(
+    sourceVault,
+    destinationVault,
+    escrowId,
+    program.programId,
+  );
+  return (await accounts(program).escrowDeposit.fetch(
+    pda,
+  )) as EscrowDepositAccount;
+}
+
+export async function fetchEscrowByAddress(
+  program: Program<Phalnx>,
+  address: PublicKey,
+): Promise<EscrowDepositAccount> {
+  return (await accounts(program).escrowDeposit.fetch(
+    address,
+  )) as EscrowDepositAccount;
+}
+
+// --- Constraint PDAs ---
+
+export function getConstraintsPDA(
+  vault: PublicKey,
+  programId: PublicKey = PHALNX_PROGRAM_ID,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("constraints"), vault.toBuffer()],
+    programId,
+  );
+}
+
+export function getPendingConstraintsPDA(
+  vault: PublicKey,
+  programId: PublicKey = PHALNX_PROGRAM_ID,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("pending_constraints"), vault.toBuffer()],
+    programId,
+  );
+}
+
+export async function fetchConstraints(
+  program: Program<Phalnx>,
+  vault: PublicKey,
+): Promise<InstructionConstraintsAccount | null> {
+  const [pda] = getConstraintsPDA(vault, program.programId);
+  try {
+    return (await accounts(program).instructionConstraints.fetch(
+      pda,
+    )) as InstructionConstraintsAccount;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchPendingConstraints(
+  program: Program<Phalnx>,
+  vault: PublicKey,
+): Promise<PendingConstraintsUpdateAccount | null> {
+  const [pda] = getPendingConstraintsPDA(vault, program.programId);
+  try {
+    return (await accounts(program).pendingConstraintsUpdate.fetch(
+      pda,
+    )) as PendingConstraintsUpdateAccount;
   } catch {
     return null;
   }

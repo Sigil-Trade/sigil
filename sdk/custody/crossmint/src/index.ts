@@ -1,13 +1,13 @@
 /**
- * @agent-shield/custody-crossmint
+ * @phalnx/custody-crossmint
  *
- * Crossmint TEE custody adapter for AgentShield.
+ * Crossmint TEE custody adapter for Phalnx.
  * Hardware-enclave signing — the private key never leaves the TEE.
  *
  * @example One-liner with shieldWallet():
  * ```typescript
- * import { shieldWallet } from '@agent-shield/sdk';
- * import { crossmint } from '@agent-shield/custody-crossmint';
+ * import { shieldWallet } from '@phalnx/sdk';
+ * import { crossmint } from '@phalnx/custody-crossmint';
  *
  * const wallet = shieldWallet(
  *   await crossmint({ apiKey: 'sk_...' }),
@@ -17,8 +17,8 @@
  *
  * @example Zero-config from environment:
  * ```typescript
- * import { shieldWallet } from '@agent-shield/sdk';
- * import { crossmintFromEnv } from '@agent-shield/custody-crossmint';
+ * import { shieldWallet } from '@phalnx/sdk';
+ * import { crossmintFromEnv } from '@phalnx/custody-crossmint';
  *
  * // Reads CROSSMINT_API_KEY (+ optional CROSSMINT_WALLET_LOCATOR) from env
  * const wallet = shieldWallet(await crossmintFromEnv(), { maxSpend: '500 USDC/day' });

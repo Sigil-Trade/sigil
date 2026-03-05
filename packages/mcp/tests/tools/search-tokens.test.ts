@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import { searchTokens } from "../../src/tools/search-tokens";
-import { configureJupiterApi, resetJupiterApiConfig } from "@agent-shield/sdk";
+import { configureJupiterApi, resetJupiterApiConfig } from "@phalnx/sdk";
 
 describe("shield_search_tokens", () => {
   const originalFetch = globalThis.fetch;

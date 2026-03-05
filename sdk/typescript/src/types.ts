@@ -1,10 +1,10 @@
 import { PublicKey } from "@solana/web3.js";
 import { BN } from "@coral-xyz/anchor";
-import type { AgentShield } from "./idl";
+import type { Phalnx } from "./idl";
 
-export type { AgentShield };
+export type { Phalnx };
 
-export const AGENT_SHIELD_PROGRAM_ID = new PublicKey(
+export const PHALNX_PROGRAM_ID = new PublicKey(
   "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL",
 );
 
@@ -18,6 +18,53 @@ export const PROTOCOL_TREASURY = new PublicKey(
 
 // USD decimals (6) — $500 = 500_000_000
 export const USD_DECIMALS = 6;
+
+// Multi-agent constants (matching on-chain values in state/mod.rs)
+export const MAX_AGENTS_PER_VAULT = 10;
+/** Permission bitmask with all 21 bits set (18 base + 3 escrow ActionType variants) */
+export const FULL_PERMISSIONS = (1n << 21n) - 1n;
+export const SWAP_ONLY = 1n << 0n;
+export const PERPS_ONLY = (1n << 1n) | (1n << 2n) | (1n << 3n) | (1n << 4n);
+export const TRANSFER_ONLY = 1n << 7n;
+export const ESCROW_ONLY = (1n << 18n) | (1n << 19n) | (1n << 20n);
+
+// Escrow constants
+export const MAX_ESCROW_DURATION = 2_592_000; // 30 days in seconds
+
+/** Permission bit mapping for each ActionType variant */
+const ACTION_PERMISSION_MAP: Record<string, bigint> = {
+  swap: 1n << 0n,
+  openPosition: 1n << 1n,
+  closePosition: 1n << 2n,
+  increasePosition: 1n << 3n,
+  decreasePosition: 1n << 4n,
+  deposit: 1n << 5n,
+  withdraw: 1n << 6n,
+  transfer: 1n << 7n,
+  addCollateral: 1n << 8n,
+  removeCollateral: 1n << 9n,
+  placeTriggerOrder: 1n << 10n,
+  editTriggerOrder: 1n << 11n,
+  cancelTriggerOrder: 1n << 12n,
+  placeLimitOrder: 1n << 13n,
+  editLimitOrder: 1n << 14n,
+  cancelLimitOrder: 1n << 15n,
+  swapAndOpenPosition: 1n << 16n,
+  closeAndSwapPosition: 1n << 17n,
+  createEscrow: 1n << 18n,
+  settleEscrow: 1n << 19n,
+  refundEscrow: 1n << 20n,
+};
+
+/** Check if a permission bitmask includes the permission for a given action type */
+export function hasPermission(
+  permissions: bigint,
+  actionType: string,
+): boolean {
+  const bit = ACTION_PERMISSION_MAP[actionType];
+  if (bit === undefined) return false;
+  return (permissions & bit) !== 0n;
+}
 
 // SpendTracker constants (matching on-chain values)
 export const EPOCH_DURATION = 600; // 10 minutes in seconds
@@ -64,12 +111,18 @@ export type EpochBucket = {
   usdAmount: BN;
 };
 
+// Agent entry type for multi-agent vaults
+export type AgentEntry = {
+  pubkey: PublicKey;
+  permissions: BN;
+};
+
 // Re-export IDL types for convenience
 export type AgentVaultAccount = {
   owner: PublicKey;
-  agent: PublicKey;
-  feeDestination: PublicKey;
   vaultId: BN;
+  agents: AgentEntry[];
+  feeDestination: PublicKey;
   status: VaultStatus;
   bump: number;
   createdAt: BN;
@@ -92,6 +145,7 @@ export type PolicyConfigAccount = {
   maxSlippageBps: number;
   timelockDuration: BN;
   allowedDestinations: PublicKey[];
+  hasConstraints: boolean;
   bump: number;
 };
 
@@ -109,6 +163,57 @@ export type PendingPolicyUpdateAccount = {
   developerFeeRate: number | null;
   timelockDuration: BN | null;
   allowedDestinations: PublicKey[] | null;
+  bump: number;
+};
+
+// Escrow types
+export type EscrowStatus =
+  | { active: Record<string, never> }
+  | { settled: Record<string, never> }
+  | { refunded: Record<string, never> };
+
+export type EscrowDepositAccount = {
+  sourceVault: PublicKey;
+  destinationVault: PublicKey;
+  escrowId: BN;
+  amount: BN;
+  tokenMint: PublicKey;
+  createdAt: BN;
+  expiresAt: BN;
+  status: EscrowStatus;
+  conditionHash: number[];
+  bump: number;
+};
+
+// Constraint types
+export type ConstraintOperator =
+  | { eq: Record<string, never> }
+  | { ne: Record<string, never> }
+  | { gte: Record<string, never> }
+  | { lte: Record<string, never> };
+
+export type DataConstraint = {
+  offset: number;
+  operator: ConstraintOperator;
+  value: number[];
+};
+
+export type ConstraintEntry = {
+  programId: PublicKey;
+  dataConstraints: DataConstraint[];
+};
+
+export type InstructionConstraintsAccount = {
+  vault: PublicKey;
+  entries: ConstraintEntry[];
+  bump: number;
+};
+
+export type PendingConstraintsUpdateAccount = {
+  vault: PublicKey;
+  entries: ConstraintEntry[];
+  queuedAt: BN;
+  executesAt: BN;
   bump: number;
 };
 
@@ -160,7 +265,10 @@ export type ActionType =
   | { editLimitOrder: Record<string, never> }
   | { cancelLimitOrder: Record<string, never> }
   | { swapAndOpenPosition: Record<string, never> }
-  | { closeAndSwapPosition: Record<string, never> };
+  | { closeAndSwapPosition: Record<string, never> }
+  | { createEscrow: Record<string, never> }
+  | { settleEscrow: Record<string, never> }
+  | { refundEscrow: Record<string, never> };
 
 /** Position effect classification */
 export type PositionEffect = "increment" | "decrement" | "none";
@@ -171,15 +279,13 @@ export function isSpendingAction(actionType: ActionType): boolean {
   return [
     "swap",
     "openPosition",
-    "closePosition",
     "increasePosition",
-    "decreasePosition",
     "deposit",
     "transfer",
     "addCollateral",
     "placeLimitOrder",
     "swapAndOpenPosition",
-    "closeAndSwapPosition",
+    "createEscrow",
   ].includes(key);
 }
 
@@ -286,4 +392,51 @@ export interface ComposeActionParams {
   protocolTreasuryTokenAccount?: PublicKey | null;
   /** Output stablecoin token account (for post-swap balance verification) */
   outputStablecoinAccount?: PublicKey;
+  /** Optional: constraints PDA to pass as remaining account */
+  constraintsPda?: PublicKey;
+}
+
+// Escrow param types
+export interface CreateEscrowParams {
+  escrowId: BN;
+  amount: BN;
+  expiresAt: BN;
+  conditionHash: number[];
+  tokenMint: PublicKey;
+  sourceVault: PublicKey;
+  destinationVault: PublicKey;
+  sourceVaultAta: PublicKey;
+  protocolTreasuryAta?: PublicKey | null;
+  feeDestinationAta?: PublicKey | null;
+}
+
+export interface SettleEscrowParams {
+  proof: Buffer;
+  escrow: PublicKey;
+  destinationVault: PublicKey;
+  sourceVault: PublicKey;
+  escrowAta: PublicKey;
+  destinationVaultAta: PublicKey;
+  tokenMint: PublicKey;
+}
+
+export interface RefundEscrowParams {
+  escrow: PublicKey;
+  sourceVault: PublicKey;
+  escrowAta: PublicKey;
+  sourceVaultAta: PublicKey;
+  tokenMint: PublicKey;
+}
+
+// Constraint param types
+export interface CreateConstraintsParams {
+  entries: ConstraintEntry[];
+}
+
+export interface UpdateConstraintsParams {
+  entries: ConstraintEntry[];
+}
+
+export interface QueueConstraintsUpdateParams {
+  entries: ConstraintEntry[];
 }

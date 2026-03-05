@@ -4,9 +4,9 @@ import {
   Transaction,
   VersionedTransaction,
 } from "@solana/web3.js";
-import { shieldWallet } from "@agent-shield/sdk";
-import type { ShieldedWallet, WalletLike } from "@agent-shield/sdk";
-import { ENV_KEYS, AgentShieldElizaConfig, CustodyProvider } from "./types";
+import { shieldWallet } from "@phalnx/sdk";
+import type { ShieldedWallet, WalletLike } from "@phalnx/sdk";
+import { ENV_KEYS, PhalnxElizaConfig, CustodyProvider } from "./types";
 
 /** Minimal wallet wrapper around a Keypair (no Anchor dependency). */
 class KeypairWallet implements WalletLike {
@@ -32,10 +32,10 @@ const walletCache = new WeakMap<
 >();
 
 /**
- * Reads AgentShield config from ElizaOS runtime settings.
+ * Reads Phalnx config from ElizaOS runtime settings.
  * Supports both raw keypair and TEE custody provider paths.
  */
-export function getConfig(runtime: any): AgentShieldElizaConfig {
+export function getConfig(runtime: any): PhalnxElizaConfig {
   const blockRaw = runtime.getSetting(ENV_KEYS.BLOCK_UNKNOWN);
   const blockUnknown = blockRaw !== "false";
 
@@ -63,7 +63,7 @@ export function getConfig(runtime: any): AgentShieldElizaConfig {
   const walletPrivateKey = runtime.getSetting(ENV_KEYS.WALLET_PRIVATE_KEY);
   if (!walletPrivateKey) {
     throw new Error(
-      `AgentShield: either set '${ENV_KEYS.CUSTODY_PROVIDER}' to a custody provider ` +
+      `Phalnx: either set '${ENV_KEYS.CUSTODY_PROVIDER}' to a custody provider ` +
         `(crossmint, turnkey, privy) or provide '${ENV_KEYS.WALLET_PRIVATE_KEY}'.`,
     );
   }
@@ -96,25 +96,25 @@ function parseKeypair(raw: string): Keypair {
  * Dynamically imports the provider adapter to avoid hard dependencies.
  */
 async function createCustodyWallet(
-  config: AgentShieldElizaConfig,
+  config: PhalnxElizaConfig,
 ): Promise<WalletLike> {
   switch (config.custodyProvider) {
     case "crossmint": {
       if (!config.crossmintApiKey) {
         throw new Error(
-          `AgentShield: '${ENV_KEYS.CROSSMINT_API_KEY}' is required when ` +
+          `Phalnx: '${ENV_KEYS.CROSSMINT_API_KEY}' is required when ` +
             `'${ENV_KEYS.CUSTODY_PROVIDER}' is set to 'crossmint'.`,
         );
       }
       // Dynamic require to avoid hard dependency on custody adapter.
-      // The package is optional — only needed when AGENT_SHIELD_CUSTODY=crossmint.
+      // The package is optional — only needed when PHALNX_CUSTODY=crossmint.
       let mod: any;
       try {
-        mod = require("@agent-shield/custody-crossmint");
+        mod = require("@phalnx/custody-crossmint");
       } catch {
         throw new Error(
-          "AgentShield: @agent-shield/custody-crossmint is not installed. " +
-            "Run: npm install @agent-shield/custody-crossmint",
+          "Phalnx: @phalnx/custody-crossmint is not installed. " +
+            "Run: npm install @phalnx/custody-crossmint",
         );
       }
       return mod.crossmint({
@@ -124,17 +124,17 @@ async function createCustodyWallet(
     }
     case "turnkey":
       throw new Error(
-        "AgentShield: Turnkey custody adapter is not yet available. " +
-          "Install @agent-shield/custody-turnkey when released.",
+        "Phalnx: Turnkey custody adapter is not yet available. " +
+          "Install @phalnx/custody-turnkey when released.",
       );
     case "privy":
       throw new Error(
-        "AgentShield: Privy custody adapter is not yet available. " +
-          "Install @agent-shield/custody-privy when released.",
+        "Phalnx: Privy custody adapter is not yet available. " +
+          "Install @phalnx/custody-privy when released.",
       );
     default:
       throw new Error(
-        `AgentShield: unknown custody provider '${config.custodyProvider}'. ` +
+        `Phalnx: unknown custody provider '${config.custodyProvider}'. ` +
           "Supported: crossmint, turnkey, privy.",
       );
   }
@@ -145,7 +145,7 @@ async function createCustodyWallet(
  * Cached per runtime instance via WeakMap.
  *
  * Supports two paths:
- * 1. TEE custody: AGENT_SHIELD_CUSTODY=crossmint → uses Crossmint TEE adapter
+ * 1. TEE custody: PHALNX_CUSTODY=crossmint → uses Crossmint TEE adapter
  * 2. Raw keypair: SOLANA_WALLET_PRIVATE_KEY → wraps local keypair (legacy)
  */
 export async function getOrCreateShieldedWallet(runtime: any): Promise<{
@@ -163,7 +163,7 @@ export async function getOrCreateShieldedWallet(runtime: any): Promise<{
   if (config.custodyProvider) {
     // TEE custody — private key never leaves the enclave
     (logger.info ?? console.info)(
-      `[AgentShield] Using TEE custody provider: ${config.custodyProvider}`,
+      `[Phalnx] Using TEE custody provider: ${config.custodyProvider}`,
     );
     innerWallet = await createCustodyWallet(config);
   } else {
@@ -181,24 +181,24 @@ export async function getOrCreateShieldedWallet(runtime: any): Promise<{
     {
       onDenied: (error) => {
         (logger.warn ?? console.warn)(
-          "[AgentShield] Transaction denied:",
+          "[Phalnx] Transaction denied:",
           error.message,
         );
       },
       onApproved: (txHash) => {
         (logger.info ?? console.info)(
-          "[AgentShield] Transaction approved",
+          "[Phalnx] Transaction approved",
           txHash ?? "",
         );
       },
       onPause: () => {
-        (logger.info ?? console.info)("[AgentShield] Enforcement paused");
+        (logger.info ?? console.info)("[Phalnx] Enforcement paused");
       },
       onResume: () => {
-        (logger.info ?? console.info)("[AgentShield] Enforcement resumed");
+        (logger.info ?? console.info)("[Phalnx] Enforcement resumed");
       },
       onPolicyUpdate: () => {
-        (logger.info ?? console.info)("[AgentShield] Policies updated");
+        (logger.info ?? console.info)("[Phalnx] Policies updated");
       },
     },
   );

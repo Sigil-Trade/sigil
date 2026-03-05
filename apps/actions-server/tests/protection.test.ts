@@ -18,7 +18,7 @@ describe("Protection Route", () => {
     it("returns single protection model (not tiers)", async () => {
       const res = await app.request("/api/actions/protection");
       const body = (await res.json()) as any;
-      expect(body.protection.name).to.equal("AgentShield");
+      expect(body.protection.name).to.equal("Phalnx");
       expect(body.protection.layers).to.be.an("array");
       expect(body.protection.layers.length).to.equal(3);
     });

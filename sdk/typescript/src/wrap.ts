@@ -9,7 +9,7 @@ import {
 } from "@solana/web3.js";
 import { BN, Program } from "@coral-xyz/anchor";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
-import type { AgentShield, ActionType } from "./types";
+import type { Phalnx, ActionType } from "./types";
 import { getVaultPDA, getPolicyPDA } from "./accounts";
 import {
   buildValidateAndAuthorize,
@@ -58,7 +58,7 @@ export interface WrapTransactionParams {
 }
 
 /**
- * Wrap arbitrary DeFi instructions into a complete AgentShield transaction.
+ * Wrap arbitrary DeFi instructions into a complete Phalnx transaction.
  *
  * This is the protocol-agnostic entry point. It:
  * 1. Resolves the vault's token account
@@ -69,7 +69,7 @@ export interface WrapTransactionParams {
  * CU budget is automatically sized. Priority fees are automatically estimated.
  */
 export async function wrapTransaction(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   connection: Connection,
   params: WrapTransactionParams,
 ): Promise<VersionedTransaction> {
@@ -91,7 +91,7 @@ export async function wrapTransaction(
  * to compose further or use a different signing flow.
  */
 export async function wrapInstructions(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   connection: Connection | null,
   params: WrapTransactionParams,
 ): Promise<TransactionInstruction[]> {

@@ -1,6 +1,6 @@
 {
   "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm --filter @agent-shield/sdk build && mkdir -p public && echo '{}' > public/.keep",
+  "buildCommand": "pnpm --filter @phalnx/sdk build && mkdir -p public && echo '{}' > public/.keep",
   "rewrites": [
     { "source": "/.well-known/actions.json", "destination": "/api/discovery" }
   ],

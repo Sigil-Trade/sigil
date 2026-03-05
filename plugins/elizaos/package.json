@@ -1,13 +1,13 @@
 {
-  "name": "@agent-shield/plugin-elizaos",
+  "name": "@phalnx/plugin-elizaos",
   "version": "0.4.3",
   "author": "Kaleb Rupe (https://x.com/MightieMags)",
-  "homepage": "https://github.com/Kaleb-Rupe/agentshield#readme",
+  "homepage": "https://github.com/Kaleb-Rupe/phalnx#readme",
   "bugs": {
-    "url": "https://github.com/Kaleb-Rupe/agentshield/issues",
+    "url": "https://github.com/Kaleb-Rupe/phalnx/issues",
     "email": "https://t.me/MightyMags"
   },
-  "description": "AgentShield plugin for ElizaOS — shieldWallet() wrapper actions, providers, and policy evaluators",
+  "description": "Phalnx plugin for ElizaOS — shieldWallet() wrapper actions, providers, and policy evaluators",
   "main": "dist/index.js",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -25,19 +25,19 @@
     "node": ">=18.0.0"
   },
   "peerDependencies": {
-    "@agent-shield/custody-crossmint": ">=0.1.4",
-    "@agent-shield/sdk": ">=0.5.4",
+    "@phalnx/custody-crossmint": ">=0.1.4",
+    "@phalnx/sdk": ">=0.5.4",
     "@elizaos/core": ">=0.1.0",
     "@solana/web3.js": ">=1.90.0"
   },
   "peerDependenciesMeta": {
-    "@agent-shield/custody-crossmint": {
+    "@phalnx/custody-crossmint": {
       "optional": true
     }
   },
   "devDependencies": {
-    "@agent-shield/custody-crossmint": "workspace:*",
-    "@agent-shield/sdk": "workspace:*",
+    "@phalnx/custody-crossmint": "workspace:*",
+    "@phalnx/sdk": "workspace:*",
     "@elizaos/core": "^1.7.2",
     "@solana/web3.js": "^1.95.0",
     "@types/chai": "^4.3.11",
@@ -59,7 +59,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Kaleb-Rupe/agentshield",
+    "url": "https://github.com/Kaleb-Rupe/phalnx",
     "directory": "plugins/elizaos"
   }
 }

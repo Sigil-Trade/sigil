@@ -7,6 +7,7 @@ const RPC_URL = process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com";
 
 export interface BuildRevokeAgentTxParams {
   owner: PublicKeyType;
+  agentToRemove: PublicKeyType;
   vaultId: number;
 }
 
@@ -29,7 +30,7 @@ export async function buildRevokeAgentTransaction(
   const { BN, Program, AnchorProvider, Wallet } =
     await import("@coral-xyz/anchor");
   const { IDL, buildRevokeAgent, getVaultPDA, CU_OWNER_ACTION, getEstimator } =
-    await import("@agent-shield/sdk");
+    await import("@phalnx/sdk");
 
   const connection = new Connection(RPC_URL, "confirmed");
 
@@ -56,6 +57,7 @@ export async function buildRevokeAgentTransaction(
     program,
     params.owner,
     vaultPDA,
+    params.agentToRemove,
   ).instruction();
 
   // Priority fee for reliable tx landing

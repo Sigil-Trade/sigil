@@ -13,7 +13,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "programs/agent-shield/src/**"
+      - "programs/phalnx/src/**"
       - "tests/devnet-*.ts"
       - "tests/helpers/devnet-setup.ts"
       - ".github/workflows/devnet-test.yml"

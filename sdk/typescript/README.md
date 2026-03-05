@@ -1,13 +1,13 @@
-# @agent-shield/sdk
+# @phalnx/sdk
 
-TypeScript SDK for AgentShield — permission-guarded DeFi access for AI agents on Solana. Provides cryptographic guarantees via PDA vaults, on-chain policy enforcement, and atomic transaction composition.
+TypeScript SDK for Phalnx — permission-guarded DeFi access for AI agents on Solana. Provides cryptographic guarantees via PDA vaults, on-chain policy enforcement, and atomic transaction composition.
 
-This is the primary package for AgentShield. Use `withVault()` for full protection (client-side + TEE + on-chain vault) or `AgentShieldClient` for direct vault management.
+This is the primary package for Phalnx. Use `withVault()` for full protection (client-side + TEE + on-chain vault) or `PhalnxClient` for direct vault management.
 
 ## Installation
 
 ```bash
-npm install @agent-shield/sdk @coral-xyz/anchor @solana/web3.js
+npm install @phalnx/sdk @coral-xyz/anchor @solana/web3.js
 ```
 
 Peer dependencies: `@coral-xyz/anchor ^0.32.1`, `@solana/web3.js ^1.95.0`
@@ -17,13 +17,13 @@ Optional: `flash-sdk ^12.0.3` (only needed for Flash Trade perpetuals)
 ## Quick Start
 
 ```typescript
-import { AgentShieldClient } from "@agent-shield/sdk";
+import { PhalnxClient } from "@phalnx/sdk";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import { Wallet, BN } from "@coral-xyz/anchor";
 
 const connection = new Connection("https://api.devnet.solana.com");
 const wallet = new Wallet(ownerKeypair);
-const client = new AgentShieldClient(connection, wallet);
+const client = new PhalnxClient(connection, wallet);
 
 // 1. Create a vault with policy
 await client.createVault({
@@ -59,7 +59,7 @@ const sig = await client.executeJupiterSwap({
 
 ## On-Chain Account Model
 
-AgentShield uses 5 PDA account types:
+Phalnx uses 5 PDA account types:
 
 | Account | Seeds | Description |
 |---------|-------|-------------|
@@ -76,9 +76,9 @@ The SDK uses **atomic multi-instruction transactions** to avoid Solana's 4-level
 ```
 Transaction = [
   SetComputeUnitLimit(1_400_000),
-  ValidateAndAuthorize,    // AgentShield: check policy, create session PDA
+  ValidateAndAuthorize,    // Phalnx: check policy, create session PDA
   ...DeFi instructions,    // Jupiter swap / Flash Trade open / etc.
-  FinalizeSession          // AgentShield: audit, close session PDA
+  FinalizeSession          // Phalnx: audit, close session PDA
 ]
 ```
 
@@ -198,11 +198,11 @@ ActionType.withdraw
 
 ```typescript
 import {
-  AGENT_SHIELD_PROGRAM_ID,  // 4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL
+  PHALNX_PROGRAM_ID,  // 4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL
   JUPITER_V6_API,            // https://quote-api.jup.ag/v6
   JUPITER_PROGRAM_ID,        // JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4
   FLASH_TRADE_PROGRAM_ID,    // FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn
-} from "@agent-shield/sdk";
+} from "@phalnx/sdk";
 ```
 
 ## Architecture
@@ -256,13 +256,13 @@ Owner creates vault with policy → Agent operates within policy constraints
 
 ## Security Model
 
-AgentShield provides three layers of protection in a single integration:
+Phalnx provides three layers of protection in a single integration:
 
 1. **Client-side policy checks** — fast deny before transactions hit the network
 2. **TEE key custody** — agent private keys stored in hardware enclaves (Crossmint, Turnkey, Privy)
 3. **On-chain vault enforcement** (this package) — PDA vaults with cryptographic policy guarantees enforced by Solana validators
 
-All three layers are bundled into `withVault()` from `@agent-shield/sdk`.
+All three layers are bundled into `withVault()` from `@phalnx/sdk`.
 
 **On-chain enforcement means:**
 - Agent cannot exceed spending caps even if the agent software is compromised
@@ -281,15 +281,15 @@ IDL account: `Ev3gSzxLw6RwExAMpTHUKvn2o9YVULxiWehrHee7aepP`
 
 | Package | Description |
 |---------|-------------|
-| [`@agent-shield/core`](https://www.npmjs.com/package/@agent-shield/core) | Pure TypeScript policy engine |
-| [`@agent-shield/plugin-solana-agent-kit`](https://www.npmjs.com/package/@agent-shield/plugin-solana-agent-kit) | Solana Agent Kit integration |
-| [`@agent-shield/plugin-elizaos`](https://www.npmjs.com/package/@agent-shield/plugin-elizaos) | ElizaOS integration |
+| [`@phalnx/core`](https://www.npmjs.com/package/@phalnx/core) | Pure TypeScript policy engine |
+| [`@phalnx/plugin-solana-agent-kit`](https://www.npmjs.com/package/@phalnx/plugin-solana-agent-kit) | Solana Agent Kit integration |
+| [`@phalnx/plugin-elizaos`](https://www.npmjs.com/package/@phalnx/plugin-elizaos) | ElizaOS integration |
 
 ## Support
 
 - X/Twitter: [@MightieMags](https://x.com/MightieMags)
 - Telegram: [MightyMags](https://t.me/MightyMags)
-- Issues: [GitHub Issues](https://github.com/Kaleb-Rupe/agentshield/issues)
+- Issues: [GitHub Issues](https://github.com/Kaleb-Rupe/phalnx/issues)
 
 ## License
 

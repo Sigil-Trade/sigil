@@ -14,7 +14,7 @@
 # "version packages" merge — avoids wasting CI minutes on non-release pushes.
 #
 # Uses npm OIDC Trusted Publishing (provenance) — no stored npm token.
-# Each @agent-shield package must have Trusted Publishing configured
+# Each @phalnx package must have Trusted Publishing configured
 # on npmjs.com → Package Settings → Publishing access → Trusted Publishers.
 
 name: Release

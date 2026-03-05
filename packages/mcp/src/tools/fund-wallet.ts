@@ -31,18 +31,18 @@ export async function fundWallet(
   const config = loadShieldConfig();
   if (!config) {
     return (
-      "AgentShield is not configured yet. " +
-      'Ask me to set it up first with "Set up AgentShield".'
+      "Phalnx is not configured yet. " +
+      'Ask me to set it up first with "Set up Phalnx".'
     );
   }
 
   const destination = config.wallet.publicKey;
 
   const lines: string[] = [
-    "## Fund Your AgentShield Wallet",
+    "## Fund Your Phalnx Wallet",
     "",
     `**Sending to:** ${destination}`,
-    `**Wallet Type:** AgentShield wallet (TEE + on-chain enforced)`,
+    `**Wallet Type:** Phalnx wallet (TEE + on-chain enforced)`,
     `**Network:** ${config.network}`,
     "",
   ];
@@ -95,7 +95,7 @@ export async function fundWallet(
 export const fundWalletTool = {
   name: "shield_fund_wallet",
   description:
-    "Generate funding links for the configured AgentShield wallet. " +
+    "Generate funding links for the configured Phalnx wallet. " +
     "Returns a Blink URL (desktop), Solana Pay URL (mobile QR), and raw address.",
   schema: fundWalletSchema,
   handler: fundWallet,

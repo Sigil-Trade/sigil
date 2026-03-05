@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { toPublicKey, toBN } from "../utils";
 import { formatError } from "../errors";
 import {
@@ -27,7 +27,7 @@ function parseSide(
 }
 
 export async function removeCollateral(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   config: McpConfig,
   input: RemoveCollateralInput,
   custodyWallet?: CustodyWalletLike | null,
@@ -76,8 +76,8 @@ export async function removeCollateral(
 export const removeCollateralTool = {
   name: "shield_remove_collateral",
   description:
-    "Remove collateral from an existing Flash Trade position through an AgentShield vault. " +
-    "Requires AGENTSHIELD_AGENT_KEYPAIR_PATH. " +
+    "Remove collateral from an existing Flash Trade position through an Phalnx vault. " +
+    "Requires PHALNX_AGENT_KEYPAIR_PATH. " +
     "Non-spending: does not count toward daily cap.",
   schema: removeCollateralSchema,
   handler: removeCollateral,

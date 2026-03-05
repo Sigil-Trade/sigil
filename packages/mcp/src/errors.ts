@@ -6,7 +6,7 @@ export interface ErrorInfo {
 }
 
 /**
- * Maps all 46 AgentShield Anchor error codes (6000–6045) to
+ * Maps all 63 Phalnx Anchor error codes (6000–6062) to
  * human-readable messages with actionable suggestions for AI tools.
  */
 const ERROR_MAP: Record<number, ErrorInfo> = {
@@ -29,7 +29,7 @@ const ERROR_MAP: Record<number, ErrorInfo> = {
     name: "UnauthorizedOwner",
     message: "Unauthorized: signer is not the vault owner",
     suggestion:
-      "This operation requires the vault owner's wallet. Check AGENTSHIELD_WALLET_PATH.",
+      "This operation requires the vault owner's wallet. Check PHALNX_WALLET_PATH.",
   },
   6003: {
     code: 6003,
@@ -327,6 +327,131 @@ const ERROR_MAP: Record<number, ErrorInfo> = {
     message: "Non-stablecoin swap allows exactly one DeFi instruction",
     suggestion:
       "Non-stablecoin swaps allow exactly one DeFi instruction per session. Split multi-step swaps into separate transactions (e.g., WIF→USDC then USDC→BONK).",
+  },
+
+  // --- Multi-Agent errors (Workstream A) ---
+  6046: {
+    code: 6046,
+    name: "MaxAgentsReached",
+    message: "Maximum agents per vault reached (limit: 10)",
+    suggestion:
+      "Remove an existing agent with shield_revoke_agent before registering a new one. Maximum 10 agents per vault.",
+  },
+  6047: {
+    code: 6047,
+    name: "InsufficientPermissions",
+    message: "Agent lacks permission for this action type",
+    suggestion:
+      "The agent's permission bitmask does not include this action. Use shield_update_agent_permissions to grant the required permission bits.",
+  },
+  6048: {
+    code: 6048,
+    name: "InvalidPermissions",
+    message: "Permission bitmask contains invalid bits",
+    suggestion:
+      "The permission bitmask has bits set beyond the valid range (0-20). Use predefined constants like FULL_PERMISSIONS, SWAP_ONLY, PERPS_ONLY, etc.",
+  },
+
+  // --- Escrow errors (Workstream B) ---
+  6049: {
+    code: 6049,
+    name: "EscrowNotActive",
+    message: "Escrow is not in Active status",
+    suggestion:
+      "The escrow has already been settled or refunded. Check the escrow status with shield_check_escrow.",
+  },
+  6050: {
+    code: 6050,
+    name: "EscrowExpired",
+    message: "Escrow has expired",
+    suggestion:
+      "The escrow expiration time has passed. Use shield_refund_escrow to return funds to the source vault.",
+  },
+  6051: {
+    code: 6051,
+    name: "EscrowNotExpired",
+    message: "Escrow has not expired yet",
+    suggestion:
+      "The escrow is still within its active period. Wait for expiration before requesting a refund, or settle it with valid proof.",
+  },
+  6052: {
+    code: 6052,
+    name: "InvalidEscrowVault",
+    message: "Invalid escrow vault",
+    suggestion:
+      "The source or destination vault does not match the escrow's recorded vaults. Verify the vault addresses.",
+  },
+  6053: {
+    code: 6053,
+    name: "EscrowConditionsNotMet",
+    message: "Escrow conditions not met",
+    suggestion:
+      "The provided proof does not match the escrow's condition_hash (SHA-256). Verify the proof data.",
+  },
+  6054: {
+    code: 6054,
+    name: "EscrowDurationExceeded",
+    message: "Escrow duration exceeds maximum (30 days)",
+    suggestion:
+      "The escrow expiration is more than 30 days from now. Reduce the expiresAt to within 2,592,000 seconds of creation.",
+  },
+
+  // --- Instruction Constraints errors (Workstream C) ---
+  6055: {
+    code: 6055,
+    name: "InvalidConstraintConfig",
+    message: "Invalid constraint configuration: bounds exceeded",
+    suggestion:
+      "The constraint configuration exceeds maximum limits. Check entry count and data constraint sizes.",
+  },
+  6056: {
+    code: 6056,
+    name: "ConstraintViolated",
+    message: "Instruction constraint violated",
+    suggestion:
+      "A DeFi instruction in the transaction violates the vault's instruction constraints. Check the constraint rules with shield_check_constraints.",
+  },
+  6057: {
+    code: 6057,
+    name: "InvalidConstraintsPda",
+    message: "Invalid constraints PDA: wrong owner or vault",
+    suggestion:
+      "The constraints account does not belong to the specified vault. Verify the vault address.",
+  },
+  6058: {
+    code: 6058,
+    name: "NoPendingConstraintsUpdate",
+    message: "No pending constraints update to apply or cancel",
+    suggestion:
+      "No constraints update is queued. Use shield_queue_constraints_update to queue one first.",
+  },
+  6059: {
+    code: 6059,
+    name: "PendingConstraintsUpdateExists",
+    message: "A pending constraints update already exists",
+    suggestion:
+      "Cancel the existing pending update with shield_cancel_constraints_update before queuing a new one.",
+  },
+  6060: {
+    code: 6060,
+    name: "ConstraintsUpdateNotExpired",
+    message: "Constraints update timelock has not expired",
+    suggestion:
+      "Wait for the timelock period to expire before applying the pending constraints update.",
+  },
+  6061: {
+    code: 6061,
+    name: "InvalidPendingConstraintsPda",
+    message: "Invalid pending constraints PDA: wrong owner or vault",
+    suggestion:
+      "The pending constraints account does not belong to the specified vault. Verify the vault address.",
+  },
+  6062: {
+    code: 6062,
+    name: "ConstraintsUpdateExpired",
+    message: "Pending constraints update has expired and is stale",
+    suggestion:
+      "The pending constraints update is past its expiration window. Cancel it and queue a fresh update.",
   },
 };
 

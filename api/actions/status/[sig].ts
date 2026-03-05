@@ -13,11 +13,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const { Connection, PublicKey } = await import("@solana/web3.js");
-    const { AGENT_SHIELD_PROGRAM_ID } = await import("@agent-shield/sdk");
+    const { PHALNX_PROGRAM_ID } = await import("@phalnx/sdk");
 
-    const PROGRAM_ID = process.env.AGENTSHIELD_PROGRAM_ID
-      ? new PublicKey(process.env.AGENTSHIELD_PROGRAM_ID)
-      : AGENT_SHIELD_PROGRAM_ID;
+    const PROGRAM_ID = process.env.PHALNX_PROGRAM_ID
+      ? new PublicKey(process.env.PHALNX_PROGRAM_ID)
+      : PHALNX_PROGRAM_ID;
 
     const connection = new Connection(RPC_URL, "confirmed");
     const txStatus = await connection.getSignatureStatus(sig, {

@@ -115,7 +115,7 @@ describe("devnet-security", () => {
   it("2. non-owner cannot revoke_agent", async () => {
     try {
       await program.methods
-        .revokeAgent()
+        .revokeAgent(agent.publicKey)
         .accounts({
           owner: attacker.publicKey,
           vault: vault.vaultPda,
@@ -442,7 +442,9 @@ describe("devnet-security", () => {
     // Vault stats incremented by 2
     const v = await program.account.agentVault.fetch(freshVault.vaultPda);
     expect(v.totalTransactions.toNumber()).to.equal(2);
-    console.log("    Back-to-back composed TXes: session PDA reused successfully");
+    console.log(
+      "    Back-to-back composed TXes: session PDA reused successfully",
+    );
   });
 
   it("10. frozen vault blocks validate_and_authorize", async () => {
@@ -464,11 +466,11 @@ describe("devnet-security", () => {
       depositAmount: new BN(500_000_000),
     });
 
-    // Freeze vault — revokeAgent sets status=Frozen AND clears the agent field.
+    // Freeze vault — revokeAgent removes the agent and freezes if no agents remain.
     // The on-chain constraint checks agent identity before vault status, so
-    // the error will be UnauthorizedAgent (agent cleared) rather than VaultNotActive.
+    // the error will be UnauthorizedAgent (agent removed) rather than VaultNotActive.
     await program.methods
-      .revokeAgent()
+      .revokeAgent(freshAgent.publicKey)
       .accounts({ owner: owner.publicKey, vault: freshVault.vaultPda } as any)
       .rpc();
 
@@ -495,7 +497,7 @@ describe("devnet-security", () => {
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
-      // revokeAgent clears the agent, so the first constraint hit is UnauthorizedAgent
+      // revokeAgent removed the agent, so the first constraint hit is UnauthorizedAgent
       expectError(
         err,
         "UnauthorizedAgent",
@@ -526,9 +528,9 @@ describe("devnet-security", () => {
       depositAmount: new BN(500_000_000),
     });
 
-    // Freeze
+    // Freeze — revoking the only agent freezes the vault
     await program.methods
-      .revokeAgent()
+      .revokeAgent(freshAgent.publicKey)
       .accounts({ owner: owner.publicKey, vault: freshVault.vaultPda } as any)
       .rpc();
 

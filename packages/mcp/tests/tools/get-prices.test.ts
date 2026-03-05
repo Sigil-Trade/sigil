@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { Keypair } from "@solana/web3.js";
 import { getPrices } from "../../src/tools/get-prices";
-import { configureJupiterApi, resetJupiterApiConfig } from "@agent-shield/sdk";
+import { configureJupiterApi, resetJupiterApiConfig } from "@phalnx/sdk";
 
 describe("shield_get_prices", () => {
   const mint1 = Keypair.generate().publicKey.toBase58();

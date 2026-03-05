@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { toPublicKey, toBN } from "../utils";
 import { formatError } from "../errors";
 import {
@@ -26,7 +26,7 @@ function parseSide(
 }
 
 export async function cancelTriggerOrder(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   config: McpConfig,
   input: CancelTriggerOrderInput,
   custodyWallet?: CustodyWalletLike | null,
@@ -81,7 +81,7 @@ export const cancelTriggerOrderTool = {
   name: "shield_cancel_trigger_order",
   description:
     "Cancel a take-profit or stop-loss trigger order on a Flash Trade position. " +
-    "Requires AGENTSHIELD_AGENT_KEYPAIR_PATH. " +
+    "Requires PHALNX_AGENT_KEYPAIR_PATH. " +
     "Non-spending: does not count toward daily cap.",
   schema: cancelTriggerOrderSchema,
   handler: cancelTriggerOrder,

@@ -11,7 +11,7 @@ import {
   type McpConfig,
   type CustodyWalletLike,
 } from "./config";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 
 // Tool handlers
 import { checkVault } from "./tools/check-vault";
@@ -40,6 +40,23 @@ import { cancelTriggerOrder } from "./tools/cancel-trigger-order";
 import { placeLimitOrder } from "./tools/place-limit-order";
 import { cancelLimitOrder } from "./tools/cancel-limit-order";
 import { syncPositions } from "./tools/sync-positions";
+import { updateAgentPermissions } from "./tools/update-agent-permissions";
+
+// Escrow tools
+import { createEscrow } from "./tools/create-escrow";
+import { settleEscrow } from "./tools/settle-escrow";
+import { refundEscrow } from "./tools/refund-escrow";
+import { closeSettledEscrow } from "./tools/close-settled-escrow";
+import { checkEscrow } from "./tools/check-escrow";
+
+// Instruction Constraints tools
+import { createConstraints } from "./tools/create-constraints";
+import { updateConstraints } from "./tools/update-constraints";
+import { closeConstraints } from "./tools/close-constraints";
+import { queueConstraintsUpdate as queueConstraintsUpdateHandler } from "./tools/queue-constraints-update";
+import { applyConstraintsUpdate } from "./tools/apply-constraints-update";
+import { cancelConstraintsUpdate } from "./tools/cancel-constraints-update";
+import { checkConstraints } from "./tools/check-constraints";
 
 // Jupiter expanded integration tools
 import { getPrices } from "./tools/get-prices";
@@ -69,6 +86,8 @@ import { setupStatus } from "./tools/setup-status";
 import { configure } from "./tools/configure";
 import { configureFromFile } from "./tools/configure-from-file";
 import { fundWallet } from "./tools/fund-wallet";
+import { discoverVault } from "./tools/discover-vault";
+import { confirmVault } from "./tools/confirm-vault";
 
 // Resources
 import { getPolicyResource } from "./resources/policy";
@@ -76,8 +95,8 @@ import { getSpendingResource } from "./resources/spending";
 import { getActivityResource } from "./resources/activity";
 
 const NOT_CONFIGURED_MSG =
-  "AgentShield is not configured yet. " +
-  'Use shield_setup_status to check status, or ask me to "Set up AgentShield".';
+  "Phalnx is not configured yet. " +
+  'Use shield_setup_status to check status, or ask me to "Set up Phalnx".';
 
 /**
  * Helper to register a tool with the MCP server.
@@ -99,11 +118,11 @@ function registerTool(
 
 async function main() {
   // All logging to stderr — stdout is reserved for JSON-RPC
-  console.error("[agent-shield-mcp] Starting...");
+  console.error("[phalnx-mcp] Starting...");
 
   // Try to load config, but don't exit if it fails — run in setup mode
   let config: McpConfig | null = null;
-  let client: AgentShieldClient | null = null;
+  let client: PhalnxClient | null = null;
   let custodyWallet: CustodyWalletLike | null = null;
 
   try {
@@ -113,21 +132,19 @@ async function main() {
       config = resolved.config;
       custodyWallet = resolved.custodyWallet;
       console.error(
-        `[agent-shield-mcp] Connected to ${config.rpcUrl}, ` +
+        `[phalnx-mcp] Connected to ${config.rpcUrl}, ` +
           `wallet: ${client.provider.wallet.publicKey.toBase58()}` +
           (custodyWallet ? " (custody)" : ""),
       );
     } else {
       console.error(
-        "[agent-shield-mcp] No wallet configured — running in setup mode. " +
+        "[phalnx-mcp] No wallet configured — running in setup mode. " +
           "Use shield_setup_status or shield_configure to get started.",
       );
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(
-      `[agent-shield-mcp] Config error: ${msg} — running in setup mode.`,
-    );
+    console.error(`[phalnx-mcp] Config error: ${msg} — running in setup mode.`);
   }
 
   /**
@@ -166,7 +183,7 @@ async function main() {
   }
 
   const server = new McpServer({
-    name: "agent-shield",
+    name: "phalnx",
     version: "0.1.0",
   });
 
@@ -175,7 +192,7 @@ async function main() {
   registerTool(
     server,
     "shield_setup_status",
-    "Check the current AgentShield setup status — shows wallet, guardrails, and network configuration. Works even when not configured.",
+    "Check the current Phalnx setup status — shows wallet, guardrails, and network configuration. Works even when not configured.",
     {},
     async (input) => ({
       content: [{ type: "text", text: await setupStatus(null, input) }],
@@ -185,7 +202,7 @@ async function main() {
   registerTool(
     server,
     "shield_configure",
-    "Set up AgentShield with full on-chain protection. Generates keypair, provisions TEE wallet, and creates vault Blink URL.",
+    "Set up Phalnx with full on-chain protection. Generates keypair, provisions TEE wallet, and creates vault Blink URL.",
     {
       teeProvider: z
         .enum(["crossmint", "turnkey", "privy"])
@@ -234,7 +251,7 @@ async function main() {
   registerTool(
     server,
     "shield_fund_wallet",
-    "Generate funding links (Blink URL, Solana Pay, raw address) for the configured AgentShield wallet.",
+    "Generate funding links (Blink URL, Solana Pay, raw address) for the configured Phalnx wallet.",
     {
       mint: z
         .string()
@@ -250,7 +267,7 @@ async function main() {
   registerTool(
     server,
     "shield_configure_from_file",
-    "Apply AgentShield configuration from a pre-written JSON file. For CI/CD pipelines and orchestrator platforms that need non-interactive setup. The config file must match the ShieldLocalConfig schema (same format as ~/.agentshield/config.json).",
+    "Apply Phalnx configuration from a pre-written JSON file. For CI/CD pipelines and orchestrator platforms that need non-interactive setup. The config file must match the ShieldLocalConfig schema (same format as ~/.phalnx/config.json).",
     {
       configFile: z
         .string()
@@ -263,12 +280,53 @@ async function main() {
     }),
   );
 
+  registerTool(
+    server,
+    "shield_discover_vault",
+    "Discover vaults owned by a public key. Derives vault PDA(s) from owner + vaultId and checks on-chain. Use to find vault addresses after creation, or scan for all vaults owned by an address.",
+    {
+      owner: z.string().describe("Owner public key (base58)"),
+      vaultId: z
+        .number()
+        .optional()
+        .describe("Specific vault ID. If omitted, scans a range."),
+      scanRange: z
+        .number()
+        .optional()
+        .default(10)
+        .describe("Number of IDs to scan (max 256). Default: 10."),
+    },
+    async (input) => ({
+      content: [{ type: "text", text: await discoverVault(null, input) }],
+    }),
+  );
+
+  registerTool(
+    server,
+    "shield_confirm_vault",
+    "Confirm a vault exists on-chain and save its address to config. Use after signing the vault creation Blink to populate the vault address.",
+    {
+      owner: z
+        .string()
+        .optional()
+        .describe("Owner public key (base58). Defaults to configured wallet."),
+      vaultId: z
+        .number()
+        .optional()
+        .default(0)
+        .describe("Vault ID. Default: 0"),
+    },
+    async (input) => ({
+      content: [{ type: "text", text: await confirmVault(null, input) }],
+    }),
+  );
+
   // ── Read-Only Tools ──────────────────────────────────────────
 
   registerTool(
     server,
     "shield_check_vault",
-    "Check the status and policy configuration of an AgentShield vault",
+    "Check the status and policy configuration of an Phalnx vault",
     {
       vault: z
         .string()
@@ -310,7 +368,7 @@ async function main() {
   registerTool(
     server,
     "shield_create_vault",
-    "Create a new AgentShield vault with policy configuration",
+    "Create a new Phalnx vault with policy configuration",
     {
       vaultId: z.string().describe("Unique vault ID number"),
       dailySpendingCapUsd: z
@@ -367,7 +425,7 @@ async function main() {
   registerTool(
     server,
     "shield_deposit",
-    "Deposit tokens into an AgentShield vault",
+    "Deposit tokens into an Phalnx vault",
     {
       vault: z.string().describe("Vault PDA address (base58)"),
       mint: z.string().describe("Token mint address (base58)"),
@@ -379,7 +437,7 @@ async function main() {
   registerTool(
     server,
     "shield_withdraw",
-    "Withdraw tokens from an AgentShield vault (owner-only)",
+    "Withdraw tokens from an Phalnx vault (owner-only)",
     {
       vault: z.string().describe("Vault PDA address (base58)"),
       mint: z.string().describe("Token mint address (base58)"),
@@ -391,10 +449,16 @@ async function main() {
   registerTool(
     server,
     "shield_register_agent",
-    "Register an agent signing key to a vault",
+    "Register an agent signing key to a vault. Up to 10 agents per vault. Omit permissions for full access.",
     {
       vault: z.string().describe("Vault PDA address (base58)"),
       agent: z.string().describe("Agent public key to register (base58)"),
+      permissions: z
+        .string()
+        .optional()
+        .describe(
+          "Permission bitmask as decimal string. Omit for full permissions (2097151).",
+        ),
     },
     requireClient((input) => registerAgent(client!, input)),
   );
@@ -520,9 +584,10 @@ async function main() {
   registerTool(
     server,
     "shield_revoke_agent",
-    "Emergency kill switch — revokes agent and freezes vault immediately",
+    "Remove an agent from a vault. If no agents remain, the vault freezes.",
     {
       vault: z.string().describe("Vault PDA address (base58)"),
+      agent: z.string().describe("Agent public key to revoke (base58)"),
     },
     requireClient((input) => revokeAgent(client!, input)),
   );
@@ -537,8 +602,28 @@ async function main() {
         .string()
         .optional()
         .describe("Optional new agent public key (base58)"),
+      newAgentPermissions: z
+        .string()
+        .optional()
+        .describe(
+          "Permission bitmask for the new agent (decimal string). Only used with newAgent.",
+        ),
     },
     requireClient((input) => reactivateVault(client!, input)),
+  );
+
+  registerTool(
+    server,
+    "shield_update_agent_permissions",
+    "Update the permission bitmask for a registered agent. Owner-only.",
+    {
+      vault: z.string().describe("Vault PDA address (base58)"),
+      agent: z.string().describe("Agent public key (base58)"),
+      permissions: z
+        .string()
+        .describe("New permission bitmask as decimal string (full = 2097151)"),
+    },
+    requireClient((input) => updateAgentPermissions(client!, input)),
   );
 
   // ── Agent-Signed Tools ──────────────────────────────────────
@@ -563,7 +648,7 @@ async function main() {
   registerTool(
     server,
     "shield_execute_swap",
-    "Execute a Jupiter token swap through an AgentShield vault",
+    "Execute a Jupiter token swap through an Phalnx vault",
     {
       vault: z.string().describe("Vault PDA address (base58)"),
       inputMint: z.string().describe("Input token mint address (base58)"),
@@ -780,6 +865,238 @@ async function main() {
     requireClient((input) => syncPositions(client!, config!, input)),
   );
 
+  // ── Escrow Tools ───────────────────────────────────────────
+
+  registerTool(
+    server,
+    "shield_check_escrow",
+    "Check the status of a conditional escrow between two vaults",
+    {
+      sourceVault: z.string().describe("Source vault PDA address (base58)"),
+      destinationVault: z
+        .string()
+        .describe("Destination vault PDA address (base58)"),
+      escrowId: z.string().describe("Escrow ID number"),
+    },
+    requireClient((input) => checkEscrow(client!, input)),
+  );
+
+  registerTool(
+    server,
+    "shield_create_escrow",
+    "Create a conditional escrow between two vaults. Locks tokens until conditions are met or escrow expires. Agent-signed.",
+    {
+      sourceVault: z.string().describe("Source vault PDA address (base58)"),
+      destinationVault: z
+        .string()
+        .describe("Destination vault PDA address (base58)"),
+      escrowId: z.string().describe("Unique escrow ID number"),
+      amount: z.string().describe("Amount in token base units"),
+      expiresAt: z
+        .string()
+        .describe("Expiration timestamp (Unix seconds). Max 30 days."),
+      conditionHash: z
+        .array(z.number().int().min(0).max(255))
+        .length(32)
+        .describe("SHA-256 condition hash (32 bytes)"),
+      tokenMint: z.string().describe("Token mint address (base58)"),
+      sourceVaultAta: z
+        .string()
+        .describe("Source vault token account (base58)"),
+      protocolTreasuryAta: z
+        .string()
+        .optional()
+        .describe("Protocol treasury token account (base58)"),
+      feeDestinationAta: z
+        .string()
+        .optional()
+        .describe("Developer fee destination token account (base58)"),
+    },
+    requireClient((input) => createEscrow(client!, input)),
+  );
+
+  registerTool(
+    server,
+    "shield_settle_escrow",
+    "Settle an escrow by providing proof matching the condition hash. Agent-signed (destination vault).",
+    {
+      destinationVault: z
+        .string()
+        .describe("Destination vault PDA address (base58)"),
+      sourceVault: z.string().describe("Source vault PDA address (base58)"),
+      escrow: z.string().describe("Escrow PDA address (base58)"),
+      escrowAta: z.string().describe("Escrow token account (base58)"),
+      destinationVaultAta: z
+        .string()
+        .describe("Destination vault token account (base58)"),
+      tokenMint: z.string().describe("Token mint address (base58)"),
+      proof: z
+        .string()
+        .describe(
+          "Base64-encoded proof data (SHA-256 must match condition_hash)",
+        ),
+    },
+    requireClient((input) => settleEscrow(client!, input)),
+  );
+
+  registerTool(
+    server,
+    "shield_refund_escrow",
+    "Refund an expired escrow, returning tokens to the source vault",
+    {
+      sourceVault: z.string().describe("Source vault PDA address (base58)"),
+      escrow: z.string().describe("Escrow PDA address (base58)"),
+      escrowAta: z.string().describe("Escrow token account (base58)"),
+      sourceVaultAta: z
+        .string()
+        .describe("Source vault token account (base58)"),
+      tokenMint: z.string().describe("Token mint address (base58)"),
+    },
+    requireClient((input) => refundEscrow(client!, input)),
+  );
+
+  registerTool(
+    server,
+    "shield_close_settled_escrow",
+    "Close a settled or refunded escrow account and reclaim rent",
+    {
+      sourceVault: z.string().describe("Source vault PDA address (base58)"),
+      destinationVault: z
+        .string()
+        .describe("Destination vault PDA address (base58)"),
+      escrow: z.string().describe("Escrow PDA address (base58)"),
+      escrowId: z.string().describe("Escrow ID number"),
+    },
+    requireClient((input) => closeSettledEscrow(client!, input)),
+  );
+
+  // ── Instruction Constraints Tools ─────────────────────────
+
+  registerTool(
+    server,
+    "shield_check_constraints",
+    "Check instruction constraints and pending updates for a vault",
+    {
+      vault: z.string().describe("Vault PDA address (base58)"),
+    },
+    requireClient((input) => checkConstraints(client!, input)),
+  );
+
+  registerTool(
+    server,
+    "shield_create_constraints",
+    "Create instruction constraints that validate DeFi instruction data bytes. Owner-only.",
+    {
+      vault: z.string().describe("Vault PDA address (base58)"),
+      entries: z
+        .array(
+          z.object({
+            programId: z.string().describe("Target program ID (base58)"),
+            dataConstraints: z.array(
+              z.object({
+                offset: z
+                  .number()
+                  .int()
+                  .min(0)
+                  .describe("Byte offset in instruction data"),
+                operator: z
+                  .enum(["eq", "ne", "gte", "lte"])
+                  .describe("Comparison operator"),
+                value: z
+                  .array(z.number().int().min(0).max(255))
+                  .min(1)
+                  .max(32)
+                  .describe("Expected value bytes"),
+              }),
+            ),
+          }),
+        )
+        .min(1)
+        .describe("Constraint entries (one per target program)"),
+    },
+    requireClient((input) => createConstraints(client!, input)),
+  );
+
+  registerTool(
+    server,
+    "shield_update_constraints",
+    "Replace all instruction constraints for a vault. No-timelock vaults only. Owner-only.",
+    {
+      vault: z.string().describe("Vault PDA address (base58)"),
+      entries: z
+        .array(
+          z.object({
+            programId: z.string().describe("Target program ID (base58)"),
+            dataConstraints: z.array(
+              z.object({
+                offset: z.number().int().min(0),
+                operator: z.enum(["eq", "ne", "gte", "lte"]),
+                value: z.array(z.number().int().min(0).max(255)).min(1).max(32),
+              }),
+            ),
+          }),
+        )
+        .min(1)
+        .describe("New constraint entries"),
+    },
+    requireClient((input) => updateConstraints(client!, input)),
+  );
+
+  registerTool(
+    server,
+    "shield_close_constraints",
+    "Remove all instruction constraints from a vault and reclaim rent. Owner-only.",
+    {
+      vault: z.string().describe("Vault PDA address (base58)"),
+    },
+    requireClient((input) => closeConstraints(client!, input)),
+  );
+
+  registerTool(
+    server,
+    "shield_queue_constraints_update",
+    "Queue a timelocked constraints update. Required for vaults with timelock. Owner-only.",
+    {
+      vault: z.string().describe("Vault PDA address (base58)"),
+      entries: z
+        .array(
+          z.object({
+            programId: z.string().describe("Target program ID (base58)"),
+            dataConstraints: z.array(
+              z.object({
+                offset: z.number().int().min(0),
+                operator: z.enum(["eq", "ne", "gte", "lte"]),
+                value: z.array(z.number().int().min(0).max(255)).min(1).max(32),
+              }),
+            ),
+          }),
+        )
+        .min(1)
+        .describe("New constraint entries"),
+    },
+    requireClient((input) => queueConstraintsUpdateHandler(client!, input)),
+  );
+
+  registerTool(
+    server,
+    "shield_apply_constraints_update",
+    "Apply a pending timelocked constraints update after timelock expires. Owner-only.",
+    {
+      vault: z.string().describe("Vault PDA address (base58)"),
+    },
+    requireClient((input) => applyConstraintsUpdate(client!, input)),
+  );
+
+  registerTool(
+    server,
+    "shield_cancel_constraints_update",
+    "Cancel a pending timelocked constraints update. Owner-only.",
+    {
+      vault: z.string().describe("Vault PDA address (base58)"),
+    },
+    requireClient((input) => cancelConstraintsUpdate(client!, input)),
+  );
+
   // ── Platform Tools ─────────────────────────────────────────
 
   registerTool(
@@ -791,7 +1108,7 @@ async function main() {
         .string()
         .optional()
         .default("https://agent-middleware.vercel.app")
-        .describe("AgentShield Actions server URL"),
+        .describe("Phalnx Actions server URL"),
       template: z
         .enum(["conservative", "moderate", "aggressive"])
         .optional()
@@ -960,7 +1277,7 @@ async function main() {
   registerTool(
     server,
     "shield_lend_deposit",
-    "Deposit tokens into Jupiter Lend/Earn through an AgentShield vault. Full on-chain sandwich enforcement. Counts against daily spending cap.",
+    "Deposit tokens into Jupiter Lend/Earn through an Phalnx vault. Full on-chain sandwich enforcement. Counts against daily spending cap.",
     {
       vault: z.string().describe("Vault PDA address (base58)"),
       mint: z.string().describe("Token mint to deposit (base58)"),
@@ -974,7 +1291,7 @@ async function main() {
   registerTool(
     server,
     "shield_lend_withdraw",
-    "Withdraw tokens from Jupiter Lend/Earn through an AgentShield vault. Full on-chain sandwich enforcement. Non-spending action.",
+    "Withdraw tokens from Jupiter Lend/Earn through an Phalnx vault. Full on-chain sandwich enforcement. Non-spending action.",
     {
       vault: z.string().describe("Vault PDA address (base58)"),
       mint: z.string().describe("Token mint to withdraw (base58)"),
@@ -1059,8 +1376,8 @@ async function main() {
   registerTool(
     server,
     "shield_squads_create_multisig",
-    "Create a new Squads V4 multisig for N-of-M governance over AgentShield vaults. " +
-      "The vault PDA becomes the AgentShield vault owner.",
+    "Create a new Squads V4 multisig for N-of-M governance over Phalnx vaults. " +
+      "The vault PDA becomes the Phalnx vault owner.",
     {
       members: z
         .array(
@@ -1097,7 +1414,7 @@ async function main() {
   registerTool(
     server,
     "shield_squads_propose_action",
-    "Propose an AgentShield admin action through Squads multisig governance. " +
+    "Propose an Phalnx admin action through Squads multisig governance. " +
       "Wraps the instruction in a vault transaction and opens a proposal.",
     {
       multisig: z.string().describe("Squads multisig address (base58)"),
@@ -1116,10 +1433,8 @@ async function main() {
           "emergency_close",
           "sync_positions",
         ])
-        .describe("AgentShield admin action to propose"),
-      agentShieldVault: z
-        .string()
-        .describe("AgentShield vault PDA address (base58)"),
+        .describe("Phalnx admin action to propose"),
+      phalnxVault: z.string().describe("Phalnx vault PDA address (base58)"),
       actionParams: z
         .string()
         .optional()
@@ -1280,10 +1595,10 @@ async function main() {
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("[agent-shield-mcp] Server running on stdio");
+  console.error("[phalnx-mcp] Server running on stdio");
 }
 
 main().catch((error) => {
-  console.error("[agent-shield-mcp] Fatal error:", error);
+  console.error("[phalnx-mcp] Fatal error:", error);
   process.exit(1);
 });

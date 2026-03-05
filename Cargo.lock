@@ -39,17 +39,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "agent-shield"
-version = "0.1.0"
-dependencies = [
- "anchor-lang",
- "anchor-spl",
- "blake3",
- "bytemuck",
- "cvlr",
-]
-
-[[package]]
 name = "ahash"
 version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1179,6 +1168,18 @@ name = "percent-encoding"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
+
+[[package]]
+name = "phalnx"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "anchor-spl",
+ "blake3",
+ "bytemuck",
+ "cvlr",
+ "solana-program",
+]
 
 [[package]]
 name = "polyval"

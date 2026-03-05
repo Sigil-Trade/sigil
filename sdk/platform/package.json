@@ -1,13 +1,13 @@
 {
-  "name": "@agent-shield/platform",
+  "name": "@phalnx/platform",
   "version": "0.1.4",
   "author": "Kaleb Rupe (https://x.com/MightieMags)",
-  "homepage": "https://github.com/Kaleb-Rupe/agentshield#readme",
+  "homepage": "https://github.com/Kaleb-Rupe/phalnx#readme",
   "bugs": {
-    "url": "https://github.com/Kaleb-Rupe/agentshield/issues",
+    "url": "https://github.com/Kaleb-Rupe/phalnx/issues",
     "email": "https://t.me/MightyMags"
   },
-  "description": "Platform client for AgentShield — request TEE wallet provisioning via Solana Actions",
+  "description": "Platform client for Phalnx — request TEE wallet provisioning via Solana Actions",
   "main": "dist/index.js",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -46,7 +46,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Kaleb-Rupe/agentshield",
+    "url": "https://github.com/Kaleb-Rupe/phalnx",
     "directory": "sdk/platform"
   }
 }

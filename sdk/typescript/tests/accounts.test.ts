@@ -6,7 +6,7 @@ import {
   getPolicyPDA,
   getTrackerPDA,
   getSessionPDA,
-  AGENT_SHIELD_PROGRAM_ID,
+  PHALNX_PROGRAM_ID,
 } from "../src/index";
 
 describe("Accounts — PDA Derivation", () => {
@@ -105,7 +105,7 @@ describe("Accounts — PDA Derivation", () => {
   describe("custom programId", () => {
     it("uses custom programId when provided", () => {
       const customProgram = PublicKey.unique();
-      const [pda1] = getVaultPDA(owner, vaultId, AGENT_SHIELD_PROGRAM_ID);
+      const [pda1] = getVaultPDA(owner, vaultId, PHALNX_PROGRAM_ID);
       const [pda2] = getVaultPDA(owner, vaultId, customProgram);
       expect(pda1.equals(pda2)).to.be.false;
     });

@@ -44,18 +44,18 @@ export const provisionAction = {
   ) => {
     try {
       const platformUrl =
-        runtime.getSetting?.("AGENT_SHIELD_PLATFORM_URL") ||
-        process.env.AGENT_SHIELD_PLATFORM_URL ||
-        "https://app.agentshield.dev";
+        runtime.getSetting?.("PHALNX_PLATFORM_URL") ||
+        process.env.PHALNX_PLATFORM_URL ||
+        "https://app.phalnx.io";
 
       const template =
-        runtime.getSetting?.("AGENT_SHIELD_DEFAULT_TEMPLATE") ||
-        process.env.AGENT_SHIELD_DEFAULT_TEMPLATE ||
+        runtime.getSetting?.("PHALNX_DEFAULT_TEMPLATE") ||
+        process.env.PHALNX_DEFAULT_TEMPLATE ||
         "conservative";
 
       const dailyCapStr =
-        runtime.getSetting?.("AGENT_SHIELD_DAILY_CAP") ||
-        process.env.AGENT_SHIELD_DAILY_CAP;
+        runtime.getSetting?.("PHALNX_DAILY_CAP") ||
+        process.env.PHALNX_DAILY_CAP;
       const dailyCap = dailyCapStr ? parseInt(dailyCapStr, 10) : undefined;
 
       const baseUrl = platformUrl.replace(/\/$/, "");
@@ -107,7 +107,7 @@ export const provisionAction = {
       {
         user: "{{agent}}",
         content: {
-          text: "I need a protected wallet to trade. Please approve the vault creation:\n\n**Policy:** conservative (500 USDC/day cap)\n\n**Blink URL:** https://dial.to/?action=solana-action:...\n**Action URL:** https://app.agentshield.dev/api/actions/provision?template=conservative",
+          text: "I need a protected wallet to trade. Please approve the vault creation:\n\n**Policy:** conservative (500 USDC/day cap)\n\n**Blink URL:** https://dial.to/?action=solana-action:...\n**Action URL:** https://app.phalnx.io/api/actions/provision?template=conservative",
         },
       },
     ],

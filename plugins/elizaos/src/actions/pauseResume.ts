@@ -3,7 +3,7 @@ import { getOrCreateShieldedWallet } from "../client-factory";
 export const pauseResumeAction = {
   name: "SHIELD_PAUSE_RESUME",
   description:
-    "Pause or resume AgentShield enforcement. When paused, transactions " +
+    "Pause or resume Phalnx enforcement. When paused, transactions " +
     "pass through without policy checks or spend recording.",
   similes: [
     "pause shield",
@@ -51,17 +51,17 @@ export const pauseResumeAction = {
       if (isResume) {
         wallet.resume();
         callback({
-          text: "Shield enforcement resumed. Policy checks are active.",
+          text: "Phalnx enforcement resumed. Policy checks are active.",
         });
       } else {
         wallet.pause();
         callback({
-          text: "Shield enforcement paused. Transactions will pass through without policy checks.",
+          text: "Phalnx enforcement paused. Transactions will pass through without policy checks.",
         });
       }
     } catch (error: any) {
       callback({
-        text: `Failed to pause/resume shield: ${error.message}`,
+        text: `Failed to pause/resume enforcement: ${error.message}`,
         error: true,
       });
     }
@@ -76,7 +76,7 @@ export const pauseResumeAction = {
       {
         user: "{{agent}}",
         content: {
-          text: "Shield enforcement paused. Transactions will pass through without policy checks.",
+          text: "Phalnx enforcement paused. Transactions will pass through without policy checks.",
         },
       },
     ],
@@ -88,7 +88,7 @@ export const pauseResumeAction = {
       {
         user: "{{agent}}",
         content: {
-          text: "Shield enforcement resumed. Policy checks are active.",
+          text: "Phalnx enforcement resumed. Policy checks are active.",
         },
       },
     ],

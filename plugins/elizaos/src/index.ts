@@ -1,5 +1,5 @@
-export { agentShieldPlugin } from "./plugin";
-export { ENV_KEYS, type AgentShieldElizaConfig } from "./types";
+export { phalnxPlugin } from "./plugin";
+export { ENV_KEYS, type PhalnxElizaConfig } from "./types";
 export { getOrCreateShieldedWallet, getConfig } from "./client-factory";
 export {
   statusAction,
@@ -13,5 +13,5 @@ export { shieldStatusProvider, spendTrackingProvider } from "./providers";
 export { policyCheckEvaluator } from "./evaluators";
 
 // Default export for ElizaOS plugin loader
-import { agentShieldPlugin } from "./plugin";
-export default agentShieldPlugin;
+import { phalnxPlugin } from "./plugin";
+export default phalnxPlugin;

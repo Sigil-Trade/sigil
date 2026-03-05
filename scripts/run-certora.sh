@@ -44,6 +44,6 @@ fi
 # ── Run the prover ───────────────────────────────────────────────────
 
 echo "Running Certora Solana Prover (platform-tools v1.51)..."
-certoraSolanaProver certora/conf/agent_shield.conf
+certoraSolanaProver certora/conf/phalnx.conf
 
 echo "Done. Certora report available in .certora_internal/"

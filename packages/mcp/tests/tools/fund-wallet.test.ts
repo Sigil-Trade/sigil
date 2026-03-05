@@ -13,18 +13,18 @@ describe("shield_fund_wallet", () => {
   });
 
   beforeEach(() => {
-    const shieldDir = path.join(tmpHome, ".agentshield");
+    const shieldDir = path.join(tmpHome, ".phalnx");
     if (!fs.existsSync(shieldDir)) {
       fs.mkdirSync(shieldDir, { recursive: true });
     }
     process.env.HOME = tmpHome;
-    delete process.env.AGENTSHIELD_WALLET_PATH;
-    delete process.env.AGENTSHIELD_RPC_URL;
+    delete process.env.PHALNX_WALLET_PATH;
+    delete process.env.PHALNX_RPC_URL;
   });
 
   afterEach(() => {
     process.env.HOME = origHome;
-    const configPath = path.join(tmpHome, ".agentshield", "config.json");
+    const configPath = path.join(tmpHome, ".phalnx", "config.json");
     if (fs.existsSync(configPath)) {
       fs.unlinkSync(configPath);
     }
@@ -51,7 +51,7 @@ describe("shield_fund_wallet", () => {
       },
       wallet: {
         type: "keypair",
-        path: "~/.agentshield/wallets/agent.json",
+        path: "~/.phalnx/wallets/agent.json",
         publicKey: "11111111111111111111111111111111",
       },
       network: "devnet",
@@ -60,7 +60,7 @@ describe("shield_fund_wallet", () => {
       ...overrides,
     };
     fs.writeFileSync(
-      path.join(tmpHome, ".agentshield", "config.json"),
+      path.join(tmpHome, ".phalnx", "config.json"),
       JSON.stringify(config),
     );
   }
@@ -73,7 +73,7 @@ describe("shield_fund_wallet", () => {
   it("generates Blink URL for SOL funding", async () => {
     writeConfig();
     const result = await fundWallet(null, { amount: "1.5" });
-    expect(result).to.include("Fund Your AgentShield Wallet");
+    expect(result).to.include("Fund Your Phalnx Wallet");
     expect(result).to.include("11111111111111111111111111111111");
     expect(result).to.include("dial.to");
     expect(result).to.include("SOL");

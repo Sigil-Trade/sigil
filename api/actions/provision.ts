@@ -47,7 +47,7 @@ function handleGet(req: VercelRequest, res: VercelResponse) {
   res.status(200).json({
     type: "action",
     icon: `${baseUrl}/icon.png`,
-    title: "Create AgentShield Vault",
+    title: "Create Phalnx Vault",
     description: `Set up a policy-enforced agent vault. Template: ${config.label} — ${config.description}`,
     label: "Create Vault",
     links: {

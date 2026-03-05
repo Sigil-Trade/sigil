@@ -1,11 +1,11 @@
 import { PublicKey } from "@solana/web3.js";
-import * as Core from "@agent-shield/core";
+import * as Core from "@phalnx/core";
 
 // Re-export core types that don't need Solana adaptation
-export type { RateLimitConfig, PolicyCheckResult } from "@agent-shield/core";
-export { DEFAULT_POLICIES, parseSpendLimit } from "@agent-shield/core";
+export type { RateLimitConfig, PolicyCheckResult } from "@phalnx/core";
+export { DEFAULT_POLICIES, parseSpendLimit } from "@phalnx/core";
 
-/** Policy configuration for the shield wrapper (accepts PublicKey or string) */
+/** Policy configuration for the Phalnx wrapper (accepts PublicKey or string) */
 export interface ShieldPolicies {
   /** Maximum spend per rolling 24h window, per token. e.g. "500 USDC/day" or { mint, amount } */
   maxSpend?: SpendLimit | SpendLimit[] | string | string[];

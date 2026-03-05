@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { toPublicKey } from "../utils";
 import { formatError } from "../errors";
 
@@ -16,7 +16,7 @@ export const squadsStatusSchema = z.object({
 export type SquadsStatusInput = z.infer<typeof squadsStatusSchema>;
 
 export async function squadsStatus(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   input: SquadsStatusInput,
 ): Promise<string> {
   try {

@@ -1,6 +1,6 @@
 import { PublicKey, Connection, TransactionInstruction } from "@solana/web3.js";
 import { Program } from "@coral-xyz/anchor";
-import type { AgentShield, AgentVaultAccount } from "../types";
+import type { Phalnx, AgentVaultAccount } from "../types";
 import { buildSyncPositions } from "../instructions";
 import { fetchVaultByAddress } from "../accounts";
 
@@ -56,7 +56,7 @@ export async function countFlashTradePositions(
  *   if already in sync.
  */
 export async function reconcilePositions(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   connection: Connection,
   owner: PublicKey,
   vault: PublicKey,

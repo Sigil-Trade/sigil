@@ -11,11 +11,15 @@ import {
 import { AnchorProvider, BN, Program, Wallet } from "@coral-xyz/anchor";
 import { FEE_RATE_DENOMINATOR, PROTOCOL_FEE_RATE } from "./types";
 import type {
-  AgentShield,
+  Phalnx,
   AgentVaultAccount,
   PolicyConfigAccount,
   SpendTrackerAccount,
   PendingPolicyUpdateAccount,
+  EscrowDepositAccount,
+  InstructionConstraintsAccount,
+  PendingConstraintsUpdateAccount,
+  ConstraintEntry,
   InitializeVaultParams,
   UpdatePolicyParams,
   QueuePolicyUpdateParams,
@@ -29,6 +33,9 @@ import {
   getTrackerPDA,
   getSessionPDA,
   getPendingPolicyPDA,
+  getEscrowPDA,
+  getConstraintsPDA,
+  getPendingConstraintsPDA,
   fetchVault,
   fetchPolicy,
   fetchTracker,
@@ -36,6 +43,10 @@ import {
   fetchPolicyByAddress,
   fetchTrackerByAddress,
   fetchPendingPolicy,
+  fetchEscrow,
+  fetchEscrowByAddress,
+  fetchConstraints,
+  fetchPendingConstraints,
 } from "./accounts";
 import {
   buildInitializeVault,
@@ -52,6 +63,17 @@ import {
   buildApplyPendingPolicy,
   buildCancelPendingPolicy,
   buildAgentTransfer,
+  buildUpdateAgentPermissions,
+  buildCreateEscrow,
+  buildSettleEscrow,
+  buildRefundEscrow,
+  buildCloseSettledEscrow,
+  buildCreateInstructionConstraints,
+  buildCloseInstructionConstraints,
+  buildUpdateInstructionConstraints,
+  buildQueueConstraintsUpdate,
+  buildApplyConstraintsUpdate,
+  buildCancelConstraintsUpdate,
 } from "./instructions";
 import {
   composePermittedAction,
@@ -147,7 +169,7 @@ import {
 } from "./integrations/flash-trade-reconcile";
 import { buildSyncPositions } from "./instructions";
 import { PerpetualsClient, PoolConfig } from "flash-sdk";
-import { IDL as AgentShieldIDL } from "./idl-json";
+import { IDL as PhalnxIDL } from "./idl-json";
 import {
   configureJupiterApi,
   type JupiterApiConfig,
@@ -175,7 +197,7 @@ import {
   type ProposalInfo,
 } from "./integrations/squads";
 
-export interface AgentShieldClientOptions {
+export interface PhalnxClientOptions {
   programId?: PublicKey;
   idl?: any;
   /** When true, createVault() throws if allowedDestinations is empty */
@@ -186,8 +208,8 @@ export interface AgentShieldClientOptions {
   jupiterApiConfig?: JupiterApiConfig;
 }
 
-export class AgentShieldClient {
-  readonly program: Program<AgentShield>;
+export class PhalnxClient {
+  readonly program: Program<Phalnx>;
   readonly provider: AnchorProvider;
   private readonly requireDestinations: boolean;
   private readonly priorityFeeConfig:
@@ -197,7 +219,7 @@ export class AgentShieldClient {
   constructor(
     connection: Connection,
     wallet: Wallet,
-    programIdOrOptions?: PublicKey | AgentShieldClientOptions,
+    programIdOrOptions?: PublicKey | PhalnxClientOptions,
     idl?: any,
   ) {
     this.provider = new AnchorProvider(connection, wallet, {
@@ -212,9 +234,9 @@ export class AgentShieldClient {
       !(programIdOrOptions instanceof PublicKey) &&
       typeof programIdOrOptions === "object"
     ) {
-      const opts = programIdOrOptions as AgentShieldClientOptions;
+      const opts = programIdOrOptions as PhalnxClientOptions;
       programId = opts.programId;
-      resolvedIdl = opts.idl ?? AgentShieldIDL;
+      resolvedIdl = opts.idl ?? PhalnxIDL;
       this.requireDestinations = opts.requireDestinations ?? false;
       this.priorityFeeConfig = opts.priorityFees ?? {};
       if (opts.jupiterApiConfig) {
@@ -222,7 +244,7 @@ export class AgentShieldClient {
       }
     } else {
       programId = programIdOrOptions as PublicKey | undefined;
-      resolvedIdl = idl ?? AgentShieldIDL;
+      resolvedIdl = idl ?? PhalnxIDL;
       this.requireDestinations = false;
       this.priorityFeeConfig = {};
     }
@@ -230,7 +252,7 @@ export class AgentShieldClient {
     if (programId) {
       resolvedIdl.address = programId.toBase58();
     }
-    this.program = new Program<AgentShield>(resolvedIdl, this.provider) as any;
+    this.program = new Program<Phalnx>(resolvedIdl, this.provider) as any;
   }
 
   // --- PDA Helpers ---
@@ -302,12 +324,12 @@ export class AgentShieldClient {
     if (!hasDestinations) {
       if (this.requireDestinations) {
         throw new Error(
-          "AgentShield: allowedDestinations is empty but requireDestinations is enabled. " +
+          "Phalnx: allowedDestinations is empty but requireDestinations is enabled. " +
             "Pass allowedDestinations to restrict agent transfer targets.",
         );
       }
       console.warn(
-        "\u26A0 AgentShield: Vault created with empty allowedDestinations \u2014 " +
+        "\u26A0 Phalnx: Vault created with empty allowedDestinations \u2014 " +
           "agent can transfer to ANY address. Pass allowedDestinations to restrict.",
       );
     }
@@ -325,9 +347,19 @@ export class AgentShieldClient {
     return buildDepositFunds(this.program, owner, vault, mint, amount).rpc();
   }
 
-  async registerAgent(vault: PublicKey, agent: PublicKey): Promise<string> {
+  async registerAgent(
+    vault: PublicKey,
+    agent: PublicKey,
+    permissions: BN,
+  ): Promise<string> {
     const owner = this.provider.wallet.publicKey;
-    return buildRegisterAgent(this.program, owner, vault, agent).rpc();
+    return buildRegisterAgent(
+      this.program,
+      owner,
+      vault,
+      agent,
+      permissions,
+    ).rpc();
   }
 
   async updatePolicy(
@@ -400,17 +432,42 @@ export class AgentShieldClient {
     };
   }
 
-  async revokeAgent(vault: PublicKey): Promise<string> {
+  async revokeAgent(
+    vault: PublicKey,
+    agentToRemove: PublicKey,
+  ): Promise<string> {
     const owner = this.provider.wallet.publicKey;
-    return buildRevokeAgent(this.program, owner, vault).rpc();
+    return buildRevokeAgent(this.program, owner, vault, agentToRemove).rpc();
   }
 
   async reactivateVault(
     vault: PublicKey,
     newAgent?: PublicKey | null,
+    newAgentPermissions?: BN | null,
   ): Promise<string> {
     const owner = this.provider.wallet.publicKey;
-    return buildReactivateVault(this.program, owner, vault, newAgent).rpc();
+    return buildReactivateVault(
+      this.program,
+      owner,
+      vault,
+      newAgent,
+      newAgentPermissions,
+    ).rpc();
+  }
+
+  async updateAgentPermissions(
+    vault: PublicKey,
+    agent: PublicKey,
+    newPermissions: BN,
+  ): Promise<string> {
+    const owner = this.provider.wallet.publicKey;
+    return buildUpdateAgentPermissions(
+      this.program,
+      owner,
+      vault,
+      agent,
+      newPermissions,
+    ).rpc();
   }
 
   async withdraw(
@@ -594,7 +651,7 @@ export class AgentShieldClient {
   }
 
   /**
-   * Build an unsigned VersionedTransaction for a Jupiter swap through AgentShield.
+   * Build an unsigned VersionedTransaction for a Jupiter swap through Phalnx.
    *
    * Composes: [ComputeBudget, ValidateAndAuthorize, ...JupiterIxs, FinalizeSession]
    */
@@ -825,7 +882,7 @@ export class AgentShieldClient {
   }
 
   /**
-   * Compose a Flash Trade open position through AgentShield.
+   * Compose a Flash Trade open position through Phalnx.
    */
   async flashTradeOpen(
     params: FlashOpenPositionParams,
@@ -837,7 +894,7 @@ export class AgentShieldClient {
   }
 
   /**
-   * Compose a Flash Trade close position through AgentShield.
+   * Compose a Flash Trade close position through Phalnx.
    */
   async flashTradeClose(
     params: FlashClosePositionParams,
@@ -849,7 +906,7 @@ export class AgentShieldClient {
   }
 
   /**
-   * Compose a Flash Trade increase position through AgentShield.
+   * Compose a Flash Trade increase position through Phalnx.
    */
   async flashTradeIncrease(
     params: FlashIncreasePositionParams,
@@ -861,7 +918,7 @@ export class AgentShieldClient {
   }
 
   /**
-   * Compose a Flash Trade decrease position through AgentShield.
+   * Compose a Flash Trade decrease position through Phalnx.
    */
   async flashTradeDecrease(
     params: FlashDecreasePositionParams,
@@ -958,7 +1015,7 @@ export class AgentShieldClient {
   }
 
   /**
-   * Place a limit order via Flash Trade through AgentShield.
+   * Place a limit order via Flash Trade through Phalnx.
    */
   async flashTradePlaceLimitOrder(
     params: FlashLimitOrderParams,
@@ -1122,10 +1179,176 @@ export class AgentShieldClient {
     return sig;
   }
 
+  // --- Escrow Operations ---
+
+  async createEscrow(
+    sourceVault: PublicKey,
+    destinationVault: PublicKey,
+    escrowId: BN,
+    amount: BN,
+    expiresAt: BN,
+    conditionHash: number[],
+    tokenMint: PublicKey,
+    sourceVaultAta: PublicKey,
+    protocolTreasuryAta?: PublicKey | null,
+    feeDestinationAta?: PublicKey | null,
+  ): Promise<string> {
+    const agent = this.provider.wallet.publicKey;
+    return buildCreateEscrow(
+      this.program,
+      agent,
+      sourceVault,
+      destinationVault,
+      escrowId,
+      amount,
+      expiresAt,
+      conditionHash,
+      tokenMint,
+      sourceVaultAta,
+      protocolTreasuryAta,
+      feeDestinationAta,
+    ).rpc();
+  }
+
+  async settleEscrow(
+    destinationVault: PublicKey,
+    sourceVault: PublicKey,
+    escrow: PublicKey,
+    escrowAta: PublicKey,
+    destinationVaultAta: PublicKey,
+    tokenMint: PublicKey,
+    proof: Buffer,
+  ): Promise<string> {
+    const agent = this.provider.wallet.publicKey;
+    return buildSettleEscrow(
+      this.program,
+      agent,
+      destinationVault,
+      sourceVault,
+      escrow,
+      escrowAta,
+      destinationVaultAta,
+      tokenMint,
+      proof,
+    ).rpc();
+  }
+
+  async refundEscrow(
+    sourceVault: PublicKey,
+    escrow: PublicKey,
+    escrowAta: PublicKey,
+    sourceVaultAta: PublicKey,
+    tokenMint: PublicKey,
+  ): Promise<string> {
+    const signer = this.provider.wallet.publicKey;
+    return buildRefundEscrow(
+      this.program,
+      signer,
+      sourceVault,
+      escrow,
+      escrowAta,
+      sourceVaultAta,
+      tokenMint,
+    ).rpc();
+  }
+
+  async closeSettledEscrow(
+    sourceVault: PublicKey,
+    destinationVaultKey: PublicKey,
+    escrow: PublicKey,
+    escrowId: BN,
+  ): Promise<string> {
+    const signer = this.provider.wallet.publicKey;
+    return buildCloseSettledEscrow(
+      this.program,
+      signer,
+      sourceVault,
+      destinationVaultKey,
+      escrow,
+      escrowId,
+    ).rpc();
+  }
+
+  async fetchEscrow(
+    sourceVault: PublicKey,
+    destinationVault: PublicKey,
+    escrowId: BN,
+  ): Promise<EscrowDepositAccount> {
+    return fetchEscrow(this.program, sourceVault, destinationVault, escrowId);
+  }
+
+  // --- Instruction Constraints ---
+
+  async createInstructionConstraints(
+    vault: PublicKey,
+    entries: ConstraintEntry[],
+  ): Promise<string> {
+    const owner = this.provider.wallet.publicKey;
+    return buildCreateInstructionConstraints(
+      this.program,
+      owner,
+      vault,
+      entries,
+    ).rpc();
+  }
+
+  async closeInstructionConstraints(vault: PublicKey): Promise<string> {
+    const owner = this.provider.wallet.publicKey;
+    return buildCloseInstructionConstraints(this.program, owner, vault).rpc();
+  }
+
+  async updateInstructionConstraints(
+    vault: PublicKey,
+    entries: ConstraintEntry[],
+  ): Promise<string> {
+    const owner = this.provider.wallet.publicKey;
+    return buildUpdateInstructionConstraints(
+      this.program,
+      owner,
+      vault,
+      entries,
+    ).rpc();
+  }
+
+  async queueConstraintsUpdate(
+    vault: PublicKey,
+    entries: ConstraintEntry[],
+  ): Promise<string> {
+    const owner = this.provider.wallet.publicKey;
+    return buildQueueConstraintsUpdate(
+      this.program,
+      owner,
+      vault,
+      entries,
+    ).rpc();
+  }
+
+  async applyConstraintsUpdate(vault: PublicKey): Promise<string> {
+    const owner = this.provider.wallet.publicKey;
+    return buildApplyConstraintsUpdate(this.program, owner, vault).rpc();
+  }
+
+  async cancelConstraintsUpdate(vault: PublicKey): Promise<string> {
+    const owner = this.provider.wallet.publicKey;
+    return buildCancelConstraintsUpdate(this.program, owner, vault).rpc();
+  }
+
+  async fetchConstraints(
+    vault: PublicKey,
+  ): Promise<InstructionConstraintsAccount | null> {
+    return fetchConstraints(this.program, vault);
+  }
+
+  async fetchPendingConstraints(
+    vault: PublicKey,
+  ): Promise<PendingConstraintsUpdateAccount | null> {
+    return fetchPendingConstraints(this.program, vault);
+  }
+
   // --- Squads V4 Multisig Governance ---
 
   /**
-   * Create a new Squads V4 multisig for governing an AgentShield vault.
+   * Create a new Squads V4 multisig for governing an Phalnx vault.
    * Returns the multisig PDA and default vault PDA (index 0).
    */
   async squadsCreateMultisig(
@@ -1140,7 +1363,7 @@ export class AgentShieldClient {
   }
 
   /**
-   * Wrap AgentShield instruction(s) in a Squads vault transaction + proposal.
+   * Wrap Phalnx instruction(s) in a Squads vault transaction + proposal.
    * The member must have the Initiate permission.
    */
   async squadsProposeVaultAction(
@@ -1203,7 +1426,7 @@ export class AgentShieldClient {
   }
 
   /**
-   * Build an AgentShield admin instruction and wrap it in a Squads proposal.
+   * Build an Phalnx admin instruction and wrap it in a Squads proposal.
    * Supported actions: update_policy, queue_policy_update, apply_pending_policy,
    * sync_positions, initialize_vault.
    */
@@ -1213,7 +1436,7 @@ export class AgentShieldClient {
       multisigPda: PublicKey;
       vaultIndex?: number;
       action: string;
-      agentShieldVault?: PublicKey;
+      phalnxVault?: PublicKey;
       actionParams?: any;
       memo?: string;
     },
@@ -1229,27 +1452,27 @@ export class AgentShieldClient {
       case "update_policy":
         return _proposeUpdatePolicy(this.program, conn, member, {
           ...base,
-          agentShieldVault: params.agentShieldVault!,
+          phalnxVault: params.phalnxVault!,
           policyUpdate: params.actionParams,
         });
 
       case "queue_policy_update":
         return _proposeQueuePolicyUpdate(this.program, conn, member, {
           ...base,
-          agentShieldVault: params.agentShieldVault!,
+          phalnxVault: params.phalnxVault!,
           policyUpdate: params.actionParams,
         });
 
       case "apply_pending_policy":
         return _proposeApplyPendingPolicy(this.program, conn, member, {
           ...base,
-          agentShieldVault: params.agentShieldVault!,
+          phalnxVault: params.phalnxVault!,
         });
 
       case "sync_positions":
         return _proposeSyncPositions(this.program, conn, member, {
           ...base,
-          agentShieldVault: params.agentShieldVault!,
+          phalnxVault: params.phalnxVault!,
           actualPositions: params.actionParams?.actualPositions ?? 0,
         });
 

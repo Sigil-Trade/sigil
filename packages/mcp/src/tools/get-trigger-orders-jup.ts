@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { formatError } from "../errors";
 
 export const getTriggerOrdersJupSchema = z.object({
@@ -15,7 +15,7 @@ export type GetTriggerOrdersJupInput = z.infer<
 >;
 
 export async function getTriggerOrdersJup(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   input: GetTriggerOrdersJupInput,
 ): Promise<string> {
   try {

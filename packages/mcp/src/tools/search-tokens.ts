@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { searchJupiterTokens, isTokenSuspicious } from "@agent-shield/sdk";
+import { searchJupiterTokens, isTokenSuspicious } from "@phalnx/sdk";
 import { formatError } from "../errors";
 
 export const searchTokensSchema = z.object({

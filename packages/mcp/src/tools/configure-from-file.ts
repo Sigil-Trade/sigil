@@ -21,7 +21,7 @@ export const configureFromFileSchema = z.object({
 export type ConfigureFromFileInput = z.infer<typeof configureFromFileSchema>;
 
 /**
- * Apply an AgentShield configuration from a pre-written JSON file.
+ * Apply an Phalnx configuration from a pre-written JSON file.
  *
  * Designed for programmatic deployments (CI/CD pipelines, orchestrator
  * platforms) that need a non-interactive config path. The human who
@@ -37,7 +37,7 @@ export type ConfigureFromFileInput = z.infer<typeof configureFromFileSchema>;
  *     "tee": { "enabled": false, "locator": null, "publicKey": null },
  *     "vault": { "enabled": false, "address": null, "owner": null, "vaultId": null }
  *   },
- *   "wallet": { "type": "keypair", "path": "~/.agentshield/wallets/agent.json", "publicKey": "<base58>" },
+ *   "wallet": { "type": "keypair", "path": "~/.phalnx/wallets/agent.json", "publicKey": "<base58>" },
  *   "network": "devnet",
  *   "template": "conservative",
  *   "configuredAt": "2026-01-01T00:00:00.000Z"
@@ -99,7 +99,7 @@ export async function configureFromFile(
     const fullyConfigured = isFullyConfigured(config);
 
     const lines: string[] = [
-      `## AgentShield Configured from File${isOverwrite ? " (overwritten)" : ""}`,
+      `## Phalnx Configured from File${isOverwrite ? " (overwritten)" : ""}`,
       "",
       `**Source:** ${resolved}`,
       `**Status:** ${fullyConfigured ? "Fully configured" : "Partially configured"}`,
@@ -113,7 +113,7 @@ export async function configureFromFile(
       lines.push("");
       lines.push(
         "**Note:** For production use with real funds, ensure all layers are enabled " +
-          "(Shield + TEE + Vault) for on-chain policy enforcement that " +
+          "(Policy + TEE + Vault) for on-chain policy enforcement that " +
           "cannot be bypassed even by compromised agent software.",
       );
     }
@@ -225,10 +225,10 @@ function validateConfig(obj: any): string[] {
 export const configureFromFileTool = {
   name: "shield_configure_from_file",
   description:
-    "Apply AgentShield configuration from a pre-written JSON file. " +
+    "Apply Phalnx configuration from a pre-written JSON file. " +
     "Designed for CI/CD pipelines and orchestrator platforms that need " +
     "non-interactive setup. The config file must match the ShieldLocalConfig " +
-    "schema (same format as ~/.agentshield/config.json).",
+    "schema (same format as ~/.phalnx/config.json).",
   schema: configureFromFileSchema,
   handler: configureFromFile,
 };

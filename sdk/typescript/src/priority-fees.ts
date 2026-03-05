@@ -11,22 +11,22 @@ const JUPITER_LEND_PROGRAM = "JLend2fEim9xUFcaHsyGePEoBzFLvkjMi3MnPcSuCdu";
 const FLASH_TRADE_PROGRAM = "FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn";
 
 // ─── CU Budget Defaults ─────────────────────────────────────────────────────
-// Measured via LiteSVM. Shield overhead (validate+finalize) is 52–62K CU.
+// Measured via LiteSVM. Phalnx overhead (validate+finalize) is 52–62K CU.
 // External DeFi instruction CU varies by protocol; we add generous headroom.
 
-/** Shield overhead only (no external DeFi): ~55K measured + 45K buffer */
+/** Phalnx overhead only (no external DeFi): ~55K measured + 45K buffer */
 export const CU_AGENT_TRANSFER = 200_000;
 
-/** Shield + Jupiter single-hop swap: ~56K shield + ~250K swap + buffer */
+/** Phalnx + Jupiter single-hop swap: ~56K validate + ~250K swap + buffer */
 export const CU_JUPITER_SWAP = 600_000;
 
-/** Shield + Jupiter multi-hop swap: ~62K shield + ~500K swap + buffer */
+/** Phalnx + Jupiter multi-hop swap: ~62K validate + ~500K swap + buffer */
 export const CU_JUPITER_MULTI_HOP = 900_000;
 
-/** Shield + Flash Trade position action: ~48K shield + ~400K flash + buffer */
+/** Phalnx + Flash Trade position action: ~48K validate + ~400K flash + buffer */
 export const CU_FLASH_TRADE = 800_000;
 
-/** Shield + Jupiter Lend deposit/withdraw: ~55K shield + ~200K lend + buffer */
+/** Phalnx + Jupiter Lend deposit/withdraw: ~55K validate + ~200K lend + buffer */
 export const CU_JUPITER_LEND = 400_000;
 
 /** Fallback for unknown DeFi protocols */
@@ -193,7 +193,7 @@ export class PriorityFeeEstimator {
 
       const body = {
         jsonrpc: "2.0",
-        id: "agentshield-fee-estimate",
+        id: "phalnx-fee-estimate",
         method: "getPriorityFeeEstimate",
         params: [
           {

@@ -45,13 +45,39 @@ export type {
 } from "./policies";
 export { parseSpendLimit, resolvePolicies, DEFAULT_POLICIES } from "./policies";
 
-// Errors (re-exported from @agent-shield/core + TeeRequiredError)
+// Errors (re-exported from @phalnx/core + TeeRequiredError + attestation errors)
 export {
   ShieldDeniedError,
   ShieldConfigError,
   TeeRequiredError,
+  TeeAttestationError,
+  AttestationCertChainError,
+  AttestationPcrMismatchError,
 } from "./errors";
 export type { PolicyViolation } from "./errors";
+
+// TEE Remote Attestation
+export {
+  AttestationStatus,
+  AttestationCache,
+  DEFAULT_CACHE_TTL_MS,
+  verifyTeeAttestation,
+  clearAttestationCache,
+  deleteFromAttestationCache,
+  verifyCrossmint,
+  verifyPrivy,
+  verifyTurnkey,
+} from "./tee";
+export type {
+  TeeProvider,
+  AttestationResult,
+  AttestationConfig,
+  AttestationMetadata,
+  AttestationLevel,
+  VerifiedTeeWallet,
+  NitroPcrValues,
+  TurnkeyAttestationBundle,
+} from "./tee";
 
 // Transaction inspection (Solana-specific)
 export {
@@ -72,7 +98,7 @@ export {
   isKnownProtocol,
 } from "./registry";
 
-// Client-side state (re-exported from @agent-shield/core)
+// Client-side state (re-exported from @phalnx/core)
 export { ShieldState } from "./state";
 export type {
   ShieldStorage,

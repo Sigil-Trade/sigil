@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { toPublicKey, toBN } from "../utils";
 import { formatError } from "../errors";
 import {
@@ -28,7 +28,7 @@ function parseSide(
 }
 
 export async function placeTriggerOrder(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   config: McpConfig,
   input: PlaceTriggerOrderInput,
   custodyWallet?: CustodyWalletLike | null,
@@ -82,7 +82,7 @@ export const placeTriggerOrderTool = {
   name: "shield_place_trigger_order",
   description:
     "Place a take-profit or stop-loss trigger order on a Flash Trade position. " +
-    "Requires AGENTSHIELD_AGENT_KEYPAIR_PATH. " +
+    "Requires PHALNX_AGENT_KEYPAIR_PATH. " +
     "Non-spending: does not count toward daily cap.",
   schema: placeTriggerOrderSchema,
   handler: placeTriggerOrder,

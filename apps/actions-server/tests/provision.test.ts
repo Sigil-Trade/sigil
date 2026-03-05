@@ -31,7 +31,7 @@ describe("Actions Server", () => {
       expect(res.status).to.equal(200);
       const body = (await res.json()) as any;
       expect(body.type).to.equal("action");
-      expect(body.title).to.equal("Create AgentShield Vault");
+      expect(body.title).to.equal("Create Phalnx Vault");
       expect(body.label).to.equal("Create Vault");
       expect(body.links.actions).to.be.an("array");
       expect(body.links.actions.length).to.equal(3);

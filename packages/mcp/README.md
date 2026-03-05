@@ -1,18 +1,18 @@
-# @agent-shield/mcp
+# @phalnx/mcp
 
-MCP (Model Context Protocol) server for AgentShield. Lets any MCP-compatible AI tool — Claude Desktop, Cursor, Windsurf — manage on-chain Solana vaults and enforce DeFi policies via natural language.
+MCP (Model Context Protocol) server for Phalnx. Lets any MCP-compatible AI tool — Claude Desktop, Cursor, Windsurf — manage on-chain Solana vaults and enforce DeFi policies via natural language.
 
 ## Installation
 
 ```bash
-npm install -g @agent-shield/mcp
+npm install -g @phalnx/mcp
 # or run directly
-npx @agent-shield/mcp
+npx @phalnx/mcp
 ```
 
 ## Security Model
 
-AgentShield bundles three layers of protection in a single integration:
+Phalnx bundles three layers of protection in a single integration:
 
 | Layer | What It Does |
 | ----- | ------------ |
@@ -25,8 +25,8 @@ All three layers are set up with a single `shield_configure` call. TEE is requir
 ## Quickstart
 
 1. Install and add to your MCP client (see Configuration below)
-2. Ask your AI assistant: _"What's my AgentShield setup status?"_ — it will call `shield_setup_status`
-3. Follow the guided flow: _"Set up AgentShield"_ — the assistant walks you through wallet creation and policy configuration
+2. Ask your AI assistant: _"What's my Phalnx setup status?"_ — it will call `shield_setup_status`
+3. Follow the guided flow: _"Set up Phalnx"_ — the assistant walks you through wallet creation and policy configuration
 4. For programmatic/CI deployments, use `shield_configure_from_file` with a pre-written JSON config
 
 ## Configuration
@@ -35,9 +35,9 @@ All three layers are set up with a single `shield_configure` call. TEE is requir
 
 | Variable                         | Required | Default | Description                                                                                       |
 | -------------------------------- | -------- | ------- | ------------------------------------------------------------------------------------------------- |
-| `AGENTSHIELD_WALLET_PATH`        | No       | —       | Path to Solana keypair JSON (vault owner). Not required — server starts in setup mode without it. |
-| `AGENTSHIELD_RPC_URL`            | No       | devnet  | Solana RPC endpoint URL                                                                           |
-| `AGENTSHIELD_AGENT_KEYPAIR_PATH` | No       | —       | Path to agent keypair JSON (needed for swap/position tools)                                       |
+| `PHALNX_WALLET_PATH`        | No       | —       | Path to Solana keypair JSON (vault owner). Not required — server starts in setup mode without it. |
+| `PHALNX_RPC_URL`            | No       | devnet  | Solana RPC endpoint URL                                                                           |
+| `PHALNX_AGENT_KEYPAIR_PATH` | No       | —       | Path to agent keypair JSON (needed for swap/position tools)                                       |
 
 ### Claude Desktop
 
@@ -46,12 +46,12 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "agent-shield": {
+    "phalnx": {
       "command": "npx",
-      "args": ["@agent-shield/mcp"],
+      "args": ["@phalnx/mcp"],
       "env": {
-        "AGENTSHIELD_WALLET_PATH": "~/.config/solana/id.json",
-        "AGENTSHIELD_RPC_URL": "https://api.devnet.solana.com"
+        "PHALNX_WALLET_PATH": "~/.config/solana/id.json",
+        "PHALNX_RPC_URL": "https://api.devnet.solana.com"
       }
     }
   }
@@ -65,11 +65,11 @@ Add to `.cursor/mcp.json` in your project:
 ```json
 {
   "mcpServers": {
-    "agent-shield": {
+    "phalnx": {
       "command": "npx",
-      "args": ["@agent-shield/mcp"],
+      "args": ["@phalnx/mcp"],
       "env": {
-        "AGENTSHIELD_WALLET_PATH": "~/.config/solana/id.json"
+        "PHALNX_WALLET_PATH": "~/.config/solana/id.json"
       }
     }
   }
@@ -83,7 +83,7 @@ Add to `.cursor/mcp.json` in your project:
 | Tool                         | Description                                                                   |
 | ---------------------------- | ----------------------------------------------------------------------------- |
 | `shield_setup_status`        | Check current setup status — which layers are active                          |
-| `shield_configure`           | Set up AgentShield with full protection (Shield + TEE + Vault)                |
+| `shield_configure`           | Set up Phalnx with full protection (Shield + TEE + Vault)                |
 | `shield_configure_from_file` | Apply a pre-written JSON config file (for CI/CD and programmatic deployments) |
 | `shield_fund_wallet`         | Generate funding links (Blink URL, Solana Pay, raw address)                   |
 
@@ -111,7 +111,7 @@ Add to `.cursor/mcp.json` in your project:
 | `shield_reactivate_vault`      | Unfreeze a vault, optionally with a new agent                    |
 | `shield_provision`             | Provision a vault via Solana Actions                             |
 
-### Agent-Signed (Requires `AGENTSHIELD_AGENT_KEYPAIR_PATH`)
+### Agent-Signed (Requires `PHALNX_AGENT_KEYPAIR_PATH`)
 
 | Tool                              | Description                                           |
 | --------------------------------- | ----------------------------------------------------- |
@@ -189,24 +189,24 @@ pnpm build
 pnpm test
 
 # Smoke test
-AGENTSHIELD_WALLET_PATH=~/.config/solana/id.json node dist/index.js
+PHALNX_WALLET_PATH=~/.config/solana/id.json node dist/index.js
 ```
 
 ## Architecture
 
 - **Transport**: stdio only (local subprocess of the AI tool)
 - **Credentials**: Environment variables (keypair file paths)
-- **SDK**: Wraps `AgentShieldClient` from `@agent-shield/sdk` — every tool delegates to a client method
+- **SDK**: Wraps `PhalnxClient` from `@phalnx/sdk` — every tool delegates to a client method
 - **Setup mode**: Starts without a wallet — only setup/onboarding tools available until configured
 - **Programmatic config**: `shield_configure_from_file` reads a JSON config matching the `ShieldLocalConfig` schema — for CI/CD pipelines and orchestrator platforms where interactive setup is not practical
-- **Local config**: `~/.agentshield/config.json` stores wallet, layer status, and policy state across sessions
+- **Local config**: `~/.phalnx/config.json` stores wallet, layer status, and policy state across sessions
 - **Error handling**: All 46 Anchor error codes (6000-6045) mapped to human-readable messages with actionable suggestions
 
 ## Support
 
 - X/Twitter: [@MightieMags](https://x.com/MightieMags)
 - Telegram: [MightyMags](https://t.me/MightyMags)
-- Issues: [GitHub Issues](https://github.com/Kaleb-Rupe/agentshield/issues)
+- Issues: [GitHub Issues](https://github.com/Kaleb-Rupe/phalnx/issues)
 
 ## License
 

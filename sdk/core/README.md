@@ -1,13 +1,13 @@
-# @agent-shield/core
+# @phalnx/core
 
 Pure TypeScript policy engine for AI agent spending controls. Zero blockchain dependencies.
 
-`@agent-shield/core` is the foundational policy engine that powers all AgentShield packages. It provides spending caps, rate limiting, protocol allowlists, and transaction analysis in a framework-agnostic, chain-agnostic core. Use it directly if you're building a custom integration, or let higher-level packages like `@agent-shield/sdk` consume it automatically.
+`@phalnx/core` is the foundational policy engine that powers all Phalnx packages. It provides spending caps, rate limiting, protocol allowlists, and transaction analysis in a framework-agnostic, chain-agnostic core. Use it directly if you're building a custom integration, or let higher-level packages like `@phalnx/sdk` consume it automatically.
 
 ## Installation
 
 ```bash
-npm install @agent-shield/core
+npm install @phalnx/core
 ```
 
 Zero dependencies. Works in Node.js, browsers, and edge runtimes.
@@ -31,7 +31,7 @@ import {
   evaluatePolicy,
   recordTransaction,
   ShieldState,
-} from "@agent-shield/core";
+} from "@phalnx/core";
 
 // 1. Define policies
 const policies = resolvePolicies({
@@ -192,7 +192,7 @@ const state = new ShieldState({
 Thrown when a transaction violates one or more policies.
 
 ```typescript
-import { ShieldDeniedError } from "@agent-shield/core";
+import { ShieldDeniedError } from "@phalnx/core";
 
 try {
   enforcePolicy(analysis, policies, state);
@@ -274,7 +274,7 @@ interface TokenTransfer {
 ## Architecture
 
 ```
-@agent-shield/core (this package)
+@phalnx/core (this package)
 ├── policies.ts    — Config types, parsing, defaults
 ├── engine.ts      — Policy evaluation + enforcement
 ├── state.ts       — Rolling spend + rate limit tracking
@@ -282,7 +282,7 @@ interface TokenTransfer {
 └── errors.ts      — ShieldDeniedError, ShieldConfigError
 
 Used by:
-├── @agent-shield/sdk      — On-chain guardrails (primary package)
+├── @phalnx/sdk      — On-chain guardrails (primary package)
 └── (your custom integration)
 ```
 
@@ -293,13 +293,13 @@ Used by:
 - Testing policy logic in isolation
 - Building framework integrations beyond Solana Agent Kit and ElizaOS
 
-For Solana-specific integrations, use `@agent-shield/sdk` which wraps this package with Solana transaction analysis and wallet signing.
+For Solana-specific integrations, use `@phalnx/sdk` which wraps this package with Solana transaction analysis and wallet signing.
 
 ## Support
 
 - X/Twitter: [@MightieMags](https://x.com/MightieMags)
 - Telegram: [MightyMags](https://t.me/MightyMags)
-- Issues: [GitHub Issues](https://github.com/Kaleb-Rupe/agentshield/issues)
+- Issues: [GitHub Issues](https://github.com/Kaleb-Rupe/phalnx/issues)
 
 ## License
 

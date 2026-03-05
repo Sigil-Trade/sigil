@@ -128,7 +128,7 @@ syncPositions.post("/api/actions/sync-positions", async (c) => {
     );
   } catch (error) {
     console.error(
-      "[AgentShield] sync-positions error:",
+      "[Phalnx] sync-positions error:",
       error instanceof Error ? error.message : String(error),
     );
     return c.json(

@@ -1,13 +1,13 @@
 import { getOrCreateShieldedWallet } from "../client-factory";
 
 /**
- * Shield Status Provider — injects shield enforcement state and
+ * Phalnx Status Provider — injects enforcement state and
  * policy summary into every agent conversation turn.
  */
 export const shieldStatusProvider = {
-  name: "AGENT_SHIELD_STATUS",
+  name: "PHALNX_STATUS",
   description:
-    "Provides current AgentShield enforcement state, wallet address, and pause status",
+    "Provides current Phalnx enforcement state, wallet address, and pause status",
 
   get: async (runtime: any, _message: any, _state: any) => {
     try {
@@ -22,7 +22,7 @@ export const shieldStatusProvider = {
       });
 
       const text = [
-        `AgentShield: ${publicKey.toBase58()}`,
+        `Phalnx: ${publicKey.toBase58()}`,
         `Enforcement: ${paused ? "PAUSED" : "ACTIVE"}`,
         `Spending: ${tokenLines.join(", ") || "no limits configured"}`,
         `Rate limit: ${summary.rateLimit.count}/${summary.rateLimit.limit}`,
@@ -39,7 +39,7 @@ export const shieldStatusProvider = {
       };
     } catch (error: any) {
       return {
-        text: `AgentShield: Unable to fetch status — ${error.message}`,
+        text: `Phalnx: Unable to fetch status — ${error.message}`,
         values: {},
       };
     }

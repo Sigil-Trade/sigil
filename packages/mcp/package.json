@@ -1,19 +1,19 @@
 {
-  "name": "@agent-shield/mcp",
+  "name": "@phalnx/mcp",
   "version": "0.4.8",
   "author": "Kaleb Rupe (https://x.com/MightieMags)",
-  "homepage": "https://github.com/Kaleb-Rupe/agentshield#readme",
+  "homepage": "https://github.com/Kaleb-Rupe/phalnx#readme",
   "bugs": {
-    "url": "https://github.com/Kaleb-Rupe/agentshield/issues",
+    "url": "https://github.com/Kaleb-Rupe/phalnx/issues",
     "email": "https://t.me/MightyMags"
   },
-  "description": "MCP server for AgentShield — manage on-chain vaults and enforce policies via AI tools",
+  "description": "MCP server for Phalnx — manage on-chain vaults and enforce policies via AI tools",
   "main": "dist/index.js",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "sideEffects": false,
   "bin": {
-    "agent-shield-mcp": "dist/index.js"
+    "phalnx-mcp": "dist/index.js"
   },
   "scripts": {
     "build": "tsc",
@@ -31,8 +31,8 @@
     "@modelcontextprotocol/sdk": "^1.27.0"
   },
   "peerDependencies": {
-    "@agent-shield/custody-crossmint": ">=0.1.4",
-    "@agent-shield/sdk": ">=0.5.4",
+    "@phalnx/custody-crossmint": ">=0.1.4",
+    "@phalnx/sdk": ">=0.5.4",
     "@coral-xyz/anchor": ">=0.32.1",
     "@solana/spl-token": ">=0.4.0",
     "@solana/web3.js": ">=1.95.0",
@@ -40,7 +40,7 @@
     "@sqds/multisig": ">=2.1.0"
   },
   "peerDependenciesMeta": {
-    "@agent-shield/custody-crossmint": {
+    "@phalnx/custody-crossmint": {
       "optional": true
     },
     "@sqds/multisig": {
@@ -48,8 +48,8 @@
     }
   },
   "devDependencies": {
-    "@agent-shield/custody-crossmint": "workspace:*",
-    "@agent-shield/sdk": "workspace:*",
+    "@phalnx/custody-crossmint": "workspace:*",
+    "@phalnx/sdk": "workspace:*",
     "@coral-xyz/anchor": "^0.32.1",
     "@solana/spl-token": "^0.4.0",
     "@solana/web3.js": "^1.95.0",
@@ -78,7 +78,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Kaleb-Rupe/agentshield",
+    "url": "https://github.com/Kaleb-Rupe/phalnx",
     "directory": "packages/mcp"
   }
 }

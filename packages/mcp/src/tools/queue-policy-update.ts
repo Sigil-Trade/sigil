@@ -1,9 +1,6 @@
 import { z } from "zod";
 import { BN } from "@coral-xyz/anchor";
-import type {
-  AgentShieldClient,
-  QueuePolicyUpdateParams,
-} from "@agent-shield/sdk";
+import type { PhalnxClient, QueuePolicyUpdateParams } from "@phalnx/sdk";
 import { toPublicKey, toBN } from "../utils";
 import { formatError } from "../errors";
 
@@ -56,7 +53,7 @@ export const queuePolicyUpdateSchema = z.object({
 export type QueuePolicyUpdateInput = z.infer<typeof queuePolicyUpdateSchema>;
 
 export async function queuePolicyUpdate(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   input: QueuePolicyUpdateInput,
 ): Promise<string> {
   try {
@@ -118,7 +115,7 @@ export async function queuePolicyUpdate(
 export const queuePolicyUpdateTool = {
   name: "shield_queue_policy_update",
   description:
-    "Queue a timelocked policy change for an AgentShield vault. " +
+    "Queue a timelocked policy change for an Phalnx vault. " +
     "Required when the vault has a timelock_duration > 0. " +
     "The change will not take effect until the timelock expires and shield_apply_pending_policy is called.",
   schema: queuePolicyUpdateSchema,

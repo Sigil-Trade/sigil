@@ -1,11 +1,11 @@
 export const IDL = {
   address: "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL",
   metadata: {
-    name: "agent_shield",
+    name: "phalnx",
     version: "0.1.0",
     spec: "0.1.0",
     description:
-      "On-chain guardrails for AI agents on Solana - Permission controls, spending limits, and audit infrastructure for autonomous agents",
+      "On-chain guardrails for AI agents on Solana - Permission controls, spending limits, and audit infrastructure for autonomous agents (Phalnx)",
   },
   instructions: [
     {
@@ -115,6 +115,76 @@ export const IDL = {
       ],
     },
     {
+      name: "apply_constraints_update",
+      docs: ["Apply a queued constraints update after the timelock expires."],
+      discriminator: [175, 103, 90, 155, 134, 91, 135, 242],
+      accounts: [
+        {
+          name: "owner",
+          writable: true,
+          signer: true,
+          relations: ["vault"],
+        },
+        {
+          name: "vault",
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [118, 97, 117, 108, 116],
+              },
+              {
+                kind: "account",
+                path: "owner",
+              },
+              {
+                kind: "account",
+                path: "vault.vault_id",
+                account: "AgentVault",
+              },
+            ],
+          },
+          relations: ["constraints", "pending_constraints"],
+        },
+        {
+          name: "constraints",
+          writable: true,
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [99, 111, 110, 115, 116, 114, 97, 105, 110, 116, 115],
+              },
+              {
+                kind: "account",
+                path: "vault",
+              },
+            ],
+          },
+        },
+        {
+          name: "pending_constraints",
+          writable: true,
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [
+                  112, 101, 110, 100, 105, 110, 103, 95, 99, 111, 110, 115, 116,
+                  114, 97, 105, 110, 116, 115,
+                ],
+              },
+              {
+                kind: "account",
+                path: "vault",
+              },
+            ],
+          },
+        },
+      ],
+      args: [],
+    },
+    {
       name: "apply_pending_policy",
       docs: ["Apply a queued policy update after the timelock expires."],
       discriminator: [114, 212, 19, 227, 89, 199, 74, 62],
@@ -185,6 +255,60 @@ export const IDL = {
       args: [],
     },
     {
+      name: "cancel_constraints_update",
+      docs: ["Cancel a queued constraints update."],
+      discriminator: [169, 121, 85, 230, 154, 2, 78, 61],
+      accounts: [
+        {
+          name: "owner",
+          writable: true,
+          signer: true,
+          relations: ["vault"],
+        },
+        {
+          name: "vault",
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [118, 97, 117, 108, 116],
+              },
+              {
+                kind: "account",
+                path: "owner",
+              },
+              {
+                kind: "account",
+                path: "vault.vault_id",
+                account: "AgentVault",
+              },
+            ],
+          },
+          relations: ["pending_constraints"],
+        },
+        {
+          name: "pending_constraints",
+          writable: true,
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [
+                  112, 101, 110, 100, 105, 110, 103, 95, 99, 111, 110, 115, 116,
+                  114, 97, 105, 110, 116, 115,
+                ],
+              },
+              {
+                kind: "account",
+                path: "vault",
+              },
+            ],
+          },
+        },
+      ],
+      args: [],
+    },
+    {
       name: "cancel_pending_policy",
       docs: ["Cancel a queued policy update."],
       discriminator: [153, 36, 104, 200, 50, 94, 207, 33],
@@ -239,6 +363,147 @@ export const IDL = {
       args: [],
     },
     {
+      name: "close_instruction_constraints",
+      docs: [
+        "Close instruction constraints for the vault.",
+        "Only the owner can call this. Blocked when timelock > 0 (removing constraints loosens security).",
+      ],
+      discriminator: [145, 240, 233, 37, 11, 78, 195, 145],
+      accounts: [
+        {
+          name: "owner",
+          writable: true,
+          signer: true,
+          relations: ["vault"],
+        },
+        {
+          name: "vault",
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [118, 97, 117, 108, 116],
+              },
+              {
+                kind: "account",
+                path: "owner",
+              },
+              {
+                kind: "account",
+                path: "vault.vault_id",
+                account: "AgentVault",
+              },
+            ],
+          },
+          relations: ["policy", "constraints"],
+        },
+        {
+          name: "policy",
+          writable: true,
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [112, 111, 108, 105, 99, 121],
+              },
+              {
+                kind: "account",
+                path: "vault",
+              },
+            ],
+          },
+        },
+        {
+          name: "constraints",
+          writable: true,
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [99, 111, 110, 115, 116, 114, 97, 105, 110, 116, 115],
+              },
+              {
+                kind: "account",
+                path: "vault",
+              },
+            ],
+          },
+        },
+      ],
+      args: [],
+    },
+    {
+      name: "close_settled_escrow",
+      docs: ["Close a settled/refunded escrow PDA \u2014 owner reclaims rent."],
+      discriminator: [169, 244, 164, 173, 181, 214, 139, 6],
+      accounts: [
+        {
+          name: "signer",
+          writable: true,
+          signer: true,
+        },
+        {
+          name: "source_vault",
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [118, 97, 117, 108, 116],
+              },
+              {
+                kind: "account",
+                path: "source_vault.owner",
+                account: "AgentVault",
+              },
+              {
+                kind: "account",
+                path: "source_vault.vault_id",
+                account: "AgentVault",
+              },
+            ],
+          },
+          relations: ["escrow"],
+        },
+        {
+          name: "destination_vault_key",
+          docs: [
+            "Validated indirectly: if the wrong key is passed, the escrow PDA seeds won't",
+            "match and Anchor will reject the account.",
+          ],
+        },
+        {
+          name: "escrow",
+          writable: true,
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [101, 115, 99, 114, 111, 119],
+              },
+              {
+                kind: "account",
+                path: "source_vault",
+              },
+              {
+                kind: "account",
+                path: "destination_vault_key",
+              },
+              {
+                kind: "arg",
+                path: "escrow_id",
+              },
+            ],
+          },
+        },
+      ],
+      args: [
+        {
+          name: "escrow_id",
+          type: "u64",
+        },
+      ],
+    },
+    {
       name: "close_vault",
       docs: ["Close the vault entirely. Reclaims rent from all PDAs."],
       discriminator: [141, 103, 17, 126, 72, 75, 29, 29],
@@ -289,7 +554,7 @@ export const IDL = {
         },
         {
           name: "tracker",
-          docs: ["Zero-copy SpendTracker — close returns rent to owner"],
+          docs: ["Zero-copy SpendTracker \u2014 close returns rent to owner"],
           writable: true,
           pda: {
             seeds: [
@@ -310,6 +575,295 @@ export const IDL = {
         },
       ],
       args: [],
+    },
+    {
+      name: "create_escrow",
+      docs: [
+        "Create an escrow deposit between two vaults.",
+        "Agent-initiated, stablecoin-only, fees deducted upfront, cap-checked.",
+      ],
+      discriminator: [253, 215, 165, 116, 36, 108, 68, 80],
+      accounts: [
+        {
+          name: "agent",
+          writable: true,
+          signer: true,
+        },
+        {
+          name: "source_vault",
+          writable: true,
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [118, 97, 117, 108, 116],
+              },
+              {
+                kind: "account",
+                path: "source_vault.owner",
+                account: "AgentVault",
+              },
+              {
+                kind: "account",
+                path: "source_vault.vault_id",
+                account: "AgentVault",
+              },
+            ],
+          },
+        },
+        {
+          name: "policy",
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [112, 111, 108, 105, 99, 121],
+              },
+              {
+                kind: "account",
+                path: "source_vault",
+              },
+            ],
+          },
+        },
+        {
+          name: "tracker",
+          writable: true,
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [116, 114, 97, 99, 107, 101, 114],
+              },
+              {
+                kind: "account",
+                path: "source_vault",
+              },
+            ],
+          },
+        },
+        {
+          name: "destination_vault",
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [118, 97, 117, 108, 116],
+              },
+              {
+                kind: "account",
+                path: "destination_vault.owner",
+                account: "AgentVault",
+              },
+              {
+                kind: "account",
+                path: "destination_vault.vault_id",
+                account: "AgentVault",
+              },
+            ],
+          },
+        },
+        {
+          name: "escrow",
+          writable: true,
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [101, 115, 99, 114, 111, 119],
+              },
+              {
+                kind: "account",
+                path: "source_vault",
+              },
+              {
+                kind: "account",
+                path: "destination_vault",
+              },
+              {
+                kind: "arg",
+                path: "escrow_id",
+              },
+            ],
+          },
+        },
+        {
+          name: "source_vault_ata",
+          docs: ["Source vault's token account (vault PDA is authority)"],
+          writable: true,
+        },
+        {
+          name: "escrow_ata",
+          docs: [
+            "Escrow-owned ATA \u2014 init_if_needed because escrow PDA is created in same ix",
+          ],
+          writable: true,
+          pda: {
+            seeds: [
+              {
+                kind: "account",
+                path: "escrow",
+              },
+              {
+                kind: "const",
+                value: [
+                  6, 221, 246, 225, 215, 101, 161, 147, 217, 203, 225, 70, 206,
+                  235, 121, 172, 28, 180, 133, 237, 95, 91, 55, 145, 58, 140,
+                  245, 133, 126, 255, 0, 169,
+                ],
+              },
+              {
+                kind: "account",
+                path: "token_mint",
+              },
+            ],
+            program: {
+              kind: "const",
+              value: [
+                140, 151, 37, 143, 78, 36, 137, 241, 187, 61, 16, 41, 20, 142,
+                13, 131, 11, 90, 19, 153, 218, 255, 16, 132, 4, 142, 123, 216,
+                219, 233, 248, 89,
+              ],
+            },
+          },
+        },
+        {
+          name: "protocol_treasury_ata",
+          docs: [
+            "Protocol treasury token account (needed when protocol_fee > 0)",
+          ],
+          writable: true,
+          optional: true,
+        },
+        {
+          name: "fee_destination_ata",
+          docs: [
+            "Developer fee destination token account (needed when developer_fee > 0)",
+          ],
+          writable: true,
+          optional: true,
+        },
+        {
+          name: "token_mint",
+        },
+        {
+          name: "token_program",
+          address: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        },
+        {
+          name: "system_program",
+          address: "11111111111111111111111111111111",
+        },
+        {
+          name: "associated_token_program",
+          address: "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+        },
+      ],
+      args: [
+        {
+          name: "escrow_id",
+          type: "u64",
+        },
+        {
+          name: "amount",
+          type: "u64",
+        },
+        {
+          name: "expires_at",
+          type: "i64",
+        },
+        {
+          name: "condition_hash",
+          type: {
+            array: ["u8", 32],
+          },
+        },
+      ],
+    },
+    {
+      name: "create_instruction_constraints",
+      docs: [
+        "Create instruction constraints for the vault.",
+        "Only the owner can call this. No timelock check (additive change).",
+      ],
+      discriminator: [13, 182, 97, 5, 57, 136, 26, 152],
+      accounts: [
+        {
+          name: "owner",
+          writable: true,
+          signer: true,
+          relations: ["vault"],
+        },
+        {
+          name: "vault",
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [118, 97, 117, 108, 116],
+              },
+              {
+                kind: "account",
+                path: "owner",
+              },
+              {
+                kind: "account",
+                path: "vault.vault_id",
+                account: "AgentVault",
+              },
+            ],
+          },
+          relations: ["policy"],
+        },
+        {
+          name: "policy",
+          writable: true,
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [112, 111, 108, 105, 99, 121],
+              },
+              {
+                kind: "account",
+                path: "vault",
+              },
+            ],
+          },
+        },
+        {
+          name: "constraints",
+          writable: true,
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [99, 111, 110, 115, 116, 114, 97, 105, 110, 116, 115],
+              },
+              {
+                kind: "account",
+                path: "vault",
+              },
+            ],
+          },
+        },
+        {
+          name: "system_program",
+          address: "11111111111111111111111111111111",
+        },
+      ],
+      args: [
+        {
+          name: "entries",
+          type: {
+            vec: {
+              defined: {
+                name: "ConstraintEntry",
+              },
+            },
+          },
+        },
+      ],
     },
     {
       name: "deposit_funds",
@@ -505,6 +1059,43 @@ export const IDL = {
           writable: true,
         },
         {
+          name: "policy",
+          docs: [
+            "Policy config for cap checking during non-stablecoin swap finalization",
+          ],
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [112, 111, 108, 105, 99, 121],
+              },
+              {
+                kind: "account",
+                path: "vault",
+              },
+            ],
+          },
+        },
+        {
+          name: "tracker",
+          docs: [
+            "Zero-copy SpendTracker for recording non-stablecoin swap value",
+          ],
+          writable: true,
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [116, 114, 97, 99, 107, 101, 114],
+              },
+              {
+                kind: "account",
+                path: "vault",
+              },
+            ],
+          },
+        },
+        {
           name: "vault_token_account",
           docs: ["Vault's PDA token account for the session's token"],
           writable: true,
@@ -513,7 +1104,7 @@ export const IDL = {
         {
           name: "output_stablecoin_account",
           docs: [
-            "Vault's stablecoin ATA for non-stablecoin→stablecoin swap verification.",
+            "Vault's stablecoin ATA for non-stablecoin\u2192stablecoin swap verification.",
             "Required when session.output_mint != Pubkey::default().",
           ],
           writable: true,
@@ -587,7 +1178,7 @@ export const IDL = {
         },
         {
           name: "tracker",
-          docs: ["Zero-copy SpendTracker — 2,352 bytes fixed size"],
+          docs: ["Zero-copy SpendTracker \u2014 2,352 bytes fixed size"],
           writable: true,
           pda: {
             seeds: [
@@ -657,6 +1248,105 @@ export const IDL = {
           name: "allowed_destinations",
           type: {
             vec: "pubkey",
+          },
+        },
+      ],
+    },
+    {
+      name: "queue_constraints_update",
+      docs: ["Queue a constraints update when timelock is active."],
+      discriminator: [247, 253, 233, 93, 233, 54, 53, 131],
+      accounts: [
+        {
+          name: "owner",
+          writable: true,
+          signer: true,
+          relations: ["vault"],
+        },
+        {
+          name: "vault",
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [118, 97, 117, 108, 116],
+              },
+              {
+                kind: "account",
+                path: "owner",
+              },
+              {
+                kind: "account",
+                path: "vault.vault_id",
+                account: "AgentVault",
+              },
+            ],
+          },
+          relations: ["policy", "constraints"],
+        },
+        {
+          name: "policy",
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [112, 111, 108, 105, 99, 121],
+              },
+              {
+                kind: "account",
+                path: "vault",
+              },
+            ],
+          },
+        },
+        {
+          name: "constraints",
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [99, 111, 110, 115, 116, 114, 97, 105, 110, 116, 115],
+              },
+              {
+                kind: "account",
+                path: "vault",
+              },
+            ],
+          },
+        },
+        {
+          name: "pending_constraints",
+          writable: true,
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [
+                  112, 101, 110, 100, 105, 110, 103, 95, 99, 111, 110, 115, 116,
+                  114, 97, 105, 110, 116, 115,
+                ],
+              },
+              {
+                kind: "account",
+                path: "vault",
+              },
+            ],
+          },
+        },
+        {
+          name: "system_program",
+          address: "11111111111111111111111111111111",
+        },
+      ],
+      args: [
+        {
+          name: "entries",
+          type: {
+            vec: {
+              defined: {
+                name: "ConstraintEntry",
+              },
+            },
           },
         },
       ],
@@ -807,7 +1497,9 @@ export const IDL = {
     },
     {
       name: "reactivate_vault",
-      docs: ["Reactivate a frozen vault. Optionally rotate the agent key."],
+      docs: [
+        "Reactivate a frozen vault. Optionally add a new agent with permissions.",
+      ],
       discriminator: [245, 50, 143, 70, 114, 220, 25, 251],
       accounts: [
         {
@@ -844,13 +1536,130 @@ export const IDL = {
             option: "pubkey",
           },
         },
+        {
+          name: "new_agent_permissions",
+          type: {
+            option: "u64",
+          },
+        },
       ],
+    },
+    {
+      name: "refund_escrow",
+      docs: [
+        "Refund an escrow \u2014 source vault's agent or owner reclaims funds after expiry.",
+        "Cap charge is NOT reversed (prevents cap-washing attacks).",
+      ],
+      discriminator: [107, 186, 89, 99, 26, 194, 23, 204],
+      accounts: [
+        {
+          name: "source_signer",
+          docs: ["Source vault's agent or owner"],
+          writable: true,
+          signer: true,
+        },
+        {
+          name: "source_vault",
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [118, 97, 117, 108, 116],
+              },
+              {
+                kind: "account",
+                path: "source_vault.owner",
+                account: "AgentVault",
+              },
+              {
+                kind: "account",
+                path: "source_vault.vault_id",
+                account: "AgentVault",
+              },
+            ],
+          },
+        },
+        {
+          name: "escrow",
+          writable: true,
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [101, 115, 99, 114, 111, 119],
+              },
+              {
+                kind: "account",
+                path: "source_vault",
+              },
+              {
+                kind: "account",
+                path: "escrow.destination_vault",
+                account: "EscrowDeposit",
+              },
+              {
+                kind: "account",
+                path: "escrow.escrow_id",
+                account: "EscrowDeposit",
+              },
+            ],
+          },
+        },
+        {
+          name: "escrow_ata",
+          writable: true,
+          pda: {
+            seeds: [
+              {
+                kind: "account",
+                path: "escrow",
+              },
+              {
+                kind: "const",
+                value: [
+                  6, 221, 246, 225, 215, 101, 161, 147, 217, 203, 225, 70, 206,
+                  235, 121, 172, 28, 180, 133, 237, 95, 91, 55, 145, 58, 140,
+                  245, 133, 126, 255, 0, 169,
+                ],
+              },
+              {
+                kind: "account",
+                path: "token_mint",
+              },
+            ],
+            program: {
+              kind: "const",
+              value: [
+                140, 151, 37, 143, 78, 36, 137, 241, 187, 61, 16, 41, 20, 142,
+                13, 131, 11, 90, 19, 153, 218, 255, 16, 132, 4, 142, 123, 216,
+                219, 233, 248, 89,
+              ],
+            },
+          },
+        },
+        {
+          name: "source_vault_ata",
+          writable: true,
+        },
+        {
+          name: "rent_destination",
+          writable: true,
+        },
+        {
+          name: "token_mint",
+        },
+        {
+          name: "token_program",
+          address: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        },
+      ],
+      args: [],
     },
     {
       name: "register_agent",
       docs: [
-        "Register an agent's signing key to this vault.",
-        "Only the owner can call this. One agent per vault.",
+        "Register an agent's signing key to this vault with per-agent permissions.",
+        "Only the owner can call this. Up to 10 agents per vault.",
       ],
       discriminator: [135, 157, 66, 195, 2, 113, 175, 30],
       accounts: [
@@ -886,13 +1695,17 @@ export const IDL = {
           name: "agent",
           type: "pubkey",
         },
+        {
+          name: "permissions",
+          type: "u64",
+        },
       ],
     },
     {
       name: "revoke_agent",
       docs: [
-        "Kill switch. Immediately freezes the vault.",
-        "Only the owner can call this.",
+        "Revoke a specific agent from the vault.",
+        "Only the owner can call this. Freezes vault if last agent is removed.",
       ],
       discriminator: [227, 60, 209, 125, 240, 117, 163, 73],
       accounts: [
@@ -923,7 +1736,147 @@ export const IDL = {
           },
         },
       ],
-      args: [],
+      args: [
+        {
+          name: "agent_to_remove",
+          type: "pubkey",
+        },
+      ],
+    },
+    {
+      name: "settle_escrow",
+      docs: [
+        "Settle an escrow \u2014 destination vault's agent claims funds before expiry.",
+        "For conditional escrows, proof must match the SHA-256 condition hash.",
+      ],
+      discriminator: [22, 135, 160, 194, 23, 186, 124, 110],
+      accounts: [
+        {
+          name: "destination_agent",
+          writable: true,
+          signer: true,
+        },
+        {
+          name: "destination_vault",
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [118, 97, 117, 108, 116],
+              },
+              {
+                kind: "account",
+                path: "destination_vault.owner",
+                account: "AgentVault",
+              },
+              {
+                kind: "account",
+                path: "destination_vault.vault_id",
+                account: "AgentVault",
+              },
+            ],
+          },
+        },
+        {
+          name: "source_vault",
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [118, 97, 117, 108, 116],
+              },
+              {
+                kind: "account",
+                path: "source_vault.owner",
+                account: "AgentVault",
+              },
+              {
+                kind: "account",
+                path: "source_vault.vault_id",
+                account: "AgentVault",
+              },
+            ],
+          },
+        },
+        {
+          name: "escrow",
+          writable: true,
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [101, 115, 99, 114, 111, 119],
+              },
+              {
+                kind: "account",
+                path: "source_vault",
+              },
+              {
+                kind: "account",
+                path: "destination_vault",
+              },
+              {
+                kind: "account",
+                path: "escrow.escrow_id",
+                account: "EscrowDeposit",
+              },
+            ],
+          },
+        },
+        {
+          name: "escrow_ata",
+          writable: true,
+          pda: {
+            seeds: [
+              {
+                kind: "account",
+                path: "escrow",
+              },
+              {
+                kind: "const",
+                value: [
+                  6, 221, 246, 225, 215, 101, 161, 147, 217, 203, 225, 70, 206,
+                  235, 121, 172, 28, 180, 133, 237, 95, 91, 55, 145, 58, 140,
+                  245, 133, 126, 255, 0, 169,
+                ],
+              },
+              {
+                kind: "account",
+                path: "token_mint",
+              },
+            ],
+            program: {
+              kind: "const",
+              value: [
+                140, 151, 37, 143, 78, 36, 137, 241, 187, 61, 16, 41, 20, 142,
+                13, 131, 11, 90, 19, 153, 218, 255, 16, 132, 4, 142, 123, 216,
+                219, 233, 248, 89,
+              ],
+            },
+          },
+        },
+        {
+          name: "destination_vault_ata",
+          writable: true,
+        },
+        {
+          name: "rent_destination",
+          writable: true,
+        },
+        {
+          name: "token_mint",
+        },
+        {
+          name: "token_program",
+          address: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        },
+      ],
+      args: [
+        {
+          name: "proof",
+          type: "bytes",
+        },
+      ],
     },
     {
       name: "sync_positions",
@@ -961,6 +1914,148 @@ export const IDL = {
         {
           name: "actual_positions",
           type: "u8",
+        },
+      ],
+    },
+    {
+      name: "update_agent_permissions",
+      docs: [
+        "Update an agent's permission bitmask.",
+        "Only the owner can call this. Blocked when timelock is active.",
+      ],
+      discriminator: [56, 163, 109, 133, 69, 188, 163, 184],
+      accounts: [
+        {
+          name: "owner",
+          writable: true,
+          signer: true,
+        },
+        {
+          name: "vault",
+          writable: true,
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [118, 97, 117, 108, 116],
+              },
+              {
+                kind: "account",
+                path: "vault.owner",
+                account: "AgentVault",
+              },
+              {
+                kind: "account",
+                path: "vault.vault_id",
+                account: "AgentVault",
+              },
+            ],
+          },
+        },
+        {
+          name: "policy",
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [112, 111, 108, 105, 99, 121],
+              },
+              {
+                kind: "account",
+                path: "vault",
+              },
+            ],
+          },
+        },
+      ],
+      args: [
+        {
+          name: "agent",
+          type: "pubkey",
+        },
+        {
+          name: "new_permissions",
+          type: "u64",
+        },
+      ],
+    },
+    {
+      name: "update_instruction_constraints",
+      docs: [
+        "Update instruction constraints for the vault.",
+        "Only the owner can call this. Blocked when timelock > 0.",
+      ],
+      discriminator: [229, 117, 208, 238, 102, 240, 54, 74],
+      accounts: [
+        {
+          name: "owner",
+          writable: true,
+          signer: true,
+          relations: ["vault"],
+        },
+        {
+          name: "vault",
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [118, 97, 117, 108, 116],
+              },
+              {
+                kind: "account",
+                path: "owner",
+              },
+              {
+                kind: "account",
+                path: "vault.vault_id",
+                account: "AgentVault",
+              },
+            ],
+          },
+          relations: ["policy", "constraints"],
+        },
+        {
+          name: "policy",
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [112, 111, 108, 105, 99, 121],
+              },
+              {
+                kind: "account",
+                path: "vault",
+              },
+            ],
+          },
+        },
+        {
+          name: "constraints",
+          writable: true,
+          pda: {
+            seeds: [
+              {
+                kind: "const",
+                value: [99, 111, 110, 115, 116, 114, 97, 105, 110, 116, 115],
+              },
+              {
+                kind: "account",
+                path: "vault",
+              },
+            ],
+          },
+        },
+      ],
+      args: [
+        {
+          name: "entries",
+          type: {
+            vec: {
+              defined: {
+                name: "ConstraintEntry",
+              },
+            },
+          },
         },
       ],
     },
@@ -1105,7 +2200,6 @@ export const IDL = {
         },
         {
           name: "vault",
-          writable: true,
           pda: {
             seeds: [
               {
@@ -1161,7 +2255,7 @@ export const IDL = {
         {
           name: "session",
           docs: [
-            "Ephemeral session PDA — `init` ensures no double-authorization.",
+            "Ephemeral session PDA \u2014 `init` ensures no double-authorization.",
             "Seeds include token_mint for per-token concurrent sessions.",
           ],
           writable: true,
@@ -1194,7 +2288,7 @@ export const IDL = {
         {
           name: "token_mint_account",
           docs: [
-            "The token mint being spent — constrained to match token_mint arg",
+            "The token mint being spent \u2014 constrained to match token_mint arg",
           ],
         },
         {
@@ -1387,6 +2481,18 @@ export const IDL = {
       discriminator: [232, 220, 237, 164, 157, 9, 215, 194],
     },
     {
+      name: "EscrowDeposit",
+      discriminator: [56, 152, 208, 160, 159, 83, 6, 17],
+    },
+    {
+      name: "InstructionConstraints",
+      discriminator: [183, 235, 149, 166, 174, 58, 98, 218],
+    },
+    {
+      name: "PendingConstraintsUpdate",
+      discriminator: [22, 206, 77, 208, 147, 121, 53, 174],
+    },
+    {
       name: "PendingPolicyUpdate",
       discriminator: [77, 255, 2, 51, 79, 237, 183, 239],
     },
@@ -1409,6 +2515,10 @@ export const IDL = {
       discriminator: [85, 90, 59, 218, 126, 8, 179, 63],
     },
     {
+      name: "AgentPermissionsUpdated",
+      discriminator: [203, 110, 249, 149, 51, 17, 246, 63],
+    },
+    {
       name: "AgentRegistered",
       discriminator: [191, 78, 217, 54, 232, 100, 189, 85],
     },
@@ -1421,8 +2531,32 @@ export const IDL = {
       discriminator: [88, 52, 117, 69, 112, 152, 167, 40],
     },
     {
+      name: "ConstraintsChangeApplied",
+      discriminator: [112, 150, 111, 125, 243, 133, 35, 55],
+    },
+    {
+      name: "ConstraintsChangeCancelled",
+      discriminator: [15, 75, 104, 222, 104, 193, 65, 145],
+    },
+    {
+      name: "ConstraintsChangeQueued",
+      discriminator: [111, 221, 100, 149, 52, 23, 88, 212],
+    },
+    {
       name: "DelegationRevoked",
       discriminator: [59, 158, 142, 49, 164, 116, 220, 8],
+    },
+    {
+      name: "EscrowCreated",
+      discriminator: [70, 127, 105, 102, 92, 97, 7, 173],
+    },
+    {
+      name: "EscrowRefunded",
+      discriminator: [132, 209, 49, 109, 135, 138, 28, 81],
+    },
+    {
+      name: "EscrowSettled",
+      discriminator: [97, 27, 150, 55, 203, 179, 173, 23],
     },
     {
       name: "FeesCollected",
@@ -1435,6 +2569,18 @@ export const IDL = {
     {
       name: "FundsWithdrawn",
       discriminator: [56, 130, 230, 154, 35, 92, 11, 118],
+    },
+    {
+      name: "InstructionConstraintsClosed",
+      discriminator: [107, 107, 90, 8, 81, 158, 130, 86],
+    },
+    {
+      name: "InstructionConstraintsCreated",
+      discriminator: [8, 170, 99, 232, 31, 216, 57, 26],
+    },
+    {
+      name: "InstructionConstraintsUpdated",
+      discriminator: [159, 63, 148, 194, 150, 209, 43, 129],
     },
     {
       name: "PolicyChangeApplied",
@@ -1612,7 +2758,7 @@ export const IDL = {
     {
       code: 6027,
       name: "TimelockActive",
-      msg: "Vault has timelock active — use queue_policy_update instead",
+      msg: "Vault has timelock active \u2014 use queue_policy_update instead",
     },
     {
       code: 6028,
@@ -1703,6 +2849,91 @@ export const IDL = {
       code: 6045,
       name: "TooManyDeFiInstructions",
       msg: "Non-stablecoin swap allows exactly one DeFi instruction",
+    },
+    {
+      code: 6046,
+      name: "MaxAgentsReached",
+      msg: "Maximum agents per vault reached (limit: 10)",
+    },
+    {
+      code: 6047,
+      name: "InsufficientPermissions",
+      msg: "Agent lacks permission for this action type",
+    },
+    {
+      code: 6048,
+      name: "InvalidPermissions",
+      msg: "Permission bitmask contains invalid bits",
+    },
+    {
+      code: 6049,
+      name: "EscrowNotActive",
+      msg: "Escrow is not in Active status",
+    },
+    {
+      code: 6050,
+      name: "EscrowExpired",
+      msg: "Escrow has expired",
+    },
+    {
+      code: 6051,
+      name: "EscrowNotExpired",
+      msg: "Escrow has not expired yet",
+    },
+    {
+      code: 6052,
+      name: "InvalidEscrowVault",
+      msg: "Invalid escrow vault",
+    },
+    {
+      code: 6053,
+      name: "EscrowConditionsNotMet",
+      msg: "Escrow conditions not met",
+    },
+    {
+      code: 6054,
+      name: "EscrowDurationExceeded",
+      msg: "Escrow duration exceeds maximum (30 days)",
+    },
+    {
+      code: 6055,
+      name: "InvalidConstraintConfig",
+      msg: "Invalid constraint configuration: bounds exceeded",
+    },
+    {
+      code: 6056,
+      name: "ConstraintViolated",
+      msg: "Instruction constraint violated",
+    },
+    {
+      code: 6057,
+      name: "InvalidConstraintsPda",
+      msg: "Invalid constraints PDA: wrong owner or vault",
+    },
+    {
+      code: 6058,
+      name: "NoPendingConstraintsUpdate",
+      msg: "No pending constraints update to apply or cancel",
+    },
+    {
+      code: 6059,
+      name: "PendingConstraintsUpdateExists",
+      msg: "A pending constraints update already exists",
+    },
+    {
+      code: 6060,
+      name: "ConstraintsUpdateNotExpired",
+      msg: "Constraints update timelock has not expired",
+    },
+    {
+      code: 6061,
+      name: "InvalidPendingConstraintsPda",
+      msg: "Invalid pending constraints PDA: wrong owner or vault",
+    },
+    {
+      code: 6062,
+      name: "ConstraintsUpdateExpired",
+      msg: "Pending constraints update has expired and is stale",
     },
   ],
   types: [
@@ -1822,6 +3053,55 @@ export const IDL = {
           {
             name: "CloseAndSwapPosition",
           },
+          {
+            name: "CreateEscrow",
+          },
+          {
+            name: "SettleEscrow",
+          },
+          {
+            name: "RefundEscrow",
+          },
+        ],
+      },
+    },
+    {
+      name: "AgentEntry",
+      type: {
+        kind: "struct",
+        fields: [
+          {
+            name: "pubkey",
+            type: "pubkey",
+          },
+          {
+            name: "permissions",
+            type: "u64",
+          },
+        ],
+      },
+    },
+    {
+      name: "AgentPermissionsUpdated",
+      type: {
+        kind: "struct",
+        fields: [
+          {
+            name: "vault",
+            type: "pubkey",
+          },
+          {
+            name: "agent",
+            type: "pubkey",
+          },
+          {
+            name: "old_permissions",
+            type: "u64",
+          },
+          {
+            name: "new_permissions",
+            type: "u64",
+          },
         ],
       },
     },
@@ -1837,6 +3117,10 @@ export const IDL = {
           {
             name: "agent",
             type: "pubkey",
+          },
+          {
+            name: "permissions",
+            type: "u64",
           },
           {
             name: "timestamp",
@@ -1857,6 +3141,10 @@ export const IDL = {
           {
             name: "agent",
             type: "pubkey",
+          },
+          {
+            name: "remaining_agents",
+            type: "u8",
           },
           {
             name: "timestamp",
@@ -1900,26 +3188,32 @@ export const IDL = {
             type: "pubkey",
           },
           {
-            name: "agent",
-            docs: [
-              "The registered agent's signing key (Pubkey::default() if not yet registered)",
-            ],
-            type: "pubkey",
-          },
-          {
-            name: "fee_destination",
-            docs: [
-              "Developer fee destination — IMMUTABLE after initialization.",
-              "Prevents a compromised owner from redirecting fees.",
-            ],
-            type: "pubkey",
-          },
-          {
             name: "vault_id",
             docs: [
               "Unique vault identifier (allows one owner to have multiple vaults)",
             ],
             type: "u64",
+          },
+          {
+            name: "agents",
+            docs: [
+              "Registered agents with per-agent permission bitmasks (max 10)",
+            ],
+            type: {
+              vec: {
+                defined: {
+                  name: "AgentEntry",
+                },
+              },
+            },
+          },
+          {
+            name: "fee_destination",
+            docs: [
+              "Developer fee destination \u2014 IMMUTABLE after initialization.",
+              "Prevents a compromised owner from redirecting fees.",
+            ],
+            type: "pubkey",
           },
           {
             name: "status",
@@ -1968,6 +3262,116 @@ export const IDL = {
       },
     },
     {
+      name: "ConstraintEntry",
+      type: {
+        kind: "struct",
+        fields: [
+          {
+            name: "program_id",
+            type: "pubkey",
+          },
+          {
+            name: "data_constraints",
+            type: {
+              vec: {
+                defined: {
+                  name: "DataConstraint",
+                },
+              },
+            },
+          },
+        ],
+      },
+    },
+    {
+      name: "ConstraintOperator",
+      type: {
+        kind: "enum",
+        variants: [
+          {
+            name: "Eq",
+          },
+          {
+            name: "Ne",
+          },
+          {
+            name: "Gte",
+          },
+          {
+            name: "Lte",
+          },
+        ],
+      },
+    },
+    {
+      name: "ConstraintsChangeApplied",
+      type: {
+        kind: "struct",
+        fields: [
+          {
+            name: "vault",
+            type: "pubkey",
+          },
+          {
+            name: "applied_at",
+            type: "i64",
+          },
+        ],
+      },
+    },
+    {
+      name: "ConstraintsChangeCancelled",
+      type: {
+        kind: "struct",
+        fields: [
+          {
+            name: "vault",
+            type: "pubkey",
+          },
+        ],
+      },
+    },
+    {
+      name: "ConstraintsChangeQueued",
+      type: {
+        kind: "struct",
+        fields: [
+          {
+            name: "vault",
+            type: "pubkey",
+          },
+          {
+            name: "executes_at",
+            type: "i64",
+          },
+        ],
+      },
+    },
+    {
+      name: "DataConstraint",
+      type: {
+        kind: "struct",
+        fields: [
+          {
+            name: "offset",
+            type: "u16",
+          },
+          {
+            name: "operator",
+            type: {
+              defined: {
+                name: "ConstraintOperator",
+              },
+            },
+          },
+          {
+            name: "value",
+            type: "bytes",
+          },
+        ],
+      },
+    },
+    {
       name: "DelegationRevoked",
       type: {
         kind: "struct",
@@ -1991,7 +3395,7 @@ export const IDL = {
       name: "EpochBucket",
       docs: [
         "A single epoch bucket tracking aggregate USD spend.",
-        "16 bytes per bucket. USD-only — rate limiting stays client-side.",
+        "16 bytes per bucket. USD-only \u2014 rate limiting stays client-side.",
       ],
       serialization: "bytemuck",
       repr: {
@@ -2009,6 +3413,171 @@ export const IDL = {
             name: "usd_amount",
             docs: ["Aggregate USD spent in this epoch (6 decimals)"],
             type: "u64",
+          },
+        ],
+      },
+    },
+    {
+      name: "EscrowCreated",
+      type: {
+        kind: "struct",
+        fields: [
+          {
+            name: "source_vault",
+            type: "pubkey",
+          },
+          {
+            name: "destination_vault",
+            type: "pubkey",
+          },
+          {
+            name: "escrow_id",
+            type: "u64",
+          },
+          {
+            name: "amount",
+            type: "u64",
+          },
+          {
+            name: "token_mint",
+            type: "pubkey",
+          },
+          {
+            name: "expires_at",
+            type: "i64",
+          },
+          {
+            name: "condition_hash",
+            type: {
+              array: ["u8", 32],
+            },
+          },
+        ],
+      },
+    },
+    {
+      name: "EscrowDeposit",
+      type: {
+        kind: "struct",
+        fields: [
+          {
+            name: "source_vault",
+            type: "pubkey",
+          },
+          {
+            name: "destination_vault",
+            type: "pubkey",
+          },
+          {
+            name: "escrow_id",
+            type: "u64",
+          },
+          {
+            name: "amount",
+            type: "u64",
+          },
+          {
+            name: "token_mint",
+            type: "pubkey",
+          },
+          {
+            name: "created_at",
+            type: "i64",
+          },
+          {
+            name: "expires_at",
+            type: "i64",
+          },
+          {
+            name: "status",
+            type: {
+              defined: {
+                name: "EscrowStatus",
+              },
+            },
+          },
+          {
+            name: "condition_hash",
+            type: {
+              array: ["u8", 32],
+            },
+          },
+          {
+            name: "bump",
+            type: "u8",
+          },
+        ],
+      },
+    },
+    {
+      name: "EscrowRefunded",
+      type: {
+        kind: "struct",
+        fields: [
+          {
+            name: "source_vault",
+            type: "pubkey",
+          },
+          {
+            name: "destination_vault",
+            type: "pubkey",
+          },
+          {
+            name: "escrow_id",
+            type: "u64",
+          },
+          {
+            name: "amount",
+            type: "u64",
+          },
+          {
+            name: "refunded_by",
+            type: "pubkey",
+          },
+        ],
+      },
+    },
+    {
+      name: "EscrowSettled",
+      type: {
+        kind: "struct",
+        fields: [
+          {
+            name: "source_vault",
+            type: "pubkey",
+          },
+          {
+            name: "destination_vault",
+            type: "pubkey",
+          },
+          {
+            name: "escrow_id",
+            type: "u64",
+          },
+          {
+            name: "amount",
+            type: "u64",
+          },
+          {
+            name: "settled_by",
+            type: "pubkey",
+          },
+        ],
+      },
+    },
+    {
+      name: "EscrowStatus",
+      type: {
+        kind: "enum",
+        variants: [
+          {
+            name: "Active",
+          },
+          {
+            name: "Settled",
+          },
+          {
+            name: "Refunded",
           },
         ],
       },
@@ -2113,6 +3682,133 @@ export const IDL = {
           {
             name: "timestamp",
             type: "i64",
+          },
+        ],
+      },
+    },
+    {
+      name: "InstructionConstraints",
+      type: {
+        kind: "struct",
+        fields: [
+          {
+            name: "vault",
+            type: "pubkey",
+          },
+          {
+            name: "entries",
+            type: {
+              vec: {
+                defined: {
+                  name: "ConstraintEntry",
+                },
+              },
+            },
+          },
+          {
+            name: "bump",
+            type: "u8",
+          },
+        ],
+      },
+    },
+    {
+      name: "InstructionConstraintsClosed",
+      type: {
+        kind: "struct",
+        fields: [
+          {
+            name: "vault",
+            type: "pubkey",
+          },
+          {
+            name: "timestamp",
+            type: "i64",
+          },
+        ],
+      },
+    },
+    {
+      name: "InstructionConstraintsCreated",
+      type: {
+        kind: "struct",
+        fields: [
+          {
+            name: "vault",
+            type: "pubkey",
+          },
+          {
+            name: "entries_count",
+            type: "u8",
+          },
+          {
+            name: "timestamp",
+            type: "i64",
+          },
+        ],
+      },
+    },
+    {
+      name: "InstructionConstraintsUpdated",
+      type: {
+        kind: "struct",
+        fields: [
+          {
+            name: "vault",
+            type: "pubkey",
+          },
+          {
+            name: "entries_count",
+            type: "u8",
+          },
+          {
+            name: "timestamp",
+            type: "i64",
+          },
+        ],
+      },
+    },
+    {
+      name: "PendingConstraintsUpdate",
+      docs: [
+        "Queued instruction constraints update that becomes executable after",
+        "a timelock period. Mirrors `PendingPolicyUpdate` pattern.",
+        "",
+        'PDA seeds: `[b"pending_constraints", vault.key().as_ref()]`',
+      ],
+      type: {
+        kind: "struct",
+        fields: [
+          {
+            name: "vault",
+            docs: ["Associated vault pubkey"],
+            type: "pubkey",
+          },
+          {
+            name: "entries",
+            docs: ["New constraint entries to apply"],
+            type: {
+              vec: {
+                defined: {
+                  name: "ConstraintEntry",
+                },
+              },
+            },
+          },
+          {
+            name: "queued_at",
+            docs: ["Unix timestamp when this update was queued"],
+            type: "i64",
+          },
+          {
+            name: "executes_at",
+            docs: ["Unix timestamp when this update becomes executable"],
+            type: "i64",
+          },
+          {
+            name: "bump",
+            docs: ["Bump seed for PDA"],
+            type: "u8",
           },
         ],
       },
@@ -2364,6 +4060,14 @@ export const IDL = {
             },
           },
           {
+            name: "has_constraints",
+            docs: [
+              "Whether instruction constraints PDA exists for this vault.",
+              "Set true by create_instruction_constraints, false by close_instruction_constraints.",
+            ],
+            type: "bool",
+          },
+          {
             name: "bump",
             docs: ["Bump seed for PDA"],
             type: "u8",
@@ -2520,7 +4224,7 @@ export const IDL = {
           {
             name: "output_mint",
             docs: [
-              "Expected output stablecoin mint for non-stablecoin→stablecoin swaps.",
+              "Expected output stablecoin mint for non-stablecoin\u2192stablecoin swaps.",
               "Pubkey::default() when input is already a stablecoin (no snapshot needed).",
             ],
             type: "pubkey",
@@ -2677,6 +4381,12 @@ export const IDL = {
             name: "new_agent",
             type: {
               option: "pubkey",
+            },
+          },
+          {
+            name: "new_agent_permissions",
+            type: {
+              option: "u64",
             },
           },
           {

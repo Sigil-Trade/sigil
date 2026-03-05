@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { getTrendingTokens, isTokenSuspicious } from "@agent-shield/sdk";
+import { getTrendingTokens, isTokenSuspicious } from "@phalnx/sdk";
 import { formatError } from "../errors";
 
 export const trendingTokensSchema = z.object({

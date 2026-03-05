@@ -12,7 +12,7 @@ import { PublicKey, Transaction, VersionedTransaction } from "@solana/web3.js";
 import { CrossmintWalletConfig, validateConfig } from "./config";
 
 /**
- * Minimal wallet interface — identical to the one in @agent-shield/sdk.
+ * Minimal wallet interface — identical to the one in @phalnx/sdk.
  * Duplicated here to avoid a hard dependency on the wrapper package.
  */
 export interface WalletLike {
@@ -280,5 +280,24 @@ export class CrossmintWallet implements WalletLike {
       results.push(await this.signTransaction(tx));
     }
     return results;
+  }
+
+  /**
+   * API-based custody verification. Calls Crossmint's getWallet() API and
+   * confirms the returned address matches this wallet's public key.
+   */
+  async verifyProviderCustody(): Promise<boolean> {
+    const result = await this.client.getWallet(this.locator);
+    return result.address === this.publicKey.toBase58();
+  }
+
+  /**
+   * TEE attestation stub. Crossmint uses managed Intel TDX infrastructure
+   * and does not expose attestation documents publicly. Returns null to
+   * indicate attestation data is unavailable — the verifier will fall back
+   * to ProviderTrusted status.
+   */
+  async getAttestation(): Promise<null> {
+    return null;
   }
 }

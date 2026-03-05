@@ -1,13 +1,13 @@
 {
-  "name": "@agent-shield/plugin-solana-agent-kit",
+  "name": "@phalnx/plugin-solana-agent-kit",
   "version": "0.4.4",
   "author": "Kaleb Rupe (https://x.com/MightieMags)",
-  "homepage": "https://github.com/Kaleb-Rupe/agentshield#readme",
+  "homepage": "https://github.com/Kaleb-Rupe/phalnx#readme",
   "bugs": {
-    "url": "https://github.com/Kaleb-Rupe/agentshield/issues",
+    "url": "https://github.com/Kaleb-Rupe/phalnx/issues",
     "email": "https://t.me/MightyMags"
   },
-  "description": "AgentShield plugin for Solana Agent Kit — shieldWallet() wrapper monitoring and management tools",
+  "description": "Phalnx plugin for Solana Agent Kit — shieldWallet() wrapper monitoring and management tools",
   "main": "dist/index.js",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -25,12 +25,12 @@
     "node": ">=18.0.0"
   },
   "peerDependencies": {
-    "@agent-shield/sdk": ">=0.5.4",
+    "@phalnx/sdk": ">=0.5.4",
     "@solana/web3.js": ">=1.90.0",
     "solana-agent-kit": ">=2.0.0"
   },
   "devDependencies": {
-    "@agent-shield/sdk": "workspace:*",
+    "@phalnx/sdk": "workspace:*",
     "@solana/web3.js": "^1.95.0",
     "@types/chai": "^4.3.11",
     "@types/mocha": "^10.0.6",
@@ -55,7 +55,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Kaleb-Rupe/agentshield",
+    "url": "https://github.com/Kaleb-Rupe/phalnx",
     "directory": "plugins/solana-agent-kit"
   }
 }

@@ -34,7 +34,7 @@ describe("Errors", () => {
       expect(err.violations).to.deep.equal(violations);
       expect(err.message).to.include("Exceeded USDC cap");
       expect(err.message).to.include("Too many transactions");
-      expect(err.message).to.include("Transaction denied by AgentShield");
+      expect(err.message).to.include("Transaction denied by Phalnx");
     });
   });
 

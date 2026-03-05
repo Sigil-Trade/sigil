@@ -4,7 +4,7 @@
       "name": "Core vault management & permission engine",
       "count": 67,
       "onChain": true,
-      "claudePattern": "tests/agent-shield.ts` (ts-mocha + LiteSVM, no validator needed, %d tests)"
+      "claudePattern": "tests/phalnx.ts` (ts-mocha + LiteSVM, no validator needed, %d tests)"
     },
     {
       "name": "Jupiter integration (composed swaps)",
@@ -42,19 +42,19 @@
       "claudePattern": "tests/surfpool-integration.ts` (ts-mocha + Surfnet, %d tests)"
     },
     {
-      "name": "Core policy engine (`@agent-shield/core`)",
+      "name": "Core policy engine (`@phalnx/core`)",
       "count": 73,
       "ciStepName": "Core policy engine tests",
       "claudePattern": "sdk/core/tests/` (mocha, %d tests)"
     },
     {
-      "name": "SDK tests (`@agent-shield/sdk`)",
+      "name": "SDK tests (`@phalnx/sdk`)",
       "count": 199,
       "ciStepName": "SDK tests",
       "claudePattern": "sdk/typescript/tests/` (mocha, %d tests"
     },
     {
-      "name": "Platform client tests (`@agent-shield/platform`)",
+      "name": "Platform client tests (`@phalnx/platform`)",
       "count": 17,
       "ciStepName": "Platform client tests",
       "claudePattern": "sdk/platform/tests/` (mocha, %d tests)"
@@ -66,7 +66,7 @@
       "claudePattern": "sdk/custody/crossmint/tests/` (mocha, %d tests)"
     },
     {
-      "name": "SAK plugin (`@agent-shield/plugin-solana-agent-kit`)",
+      "name": "SAK plugin (`@phalnx/plugin-solana-agent-kit`)",
       "count": 29,
       "ciStepName": "SAK plugin tests",
       "claudePattern": "plugins/solana-agent-kit/tests/plugin.test.ts` (mocha, %d tests)",
@@ -74,7 +74,7 @@
       "packageReadmePattern": "# Runs %d tests covering"
     },
     {
-      "name": "ElizaOS plugin (`@agent-shield/plugin-elizaos`)",
+      "name": "ElizaOS plugin (`@phalnx/plugin-elizaos`)",
       "count": 35,
       "ciStepName": "ElizaOS plugin tests",
       "claudePattern": "plugins/elizaos/tests/plugin.test.ts` (mocha, %d tests)",
@@ -82,7 +82,7 @@
       "packageReadmePattern": "# Runs %d tests covering"
     },
     {
-      "name": "MCP server (`@agent-shield/mcp`)",
+      "name": "MCP server (`@phalnx/mcp`)",
       "count": 291,
       "ciStepName": "MCP server tests",
       "claudePattern": "packages/mcp/tests/` (mocha, %d tests",
@@ -90,7 +90,7 @@
       "packageReadmePattern": "# Run tests (%d tests)"
     },
     {
-      "name": "Actions server (`@agent-shield/actions-server`)",
+      "name": "Actions server (`@phalnx/actions-server`)",
       "count": 61,
       "ciStepName": "Actions server tests",
       "claudePattern": "apps/actions-server/tests/` (mocha, %d tests)"

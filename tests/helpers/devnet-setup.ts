@@ -7,7 +7,7 @@
  */
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
-import { AgentShield } from "../../target/types/agent_shield";
+import { Phalnx } from "../../target/types/phalnx";
 import {
   Keypair,
   PublicKey,
@@ -59,7 +59,7 @@ function createThrottledFetch(): typeof fetch {
   } as typeof fetch;
 }
 
-// ─── Constants (mirrors programs/agent-shield/src/state/mod.rs) ─────────────
+// ─── Constants (mirrors programs/phalnx/src/state/mod.rs) ─────────────
 
 export const PROTOCOL_TREASURY = new PublicKey(
   "ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT",
@@ -149,7 +149,7 @@ export function getDevnetProvider() {
     commitment: "confirmed",
   });
   anchor.setProvider(provider);
-  const program = anchor.workspace.AgentShield as Program<AgentShield>;
+  const program = anchor.workspace.Phalnx as Program<Phalnx>;
   const owner = provider.wallet as anchor.Wallet;
   return { provider, program, connection, owner };
 }
@@ -157,7 +157,7 @@ export function getDevnetProvider() {
 // ─── Full vault factory ─────────────────────────────────────────────────────
 
 export interface CreateFullVaultOpts {
-  program: Program<AgentShield>;
+  program: Program<Phalnx>;
   connection: Connection;
   owner: anchor.Wallet;
   agent: Keypair;
@@ -292,10 +292,10 @@ export async function createFullVault(
     } as any)
     .rpc();
 
-  // Register agent
+  // Register agent (multi-agent: agent pubkey + permissions bitmask)
   if (!skipAgent) {
     await program.methods
-      .registerAgent(agent.publicKey)
+      .registerAgent(agent.publicKey, new BN(2097151)) // FULL_PERMISSIONS
       .accounts({
         owner: owner.publicKey,
         vault: pdas.vaultPda,
@@ -332,7 +332,7 @@ export async function createFullVault(
 // ─── Authorize + Finalize helper (composed into single versioned TX) ────────
 
 export interface AuthorizeOpts {
-  program: Program<AgentShield>;
+  program: Program<Phalnx>;
   connection: Connection;
   agent: Keypair;
   vaultPda: PublicKey;
@@ -406,7 +406,7 @@ export async function buildAuthorizeIx(opts: AuthorizeOpts) {
 }
 
 export interface FinalizeOpts {
-  program: Program<AgentShield>;
+  program: Program<Phalnx>;
   payer: Keypair;
   vaultPda: PublicKey;
   policyPda: PublicKey;

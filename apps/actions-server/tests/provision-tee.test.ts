@@ -198,4 +198,71 @@ describe("POST /api/actions/provision-tee", () => {
     });
     expect(res.status).to.equal(503);
   });
+
+  // ── Multi-provider tests ──────────────────────────────────────
+
+  it("returns 503 for privy when PRIVY env vars missing", async () => {
+    delete process.env.PRIVY_APP_ID;
+    delete process.env.PRIVY_APP_SECRET;
+
+    const res = await app.request("/api/actions/provision-tee", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "privy" }),
+    });
+    expect(res.status).to.equal(503);
+    const body = (await res.json()) as any;
+    expect(body.error).to.include("not available");
+  });
+
+  it("returns 503 for turnkey when TURNKEY env vars missing", async () => {
+    delete process.env.TURNKEY_ORGANIZATION_ID;
+    delete process.env.TURNKEY_API_KEY_ID;
+    delete process.env.TURNKEY_API_PRIVATE_KEY;
+
+    const res = await app.request("/api/actions/provision-tee", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "turnkey" }),
+    });
+    expect(res.status).to.equal(503);
+    const body = (await res.json()) as any;
+    expect(body.error).to.include("not available");
+  });
+
+  it("returns 400 for unknown provider", async () => {
+    const res = await app.request("/api/actions/provision-tee", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "unknown-provider" }),
+    });
+    expect(res.status).to.equal(400);
+    const body = (await res.json()) as any;
+    expect(body.error).to.include("Unknown provider");
+  });
+
+  it("defaults to crossmint when no provider specified", async () => {
+    delete process.env.CROSSMINT_API_KEY;
+
+    const res = await app.request("/api/actions/provision-tee", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ network: "devnet" }),
+    });
+    // Should hit crossmint path (503 because no API key)
+    expect(res.status).to.equal(503);
+    const body = (await res.json()) as any;
+    expect(body.error).to.include("not available");
+  });
+
+  it("validates publicKey format regardless of provider", async () => {
+    const res = await app.request("/api/actions/provision-tee", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "privy", publicKey: "short" }),
+    });
+    expect(res.status).to.equal(400);
+    const body = (await res.json()) as any;
+    expect(body.error).to.include("Invalid publicKey");
+  });
 });

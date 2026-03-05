@@ -40,13 +40,20 @@ export interface WalletLike {
  */
 export interface TeeWallet extends WalletLike {
   readonly provider: string;
+  /** Optional: API-based custody verification. Returns true if the provider confirms
+   *  this wallet's key is in their TEE custody system. */
+  verifyProviderCustody?(): Promise<boolean>;
 }
 
 /**
  * Type guard to detect TEE-backed wallets at runtime.
  */
 export function isTeeWallet(wallet: WalletLike): wallet is TeeWallet {
-  return "provider" in wallet && typeof (wallet as any).provider === "string";
+  return (
+    "provider" in wallet &&
+    typeof (wallet as Record<string, unknown>).provider === "string" &&
+    ((wallet as Record<string, unknown>).provider as string).length > 0
+  );
 }
 
 /**
@@ -88,9 +95,9 @@ export interface ShieldOptions {
   onApproved?: (txHash: string | null) => void;
   /** Event handler called when policies are updated via updatePolicies() */
   onPolicyUpdate?: (policies: ShieldPolicies) => void;
-  /** Event handler called when the shield is paused */
+  /** Event handler called when enforcement is paused */
   onPause?: () => void;
-  /** Event handler called when the shield is resumed */
+  /** Event handler called when enforcement is resumed */
   onResume?: () => void;
 }
 
@@ -99,7 +106,7 @@ export interface ShieldOptions {
  *
  * @example
  * ```typescript
- * import { shieldWallet } from '@agent-shield/sdk';
+ * import { shieldWallet } from '@phalnx/sdk';
  *
  * const protectedWallet = shieldWallet(wallet, { maxSpend: '500 USDC/day' });
  * const agent = new SolanaAgentKit(protectedWallet, RPC_URL, config);

@@ -13,7 +13,7 @@ export async function status(
   const summary = config.wallet.getSpendingSummary();
 
   const lines = [
-    `=== AgentShield Status ===`,
+    `=== Phalnx Status ===`,
     `Paused: ${summary.isPaused}`,
     ``,
     `--- Spending Limits ---`,

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { toPublicKey } from "../utils";
 import { formatError } from "../errors";
 import type { McpConfig } from "../config";
@@ -23,7 +23,7 @@ export const syncPositionsSchema = z.object({
 export type SyncPositionsInput = z.infer<typeof syncPositionsSchema>;
 
 export async function syncPositions(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   _config: McpConfig,
   input: SyncPositionsInput,
 ): Promise<string> {
@@ -31,7 +31,7 @@ export async function syncPositions(
     const vaultAddress = toPublicKey(input.vault);
     const vault = await client.fetchVaultByAddress(vaultAddress);
 
-    const { FLASH_TRADE_PROGRAM_ID } = await import("@agent-shield/sdk");
+    const { FLASH_TRADE_PROGRAM_ID } = await import("@phalnx/sdk");
 
     const flashProgramId = input.flashProgramId
       ? toPublicKey(input.flashProgramId)

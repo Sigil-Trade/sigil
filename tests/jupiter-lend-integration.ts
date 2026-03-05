@@ -1,6 +1,6 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
-import { AgentShield } from "../target/types/agent_shield";
+import { Phalnx } from "../target/types/phalnx";
 import {
   Keypair,
   PublicKey,
@@ -35,11 +35,13 @@ import {
   LiteSVM,
 } from "./helpers/litesvm-setup";
 
+const FULL_PERMISSIONS = new BN((1n << 21n) - 1n);
+
 /**
  * Jupiter Lend Integration Tests
  *
  * These tests verify that Jupiter Lend deposit/withdraw actions work
- * correctly through AgentShield's atomic composition pattern.
+ * correctly through Phalnx's atomic composition pattern.
  *
  * Deposit = spending action (counts against daily cap, fees apply)
  * Withdraw = non-spending action (amount = 0, no cap/fees)
@@ -51,7 +53,7 @@ import {
 describe("jupiter-lend-integration", () => {
   let env: TestEnv;
   let svm: LiteSVM;
-  let program: Program<AgentShield>;
+  let program: Program<Phalnx>;
 
   let owner: anchor.Wallet;
   const agent = Keypair.generate();
@@ -247,7 +249,7 @@ describe("jupiter-lend-integration", () => {
 
     // Register agent
     await program.methods
-      .registerAgent(agent.publicKey)
+      .registerAgent(agent.publicKey, FULL_PERMISSIONS)
       .accountsPartial({
         owner: owner.publicKey,
         vault: vaultPda,
@@ -467,13 +469,13 @@ describe("jupiter-lend-integration", () => {
         .rpc();
 
       await program.methods
-        .registerAgent(agent.publicKey)
+        .registerAgent(agent.publicKey, FULL_PERMISSIONS)
         .accountsPartial({ owner: owner.publicKey, vault: frozenVault })
         .rpc();
 
       // Freeze via revoke
       await program.methods
-        .revokeAgent()
+        .revokeAgent(agent.publicKey)
         .accountsPartial({ owner: owner.publicKey, vault: frozenVault })
         .rpc();
     });
@@ -567,7 +569,7 @@ describe("jupiter-lend-integration", () => {
         .rpc();
 
       await program.methods
-        .registerAgent(agent.publicKey)
+        .registerAgent(agent.publicKey, FULL_PERMISSIONS)
         .accountsPartial({ owner: owner.publicKey, vault: rollingVault })
         .rpc();
 

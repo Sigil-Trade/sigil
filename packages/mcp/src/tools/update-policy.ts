@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { BN } from "@coral-xyz/anchor";
-import type { AgentShieldClient } from "@agent-shield/sdk";
-import type { UpdatePolicyParams } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
+import type { UpdatePolicyParams } from "@phalnx/sdk";
 import { toPublicKey, toBN } from "../utils";
 import { formatError } from "../errors";
 
@@ -61,7 +61,7 @@ export const updatePolicySchema = z.object({
 export type UpdatePolicyInput = z.infer<typeof updatePolicySchema>;
 
 export async function updatePolicy(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   input: UpdatePolicyInput,
 ): Promise<string> {
   try {
@@ -116,7 +116,7 @@ export async function updatePolicy(
 export const updatePolicyTool = {
   name: "shield_update_policy",
   description:
-    "Update the policy configuration for an AgentShield vault. " +
+    "Update the policy configuration for an Phalnx vault. " +
     "Only the fields you provide will be changed. Owner-only operation.",
   schema: updatePolicySchema,
   handler: updatePolicy,

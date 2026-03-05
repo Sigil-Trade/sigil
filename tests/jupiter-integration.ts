@@ -1,6 +1,6 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
-import { AgentShield } from "../target/types/agent_shield";
+import { Phalnx } from "../target/types/phalnx";
 import {
   Keypair,
   PublicKey,
@@ -44,11 +44,13 @@ import {
   FailedTransactionMetadata,
 } from "./helpers/litesvm-setup";
 
+const FULL_PERMISSIONS = new BN((1n << 21n) - 1n);
+
 /**
  * Jupiter Integration Tests
  *
  * These tests verify that Jupiter swap instructions can be correctly composed
- * into AgentShield's atomic [validate, ...defi, finalize] transactions.
+ * into Phalnx's atomic [validate, ...defi, finalize] transactions.
  *
  * Since the on-chain program does not inspect DeFi instruction contents — it
  * only validates policy in validate_and_authorize and records the result in
@@ -57,7 +59,7 @@ import {
 describe("jupiter-integration", () => {
   let env: TestEnv;
   let svm: LiteSVM;
-  let program: Program<AgentShield>;
+  let program: Program<Phalnx>;
 
   // Test actors
   let owner: anchor.Wallet;
@@ -89,7 +91,7 @@ describe("jupiter-integration", () => {
   /**
    * Create a mock DeFi instruction that mimics what Jupiter would produce.
    * Uses SystemProgram as the program ID since the real Jupiter program
-   * doesn't exist on localnet. The on-chain AgentShield program doesn't
+   * doesn't exist on localnet. The on-chain Phalnx program doesn't
    * inspect the DeFi instruction — it only validates policy in
    * validate_and_authorize and records the result in finalize_session.
    *
@@ -267,7 +269,7 @@ describe("jupiter-integration", () => {
 
     // Register agent
     await program.methods
-      .registerAgent(agent.publicKey)
+      .registerAgent(agent.publicKey, FULL_PERMISSIONS)
       .accountsPartial({
         owner: owner.publicKey,
         vault: vaultPda,
@@ -538,13 +540,13 @@ describe("jupiter-integration", () => {
         .rpc();
 
       await program.methods
-        .registerAgent(agent.publicKey)
+        .registerAgent(agent.publicKey, FULL_PERMISSIONS)
         .accountsPartial({ owner: owner.publicKey, vault: frozenVault })
         .rpc();
 
       // Freeze it
       await program.methods
-        .revokeAgent()
+        .revokeAgent(agent.publicKey)
         .accountsPartial({ owner: owner.publicKey, vault: frozenVault })
         .rpc();
 
@@ -652,7 +654,7 @@ describe("jupiter-integration", () => {
         .rpc();
 
       await program.methods
-        .registerAgent(agent.publicKey)
+        .registerAgent(agent.publicKey, FULL_PERMISSIONS)
         .accountsPartial({ owner: owner.publicKey, vault: rollingVault })
         .rpc();
 
@@ -680,7 +682,7 @@ describe("jupiter-integration", () => {
     it("allows multiple swaps under cap, then rejects when exceeded", async () => {
       // Verify agent is registered
       const vaultState = await program.account.agentVault.fetch(rollingVault);
-      expect(vaultState.agent.toString()).to.equal(
+      expect(vaultState.agents[0].pubkey.toString()).to.equal(
         agent.publicKey.toString(),
         "Agent should be registered for rolling window vault",
       );

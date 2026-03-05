@@ -21,7 +21,7 @@ export interface BuildProvisionTxParams {
  * 2. Initializes vault + policy + tracker
  * 3. Registers agent
  *
- * Heavy dependencies (@solana/web3.js, @coral-xyz/anchor, @agent-shield/sdk)
+ * Heavy dependencies (@solana/web3.js, @coral-xyz/anchor, @phalnx/sdk)
  * are loaded dynamically to avoid slow cold starts on serverless.
  */
 export async function buildProvisionTransaction(
@@ -37,18 +37,18 @@ export async function buildProvisionTransaction(
   const { BN, Program, AnchorProvider, Wallet } =
     await import("@coral-xyz/anchor");
   const {
-    AGENT_SHIELD_PROGRAM_ID,
+    PHALNX_PROGRAM_ID,
     IDL,
     buildInitializeVault,
     buildRegisterAgent,
     getVaultPDA,
     CU_VAULT_CREATION,
     getEstimator,
-  } = await import("@agent-shield/sdk");
+  } = await import("@phalnx/sdk");
 
-  const PROGRAM_ID = process.env.AGENTSHIELD_PROGRAM_ID
-    ? new PublicKey(process.env.AGENTSHIELD_PROGRAM_ID)
-    : AGENT_SHIELD_PROGRAM_ID;
+  const PROGRAM_ID = process.env.PHALNX_PROGRAM_ID
+    ? new PublicKey(process.env.PHALNX_PROGRAM_ID)
+    : PHALNX_PROGRAM_ID;
 
   const connection = new Connection(RPC_URL, "confirmed");
 
@@ -84,11 +84,13 @@ export async function buildProvisionTransaction(
     params.owner,
     vaultParams,
   ).instruction();
+  const FULL_PERMISSIONS = new BN(2097151); // 21 bits — all action types
   const registerIx = await buildRegisterAgent(
     program,
     params.owner,
     vaultPDA,
     params.agentPubkey,
+    FULL_PERMISSIONS,
   ).instruction();
 
   // Priority fee for reliable tx landing

@@ -49,7 +49,7 @@ let currentConfig: Required<JupiterApiConfig> = { ...DEFAULT_CONFIG };
 
 /**
  * Configure the global Jupiter API client.
- * Call once at startup (e.g. in AgentShieldClient constructor).
+ * Call once at startup (e.g. in PhalnxClient constructor).
  */
 export function configureJupiterApi(config: JupiterApiConfig): void {
   currentConfig = {

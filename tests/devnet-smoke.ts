@@ -9,7 +9,7 @@
  */
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
-import { AgentShield } from "../target/types/agent_shield";
+import { Phalnx } from "../target/types/phalnx";
 import {
   Keypair,
   PublicKey,
@@ -175,7 +175,7 @@ describe("devnet-smoke-test", () => {
 
   it("3. register_agent", async () => {
     await program.methods
-      .registerAgent(agent.publicKey)
+      .registerAgent(agent.publicKey, new BN(2097151)) // FULL_PERMISSIONS
       .accounts({
         owner: owner.publicKey,
         vault: vaultPda,
@@ -183,7 +183,9 @@ describe("devnet-smoke-test", () => {
       .rpc();
 
     const vault = await program.account.agentVault.fetch(vaultPda);
-    expect(vault.agent.toString()).to.equal(agent.publicKey.toString());
+    expect(vault.agents[0].pubkey.toString()).to.equal(
+      agent.publicKey.toString(),
+    );
     console.log("    Agent registered:", agent.publicKey.toString());
   });
 
@@ -310,7 +312,7 @@ describe("devnet-smoke-test", () => {
 
   it("7. revoke_agent (kill switch)", async () => {
     await program.methods
-      .revokeAgent()
+      .revokeAgent(agent.publicKey)
       .accounts({
         owner: owner.publicKey,
         vault: vaultPda,
@@ -323,9 +325,9 @@ describe("devnet-smoke-test", () => {
   });
 
   it("8. reactivate_vault", async () => {
-    // revokeAgent clears the agent, so we must provide a new one
+    // revokeAgent removed the agent, so we must provide a new one
     await program.methods
-      .reactivateVault(agent.publicKey)
+      .reactivateVault(agent.publicKey, new BN(2097151)) // FULL_PERMISSIONS
       .accounts({
         owner: owner.publicKey,
         vault: vaultPda,

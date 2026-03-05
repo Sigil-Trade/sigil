@@ -1,9 +1,9 @@
 // ---------------------------------------------------------------------------
-// Squads V4 Multisig integration for AgentShield
+// Squads V4 Multisig integration for Phalnx
 // Enables N-of-M governance over vault policies — institutional users can
 // require "3-of-5 board approval" before AI agent spending limits change.
 //
-// Architecture: A Squads vault PDA becomes the AgentShield vault `owner`.
+// Architecture: A Squads vault PDA becomes the Phalnx vault `owner`.
 // Policy changes go through Squads proposals. The agent runtime is unaffected.
 // ---------------------------------------------------------------------------
 
@@ -17,7 +17,7 @@ import {
 import { Program } from "@coral-xyz/anchor";
 import * as multisig from "@sqds/multisig";
 import type {
-  AgentShield,
+  Phalnx,
   UpdatePolicyParams,
   QueuePolicyUpdateParams,
   InitializeVaultParams,
@@ -68,7 +68,7 @@ export interface ProposeVaultActionParams {
   multisigPda: PublicKey;
   /** Squads vault authority index (default 0). */
   vaultIndex?: number;
-  /** AgentShield instruction(s) to wrap in the proposal. */
+  /** Phalnx instruction(s) to wrap in the proposal. */
   instructions: TransactionInstruction[];
   memo?: string;
 }
@@ -126,8 +126,8 @@ export interface ProposeInitializeVaultParams {
 export interface ProposeUpdatePolicyParams {
   multisigPda: PublicKey;
   vaultIndex?: number;
-  /** The AgentShield vault PDA whose policy is being changed. */
-  agentShieldVault: PublicKey;
+  /** The Phalnx vault PDA whose policy is being changed. */
+  phalnxVault: PublicKey;
   policyUpdate: UpdatePolicyParams;
   memo?: string;
 }
@@ -135,7 +135,7 @@ export interface ProposeUpdatePolicyParams {
 export interface ProposeQueuePolicyUpdateParams {
   multisigPda: PublicKey;
   vaultIndex?: number;
-  agentShieldVault: PublicKey;
+  phalnxVault: PublicKey;
   policyUpdate: QueuePolicyUpdateParams;
   memo?: string;
 }
@@ -143,14 +143,14 @@ export interface ProposeQueuePolicyUpdateParams {
 export interface ProposeApplyPendingPolicyParams {
   multisigPda: PublicKey;
   vaultIndex?: number;
-  agentShieldVault: PublicKey;
+  phalnxVault: PublicKey;
   memo?: string;
 }
 
 export interface ProposeSyncPositionsParams {
   multisigPda: PublicKey;
   vaultIndex?: number;
-  agentShieldVault: PublicKey;
+  phalnxVault: PublicKey;
   actualPositions: number;
   memo?: string;
 }
@@ -239,7 +239,7 @@ function resolveStatus(status: any): { name: string; timestamp?: bigint } {
  *
  * Returns the transaction signature, the derived multisig PDA, and the
  * default vault PDA (index 0). Use the vault PDA as the `owner` when
- * creating an AgentShield vault governed by this multisig.
+ * creating an Phalnx vault governed by this multisig.
  */
 export async function createSquadsMultisig(
   connection: Connection,
@@ -454,16 +454,16 @@ export async function fetchProposalInfo(
 }
 
 // ---------------------------------------------------------------------------
-// AgentShield Convenience Functions
+// Phalnx Convenience Functions
 //
-// Each builds an AgentShield owner instruction, then wraps it in a Squads
+// Each builds an Phalnx owner instruction, then wraps it in a Squads
 // proposal via proposeVaultAction(). The Squads vault PDA is used as the
 // `owner` signer — when the proposal is executed, Squads CPI-calls into
-// AgentShield with the vault PDA as authority.
+// Phalnx with the vault PDA as authority.
 // ---------------------------------------------------------------------------
 
 export async function proposeInitializeVault(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   connection: Connection,
   feePayer: Keypair,
   params: ProposeInitializeVaultParams,
@@ -487,7 +487,7 @@ export async function proposeInitializeVault(
 }
 
 export async function proposeUpdatePolicy(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   connection: Connection,
   feePayer: Keypair,
   params: ProposeUpdatePolicyParams,
@@ -499,7 +499,7 @@ export async function proposeUpdatePolicy(
   const ix = await buildUpdatePolicy(
     program,
     squadsVault,
-    params.agentShieldVault,
+    params.phalnxVault,
     params.policyUpdate,
   ).instruction();
 
@@ -512,7 +512,7 @@ export async function proposeUpdatePolicy(
 }
 
 export async function proposeQueuePolicyUpdate(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   connection: Connection,
   feePayer: Keypair,
   params: ProposeQueuePolicyUpdateParams,
@@ -524,7 +524,7 @@ export async function proposeQueuePolicyUpdate(
   const ix = await buildQueuePolicyUpdate(
     program,
     squadsVault,
-    params.agentShieldVault,
+    params.phalnxVault,
     params.policyUpdate,
   ).instruction();
 
@@ -537,7 +537,7 @@ export async function proposeQueuePolicyUpdate(
 }
 
 export async function proposeApplyPendingPolicy(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   connection: Connection,
   feePayer: Keypair,
   params: ProposeApplyPendingPolicyParams,
@@ -549,7 +549,7 @@ export async function proposeApplyPendingPolicy(
   const ix = await buildApplyPendingPolicy(
     program,
     squadsVault,
-    params.agentShieldVault,
+    params.phalnxVault,
   ).instruction();
 
   return proposeVaultAction(connection, feePayer, {
@@ -561,7 +561,7 @@ export async function proposeApplyPendingPolicy(
 }
 
 export async function proposeSyncPositions(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   connection: Connection,
   feePayer: Keypair,
   params: ProposeSyncPositionsParams,
@@ -573,7 +573,7 @@ export async function proposeSyncPositions(
   const ix = await buildSyncPositions(
     program,
     squadsVault,
-    params.agentShieldVault,
+    params.phalnxVault,
     params.actualPositions,
   ).instruction();
 

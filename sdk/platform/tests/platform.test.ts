@@ -1,14 +1,14 @@
 import { expect } from "chai";
 import * as sinon from "sinon";
-import { AgentShieldPlatform } from "../src/index";
+import { PhalnxPlatform } from "../src/index";
 
-describe("AgentShieldPlatform", () => {
-  const BASE_URL = "https://app.agentshield.dev";
-  let platform: AgentShieldPlatform;
+describe("PhalnxPlatform", () => {
+  const BASE_URL = "https://app.phalnx.io";
+  let platform: PhalnxPlatform;
   let fetchStub: sinon.SinonStub;
 
   beforeEach(() => {
-    platform = new AgentShieldPlatform(BASE_URL);
+    platform = new PhalnxPlatform(BASE_URL);
     fetchStub = sinon.stub(globalThis, "fetch");
   });
 
@@ -46,7 +46,7 @@ describe("AgentShieldPlatform", () => {
     });
 
     it("strips trailing slash from base URL", () => {
-      const p = new AgentShieldPlatform("https://example.com/");
+      const p = new PhalnxPlatform("https://example.com/");
       const url = p.getProvisionActionUrl();
       expect(url).to.equal("https://example.com/api/actions/provision");
     });
@@ -66,7 +66,7 @@ describe("AgentShieldPlatform", () => {
     it("fetches GET endpoint", async () => {
       const mockMetadata = {
         type: "action",
-        title: "Create AgentShield Protected Vault",
+        title: "Create Phalnx Protected Vault",
         icon: "https://example.com/icon.png",
         description: "Test",
         label: "Create Vault",
@@ -79,7 +79,7 @@ describe("AgentShieldPlatform", () => {
       } as Response);
 
       const result = await platform.getActionMetadata();
-      expect(result.title).to.equal("Create AgentShield Protected Vault");
+      expect(result.title).to.equal("Create Phalnx Protected Vault");
       expect(fetchStub.calledOnce).to.be.true;
       expect(fetchStub.firstCall.args[0]).to.equal(
         `${BASE_URL}/api/actions/provision`,
@@ -226,7 +226,7 @@ describe("AgentShieldPlatform", () => {
         ok: true,
         json: async () => ({
           status: "not_found",
-          error: "TX does not involve AgentShield",
+          error: "TX does not involve Phalnx",
         }),
       } as Response);
 

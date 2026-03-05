@@ -29,8 +29,8 @@ function handleGet(req: VercelRequest, res: VercelResponse) {
   return res.status(200).json({
     type: "action",
     icon: `${url.origin}/icon.png`,
-    title: "Fund AgentShield Wallet",
-    description: `Send${amountLabel} ${tokenLabel} to AgentShield wallet ${destination ? destination.slice(0, 8) + "..." : ""}`,
+    title: "Fund Phalnx Wallet",
+    description: `Send${amountLabel} ${tokenLabel} to Phalnx wallet ${destination ? destination.slice(0, 8) + "..." : ""}`,
     label: `Send ${tokenLabel}`,
   });
 }

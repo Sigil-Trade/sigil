@@ -10,7 +10,7 @@
  */
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
-import { AgentShield } from "../target/types/agent_shield";
+import { Phalnx } from "../target/types/phalnx";
 import {
   Keypair,
   PublicKey,
@@ -54,10 +54,12 @@ import {
   VersionedTxResult,
 } from "./helpers/surfpool-setup";
 
+const FULL_PERMISSIONS = new BN((1n << 21n) - 1n);
+
 // ─── Shared state ───────────────────────────────────────────────────────────
 
 let env: SurfpoolTestEnv;
-let program: Program<AgentShield>;
+let program: Program<Phalnx>;
 
 describe("surfpool-integration", function () {
   this.timeout(300_000); // 5 min global timeout
@@ -147,7 +149,7 @@ describe("surfpool-integration", function () {
     it("registers agent and deposits USDC", async () => {
       // Register agent
       await program.methods
-        .registerAgent(agent.publicKey)
+        .registerAgent(agent.publicKey, FULL_PERMISSIONS)
         .accounts({
           owner: env.payer.publicKey,
           vault: vaultPda,
@@ -155,7 +157,9 @@ describe("surfpool-integration", function () {
         .rpc();
 
       const vault = await program.account.agentVault.fetch(vaultPda);
-      expect(vault.agent.toString()).to.equal(agent.publicKey.toString());
+      expect(vault.agents[0].pubkey.toString()).to.equal(
+        agent.publicKey.toString(),
+      );
 
       // Create vault ATA and fund it
       vaultUsdcAta = getAssociatedTokenAddressSync(
@@ -306,7 +310,7 @@ describe("surfpool-integration", function () {
         .rpc();
 
       await program.methods
-        .registerAgent(agent.publicKey)
+        .registerAgent(agent.publicKey, FULL_PERMISSIONS)
         .accounts({
           owner: env.payer.publicKey,
           vault: vaultPda,
@@ -437,7 +441,8 @@ describe("surfpool-integration", function () {
         await sendVersionedTx(env.connection, [validateIx], agent);
         expect.fail("Should have rejected — no finalize instruction");
       } catch (err: any) {
-        expect(err.toString()).to.include("MissingFinalizeInstruction");
+        const errStr = err.message || err.toString() || JSON.stringify(err);
+        expect(errStr).to.include("MissingFinalizeInstruction");
       }
     });
 
@@ -556,7 +561,7 @@ describe("surfpool-integration", function () {
         .rpc();
 
       await program.methods
-        .registerAgent(agent.publicKey)
+        .registerAgent(agent.publicKey, FULL_PERMISSIONS)
         .accounts({
           owner: env.payer.publicKey,
           vault: vaultPda,
@@ -703,7 +708,8 @@ describe("surfpool-integration", function () {
         await sendVersionedTx(env.connection, [validateIx, finalizeIx], agent);
         expect.fail("Should have failed — amount exceeds max tx size");
       } catch (err: any) {
-        expect(err.toString()).to.include("TransactionTooLarge");
+        const errStr = err.message || err.toString() || JSON.stringify(err);
+        expect(errStr).to.include("TransactionTooLarge");
       }
 
       // Verify no state changes occurred (atomic revert)
@@ -826,7 +832,7 @@ describe("surfpool-integration", function () {
         .rpc();
 
       await program.methods
-        .registerAgent(agent.publicKey)
+        .registerAgent(agent.publicKey, FULL_PERMISSIONS)
         .accounts({
           owner: env.payer.publicKey,
           vault: vaultPda,
@@ -997,7 +1003,7 @@ describe("surfpool-integration", function () {
         .rpc();
 
       await program.methods
-        .registerAgent(agent.publicKey)
+        .registerAgent(agent.publicKey, FULL_PERMISSIONS)
         .accounts({
           owner: env.payer.publicKey,
           vault: vaultPda,
@@ -1260,7 +1266,8 @@ describe("surfpool-integration", function () {
         await program.account.agentVault.fetch(pdas.vaultPda);
         expect.fail("Vault should not exist after network reset");
       } catch (err: any) {
-        expect(err.toString()).to.satisfy(
+        const errStr = err.message || err.toString() || JSON.stringify(err);
+        expect(errStr).to.satisfy(
           (s: string) =>
             s.includes("Account does not exist") ||
             s.includes("Could not find"),
@@ -1459,7 +1466,8 @@ describe("surfpool-integration", function () {
         await sendVersionedTx(env.connection, [applyIx], env.payer);
         expect.fail("Should have thrown TimelockNotExpired");
       } catch (err: any) {
-        expect(err.toString()).to.include("TimelockNotExpired");
+        const errStr = err.message || err.toString() || JSON.stringify(err);
+        expect(errStr).to.include("TimelockNotExpired");
       }
     });
   });

@@ -100,7 +100,7 @@ export const configureSchema = z.object({
 export type ConfigureInput = z.input<typeof configureSchema>;
 
 /**
- * Set up AgentShield with full on-chain guardrails.
+ * Set up Phalnx with full on-chain guardrails.
  * Generates keypair, provisions TEE wallet, and creates vault Blink URL.
  */
 export async function configure(
@@ -177,7 +177,7 @@ export async function configure(
     };
 
     const lines: string[] = [
-      "## AgentShield Configured",
+      "## Phalnx Configured",
       "",
       `**Wallet:** ${walletPublicKey}`,
       `**Network:** ${config.network}`,
@@ -189,6 +189,8 @@ export async function configure(
     ];
 
     // ── Step 2: Provision TEE wallet ──────────────────────────────
+    const teeProvider = input.teeProvider ?? "crossmint";
+
     // Dedup guard: if we already have a TEE wallet from a previous run, reuse it
     const existingConfig = loadShieldConfig();
     if (
@@ -196,7 +198,11 @@ export async function configure(
       existingConfig.layers.tee.locator
     ) {
       config.layers.tee = { ...existingConfig.layers.tee };
-      config.wallet.type = "crossmint";
+      config.wallet.type = existingConfig.wallet.type as
+        | "keypair"
+        | "crossmint"
+        | "privy"
+        | "turnkey";
       config.wallet.publicKey =
         existingConfig.layers.tee.publicKey ?? walletPublicKey;
 
@@ -207,16 +213,101 @@ export async function configure(
       lines.push(
         "- Your agent's private key is protected in a hardware enclave.",
       );
-    } else if (process.env.CROSSMINT_API_KEY) {
+    } else if (
+      teeProvider === "privy" &&
+      process.env.PRIVY_APP_ID &&
+      process.env.PRIVY_APP_SECRET
+    ) {
+      // Local Privy creation — dev has their own API credentials
+      try {
+        let mod: any;
+        try {
+          mod = require("@phalnx/custody-privy");
+        } catch {
+          return (
+            "Error: @phalnx/custody-privy is not installed.\n" +
+            "Run: npm install @phalnx/custody-privy"
+          );
+        }
+        const custodyWallet = await mod.privy({
+          appId: process.env.PRIVY_APP_ID,
+          appSecret: process.env.PRIVY_APP_SECRET,
+        });
+
+        config.layers.tee = {
+          enabled: true,
+          locator: custodyWallet.walletId,
+          publicKey: custodyWallet.publicKey.toBase58(),
+        };
+        config.wallet.type = "privy";
+        config.wallet.publicKey = custodyWallet.publicKey.toBase58();
+
+        lines.push("");
+        lines.push("### TEE Custody (Privy)");
+        lines.push(`- **TEE Public Key:** ${config.wallet.publicKey}`);
+        lines.push(`- **Wallet ID:** ${config.layers.tee.locator}`);
+        lines.push(
+          "- Your agent's private key is protected in a Privy AWS Nitro Enclave.",
+        );
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        return `Error creating Privy wallet locally: ${msg}`;
+      }
+    } else if (
+      teeProvider === "turnkey" &&
+      process.env.TURNKEY_ORGANIZATION_ID &&
+      process.env.TURNKEY_API_KEY_ID &&
+      process.env.TURNKEY_API_PRIVATE_KEY
+    ) {
+      // Local Turnkey creation — dev has their own API credentials
+      try {
+        let mod: any;
+        try {
+          mod = require("@phalnx/custody-turnkey");
+        } catch {
+          return (
+            "Error: @phalnx/custody-turnkey is not installed.\n" +
+            "Run: npm install @phalnx/custody-turnkey"
+          );
+        }
+        const custodyWallet = await mod.turnkey({
+          organizationId: process.env.TURNKEY_ORGANIZATION_ID,
+          apiKeyId: process.env.TURNKEY_API_KEY_ID,
+          apiPrivateKey: process.env.TURNKEY_API_PRIVATE_KEY,
+        });
+
+        config.layers.tee = {
+          enabled: true,
+          locator: custodyWallet.walletId,
+          publicKey: custodyWallet.publicKey.toBase58(),
+        };
+        config.wallet.type = "turnkey";
+        config.wallet.publicKey = custodyWallet.publicKey.toBase58();
+
+        lines.push("");
+        lines.push("### TEE Custody (Turnkey)");
+        lines.push(`- **TEE Public Key:** ${config.wallet.publicKey}`);
+        lines.push(`- **Wallet ID:** ${config.layers.tee.locator}`);
+        lines.push(
+          "- Your agent's private key is protected in Turnkey's secure infrastructure.",
+        );
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        return `Error creating Turnkey wallet locally: ${msg}`;
+      }
+    } else if (
+      (teeProvider === "crossmint" || teeProvider === undefined) &&
+      process.env.CROSSMINT_API_KEY
+    ) {
       // Local Crossmint creation — dev has their own API key
       try {
         let mod: any;
         try {
-          mod = require("@agent-shield/custody-crossmint");
+          mod = require("@phalnx/custody-crossmint");
         } catch {
           return (
-            "Error: @agent-shield/custody-crossmint is not installed.\n" +
-            "Run: npm install @agent-shield/custody-crossmint"
+            "Error: @phalnx/custody-crossmint is not installed.\n" +
+            "Run: npm install @phalnx/custody-crossmint"
           );
         }
         const baseUrl =
@@ -226,12 +317,12 @@ export async function configure(
         const custodyWallet = await mod.crossmint({
           apiKey: process.env.CROSSMINT_API_KEY,
           baseUrl,
-          linkedUser: `userId:agent-shield-${walletPublicKey}`,
+          linkedUser: `userId:phalnx-${walletPublicKey}`,
         });
 
         config.layers.tee = {
           enabled: true,
-          locator: `userId:agent-shield-${walletPublicKey}`,
+          locator: `userId:phalnx-${walletPublicKey}`,
           publicKey: custodyWallet.publicKey.toBase58(),
         };
         config.wallet.type = "crossmint";
@@ -256,7 +347,11 @@ export async function configure(
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ network, publicKey: walletPublicKey }),
+            body: JSON.stringify({
+              network,
+              publicKey: walletPublicKey,
+              provider: teeProvider,
+            }),
           },
         );
 
@@ -274,11 +369,11 @@ export async function configure(
           locator: teeResult.locator,
           publicKey: teeResult.publicKey,
         };
-        config.wallet.type = "crossmint";
+        config.wallet.type = teeProvider as "crossmint" | "privy" | "turnkey";
         config.wallet.publicKey = teeResult.publicKey;
 
         lines.push("");
-        lines.push("### TEE Custody");
+        lines.push(`### TEE Custody (${teeProvider})`);
         lines.push(`- **TEE Public Key:** ${teeResult.publicKey}`);
         lines.push(`- **Locator:** ${teeResult.locator}`);
         lines.push(
@@ -286,7 +381,7 @@ export async function configure(
         );
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
-        return `Error connecting to AgentShield platform for TEE provisioning: ${msg}`;
+        return `Error connecting to Phalnx platform for TEE provisioning: ${msg}`;
       }
     }
 
@@ -321,20 +416,23 @@ export async function configure(
     lines.push("");
     lines.push("### Next Steps");
     lines.push("1. Sign the vault creation transaction using the link above");
-    lines.push("2. Fund your vault with SOL and tokens");
-    lines.push("3. You're ready to trade with full on-chain protection!");
+    lines.push(
+      "2. After signing, run `shield_confirm_vault` to save your vault address",
+    );
+    lines.push("3. Fund your vault with SOL and tokens");
+    lines.push("4. You're ready to trade with full on-chain protection!");
 
     return lines.join("\n");
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    return `Error configuring AgentShield: ${msg}`;
+    return `Error configuring Phalnx: ${msg}`;
   }
 }
 
 export const configureTool = {
   name: "shield_configure",
   description:
-    "Set up AgentShield with full on-chain guardrails. " +
+    "Set up Phalnx with full on-chain guardrails. " +
     "Generates keypair, provisions TEE wallet, and creates vault Blink URL.",
   schema: configureSchema,
   handler: configure,

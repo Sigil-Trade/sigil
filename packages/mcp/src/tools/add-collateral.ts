@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { toPublicKey, toBN } from "../utils";
 import { formatError } from "../errors";
 import {
@@ -28,7 +28,7 @@ function parseSide(
 }
 
 export async function addCollateral(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   config: McpConfig,
   input: AddCollateralInput,
   custodyWallet?: CustodyWalletLike | null,
@@ -78,8 +78,8 @@ export async function addCollateral(
 export const addCollateralTool = {
   name: "shield_add_collateral",
   description:
-    "Add collateral to an existing Flash Trade position through an AgentShield vault. " +
-    "Requires AGENTSHIELD_AGENT_KEYPAIR_PATH. " +
+    "Add collateral to an existing Flash Trade position through an Phalnx vault. " +
+    "Requires PHALNX_AGENT_KEYPAIR_PATH. " +
     "Spending-checked: amount counts toward daily spending cap.",
   schema: addCollateralSchema,
   handler: addCollateral,

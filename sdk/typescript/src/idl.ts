@@ -2,12 +2,12 @@
  * Program IDL in camelCase format in order to be used in JS/TS.
  *
  * Note that this is only a type helper and is not the actual IDL. The original
- * IDL can be found at `target/idl/agent_shield.json`.
+ * IDL can be found at `target/idl/phalnx.json`.
  */
-export type AgentShield = {
+export type Phalnx = {
   address: "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL";
   metadata: {
-    name: "agentShield";
+    name: "phalnx";
     version: "0.1.0";
     spec: "0.1.0";
     description: "On-chain guardrails for AI agents on Solana - Permission controls, spending limits, and audit infrastructure for autonomous agents";
@@ -120,6 +120,93 @@ export type AgentShield = {
       ];
     },
     {
+      name: "applyConstraintsUpdate";
+      docs: ["Apply a queued constraints update after the timelock expires."];
+      discriminator: [175, 103, 90, 155, 134, 91, 135, 242];
+      accounts: [
+        {
+          name: "owner";
+          writable: true;
+          signer: true;
+          relations: ["vault"];
+        },
+        {
+          name: "vault";
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [118, 97, 117, 108, 116];
+              },
+              {
+                kind: "account";
+                path: "owner";
+              },
+              {
+                kind: "account";
+                path: "vault.vault_id";
+                account: "agentVault";
+              },
+            ];
+          };
+          relations: ["constraints", "pendingConstraints"];
+        },
+        {
+          name: "constraints";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [99, 111, 110, 115, 116, 114, 97, 105, 110, 116, 115];
+              },
+              {
+                kind: "account";
+                path: "vault";
+              },
+            ];
+          };
+        },
+        {
+          name: "pendingConstraints";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [
+                  112,
+                  101,
+                  110,
+                  100,
+                  105,
+                  110,
+                  103,
+                  95,
+                  99,
+                  111,
+                  110,
+                  115,
+                  116,
+                  114,
+                  97,
+                  105,
+                  110,
+                  116,
+                  115,
+                ];
+              },
+              {
+                kind: "account";
+                path: "vault";
+              },
+            ];
+          };
+        },
+      ];
+      args: [];
+    },
+    {
       name: "applyPendingPolicy";
       docs: ["Apply a queued policy update after the timelock expires."];
       discriminator: [114, 212, 19, 227, 89, 199, 74, 62];
@@ -202,6 +289,77 @@ export type AgentShield = {
       args: [];
     },
     {
+      name: "cancelConstraintsUpdate";
+      docs: ["Cancel a queued constraints update."];
+      discriminator: [169, 121, 85, 230, 154, 2, 78, 61];
+      accounts: [
+        {
+          name: "owner";
+          writable: true;
+          signer: true;
+          relations: ["vault"];
+        },
+        {
+          name: "vault";
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [118, 97, 117, 108, 116];
+              },
+              {
+                kind: "account";
+                path: "owner";
+              },
+              {
+                kind: "account";
+                path: "vault.vault_id";
+                account: "agentVault";
+              },
+            ];
+          };
+          relations: ["pendingConstraints"];
+        },
+        {
+          name: "pendingConstraints";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [
+                  112,
+                  101,
+                  110,
+                  100,
+                  105,
+                  110,
+                  103,
+                  95,
+                  99,
+                  111,
+                  110,
+                  115,
+                  116,
+                  114,
+                  97,
+                  105,
+                  110,
+                  116,
+                  115,
+                ];
+              },
+              {
+                kind: "account";
+                path: "vault";
+              },
+            ];
+          };
+        },
+      ];
+      args: [];
+    },
+    {
       name: "cancelPendingPolicy";
       docs: ["Cancel a queued policy update."];
       discriminator: [153, 36, 104, 200, 50, 94, 207, 33];
@@ -266,6 +424,147 @@ export type AgentShield = {
         },
       ];
       args: [];
+    },
+    {
+      name: "closeInstructionConstraints";
+      docs: [
+        "Close instruction constraints for the vault.",
+        "Only the owner can call this. Blocked when timelock > 0 (removing constraints loosens security).",
+      ];
+      discriminator: [145, 240, 233, 37, 11, 78, 195, 145];
+      accounts: [
+        {
+          name: "owner";
+          writable: true;
+          signer: true;
+          relations: ["vault"];
+        },
+        {
+          name: "vault";
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [118, 97, 117, 108, 116];
+              },
+              {
+                kind: "account";
+                path: "owner";
+              },
+              {
+                kind: "account";
+                path: "vault.vault_id";
+                account: "agentVault";
+              },
+            ];
+          };
+          relations: ["policy", "constraints"];
+        },
+        {
+          name: "policy";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [112, 111, 108, 105, 99, 121];
+              },
+              {
+                kind: "account";
+                path: "vault";
+              },
+            ];
+          };
+        },
+        {
+          name: "constraints";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [99, 111, 110, 115, 116, 114, 97, 105, 110, 116, 115];
+              },
+              {
+                kind: "account";
+                path: "vault";
+              },
+            ];
+          };
+        },
+      ];
+      args: [];
+    },
+    {
+      name: "closeSettledEscrow";
+      docs: ["Close a settled/refunded escrow PDA — owner reclaims rent."];
+      discriminator: [169, 244, 164, 173, 181, 214, 139, 6];
+      accounts: [
+        {
+          name: "signer";
+          writable: true;
+          signer: true;
+        },
+        {
+          name: "sourceVault";
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [118, 97, 117, 108, 116];
+              },
+              {
+                kind: "account";
+                path: "source_vault.owner";
+                account: "agentVault";
+              },
+              {
+                kind: "account";
+                path: "source_vault.vault_id";
+                account: "agentVault";
+              },
+            ];
+          };
+          relations: ["escrow"];
+        },
+        {
+          name: "destinationVaultKey";
+          docs: [
+            "Validated indirectly: if the wrong key is passed, the escrow PDA seeds won't",
+            "match and Anchor will reject the account.",
+          ];
+        },
+        {
+          name: "escrow";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [101, 115, 99, 114, 111, 119];
+              },
+              {
+                kind: "account";
+                path: "sourceVault";
+              },
+              {
+                kind: "account";
+                path: "destinationVaultKey";
+              },
+              {
+                kind: "arg";
+                path: "escrowId";
+              },
+            ];
+          };
+        },
+      ];
+      args: [
+        {
+          name: "escrowId";
+          type: "u64";
+        },
+      ];
     },
     {
       name: "closeVault";
@@ -339,6 +638,353 @@ export type AgentShield = {
         },
       ];
       args: [];
+    },
+    {
+      name: "createEscrow";
+      docs: [
+        "Create an escrow deposit between two vaults.",
+        "Agent-initiated, stablecoin-only, fees deducted upfront, cap-checked.",
+      ];
+      discriminator: [253, 215, 165, 116, 36, 108, 68, 80];
+      accounts: [
+        {
+          name: "agent";
+          writable: true;
+          signer: true;
+        },
+        {
+          name: "sourceVault";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [118, 97, 117, 108, 116];
+              },
+              {
+                kind: "account";
+                path: "source_vault.owner";
+                account: "agentVault";
+              },
+              {
+                kind: "account";
+                path: "source_vault.vault_id";
+                account: "agentVault";
+              },
+            ];
+          };
+        },
+        {
+          name: "policy";
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [112, 111, 108, 105, 99, 121];
+              },
+              {
+                kind: "account";
+                path: "sourceVault";
+              },
+            ];
+          };
+        },
+        {
+          name: "tracker";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [116, 114, 97, 99, 107, 101, 114];
+              },
+              {
+                kind: "account";
+                path: "sourceVault";
+              },
+            ];
+          };
+        },
+        {
+          name: "destinationVault";
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [118, 97, 117, 108, 116];
+              },
+              {
+                kind: "account";
+                path: "destination_vault.owner";
+                account: "agentVault";
+              },
+              {
+                kind: "account";
+                path: "destination_vault.vault_id";
+                account: "agentVault";
+              },
+            ];
+          };
+        },
+        {
+          name: "escrow";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [101, 115, 99, 114, 111, 119];
+              },
+              {
+                kind: "account";
+                path: "sourceVault";
+              },
+              {
+                kind: "account";
+                path: "destinationVault";
+              },
+              {
+                kind: "arg";
+                path: "escrowId";
+              },
+            ];
+          };
+        },
+        {
+          name: "sourceVaultAta";
+          docs: ["Source vault's token account (vault PDA is authority)"];
+          writable: true;
+        },
+        {
+          name: "escrowAta";
+          docs: [
+            "Escrow-owned ATA — init_if_needed because escrow PDA is created in same ix",
+          ];
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "account";
+                path: "escrow";
+              },
+              {
+                kind: "const";
+                value: [
+                  6,
+                  221,
+                  246,
+                  225,
+                  215,
+                  101,
+                  161,
+                  147,
+                  217,
+                  203,
+                  225,
+                  70,
+                  206,
+                  235,
+                  121,
+                  172,
+                  28,
+                  180,
+                  133,
+                  237,
+                  95,
+                  91,
+                  55,
+                  145,
+                  58,
+                  140,
+                  245,
+                  133,
+                  126,
+                  255,
+                  0,
+                  169,
+                ];
+              },
+              {
+                kind: "account";
+                path: "tokenMint";
+              },
+            ];
+            program: {
+              kind: "const";
+              value: [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89,
+              ];
+            };
+          };
+        },
+        {
+          name: "protocolTreasuryAta";
+          docs: [
+            "Protocol treasury token account (needed when protocol_fee > 0)",
+          ];
+          writable: true;
+          optional: true;
+        },
+        {
+          name: "feeDestinationAta";
+          docs: [
+            "Developer fee destination token account (needed when developer_fee > 0)",
+          ];
+          writable: true;
+          optional: true;
+        },
+        {
+          name: "tokenMint";
+        },
+        {
+          name: "tokenProgram";
+          address: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+        },
+        {
+          name: "systemProgram";
+          address: "11111111111111111111111111111111";
+        },
+        {
+          name: "associatedTokenProgram";
+          address: "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
+        },
+      ];
+      args: [
+        {
+          name: "escrowId";
+          type: "u64";
+        },
+        {
+          name: "amount";
+          type: "u64";
+        },
+        {
+          name: "expiresAt";
+          type: "i64";
+        },
+        {
+          name: "conditionHash";
+          type: {
+            array: ["u8", 32];
+          };
+        },
+      ];
+    },
+    {
+      name: "createInstructionConstraints";
+      docs: [
+        "Create instruction constraints for the vault.",
+        "Only the owner can call this. No timelock check (additive change).",
+      ];
+      discriminator: [13, 182, 97, 5, 57, 136, 26, 152];
+      accounts: [
+        {
+          name: "owner";
+          writable: true;
+          signer: true;
+          relations: ["vault"];
+        },
+        {
+          name: "vault";
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [118, 97, 117, 108, 116];
+              },
+              {
+                kind: "account";
+                path: "owner";
+              },
+              {
+                kind: "account";
+                path: "vault.vault_id";
+                account: "agentVault";
+              },
+            ];
+          };
+          relations: ["policy"];
+        },
+        {
+          name: "policy";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [112, 111, 108, 105, 99, 121];
+              },
+              {
+                kind: "account";
+                path: "vault";
+              },
+            ];
+          };
+        },
+        {
+          name: "constraints";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [99, 111, 110, 115, 116, 114, 97, 105, 110, 116, 115];
+              },
+              {
+                kind: "account";
+                path: "vault";
+              },
+            ];
+          };
+        },
+        {
+          name: "systemProgram";
+          address: "11111111111111111111111111111111";
+        },
+      ];
+      args: [
+        {
+          name: "entries";
+          type: {
+            vec: {
+              defined: {
+                name: "constraintEntry";
+              };
+            };
+          };
+        },
+      ];
     },
     {
       name: "depositFunds";
@@ -650,6 +1296,43 @@ export type AgentShield = {
           writable: true;
         },
         {
+          name: "policy";
+          docs: [
+            "Policy config for cap checking during non-stablecoin swap finalization",
+          ];
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [112, 111, 108, 105, 99, 121];
+              },
+              {
+                kind: "account";
+                path: "vault";
+              },
+            ];
+          };
+        },
+        {
+          name: "tracker";
+          docs: [
+            "Zero-copy SpendTracker for recording non-stablecoin swap value",
+          ];
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [116, 114, 97, 99, 107, 101, 114];
+              },
+              {
+                kind: "account";
+                path: "vault";
+              },
+            ];
+          };
+        },
+        {
           name: "vaultTokenAccount";
           docs: ["Vault's PDA token account for the session's token"];
           writable: true;
@@ -802,6 +1485,122 @@ export type AgentShield = {
           name: "allowedDestinations";
           type: {
             vec: "pubkey";
+          };
+        },
+      ];
+    },
+    {
+      name: "queueConstraintsUpdate";
+      docs: ["Queue a constraints update when timelock is active."];
+      discriminator: [247, 253, 233, 93, 233, 54, 53, 131];
+      accounts: [
+        {
+          name: "owner";
+          writable: true;
+          signer: true;
+          relations: ["vault"];
+        },
+        {
+          name: "vault";
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [118, 97, 117, 108, 116];
+              },
+              {
+                kind: "account";
+                path: "owner";
+              },
+              {
+                kind: "account";
+                path: "vault.vault_id";
+                account: "agentVault";
+              },
+            ];
+          };
+          relations: ["policy", "constraints"];
+        },
+        {
+          name: "policy";
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [112, 111, 108, 105, 99, 121];
+              },
+              {
+                kind: "account";
+                path: "vault";
+              },
+            ];
+          };
+        },
+        {
+          name: "constraints";
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [99, 111, 110, 115, 116, 114, 97, 105, 110, 116, 115];
+              },
+              {
+                kind: "account";
+                path: "vault";
+              },
+            ];
+          };
+        },
+        {
+          name: "pendingConstraints";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [
+                  112,
+                  101,
+                  110,
+                  100,
+                  105,
+                  110,
+                  103,
+                  95,
+                  99,
+                  111,
+                  110,
+                  115,
+                  116,
+                  114,
+                  97,
+                  105,
+                  110,
+                  116,
+                  115,
+                ];
+              },
+              {
+                kind: "account";
+                path: "vault";
+              },
+            ];
+          };
+        },
+        {
+          name: "systemProgram";
+          address: "11111111111111111111111111111111";
+        },
+      ];
+      args: [
+        {
+          name: "entries";
+          type: {
+            vec: {
+              defined: {
+                name: "constraintEntry";
+              };
+            };
           };
         },
       ];
@@ -964,7 +1763,9 @@ export type AgentShield = {
     },
     {
       name: "reactivateVault";
-      docs: ["Reactivate a frozen vault. Optionally rotate the agent key."];
+      docs: [
+        "Reactivate a frozen vault. Optionally add a new agent with permissions.",
+      ];
       discriminator: [245, 50, 143, 70, 114, 220, 25, 251];
       accounts: [
         {
@@ -1001,13 +1802,188 @@ export type AgentShield = {
             option: "pubkey";
           };
         },
+        {
+          name: "newAgentPermissions";
+          type: {
+            option: "u64";
+          };
+        },
       ];
+    },
+    {
+      name: "refundEscrow";
+      docs: [
+        "Refund an escrow — source vault's agent or owner reclaims funds after expiry.",
+        "Cap charge is NOT reversed (prevents cap-washing attacks).",
+      ];
+      discriminator: [107, 186, 89, 99, 26, 194, 23, 204];
+      accounts: [
+        {
+          name: "sourceSigner";
+          docs: ["Source vault's agent or owner"];
+          writable: true;
+          signer: true;
+        },
+        {
+          name: "sourceVault";
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [118, 97, 117, 108, 116];
+              },
+              {
+                kind: "account";
+                path: "source_vault.owner";
+                account: "agentVault";
+              },
+              {
+                kind: "account";
+                path: "source_vault.vault_id";
+                account: "agentVault";
+              },
+            ];
+          };
+        },
+        {
+          name: "escrow";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [101, 115, 99, 114, 111, 119];
+              },
+              {
+                kind: "account";
+                path: "sourceVault";
+              },
+              {
+                kind: "account";
+                path: "escrow.destination_vault";
+                account: "escrowDeposit";
+              },
+              {
+                kind: "account";
+                path: "escrow.escrow_id";
+                account: "escrowDeposit";
+              },
+            ];
+          };
+        },
+        {
+          name: "escrowAta";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "account";
+                path: "escrow";
+              },
+              {
+                kind: "const";
+                value: [
+                  6,
+                  221,
+                  246,
+                  225,
+                  215,
+                  101,
+                  161,
+                  147,
+                  217,
+                  203,
+                  225,
+                  70,
+                  206,
+                  235,
+                  121,
+                  172,
+                  28,
+                  180,
+                  133,
+                  237,
+                  95,
+                  91,
+                  55,
+                  145,
+                  58,
+                  140,
+                  245,
+                  133,
+                  126,
+                  255,
+                  0,
+                  169,
+                ];
+              },
+              {
+                kind: "account";
+                path: "tokenMint";
+              },
+            ];
+            program: {
+              kind: "const";
+              value: [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89,
+              ];
+            };
+          };
+        },
+        {
+          name: "sourceVaultAta";
+          writable: true;
+        },
+        {
+          name: "rentDestination";
+          writable: true;
+        },
+        {
+          name: "tokenMint";
+        },
+        {
+          name: "tokenProgram";
+          address: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+        },
+      ];
+      args: [];
     },
     {
       name: "registerAgent";
       docs: [
-        "Register an agent's signing key to this vault.",
-        "Only the owner can call this. One agent per vault.",
+        "Register an agent's signing key to this vault with per-agent permissions.",
+        "Only the owner can call this. Up to 10 agents per vault.",
       ];
       discriminator: [135, 157, 66, 195, 2, 113, 175, 30];
       accounts: [
@@ -1043,13 +2019,17 @@ export type AgentShield = {
           name: "agent";
           type: "pubkey";
         },
+        {
+          name: "permissions";
+          type: "u64";
+        },
       ];
     },
     {
       name: "revokeAgent";
       docs: [
-        "Kill switch. Immediately freezes the vault.",
-        "Only the owner can call this.",
+        "Revoke a specific agent from the vault.",
+        "Only the owner can call this. Freezes vault if last agent is removed.",
       ];
       discriminator: [227, 60, 209, 125, 240, 117, 163, 73];
       accounts: [
@@ -1080,7 +2060,205 @@ export type AgentShield = {
           };
         },
       ];
-      args: [];
+      args: [
+        {
+          name: "agentToRemove";
+          type: "pubkey";
+        },
+      ];
+    },
+    {
+      name: "settleEscrow";
+      docs: [
+        "Settle an escrow — destination vault's agent claims funds before expiry.",
+        "For conditional escrows, proof must match the SHA-256 condition hash.",
+      ];
+      discriminator: [22, 135, 160, 194, 23, 186, 124, 110];
+      accounts: [
+        {
+          name: "destinationAgent";
+          writable: true;
+          signer: true;
+        },
+        {
+          name: "destinationVault";
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [118, 97, 117, 108, 116];
+              },
+              {
+                kind: "account";
+                path: "destination_vault.owner";
+                account: "agentVault";
+              },
+              {
+                kind: "account";
+                path: "destination_vault.vault_id";
+                account: "agentVault";
+              },
+            ];
+          };
+        },
+        {
+          name: "sourceVault";
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [118, 97, 117, 108, 116];
+              },
+              {
+                kind: "account";
+                path: "source_vault.owner";
+                account: "agentVault";
+              },
+              {
+                kind: "account";
+                path: "source_vault.vault_id";
+                account: "agentVault";
+              },
+            ];
+          };
+        },
+        {
+          name: "escrow";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [101, 115, 99, 114, 111, 119];
+              },
+              {
+                kind: "account";
+                path: "sourceVault";
+              },
+              {
+                kind: "account";
+                path: "destinationVault";
+              },
+              {
+                kind: "account";
+                path: "escrow.escrow_id";
+                account: "escrowDeposit";
+              },
+            ];
+          };
+        },
+        {
+          name: "escrowAta";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "account";
+                path: "escrow";
+              },
+              {
+                kind: "const";
+                value: [
+                  6,
+                  221,
+                  246,
+                  225,
+                  215,
+                  101,
+                  161,
+                  147,
+                  217,
+                  203,
+                  225,
+                  70,
+                  206,
+                  235,
+                  121,
+                  172,
+                  28,
+                  180,
+                  133,
+                  237,
+                  95,
+                  91,
+                  55,
+                  145,
+                  58,
+                  140,
+                  245,
+                  133,
+                  126,
+                  255,
+                  0,
+                  169,
+                ];
+              },
+              {
+                kind: "account";
+                path: "tokenMint";
+              },
+            ];
+            program: {
+              kind: "const";
+              value: [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89,
+              ];
+            };
+          };
+        },
+        {
+          name: "destinationVaultAta";
+          writable: true;
+        },
+        {
+          name: "rentDestination";
+          writable: true;
+        },
+        {
+          name: "tokenMint";
+        },
+        {
+          name: "tokenProgram";
+          address: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+        },
+      ];
+      args: [
+        {
+          name: "proof";
+          type: "bytes";
+        },
+      ];
     },
     {
       name: "syncPositions";
@@ -1118,6 +2296,148 @@ export type AgentShield = {
         {
           name: "actualPositions";
           type: "u8";
+        },
+      ];
+    },
+    {
+      name: "updateAgentPermissions";
+      docs: [
+        "Update an agent's permission bitmask.",
+        "Only the owner can call this. Blocked when timelock is active.",
+      ];
+      discriminator: [56, 163, 109, 133, 69, 188, 163, 184];
+      accounts: [
+        {
+          name: "owner";
+          writable: true;
+          signer: true;
+        },
+        {
+          name: "vault";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [118, 97, 117, 108, 116];
+              },
+              {
+                kind: "account";
+                path: "vault.owner";
+                account: "agentVault";
+              },
+              {
+                kind: "account";
+                path: "vault.vault_id";
+                account: "agentVault";
+              },
+            ];
+          };
+        },
+        {
+          name: "policy";
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [112, 111, 108, 105, 99, 121];
+              },
+              {
+                kind: "account";
+                path: "vault";
+              },
+            ];
+          };
+        },
+      ];
+      args: [
+        {
+          name: "agent";
+          type: "pubkey";
+        },
+        {
+          name: "newPermissions";
+          type: "u64";
+        },
+      ];
+    },
+    {
+      name: "updateInstructionConstraints";
+      docs: [
+        "Update instruction constraints for the vault.",
+        "Only the owner can call this. Blocked when timelock > 0.",
+      ];
+      discriminator: [229, 117, 208, 238, 102, 240, 54, 74];
+      accounts: [
+        {
+          name: "owner";
+          writable: true;
+          signer: true;
+          relations: ["vault"];
+        },
+        {
+          name: "vault";
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [118, 97, 117, 108, 116];
+              },
+              {
+                kind: "account";
+                path: "owner";
+              },
+              {
+                kind: "account";
+                path: "vault.vault_id";
+                account: "agentVault";
+              },
+            ];
+          };
+          relations: ["policy", "constraints"];
+        },
+        {
+          name: "policy";
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [112, 111, 108, 105, 99, 121];
+              },
+              {
+                kind: "account";
+                path: "vault";
+              },
+            ];
+          };
+        },
+        {
+          name: "constraints";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [99, 111, 110, 115, 116, 114, 97, 105, 110, 116, 115];
+              },
+              {
+                kind: "account";
+                path: "vault";
+              },
+            ];
+          };
+        },
+      ];
+      args: [
+        {
+          name: "entries";
+          type: {
+            vec: {
+              defined: {
+                name: "constraintEntry";
+              };
+            };
+          };
         },
       ];
     },
@@ -1262,7 +2582,6 @@ export type AgentShield = {
         },
         {
           name: "vault";
-          writable: true;
           pda: {
             seeds: [
               {
@@ -1660,6 +2979,18 @@ export type AgentShield = {
       discriminator: [232, 220, 237, 164, 157, 9, 215, 194];
     },
     {
+      name: "escrowDeposit";
+      discriminator: [56, 152, 208, 160, 159, 83, 6, 17];
+    },
+    {
+      name: "instructionConstraints";
+      discriminator: [183, 235, 149, 166, 174, 58, 98, 218];
+    },
+    {
+      name: "pendingConstraintsUpdate";
+      discriminator: [22, 206, 77, 208, 147, 121, 53, 174];
+    },
+    {
       name: "pendingPolicyUpdate";
       discriminator: [77, 255, 2, 51, 79, 237, 183, 239];
     },
@@ -1682,6 +3013,10 @@ export type AgentShield = {
       discriminator: [85, 90, 59, 218, 126, 8, 179, 63];
     },
     {
+      name: "agentPermissionsUpdated";
+      discriminator: [203, 110, 249, 149, 51, 17, 246, 63];
+    },
+    {
       name: "agentRegistered";
       discriminator: [191, 78, 217, 54, 232, 100, 189, 85];
     },
@@ -1694,8 +3029,32 @@ export type AgentShield = {
       discriminator: [88, 52, 117, 69, 112, 152, 167, 40];
     },
     {
+      name: "constraintsChangeApplied";
+      discriminator: [112, 150, 111, 125, 243, 133, 35, 55];
+    },
+    {
+      name: "constraintsChangeCancelled";
+      discriminator: [15, 75, 104, 222, 104, 193, 65, 145];
+    },
+    {
+      name: "constraintsChangeQueued";
+      discriminator: [111, 221, 100, 149, 52, 23, 88, 212];
+    },
+    {
       name: "delegationRevoked";
       discriminator: [59, 158, 142, 49, 164, 116, 220, 8];
+    },
+    {
+      name: "escrowCreated";
+      discriminator: [70, 127, 105, 102, 92, 97, 7, 173];
+    },
+    {
+      name: "escrowRefunded";
+      discriminator: [132, 209, 49, 109, 135, 138, 28, 81];
+    },
+    {
+      name: "escrowSettled";
+      discriminator: [97, 27, 150, 55, 203, 179, 173, 23];
     },
     {
       name: "feesCollected";
@@ -1708,6 +3067,18 @@ export type AgentShield = {
     {
       name: "fundsWithdrawn";
       discriminator: [56, 130, 230, 154, 35, 92, 11, 118];
+    },
+    {
+      name: "instructionConstraintsClosed";
+      discriminator: [107, 107, 90, 8, 81, 158, 130, 86];
+    },
+    {
+      name: "instructionConstraintsCreated";
+      discriminator: [8, 170, 99, 232, 31, 216, 57, 26];
+    },
+    {
+      name: "instructionConstraintsUpdated";
+      discriminator: [159, 63, 148, 194, 150, 209, 43, 129];
     },
     {
       name: "policyChangeApplied";
@@ -1955,7 +3326,7 @@ export type AgentShield = {
     {
       code: 6041;
       name: "dustDepositDetected";
-      msg: "SPL Transfer to vault stablecoin ATA detected (dust deposit attack)";
+      msg: "Top-level SPL Token transfer not allowed between validate and finalize";
     },
     {
       code: 6042;
@@ -1966,6 +3337,101 @@ export type AgentShield = {
       code: 6043;
       name: "slippageBpsTooHigh";
       msg: "Slippage BPS exceeds maximum (5000 = 50%)";
+    },
+    {
+      code: 6044;
+      name: "protocolMismatch";
+      msg: "DeFi instruction program does not match declared target_protocol";
+    },
+    {
+      code: 6045;
+      name: "tooManyDeFiInstructions";
+      msg: "Non-stablecoin swap allows exactly one DeFi instruction";
+    },
+    {
+      code: 6046;
+      name: "maxAgentsReached";
+      msg: "Maximum agents per vault reached (limit: 10)";
+    },
+    {
+      code: 6047;
+      name: "insufficientPermissions";
+      msg: "Agent lacks permission for this action type";
+    },
+    {
+      code: 6048;
+      name: "invalidPermissions";
+      msg: "Permission bitmask contains invalid bits";
+    },
+    {
+      code: 6049;
+      name: "escrowNotActive";
+      msg: "Escrow is not in Active status";
+    },
+    {
+      code: 6050;
+      name: "escrowExpired";
+      msg: "Escrow has expired";
+    },
+    {
+      code: 6051;
+      name: "escrowNotExpired";
+      msg: "Escrow has not expired yet";
+    },
+    {
+      code: 6052;
+      name: "invalidEscrowVault";
+      msg: "Invalid escrow vault";
+    },
+    {
+      code: 6053;
+      name: "escrowConditionsNotMet";
+      msg: "Escrow conditions not met";
+    },
+    {
+      code: 6054;
+      name: "escrowDurationExceeded";
+      msg: "Escrow duration exceeds maximum (30 days)";
+    },
+    {
+      code: 6055;
+      name: "invalidConstraintConfig";
+      msg: "Invalid constraint configuration: bounds exceeded";
+    },
+    {
+      code: 6056;
+      name: "constraintViolated";
+      msg: "Instruction constraint violated";
+    },
+    {
+      code: 6057;
+      name: "invalidConstraintsPda";
+      msg: "Invalid constraints PDA: wrong owner or vault";
+    },
+    {
+      code: 6058;
+      name: "noPendingConstraintsUpdate";
+      msg: "No pending constraints update to apply or cancel";
+    },
+    {
+      code: 6059;
+      name: "pendingConstraintsUpdateExists";
+      msg: "A pending constraints update already exists";
+    },
+    {
+      code: 6060;
+      name: "constraintsUpdateNotExpired";
+      msg: "Constraints update timelock has not expired";
+    },
+    {
+      code: 6061;
+      name: "invalidPendingConstraintsPda";
+      msg: "Invalid pending constraints PDA: wrong owner or vault";
+    },
+    {
+      code: 6062;
+      name: "constraintsUpdateExpired";
+      msg: "Pending constraints update has expired and is stale";
     },
   ];
   types: [
@@ -2085,6 +3551,55 @@ export type AgentShield = {
           {
             name: "closeAndSwapPosition";
           },
+          {
+            name: "createEscrow";
+          },
+          {
+            name: "settleEscrow";
+          },
+          {
+            name: "refundEscrow";
+          },
+        ];
+      };
+    },
+    {
+      name: "agentEntry";
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "pubkey";
+            type: "pubkey";
+          },
+          {
+            name: "permissions";
+            type: "u64";
+          },
+        ];
+      };
+    },
+    {
+      name: "agentPermissionsUpdated";
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "vault";
+            type: "pubkey";
+          },
+          {
+            name: "agent";
+            type: "pubkey";
+          },
+          {
+            name: "oldPermissions";
+            type: "u64";
+          },
+          {
+            name: "newPermissions";
+            type: "u64";
+          },
         ];
       };
     },
@@ -2100,6 +3615,10 @@ export type AgentShield = {
           {
             name: "agent";
             type: "pubkey";
+          },
+          {
+            name: "permissions";
+            type: "u64";
           },
           {
             name: "timestamp";
@@ -2120,6 +3639,10 @@ export type AgentShield = {
           {
             name: "agent";
             type: "pubkey";
+          },
+          {
+            name: "remainingAgents";
+            type: "u8";
           },
           {
             name: "timestamp";
@@ -2163,11 +3686,24 @@ export type AgentShield = {
             type: "pubkey";
           },
           {
-            name: "agent";
+            name: "vaultId";
             docs: [
-              "The registered agent's signing key (Pubkey::default() if not yet registered)",
+              "Unique vault identifier (allows one owner to have multiple vaults)",
             ];
-            type: "pubkey";
+            type: "u64";
+          },
+          {
+            name: "agents";
+            docs: [
+              "Registered agents with per-agent permission bitmasks (max 10)",
+            ];
+            type: {
+              vec: {
+                defined: {
+                  name: "agentEntry";
+                };
+              };
+            };
           },
           {
             name: "feeDestination";
@@ -2176,13 +3712,6 @@ export type AgentShield = {
               "Prevents a compromised owner from redirecting fees.",
             ];
             type: "pubkey";
-          },
-          {
-            name: "vaultId";
-            docs: [
-              "Unique vault identifier (allows one owner to have multiple vaults)",
-            ];
-            type: "u64";
           },
           {
             name: "status";
@@ -2231,6 +3760,116 @@ export type AgentShield = {
       };
     },
     {
+      name: "constraintEntry";
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "programId";
+            type: "pubkey";
+          },
+          {
+            name: "dataConstraints";
+            type: {
+              vec: {
+                defined: {
+                  name: "dataConstraint";
+                };
+              };
+            };
+          },
+        ];
+      };
+    },
+    {
+      name: "constraintOperator";
+      type: {
+        kind: "enum";
+        variants: [
+          {
+            name: "eq";
+          },
+          {
+            name: "ne";
+          },
+          {
+            name: "gte";
+          },
+          {
+            name: "lte";
+          },
+        ];
+      };
+    },
+    {
+      name: "constraintsChangeApplied";
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "vault";
+            type: "pubkey";
+          },
+          {
+            name: "appliedAt";
+            type: "i64";
+          },
+        ];
+      };
+    },
+    {
+      name: "constraintsChangeCancelled";
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "vault";
+            type: "pubkey";
+          },
+        ];
+      };
+    },
+    {
+      name: "constraintsChangeQueued";
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "vault";
+            type: "pubkey";
+          },
+          {
+            name: "executesAt";
+            type: "i64";
+          },
+        ];
+      };
+    },
+    {
+      name: "dataConstraint";
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "offset";
+            type: "u16";
+          },
+          {
+            name: "operator";
+            type: {
+              defined: {
+                name: "constraintOperator";
+              };
+            };
+          },
+          {
+            name: "value";
+            type: "bytes";
+          },
+        ];
+      };
+    },
+    {
       name: "delegationRevoked";
       type: {
         kind: "struct";
@@ -2272,6 +3911,171 @@ export type AgentShield = {
             name: "usdAmount";
             docs: ["Aggregate USD spent in this epoch (6 decimals)"];
             type: "u64";
+          },
+        ];
+      };
+    },
+    {
+      name: "escrowCreated";
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "sourceVault";
+            type: "pubkey";
+          },
+          {
+            name: "destinationVault";
+            type: "pubkey";
+          },
+          {
+            name: "escrowId";
+            type: "u64";
+          },
+          {
+            name: "amount";
+            type: "u64";
+          },
+          {
+            name: "tokenMint";
+            type: "pubkey";
+          },
+          {
+            name: "expiresAt";
+            type: "i64";
+          },
+          {
+            name: "conditionHash";
+            type: {
+              array: ["u8", 32];
+            };
+          },
+        ];
+      };
+    },
+    {
+      name: "escrowDeposit";
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "sourceVault";
+            type: "pubkey";
+          },
+          {
+            name: "destinationVault";
+            type: "pubkey";
+          },
+          {
+            name: "escrowId";
+            type: "u64";
+          },
+          {
+            name: "amount";
+            type: "u64";
+          },
+          {
+            name: "tokenMint";
+            type: "pubkey";
+          },
+          {
+            name: "createdAt";
+            type: "i64";
+          },
+          {
+            name: "expiresAt";
+            type: "i64";
+          },
+          {
+            name: "status";
+            type: {
+              defined: {
+                name: "escrowStatus";
+              };
+            };
+          },
+          {
+            name: "conditionHash";
+            type: {
+              array: ["u8", 32];
+            };
+          },
+          {
+            name: "bump";
+            type: "u8";
+          },
+        ];
+      };
+    },
+    {
+      name: "escrowRefunded";
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "sourceVault";
+            type: "pubkey";
+          },
+          {
+            name: "destinationVault";
+            type: "pubkey";
+          },
+          {
+            name: "escrowId";
+            type: "u64";
+          },
+          {
+            name: "amount";
+            type: "u64";
+          },
+          {
+            name: "refundedBy";
+            type: "pubkey";
+          },
+        ];
+      };
+    },
+    {
+      name: "escrowSettled";
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "sourceVault";
+            type: "pubkey";
+          },
+          {
+            name: "destinationVault";
+            type: "pubkey";
+          },
+          {
+            name: "escrowId";
+            type: "u64";
+          },
+          {
+            name: "amount";
+            type: "u64";
+          },
+          {
+            name: "settledBy";
+            type: "pubkey";
+          },
+        ];
+      };
+    },
+    {
+      name: "escrowStatus";
+      type: {
+        kind: "enum";
+        variants: [
+          {
+            name: "active";
+          },
+          {
+            name: "settled";
+          },
+          {
+            name: "refunded";
           },
         ];
       };
@@ -2376,6 +4180,133 @@ export type AgentShield = {
           {
             name: "timestamp";
             type: "i64";
+          },
+        ];
+      };
+    },
+    {
+      name: "instructionConstraints";
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "vault";
+            type: "pubkey";
+          },
+          {
+            name: "entries";
+            type: {
+              vec: {
+                defined: {
+                  name: "constraintEntry";
+                };
+              };
+            };
+          },
+          {
+            name: "bump";
+            type: "u8";
+          },
+        ];
+      };
+    },
+    {
+      name: "instructionConstraintsClosed";
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "vault";
+            type: "pubkey";
+          },
+          {
+            name: "timestamp";
+            type: "i64";
+          },
+        ];
+      };
+    },
+    {
+      name: "instructionConstraintsCreated";
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "vault";
+            type: "pubkey";
+          },
+          {
+            name: "entriesCount";
+            type: "u8";
+          },
+          {
+            name: "timestamp";
+            type: "i64";
+          },
+        ];
+      };
+    },
+    {
+      name: "instructionConstraintsUpdated";
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "vault";
+            type: "pubkey";
+          },
+          {
+            name: "entriesCount";
+            type: "u8";
+          },
+          {
+            name: "timestamp";
+            type: "i64";
+          },
+        ];
+      };
+    },
+    {
+      name: "pendingConstraintsUpdate";
+      docs: [
+        "Queued instruction constraints update that becomes executable after",
+        "a timelock period. Mirrors `PendingPolicyUpdate` pattern.",
+        "",
+        'PDA seeds: `[b"pending_constraints", vault.key().as_ref()]`',
+      ];
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "vault";
+            docs: ["Associated vault pubkey"];
+            type: "pubkey";
+          },
+          {
+            name: "entries";
+            docs: ["New constraint entries to apply"];
+            type: {
+              vec: {
+                defined: {
+                  name: "constraintEntry";
+                };
+              };
+            };
+          },
+          {
+            name: "queuedAt";
+            docs: ["Unix timestamp when this update was queued"];
+            type: "i64";
+          },
+          {
+            name: "executesAt";
+            docs: ["Unix timestamp when this update becomes executable"];
+            type: "i64";
+          },
+          {
+            name: "bump";
+            docs: ["Bump seed for PDA"];
+            type: "u8";
           },
         ];
       };
@@ -2625,6 +4556,14 @@ export type AgentShield = {
             type: {
               vec: "pubkey";
             };
+          },
+          {
+            name: "hasConstraints";
+            docs: [
+              "Whether instruction constraints PDA exists for this vault.",
+              "Set true by create_instruction_constraints, false by close_instruction_constraints.",
+            ];
+            type: "bool";
           },
           {
             name: "bump";
@@ -2940,6 +4879,12 @@ export type AgentShield = {
             name: "newAgent";
             type: {
               option: "pubkey";
+            };
+          },
+          {
+            name: "newAgentPermissions";
+            type: {
+              option: "u64";
             };
           },
           {

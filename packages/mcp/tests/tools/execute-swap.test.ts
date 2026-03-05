@@ -79,7 +79,7 @@ describe("shield_execute_swap", () => {
       amount: "1000000",
       slippageBps: 50,
     });
-    expect(result).to.include("AGENTSHIELD_AGENT_KEYPAIR_PATH is required");
+    expect(result).to.include("PHALNX_AGENT_KEYPAIR_PATH is required");
   });
 
   it("executes swap with custody wallet (no keypair loading)", async () => {

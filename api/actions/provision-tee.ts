@@ -90,8 +90,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Deterministic linkedUser when publicKey provided (idempotent),
     // otherwise fall back to timestamp (backwards compatible)
     const linkedUser = body.publicKey
-      ? `userId:agent-shield-${body.publicKey}`
-      : `userId:agent-shield-${Date.now()}`;
+      ? `userId:phalnx-${body.publicKey}`
+      : `userId:phalnx-${Date.now()}`;
 
     const crossmintUrl = `https://${network === "mainnet" ? "" : "staging."}crossmint.com/api/v1-alpha2/wallets`;
 

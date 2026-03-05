@@ -72,7 +72,7 @@ describe("shield_close_position", () => {
         priceExponent: 0,
       },
     );
-    expect(result).to.include("AGENTSHIELD_AGENT_KEYPAIR_PATH is required");
+    expect(result).to.include("PHALNX_AGENT_KEYPAIR_PATH is required");
   });
 
   it("returns formatted error on failure", async () => {

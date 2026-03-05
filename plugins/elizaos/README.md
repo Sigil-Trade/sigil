@@ -1,24 +1,24 @@
-# @agent-shield/plugin-elizaos
+# @phalnx/plugin-elizaos
 
-AgentShield plugin for [ElizaOS](https://github.com/elizaOS/eliza) — provides shield status actions, pause/resume controls, transaction history, spending providers, and policy evaluators for AI agents with on-chain guardrails for spending, protocol allowlists, and rate limiting.
+Phalnx plugin for [ElizaOS](https://github.com/elizaOS/eliza) — provides vault status actions, pause/resume controls, transaction history, spending providers, and policy evaluators for AI agents with on-chain guardrails for spending, protocol allowlists, and rate limiting.
 
 ## Installation
 
 ```bash
-npm install @agent-shield/plugin-elizaos @agent-shield/sdk
+npm install @phalnx/plugin-elizaos @phalnx/sdk
 ```
 
-Peer dependencies: `@elizaos/core >=0.1.0`, `@agent-shield/sdk >=0.1.0`, `@solana/web3.js >=1.90.0`
+Peer dependencies: `@elizaos/core >=0.1.0`, `@phalnx/sdk >=0.1.0`, `@solana/web3.js >=1.90.0`
 
 ## Quick Start
 
 ```typescript
-import { agentShieldPlugin } from "@agent-shield/plugin-elizaos";
+import { phalnxPlugin } from "@phalnx/plugin-elizaos";
 
 // Register in your ElizaOS character config
 const character = {
   name: "DeFi Agent",
-  plugins: [agentShieldPlugin],
+  plugins: [phalnxPlugin],
   settings: {
     // ... other settings
   },
@@ -32,8 +32,8 @@ The plugin reads environment variables to create a `ShieldedWallet` automaticall
 | Variable | Required | Description | Default |
 |----------|----------|-------------|---------|
 | `SOLANA_WALLET_PRIVATE_KEY` | Yes | Agent wallet private key (base58 or JSON array) | - |
-| `AGENT_SHIELD_MAX_SPEND` | No | Spending limit string | `"1000 USDC/day"` + `"1000 USDT/day"` + `"10 SOL/day"` |
-| `AGENT_SHIELD_BLOCK_UNKNOWN` | No | Block unknown programs | `"true"` |
+| `PHALNX_MAX_SPEND` | No | Spending limit string | `"1000 USDC/day"` + `"1000 USDT/day"` + `"10 SOL/day"` |
+| `PHALNX_BLOCK_UNKNOWN` | No | Block unknown programs | `"true"` |
 
 **Private key formats supported:**
 - Base58 string: `"4wBqp..."` (standard Solana CLI format)
@@ -52,7 +52,7 @@ Returns current spending summary including enforcement state, per-token usage wi
 **Example conversation:**
 ```
 User: "What's my shield spending status?"
-Agent: "=== AgentShield Status ===
+Agent: "=== Phalnx Status ===
 Enforcement: ACTIVE
 
 USDC: 200000000 / 500000000 (40% used)
@@ -74,7 +74,7 @@ Updates spending limits or program blocking at runtime.
 **Example conversation:**
 ```
 User: "Update my shield limit to 1000 USDC per day"
-Agent: "Shield policies updated: maxSpend: 1000 USDC/day"
+Agent: "Phalnx policies updated: maxSpend: 1000 USDC/day"
 ```
 
 ### `SHIELD_PAUSE_RESUME`
@@ -86,10 +86,10 @@ Pauses or resumes policy enforcement. The action infers the intent (pause vs res
 **Example conversations:**
 ```
 User: "Pause the shield enforcement"
-Agent: "Shield enforcement paused. Transactions will pass through without policy checks."
+Agent: "Phalnx enforcement paused. Transactions will pass through without policy checks."
 
 User: "Resume shield enforcement"
-Agent: "Shield enforcement resumed. Policy checks are active."
+Agent: "Phalnx enforcement resumed. Policy checks are active."
 ```
 
 ### `SHIELD_TRANSACTION_HISTORY`
@@ -101,7 +101,7 @@ Returns a detailed per-token usage summary with percentages, remaining budgets, 
 **Example conversation:**
 ```
 User: "Show me the transaction history"
-Agent: "=== AgentShield Transaction History ===
+Agent: "=== Phalnx Transaction History ===
 Enforcement: ACTIVE
 
 --- Per-Token Usage ---
@@ -135,7 +135,7 @@ Providers inject shield context into the agent's memory before each response, gi
 
 ### `shieldStatusProvider`
 
-**Name:** `AGENT_SHIELD_STATUS`
+**Name:** `PHALNX_STATUS`
 
 Injects into every conversation turn:
 - Wallet address
@@ -146,7 +146,7 @@ Injects into every conversation turn:
 **Returned data:**
 ```typescript
 {
-  text: "AgentShield Status: ...",  // Human-readable for agent context
+  text: "Phalnx Status: ...",  // Human-readable for agent context
   values: {
     address: "...",
     isPaused: false,
@@ -158,7 +158,7 @@ Injects into every conversation turn:
 
 ### `spendTrackingProvider`
 
-**Name:** `AGENT_SHIELD_SPEND_TRACKING`
+**Name:** `PHALNX_SPEND_TRACKING`
 
 Injects per-token spending data with:
 - Usage percentages per token
@@ -170,11 +170,11 @@ Injects per-token spending data with:
 
 ### `policyCheckEvaluator`
 
-**Name:** `AGENT_SHIELD_POLICY_CHECK`
+**Name:** `PHALNX_POLICY_CHECK`
 
 Post-action evaluator that warns when any token's spending exceeds 80% of its cap. Helps the agent self-regulate and avoid hitting hard limits.
 
-**Triggers on:** Messages containing "agentshield", "shield", or "transaction:"
+**Triggers on:** Messages containing "phalnx", "shield", or "transaction:"
 
 **Behavior:**
 - Returns `null` if enforcement is paused (no warnings when paused)
@@ -184,7 +184,7 @@ Post-action evaluator that warns when any token's spending exceeds 80% of its ca
 
 **Example warning:**
 ```
-"[AgentShield Warning] USDC spending at 85% of cap (150000000 remaining)"
+"[Phalnx Warning] USDC spending at 85% of cap (150000000 remaining)"
 ```
 
 ## Event Callback Wiring
@@ -193,11 +193,11 @@ The plugin automatically wires shield event callbacks to the ElizaOS runtime log
 
 | Event | Log Level | Message |
 |-------|-----------|---------|
-| `onDenied` | `warn` | `[AgentShield] Transaction denied: <reason>` |
-| `onApproved` | `info` | `[AgentShield] Transaction approved` |
-| `onPause` | `info` | `[AgentShield] Enforcement paused` |
-| `onResume` | `info` | `[AgentShield] Enforcement resumed` |
-| `onPolicyUpdate` | `info` | `[AgentShield] Policies updated` |
+| `onDenied` | `warn` | `[Phalnx] Transaction denied: <reason>` |
+| `onApproved` | `info` | `[Phalnx] Transaction approved` |
+| `onPause` | `info` | `[Phalnx] Enforcement paused` |
+| `onResume` | `info` | `[Phalnx] Enforcement resumed` |
+| `onPolicyUpdate` | `info` | `[Phalnx] Policies updated` |
 
 Falls back to `console` if `runtime.logger` is not available.
 
@@ -213,18 +213,18 @@ The plugin uses a `WeakMap` to cache `ShieldedWallet` instances per ElizaOS runt
 
 | Export | Description |
 |--------|-------------|
-| `agentShieldPlugin` | Plugin object for ElizaOS registration |
+| `phalnxPlugin` | Plugin object for ElizaOS registration |
 | `getConfig(runtime)` | Read config from runtime settings |
 | `getOrCreateShieldedWallet(runtime)` | Get/create cached ShieldedWallet |
 | `statusAction` | SHIELD_STATUS action |
 | `updatePolicyAction` | SHIELD_UPDATE_POLICY action |
 | `pauseResumeAction` | SHIELD_PAUSE_RESUME action |
 | `transactionHistoryAction` | SHIELD_TRANSACTION_HISTORY action |
-| `shieldStatusProvider` | Shield status context provider |
+| `shieldStatusProvider` | Phalnx status context provider |
 | `spendTrackingProvider` | Spend tracking context provider |
 | `policyCheckEvaluator` | Policy cap warning evaluator |
 | `ENV_KEYS` | Environment variable key constants |
-| `AgentShieldElizaConfig` | Config type interface |
+| `PhalnxElizaConfig` | Config type interface |
 
 The plugin is also available as a default export for ElizaOS plugin loader compatibility.
 
@@ -265,15 +265,15 @@ npm test
 
 | Package | Description |
 |---------|-------------|
-| [`@agent-shield/sdk`](https://www.npmjs.com/package/@agent-shield/sdk) | On-chain guardrails — `withVault()` primary API |
-| [`@agent-shield/core`](https://www.npmjs.com/package/@agent-shield/core) | Pure TypeScript policy engine |
-| [`@agent-shield/plugin-solana-agent-kit`](https://www.npmjs.com/package/@agent-shield/plugin-solana-agent-kit) | Solana Agent Kit integration |
+| [`@phalnx/sdk`](https://www.npmjs.com/package/@phalnx/sdk) | On-chain guardrails — `withVault()` primary API |
+| [`@phalnx/core`](https://www.npmjs.com/package/@phalnx/core) | Pure TypeScript policy engine |
+| [`@phalnx/plugin-solana-agent-kit`](https://www.npmjs.com/package/@phalnx/plugin-solana-agent-kit) | Solana Agent Kit integration |
 
 ## Support
 
 - X/Twitter: [@MightieMags](https://x.com/MightieMags)
 - Telegram: [MightyMags](https://t.me/MightyMags)
-- Issues: [GitHub Issues](https://github.com/Kaleb-Rupe/agentshield/issues)
+- Issues: [GitHub Issues](https://github.com/Kaleb-Rupe/phalnx/issues)
 
 ## License
 

@@ -456,9 +456,9 @@ export async function shieldedFetch(
   tx.recentBlockhash = blockhash;
   tx.feePayer = wallet.publicKey;
 
-  // For client-side wallets: signTransaction runs through the shield interceptor
+  // For client-side wallets: signTransaction runs through the policy interceptor
   // which evaluates policies AND records the spend.
-  // For hardened wallets: the shield interceptor wraps in vault composition.
+  // For hardened wallets: the policy interceptor wraps in vault composition.
   const signedTx = await wallet.signTransaction(tx);
   const serialized = (signedTx as Transaction).serialize({
     verifySignatures: false,

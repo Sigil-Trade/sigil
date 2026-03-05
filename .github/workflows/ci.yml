@@ -1,4 +1,4 @@
-# CI Pipeline for AgentShield
+# CI Pipeline for Phalnx
 #
 # Runs on every push to main and on pull requests.
 # Eight jobs (1 detection + 6 parallel + 1 gate):
@@ -233,7 +233,7 @@ jobs:
       - name: Generate test summary
         if: always()
         run: |
-          echo "AgentShield Test Report - $(date -u +%Y-%m-%dT%H:%M:%SZ)" > test-summary.txt
+          echo "Phalnx Test Report - $(date -u +%Y-%m-%dT%H:%M:%SZ)" > test-summary.txt
           echo "Branch: ${{ github.ref_name }}" >> test-summary.txt
           echo "Commit: ${{ github.sha }}" >> test-summary.txt
           echo "---" >> test-summary.txt
@@ -255,8 +255,8 @@ jobs:
       - name: Commit updated README
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
-          git config user.name "agentshield-ci-bot[bot]"
-          git config user.email "${{ vars.CI_APP_ID }}+agentshield-ci-bot[bot]@users.noreply.github.com"
+          git config user.name "phalnx-ci-bot[bot]"
+          git config user.email "${{ vars.CI_APP_ID }}+phalnx-ci-bot[bot]@users.noreply.github.com"
           git diff --quiet README.md || \
             (git add README.md && \
              git commit -m "chore: update test counts [skip ci]" && \
@@ -286,12 +286,12 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            programs/agent-shield/target
-          key: rust-${{ runner.os }}-${{ hashFiles('programs/agent-shield/Cargo.lock') }}
+            programs/phalnx/target
+          key: rust-${{ runner.os }}-${{ hashFiles('programs/phalnx/Cargo.lock') }}
           restore-keys: rust-${{ runner.os }}-
 
       - name: Check formatting
-        run: cargo fmt --check --manifest-path programs/agent-shield/Cargo.toml
+        run: cargo fmt --check --manifest-path programs/phalnx/Cargo.toml
 
       - name: Clippy
         # Allow Anchor-specific false positives:
@@ -299,7 +299,7 @@ jobs:
         #   too_many_arguments — Anchor instruction handlers need many params
         #   ambiguous_glob_reexports — all instruction modules export `handler`
         run: |
-          cargo clippy --manifest-path programs/agent-shield/Cargo.toml -- -D warnings \
+          cargo clippy --manifest-path programs/phalnx/Cargo.toml -- -D warnings \
             -A unexpected_cfgs \
             -A clippy::too_many_arguments \
             -A ambiguous_glob_reexports
@@ -329,7 +329,7 @@ jobs:
             ~/.cargo/git
             ~/.cargo/bin
             target
-          key: anchor-${{ runner.os }}-${{ hashFiles('programs/agent-shield/Cargo.lock') }}
+          key: anchor-${{ runner.os }}-${{ hashFiles('programs/phalnx/Cargo.lock') }}
           restore-keys: anchor-${{ runner.os }}-
 
       - name: Install Solana CLI
@@ -370,7 +370,7 @@ jobs:
       - name: Run on-chain tests (LiteSVM, in-process)
         run: |
           npx ts-mocha -p ./tsconfig.json -t 300000 \
-            tests/agent-shield.ts \
+            tests/phalnx.ts \
             tests/jupiter-integration.ts \
             tests/jupiter-lend-integration.ts \
             tests/flash-trade-integration.ts \
@@ -406,7 +406,7 @@ jobs:
             ~/.cargo/git
             ~/.cargo/bin
             target
-          key: build-verify-${{ runner.os }}-${{ hashFiles('programs/agent-shield/Cargo.lock') }}
+          key: build-verify-${{ runner.os }}-${{ hashFiles('programs/phalnx/Cargo.lock') }}
           restore-keys: build-verify-${{ runner.os }}-
 
       - name: Install Solana CLI
@@ -427,13 +427,13 @@ jobs:
         run: anchor build --no-idl -- --no-default-features --features mainnet
 
       - name: Save mainnet binary hash
-        run: sha256sum target/deploy/agent_shield.so > /tmp/mainnet-hash.txt
+        run: sha256sum target/deploy/phalnx.so > /tmp/mainnet-hash.txt
 
       - name: Build with devnet feature (default)
         run: anchor build --no-idl
 
       - name: Save devnet binary hash
-        run: sha256sum target/deploy/agent_shield.so > /tmp/devnet-hash.txt
+        run: sha256sum target/deploy/phalnx.so > /tmp/devnet-hash.txt
 
       - name: Verify binaries differ
         run: |
@@ -468,7 +468,7 @@ jobs:
                 FOUND=1
               fi
             fi
-          done < <(find programs/agent-shield/src -name "*.rs" -type f)
+          done < <(find programs/phalnx/src -name "*.rs" -type f)
 
           if [ "$FOUND" -eq 1 ]; then
             exit 1
@@ -506,7 +506,7 @@ jobs:
             ~/.cargo/bin
             ~/.local/bin
             target
-          key: surfpool-anchor-${{ runner.os }}-${{ hashFiles('programs/agent-shield/Cargo.lock') }}
+          key: surfpool-anchor-${{ runner.os }}-${{ hashFiles('programs/phalnx/Cargo.lock') }}
           restore-keys: surfpool-anchor-${{ runner.os }}-
 
       - name: Install Solana CLI
@@ -597,7 +597,7 @@ jobs:
         run: |
           docker run --rm --volume "$(pwd):/workspace" \
             ghcr.io/sec3-product/x-ray:v0.0.6 \
-            /workspace/programs/agent-shield 2>&1 | tee xray-report.txt
+            /workspace/programs/phalnx 2>&1 | tee xray-report.txt
 
       - name: Check X-Ray findings
         run: |
@@ -700,7 +700,7 @@ jobs:
           CERTORAKEY: ${{ secrets.CERTORAKEY }}
         run: |
           source .certora-venv/bin/activate
-          certoraSolanaProver certora/conf/agent_shield.conf
+          certoraSolanaProver certora/conf/phalnx.conf
 
       - name: Upload Certora report
         if: always()

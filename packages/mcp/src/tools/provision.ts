@@ -6,7 +6,7 @@ export const provisionSchema = z.object({
     .optional()
     .default("https://agent-middleware.vercel.app")
     .describe(
-      "AgentShield Actions server URL (default: https://agent-middleware.vercel.app)",
+      "Phalnx Actions server URL (default: https://agent-middleware.vercel.app)",
     ),
   template: z
     .enum(["conservative", "moderate", "aggressive"])

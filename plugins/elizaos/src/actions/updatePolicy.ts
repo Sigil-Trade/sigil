@@ -1,10 +1,9 @@
-import type { ShieldPolicies } from "@agent-shield/sdk";
+import type { ShieldPolicies } from "@phalnx/sdk";
 import { getOrCreateShieldedWallet } from "../client-factory";
 
 export const updatePolicyAction = {
   name: "SHIELD_UPDATE_POLICY",
-  description:
-    "Update AgentShield spending limits or program blocking at runtime.",
+  description: "Update Phalnx spending limits or program blocking at runtime.",
   similes: [
     "update policy",
     "change limit",
@@ -66,7 +65,7 @@ export const updatePolicyAction = {
       wallet.updatePolicies(newPolicies);
 
       callback({
-        text: `Shield policies updated: ${changes.join(", ")}`,
+        text: `Phalnx policies updated: ${changes.join(", ")}`,
       });
     } catch (error: any) {
       callback({
@@ -88,7 +87,7 @@ export const updatePolicyAction = {
       {
         user: "{{agent}}",
         content: {
-          text: "Shield policies updated: maxSpend: 1000 USDC/day",
+          text: "Phalnx policies updated: maxSpend: 1000 USDC/day",
         },
       },
     ],

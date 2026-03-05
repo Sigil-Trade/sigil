@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { toPublicKey, formatBN } from "../utils";
 import { formatError } from "../errors";
 
@@ -10,7 +10,7 @@ export const checkSpendingSchema = z.object({
 export type CheckSpendingInput = z.infer<typeof checkSpendingSchema>;
 
 export async function checkSpending(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   input: CheckSpendingInput,
 ): Promise<string> {
   try {
@@ -59,7 +59,7 @@ export async function checkSpending(
 export const checkSpendingTool = {
   name: "shield_check_spending",
   description:
-    "Check the rolling 24h spending for an AgentShield vault. " +
+    "Check the rolling 24h spending for an Phalnx vault. " +
     "Uses epoch-based circular buffer. Transaction history is available via Anchor events.",
   schema: checkSpendingSchema,
   handler: checkSpending,

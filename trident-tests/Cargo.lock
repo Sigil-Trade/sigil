@@ -59,7 +59,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "agent-shield"
+name = "phalnx"
 version = "0.1.0"
 dependencies = [
  "anchor-lang",
@@ -1385,7 +1385,7 @@ dependencies = [
 name = "fuzz_tests"
 version = "0.1.0"
 dependencies = [
- "agent-shield",
+ "phalnx",
  "anchor-lang",
  "borsh 1.6.0",
  "solana-sdk",

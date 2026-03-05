@@ -18,7 +18,7 @@ describe("Fund Route", () => {
       expect(res.status).to.equal(200);
       const body = (await res.json()) as any;
       expect(body.type).to.equal("action");
-      expect(body.title).to.equal("Fund AgentShield Wallet");
+      expect(body.title).to.equal("Fund Phalnx Wallet");
       expect(body.label).to.include("SOL");
     });
 

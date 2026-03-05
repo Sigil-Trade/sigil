@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { toPublicKey, toBN } from "../utils";
 import { formatError } from "../errors";
 import {
@@ -23,7 +23,7 @@ export const executeSwapSchema = z.object({
 export type ExecuteSwapInput = z.infer<typeof executeSwapSchema>;
 
 export async function executeSwap(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   config: McpConfig,
   input: ExecuteSwapInput,
   custodyWallet?: CustodyWalletLike | null,
@@ -48,7 +48,7 @@ export async function executeSwap(
     // Fetch vault to get owner and vaultId for the swap params
     const vault = await client.fetchVaultByAddress(vaultAddress);
 
-    // Execute swap through AgentShield
+    // Execute swap through Phalnx
     // executeJupiterSwap fetches the quote internally if not provided
     const sig = await client.executeJupiterSwap(
       {
@@ -79,8 +79,8 @@ export async function executeSwap(
 export const executeSwapTool = {
   name: "shield_execute_swap",
   description:
-    "Execute a Jupiter token swap through an AgentShield vault. " +
-    "Requires AGENTSHIELD_AGENT_KEYPAIR_PATH to be set. " +
+    "Execute a Jupiter token swap through an Phalnx vault. " +
+    "Requires PHALNX_AGENT_KEYPAIR_PATH to be set. " +
     "The swap is policy-checked: spending caps, token allowlist, and transaction size limits apply.",
   schema: executeSwapSchema,
   handler: executeSwap,

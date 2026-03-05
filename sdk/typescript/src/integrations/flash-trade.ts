@@ -9,7 +9,7 @@ import {
 import { AnchorProvider, BN, Program } from "@coral-xyz/anchor";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { PerpetualsClient, PoolConfig, Side, Privilege } from "flash-sdk";
-import type { AgentShield, ComposeActionParams, ActionType } from "../types";
+import type { Phalnx, ComposeActionParams, ActionType } from "../types";
 import { getVaultPDA } from "../accounts";
 import { composePermittedAction } from "../composer";
 
@@ -226,7 +226,7 @@ export interface FlashCancelLimitOrderParams {
   collateralSymbol: string;
   /** Flash Trade doesn't have a direct cancelLimitOrder; cancellation is
    *  done via editLimitOrder with sizeAmount=0. Alternatively, the
-   *  limit order expires or is consumed. For AgentShield, we model this
+   *  limit order expires or is consumed. For Phalnx, we model this
    *  as a non-spending action using a no-op DeFi instruction placeholder.
    *  The actual cancellation mechanism depends on Flash Trade's API. */
   orderId: number;
@@ -313,12 +313,12 @@ export function getPoolConfig(
 // ---------------------------------------------------------------------------
 
 /**
- * Compose a Flash Trade open position through AgentShield.
+ * Compose a Flash Trade open position through Phalnx.
  *
  * Returns: [ComputeBudget, ValidateAndAuthorize, ...flashIxs, FinalizeSession]
  */
 export async function composeFlashTradeOpen(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   perpClient: PerpetualsClient,
   poolConfig: PoolConfig,
   params: FlashOpenPositionParams,
@@ -377,12 +377,12 @@ export async function composeFlashTradeOpen(
 }
 
 /**
- * Compose a Flash Trade close position through AgentShield.
+ * Compose a Flash Trade close position through Phalnx.
  * Non-spending: amount = 0 (collateral returns TO the vault).
  * Position effect: decrement.
  */
 export async function composeFlashTradeClose(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   perpClient: PerpetualsClient,
   poolConfig: PoolConfig,
   params: FlashClosePositionParams,
@@ -433,10 +433,10 @@ export async function composeFlashTradeClose(
 }
 
 /**
- * Compose a Flash Trade increase position through AgentShield.
+ * Compose a Flash Trade increase position through Phalnx.
  */
 export async function composeFlashTradeIncrease(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   perpClient: PerpetualsClient,
   poolConfig: PoolConfig,
   params: FlashIncreasePositionParams,
@@ -490,11 +490,11 @@ export async function composeFlashTradeIncrease(
 }
 
 /**
- * Compose a Flash Trade decrease position through AgentShield.
+ * Compose a Flash Trade decrease position through Phalnx.
  * Non-spending: amount = 0 (collateral returns TO the vault).
  */
 export async function composeFlashTradeDecrease(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   perpClient: PerpetualsClient,
   poolConfig: PoolConfig,
   params: FlashDecreasePositionParams,
@@ -551,11 +551,11 @@ export async function composeFlashTradeDecrease(
 // ---------------------------------------------------------------------------
 
 /**
- * Compose a Flash Trade add collateral through AgentShield.
+ * Compose a Flash Trade add collateral through Phalnx.
  * Spending: amount = collateralWithFee (fees + delegation apply).
  */
 export async function composeFlashTradeAddCollateral(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   perpClient: PerpetualsClient,
   poolConfig: PoolConfig,
   params: FlashAddCollateralParams,
@@ -607,11 +607,11 @@ export async function composeFlashTradeAddCollateral(
 }
 
 /**
- * Compose a Flash Trade remove collateral through AgentShield.
+ * Compose a Flash Trade remove collateral through Phalnx.
  * Non-spending: amount = 0 (no fees, no delegation).
  */
 export async function composeFlashTradeRemoveCollateral(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   perpClient: PerpetualsClient,
   poolConfig: PoolConfig,
   params: FlashRemoveCollateralParams,
@@ -665,11 +665,11 @@ export async function composeFlashTradeRemoveCollateral(
 // ---------------------------------------------------------------------------
 
 /**
- * Compose a Flash Trade place trigger order (TP/SL) through AgentShield.
+ * Compose a Flash Trade place trigger order (TP/SL) through Phalnx.
  * Non-spending: amount = 0.
  */
 export async function composeFlashTradePlaceTriggerOrder(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   perpClient: PerpetualsClient,
   poolConfig: PoolConfig,
   params: FlashTriggerOrderParams,
@@ -721,11 +721,11 @@ export async function composeFlashTradePlaceTriggerOrder(
 }
 
 /**
- * Compose a Flash Trade edit trigger order through AgentShield.
+ * Compose a Flash Trade edit trigger order through Phalnx.
  * Non-spending: amount = 0.
  */
 export async function composeFlashTradeEditTriggerOrder(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   perpClient: PerpetualsClient,
   poolConfig: PoolConfig,
   params: FlashEditTriggerOrderParams,
@@ -778,11 +778,11 @@ export async function composeFlashTradeEditTriggerOrder(
 }
 
 /**
- * Compose a Flash Trade cancel trigger order through AgentShield.
+ * Compose a Flash Trade cancel trigger order through Phalnx.
  * Non-spending: amount = 0.
  */
 export async function composeFlashTradeCancelTriggerOrder(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   perpClient: PerpetualsClient,
   poolConfig: PoolConfig,
   params: FlashCancelTriggerOrderParams,
@@ -836,12 +836,12 @@ export async function composeFlashTradeCancelTriggerOrder(
 // ---------------------------------------------------------------------------
 
 /**
- * Compose a Flash Trade place limit order through AgentShield.
+ * Compose a Flash Trade place limit order through Phalnx.
  * Spending: amount = collateralAmount (fees + delegation apply).
  * Position effect: increment (collateral committed on-chain).
  */
 export async function composeFlashTradePlaceLimitOrder(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   perpClient: PerpetualsClient,
   poolConfig: PoolConfig,
   params: FlashLimitOrderParams,
@@ -899,11 +899,11 @@ export async function composeFlashTradePlaceLimitOrder(
 }
 
 /**
- * Compose a Flash Trade edit limit order through AgentShield.
+ * Compose a Flash Trade edit limit order through Phalnx.
  * Non-spending: amount = 0.
  */
 export async function composeFlashTradeEditLimitOrder(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   perpClient: PerpetualsClient,
   poolConfig: PoolConfig,
   params: FlashEditLimitOrderParams,
@@ -958,11 +958,11 @@ export async function composeFlashTradeEditLimitOrder(
 }
 
 /**
- * Compose a Flash Trade cancel limit order through AgentShield.
+ * Compose a Flash Trade cancel limit order through Phalnx.
  * Non-spending: amount = 0. Position effect: decrement.
  */
 export async function composeFlashTradeCancelLimitOrder(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   perpClient: PerpetualsClient,
   poolConfig: PoolConfig,
   params: FlashCancelLimitOrderParams,
@@ -1025,14 +1025,14 @@ export async function composeFlashTradeCancelLimitOrder(
 // ---------------------------------------------------------------------------
 
 /**
- * Compose a swap-then-open-position through AgentShield.
+ * Compose a swap-then-open-position through Phalnx.
  * Spending: amount = collateralAmount. Position effect: increment.
  *
  * The caller provides pre-built Jupiter swap instructions that convert
  * the source token to the position's collateral token.
  */
 export async function composeFlashTradeSwapAndOpen(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   perpClient: PerpetualsClient,
   poolConfig: PoolConfig,
   params: FlashSwapAndOpenParams,
@@ -1092,7 +1092,7 @@ export async function composeFlashTradeSwapAndOpen(
 }
 
 /**
- * Compose a close-position-then-swap through AgentShield.
+ * Compose a close-position-then-swap through Phalnx.
  * Non-spending: amount = 0 (collateral returns TO the vault).
  * Position effect: decrement.
  *
@@ -1100,7 +1100,7 @@ export async function composeFlashTradeSwapAndOpen(
  * the position's collateral back to a target token.
  */
 export async function composeFlashTradeCloseAndSwap(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   perpClient: PerpetualsClient,
   poolConfig: PoolConfig,
   params: FlashCloseAndSwapParams,

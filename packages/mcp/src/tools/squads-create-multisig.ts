@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Keypair } from "@solana/web3.js";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { toPublicKey } from "../utils";
 import { formatError } from "../errors";
 import type { McpConfig } from "../config";
@@ -42,7 +42,7 @@ export type SquadsCreateMultisigInput = z.infer<
 >;
 
 export async function squadsCreateMultisig(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   config: McpConfig,
   input: SquadsCreateMultisigInput,
 ): Promise<string> {
@@ -78,7 +78,7 @@ export async function squadsCreateMultisig(
       `- **Time Lock:** ${input.timeLock ?? 0}s`,
       `- **Transaction:** ${result.signature}`,
       "",
-      "Use the **Vault PDA** as the `owner` when creating an AgentShield vault " +
+      "Use the **Vault PDA** as the `owner` when creating an Phalnx vault " +
         "to enable multisig governance.",
     ].join("\n");
   } catch (error) {
@@ -89,8 +89,8 @@ export async function squadsCreateMultisig(
 export const squadsCreateMultisigTool = {
   name: "shield_squads_create_multisig",
   description:
-    "Create a new Squads V4 multisig for N-of-M governance over AgentShield vaults. " +
-    "The vault PDA becomes the AgentShield vault owner.",
+    "Create a new Squads V4 multisig for N-of-M governance over Phalnx vaults. " +
+    "The vault PDA becomes the Phalnx vault owner.",
   schema: squadsCreateMultisigSchema,
   handler: squadsCreateMultisig,
 };

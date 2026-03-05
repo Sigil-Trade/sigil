@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { toPublicKey, toBN } from "../utils";
 import { formatError } from "../errors";
 
@@ -12,7 +12,7 @@ export const depositSchema = z.object({
 export type DepositInput = z.infer<typeof depositSchema>;
 
 export async function deposit(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   input: DepositInput,
 ): Promise<string> {
   try {
@@ -37,7 +37,7 @@ export async function deposit(
 export const depositTool = {
   name: "shield_deposit",
   description:
-    "Deposit tokens into an AgentShield vault. " +
+    "Deposit tokens into an Phalnx vault. " +
     "The owner must have sufficient token balance.",
   schema: depositSchema,
   handler: deposit,

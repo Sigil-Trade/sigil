@@ -24,8 +24,8 @@ export interface ShieldStorage {
   setItem(key: string, value: string): void;
 }
 
-const STORAGE_KEY_SPENDS = "agentshield:spends";
-const STORAGE_KEY_TXS = "agentshield:txs";
+const STORAGE_KEY_SPENDS = "phalnx:spends";
+const STORAGE_KEY_TXS = "phalnx:txs";
 
 /** Max entries to keep in each tracker to prevent unbounded growth */
 const MAX_SPEND_ENTRIES = 500;

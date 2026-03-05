@@ -1,4 +1,4 @@
-# Sec3 X-Ray Allowlist for AgentShield
+# Sec3 X-Ray Allowlist for Phalnx
 #
 # Each non-comment, non-blank line is a grep pattern used to EXCLUDE
 # matching VULNERABLE lines from the X-Ray report. Patterns are
@@ -9,7 +9,7 @@
 # Last reviewed: 2026-02-21
 
 # --- MaliciousSimulation ---
-# X-Ray flags suspicious code patterns heuristically. AgentShield is
+# X-Ray flags suspicious code patterns heuristically. Phalnx is
 # formally verified by Certora (16/16 rules), fuzz-tested (Trident,
 # 1000 iterations), and covered by 174 on-chain tests + 81 security
 # exploit tests. No malicious behavior present.
@@ -28,7 +28,7 @@ MaliciousSimulation
 UnvalidatedAccount
 
 # --- anchorVersionTooOld ---
-# X-Ray flags anchor_lang < latest as "anchorVersionTooOld". AgentShield
+# X-Ray flags anchor_lang < latest as "anchorVersionTooOld". Phalnx
 # uses Anchor 0.32.1, which is the latest stable release compatible with
 # our Solana SDK version (solana-program 2.x). Upgrading is tracked but
 # not a security vulnerability — it is an informational finding.

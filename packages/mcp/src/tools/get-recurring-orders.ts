@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { formatError } from "../errors";
 
 export const getRecurringOrdersSchema = z.object({
@@ -9,7 +9,7 @@ export const getRecurringOrdersSchema = z.object({
 export type GetRecurringOrdersInput = z.infer<typeof getRecurringOrdersSchema>;
 
 export async function getRecurringOrders(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   input: GetRecurringOrdersInput,
 ): Promise<string> {
   try {

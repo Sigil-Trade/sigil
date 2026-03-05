@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { formatError } from "../errors";
 
 export const jupiterPortfolioSchema = z.object({
@@ -9,7 +9,7 @@ export const jupiterPortfolioSchema = z.object({
 export type JupiterPortfolioInput = z.infer<typeof jupiterPortfolioSchema>;
 
 export async function jupiterPortfolio(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   input: JupiterPortfolioInput,
 ): Promise<string> {
   try {

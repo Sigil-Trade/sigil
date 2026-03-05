@@ -7,7 +7,7 @@ import {
   Connection,
 } from "@solana/web3.js";
 import { Program } from "@coral-xyz/anchor";
-import type { AgentShield, ComposeActionParams } from "./types";
+import type { Phalnx, ComposeActionParams } from "./types";
 import {
   buildValidateAndAuthorize,
   buildFinalizeSession,
@@ -29,7 +29,7 @@ import {
  * Priority fees are injected when a connection is provided.
  */
 export async function composePermittedAction(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   params: ComposeActionParams,
   computeUnits?: number,
   connection?: Connection,
@@ -93,7 +93,7 @@ export async function composePermittedAction(
  * Automatically includes right-sized CU budget and priority fees.
  */
 export async function composePermittedTransaction(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   connection: Connection,
   params: ComposeActionParams,
   computeUnits?: number,
@@ -122,7 +122,7 @@ export async function composePermittedTransaction(
  * Wraps composePermittedAction with actionType = { swap: {} }.
  */
 export async function composePermittedSwap(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   params: Omit<ComposeActionParams, "actionType">,
   computeUnits?: number,
   connection?: Connection,

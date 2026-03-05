@@ -1,8 +1,8 @@
 import {
   evaluatePolicy as coreEvaluatePolicy,
   recordTransaction as coreRecordTransaction,
-} from "@agent-shield/core";
-import type { PolicyViolation } from "@agent-shield/core";
+} from "@phalnx/core";
+import type { PolicyViolation } from "@phalnx/core";
 import { ShieldDeniedError } from "./errors";
 import {
   ResolvedPolicies,

@@ -5,7 +5,7 @@ import { getOrCreateShieldedWallet } from "../client-factory";
  * if spending is approaching any token's cap (>=80%).
  */
 export const policyCheckEvaluator = {
-  name: "AGENT_SHIELD_POLICY_CHECK",
+  name: "PHALNX_POLICY_CHECK",
   description:
     "Post-action evaluator that checks spending against caps " +
     "and warns if any token usage exceeds 80%.",
@@ -14,7 +14,7 @@ export const policyCheckEvaluator = {
   validate: async (_runtime: any, message: any): Promise<boolean> => {
     const text = (message.content?.text || "").toLowerCase();
     return (
-      text.includes("agentshield") ||
+      text.includes("phalnx") ||
       text.includes("shield") ||
       text.includes("transaction:")
     );
@@ -43,7 +43,7 @@ export const policyCheckEvaluator = {
       if (warnings.length > 0) {
         return {
           text:
-            `WARNING: AgentShield spending approaching limits:\n` +
+            `WARNING: Phalnx spending approaching limits:\n` +
             warnings.map((w) => `  ${w}`).join("\n") +
             `\nConsider reducing trade sizes or waiting for the rolling window to reset.`,
           action: "POLICY_WARNING",
@@ -70,7 +70,7 @@ export const policyCheckEvaluator = {
         },
       ],
       outcome:
-        "WARNING: AgentShield spending approaching limits:\n" +
+        "WARNING: Phalnx spending approaching limits:\n" +
         "  USDC: 85% used (75000000 remaining)",
     },
   ],

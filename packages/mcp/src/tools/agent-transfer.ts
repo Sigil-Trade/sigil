@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { PublicKey } from "@solana/web3.js";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
-import type { AgentShieldClient, AgentTransferParams } from "@agent-shield/sdk";
+import type { PhalnxClient, AgentTransferParams } from "@phalnx/sdk";
 import { toPublicKey, toBN } from "../utils";
 import { formatError } from "../errors";
 
@@ -19,7 +19,7 @@ export const agentTransferSchema = z.object({
 export type AgentTransferInput = z.infer<typeof agentTransferSchema>;
 
 export async function agentTransfer(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   input: AgentTransferInput,
 ): Promise<string> {
   try {
@@ -63,7 +63,7 @@ export async function agentTransfer(
 export const agentTransferTool = {
   name: "shield_agent_transfer",
   description:
-    "Transfer tokens from an AgentShield vault to a destination address. " +
+    "Transfer tokens from an Phalnx vault to a destination address. " +
     "Agent-signed operation. If the vault has an allowed_destinations list, " +
     "the destination must be in it. Respects daily spending caps.",
   schema: agentTransferSchema,

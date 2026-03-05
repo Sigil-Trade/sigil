@@ -160,9 +160,7 @@ describe("devnet-sessions", () => {
 
     // Stats incremented
     const vaultAfter = await program.account.agentVault.fetch(vault.vaultPda);
-    expect(vaultAfter.totalTransactions.toNumber()).to.equal(
-      txCountBefore + 1,
-    );
+    expect(vaultAfter.totalTransactions.toNumber()).to.equal(txCountBefore + 1);
     console.log(
       "    Composed TX: session created + closed atomically, stats incremented",
     );
@@ -322,9 +320,7 @@ describe("devnet-sessions", () => {
 
     // Stats incremented by 2
     const vaultAfter = await program.account.agentVault.fetch(vault.vaultPda);
-    expect(vaultAfter.totalTransactions.toNumber()).to.equal(
-      txCountBefore + 2,
-    );
+    expect(vaultAfter.totalTransactions.toNumber()).to.equal(txCountBefore + 2);
     console.log(
       "    Sequential composed TXes with different mints: both succeeded",
     );

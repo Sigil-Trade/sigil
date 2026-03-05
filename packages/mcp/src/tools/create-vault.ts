@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { BN } from "@coral-xyz/anchor";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { toPublicKey, toBN } from "../utils";
 import { formatError } from "../errors";
 
@@ -79,7 +79,7 @@ export const createVaultSchema = z.object({
 export type CreateVaultInput = z.infer<typeof createVaultSchema>;
 
 export async function createVault(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   input: CreateVaultInput,
 ): Promise<string> {
   try {
@@ -124,7 +124,7 @@ export async function createVault(
 export const createVaultTool = {
   name: "shield_create_vault",
   description:
-    "Create a new AgentShield vault with policy configuration. " +
+    "Create a new Phalnx vault with policy configuration. " +
     "Sets spending caps, protocol mode, leverage limits, and fee settings. " +
     "Stablecoin-only USD tracking with on-chain slippage enforcement.",
   schema: createVaultSchema,

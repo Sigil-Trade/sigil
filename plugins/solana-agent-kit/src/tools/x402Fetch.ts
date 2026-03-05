@@ -55,7 +55,7 @@ export async function x402Fetch(
 ): Promise<string> {
   try {
     validateUrl(input.url);
-    const { shieldedFetch } = await import("@agent-shield/sdk");
+    const { shieldedFetch } = await import("@phalnx/sdk");
 
     const fetchInit: RequestInit = {
       method: input.method ?? "GET",

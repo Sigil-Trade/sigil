@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { toPublicKey, formatBN, formatTimestamp } from "../utils";
 import { formatError } from "../errors";
 
@@ -10,7 +10,7 @@ export const checkPendingPolicySchema = z.object({
 export type CheckPendingPolicyInput = z.infer<typeof checkPendingPolicySchema>;
 
 export async function checkPendingPolicy(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   input: CheckPendingPolicyInput,
 ): Promise<string> {
   try {
@@ -100,7 +100,7 @@ export async function checkPendingPolicy(
 export const checkPendingPolicyTool = {
   name: "shield_check_pending_policy",
   description:
-    "Check if a pending (timelocked) policy update exists for an AgentShield vault. " +
+    "Check if a pending (timelocked) policy update exists for an Phalnx vault. " +
     "Shows queued changes, timestamps, and time remaining until the update can be applied.",
   schema: checkPendingPolicySchema,
   handler: checkPendingPolicy,

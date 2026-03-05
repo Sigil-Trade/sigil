@@ -35,7 +35,7 @@ export async function buildSyncPositionsTransaction(
     getVaultPDA,
     CU_OWNER_ACTION,
     getEstimator,
-  } = await import("@agent-shield/sdk");
+  } = await import("@phalnx/sdk");
 
   const connection = new Connection(RPC_URL, "confirmed");
 

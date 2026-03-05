@@ -62,10 +62,7 @@ describe("devnet-positions", () => {
   }
 
   /** Open a position (composed validate + finalize) */
-  async function openPosition(
-    vault: FullVaultResult,
-    success: boolean = true,
-  ) {
+  async function openPosition(vault: FullVaultResult, success: boolean = true) {
     const sessionPda = deriveSessionPda(
       vault.vaultPda,
       agent.publicKey,

@@ -242,15 +242,15 @@ updateFile("CLAUDE.md", "CLAUDE.md", (content) => {
   const packagePatterns = [
     {
       match: /`sdk\/core\/`[^)]*?(\d+) tests\)/,
-      suite: "Core policy engine (`@agent-shield/core`)",
+      suite: "Core policy engine (`@phalnx/core`)",
     },
     {
       match: /`sdk\/typescript\/`[^)]*?(\d+) tests\)/,
-      suite: "SDK tests (`@agent-shield/sdk`)",
+      suite: "SDK tests (`@phalnx/sdk`)",
     },
     {
       match: /`sdk\/platform\/`[^)]*?(\d+) tests\)/,
-      suite: "Platform client tests (`@agent-shield/platform`)",
+      suite: "Platform client tests (`@phalnx/platform`)",
     },
     {
       match: /`sdk\/custody\/crossmint\/`[^)]*?(\d+) tests\)/,
@@ -258,19 +258,19 @@ updateFile("CLAUDE.md", "CLAUDE.md", (content) => {
     },
     {
       match: /`plugins\/solana-agent-kit\/`[^)]*?(\d+) tests\)/,
-      suite: "SAK plugin (`@agent-shield/plugin-solana-agent-kit`)",
+      suite: "SAK plugin (`@phalnx/plugin-solana-agent-kit`)",
     },
     {
       match: /`plugins\/elizaos\/`[^)]*?(\d+) tests\)/,
-      suite: "ElizaOS plugin (`@agent-shield/plugin-elizaos`)",
+      suite: "ElizaOS plugin (`@phalnx/plugin-elizaos`)",
     },
     {
       match: /`packages\/mcp\/`[^)]*?(\d+) tests\)/,
-      suite: "MCP server (`@agent-shield/mcp`)",
+      suite: "MCP server (`@phalnx/mcp`)",
     },
     {
       match: /`apps\/actions-server\/`[^)]*?(\d+) tests\)/,
-      suite: "Actions server (`@agent-shield/actions-server`)",
+      suite: "Actions server (`@phalnx/actions-server`)",
     },
   ];
 

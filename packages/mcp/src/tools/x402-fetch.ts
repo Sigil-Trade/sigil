@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { formatError } from "../errors";
 import type { McpConfig, CustodyWalletLike } from "../config";
 
@@ -28,7 +28,7 @@ export type X402FetchInput = z.input<typeof x402FetchSchema>;
 
 // Module-level cache: persistent wallet + config fingerprint
 // Use ShieldedWallet type from SDK (V2: shield function is internal, type is public)
-import type { ShieldedWallet } from "@agent-shield/sdk";
+import type { ShieldedWallet } from "@phalnx/sdk";
 let _cachedWallet: ShieldedWallet | null = null;
 let _cachedConfigKey: string | null = null;
 
@@ -102,18 +102,18 @@ function validateUrl(url: string): void {
 }
 
 export async function x402Fetch(
-  _client: AgentShieldClient,
+  _client: PhalnxClient,
   config: McpConfig,
   input: X402FetchInput,
   custodyWallet?: CustodyWalletLike | null,
 ): Promise<string> {
   try {
     validateUrl(input.url);
-    const { shieldedFetch } = await import("@agent-shield/sdk");
+    const { shieldedFetch } = await import("@phalnx/sdk");
     // V2: shield() is internal to the wrapper. We access it from the compiled
     // dist output since the MCP server runs in the same monorepo.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const wrapperMod = require("@agent-shield/sdk/dist/wrapper/index");
+    const wrapperMod = require("@phalnx/sdk/dist/wrapper/index");
     const shieldWallet: (w: any, p?: any, o?: any) => ShieldedWallet =
       wrapperMod.shieldWallet;
     const { Connection, Keypair } = await import("@solana/web3.js");

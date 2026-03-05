@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { getJupiterLendTokens } from "@agent-shield/sdk";
+import { getJupiterLendTokens } from "@phalnx/sdk";
 import { formatError } from "../errors";
 
 export const lendTokensSchema = z.object({});

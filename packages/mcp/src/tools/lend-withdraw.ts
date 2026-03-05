@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { toPublicKey, toBN } from "../utils";
 import { formatError } from "../errors";
 import {
@@ -17,7 +17,7 @@ export const lendWithdrawSchema = z.object({
 export type LendWithdrawInput = z.infer<typeof lendWithdrawSchema>;
 
 export async function lendWithdraw(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   config: McpConfig,
   input: LendWithdrawInput,
   custodyWallet?: CustodyWalletLike | null,
@@ -60,7 +60,7 @@ export async function lendWithdraw(
 export const lendWithdrawTool = {
   name: "shield_lend_withdraw",
   description:
-    "Withdraw tokens from Jupiter Lend/Earn through an AgentShield vault. " +
+    "Withdraw tokens from Jupiter Lend/Earn through an Phalnx vault. " +
     "Full on-chain sandwich enforcement. Non-spending action.",
   schema: lendWithdrawSchema,
   handler: lendWithdraw,

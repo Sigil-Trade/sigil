@@ -26,7 +26,7 @@ export class ShieldDeniedError extends Error {
 
   constructor(violations: PolicyViolation[]) {
     const summary = violations.map((v) => v.message).join("; ");
-    super(`Transaction denied by AgentShield: ${summary}`);
+    super(`Transaction denied by Phalnx: ${summary}`);
     this.name = "ShieldDeniedError";
     this.violations = violations;
   }

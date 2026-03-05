@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { getJupiterPrices } from "@agent-shield/sdk";
+import { getJupiterPrices } from "@phalnx/sdk";
 import { formatError } from "../errors";
 
 export const getPricesSchema = z.object({

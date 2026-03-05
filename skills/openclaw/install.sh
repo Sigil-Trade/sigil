@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# AgentShield OpenClaw Skill Installer
+# Phalnx OpenClaw Skill Installer
 # Idempotent — safe to run multiple times.
 # Does NOT execute remote code. Only copies files and merges JSON config.
 
 MCP_VERSION="0.4.7"
-SKILL_DIR="${HOME}/.openclaw/workspace/skills/agent-shield"
+SKILL_DIR="${HOME}/.openclaw/workspace/skills/phalnx"
 CONFIG_FILE="${HOME}/.openclaw/openclaw.json"
-SHIELD_DIR="${HOME}/.agentshield"
+SHIELD_DIR="${HOME}/.phalnx"
 
-echo "==> Installing AgentShield skill for OpenClaw..."
+echo "==> Installing Phalnx skill for OpenClaw..."
 
 # 0. Check npx availability
 if ! command -v npx &>/dev/null; then
@@ -24,7 +24,7 @@ mkdir -p "${SKILL_DIR}"
 cp "$(dirname "$0")/SKILL.md" "${SKILL_DIR}/SKILL.md"
 echo "    Copied SKILL.md to ${SKILL_DIR}/"
 
-# 2. Create AgentShield config directory with restricted permissions
+# 2. Create Phalnx config directory with restricted permissions
 if [ ! -d "${SHIELD_DIR}" ]; then
   mkdir -p "${SHIELD_DIR}" && chmod 700 "${SHIELD_DIR}"
   echo "    Created ${SHIELD_DIR}/ (mode 700)"
@@ -34,16 +34,16 @@ fi
 MCP_ENTRY=$(cat <<JSONEOF
 {
   "command": "npx",
-  "args": ["@agent-shield/mcp@${MCP_VERSION}"],
+  "args": ["@phalnx/mcp@${MCP_VERSION}"],
   "env": {
-    "AGENTSHIELD_RPC_URL": "https://api.devnet.solana.com"
+    "PHALNX_RPC_URL": "https://api.devnet.solana.com"
   }
 }
 JSONEOF
 )
 
 if [ -f "${CONFIG_FILE}" ]; then
-  if grep -q "@agent-shield/mcp@${MCP_VERSION}" "${CONFIG_FILE}" 2>/dev/null; then
+  if grep -q "@phalnx/mcp@${MCP_VERSION}" "${CONFIG_FILE}" 2>/dev/null; then
     echo "    MCP config already present (v${MCP_VERSION}) in ${CONFIG_FILE} — skipping"
   else
     # Merge using node (available since npx check passed)
@@ -53,22 +53,22 @@ if [ -f "${CONFIG_FILE}" ]; then
       if (!cfg.agents) cfg.agents = {};
       if (!cfg.agents.default) cfg.agents.default = {};
       if (!cfg.agents.default.mcp) cfg.agents.default.mcp = {};
-      cfg.agents.default.mcp['agent-shield'] = ${MCP_ENTRY};
+      cfg.agents.default.mcp['phalnx'] = ${MCP_ENTRY};
       fs.writeFileSync('${CONFIG_FILE}', JSON.stringify(cfg, null, 2) + '\n');
     "
-    echo "    Merged agent-shield MCP config into ${CONFIG_FILE}"
+    echo "    Merged phalnx MCP config into ${CONFIG_FILE}"
   fi
 else
   mkdir -p "$(dirname "${CONFIG_FILE}")"
   cp "$(dirname "$0")/openclaw.json" "${CONFIG_FILE}"
-  echo "    Created ${CONFIG_FILE} with AgentShield MCP config"
+  echo "    Created ${CONFIG_FILE} with Phalnx MCP config"
 fi
 
 echo ""
-echo "==> Done! AgentShield skill installed."
+echo "==> Done! Phalnx skill installed."
 echo ""
-echo "    Start OpenClaw and say: \"Set up AgentShield\""
+echo "    Start OpenClaw and say: \"Set up Phalnx\""
 echo "    The agent will guide you through security setup."
 echo ""
-echo "    MCP server: @agent-shield/mcp@${MCP_VERSION}"
+echo "    MCP server: @phalnx/mcp@${MCP_VERSION}"
 echo "    No wallet needed at install time — the agent creates one during setup."

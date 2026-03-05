@@ -3,14 +3,14 @@ import type {
   WalletLike,
   ShieldPolicies,
   ShieldOptions,
-} from "@agent-shield/sdk";
+} from "@phalnx/sdk";
 import { createShieldedWallet } from "./factory";
 
 /**
  * Plugin configuration — accepts either a pre-created ShieldedWallet
  * or a raw wallet + policies for auto-creation via the factory.
  */
-export interface AgentShieldPluginConfig {
+export interface PhalnxPluginConfig {
   /** A pre-created ShieldedWallet (from shieldWallet()). Mutually exclusive with rawWallet. */
   wallet?: ShieldedWallet;
   /** A raw WalletLike to wrap with shieldWallet(). Mutually exclusive with wallet. */
@@ -35,7 +35,7 @@ export interface ResolvedConfig {
  * Resolves plugin config to always have a ShieldedWallet.
  * If a rawWallet is provided, uses the factory to create one.
  */
-export function resolveWallet(config: AgentShieldPluginConfig): ResolvedConfig {
+export function resolveWallet(config: PhalnxPluginConfig): ResolvedConfig {
   if (config.wallet) {
     return { wallet: config.wallet };
   }
@@ -51,6 +51,6 @@ export function resolveWallet(config: AgentShieldPluginConfig): ResolvedConfig {
   }
 
   throw new Error(
-    "AgentShield: config must provide either 'wallet' (ShieldedWallet) or 'rawWallet' (WalletLike).",
+    "Phalnx: config must provide either 'wallet' (ShieldedWallet) or 'rawWallet' (WalletLike).",
   );
 }

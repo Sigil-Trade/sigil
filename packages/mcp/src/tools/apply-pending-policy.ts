@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { toPublicKey } from "../utils";
 import { formatError } from "../errors";
 
@@ -10,7 +10,7 @@ export const applyPendingPolicySchema = z.object({
 export type ApplyPendingPolicyInput = z.infer<typeof applyPendingPolicySchema>;
 
 export async function applyPendingPolicy(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   input: ApplyPendingPolicyInput,
 ): Promise<string> {
   try {
@@ -32,7 +32,7 @@ export async function applyPendingPolicy(
 export const applyPendingPolicyTool = {
   name: "shield_apply_pending_policy",
   description:
-    "Apply a pending (timelocked) policy update to an AgentShield vault. " +
+    "Apply a pending (timelocked) policy update to an Phalnx vault. " +
     "Only works after the timelock duration has elapsed. Owner-only operation.",
   schema: applyPendingPolicySchema,
   handler: applyPendingPolicy,

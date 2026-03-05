@@ -5,12 +5,17 @@ import * as os from "os";
 import * as path from "path";
 import type {
   AgentVaultAccount,
+  AgentEntry,
   PolicyConfigAccount,
   PendingPolicyUpdateAccount,
   SpendTrackerAccount,
   VaultStatus,
   EpochBucket,
-} from "@agent-shield/sdk";
+  EscrowDepositAccount,
+  EscrowStatus,
+  InstructionConstraintsAccount,
+  PendingConstraintsUpdateAccount,
+} from "@phalnx/sdk";
 
 // Re-usable test fixtures
 export const TEST_OWNER = Keypair.generate();
@@ -30,7 +35,7 @@ export function createMockConfig(): {
   cleanup: () => void;
 } {
   const kp = Keypair.generate();
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agentshield-test-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "phalnx-test-"));
   const tmpPath = path.join(tmpDir, "keypair.json");
   fs.writeFileSync(tmpPath, JSON.stringify(Array.from(kp.secretKey)), {
     mode: 0o600,
@@ -52,7 +57,9 @@ export function makeVaultAccount(
 ): AgentVaultAccount {
   return {
     owner: TEST_OWNER.publicKey,
-    agent: TEST_AGENT.publicKey,
+    agents: [
+      { pubkey: TEST_AGENT.publicKey, permissions: new BN(2097151) },
+    ] as AgentEntry[],
     feeDestination: TEST_FEE_DEST,
     vaultId: new BN(1),
     status: { active: {} } as VaultStatus,
@@ -82,6 +89,7 @@ export function makePolicyAccount(
     timelockDuration: new BN(0),
     allowedDestinations: [],
     maxSlippageBps: 100,
+    hasConstraints: false,
     bump: 254,
     ...overrides,
   };
@@ -136,7 +144,7 @@ export interface CallRecord {
 }
 
 /**
- * Mock AgentShieldClient that records method calls and returns canned data.
+ * Mock PhalnxClient that records method calls and returns canned data.
  * Cast to `any` when passing to tool handlers to bypass type checks.
  */
 export function createMockClient(
@@ -240,8 +248,11 @@ export function createMockClient(
       return "mock-sig-withdraw";
     },
 
-    async registerAgent(vault: PublicKey, agent: PublicKey) {
-      calls.push({ method: "registerAgent", args: [vault, agent] });
+    async registerAgent(vault: PublicKey, agent: PublicKey, permissions: BN) {
+      calls.push({
+        method: "registerAgent",
+        args: [vault, agent, permissions],
+      });
       if (overrides.shouldThrow) throw overrides.shouldThrow;
       return "mock-sig-register";
     },
@@ -252,19 +263,36 @@ export function createMockClient(
       return "mock-sig-update";
     },
 
-    async revokeAgent(vault: PublicKey) {
-      calls.push({ method: "revokeAgent", args: [vault] });
+    async revokeAgent(vault: PublicKey, agentToRemove: PublicKey) {
+      calls.push({ method: "revokeAgent", args: [vault, agentToRemove] });
       if (overrides.shouldThrow) throw overrides.shouldThrow;
       return "mock-sig-revoke";
     },
 
-    async reactivateVault(vault: PublicKey, newAgent?: PublicKey) {
+    async reactivateVault(
+      vault: PublicKey,
+      newAgent?: PublicKey,
+      newAgentPermissions?: BN,
+    ) {
       calls.push({
         method: "reactivateVault",
-        args: [vault, newAgent],
+        args: [vault, newAgent, newAgentPermissions],
       });
       if (overrides.shouldThrow) throw overrides.shouldThrow;
       return "mock-sig-reactivate";
+    },
+
+    async updateAgentPermissions(
+      vault: PublicKey,
+      agent: PublicKey,
+      newPermissions: BN,
+    ) {
+      calls.push({
+        method: "updateAgentPermissions",
+        args: [vault, agent, newPermissions],
+      });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return "mock-sig-update-perms";
     },
 
     async authorizeAction(vault: PublicKey, params: any) {
@@ -854,6 +882,115 @@ export function createMockClient(
         signature: "mock-sig-squads-propose-action",
         transactionIndex: 1n,
       };
+    },
+
+    // --- Escrow Operations ---
+
+    async createEscrow(...args: any[]) {
+      calls.push({ method: "createEscrow", args });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return "mock-sig-create-escrow";
+    },
+
+    async settleEscrow(...args: any[]) {
+      calls.push({ method: "settleEscrow", args });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return "mock-sig-settle-escrow";
+    },
+
+    async refundEscrow(...args: any[]) {
+      calls.push({ method: "refundEscrow", args });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return "mock-sig-refund-escrow";
+    },
+
+    async closeSettledEscrow(...args: any[]) {
+      calls.push({ method: "closeSettledEscrow", args });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return "mock-sig-close-escrow";
+    },
+
+    async fetchEscrow(
+      sourceVault: PublicKey,
+      destinationVault: PublicKey,
+      escrowId: BN,
+    ) {
+      calls.push({
+        method: "fetchEscrow",
+        args: [sourceVault, destinationVault, escrowId],
+      });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return {
+        sourceVault,
+        destinationVault,
+        escrowId,
+        amount: new BN(1000000),
+        tokenMint: TEST_MINT,
+        createdAt: new BN(1700000000),
+        expiresAt: new BN(1700086400),
+        status: { active: {} } as EscrowStatus,
+        conditionHash: new Array(32).fill(0),
+        bump: 251,
+      } as EscrowDepositAccount;
+    },
+
+    // --- Instruction Constraints ---
+
+    async createInstructionConstraints(vault: PublicKey, entries: any[]) {
+      calls.push({
+        method: "createInstructionConstraints",
+        args: [vault, entries],
+      });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return "mock-sig-create-constraints";
+    },
+
+    async closeInstructionConstraints(vault: PublicKey) {
+      calls.push({ method: "closeInstructionConstraints", args: [vault] });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return "mock-sig-close-constraints";
+    },
+
+    async updateInstructionConstraints(vault: PublicKey, entries: any[]) {
+      calls.push({
+        method: "updateInstructionConstraints",
+        args: [vault, entries],
+      });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return "mock-sig-update-constraints";
+    },
+
+    async queueConstraintsUpdate(vault: PublicKey, entries: any[]) {
+      calls.push({
+        method: "queueConstraintsUpdate",
+        args: [vault, entries],
+      });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return "mock-sig-queue-constraints";
+    },
+
+    async applyConstraintsUpdate(vault: PublicKey) {
+      calls.push({ method: "applyConstraintsUpdate", args: [vault] });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return "mock-sig-apply-constraints";
+    },
+
+    async cancelConstraintsUpdate(vault: PublicKey) {
+      calls.push({ method: "cancelConstraintsUpdate", args: [vault] });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return "mock-sig-cancel-constraints";
+    },
+
+    async fetchConstraints(vault: PublicKey) {
+      calls.push({ method: "fetchConstraints", args: [vault] });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return null as InstructionConstraintsAccount | null;
+    },
+
+    async fetchPendingConstraints(vault: PublicKey) {
+      calls.push({ method: "fetchPendingConstraints", args: [vault] });
+      if (overrides.shouldThrow) throw overrides.shouldThrow;
+      return null as PendingConstraintsUpdateAccount | null;
     },
   };
 

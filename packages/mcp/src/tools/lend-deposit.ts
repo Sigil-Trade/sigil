@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { toPublicKey, toBN } from "../utils";
 import { formatError } from "../errors";
 import {
@@ -20,7 +20,7 @@ export const lendDepositSchema = z.object({
 export type LendDepositInput = z.infer<typeof lendDepositSchema>;
 
 export async function lendDeposit(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   config: McpConfig,
   input: LendDepositInput,
   custodyWallet?: CustodyWalletLike | null,
@@ -63,7 +63,7 @@ export async function lendDeposit(
 export const lendDepositTool = {
   name: "shield_lend_deposit",
   description:
-    "Deposit tokens into Jupiter Lend/Earn through an AgentShield vault. " +
+    "Deposit tokens into Jupiter Lend/Earn through an Phalnx vault. " +
     "Full on-chain sandwich enforcement. Counts against daily spending cap.",
   schema: lendDepositSchema,
   handler: lendDeposit,

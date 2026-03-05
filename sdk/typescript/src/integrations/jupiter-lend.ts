@@ -12,7 +12,7 @@
 import { PublicKey, TransactionInstruction, Connection } from "@solana/web3.js";
 import { BN, Program } from "@coral-xyz/anchor";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
-import type { AgentShield, ComposeActionParams } from "../types";
+import type { Phalnx, ComposeActionParams } from "../types";
 import { getVaultPDA } from "../accounts";
 import { composePermittedAction } from "../composer";
 import { jupiterFetch } from "./jupiter-api";
@@ -119,13 +119,13 @@ export async function getJupiterEarnPositions(
 // ---------------------------------------------------------------------------
 
 /**
- * Compose a Jupiter Lend deposit through AgentShield.
+ * Compose a Jupiter Lend deposit through Phalnx.
  *
  * Deposit is a spending action — amount counts against the daily spending cap.
  * Returns instructions for the sandwich: [validate, ...lendIxs, finalize].
  */
 export async function composeJupiterLendDeposit(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   connection: Connection,
   params: JupiterLendDepositParams,
 ): Promise<{ instructions: TransactionInstruction[] }> {
@@ -154,7 +154,7 @@ export async function composeJupiterLendDeposit(
     defiInstructions.push(deserializeInstruction(ix));
   }
 
-  // Compose with AgentShield validate/finalize sandwich
+  // Compose with Phalnx validate/finalize sandwich
   const vaultTokenAccount =
     params.vaultTokenAccount ??
     getAssociatedTokenAddressSync(params.tokenMint, vault, true);
@@ -185,13 +185,13 @@ export async function composeJupiterLendDeposit(
 }
 
 /**
- * Compose a Jupiter Lend withdrawal through AgentShield.
+ * Compose a Jupiter Lend withdrawal through Phalnx.
  *
  * Withdraw is a non-spending action — amount does not count against cap.
  * Returns instructions for the sandwich: [validate, ...lendIxs, finalize].
  */
 export async function composeJupiterLendWithdraw(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   connection: Connection,
   params: JupiterLendWithdrawParams,
 ): Promise<{ instructions: TransactionInstruction[] }> {
@@ -220,7 +220,7 @@ export async function composeJupiterLendWithdraw(
     defiInstructions.push(deserializeInstruction(ix));
   }
 
-  // Compose with AgentShield validate/finalize sandwich
+  // Compose with Phalnx validate/finalize sandwich
   // Withdraw is non-spending: amount = 0
   const vaultTokenAccount =
     params.vaultTokenAccount ??

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import {
   toPublicKey,
   formatVaultStatus,
@@ -27,7 +27,7 @@ export const checkVaultSchema = z.object({
 export type CheckVaultInput = z.infer<typeof checkVaultSchema>;
 
 export async function checkVault(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   input: CheckVaultInput,
 ): Promise<string> {
   try {
@@ -84,7 +84,16 @@ export async function checkVault(
       `## Vault: ${vaultAddress.toBase58()}`,
       `- **Status:** ${formatVaultStatus(vault.status)}`,
       `- **Owner:** ${vault.owner.toBase58()}`,
-      `- **Agent:** ${vault.agent.toBase58()}`,
+      `- **Agents:** ${
+        vault.agents && vault.agents.length > 0
+          ? vault.agents
+              .map(
+                (a) =>
+                  `${a.pubkey.toBase58()} (permissions: ${a.permissions.toString()})`,
+              )
+              .join(", ")
+          : "None"
+      }`,
       `- **Fee Destination:** ${vault.feeDestination.toBase58()}`,
       `- **Created:** ${formatTimestamp(vault.createdAt)}`,
       `- **Total Transactions:** ${formatBN(vault.totalTransactions)}`,
@@ -113,7 +122,7 @@ export async function checkVault(
 export const checkVaultTool = {
   name: "shield_check_vault",
   description:
-    "Check the status and policy configuration of an AgentShield vault. " +
+    "Check the status and policy configuration of an Phalnx vault. " +
     "Provide either the vault address directly, or owner + vaultId to derive it.",
   schema: checkVaultSchema,
   handler: checkVault,

@@ -41,7 +41,7 @@ interface ProtectionResponse {
 }
 
 /**
- * GET /api/actions/protection — Returns AgentShield protection model and templates.
+ * GET /api/actions/protection — Returns Phalnx protection model and templates.
  *
  * Pure data endpoint — no heavy dependencies, no blockchain calls.
  * Suitable for marketing pages, developer portals, and integration docs.
@@ -49,7 +49,7 @@ interface ProtectionResponse {
 protection.get("/api/actions/protection", (c) => {
   const response: ProtectionResponse = {
     protection: {
-      name: "AgentShield",
+      name: "Phalnx",
       description:
         "On-chain guardrails for AI agents on Solana. Your policies are " +
         "enforced by Solana validators, not software promises. Even fully " +

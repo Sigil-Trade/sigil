@@ -1,6 +1,6 @@
 import { PublicKey, Connection } from "@solana/web3.js";
 import { AnchorProvider, BN, Program } from "@coral-xyz/anchor";
-import { AgentShieldClient } from "../client";
+import { PhalnxClient } from "../client";
 import { getPendingPolicyPDA, fetchPendingPolicy } from "../accounts";
 import { IDL } from "../idl-json";
 import type {
@@ -102,9 +102,9 @@ function toQueueParams(params: TimelockPolicyParams): QueuePolicyUpdateParams {
 }
 
 /**
- * Create an AgentShieldClient configured with the owner wallet.
+ * Create an PhalnxClient configured with the owner wallet.
  */
-function createOwnerClient(ctx: TimelockContext): AgentShieldClient {
+function createOwnerClient(ctx: TimelockContext): PhalnxClient {
   const anchorWallet = {
     publicKey: ctx.ownerWallet.publicKey,
     signTransaction: ctx.ownerWallet.signTransaction.bind(ctx.ownerWallet),
@@ -113,11 +113,7 @@ function createOwnerClient(ctx: TimelockContext): AgentShieldClient {
       ((txs: any[]) =>
         Promise.all(txs.map((tx: any) => ctx.ownerWallet.signTransaction(tx)))),
   };
-  return new AgentShieldClient(
-    ctx.connection,
-    anchorWallet as any,
-    ctx.programId,
-  );
+  return new PhalnxClient(ctx.connection, anchorWallet as any, ctx.programId);
 }
 
 /**
@@ -195,7 +191,7 @@ export async function fetchPendingPolicyStatus(
 /**
  * Create a VaultManager for ergonomic repeated timelock operations.
  *
- * Creates a single AgentShieldClient and reuses it across calls, avoiding
+ * Creates a single PhalnxClient and reuses it across calls, avoiding
  * per-call client construction overhead.
  *
  * @example

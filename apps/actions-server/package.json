@@ -1,7 +1,7 @@
 {
-  "name": "@agent-shield/actions-server",
+  "name": "@phalnx/actions-server",
   "version": "0.1.2",
-  "description": "Solana Actions server for AgentShield vault provisioning via Blinks",
+  "description": "Solana Actions server for Phalnx vault provisioning via Blinks",
   "private": true,
   "main": "dist/index.js",
   "scripts": {
@@ -14,7 +14,7 @@
     "deploy:preview": "vercel"
   },
   "dependencies": {
-    "@agent-shield/sdk": "workspace:*",
+    "@phalnx/sdk": "workspace:*",
     "@coral-xyz/anchor": "^0.32.1",
     "@hono/node-server": "^1.13.0",
     "@solana/actions": "^1.6.0",

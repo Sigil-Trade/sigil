@@ -82,7 +82,7 @@ describe("shield_open_position", () => {
         leverageBps: 20000,
       },
     );
-    expect(result).to.include("AGENTSHIELD_AGENT_KEYPAIR_PATH is required");
+    expect(result).to.include("PHALNX_AGENT_KEYPAIR_PATH is required");
   });
 
   it("returns error on leverage violation", async () => {

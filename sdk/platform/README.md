@@ -1,13 +1,13 @@
-# @agent-shield/platform
+# @phalnx/platform
 
-Platform client for AgentShield — request TEE wallet provisioning via Solana Actions endpoints. Zero runtime dependencies.
+Platform client for Phalnx — request TEE wallet provisioning via Solana Actions endpoints. Zero runtime dependencies.
 
-`@agent-shield/platform` is a lightweight HTTP client that lets AI agents request protected wallet provisioning through AgentShield's Solana Actions (Blinks) API. It generates Action URLs, Blink URLs, submits provision requests, and polls for results.
+`@phalnx/platform` is a lightweight HTTP client that lets AI agents request protected wallet provisioning through Phalnx's Solana Actions (Blinks) API. It generates Action URLs, Blink URLs, submits provision requests, and polls for results.
 
 ## Installation
 
 ```bash
-npm install @agent-shield/platform
+npm install @phalnx/platform
 ```
 
 Zero runtime dependencies. Uses the native `fetch` API (Node.js 18+).
@@ -15,10 +15,10 @@ Zero runtime dependencies. Uses the native `fetch` API (Node.js 18+).
 ## Quick Start
 
 ```typescript
-import { AgentShieldPlatform } from "@agent-shield/platform";
+import { PhalnxPlatform } from "@phalnx/platform";
 
 // 1. Create a platform client
-const platform = new AgentShieldPlatform("https://agent-middleware.vercel.app");
+const platform = new PhalnxPlatform("https://agent-middleware.vercel.app");
 
 // 2. Generate an Action URL for the user to sign
 const actionUrl = platform.getProvisionActionUrl({ dailyCap: 500 });
@@ -40,9 +40,9 @@ console.log(result.agentPubkey);   // Agent signing key
 
 ## API Reference
 
-### `new AgentShieldPlatform(baseUrl)`
+### `new PhalnxPlatform(baseUrl)`
 
-Create a platform client pointing to an AgentShield Actions server.
+Create a platform client pointing to an Phalnx Actions server.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
@@ -142,15 +142,15 @@ interface ActionMetadata {
 
 | Package | Description |
 |---------|-------------|
-| [`@agent-shield/sdk`](https://www.npmjs.com/package/@agent-shield/sdk) | On-chain guardrails — `withVault()` primary API |
-| [`@agent-shield/core`](https://www.npmjs.com/package/@agent-shield/core) | Pure TypeScript policy engine |
-| [`@agent-shield/mcp`](https://www.npmjs.com/package/@agent-shield/mcp) | MCP server for AI tools |
+| [`@phalnx/sdk`](https://www.npmjs.com/package/@phalnx/sdk) | On-chain guardrails — `withVault()` primary API |
+| [`@phalnx/core`](https://www.npmjs.com/package/@phalnx/core) | Pure TypeScript policy engine |
+| [`@phalnx/mcp`](https://www.npmjs.com/package/@phalnx/mcp) | MCP server for AI tools |
 
 ## Support
 
 - X/Twitter: [@MightieMags](https://x.com/MightieMags)
 - Telegram: [MightyMags](https://t.me/MightyMags)
-- Issues: [GitHub Issues](https://github.com/Kaleb-Rupe/agentshield/issues)
+- Issues: [GitHub Issues](https://github.com/Kaleb-Rupe/phalnx/issues)
 
 ## License
 

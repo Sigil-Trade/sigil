@@ -491,7 +491,7 @@ describe("x402 — shieldedFetch()", () => {
         USDC_MINT,
         86_400_000,
       );
-      // signTransaction records the spend via the shield interceptor
+      // signTransaction records the spend via the policy interceptor
       expect(spentAfter > spentBefore).to.be.true;
     });
 

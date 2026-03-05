@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { toPublicKey, toBN } from "../utils";
 import { formatError } from "../errors";
 import {
@@ -27,7 +27,7 @@ function parseSide(
 }
 
 export async function cancelLimitOrder(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   config: McpConfig,
   input: CancelLimitOrderInput,
   custodyWallet?: CustodyWalletLike | null,
@@ -82,8 +82,8 @@ export async function cancelLimitOrder(
 export const cancelLimitOrderTool = {
   name: "shield_cancel_limit_order",
   description:
-    "Cancel a limit order on Flash Trade through an AgentShield vault. " +
-    "Requires AGENTSHIELD_AGENT_KEYPAIR_PATH. " +
+    "Cancel a limit order on Flash Trade through an Phalnx vault. " +
+    "Requires PHALNX_AGENT_KEYPAIR_PATH. " +
     "Non-spending: decrements position counter.",
   schema: cancelLimitOrderSchema,
   handler: cancelLimitOrder,

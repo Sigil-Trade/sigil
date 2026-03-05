@@ -5,16 +5,16 @@ import { getOrCreateShieldedWallet } from "../client-factory";
  * remaining budget into agent context.
  */
 export const spendTrackingProvider = {
-  name: "AGENT_SHIELD_SPEND_TRACKING",
+  name: "PHALNX_SPEND_TRACKING",
   description:
-    "Provides per-token spending data and remaining budget from the shield wrapper",
+    "Provides per-token spending data and remaining budget from the Phalnx policy wrapper",
 
   get: async (runtime: any, _message: any, _state: any) => {
     try {
       const { wallet } = await getOrCreateShieldedWallet(runtime);
       const summary = wallet.getSpendingSummary();
 
-      const lines = [`AgentShield Spending:`];
+      const lines = [`Phalnx Spending:`];
 
       for (const t of summary.tokens) {
         const label = t.symbol ?? t.mint.slice(0, 8) + "...";
@@ -50,7 +50,7 @@ export const spendTrackingProvider = {
       };
     } catch (error: any) {
       return {
-        text: `AgentShield: Unable to fetch spend data — ${error.message}`,
+        text: `Phalnx: Unable to fetch spend data — ${error.message}`,
         values: {},
       };
     }

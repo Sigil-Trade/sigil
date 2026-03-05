@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { formatError } from "../errors";
 import {
   loadAgentKeypair,
@@ -16,7 +16,7 @@ export type CancelRecurringOrderInput = z.infer<
 >;
 
 export async function cancelRecurringOrder(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   config: McpConfig,
   input: CancelRecurringOrderInput,
   custodyWallet?: CustodyWalletLike | null,

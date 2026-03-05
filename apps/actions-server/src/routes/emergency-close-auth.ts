@@ -41,7 +41,7 @@ emergencyCloseAuth.get("/api/actions/emergency-close-auth", (c) => {
 /**
  * POST /api/actions/emergency-close-auth — Builds unsigned revoke_agent tx.
  * Body: { account: string }
- * Query: vaultId (required)
+ * Query: vaultId (required), agentPubkey (required)
  */
 emergencyCloseAuth.post("/api/actions/emergency-close-auth", async (c) => {
   try {
@@ -70,6 +70,26 @@ emergencyCloseAuth.post("/api/actions/emergency-close-auth", async (c) => {
       );
     }
 
+    const agentPubkeyStr = c.req.query("agentPubkey");
+    if (!agentPubkeyStr) {
+      return c.json(
+        { error: "Missing 'agentPubkey' query parameter" },
+        400,
+        ACTIONS_CORS_HEADERS,
+      );
+    }
+
+    let agentToRemove: InstanceType<typeof PublicKey>;
+    try {
+      agentToRemove = new PublicKey(agentPubkeyStr);
+    } catch {
+      return c.json(
+        { error: "Invalid 'agentPubkey': not a valid public key" },
+        400,
+        ACTIONS_CORS_HEADERS,
+      );
+    }
+
     const vaultIdStr = c.req.query("vaultId");
     if (vaultIdStr === undefined || vaultIdStr === null || vaultIdStr === "") {
       return c.json(
@@ -91,6 +111,7 @@ emergencyCloseAuth.post("/api/actions/emergency-close-auth", async (c) => {
     const { transaction, vaultAddress } =
       await buildEmergencyCloseAuthTransaction({
         owner,
+        agentToRemove,
         vaultId,
       });
 
@@ -106,7 +127,7 @@ emergencyCloseAuth.post("/api/actions/emergency-close-auth", async (c) => {
     );
   } catch (error) {
     console.error(
-      "[AgentShield] emergency-freeze error:",
+      "[Phalnx] emergency-freeze error:",
       error instanceof Error ? error.message : String(error),
     );
     return c.json(

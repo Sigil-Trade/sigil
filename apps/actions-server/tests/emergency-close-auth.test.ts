@@ -19,12 +19,35 @@ describe("Emergency Vault Freeze Route", () => {
   });
 
   describe("POST /api/actions/emergency-close-auth", () => {
+    const agentPubkey = "6wrkKTM2pjkcCAbMfRz2j3AXspavu6pq3ePcuJUE3Azp";
+
+    it("returns 400 without agentPubkey", async () => {
+      const res = await app.request(
+        "/api/actions/emergency-close-auth?vaultId=0",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            account: "11111111111111111111111111111111",
+          }),
+        },
+      );
+      expect(res.status).to.equal(400);
+      const body = (await res.json()) as any;
+      expect(body.error).to.include("agentPubkey");
+    });
+
     it("returns 400 without vaultId", async () => {
-      const res = await app.request("/api/actions/emergency-close-auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ account: "11111111111111111111111111111111" }),
-      });
+      const res = await app.request(
+        `/api/actions/emergency-close-auth?agentPubkey=${agentPubkey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            account: "11111111111111111111111111111111",
+          }),
+        },
+      );
       expect(res.status).to.equal(400);
       const body = (await res.json()) as any;
       expect(body.error).to.include("vaultId");
@@ -32,7 +55,7 @@ describe("Emergency Vault Freeze Route", () => {
 
     it("returns 400 without account", async () => {
       const res = await app.request(
-        "/api/actions/emergency-close-auth?vaultId=0",
+        `/api/actions/emergency-close-auth?vaultId=0&agentPubkey=${agentPubkey}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -46,7 +69,7 @@ describe("Emergency Vault Freeze Route", () => {
 
     it("returns unsigned transaction with valid params", async () => {
       const res = await app.request(
-        "/api/actions/emergency-close-auth?vaultId=0",
+        `/api/actions/emergency-close-auth?vaultId=0&agentPubkey=${agentPubkey}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

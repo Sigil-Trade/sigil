@@ -1,22 +1,22 @@
-# @agent-shield/custody-crossmint
+# @phalnx/custody-crossmint
 
-Crossmint TEE custody adapter for AgentShield — hardware-enclave signing for AI agents. The private key never leaves the Trusted Execution Environment.
+Crossmint TEE custody adapter for Phalnx — hardware-enclave signing for AI agents. The private key never leaves the Trusted Execution Environment.
 
-`@agent-shield/custody-crossmint` wraps Crossmint's Intel TDX-backed wallets into a standard `WalletLike` interface that works with `shieldWallet()` and the rest of the AgentShield ecosystem. Your agent gets a signing interface; the private key stays in hardware.
+`@phalnx/custody-crossmint` wraps Crossmint's Intel TDX-backed wallets into a standard `WalletLike` interface that works with `shieldWallet()` and the rest of the Phalnx ecosystem. Your agent gets a signing interface; the private key stays in hardware.
 
 ## Installation
 
 ```bash
-npm install @agent-shield/custody-crossmint @solana/web3.js
+npm install @phalnx/custody-crossmint @solana/web3.js
 ```
 
-Optional peer dependency: `@agent-shield/sdk` (for `shieldWallet()` integration)
+Optional peer dependency: `@phalnx/sdk` (for `shieldWallet()` integration)
 
 ## Quick Start
 
 ```typescript
-import { shieldWallet } from "@agent-shield/sdk";
-import { crossmint } from "@agent-shield/custody-crossmint";
+import { shieldWallet } from "@phalnx/sdk";
+import { crossmint } from "@phalnx/custody-crossmint";
 
 // Create a TEE-backed wallet and wrap it with spending controls
 const wallet = shieldWallet(
@@ -31,8 +31,8 @@ await wallet.signTransaction(tx);
 ### Zero-Config from Environment
 
 ```typescript
-import { shieldWallet } from "@agent-shield/sdk";
-import { crossmintFromEnv } from "@agent-shield/custody-crossmint";
+import { shieldWallet } from "@phalnx/sdk";
+import { crossmintFromEnv } from "@phalnx/custody-crossmint";
 
 // Reads CROSSMINT_API_KEY from environment
 const wallet = shieldWallet(await crossmintFromEnv(), { maxSpend: "500 USDC/day" });
@@ -112,8 +112,8 @@ interface CrossmintWalletConfig {
 ## Integration with shieldWallet()
 
 ```typescript
-import { shieldWallet, ShieldDeniedError } from "@agent-shield/sdk";
-import { crossmint } from "@agent-shield/custody-crossmint";
+import { shieldWallet, ShieldDeniedError } from "@phalnx/sdk";
+import { crossmint } from "@phalnx/custody-crossmint";
 
 const teeWallet = await crossmint({ apiKey: "sk_..." });
 const protectedWallet = shieldWallet(teeWallet, {
@@ -138,16 +138,16 @@ try {
 
 | Package | Description |
 |---------|-------------|
-| [`@agent-shield/sdk`](https://www.npmjs.com/package/@agent-shield/sdk) | On-chain guardrails — `withVault()` primary API |
-| [`@agent-shield/core`](https://www.npmjs.com/package/@agent-shield/core) | Pure TypeScript policy engine |
-| [`@agent-shield/mcp`](https://www.npmjs.com/package/@agent-shield/mcp) | MCP server for AI tools |
-| [`@agent-shield/plugin-elizaos`](https://www.npmjs.com/package/@agent-shield/plugin-elizaos) | ElizaOS integration (supports Crossmint custody) |
+| [`@phalnx/sdk`](https://www.npmjs.com/package/@phalnx/sdk) | On-chain guardrails — `withVault()` primary API |
+| [`@phalnx/core`](https://www.npmjs.com/package/@phalnx/core) | Pure TypeScript policy engine |
+| [`@phalnx/mcp`](https://www.npmjs.com/package/@phalnx/mcp) | MCP server for AI tools |
+| [`@phalnx/plugin-elizaos`](https://www.npmjs.com/package/@phalnx/plugin-elizaos) | ElizaOS integration (supports Crossmint custody) |
 
 ## Support
 
 - X/Twitter: [@MightieMags](https://x.com/MightieMags)
 - Telegram: [MightyMags](https://t.me/MightyMags)
-- Issues: [GitHub Issues](https://github.com/Kaleb-Rupe/agentshield/issues)
+- Issues: [GitHub Issues](https://github.com/Kaleb-Rupe/phalnx/issues)
 
 ## License
 

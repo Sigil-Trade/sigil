@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { toPublicKey } from "../utils";
 import { formatError } from "../errors";
 import type { McpConfig } from "../config";
@@ -15,7 +15,7 @@ export const squadsExecuteSchema = z.object({
 export type SquadsExecuteInput = z.infer<typeof squadsExecuteSchema>;
 
 export async function squadsExecute(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   config: McpConfig,
   input: SquadsExecuteInput,
 ): Promise<string> {
@@ -36,7 +36,7 @@ export async function squadsExecute(
       `- **Executor:** ${memberKeypair.publicKey.toBase58()}`,
       `- **Transaction:** ${sig}`,
       "",
-      "The AgentShield admin action has been executed through Squads governance.",
+      "The Phalnx admin action has been executed through Squads governance.",
     ].join("\n");
   } catch (error) {
     return formatError(error);

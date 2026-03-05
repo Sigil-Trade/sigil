@@ -6,12 +6,13 @@ import {
   getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
 import type {
-  AgentShield,
+  Phalnx,
   InitializeVaultParams,
   UpdatePolicyParams,
   QueuePolicyUpdateParams,
   AgentTransferParams,
   AuthorizeParams,
+  ConstraintEntry,
 } from "./types";
 import {
   getVaultPDA,
@@ -19,10 +20,13 @@ import {
   getTrackerPDA,
   getSessionPDA,
   getPendingPolicyPDA,
+  getEscrowPDA,
+  getConstraintsPDA,
+  getPendingConstraintsPDA,
 } from "./accounts";
 
 export function buildInitializeVault(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   owner: PublicKey,
   params: InitializeVaultParams,
 ) {
@@ -55,7 +59,7 @@ export function buildInitializeVault(
 }
 
 export function buildDepositFunds(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   owner: PublicKey,
   vault: PublicKey,
   mint: PublicKey,
@@ -77,19 +81,20 @@ export function buildDepositFunds(
 }
 
 export function buildRegisterAgent(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   owner: PublicKey,
   vault: PublicKey,
   agent: PublicKey,
+  permissions: BN,
 ) {
-  return program.methods.registerAgent(agent).accounts({
+  return program.methods.registerAgent(agent, permissions).accounts({
     owner,
     vault,
   } as any);
 }
 
 export function buildUpdatePolicy(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   owner: PublicKey,
   vault: PublicKey,
   params: UpdatePolicyParams,
@@ -121,7 +126,7 @@ export function buildUpdatePolicy(
  * Build a validate_and_authorize instruction.
  */
 export function buildValidateAndAuthorize(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   agent: PublicKey,
   vault: PublicKey,
   vaultTokenAccount: PublicKey,
@@ -164,7 +169,7 @@ export function buildValidateAndAuthorize(
 }
 
 export function buildFinalizeSession(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   payer: PublicKey,
   vault: PublicKey,
   agent: PublicKey,
@@ -192,30 +197,34 @@ export function buildFinalizeSession(
 }
 
 export function buildRevokeAgent(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   owner: PublicKey,
   vault: PublicKey,
+  agentToRemove: PublicKey,
 ) {
-  return program.methods.revokeAgent().accounts({
+  return program.methods.revokeAgent(agentToRemove).accounts({
     owner,
     vault,
   } as any);
 }
 
 export function buildReactivateVault(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   owner: PublicKey,
   vault: PublicKey,
   newAgent?: PublicKey | null,
+  newAgentPermissions?: BN | null,
 ) {
-  return program.methods.reactivateVault(newAgent ?? null).accounts({
-    owner,
-    vault,
-  } as any);
+  return program.methods
+    .reactivateVault(newAgent ?? null, newAgentPermissions ?? null)
+    .accounts({
+      owner,
+      vault,
+    } as any);
 }
 
 export function buildWithdrawFunds(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   owner: PublicKey,
   vault: PublicKey,
   mint: PublicKey,
@@ -235,7 +244,7 @@ export function buildWithdrawFunds(
 }
 
 export function buildCloseVault(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   owner: PublicKey,
   vault: PublicKey,
 ) {
@@ -252,7 +261,7 @@ export function buildCloseVault(
 }
 
 export function buildQueuePolicyUpdate(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   owner: PublicKey,
   vault: PublicKey,
   params: QueuePolicyUpdateParams,
@@ -284,7 +293,7 @@ export function buildQueuePolicyUpdate(
 }
 
 export function buildApplyPendingPolicy(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   owner: PublicKey,
   vault: PublicKey,
 ) {
@@ -300,7 +309,7 @@ export function buildApplyPendingPolicy(
 }
 
 export function buildCancelPendingPolicy(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   owner: PublicKey,
   vault: PublicKey,
 ) {
@@ -317,7 +326,7 @@ export function buildCancelPendingPolicy(
  * Build an agent_transfer instruction.
  */
 export function buildAgentTransfer(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   agent: PublicKey,
   vault: PublicKey,
   params: AgentTransferParams,
@@ -345,7 +354,7 @@ export function buildAgentTransfer(
  * after keeper-executed trigger orders or filled limit orders.
  */
 export function buildSyncPositions(
-  program: Program<AgentShield>,
+  program: Program<Phalnx>,
   owner: PublicKey,
   vault: PublicKey,
   actualPositions: number,
@@ -353,5 +362,244 @@ export function buildSyncPositions(
   return program.methods.syncPositions(actualPositions).accounts({
     owner,
     vault,
+  } as any);
+}
+
+// --- Multi-Agent Instructions ---
+
+export function buildUpdateAgentPermissions(
+  program: Program<Phalnx>,
+  owner: PublicKey,
+  vault: PublicKey,
+  agent: PublicKey,
+  newPermissions: BN,
+) {
+  const [policy] = getPolicyPDA(vault, program.programId);
+
+  return program.methods
+    .updateAgentPermissions(agent, newPermissions)
+    .accounts({
+      owner,
+      vault,
+      policy,
+    } as any);
+}
+
+// --- Escrow Instructions ---
+
+export function buildCreateEscrow(
+  program: Program<Phalnx>,
+  agent: PublicKey,
+  sourceVault: PublicKey,
+  destinationVault: PublicKey,
+  escrowId: BN,
+  amount: BN,
+  expiresAt: BN,
+  conditionHash: number[],
+  tokenMint: PublicKey,
+  sourceVaultAta: PublicKey,
+  protocolTreasuryAta?: PublicKey | null,
+  feeDestinationAta?: PublicKey | null,
+) {
+  const [policy] = getPolicyPDA(sourceVault, program.programId);
+  const [tracker] = getTrackerPDA(sourceVault, program.programId);
+  const [escrow] = getEscrowPDA(
+    sourceVault,
+    destinationVault,
+    escrowId,
+    program.programId,
+  );
+  const escrowAta = getAssociatedTokenAddressSync(tokenMint, escrow, true);
+
+  return program.methods
+    .createEscrow(escrowId, amount, expiresAt, conditionHash)
+    .accounts({
+      agent,
+      sourceVault,
+      policy,
+      tracker,
+      destinationVault,
+      escrow,
+      sourceVaultAta,
+      escrowAta,
+      protocolTreasuryAta: protocolTreasuryAta ?? null,
+      feeDestinationAta: feeDestinationAta ?? null,
+      tokenMint,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+      associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+    } as any);
+}
+
+export function buildSettleEscrow(
+  program: Program<Phalnx>,
+  destinationAgent: PublicKey,
+  destinationVault: PublicKey,
+  sourceVault: PublicKey,
+  escrow: PublicKey,
+  escrowAta: PublicKey,
+  destinationVaultAta: PublicKey,
+  tokenMint: PublicKey,
+  proof: Buffer,
+) {
+  return program.methods.settleEscrow(proof).accounts({
+    destinationAgent,
+    destinationVault,
+    sourceVault,
+    escrow,
+    escrowAta,
+    destinationVaultAta,
+    tokenMint,
+    tokenProgram: TOKEN_PROGRAM_ID,
+  } as any);
+}
+
+export function buildRefundEscrow(
+  program: Program<Phalnx>,
+  sourceSigner: PublicKey,
+  sourceVault: PublicKey,
+  escrow: PublicKey,
+  escrowAta: PublicKey,
+  sourceVaultAta: PublicKey,
+  tokenMint: PublicKey,
+) {
+  return program.methods.refundEscrow().accounts({
+    sourceSigner,
+    sourceVault,
+    escrow,
+    escrowAta,
+    sourceVaultAta,
+    tokenMint,
+    tokenProgram: TOKEN_PROGRAM_ID,
+  } as any);
+}
+
+export function buildCloseSettledEscrow(
+  program: Program<Phalnx>,
+  signer: PublicKey,
+  sourceVault: PublicKey,
+  destinationVaultKey: PublicKey,
+  escrow: PublicKey,
+  escrowId: BN,
+) {
+  return program.methods.closeSettledEscrow(escrowId).accounts({
+    signer,
+    sourceVault,
+    destinationVaultKey,
+    escrow,
+  } as any);
+}
+
+// --- Constraint Instructions ---
+
+export function buildCreateInstructionConstraints(
+  program: Program<Phalnx>,
+  owner: PublicKey,
+  vault: PublicKey,
+  entries: ConstraintEntry[],
+) {
+  const [policy] = getPolicyPDA(vault, program.programId);
+  const [constraints] = getConstraintsPDA(vault, program.programId);
+
+  return program.methods.createInstructionConstraints(entries as any).accounts({
+    owner,
+    vault,
+    policy,
+    constraints,
+    systemProgram: SystemProgram.programId,
+  } as any);
+}
+
+export function buildCloseInstructionConstraints(
+  program: Program<Phalnx>,
+  owner: PublicKey,
+  vault: PublicKey,
+) {
+  const [policy] = getPolicyPDA(vault, program.programId);
+  const [constraints] = getConstraintsPDA(vault, program.programId);
+
+  return program.methods.closeInstructionConstraints().accounts({
+    owner,
+    vault,
+    policy,
+    constraints,
+  } as any);
+}
+
+export function buildUpdateInstructionConstraints(
+  program: Program<Phalnx>,
+  owner: PublicKey,
+  vault: PublicKey,
+  entries: ConstraintEntry[],
+) {
+  const [policy] = getPolicyPDA(vault, program.programId);
+  const [constraints] = getConstraintsPDA(vault, program.programId);
+
+  return program.methods.updateInstructionConstraints(entries as any).accounts({
+    owner,
+    vault,
+    policy,
+    constraints,
+  } as any);
+}
+
+export function buildQueueConstraintsUpdate(
+  program: Program<Phalnx>,
+  owner: PublicKey,
+  vault: PublicKey,
+  entries: ConstraintEntry[],
+) {
+  const [policy] = getPolicyPDA(vault, program.programId);
+  const [constraints] = getConstraintsPDA(vault, program.programId);
+  const [pendingConstraints] = getPendingConstraintsPDA(
+    vault,
+    program.programId,
+  );
+
+  return program.methods.queueConstraintsUpdate(entries as any).accounts({
+    owner,
+    vault,
+    policy,
+    constraints,
+    pendingConstraints,
+    systemProgram: SystemProgram.programId,
+  } as any);
+}
+
+export function buildApplyConstraintsUpdate(
+  program: Program<Phalnx>,
+  owner: PublicKey,
+  vault: PublicKey,
+) {
+  const [policy] = getPolicyPDA(vault, program.programId);
+  const [constraints] = getConstraintsPDA(vault, program.programId);
+  const [pendingConstraints] = getPendingConstraintsPDA(
+    vault,
+    program.programId,
+  );
+
+  return program.methods.applyConstraintsUpdate().accounts({
+    owner,
+    vault,
+    policy,
+    constraints,
+    pendingConstraints,
+  } as any);
+}
+
+export function buildCancelConstraintsUpdate(
+  program: Program<Phalnx>,
+  owner: PublicKey,
+  vault: PublicKey,
+) {
+  const [pendingConstraints] = getPendingConstraintsPDA(
+    vault,
+    program.programId,
+  );
+
+  return program.methods.cancelConstraintsUpdate().accounts({
+    owner,
+    vault,
+    pendingConstraints,
   } as any);
 }

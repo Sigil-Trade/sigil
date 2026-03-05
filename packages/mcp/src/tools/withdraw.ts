@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { toPublicKey, toBN } from "../utils";
 import { formatError } from "../errors";
 
@@ -12,7 +12,7 @@ export const withdrawSchema = z.object({
 export type WithdrawInput = z.infer<typeof withdrawSchema>;
 
 export async function withdraw(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   input: WithdrawInput,
 ): Promise<string> {
   try {
@@ -36,8 +36,7 @@ export async function withdraw(
 
 export const withdrawTool = {
   name: "shield_withdraw",
-  description:
-    "Withdraw tokens from an AgentShield vault. Owner-only operation.",
+  description: "Withdraw tokens from an Phalnx vault. Owner-only operation.",
   schema: withdrawSchema,
   handler: withdraw,
 };

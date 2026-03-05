@@ -4,11 +4,11 @@
 
 | Package | Supported |
 |---------|-----------|
-| @agent-shield/sdk >= 0.4.0 | Yes |
-| @agent-shield/mcp >= 0.4.0 | Yes |
-| @agent-shield/core >= 0.1.0 | Yes |
-| @agent-shield/sdk >= 0.5.0 | Yes |
-| On-chain program (agent_shield) | Yes |
+| @phalnx/sdk >= 0.4.0 | Yes |
+| @phalnx/mcp >= 0.4.0 | Yes |
+| @phalnx/core >= 0.1.0 | Yes |
+| @phalnx/sdk >= 0.5.0 | Yes |
+| On-chain program (phalnx) | Yes |
 
 ## Reporting a Vulnerability
 
@@ -17,7 +17,7 @@
 Please report security issues via one of the following channels:
 
 - **Telegram:** [@MightyMags](https://t.me/MightyMags) (preferred for urgent issues)
-- **Email:** Open a [private security advisory](https://github.com/Kaleb-Rupe/agentshield/security/advisories/new) on this repository
+- **Email:** Open a [private security advisory](https://github.com/Kaleb-Rupe/phalnx/security/advisories/new) on this repository
 
 Include as much detail as possible:
 
@@ -36,7 +36,7 @@ Include as much detail as possible:
 
 The following are in scope for security reports:
 
-- On-chain Anchor program (`programs/agent-shield/`)
+- On-chain Anchor program (`programs/phalnx/`)
 - SDK transaction construction (`sdk/typescript/`)
 - MCP server tool handlers (`packages/mcp/`)
 - Serverless API endpoints (`api/`)

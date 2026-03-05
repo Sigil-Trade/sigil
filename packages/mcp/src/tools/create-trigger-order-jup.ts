@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { formatError } from "../errors";
 import {
   loadAgentKeypair,
@@ -26,7 +26,7 @@ export type CreateTriggerOrderJupInput = z.input<
 >;
 
 export async function createTriggerOrderJup(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   config: McpConfig,
   input: CreateTriggerOrderJupInput,
   custodyWallet?: CustodyWalletLike | null,

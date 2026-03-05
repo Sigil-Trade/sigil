@@ -33,8 +33,8 @@ fund.get("/api/actions/fund", (c) => {
   const response = {
     type: "action",
     icon: `${new URL(c.req.url).origin}/icon.png`,
-    title: "Fund AgentShield Wallet",
-    description: `Send${amountLabel} ${tokenLabel} to AgentShield wallet ${destination ? destination.slice(0, 8) + "..." : ""}`,
+    title: "Fund Phalnx Wallet",
+    description: `Send${amountLabel} ${tokenLabel} to Phalnx wallet ${destination ? destination.slice(0, 8) + "..." : ""}`,
     label: `Send ${tokenLabel}`,
   };
 
@@ -190,7 +190,7 @@ fund.post("/api/actions/fund", async (c) => {
       ACTIONS_CORS_HEADERS,
     );
   } catch (error) {
-    console.error("[AgentShield] fund error:", error);
+    console.error("[Phalnx] fund error:", error);
     return c.json(
       { error: "Internal server error" },
       500,

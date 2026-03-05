@@ -3,7 +3,7 @@ import { getOrCreateShieldedWallet } from "../client-factory";
 export const transactionHistoryAction = {
   name: "SHIELD_TRANSACTION_HISTORY",
   description:
-    "Show recent AgentShield transaction activity — per-token usage " +
+    "Show recent Phalnx transaction activity — per-token usage " +
     "percentages and rate limit status.",
   similes: [
     "transaction history",
@@ -43,7 +43,7 @@ export const transactionHistoryAction = {
       const summary = wallet.getSpendingSummary();
 
       const lines = [
-        `=== AgentShield Transaction History ===`,
+        `=== Phalnx Transaction History ===`,
         `Enforcement: ${summary.isPaused ? "PAUSED" : "ACTIVE"}`,
         ``,
         `--- Per-Token Usage ---`,
@@ -93,7 +93,7 @@ export const transactionHistoryAction = {
       {
         user: "{{agent}}",
         content: {
-          text: "=== AgentShield Transaction History ===\nEnforcement: ACTIVE\n\n--- Per-Token Usage ---\n  USDC:\n    Spent: 200000000 / 500000000\n    Usage: 40%\n    Remaining: 300000000\n    Window: 24h rolling",
+          text: "=== Phalnx Transaction History ===\nEnforcement: ACTIVE\n\n--- Per-Token Usage ---\n  USDC:\n    Spent: 200000000 / 500000000\n    Usage: 40%\n    Remaining: 300000000\n    Window: 24h rolling",
         },
       },
     ],

@@ -35,7 +35,7 @@ import {
 import bs58 from "bs58";
 import { SuccessfulTxSimulationResponse } from "@coral-xyz/anchor/dist/cjs/utils/rpc";
 import * as path from "path";
-import { AgentShield } from "../../target/types/agent_shield";
+import { Phalnx } from "../../target/types/phalnx";
 import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -51,7 +51,7 @@ const PROGRAM_ID = new PublicKey(
 );
 const PROGRAM_SO_PATH = path.resolve(
   __dirname,
-  "../../target/deploy/agent_shield.so",
+  "../../target/deploy/phalnx.so",
 );
 
 // ─── Connection proxy ────────────────────────────────────────────────────────
@@ -270,7 +270,7 @@ export class LiteSVMProvider implements Provider {
 export interface TestEnv {
   svm: LiteSVM;
   provider: LiteSVMProvider;
-  program: Program<AgentShield>;
+  program: Program<Phalnx>;
   connection: Connection;
 }
 
@@ -300,8 +300,8 @@ export function createTestEnv(): TestEnv {
   const provider = new LiteSVMProvider(svm);
   anchor.setProvider(provider as unknown as Provider);
 
-  const program = new Program<AgentShield>(
-    require("../../target/idl/agent_shield.json"),
+  const program = new Program<Phalnx>(
+    require("../../target/idl/phalnx.json"),
     provider as unknown as Provider,
   );
 

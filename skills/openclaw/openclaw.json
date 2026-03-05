@@ -2,11 +2,11 @@
   "agents": {
     "default": {
       "mcp": {
-        "agent-shield": {
+        "phalnx": {
           "command": "npx",
-          "args": ["@agent-shield/mcp@0.4.7"],
+          "args": ["@phalnx/mcp@0.4.7"],
           "env": {
-            "AGENTSHIELD_RPC_URL": "https://api.devnet.solana.com"
+            "PHALNX_RPC_URL": "https://api.devnet.solana.com"
           }
         }
       }

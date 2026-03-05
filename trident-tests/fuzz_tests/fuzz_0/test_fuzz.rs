@@ -1,4 +1,4 @@
-// Trident fuzz test for AgentShield
+// Trident fuzz test for Phalnx
 //
 // V3: Stablecoin-only architecture — oracles removed.
 // Uses the trident 0.12.0 API (#[FuzzTestMethods] + #[flow_executor]).
@@ -24,7 +24,7 @@ use trident_fuzz::fuzzing::*;
 
 mod fuzz_accounts;
 
-use agent_shield::state::{
+use phalnx::state::{
     ActionType, AgentVault, PolicyConfig, SessionAuthority, SpendTracker, VaultStatus,
 };
 use anchor_lang::prelude::Pubkey;
@@ -117,7 +117,7 @@ impl FuzzTest {
 
         // ── Step 1: InitializeVault (V3: 11 args, includes maxSlippageBps) ──
 
-        let data = agent_shield::instruction::InitializeVault {
+        let data = phalnx::instruction::InitializeVault {
             vault_id,
             daily_spending_cap_usd: cap,
             max_transaction_size_usd: cap,
@@ -131,7 +131,7 @@ impl FuzzTest {
             max_slippage_bps: 2500, // 25%
         };
 
-        let accounts = agent_shield::accounts::InitializeVault {
+        let accounts = phalnx::accounts::InitializeVault {
             owner,
             vault,
             policy,
@@ -238,8 +238,11 @@ impl FuzzTest {
         let agent = self.fuzz_accounts.agent.insert(&mut self.trident, None);
         self.trident.airdrop(&agent, 5 * LAMPORTS_PER_SOL);
 
-        let reg_data = agent_shield::instruction::RegisterAgent { agent };
-        let reg_accounts = agent_shield::accounts::RegisterAgent { owner, vault };
+        let reg_data = phalnx::instruction::RegisterAgent {
+            agent,
+            permissions: phalnx::state::FULL_PERMISSIONS,
+        };
+        let reg_accounts = phalnx::accounts::RegisterAgent { owner, vault };
         let reg_ix = Instruction::new_with_bytes(
             program_id(),
             &reg_data.data(),
@@ -252,7 +255,7 @@ impl FuzzTest {
 
         // ── Step 6: UpdatePolicy with allowed_destinations ──
 
-        let policy_data = agent_shield::instruction::UpdatePolicy {
+        let policy_data = phalnx::instruction::UpdatePolicy {
             daily_spending_cap_usd: None,
             max_transaction_size_usd: None,
             protocol_mode: None,
@@ -266,7 +269,7 @@ impl FuzzTest {
             max_slippage_bps: None,
         };
 
-        let policy_accounts = agent_shield::accounts::UpdatePolicy {
+        let policy_accounts = phalnx::accounts::UpdatePolicy {
             owner,
             vault,
             policy,
@@ -456,8 +459,8 @@ impl FuzzTest {
         vault_ata: &Pubkey,
         amount: u64,
     ) {
-        let dep_data = agent_shield::instruction::DepositFunds { amount };
-        let dep_accounts = agent_shield::accounts::DepositFunds {
+        let dep_data = phalnx::instruction::DepositFunds { amount };
+        let dep_accounts = phalnx::accounts::DepositFunds {
             owner: *owner,
             vault: *vault,
             mint: *mint,
@@ -554,8 +557,11 @@ impl FuzzTest {
 
         let pre = self.snapshot_vault(&vault);
 
-        let data = agent_shield::instruction::RegisterAgent { agent };
-        let accounts = agent_shield::accounts::RegisterAgent { owner, vault };
+        let data = phalnx::instruction::RegisterAgent {
+            agent,
+            permissions: phalnx::state::FULL_PERMISSIONS,
+        };
+        let accounts = phalnx::accounts::RegisterAgent { owner, vault };
 
         let ix = Instruction::new_with_bytes(
             program_id(),
@@ -586,7 +592,7 @@ impl FuzzTest {
         let pre_vault = self.snapshot_vault(&vault);
         let pre_policy = self.snapshot_policy(&policy);
 
-        let data = agent_shield::instruction::UpdatePolicy {
+        let data = phalnx::instruction::UpdatePolicy {
             daily_spending_cap_usd: Some(new_cap),
             max_transaction_size_usd: Some(new_cap),
             protocol_mode: None,
@@ -600,7 +606,7 @@ impl FuzzTest {
             max_slippage_bps: None,
         };
 
-        let accounts = agent_shield::accounts::UpdatePolicy {
+        let accounts = phalnx::accounts::UpdatePolicy {
             owner,
             vault,
             policy,
@@ -640,8 +646,8 @@ impl FuzzTest {
 
         let pre = self.snapshot_vault(&vault);
 
-        let data = agent_shield::instruction::DepositFunds { amount };
-        let accounts = agent_shield::accounts::DepositFunds {
+        let data = phalnx::instruction::DepositFunds { amount };
+        let accounts = phalnx::accounts::DepositFunds {
             owner,
             vault,
             mint,
@@ -712,7 +718,7 @@ impl FuzzTest {
         let pre_vault = self.snapshot_vault(&vault);
         let pre_policy = self.snapshot_policy(&policy_addr);
 
-        let data = agent_shield::instruction::ValidateAndAuthorize {
+        let data = phalnx::instruction::ValidateAndAuthorize {
             action_type: ActionType::Swap,
             token_mint: mint,
             amount,
@@ -720,7 +726,7 @@ impl FuzzTest {
             leverage_bps: None,
         };
 
-        let accounts = agent_shield::accounts::ValidateAndAuthorize {
+        let accounts = phalnx::accounts::ValidateAndAuthorize {
             agent,
             vault,
             policy: policy_addr,
@@ -801,8 +807,8 @@ impl FuzzTest {
         // INV-3: Check session before finalization
         check_inv3_session_expiry(&Some(session_data), self.current_slot);
 
-        let data = agent_shield::instruction::FinalizeSession { success: true };
-        let accounts = agent_shield::accounts::FinalizeSession {
+        let data = phalnx::instruction::FinalizeSession { success: true };
+        let accounts = phalnx::accounts::FinalizeSession {
             payer: agent,
             vault,
             session,
@@ -858,8 +864,8 @@ impl FuzzTest {
 
         let pre = self.snapshot_vault(&vault);
 
-        let data = agent_shield::instruction::WithdrawFunds { amount };
-        let accounts = agent_shield::accounts::WithdrawFunds {
+        let data = phalnx::instruction::WithdrawFunds { amount };
+        let accounts = phalnx::accounts::WithdrawFunds {
             owner,
             vault,
             mint,
@@ -910,8 +916,8 @@ impl FuzzTest {
         let pre_vault = self.snapshot_vault(&vault);
         let pre_policy = self.snapshot_policy(&policy_addr);
 
-        let data = agent_shield::instruction::AgentTransfer { amount };
-        let accounts = agent_shield::accounts::AgentTransfer {
+        let data = phalnx::instruction::AgentTransfer { amount };
+        let accounts = phalnx::accounts::AgentTransfer {
             agent,
             vault,
             policy: policy_addr,
@@ -955,8 +961,10 @@ impl FuzzTest {
 
         let pre = self.snapshot_vault(&vault);
 
-        let data = agent_shield::instruction::RevokeAgent {};
-        let accounts = agent_shield::accounts::RevokeAgent { owner, vault };
+        let agent = unwrap_or_ret!(self.fuzz_accounts.agent.get(&mut self.trident));
+
+        let data = phalnx::instruction::RevokeAgent { agent_to_remove: agent };
+        let accounts = phalnx::accounts::RevokeAgent { owner, vault };
 
         let ix = Instruction::new_with_bytes(
             program_id(),
@@ -984,8 +992,11 @@ impl FuzzTest {
 
         let pre = self.snapshot_vault(&vault);
 
-        let data = agent_shield::instruction::ReactivateVault { new_agent: None };
-        let accounts = agent_shield::accounts::ReactivateVault { owner, vault };
+        let data = phalnx::instruction::ReactivateVault {
+            new_agent: None,
+            new_agent_permissions: None,
+        };
+        let accounts = phalnx::accounts::ReactivateVault { owner, vault };
 
         let ix = Instruction::new_with_bytes(
             program_id(),
@@ -1024,7 +1035,7 @@ impl FuzzTest {
 
         let pre = self.snapshot_vault(&vault);
 
-        let data = agent_shield::instruction::QueuePolicyUpdate {
+        let data = phalnx::instruction::QueuePolicyUpdate {
             daily_spending_cap_usd: Some(new_cap),
             max_transaction_amount_usd: None,
             protocol_mode: None,
@@ -1038,7 +1049,7 @@ impl FuzzTest {
             max_slippage_bps: None,
         };
 
-        let accounts = agent_shield::accounts::QueuePolicyUpdate {
+        let accounts = phalnx::accounts::QueuePolicyUpdate {
             owner,
             vault,
             policy,
@@ -1075,8 +1086,8 @@ impl FuzzTest {
 
         let pre = self.snapshot_vault(&vault);
 
-        let data = agent_shield::instruction::ApplyPendingPolicy {};
-        let accounts = agent_shield::accounts::ApplyPendingPolicy {
+        let data = phalnx::instruction::ApplyPendingPolicy {};
+        let accounts = phalnx::accounts::ApplyPendingPolicy {
             owner,
             vault,
             policy,
@@ -1111,8 +1122,8 @@ impl FuzzTest {
 
         let pre = self.snapshot_vault(&vault);
 
-        let data = agent_shield::instruction::CancelPendingPolicy {};
-        let accounts = agent_shield::accounts::CancelPendingPolicy {
+        let data = phalnx::instruction::CancelPendingPolicy {};
+        let accounts = phalnx::accounts::CancelPendingPolicy {
             owner,
             vault,
             pending_policy: pending,
@@ -1145,8 +1156,8 @@ impl FuzzTest {
 
         let pre = self.snapshot_vault(&vault);
 
-        let data = agent_shield::instruction::CloseVault {};
-        let accounts = agent_shield::accounts::CloseVault {
+        let data = phalnx::instruction::CloseVault {};
+        let accounts = phalnx::accounts::CloseVault {
             owner,
             vault,
             policy,
@@ -1206,8 +1217,8 @@ impl FuzzTest {
         let policy_addr = unwrap_or_ret!(self.fuzz_accounts.policy.get(&mut self.trident));
         let tracker_addr = unwrap_or_ret!(self.fuzz_accounts.tracker.get(&mut self.trident));
 
-        let data = agent_shield::instruction::FinalizeSession { success: true };
-        let accounts = agent_shield::accounts::FinalizeSession {
+        let data = phalnx::instruction::FinalizeSession { success: true };
+        let accounts = phalnx::accounts::FinalizeSession {
             payer: agent,
             vault,
             session: session_addr,
@@ -1260,8 +1271,8 @@ impl FuzzTest {
         let policy_addr = unwrap_or_ret!(self.fuzz_accounts.policy.get(&mut self.trident));
         let tracker_addr = unwrap_or_ret!(self.fuzz_accounts.tracker.get(&mut self.trident));
 
-        let data = agent_shield::instruction::FinalizeSession { success: true };
-        let accounts = agent_shield::accounts::FinalizeSession {
+        let data = phalnx::instruction::FinalizeSession { success: true };
+        let accounts = phalnx::accounts::FinalizeSession {
             payer: agent,
             vault,
             session: session_addr,

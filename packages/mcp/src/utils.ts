@@ -1,6 +1,6 @@
 import { PublicKey } from "@solana/web3.js";
 import { BN } from "@coral-xyz/anchor";
-import type { VaultStatus, ActionType } from "@agent-shield/sdk";
+import type { VaultStatus, ActionType } from "@phalnx/sdk";
 
 export function toPublicKey(value: string): PublicKey {
   try {

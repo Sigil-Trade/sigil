@@ -32,7 +32,7 @@ provision.get("/api/actions/provision", (c) => {
   const response = {
     type: "action",
     icon: `${baseUrl}/icon.png`,
-    title: "Create AgentShield Vault",
+    title: "Create Phalnx Vault",
     description: `Set up a policy-enforced agent vault. Template: ${config.label} — ${config.description}`,
     label: "Create Vault",
     links: {
@@ -153,7 +153,7 @@ provision.post("/api/actions/provision", async (c) => {
       ACTIONS_CORS_HEADERS,
     );
   } catch (error) {
-    console.error("[AgentShield] provision error:", error);
+    console.error("[Phalnx] provision error:", error);
     return c.json(
       { error: "Internal server error" },
       500,

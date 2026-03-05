@@ -1,6 +1,6 @@
-# AgentShield
+# Phalnx
 
-[![CI](https://github.com/Kaleb-Rupe/agentshield/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Kaleb-Rupe/agentshield/actions/workflows/ci.yml)
+[![CI](https://github.com/Kaleb-Rupe/phalnx/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Kaleb-Rupe/phalnx/actions/workflows/ci.yml)
 ![Tests](https://img.shields.io/badge/tests-1032-brightgreen)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 
@@ -12,10 +12,10 @@ Every AI agent on Solana today operates with unrestricted wallet access. Framewo
 
 ## The Solution
 
-AgentShield wraps your agent's wallet with on-chain policy enforcement. One call gives you client-side fast deny, TEE key custody, and on-chain vault enforcement — bundled as one product.
+Phalnx wraps your agent's wallet with on-chain policy enforcement. One call gives you client-side fast deny, TEE key custody, and on-chain vault enforcement — bundled as one product.
 
 ```typescript
-import { withVault } from "@agent-shield/sdk";
+import { withVault } from "@phalnx/sdk";
 
 const result = await withVault(teeWallet, { maxSpend: "500 USDC/day" }, {
   connection,
@@ -25,7 +25,7 @@ const result = await withVault(teeWallet, { maxSpend: "500 USDC/day" }, {
 
 ### Security Model
 
-AgentShield provides three layers of protection in a single integration:
+Phalnx provides three layers of protection in a single integration:
 
 1. **Client-side policy checks** — fast deny before transactions hit the network
 2. **TEE key custody** — agent private keys stored in hardware enclaves (Crossmint, Turnkey, Privy)
@@ -49,13 +49,13 @@ AgentShield provides three layers of protection in a single integration:
 
 ### How It Works
 
-AgentShield uses **instruction composition** to avoid Solana's 4-level CPI depth limit. Instead of wrapping DeFi calls inside the program, it sandwiches them in an atomic transaction:
+Phalnx uses **instruction composition** to avoid Solana's 4-level CPI depth limit. Instead of wrapping DeFi calls inside the program, it sandwiches them in an atomic transaction:
 
 ```
 Transaction = [
-  ValidateAndAuthorize,   // AgentShield checks policy, creates session, delegates tokens
+  ValidateAndAuthorize,   // Phalnx checks policy, creates session, delegates tokens
   DeFi instruction(s),    // Jupiter swap, Flash Trade open, etc.
-  FinalizeSession         // AgentShield records audit, revokes delegation
+  FinalizeSession         // Phalnx records audit, revokes delegation
 ]
 ```
 
@@ -95,24 +95,24 @@ All instructions succeed or all revert atomically. The agent's signing key is va
 
 | Package                                                               | Description                                                          | npm                                                                                                                                               |
 | --------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`@agent-shield/core`](./sdk/core)                                    | Pure TypeScript policy engine — zero blockchain dependencies         | [![npm](https://img.shields.io/npm/v/@agent-shield/core)](https://www.npmjs.com/package/@agent-shield/core)                                       |
-| [`@agent-shield/sdk`](./sdk/typescript)                               | On-chain guardrails — `withVault()` primary API                      | [![npm](https://img.shields.io/npm/v/@agent-shield/sdk)](https://www.npmjs.com/package/@agent-shield/sdk)                                         |
-| [`@agent-shield/platform`](./sdk/platform)                            | Platform client — request TEE wallet provisioning via Solana Actions | [![npm](https://img.shields.io/npm/v/@agent-shield/platform)](https://www.npmjs.com/package/@agent-shield/platform)                               |
-| [`@agent-shield/custody-crossmint`](./sdk/custody/crossmint)          | Crossmint TEE custody adapter — hardware-enclave signing             | [![npm](https://img.shields.io/npm/v/@agent-shield/custody-crossmint)](https://www.npmjs.com/package/@agent-shield/custody-crossmint)             |
-| [`@agent-shield/mcp`](./packages/mcp)                                 | MCP server — 49 tools, 3 resources for AI tool management            | [![npm](https://img.shields.io/npm/v/@agent-shield/mcp)](https://www.npmjs.com/package/@agent-shield/mcp)                                         |
-| [`@agent-shield/plugin-solana-agent-kit`](./plugins/solana-agent-kit) | Solana Agent Kit plugin — 6 tools with factory                       | [![npm](https://img.shields.io/npm/v/@agent-shield/plugin-solana-agent-kit)](https://www.npmjs.com/package/@agent-shield/plugin-solana-agent-kit) |
-| [`@agent-shield/plugin-elizaos`](./plugins/elizaos)                   | ElizaOS plugin — 6 actions, 2 providers, 1 evaluator                 | [![npm](https://img.shields.io/npm/v/@agent-shield/plugin-elizaos)](https://www.npmjs.com/package/@agent-shield/plugin-elizaos)                   |
+| [`@phalnx/core`](./sdk/core)                                    | Pure TypeScript policy engine — zero blockchain dependencies         | [![npm](https://img.shields.io/npm/v/@phalnx/core)](https://www.npmjs.com/package/@phalnx/core)                                       |
+| [`@phalnx/sdk`](./sdk/typescript)                               | On-chain guardrails — `withVault()` primary API                      | [![npm](https://img.shields.io/npm/v/@phalnx/sdk)](https://www.npmjs.com/package/@phalnx/sdk)                                         |
+| [`@phalnx/platform`](./sdk/platform)                            | Platform client — request TEE wallet provisioning via Solana Actions | [![npm](https://img.shields.io/npm/v/@phalnx/platform)](https://www.npmjs.com/package/@phalnx/platform)                               |
+| [`@phalnx/custody-crossmint`](./sdk/custody/crossmint)          | Crossmint TEE custody adapter — hardware-enclave signing             | [![npm](https://img.shields.io/npm/v/@phalnx/custody-crossmint)](https://www.npmjs.com/package/@phalnx/custody-crossmint)             |
+| [`@phalnx/mcp`](./packages/mcp)                                 | MCP server — 49 tools, 3 resources for AI tool management            | [![npm](https://img.shields.io/npm/v/@phalnx/mcp)](https://www.npmjs.com/package/@phalnx/mcp)                                         |
+| [`@phalnx/plugin-solana-agent-kit`](./plugins/solana-agent-kit) | Solana Agent Kit plugin — 6 tools with factory                       | [![npm](https://img.shields.io/npm/v/@phalnx/plugin-solana-agent-kit)](https://www.npmjs.com/package/@phalnx/plugin-solana-agent-kit) |
+| [`@phalnx/plugin-elizaos`](./plugins/elizaos)                   | ElizaOS plugin — 6 actions, 2 providers, 1 evaluator                 | [![npm](https://img.shields.io/npm/v/@phalnx/plugin-elizaos)](https://www.npmjs.com/package/@phalnx/plugin-elizaos)                   |
 
 ## Quick Start
 
 ### SDK Integration
 
 ```bash
-npm install @agent-shield/sdk
+npm install @phalnx/sdk
 ```
 
 ```typescript
-import { withVault } from "@agent-shield/sdk";
+import { withVault } from "@phalnx/sdk";
 
 // One call = full protection (client-side + TEE + on-chain vault)
 const result = await withVault(teeWallet, { maxSpend: "500 USDC/day" }, {
@@ -138,15 +138,15 @@ Add to your Claude Desktop config (`claude_desktop_config.json`):
 ```json
 {
   "mcpServers": {
-    "agent-shield": {
+    "phalnx": {
       "command": "npx",
-      "args": ["@agent-shield/mcp"]
+      "args": ["@phalnx/mcp"]
     }
   }
 }
 ```
 
-Then ask Claude: _"Set up AgentShield"_
+Then ask Claude: _"Set up Phalnx"_
 
 The `shield_configure` tool handles everything automatically — generates a keypair, provisions a TEE wallet, and creates your on-chain vault. No env vars or private keys needed.
 
@@ -169,11 +169,11 @@ The `shield_configure` tool handles everything automatically — generates a key
 anchor build --no-idl
 
 # Generate IDL separately (requires nightly Rust — anchor-syn 0.32.1 bug)
-RUSTUP_TOOLCHAIN=nightly anchor idl build -o target/idl/agent_shield.json
+RUSTUP_TOOLCHAIN=nightly anchor idl build -o target/idl/phalnx.json
 
 # Run on-chain tests (222 LiteSVM tests — no validator needed)
 npx ts-mocha -p ./tsconfig.json -t 300000 \
-  tests/agent-shield.ts tests/jupiter-integration.ts \
+  tests/phalnx.ts tests/jupiter-integration.ts \
   tests/flash-trade-integration.ts tests/security-exploits.ts
 
 # Run all TypeScript tests (734 tests across 8 suites)
@@ -181,7 +181,7 @@ pnpm -r run test
 
 # Lint
 npm run lint
-cargo fmt --check --manifest-path programs/agent-shield/Cargo.toml
+cargo fmt --check --manifest-path programs/phalnx/Cargo.toml
 ```
 
 ### Test Suites
@@ -195,14 +195,14 @@ cargo fmt --check --manifest-path programs/agent-shield/Cargo.toml
 | Security exploit scenarios                           |     109 |
 | Devnet integration tests (real network)              |      56 |
 | Surfpool integration tests (local Surfnet)           |      20 |
-| Core policy engine (`@agent-shield/core`)            |      73 |
-| SDK tests (`@agent-shield/sdk`)                      |     199 |
-| Platform client tests (`@agent-shield/platform`)     |      17 |
+| Core policy engine (`@phalnx/core`)            |      73 |
+| SDK tests (`@phalnx/sdk`)                      |     199 |
+| Platform client tests (`@phalnx/platform`)     |      17 |
 | Crossmint custody adapter                            |      29 |
-| SAK plugin (`@agent-shield/plugin-solana-agent-kit`) |      29 |
-| ElizaOS plugin (`@agent-shield/plugin-elizaos`)      |      35 |
-| MCP server (`@agent-shield/mcp`)                     |     291 |
-| Actions server (`@agent-shield/actions-server`)      |      61 |
+| SAK plugin (`@phalnx/plugin-solana-agent-kit`) |      29 |
+| ElizaOS plugin (`@phalnx/plugin-elizaos`)      |      35 |
+| MCP server (`@phalnx/mcp`)                     |     291 |
+| Actions server (`@phalnx/actions-server`)      |      61 |
 | **Total**                                            | **1032** |
 
 ## Security

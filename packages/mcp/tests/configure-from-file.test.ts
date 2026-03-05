@@ -33,7 +33,7 @@ describe("shield_configure_from_file", () => {
       },
       wallet: {
         type: "keypair",
-        path: "~/.agentshield/wallets/agent.json",
+        path: "~/.phalnx/wallets/agent.json",
         publicKey: "11111111111111111111111111111112",
       },
       network: "devnet",
@@ -50,8 +50,8 @@ describe("shield_configure_from_file", () => {
   }
 
   before(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agentshield-test-"));
-    testConfigDir = path.join(tmpDir, ".agentshield");
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "phalnx-test-"));
+    testConfigDir = path.join(tmpDir, ".phalnx");
     fs.mkdirSync(testConfigDir, { recursive: true, mode: 0o700 });
     // Override HOME so saveShieldConfig writes to tmp
     process.env.HOME = tmpDir;
@@ -84,7 +84,7 @@ describe("shield_configure_from_file", () => {
 
   it("returns error for non-existent file", async () => {
     const result = await configureFromFile(null, {
-      configFile: "/tmp/nonexistent-agentshield-config-12345.json",
+      configFile: "/tmp/nonexistent-phalnx-config-12345.json",
     });
     expect(result).to.include("not found");
   });

@@ -3,7 +3,7 @@ import { getOrCreateShieldedWallet } from "../client-factory";
 export const statusAction = {
   name: "SHIELD_STATUS",
   description:
-    "Show current AgentShield spending summary, rate limit usage, and enforcement state.",
+    "Show current Phalnx spending summary, rate limit usage, and enforcement state.",
   similes: [
     "shield status",
     "spending status",
@@ -42,7 +42,7 @@ export const statusAction = {
       const summary = wallet.getSpendingSummary();
 
       const lines = [
-        `=== AgentShield Status ===`,
+        `=== Phalnx Status ===`,
         `Enforcement: ${summary.isPaused ? "PAUSED" : "ACTIVE"}`,
         ``,
       ];
@@ -80,7 +80,7 @@ export const statusAction = {
       {
         user: "{{agent}}",
         content: {
-          text: "=== AgentShield Status ===\nEnforcement: ACTIVE\n\nUSDC: 200000000 / 500000000 (40% used)\n  Remaining: 300000000",
+          text: "=== Phalnx Status ===\nEnforcement: ACTIVE\n\nUSDC: 200000000 / 500000000 (40% used)\n  Remaining: 300000000",
         },
       },
     ],

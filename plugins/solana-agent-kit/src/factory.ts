@@ -4,7 +4,7 @@ import {
   type WalletLike,
   type ShieldPolicies,
   type ShieldOptions,
-} from "@agent-shield/sdk";
+} from "@phalnx/sdk";
 
 export interface FactoryConfig {
   /** Raw wallet to wrap with shieldWallet(). */
@@ -41,23 +41,23 @@ export function createShieldedWallet(config: FactoryConfig): ShieldedWallet {
   const options: ShieldOptions = {
     ...config.options,
     onDenied: (error) => {
-      warn("[AgentShield] Transaction denied:", error.message);
+      warn("[Phalnx] Transaction denied:", error.message);
       config.options?.onDenied?.(error);
     },
     onApproved: (txHash) => {
-      info("[AgentShield] Transaction approved", txHash ?? "");
+      info("[Phalnx] Transaction approved", txHash ?? "");
       config.options?.onApproved?.(txHash);
     },
     onPause: () => {
-      info("[AgentShield] Enforcement paused");
+      info("[Phalnx] Enforcement paused");
       config.options?.onPause?.();
     },
     onResume: () => {
-      info("[AgentShield] Enforcement resumed");
+      info("[Phalnx] Enforcement resumed");
       config.options?.onResume?.();
     },
     onPolicyUpdate: (policies) => {
-      info("[AgentShield] Policies updated");
+      info("[Phalnx] Policies updated");
       config.options?.onPolicyUpdate?.(policies);
     },
   };

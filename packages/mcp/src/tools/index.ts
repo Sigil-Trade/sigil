@@ -121,6 +121,13 @@ export {
   syncPositionsSchema,
 } from "./sync-positions";
 
+// --- Multi-Agent Permissions ---
+export {
+  updateAgentPermissionsTool,
+  updateAgentPermissions,
+  updateAgentPermissionsSchema,
+} from "./update-agent-permissions";
+
 // --- Jupiter Expanded Integration ---
 export { getPricesTool, getPrices, getPricesSchema } from "./get-prices";
 export {
@@ -180,6 +187,70 @@ export {
   jupiterPortfolioSchema,
 } from "./jupiter-portfolio";
 
+// --- Escrow Operations ---
+export {
+  createEscrowTool,
+  createEscrow,
+  createEscrowSchema,
+} from "./create-escrow";
+export {
+  settleEscrowTool,
+  settleEscrow,
+  settleEscrowSchema,
+} from "./settle-escrow";
+export {
+  refundEscrowTool,
+  refundEscrow,
+  refundEscrowSchema,
+} from "./refund-escrow";
+export {
+  closeSettledEscrowTool,
+  closeSettledEscrow,
+  closeSettledEscrowSchema,
+} from "./close-settled-escrow";
+export {
+  checkEscrowTool,
+  checkEscrow,
+  checkEscrowSchema,
+} from "./check-escrow";
+
+// --- Instruction Constraints ---
+export {
+  createConstraintsTool,
+  createConstraints,
+  createConstraintsSchema,
+} from "./create-constraints";
+export {
+  updateConstraintsTool,
+  updateConstraints,
+  updateConstraintsSchema,
+} from "./update-constraints";
+export {
+  closeConstraintsTool,
+  closeConstraints,
+  closeConstraintsSchema,
+} from "./close-constraints";
+export {
+  queueConstraintsUpdateTool,
+  queueConstraintsUpdate as queueConstraintsUpdateHandler,
+  queueConstraintsUpdateSchema,
+} from "./queue-constraints-update";
+export {
+  applyConstraintsUpdateTool,
+  applyConstraintsUpdate as applyConstraintsUpdateHandler,
+  applyConstraintsUpdateSchema,
+} from "./apply-constraints-update";
+export {
+  cancelConstraintsUpdateTool,
+  cancelConstraintsUpdate as cancelConstraintsUpdateHandler,
+  cancelConstraintsUpdateSchema,
+} from "./cancel-constraints-update";
+export {
+  checkConstraintsTool,
+  checkConstraints,
+  checkConstraintsSchema,
+} from "./check-constraints";
+
 // --- Squads V4 Multisig Governance ---
 export {
   squadsCreateMultisigTool,
@@ -211,3 +282,15 @@ export {
   squadsStatus,
   squadsStatusSchema,
 } from "./squads-status";
+
+// --- Vault Discovery & Confirmation ---
+export {
+  discoverVaultTool,
+  discoverVault,
+  discoverVaultSchema,
+} from "./discover-vault";
+export {
+  confirmVaultTool,
+  confirmVault,
+  confirmVaultSchema,
+} from "./confirm-vault";

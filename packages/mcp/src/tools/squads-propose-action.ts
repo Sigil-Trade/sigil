@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { toPublicKey, toBN } from "../utils";
 import { formatError } from "../errors";
 import type { McpConfig } from "../config";
@@ -22,10 +22,8 @@ export const squadsProposeActionSchema = z.object({
     .optional()
     .default(0)
     .describe("Squads vault authority index (default 0)"),
-  action: z.enum(ACTION_TYPES).describe("AgentShield admin action to propose"),
-  agentShieldVault: z
-    .string()
-    .describe("AgentShield vault PDA address (base58)"),
+  action: z.enum(ACTION_TYPES).describe("Phalnx admin action to propose"),
+  phalnxVault: z.string().describe("Phalnx vault PDA address (base58)"),
   actionParams: z
     .string()
     .optional()
@@ -42,14 +40,14 @@ export type SquadsProposeActionInput = z.infer<
 >;
 
 export async function squadsProposeAction(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   config: McpConfig,
   input: SquadsProposeActionInput,
 ): Promise<string> {
   try {
     const ownerKeypair = loadOwnerKeypair(config);
     const multisigPda = toPublicKey(input.multisig);
-    const agentShieldVault = toPublicKey(input.agentShieldVault);
+    const phalnxVault = toPublicKey(input.phalnxVault);
 
     let actionParams: any = undefined;
     if (input.actionParams) {
@@ -91,7 +89,7 @@ export async function squadsProposeAction(
       multisigPda,
       vaultIndex: input.vaultIndex,
       action: input.action,
-      agentShieldVault,
+      phalnxVault,
       actionParams,
       memo: input.memo,
     });
@@ -103,7 +101,7 @@ export async function squadsProposeAction(
       `- **Action:** ${actionLabel}`,
       `- **Multisig:** ${input.multisig}`,
       `- **Transaction Index:** ${result.transactionIndex}`,
-      `- **AgentShield Vault:** ${input.agentShieldVault}`,
+      `- **Phalnx Vault:** ${input.phalnxVault}`,
       `- **Transaction:** ${result.signature}`,
       "",
       "The proposal is now **Active**. Members can vote with " +
@@ -117,7 +115,7 @@ export async function squadsProposeAction(
 export const squadsProposeActionTool = {
   name: "shield_squads_propose_action",
   description:
-    "Propose an AgentShield admin action through Squads multisig governance. " +
+    "Propose an Phalnx admin action through Squads multisig governance. " +
     "Wraps the instruction in a vault transaction and opens a proposal for voting.",
   schema: squadsProposeActionSchema,
   handler: squadsProposeAction,

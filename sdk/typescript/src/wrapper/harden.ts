@@ -16,6 +16,8 @@ import { BN, AnchorProvider, Program } from "@coral-xyz/anchor";
 import { ShieldedWallet, WalletLike, isTeeWallet } from "./shield";
 import { ResolvedPolicies, TransactionAnalysis } from "./policies";
 import { ShieldDeniedError, TeeRequiredError } from "./errors";
+import { verifyTeeAttestation } from "./tee";
+import type { AttestationConfig } from "./tee";
 import {
   analyzeTransaction,
   extractInstructions,
@@ -25,10 +27,14 @@ import { evaluatePolicy, recordTransaction } from "./engine";
 import { ShieldState } from "./state";
 import { shield } from "./shield";
 import { isSystemProgram } from "./registry";
-import { JUPITER_PROGRAM_ID, type ActionType } from "../types";
+import {
+  JUPITER_PROGRAM_ID,
+  FULL_PERMISSIONS,
+  type ActionType,
+} from "../types";
 import { FLASH_TRADE_PROGRAM_ID } from "../integrations/flash-trade";
 import type { ShieldPolicies, SpendingSummary } from "./policies";
-import { AgentShieldClient } from "../client";
+import { PhalnxClient } from "../client";
 import { getVaultPDA, getPolicyPDA, getPendingPolicyPDA } from "../accounts";
 import { composePermittedTransaction } from "../composer";
 import { IDL } from "../idl-json";
@@ -64,6 +70,9 @@ export interface HardenOptions {
   allowedDestinations?: PublicKey[];
   /** Maximum slippage in basis points for on-chain swap verification. Default: 100 (1%) */
   maxSlippageBps?: number;
+  /** TEE remote attestation configuration. When set, cryptographically verifies
+   *  that the wallet runs inside a hardware enclave before proceeding. */
+  attestation?: AttestationConfig;
 }
 
 /**
@@ -449,13 +458,13 @@ function toAnchorWallet(wallet: WalletLike): any {
 /**
  * Harden a shielded wallet with on-chain vault enforcement.
  *
- * Creates an on-chain AgentShield vault, registers the wallet as an agent,
+ * Creates an on-chain Phalnx vault, registers the wallet as an agent,
  * and configures policies matching the wrapper config. Requires a TEE-backed
  * wallet unless unsafeSkipTeeCheck is set (devnet only).
  *
  * @example
  * ```typescript
- * import { withVault } from '@agent-shield/sdk';
+ * import { withVault } from '@phalnx/sdk';
  *
  * const result = await withVault(teeWallet, { maxSpend: '500 USDC/day' }, {
  *   connection,
@@ -510,13 +519,13 @@ export async function harden(
   }
   if (timelockDuration > 0 && timelockDuration < 300) {
     console.warn(
-      "AgentShield: timelockDuration < 300s (5 min) provides minimal protection. " +
+      "Phalnx: timelockDuration < 300s (5 min) provides minimal protection. " +
         "Consider a longer duration for meaningful governance delay.",
     );
   }
   if (timelockDuration > 0 && !options.ownerWallet) {
     console.warn(
-      "AgentShield: timelockDuration is set but no ownerWallet provided. " +
+      "Phalnx: timelockDuration is set but no ownerWallet provided. " +
         "Save result.ownerKeypair — you'll need it for queue/apply/cancel.",
     );
   }
@@ -524,7 +533,7 @@ export async function harden(
   // L1: Warn when TEE check is bypassed
   if (options.unsafeSkipTeeCheck) {
     console.warn(
-      "[AgentShield] WARNING: unsafeSkipTeeCheck is enabled. On-chain vault enforcement " +
+      "[Phalnx] WARNING: unsafeSkipTeeCheck is enabled. On-chain vault enforcement " +
         "is active but TEE key custody is bypassed. Do not use in production.",
     );
   }
@@ -534,8 +543,13 @@ export async function harden(
     throw new TeeRequiredError();
   }
 
+  // TEE remote attestation — cryptographic verification of enclave identity
+  if (options.attestation && !options.unsafeSkipTeeCheck) {
+    await verifyTeeAttestation(shieldedWallet.innerWallet, options.attestation);
+  }
+
   // Create client with owner wallet (owner signs vault creation + agent registration)
-  const client = new AgentShieldClient(
+  const client = new PhalnxClient(
     options.connection,
     toAnchorWallet(ownerWallet),
     options.programId,
@@ -598,7 +612,11 @@ export async function harden(
 
   // Register agent (signed by owner)
   try {
-    await client.registerAgent(vaultAddress, agentPubkey);
+    await client.registerAgent(
+      vaultAddress,
+      agentPubkey,
+      new BN(FULL_PERMISSIONS.toString()),
+    );
   } catch (err: any) {
     throw new Error(
       `Vault created at ${vaultAddress.toBase58()} but agent registration failed: ${err.message ?? err}. ` +
@@ -635,7 +653,7 @@ export async function harden(
  *
  * @example
  * ```typescript
- * import { withVault } from '@agent-shield/sdk';
+ * import { withVault } from '@phalnx/sdk';
  *
  * // Simplest path: bring your TEE wallet
  * const result = await withVault(teeWallet, { maxSpend: '500 USDC/day' }, {

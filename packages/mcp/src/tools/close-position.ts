@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentShieldClient } from "@agent-shield/sdk";
+import type { PhalnxClient } from "@phalnx/sdk";
 import { toPublicKey, toBN } from "../utils";
 import { formatError } from "../errors";
 import {
@@ -31,7 +31,7 @@ function parseSide(
 }
 
 export async function closePosition(
-  client: AgentShieldClient,
+  client: PhalnxClient,
   config: McpConfig,
   input: ClosePositionInput,
   custodyWallet?: CustodyWalletLike | null,
@@ -83,8 +83,8 @@ export async function closePosition(
 export const closePositionTool = {
   name: "shield_close_position",
   description:
-    "Close a leveraged perpetual position via Flash Trade through an AgentShield vault. " +
-    "Requires AGENTSHIELD_AGENT_KEYPAIR_PATH.",
+    "Close a leveraged perpetual position via Flash Trade through an Phalnx vault. " +
+    "Requires PHALNX_AGENT_KEYPAIR_PATH.",
   schema: closePositionSchema,
   handler: closePosition,
 };

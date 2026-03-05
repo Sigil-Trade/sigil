@@ -2,7 +2,7 @@
  * Template definitions for vault provisioning.
  *
  * IMPORTANT: This module must NOT import heavy dependencies at the top level
- * (@solana/web3.js, @coral-xyz/anchor, @agent-shield/sdk) to keep serverless
+ * (@solana/web3.js, @coral-xyz/anchor, @phalnx/sdk) to keep serverless
  * cold starts fast. Heavy deps are loaded dynamically in buildParamsFromTemplate.
  */
 

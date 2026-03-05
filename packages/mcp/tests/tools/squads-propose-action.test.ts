@@ -21,7 +21,7 @@ describe("shield_squads_propose_action", () => {
     multisig,
     vaultIndex: 0,
     action: "update_policy" as const,
-    agentShieldVault: vault,
+    phalnxVault: vault,
     actionParams: JSON.stringify({ dailySpendingCapUsd: "5000000000" }),
   };
 
@@ -44,7 +44,7 @@ describe("shield_squads_propose_action", () => {
     expect(call).to.exist;
     const params = call!.args[0];
     expect(params.action).to.equal("update_policy");
-    expect(params.agentShieldVault.toBase58()).to.equal(vault);
+    expect(params.phalnxVault.toBase58()).to.equal(vault);
   });
 
   it("handles apply_pending_policy (no actionParams)", async () => {
@@ -53,7 +53,7 @@ describe("shield_squads_propose_action", () => {
       multisig,
       vaultIndex: 0,
       action: "apply_pending_policy" as const,
-      agentShieldVault: vault,
+      phalnxVault: vault,
     });
     expect(result).to.include("Squads Proposal Created");
     expect(result).to.include("apply pending policy");

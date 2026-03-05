@@ -1,4 +1,4 @@
-import { AgentShieldPluginConfig, resolveWallet } from "./types";
+import { PhalnxPluginConfig, resolveWallet } from "./types";
 import {
   status,
   statusSchema,
@@ -14,43 +14,39 @@ import {
   x402FetchSchema,
 } from "./tools";
 
-export {
-  AgentShieldPluginConfig,
-  ResolvedConfig,
-  resolveWallet,
-} from "./types";
+export { PhalnxPluginConfig, ResolvedConfig, resolveWallet } from "./types";
 export { createShieldedWallet, type FactoryConfig } from "./factory";
 export * from "./tools";
 
 /**
- * Creates the AgentShield plugin for Solana Agent Kit.
+ * Creates the Phalnx plugin for Solana Agent Kit.
  *
  * Usage with pre-created wallet:
  * ```ts
- * import { shieldWallet } from '@agent-shield/sdk';
- * import { createAgentShieldPlugin } from '@agent-shield/plugin-solana-agent-kit';
+ * import { shieldWallet } from '@phalnx/sdk';
+ * import { createPhalnxPlugin } from '@phalnx/plugin-solana-agent-kit';
  *
  * const protectedWallet = shieldWallet(wallet, { maxSpend: '500 USDC/day' });
- * const plugin = createAgentShieldPlugin({ wallet: protectedWallet });
+ * const plugin = createPhalnxPlugin({ wallet: protectedWallet });
  * const agent = new SolanaAgentKit(protectedWallet, RPC_URL, { plugins: [plugin] });
  * ```
  *
  * Usage with factory (auto-creates ShieldedWallet):
  * ```ts
- * const plugin = createAgentShieldPlugin({
+ * const plugin = createPhalnxPlugin({
  *   rawWallet: keypairWallet,
  *   policies: { maxSpend: '500 USDC/day' },
  *   logger: console,
  * });
  * ```
  */
-export function createAgentShieldPlugin(config: AgentShieldPluginConfig) {
+export function createPhalnxPlugin(config: PhalnxPluginConfig) {
   const resolved = resolveWallet(config);
 
   return {
-    name: "agent-shield",
+    name: "phalnx",
     description:
-      "AgentShield — On-chain guardrails for AI agents on Solana. " +
+      "Phalnx — On-chain guardrails for AI agents on Solana. " +
       "Provides monitoring tools to check spending status, update policies, " +
       "pause/resume enforcement, and view transaction history. " +
       "Wraps signing transparently with policy enforcement.",

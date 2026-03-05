@@ -1,7 +1,7 @@
 ---
-name: agent-shield
+name: phalnx
 description: On-chain guardrails for AI agents — spending caps, TEE custody, and vault enforcement bundled as one product
-homepage: https://agentshield.xyz
+homepage: https://phalnx.xyz
 user-invocable: true
 command-dispatch: tool
 command-tool: shield_setup_status
@@ -12,13 +12,13 @@ metadata:
     os: ["darwin", "linux"]
 ---
 
-# AgentShield Skill
+# Phalnx Skill
 
-You have access to AgentShield tools that enforce on-chain guardrails on your Solana trading activity. AgentShield bundles three protection layers into a single integration — client-side fast deny, TEE key custody, and on-chain vault enforcement.
+You have access to Phalnx tools that enforce on-chain guardrails on your Solana trading activity. Phalnx bundles three protection layers into a single integration — client-side fast deny, TEE key custody, and on-chain vault enforcement.
 
 ## Security Model
 
-AgentShield provides three layers of protection in one integration:
+Phalnx provides three layers of protection in one integration:
 
 | Layer | What It Does | Details |
 |-------|-------------|---------|
@@ -34,7 +34,7 @@ All protection is set up together with `shield_configure`.
 | Tool | Purpose |
 |------|---------|
 | `shield_setup_status` | Check current setup — which layers are active, wallet, policy |
-| `shield_configure` | Set up AgentShield with full protection |
+| `shield_configure` | Set up Phalnx with full protection |
 | `shield_configure_from_file` | Apply a pre-written JSON config (CI/CD) |
 | `shield_fund_wallet` | Generate funding links (Blink URL, Solana Pay, raw address) |
 
@@ -67,10 +67,10 @@ When a user mentions trading, security, wallet setup, or protecting their agent:
 ### Step 1: Check Current Status
 Call `shield_setup_status`. If not configured, start the onboarding conversation.
 
-### Step 2: Explain What AgentShield Does
+### Step 2: Explain What Phalnx Does
 Present the protection model in plain language:
 
-> "I can set up on-chain guardrails for your wallet. AgentShield bundles three layers of protection:
+> "I can set up on-chain guardrails for your wallet. Phalnx bundles three layers of protection:
 >
 > **Client-side checks** — I'll enforce daily spending caps, protocol whitelists, and rate limits before any transaction leaves your machine.
 >
@@ -108,7 +108,7 @@ After setup, always remind:
 
 ### TEE Custody Disclosure
 After setup, disclose:
-> "Your TEE wallet is custodied by AgentShield's platform. You can export or migrate later."
+> "Your TEE wallet is custodied by Phalnx's platform. You can export or migrate later."
 
 ## Core Trading Rules
 
