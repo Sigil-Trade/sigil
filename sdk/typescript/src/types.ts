@@ -193,7 +193,10 @@ export type ConstraintOperator =
   | { eq: Record<string, never> }
   | { ne: Record<string, never> }
   | { gte: Record<string, never> }
-  | { lte: Record<string, never> };
+  | { lte: Record<string, never> }
+  | { gteSigned: Record<string, never> }
+  | { lteSigned: Record<string, never> }
+  | { bitmask: Record<string, never> };
 
 export type DataConstraint = {
   offset: number;

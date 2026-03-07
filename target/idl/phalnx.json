@@ -5126,6 +5126,15 @@
           },
           {
             "name": "Lte"
+          },
+          {
+            "name": "GteSigned"
+          },
+          {
+            "name": "LteSigned"
+          },
+          {
+            "name": "Bitmask"
           }
         ]
       }

@@ -3970,6 +3970,15 @@ export type Phalnx = {
           {
             name: "lte";
           },
+          {
+            name: "gteSigned";
+          },
+          {
+            name: "lteSigned";
+          },
+          {
+            name: "bitmask";
+          },
         ];
       };
     },

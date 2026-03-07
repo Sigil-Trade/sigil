@@ -1,4 +1,10 @@
-export const IDL = {
+/**
+ * Program IDL in camelCase format in order to be used in JS/TS.
+ *
+ * Note that this is only a type helper and is not the actual IDL. The original
+ * IDL can be found at `target/idl/phalnx.json`.
+ */
+export type Phalnx = {
   "address": "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL",
   "metadata": {
     "name": "phalnx",
@@ -8,7 +14,7 @@ export const IDL = {
   },
   "instructions": [
     {
-      "name": "agent_transfer",
+      "name": "agentTransfer",
       "docs": [
         "Transfer tokens from the vault to an allowed destination.",
         "Only the agent can call this. Stablecoin-only."
@@ -47,12 +53,12 @@ export const IDL = {
               {
                 "kind": "account",
                 "path": "vault.owner",
-                "account": "AgentVault"
+                "account": "agentVault"
               },
               {
                 "kind": "account",
                 "path": "vault.vault_id",
-                "account": "AgentVault"
+                "account": "agentVault"
               }
             ]
           },
@@ -110,27 +116,34 @@ export const IDL = {
           }
         },
         {
-          "name": "vault_token_account",
+          "name": "agentSpendOverlay",
+          "docs": [
+            "Zero-copy AgentSpendOverlay shard 0 — per-agent rolling spend enforcement"
+          ],
+          "writable": true
+        },
+        {
+          "name": "vaultTokenAccount",
           "docs": [
             "Vault's PDA-owned token account (source)"
           ],
           "writable": true
         },
         {
-          "name": "token_mint_account",
+          "name": "tokenMintAccount",
           "docs": [
             "Token mint account for decimals validation"
           ]
         },
         {
-          "name": "destination_token_account",
+          "name": "destinationTokenAccount",
           "docs": [
             "Destination token account (must be in allowed destinations)"
           ],
           "writable": true
         },
         {
-          "name": "fee_destination_token_account",
+          "name": "feeDestinationTokenAccount",
           "docs": [
             "Developer fee destination token account"
           ],
@@ -138,7 +151,7 @@ export const IDL = {
           "optional": true
         },
         {
-          "name": "protocol_treasury_token_account",
+          "name": "protocolTreasuryTokenAccount",
           "docs": [
             "Protocol treasury token account"
           ],
@@ -146,7 +159,7 @@ export const IDL = {
           "optional": true
         },
         {
-          "name": "token_program",
+          "name": "tokenProgram",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         }
       ],
@@ -158,7 +171,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "apply_constraints_update",
+      "name": "applyConstraintsUpdate",
       "docs": [
         "Apply a queued constraints update after the timelock expires."
       ],
@@ -202,13 +215,13 @@ export const IDL = {
               {
                 "kind": "account",
                 "path": "vault.vault_id",
-                "account": "AgentVault"
+                "account": "agentVault"
               }
             ]
           },
           "relations": [
             "constraints",
-            "pending_constraints"
+            "pendingConstraints"
           ]
         },
         {
@@ -240,7 +253,7 @@ export const IDL = {
           }
         },
         {
-          "name": "pending_constraints",
+          "name": "pendingConstraints",
           "writable": true,
           "pda": {
             "seeds": [
@@ -279,7 +292,7 @@ export const IDL = {
       "args": []
     },
     {
-      "name": "apply_pending_policy",
+      "name": "applyPendingPolicy",
       "docs": [
         "Apply a queued policy update after the timelock expires."
       ],
@@ -323,13 +336,13 @@ export const IDL = {
               {
                 "kind": "account",
                 "path": "vault.vault_id",
-                "account": "AgentVault"
+                "account": "agentVault"
               }
             ]
           },
           "relations": [
             "policy",
-            "pending_policy"
+            "pendingPolicy"
           ]
         },
         {
@@ -356,7 +369,7 @@ export const IDL = {
           }
         },
         {
-          "name": "pending_policy",
+          "name": "pendingPolicy",
           "writable": true,
           "pda": {
             "seeds": [
@@ -390,7 +403,7 @@ export const IDL = {
       "args": []
     },
     {
-      "name": "cancel_constraints_update",
+      "name": "cancelConstraintsUpdate",
       "docs": [
         "Cancel a queued constraints update."
       ],
@@ -434,16 +447,16 @@ export const IDL = {
               {
                 "kind": "account",
                 "path": "vault.vault_id",
-                "account": "AgentVault"
+                "account": "agentVault"
               }
             ]
           },
           "relations": [
-            "pending_constraints"
+            "pendingConstraints"
           ]
         },
         {
-          "name": "pending_constraints",
+          "name": "pendingConstraints",
           "writable": true,
           "pda": {
             "seeds": [
@@ -482,7 +495,7 @@ export const IDL = {
       "args": []
     },
     {
-      "name": "cancel_pending_policy",
+      "name": "cancelPendingPolicy",
       "docs": [
         "Cancel a queued policy update."
       ],
@@ -526,16 +539,16 @@ export const IDL = {
               {
                 "kind": "account",
                 "path": "vault.vault_id",
-                "account": "AgentVault"
+                "account": "agentVault"
               }
             ]
           },
           "relations": [
-            "pending_policy"
+            "pendingPolicy"
           ]
         },
         {
-          "name": "pending_policy",
+          "name": "pendingPolicy",
           "writable": true,
           "pda": {
             "seeds": [
@@ -569,7 +582,7 @@ export const IDL = {
       "args": []
     },
     {
-      "name": "close_instruction_constraints",
+      "name": "closeInstructionConstraints",
       "docs": [
         "Close instruction constraints for the vault.",
         "Only the owner can call this. Blocked when timelock > 0 (removing constraints loosens security)."
@@ -614,7 +627,7 @@ export const IDL = {
               {
                 "kind": "account",
                 "path": "vault.vault_id",
-                "account": "AgentVault"
+                "account": "agentVault"
               }
             ]
           },
@@ -678,9 +691,9 @@ export const IDL = {
       "args": []
     },
     {
-      "name": "close_settled_escrow",
+      "name": "closeSettledEscrow",
       "docs": [
-        "Close a settled/refunded escrow PDA \u2014 owner reclaims rent."
+        "Close a settled/refunded escrow PDA — owner reclaims rent."
       ],
       "discriminator": [
         169,
@@ -699,7 +712,7 @@ export const IDL = {
           "signer": true
         },
         {
-          "name": "source_vault",
+          "name": "sourceVault",
           "pda": {
             "seeds": [
               {
@@ -715,12 +728,12 @@ export const IDL = {
               {
                 "kind": "account",
                 "path": "source_vault.owner",
-                "account": "AgentVault"
+                "account": "agentVault"
               },
               {
                 "kind": "account",
                 "path": "source_vault.vault_id",
-                "account": "AgentVault"
+                "account": "agentVault"
               }
             ]
           },
@@ -729,7 +742,7 @@ export const IDL = {
           ]
         },
         {
-          "name": "destination_vault_key",
+          "name": "destinationVaultKey",
           "docs": [
             "Validated indirectly: if the wrong key is passed, the escrow PDA seeds won't",
             "match and Anchor will reject the account."
@@ -753,15 +766,15 @@ export const IDL = {
               },
               {
                 "kind": "account",
-                "path": "source_vault"
+                "path": "sourceVault"
               },
               {
                 "kind": "account",
-                "path": "destination_vault_key"
+                "path": "destinationVaultKey"
               },
               {
                 "kind": "arg",
-                "path": "escrow_id"
+                "path": "escrowId"
               }
             ]
           }
@@ -769,13 +782,13 @@ export const IDL = {
       ],
       "args": [
         {
-          "name": "escrow_id",
+          "name": "escrowId",
           "type": "u64"
         }
       ]
     },
     {
-      "name": "close_vault",
+      "name": "closeVault",
       "docs": [
         "Close the vault entirely. Reclaims rent from all PDAs."
       ],
@@ -820,7 +833,7 @@ export const IDL = {
               {
                 "kind": "account",
                 "path": "vault.vault_id",
-                "account": "AgentVault"
+                "account": "agentVault"
               }
             ]
           },
@@ -854,7 +867,7 @@ export const IDL = {
         {
           "name": "tracker",
           "docs": [
-            "Zero-copy SpendTracker \u2014 close returns rent to owner"
+            "Zero-copy SpendTracker — close returns rent to owner"
           ],
           "writable": true,
           "pda": {
@@ -879,21 +892,21 @@ export const IDL = {
           }
         },
         {
-          "name": "agent_spend_overlay",
+          "name": "agentSpendOverlay",
           "docs": [
-            "Zero-copy AgentSpendOverlay \u2014 close returns rent to owner"
+            "Zero-copy AgentSpendOverlay — close returns rent to owner"
           ],
           "writable": true
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
       "args": []
     },
     {
-      "name": "create_escrow",
+      "name": "createEscrow",
       "docs": [
         "Create an escrow deposit between two vaults.",
         "Agent-initiated, stablecoin-only, fees deducted upfront, cap-checked."
@@ -915,7 +928,7 @@ export const IDL = {
           "signer": true
         },
         {
-          "name": "source_vault",
+          "name": "sourceVault",
           "writable": true,
           "pda": {
             "seeds": [
@@ -932,12 +945,12 @@ export const IDL = {
               {
                 "kind": "account",
                 "path": "source_vault.owner",
-                "account": "AgentVault"
+                "account": "agentVault"
               },
               {
                 "kind": "account",
                 "path": "source_vault.vault_id",
-                "account": "AgentVault"
+                "account": "agentVault"
               }
             ]
           }
@@ -959,7 +972,7 @@ export const IDL = {
               },
               {
                 "kind": "account",
-                "path": "source_vault"
+                "path": "sourceVault"
               }
             ]
           }
@@ -983,13 +996,20 @@ export const IDL = {
               },
               {
                 "kind": "account",
-                "path": "source_vault"
+                "path": "sourceVault"
               }
             ]
           }
         },
         {
-          "name": "destination_vault",
+          "name": "agentSpendOverlay",
+          "docs": [
+            "Zero-copy AgentSpendOverlay shard 0 — per-agent rolling spend enforcement"
+          ],
+          "writable": true
+        },
+        {
+          "name": "destinationVault",
           "pda": {
             "seeds": [
               {
@@ -1005,12 +1025,12 @@ export const IDL = {
               {
                 "kind": "account",
                 "path": "destination_vault.owner",
-                "account": "AgentVault"
+                "account": "agentVault"
               },
               {
                 "kind": "account",
                 "path": "destination_vault.vault_id",
-                "account": "AgentVault"
+                "account": "agentVault"
               }
             ]
           }
@@ -1033,30 +1053,30 @@ export const IDL = {
               },
               {
                 "kind": "account",
-                "path": "source_vault"
+                "path": "sourceVault"
               },
               {
                 "kind": "account",
-                "path": "destination_vault"
+                "path": "destinationVault"
               },
               {
                 "kind": "arg",
-                "path": "escrow_id"
+                "path": "escrowId"
               }
             ]
           }
         },
         {
-          "name": "source_vault_ata",
+          "name": "sourceVaultAta",
           "docs": [
             "Source vault's token account (vault PDA is authority)"
           ],
           "writable": true
         },
         {
-          "name": "escrow_ata",
+          "name": "escrowAta",
           "docs": [
-            "Escrow-owned ATA \u2014 init_if_needed because escrow PDA is created in same ix"
+            "Escrow-owned ATA — init_if_needed because escrow PDA is created in same ix"
           ],
           "writable": true,
           "pda": {
@@ -1104,7 +1124,7 @@ export const IDL = {
               },
               {
                 "kind": "account",
-                "path": "token_mint"
+                "path": "tokenMint"
               }
             ],
             "program": {
@@ -1147,7 +1167,7 @@ export const IDL = {
           }
         },
         {
-          "name": "protocol_treasury_ata",
+          "name": "protocolTreasuryAta",
           "docs": [
             "Protocol treasury token account (needed when protocol_fee > 0)"
           ],
@@ -1155,7 +1175,7 @@ export const IDL = {
           "optional": true
         },
         {
-          "name": "fee_destination_ata",
+          "name": "feeDestinationAta",
           "docs": [
             "Developer fee destination token account (needed when developer_fee > 0)"
           ],
@@ -1163,24 +1183,24 @@ export const IDL = {
           "optional": true
         },
         {
-          "name": "token_mint"
+          "name": "tokenMint"
         },
         {
-          "name": "token_program",
+          "name": "tokenProgram",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         },
         {
-          "name": "associated_token_program",
+          "name": "associatedTokenProgram",
           "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
         }
       ],
       "args": [
         {
-          "name": "escrow_id",
+          "name": "escrowId",
           "type": "u64"
         },
         {
@@ -1188,11 +1208,11 @@ export const IDL = {
           "type": "u64"
         },
         {
-          "name": "expires_at",
+          "name": "expiresAt",
           "type": "i64"
         },
         {
-          "name": "condition_hash",
+          "name": "conditionHash",
           "type": {
             "array": [
               "u8",
@@ -1203,7 +1223,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "create_instruction_constraints",
+      "name": "createInstructionConstraints",
       "docs": [
         "Create instruction constraints for the vault.",
         "Only the owner can call this. No timelock check (additive change)."
@@ -1248,7 +1268,7 @@ export const IDL = {
               {
                 "kind": "account",
                 "path": "vault.vault_id",
-                "account": "AgentVault"
+                "account": "agentVault"
               }
             ]
           },
@@ -1308,7 +1328,7 @@ export const IDL = {
           }
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
@@ -1318,7 +1338,7 @@ export const IDL = {
           "type": {
             "vec": {
               "defined": {
-                "name": "ConstraintEntry"
+                "name": "constraintEntry"
               }
             }
           }
@@ -1326,7 +1346,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "deposit_funds",
+      "name": "depositFunds",
       "docs": [
         "Deposit SPL tokens into the vault's PDA-controlled token account.",
         "Only the owner can call this."
@@ -1371,7 +1391,7 @@ export const IDL = {
               {
                 "kind": "account",
                 "path": "vault.vault_id",
-                "account": "AgentVault"
+                "account": "agentVault"
               }
             ]
           }
@@ -1380,7 +1400,7 @@ export const IDL = {
           "name": "mint"
         },
         {
-          "name": "owner_token_account",
+          "name": "ownerTokenAccount",
           "docs": [
             "Owner's token account to transfer from"
           ],
@@ -1473,7 +1493,7 @@ export const IDL = {
           }
         },
         {
-          "name": "vault_token_account",
+          "name": "vaultTokenAccount",
           "docs": [
             "Vault's PDA-controlled token account"
           ],
@@ -1566,15 +1586,15 @@ export const IDL = {
           }
         },
         {
-          "name": "token_program",
+          "name": "tokenProgram",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         },
         {
-          "name": "associated_token_program",
+          "name": "associatedTokenProgram",
           "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
@@ -1586,7 +1606,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "finalize_session",
+      "name": "finalizeSession",
       "docs": [
         "Finalize a session after the DeFi action completes.",
         "Revokes delegation and closes the SessionAuthority PDA."
@@ -1625,12 +1645,12 @@ export const IDL = {
               {
                 "kind": "account",
                 "path": "vault.owner",
-                "account": "AgentVault"
+                "account": "agentVault"
               },
               {
                 "kind": "account",
                 "path": "vault.vault_id",
-                "account": "AgentVault"
+                "account": "agentVault"
               }
             ]
           },
@@ -1666,18 +1686,18 @@ export const IDL = {
               {
                 "kind": "account",
                 "path": "session.agent",
-                "account": "SessionAuthority"
+                "account": "sessionAuthority"
               },
               {
                 "kind": "account",
                 "path": "session.authorized_token",
-                "account": "SessionAuthority"
+                "account": "sessionAuthority"
               }
             ]
           }
         },
         {
-          "name": "session_rent_recipient",
+          "name": "sessionRentRecipient",
           "writable": true
         },
         {
@@ -1733,7 +1753,14 @@ export const IDL = {
           }
         },
         {
-          "name": "vault_token_account",
+          "name": "agentSpendOverlay",
+          "docs": [
+            "Zero-copy AgentSpendOverlay shard 0 — per-agent rolling spend enforcement"
+          ],
+          "writable": true
+        },
+        {
+          "name": "vaultTokenAccount",
           "docs": [
             "Vault's PDA token account for the session's token"
           ],
@@ -1741,20 +1768,20 @@ export const IDL = {
           "optional": true
         },
         {
-          "name": "output_stablecoin_account",
+          "name": "outputStablecoinAccount",
           "docs": [
-            "Vault's stablecoin ATA for non-stablecoin\u2192stablecoin swap verification.",
+            "Vault's stablecoin ATA for non-stablecoin→stablecoin swap verification.",
             "Required when session.output_mint != Pubkey::default()."
           ],
           "writable": true,
           "optional": true
         },
         {
-          "name": "token_program",
+          "name": "tokenProgram",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
@@ -1766,7 +1793,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "initialize_vault",
+      "name": "initializeVault",
       "docs": [
         "Initialize a new agent vault with policy configuration.",
         "Only the owner can call this. Creates vault PDA, policy PDA,",
@@ -1809,7 +1836,7 @@ export const IDL = {
               },
               {
                 "kind": "arg",
-                "path": "vault_id"
+                "path": "vaultId"
               }
             ]
           }
@@ -1865,35 +1892,35 @@ export const IDL = {
           }
         },
         {
-          "name": "agent_spend_overlay",
+          "name": "agentSpendOverlay",
           "docs": [
-            "Agent spend overlay shard 0 \u2014 per-agent contribution tracking"
+            "Agent spend overlay shard 0 — per-agent contribution tracking"
           ],
           "writable": true
         },
         {
-          "name": "fee_destination"
+          "name": "feeDestination"
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
         {
-          "name": "vault_id",
+          "name": "vaultId",
           "type": "u64"
         },
         {
-          "name": "daily_spending_cap_usd",
+          "name": "dailySpendingCapUsd",
           "type": "u64"
         },
         {
-          "name": "max_transaction_size_usd",
+          "name": "maxTransactionSizeUsd",
           "type": "u64"
         },
         {
-          "name": "protocol_mode",
+          "name": "protocolMode",
           "type": "u8"
         },
         {
@@ -1903,27 +1930,27 @@ export const IDL = {
           }
         },
         {
-          "name": "max_leverage_bps",
+          "name": "maxLeverageBps",
           "type": "u16"
         },
         {
-          "name": "max_concurrent_positions",
+          "name": "maxConcurrentPositions",
           "type": "u8"
         },
         {
-          "name": "developer_fee_rate",
+          "name": "developerFeeRate",
           "type": "u16"
         },
         {
-          "name": "max_slippage_bps",
+          "name": "maxSlippageBps",
           "type": "u16"
         },
         {
-          "name": "timelock_duration",
+          "name": "timelockDuration",
           "type": "u64"
         },
         {
-          "name": "allowed_destinations",
+          "name": "allowedDestinations",
           "type": {
             "vec": "pubkey"
           }
@@ -1931,7 +1958,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "queue_constraints_update",
+      "name": "queueConstraintsUpdate",
       "docs": [
         "Queue a constraints update when timelock is active."
       ],
@@ -1975,7 +2002,7 @@ export const IDL = {
               {
                 "kind": "account",
                 "path": "vault.vault_id",
-                "account": "AgentVault"
+                "account": "agentVault"
               }
             ]
           },
@@ -2034,7 +2061,7 @@ export const IDL = {
           }
         },
         {
-          "name": "pending_constraints",
+          "name": "pendingConstraints",
           "writable": true,
           "pda": {
             "seeds": [
@@ -2070,7 +2097,7 @@ export const IDL = {
           }
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
@@ -2080,7 +2107,7 @@ export const IDL = {
           "type": {
             "vec": {
               "defined": {
-                "name": "ConstraintEntry"
+                "name": "constraintEntry"
               }
             }
           }
@@ -2088,7 +2115,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "queue_policy_update",
+      "name": "queuePolicyUpdate",
       "docs": [
         "Queue a policy update when timelock is active."
       ],
@@ -2132,7 +2159,7 @@ export const IDL = {
               {
                 "kind": "account",
                 "path": "vault.vault_id",
-                "account": "AgentVault"
+                "account": "agentVault"
               }
             ]
           },
@@ -2163,7 +2190,7 @@ export const IDL = {
           }
         },
         {
-          "name": "pending_policy",
+          "name": "pendingPolicy",
           "writable": true,
           "pda": {
             "seeds": [
@@ -2194,25 +2221,25 @@ export const IDL = {
           }
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
         {
-          "name": "daily_spending_cap_usd",
+          "name": "dailySpendingCapUsd",
           "type": {
             "option": "u64"
           }
         },
         {
-          "name": "max_transaction_amount_usd",
+          "name": "maxTransactionAmountUsd",
           "type": {
             "option": "u64"
           }
         },
         {
-          "name": "protocol_mode",
+          "name": "protocolMode",
           "type": {
             "option": "u8"
           }
@@ -2226,53 +2253,59 @@ export const IDL = {
           }
         },
         {
-          "name": "max_leverage_bps",
+          "name": "maxLeverageBps",
           "type": {
             "option": "u16"
           }
         },
         {
-          "name": "can_open_positions",
+          "name": "canOpenPositions",
           "type": {
             "option": "bool"
           }
         },
         {
-          "name": "max_concurrent_positions",
+          "name": "maxConcurrentPositions",
           "type": {
             "option": "u8"
           }
         },
         {
-          "name": "developer_fee_rate",
+          "name": "developerFeeRate",
           "type": {
             "option": "u16"
           }
         },
         {
-          "name": "max_slippage_bps",
+          "name": "maxSlippageBps",
           "type": {
             "option": "u16"
           }
         },
         {
-          "name": "timelock_duration",
+          "name": "timelockDuration",
           "type": {
             "option": "u64"
           }
         },
         {
-          "name": "allowed_destinations",
+          "name": "allowedDestinations",
           "type": {
             "option": {
               "vec": "pubkey"
             }
           }
+        },
+        {
+          "name": "sessionExpirySlots",
+          "type": {
+            "option": "u64"
+          }
         }
       ]
     },
     {
-      "name": "reactivate_vault",
+      "name": "reactivateVault",
       "docs": [
         "Reactivate a frozen vault. Optionally add a new agent with permissions."
       ],
@@ -2316,7 +2349,7 @@ export const IDL = {
               {
                 "kind": "account",
                 "path": "vault.vault_id",
-                "account": "AgentVault"
+                "account": "agentVault"
               }
             ]
           }
@@ -2324,13 +2357,13 @@ export const IDL = {
       ],
       "args": [
         {
-          "name": "new_agent",
+          "name": "newAgent",
           "type": {
             "option": "pubkey"
           }
         },
         {
-          "name": "new_agent_permissions",
+          "name": "newAgentPermissions",
           "type": {
             "option": "u64"
           }
@@ -2338,9 +2371,9 @@ export const IDL = {
       ]
     },
     {
-      "name": "refund_escrow",
+      "name": "refundEscrow",
       "docs": [
-        "Refund an escrow \u2014 source vault's agent or owner reclaims funds after expiry.",
+        "Refund an escrow — source vault's agent or owner reclaims funds after expiry.",
         "Cap charge is NOT reversed (prevents cap-washing attacks)."
       ],
       "discriminator": [
@@ -2355,7 +2388,7 @@ export const IDL = {
       ],
       "accounts": [
         {
-          "name": "source_signer",
+          "name": "sourceSigner",
           "docs": [
             "Source vault's agent or owner"
           ],
@@ -2363,7 +2396,7 @@ export const IDL = {
           "signer": true
         },
         {
-          "name": "source_vault",
+          "name": "sourceVault",
           "pda": {
             "seeds": [
               {
@@ -2379,12 +2412,12 @@ export const IDL = {
               {
                 "kind": "account",
                 "path": "source_vault.owner",
-                "account": "AgentVault"
+                "account": "agentVault"
               },
               {
                 "kind": "account",
                 "path": "source_vault.vault_id",
-                "account": "AgentVault"
+                "account": "agentVault"
               }
             ]
           }
@@ -2407,23 +2440,23 @@ export const IDL = {
               },
               {
                 "kind": "account",
-                "path": "source_vault"
+                "path": "sourceVault"
               },
               {
                 "kind": "account",
                 "path": "escrow.destination_vault",
-                "account": "EscrowDeposit"
+                "account": "escrowDeposit"
               },
               {
                 "kind": "account",
                 "path": "escrow.escrow_id",
-                "account": "EscrowDeposit"
+                "account": "escrowDeposit"
               }
             ]
           }
         },
         {
-          "name": "escrow_ata",
+          "name": "escrowAta",
           "writable": true,
           "pda": {
             "seeds": [
@@ -2470,7 +2503,7 @@ export const IDL = {
               },
               {
                 "kind": "account",
-                "path": "token_mint"
+                "path": "tokenMint"
               }
             ],
             "program": {
@@ -2513,25 +2546,25 @@ export const IDL = {
           }
         },
         {
-          "name": "source_vault_ata",
+          "name": "sourceVaultAta",
           "writable": true
         },
         {
-          "name": "rent_destination",
+          "name": "rentDestination",
           "writable": true
         },
         {
-          "name": "token_mint"
+          "name": "tokenMint"
         },
         {
-          "name": "token_program",
+          "name": "tokenProgram",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         }
       ],
       "args": []
     },
     {
-      "name": "register_agent",
+      "name": "registerAgent",
       "docs": [
         "Register an agent's signing key to this vault with per-agent permissions.",
         "Only the owner can call this. Up to 10 agents per vault."
@@ -2576,15 +2609,15 @@ export const IDL = {
               {
                 "kind": "account",
                 "path": "vault.vault_id",
-                "account": "AgentVault"
+                "account": "agentVault"
               }
             ]
           }
         },
         {
-          "name": "agent_spend_overlay",
+          "name": "agentSpendOverlay",
           "docs": [
-            "Agent spend overlay (shard 0) \u2014 for claiming a per-agent tracking slot."
+            "Agent spend overlay (shard 0) — for claiming a per-agent tracking slot."
           ],
           "writable": true
         }
@@ -2599,13 +2632,13 @@ export const IDL = {
           "type": "u64"
         },
         {
-          "name": "spending_limit_usd",
+          "name": "spendingLimitUsd",
           "type": "u64"
         }
       ]
     },
     {
-      "name": "revoke_agent",
+      "name": "revokeAgent",
       "docs": [
         "Revoke a specific agent from the vault.",
         "Only the owner can call this. Freezes vault if last agent is removed."
@@ -2650,23 +2683,30 @@ export const IDL = {
               {
                 "kind": "account",
                 "path": "vault.vault_id",
-                "account": "AgentVault"
+                "account": "agentVault"
               }
             ]
           }
+        },
+        {
+          "name": "agentSpendOverlay",
+          "docs": [
+            "Agent spend overlay (shard 0) — release slot on revocation."
+          ],
+          "writable": true
         }
       ],
       "args": [
         {
-          "name": "agent_to_remove",
+          "name": "agentToRemove",
           "type": "pubkey"
         }
       ]
     },
     {
-      "name": "settle_escrow",
+      "name": "settleEscrow",
       "docs": [
-        "Settle an escrow \u2014 destination vault's agent claims funds before expiry.",
+        "Settle an escrow — destination vault's agent claims funds before expiry.",
         "For conditional escrows, proof must match the SHA-256 condition hash."
       ],
       "discriminator": [
@@ -2681,12 +2721,12 @@ export const IDL = {
       ],
       "accounts": [
         {
-          "name": "destination_agent",
+          "name": "destinationAgent",
           "writable": true,
           "signer": true
         },
         {
-          "name": "destination_vault",
+          "name": "destinationVault",
           "pda": {
             "seeds": [
               {
@@ -2702,18 +2742,18 @@ export const IDL = {
               {
                 "kind": "account",
                 "path": "destination_vault.owner",
-                "account": "AgentVault"
+                "account": "agentVault"
               },
               {
                 "kind": "account",
                 "path": "destination_vault.vault_id",
-                "account": "AgentVault"
+                "account": "agentVault"
               }
             ]
           }
         },
         {
-          "name": "source_vault",
+          "name": "sourceVault",
           "pda": {
             "seeds": [
               {
@@ -2729,12 +2769,12 @@ export const IDL = {
               {
                 "kind": "account",
                 "path": "source_vault.owner",
-                "account": "AgentVault"
+                "account": "agentVault"
               },
               {
                 "kind": "account",
                 "path": "source_vault.vault_id",
-                "account": "AgentVault"
+                "account": "agentVault"
               }
             ]
           }
@@ -2757,22 +2797,22 @@ export const IDL = {
               },
               {
                 "kind": "account",
-                "path": "source_vault"
+                "path": "sourceVault"
               },
               {
                 "kind": "account",
-                "path": "destination_vault"
+                "path": "destinationVault"
               },
               {
                 "kind": "account",
                 "path": "escrow.escrow_id",
-                "account": "EscrowDeposit"
+                "account": "escrowDeposit"
               }
             ]
           }
         },
         {
-          "name": "escrow_ata",
+          "name": "escrowAta",
           "writable": true,
           "pda": {
             "seeds": [
@@ -2819,7 +2859,7 @@ export const IDL = {
               },
               {
                 "kind": "account",
-                "path": "token_mint"
+                "path": "tokenMint"
               }
             ],
             "program": {
@@ -2862,18 +2902,18 @@ export const IDL = {
           }
         },
         {
-          "name": "destination_vault_ata",
+          "name": "destinationVaultAta",
           "writable": true
         },
         {
-          "name": "rent_destination",
+          "name": "rentDestination",
           "writable": true
         },
         {
-          "name": "token_mint"
+          "name": "tokenMint"
         },
         {
-          "name": "token_program",
+          "name": "tokenProgram",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         }
       ],
@@ -2885,7 +2925,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "sync_positions",
+      "name": "syncPositions",
       "docs": [
         "Sync the vault's open position counter with the actual state."
       ],
@@ -2922,12 +2962,12 @@ export const IDL = {
               {
                 "kind": "account",
                 "path": "vault.owner",
-                "account": "AgentVault"
+                "account": "agentVault"
               },
               {
                 "kind": "account",
                 "path": "vault.vault_id",
-                "account": "AgentVault"
+                "account": "agentVault"
               }
             ]
           }
@@ -2935,13 +2975,13 @@ export const IDL = {
       ],
       "args": [
         {
-          "name": "actual_positions",
+          "name": "actualPositions",
           "type": "u8"
         }
       ]
     },
     {
-      "name": "update_agent_permissions",
+      "name": "updateAgentPermissions",
       "docs": [
         "Update an agent's permission bitmask and spending limit.",
         "Only the owner can call this. Blocked when timelock is active."
@@ -2980,12 +3020,12 @@ export const IDL = {
               {
                 "kind": "account",
                 "path": "vault.owner",
-                "account": "AgentVault"
+                "account": "agentVault"
               },
               {
                 "kind": "account",
                 "path": "vault.vault_id",
-                "account": "AgentVault"
+                "account": "agentVault"
               }
             ]
           }
@@ -3019,17 +3059,17 @@ export const IDL = {
           "type": "pubkey"
         },
         {
-          "name": "new_permissions",
+          "name": "newPermissions",
           "type": "u64"
         },
         {
-          "name": "spending_limit_usd",
+          "name": "spendingLimitUsd",
           "type": "u64"
         }
       ]
     },
     {
-      "name": "update_instruction_constraints",
+      "name": "updateInstructionConstraints",
       "docs": [
         "Update instruction constraints for the vault.",
         "Only the owner can call this. Blocked when timelock > 0."
@@ -3074,7 +3114,7 @@ export const IDL = {
               {
                 "kind": "account",
                 "path": "vault.vault_id",
-                "account": "AgentVault"
+                "account": "agentVault"
               }
             ]
           },
@@ -3140,7 +3180,7 @@ export const IDL = {
           "type": {
             "vec": {
               "defined": {
-                "name": "ConstraintEntry"
+                "name": "constraintEntry"
               }
             }
           }
@@ -3148,7 +3188,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "update_policy",
+      "name": "updatePolicy",
       "docs": [
         "Update the policy configuration for a vault.",
         "Only the owner can call this. Blocked when timelock > 0."
@@ -3192,7 +3232,7 @@ export const IDL = {
               {
                 "kind": "account",
                 "path": "vault.vault_id",
-                "account": "AgentVault"
+                "account": "agentVault"
               }
             ]
           },
@@ -3226,19 +3266,19 @@ export const IDL = {
       ],
       "args": [
         {
-          "name": "daily_spending_cap_usd",
+          "name": "dailySpendingCapUsd",
           "type": {
             "option": "u64"
           }
         },
         {
-          "name": "max_transaction_size_usd",
+          "name": "maxTransactionSizeUsd",
           "type": {
             "option": "u64"
           }
         },
         {
-          "name": "protocol_mode",
+          "name": "protocolMode",
           "type": {
             "option": "u8"
           }
@@ -3252,53 +3292,59 @@ export const IDL = {
           }
         },
         {
-          "name": "max_leverage_bps",
+          "name": "maxLeverageBps",
           "type": {
             "option": "u16"
           }
         },
         {
-          "name": "can_open_positions",
+          "name": "canOpenPositions",
           "type": {
             "option": "bool"
           }
         },
         {
-          "name": "max_concurrent_positions",
+          "name": "maxConcurrentPositions",
           "type": {
             "option": "u8"
           }
         },
         {
-          "name": "developer_fee_rate",
+          "name": "developerFeeRate",
           "type": {
             "option": "u16"
           }
         },
         {
-          "name": "max_slippage_bps",
+          "name": "maxSlippageBps",
           "type": {
             "option": "u16"
           }
         },
         {
-          "name": "timelock_duration",
+          "name": "timelockDuration",
           "type": {
             "option": "u64"
           }
         },
         {
-          "name": "allowed_destinations",
+          "name": "allowedDestinations",
           "type": {
             "option": {
               "vec": "pubkey"
             }
           }
+        },
+        {
+          "name": "sessionExpirySlots",
+          "type": {
+            "option": "u64"
+          }
         }
       ]
     },
     {
-      "name": "validate_and_authorize",
+      "name": "validateAndAuthorize",
       "docs": [
         "Core permission check. Called by the agent before a DeFi action.",
         "Validates against policy constraints, stablecoin-only enforcement,",
@@ -3338,12 +3384,12 @@ export const IDL = {
               {
                 "kind": "account",
                 "path": "vault.owner",
-                "account": "AgentVault"
+                "account": "agentVault"
               },
               {
                 "kind": "account",
                 "path": "vault.vault_id",
-                "account": "AgentVault"
+                "account": "agentVault"
               }
             ]
           },
@@ -3401,9 +3447,16 @@ export const IDL = {
           }
         },
         {
+          "name": "agentSpendOverlay",
+          "docs": [
+            "Zero-copy AgentSpendOverlay shard 0 — per-agent rolling spend enforcement"
+          ],
+          "writable": true
+        },
+        {
           "name": "session",
           "docs": [
-            "Ephemeral session PDA \u2014 `init` ensures no double-authorization.",
+            "Ephemeral session PDA — `init` ensures no double-authorization.",
             "Seeds include token_mint for per-token concurrent sessions."
           ],
           "writable": true,
@@ -3431,26 +3484,26 @@ export const IDL = {
               },
               {
                 "kind": "arg",
-                "path": "token_mint"
+                "path": "tokenMint"
               }
             ]
           }
         },
         {
-          "name": "vault_token_account",
+          "name": "vaultTokenAccount",
           "docs": [
             "Vault's PDA-owned token account for the spend token"
           ],
           "writable": true
         },
         {
-          "name": "token_mint_account",
+          "name": "tokenMintAccount",
           "docs": [
-            "The token mint being spent \u2014 constrained to match token_mint arg"
+            "The token mint being spent — constrained to match token_mint arg"
           ]
         },
         {
-          "name": "protocol_treasury_token_account",
+          "name": "protocolTreasuryTokenAccount",
           "docs": [
             "Protocol treasury token account (needed when protocol_fee > 0)"
           ],
@@ -3458,7 +3511,7 @@ export const IDL = {
           "optional": true
         },
         {
-          "name": "fee_destination_token_account",
+          "name": "feeDestinationTokenAccount",
           "docs": [
             "Developer fee destination token account (needed when developer_fee > 0)"
           ],
@@ -3466,7 +3519,7 @@ export const IDL = {
           "optional": true
         },
         {
-          "name": "output_stablecoin_account",
+          "name": "outputStablecoinAccount",
           "docs": [
             "Vault's stablecoin ATA to snapshot (for non-stablecoin input swaps).",
             "Required when input token is NOT a stablecoin."
@@ -3475,15 +3528,15 @@ export const IDL = {
           "optional": true
         },
         {
-          "name": "token_program",
+          "name": "tokenProgram",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         },
         {
-          "name": "instructions_sysvar",
+          "name": "instructionsSysvar",
           "docs": [
             "Instructions sysvar for verifying DeFi instruction program_id",
             "and protocol slippage enforcement."
@@ -3493,15 +3546,15 @@ export const IDL = {
       ],
       "args": [
         {
-          "name": "action_type",
+          "name": "actionType",
           "type": {
             "defined": {
-              "name": "ActionType"
+              "name": "actionType"
             }
           }
         },
         {
-          "name": "token_mint",
+          "name": "tokenMint",
           "type": "pubkey"
         },
         {
@@ -3509,11 +3562,11 @@ export const IDL = {
           "type": "u64"
         },
         {
-          "name": "target_protocol",
+          "name": "targetProtocol",
           "type": "pubkey"
         },
         {
-          "name": "leverage_bps",
+          "name": "leverageBps",
           "type": {
             "option": "u16"
           }
@@ -3521,7 +3574,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "withdraw_funds",
+      "name": "withdrawFunds",
       "docs": [
         "Withdraw tokens from the vault back to the owner."
       ],
@@ -3565,7 +3618,7 @@ export const IDL = {
               {
                 "kind": "account",
                 "path": "vault.vault_id",
-                "account": "AgentVault"
+                "account": "agentVault"
               }
             ]
           }
@@ -3574,7 +3627,7 @@ export const IDL = {
           "name": "mint"
         },
         {
-          "name": "vault_token_account",
+          "name": "vaultTokenAccount",
           "docs": [
             "Vault's PDA-controlled token account"
           ],
@@ -3667,7 +3720,7 @@ export const IDL = {
           }
         },
         {
-          "name": "owner_token_account",
+          "name": "ownerTokenAccount",
           "docs": [
             "Owner's token account to receive funds"
           ],
@@ -3760,7 +3813,7 @@ export const IDL = {
           }
         },
         {
-          "name": "token_program",
+          "name": "tokenProgram",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         }
       ],
@@ -3774,7 +3827,7 @@ export const IDL = {
   ],
   "accounts": [
     {
-      "name": "AgentSpendOverlay",
+      "name": "agentSpendOverlay",
       "discriminator": [
         126,
         248,
@@ -3787,7 +3840,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "AgentVault",
+      "name": "agentVault",
       "discriminator": [
         232,
         220,
@@ -3800,7 +3853,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "EscrowDeposit",
+      "name": "escrowDeposit",
       "discriminator": [
         56,
         152,
@@ -3813,7 +3866,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "InstructionConstraints",
+      "name": "instructionConstraints",
       "discriminator": [
         183,
         235,
@@ -3826,7 +3879,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "PendingConstraintsUpdate",
+      "name": "pendingConstraintsUpdate",
       "discriminator": [
         22,
         206,
@@ -3839,7 +3892,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "PendingPolicyUpdate",
+      "name": "pendingPolicyUpdate",
       "discriminator": [
         77,
         255,
@@ -3852,7 +3905,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "PolicyConfig",
+      "name": "policyConfig",
       "discriminator": [
         219,
         7,
@@ -3865,7 +3918,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "SessionAuthority",
+      "name": "sessionAuthority",
       "discriminator": [
         48,
         9,
@@ -3878,7 +3931,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "SpendTracker",
+      "name": "spendTracker",
       "discriminator": [
         180,
         17,
@@ -3893,7 +3946,7 @@ export const IDL = {
   ],
   "events": [
     {
-      "name": "ActionAuthorized",
+      "name": "actionAuthorized",
       "discriminator": [
         85,
         90,
@@ -3906,7 +3959,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "AgentPermissionsUpdated",
+      "name": "agentPermissionsUpdated",
       "discriminator": [
         203,
         110,
@@ -3919,7 +3972,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "AgentRegistered",
+      "name": "agentRegistered",
       "discriminator": [
         191,
         78,
@@ -3932,7 +3985,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "AgentRevoked",
+      "name": "agentRevoked",
       "discriminator": [
         12,
         251,
@@ -3945,7 +3998,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "AgentSpendLimitChecked",
+      "name": "agentSpendLimitChecked",
       "discriminator": [
         107,
         128,
@@ -3958,7 +4011,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "AgentTransferExecuted",
+      "name": "agentTransferExecuted",
       "discriminator": [
         88,
         52,
@@ -3971,7 +4024,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "ConstraintsChangeApplied",
+      "name": "constraintsChangeApplied",
       "discriminator": [
         112,
         150,
@@ -3984,7 +4037,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "ConstraintsChangeCancelled",
+      "name": "constraintsChangeCancelled",
       "discriminator": [
         15,
         75,
@@ -3997,7 +4050,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "ConstraintsChangeQueued",
+      "name": "constraintsChangeQueued",
       "discriminator": [
         111,
         221,
@@ -4010,7 +4063,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "DelegationRevoked",
+      "name": "delegationRevoked",
       "discriminator": [
         59,
         158,
@@ -4023,7 +4076,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "EscrowCreated",
+      "name": "escrowCreated",
       "discriminator": [
         70,
         127,
@@ -4036,7 +4089,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "EscrowRefunded",
+      "name": "escrowRefunded",
       "discriminator": [
         132,
         209,
@@ -4049,7 +4102,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "EscrowSettled",
+      "name": "escrowSettled",
       "discriminator": [
         97,
         27,
@@ -4062,7 +4115,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "FeesCollected",
+      "name": "feesCollected",
       "discriminator": [
         233,
         23,
@@ -4075,7 +4128,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "FundsDeposited",
+      "name": "fundsDeposited",
       "discriminator": [
         157,
         209,
@@ -4088,7 +4141,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "FundsWithdrawn",
+      "name": "fundsWithdrawn",
       "discriminator": [
         56,
         130,
@@ -4101,7 +4154,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "InstructionConstraintsClosed",
+      "name": "instructionConstraintsClosed",
       "discriminator": [
         107,
         107,
@@ -4114,7 +4167,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "InstructionConstraintsCreated",
+      "name": "instructionConstraintsCreated",
       "discriminator": [
         8,
         170,
@@ -4127,7 +4180,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "InstructionConstraintsUpdated",
+      "name": "instructionConstraintsUpdated",
       "discriminator": [
         159,
         63,
@@ -4140,7 +4193,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "PolicyChangeApplied",
+      "name": "policyChangeApplied",
       "discriminator": [
         104,
         89,
@@ -4153,7 +4206,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "PolicyChangeCancelled",
+      "name": "policyChangeCancelled",
       "discriminator": [
         200,
         158,
@@ -4166,7 +4219,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "PolicyChangeQueued",
+      "name": "policyChangeQueued",
       "discriminator": [
         73,
         231,
@@ -4179,7 +4232,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "PolicyUpdated",
+      "name": "policyUpdated",
       "discriminator": [
         225,
         112,
@@ -4192,7 +4245,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "PositionsSynced",
+      "name": "positionsSynced",
       "discriminator": [
         83,
         33,
@@ -4205,7 +4258,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "SessionFinalized",
+      "name": "sessionFinalized",
       "discriminator": [
         33,
         12,
@@ -4218,7 +4271,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "VaultClosed",
+      "name": "vaultClosed",
       "discriminator": [
         238,
         129,
@@ -4231,7 +4284,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "VaultCreated",
+      "name": "vaultCreated",
       "discriminator": [
         117,
         25,
@@ -4244,7 +4297,7 @@ export const IDL = {
       ]
     },
     {
-      "name": "VaultReactivated",
+      "name": "vaultReactivated",
       "discriminator": [
         197,
         52,
@@ -4260,328 +4313,367 @@ export const IDL = {
   "errors": [
     {
       "code": 6000,
-      "name": "VaultNotActive",
+      "name": "vaultNotActive",
       "msg": "Vault is not active"
     },
     {
       "code": 6001,
-      "name": "UnauthorizedAgent",
+      "name": "unauthorizedAgent",
       "msg": "Unauthorized: signer is not the registered agent"
     },
     {
       "code": 6002,
-      "name": "UnauthorizedOwner",
+      "name": "unauthorizedOwner",
       "msg": "Unauthorized: signer is not the vault owner"
     },
     {
       "code": 6003,
-      "name": "TokenNotRegistered",
+      "name": "tokenNotRegistered",
       "msg": "Token is not a recognized stablecoin"
     },
     {
       "code": 6004,
-      "name": "ProtocolNotAllowed",
+      "name": "protocolNotAllowed",
       "msg": "Protocol not allowed by policy"
     },
     {
       "code": 6005,
-      "name": "TransactionTooLarge",
+      "name": "transactionTooLarge",
       "msg": "Transaction exceeds maximum single transaction size"
     },
     {
       "code": 6006,
-      "name": "DailyCapExceeded",
+      "name": "dailyCapExceeded",
       "msg": "Daily spending cap would be exceeded"
     },
     {
       "code": 6007,
-      "name": "LeverageTooHigh",
+      "name": "leverageTooHigh",
       "msg": "Leverage exceeds maximum allowed"
     },
     {
       "code": 6008,
-      "name": "TooManyPositions",
+      "name": "tooManyPositions",
       "msg": "Maximum concurrent open positions reached"
     },
     {
       "code": 6009,
-      "name": "PositionOpeningDisallowed",
+      "name": "positionOpeningDisallowed",
       "msg": "Cannot open new positions (policy disallows)"
     },
     {
       "code": 6010,
-      "name": "SessionNotAuthorized",
+      "name": "sessionNotAuthorized",
       "msg": "Session not authorized"
     },
     {
       "code": 6011,
-      "name": "InvalidSession",
+      "name": "invalidSession",
       "msg": "Invalid session: does not belong to this vault"
     },
     {
       "code": 6012,
-      "name": "OpenPositionsExist",
+      "name": "openPositionsExist",
       "msg": "Vault has open positions, cannot close"
     },
     {
       "code": 6013,
-      "name": "TooManyAllowedProtocols",
+      "name": "tooManyAllowedProtocols",
       "msg": "Policy configuration invalid: too many allowed protocols"
     },
     {
       "code": 6014,
-      "name": "AgentAlreadyRegistered",
+      "name": "agentAlreadyRegistered",
       "msg": "Agent already registered for this vault"
     },
     {
       "code": 6015,
-      "name": "NoAgentRegistered",
+      "name": "noAgentRegistered",
       "msg": "No agent registered for this vault"
     },
     {
       "code": 6016,
-      "name": "VaultNotFrozen",
+      "name": "vaultNotFrozen",
       "msg": "Vault is not frozen (expected frozen for reactivation)"
     },
     {
       "code": 6017,
-      "name": "VaultAlreadyClosed",
+      "name": "vaultAlreadyClosed",
       "msg": "Vault is already closed"
     },
     {
       "code": 6018,
-      "name": "InsufficientBalance",
+      "name": "insufficientBalance",
       "msg": "Insufficient vault balance for withdrawal"
     },
     {
       "code": 6019,
-      "name": "DeveloperFeeTooHigh",
+      "name": "developerFeeTooHigh",
       "msg": "Developer fee rate exceeds maximum (500 / 1,000,000 = 5 BPS)"
     },
     {
       "code": 6020,
-      "name": "InvalidFeeDestination",
+      "name": "invalidFeeDestination",
       "msg": "Fee destination account invalid"
     },
     {
       "code": 6021,
-      "name": "InvalidProtocolTreasury",
+      "name": "invalidProtocolTreasury",
       "msg": "Protocol treasury account does not match expected address"
     },
     {
       "code": 6022,
-      "name": "InvalidAgentKey",
+      "name": "invalidAgentKey",
       "msg": "Invalid agent: cannot be the zero address"
     },
     {
       "code": 6023,
-      "name": "AgentIsOwner",
+      "name": "agentIsOwner",
       "msg": "Invalid agent: agent cannot be the vault owner"
     },
     {
       "code": 6024,
-      "name": "Overflow",
+      "name": "overflow",
       "msg": "Arithmetic overflow"
     },
     {
       "code": 6025,
-      "name": "InvalidTokenAccount",
+      "name": "invalidTokenAccount",
       "msg": "Token account does not belong to vault or has wrong mint"
     },
     {
       "code": 6026,
-      "name": "TimelockNotExpired",
+      "name": "timelockNotExpired",
       "msg": "Timelock period has not expired yet"
     },
     {
       "code": 6027,
-      "name": "TimelockActive",
-      "msg": "Vault has timelock active \u2014 use queue_policy_update instead"
+      "name": "timelockActive",
+      "msg": "Vault has timelock active — use queue_policy_update instead"
     },
     {
       "code": 6028,
-      "name": "NoTimelockConfigured",
+      "name": "noTimelockConfigured",
       "msg": "No timelock configured on this vault"
     },
     {
       "code": 6029,
-      "name": "DestinationNotAllowed",
+      "name": "destinationNotAllowed",
       "msg": "Destination not in allowed list"
     },
     {
       "code": 6030,
-      "name": "TooManyDestinations",
+      "name": "tooManyDestinations",
       "msg": "Too many destinations (max 10)"
     },
     {
       "code": 6031,
-      "name": "InvalidProtocolMode",
+      "name": "invalidProtocolMode",
       "msg": "Invalid protocol mode (must be 0, 1, or 2)"
     },
     {
       "code": 6032,
-      "name": "InvalidNonSpendingAmount",
+      "name": "invalidNonSpendingAmount",
       "msg": "Non-spending action must have amount = 0"
     },
     {
       "code": 6033,
-      "name": "NoPositionsToClose",
+      "name": "noPositionsToClose",
       "msg": "No open positions to close or cancel"
     },
     {
       "code": 6034,
-      "name": "CpiCallNotAllowed",
+      "name": "cpiCallNotAllowed",
       "msg": "Instruction must be top-level (CPI calls not allowed)"
     },
     {
       "code": 6035,
-      "name": "MissingFinalizeInstruction",
+      "name": "missingFinalizeInstruction",
       "msg": "Transaction must include finalize_session after validate"
     },
     {
       "code": 6036,
-      "name": "NonTrackedSwapMustReturnStablecoin",
+      "name": "nonTrackedSwapMustReturnStablecoin",
       "msg": "Non-stablecoin swap must return stablecoin (balance did not increase)"
     },
     {
       "code": 6037,
-      "name": "SlippageTooHigh",
+      "name": "slippageTooHigh",
       "msg": "Jupiter slippage exceeds policy max_slippage_bps or quoted_out is zero"
     },
     {
       "code": 6038,
-      "name": "InvalidJupiterInstruction",
+      "name": "invalidJupiterInstruction",
       "msg": "Cannot parse Jupiter swap instruction data"
     },
     {
       "code": 6039,
-      "name": "InvalidFlashTradeInstruction",
+      "name": "invalidFlashTradeInstruction",
       "msg": "Cannot parse Flash Trade instruction data"
     },
     {
       "code": 6040,
-      "name": "FlashTradePriceZero",
+      "name": "flashTradePriceZero",
       "msg": "Flash Trade priceWithSlippage is zero"
     },
     {
       "code": 6041,
-      "name": "DustDepositDetected",
+      "name": "dustDepositDetected",
       "msg": "Top-level SPL Token transfer not allowed between validate and finalize"
     },
     {
       "code": 6042,
-      "name": "InvalidJupiterLendInstruction",
+      "name": "invalidJupiterLendInstruction",
       "msg": "Cannot parse Jupiter Lend instruction data"
     },
     {
       "code": 6043,
-      "name": "SlippageBpsTooHigh",
+      "name": "slippageBpsTooHigh",
       "msg": "Slippage BPS exceeds maximum (5000 = 50%)"
     },
     {
       "code": 6044,
-      "name": "ProtocolMismatch",
+      "name": "protocolMismatch",
       "msg": "DeFi instruction program does not match declared target_protocol"
     },
     {
       "code": 6045,
-      "name": "TooManyDeFiInstructions",
+      "name": "tooManyDeFiInstructions",
       "msg": "Non-stablecoin swap allows exactly one DeFi instruction"
     },
     {
       "code": 6046,
-      "name": "MaxAgentsReached",
+      "name": "maxAgentsReached",
       "msg": "Maximum agents per vault reached (limit: 10)"
     },
     {
       "code": 6047,
-      "name": "InsufficientPermissions",
+      "name": "insufficientPermissions",
       "msg": "Agent lacks permission for this action type"
     },
     {
       "code": 6048,
-      "name": "InvalidPermissions",
+      "name": "invalidPermissions",
       "msg": "Permission bitmask contains invalid bits"
     },
     {
       "code": 6049,
-      "name": "EscrowNotActive",
+      "name": "escrowNotActive",
       "msg": "Escrow is not in Active status"
     },
     {
       "code": 6050,
-      "name": "EscrowExpired",
+      "name": "escrowExpired",
       "msg": "Escrow has expired"
     },
     {
       "code": 6051,
-      "name": "EscrowNotExpired",
+      "name": "escrowNotExpired",
       "msg": "Escrow has not expired yet"
     },
     {
       "code": 6052,
-      "name": "InvalidEscrowVault",
+      "name": "invalidEscrowVault",
       "msg": "Invalid escrow vault"
     },
     {
       "code": 6053,
-      "name": "EscrowConditionsNotMet",
+      "name": "escrowConditionsNotMet",
       "msg": "Escrow conditions not met"
     },
     {
       "code": 6054,
-      "name": "EscrowDurationExceeded",
+      "name": "escrowDurationExceeded",
       "msg": "Escrow duration exceeds maximum (30 days)"
     },
     {
       "code": 6055,
-      "name": "InvalidConstraintConfig",
+      "name": "invalidConstraintConfig",
       "msg": "Invalid constraint configuration: bounds exceeded"
     },
     {
       "code": 6056,
-      "name": "ConstraintViolated",
+      "name": "constraintViolated",
       "msg": "Instruction constraint violated"
     },
     {
       "code": 6057,
-      "name": "InvalidConstraintsPda",
+      "name": "invalidConstraintsPda",
       "msg": "Invalid constraints PDA: wrong owner or vault"
     },
     {
       "code": 6058,
-      "name": "NoPendingConstraintsUpdate",
+      "name": "noPendingConstraintsUpdate",
       "msg": "No pending constraints update to apply or cancel"
     },
     {
       "code": 6059,
-      "name": "PendingConstraintsUpdateExists",
+      "name": "pendingConstraintsUpdateExists",
       "msg": "A pending constraints update already exists"
     },
     {
       "code": 6060,
-      "name": "ConstraintsUpdateNotExpired",
+      "name": "constraintsUpdateNotExpired",
       "msg": "Constraints update timelock has not expired"
     },
     {
       "code": 6061,
-      "name": "InvalidPendingConstraintsPda",
+      "name": "invalidPendingConstraintsPda",
       "msg": "Invalid pending constraints PDA: wrong owner or vault"
     },
     {
       "code": 6062,
-      "name": "ConstraintsUpdateExpired",
+      "name": "constraintsUpdateExpired",
       "msg": "Pending constraints update has expired and is stale"
     },
     {
       "code": 6063,
-      "name": "AgentSpendLimitExceeded",
+      "name": "agentSpendLimitExceeded",
       "msg": "Agent rolling 24h spend exceeds per-agent spending limit"
+    },
+    {
+      "code": 6064,
+      "name": "overlaySlotExhausted",
+      "msg": "Per-agent overlay shard is full; cannot register agent with spending limit"
+    },
+    {
+      "code": 6065,
+      "name": "agentSlotNotFound",
+      "msg": "Agent has per-agent spending limit but no overlay tracking slot"
+    },
+    {
+      "code": 6066,
+      "name": "unauthorizedTokenApproval",
+      "msg": "Unauthorized SPL Token Approve between validate and finalize"
+    },
+    {
+      "code": 6067,
+      "name": "invalidSessionExpiry",
+      "msg": "Session expiry slots out of range (10-450)"
     }
   ],
   "types": [
     {
-      "name": "ActionAuthorized",
+      "name": "accountConstraint",
+      "docs": [
+        "Account-index constraint: requires a specific pubkey at a specific account index."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "index",
+            "type": "u8"
+          },
+          {
+            "name": "expected",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "actionAuthorized",
       "type": {
         "kind": "struct",
         "fields": [
@@ -4594,15 +4686,15 @@ export const IDL = {
             "type": "pubkey"
           },
           {
-            "name": "action_type",
+            "name": "actionType",
             "type": {
               "defined": {
-                "name": "ActionType"
+                "name": "actionType"
               }
             }
           },
           {
-            "name": "token_mint",
+            "name": "tokenMint",
             "type": "pubkey"
           },
           {
@@ -4610,7 +4702,7 @@ export const IDL = {
             "type": "u64"
           },
           {
-            "name": "usd_amount",
+            "name": "usdAmount",
             "type": "u64"
           },
           {
@@ -4618,11 +4710,11 @@ export const IDL = {
             "type": "pubkey"
           },
           {
-            "name": "rolling_spend_usd_after",
+            "name": "rollingSpendUsdAfter",
             "type": "u64"
           },
           {
-            "name": "daily_cap_usd",
+            "name": "dailyCapUsd",
             "type": "u64"
           },
           {
@@ -4637,7 +4729,7 @@ export const IDL = {
       }
     },
     {
-      "name": "ActionType",
+      "name": "actionType",
       "docs": [
         "Action types that agents can request"
       ],
@@ -4645,73 +4737,73 @@ export const IDL = {
         "kind": "enum",
         "variants": [
           {
-            "name": "Swap"
+            "name": "swap"
           },
           {
-            "name": "OpenPosition"
+            "name": "openPosition"
           },
           {
-            "name": "ClosePosition"
+            "name": "closePosition"
           },
           {
-            "name": "IncreasePosition"
+            "name": "increasePosition"
           },
           {
-            "name": "DecreasePosition"
+            "name": "decreasePosition"
           },
           {
-            "name": "Deposit"
+            "name": "deposit"
           },
           {
-            "name": "Withdraw"
+            "name": "withdraw"
           },
           {
-            "name": "Transfer"
+            "name": "transfer"
           },
           {
-            "name": "AddCollateral"
+            "name": "addCollateral"
           },
           {
-            "name": "RemoveCollateral"
+            "name": "removeCollateral"
           },
           {
-            "name": "PlaceTriggerOrder"
+            "name": "placeTriggerOrder"
           },
           {
-            "name": "EditTriggerOrder"
+            "name": "editTriggerOrder"
           },
           {
-            "name": "CancelTriggerOrder"
+            "name": "cancelTriggerOrder"
           },
           {
-            "name": "PlaceLimitOrder"
+            "name": "placeLimitOrder"
           },
           {
-            "name": "EditLimitOrder"
+            "name": "editLimitOrder"
           },
           {
-            "name": "CancelLimitOrder"
+            "name": "cancelLimitOrder"
           },
           {
-            "name": "SwapAndOpenPosition"
+            "name": "swapAndOpenPosition"
           },
           {
-            "name": "CloseAndSwapPosition"
+            "name": "closeAndSwapPosition"
           },
           {
-            "name": "CreateEscrow"
+            "name": "createEscrow"
           },
           {
-            "name": "SettleEscrow"
+            "name": "settleEscrow"
           },
           {
-            "name": "RefundEscrow"
+            "name": "refundEscrow"
           }
         ]
       }
     },
     {
-      "name": "AgentContributionEntry",
+      "name": "agentContributionEntry",
       "docs": [
         "Per-agent contribution entry within a shard.",
         "Tracks each agent's individual spend contributions using the same",
@@ -4753,7 +4845,7 @@ export const IDL = {
       }
     },
     {
-      "name": "AgentEntry",
+      "name": "agentEntry",
       "type": {
         "kind": "struct",
         "fields": [
@@ -4766,14 +4858,14 @@ export const IDL = {
             "type": "u64"
           },
           {
-            "name": "spending_limit_usd",
+            "name": "spendingLimitUsd",
             "type": "u64"
           }
         ]
       }
     },
     {
-      "name": "AgentPermissionsUpdated",
+      "name": "agentPermissionsUpdated",
       "type": {
         "kind": "struct",
         "fields": [
@@ -4786,18 +4878,18 @@ export const IDL = {
             "type": "pubkey"
           },
           {
-            "name": "old_permissions",
+            "name": "oldPermissions",
             "type": "u64"
           },
           {
-            "name": "new_permissions",
+            "name": "newPermissions",
             "type": "u64"
           }
         ]
       }
     },
     {
-      "name": "AgentRegistered",
+      "name": "agentRegistered",
       "type": {
         "kind": "struct",
         "fields": [
@@ -4814,7 +4906,7 @@ export const IDL = {
             "type": "u64"
           },
           {
-            "name": "spending_limit_usd",
+            "name": "spendingLimitUsd",
             "type": "u64"
           },
           {
@@ -4825,7 +4917,7 @@ export const IDL = {
       }
     },
     {
-      "name": "AgentRevoked",
+      "name": "agentRevoked",
       "type": {
         "kind": "struct",
         "fields": [
@@ -4838,7 +4930,7 @@ export const IDL = {
             "type": "pubkey"
           },
           {
-            "name": "remaining_agents",
+            "name": "remainingAgents",
             "type": "u8"
           },
           {
@@ -4849,7 +4941,7 @@ export const IDL = {
       }
     },
     {
-      "name": "AgentSpendLimitChecked",
+      "name": "agentSpendLimitChecked",
       "type": {
         "kind": "struct",
         "fields": [
@@ -4862,11 +4954,11 @@ export const IDL = {
             "type": "pubkey"
           },
           {
-            "name": "agent_rolling_spend",
+            "name": "agentRollingSpend",
             "type": "u64"
           },
           {
-            "name": "spending_limit_usd",
+            "name": "spendingLimitUsd",
             "type": "u64"
           },
           {
@@ -4881,7 +4973,7 @@ export const IDL = {
       }
     },
     {
-      "name": "AgentSpendOverlay",
+      "name": "agentSpendOverlay",
       "docs": [
         "Per-vault overlay PDA tracking per-agent spend contributions.",
         "",
@@ -4909,9 +5001,9 @@ export const IDL = {
             "type": "pubkey"
           },
           {
-            "name": "sync_epochs",
+            "name": "syncEpochs",
             "docs": [
-              "Per-epoch sync timestamps \u2014 used to detect stale epochs across all entries.",
+              "Per-epoch sync timestamps — used to detect stale epochs across all entries.",
               "When an epoch is stale (older than the current epoch), all agent contributions",
               "for that epoch index are zeroed during the next access."
             ],
@@ -4931,7 +5023,7 @@ export const IDL = {
               "array": [
                 {
                   "defined": {
-                    "name": "AgentContributionEntry"
+                    "name": "agentContributionEntry"
                   }
                 },
                 7
@@ -4946,7 +5038,7 @@ export const IDL = {
             "type": "u8"
           },
           {
-            "name": "_padding",
+            "name": "padding",
             "docs": [
               "Padding for 8-byte alignment"
             ],
@@ -4961,7 +5053,7 @@ export const IDL = {
       }
     },
     {
-      "name": "AgentTransferExecuted",
+      "name": "agentTransferExecuted",
       "type": {
         "kind": "struct",
         "fields": [
@@ -4985,7 +5077,7 @@ export const IDL = {
       }
     },
     {
-      "name": "AgentVault",
+      "name": "agentVault",
       "type": {
         "kind": "struct",
         "fields": [
@@ -4997,7 +5089,7 @@ export const IDL = {
             "type": "pubkey"
           },
           {
-            "name": "vault_id",
+            "name": "vaultId",
             "docs": [
               "Unique vault identifier (allows one owner to have multiple vaults)"
             ],
@@ -5011,15 +5103,15 @@ export const IDL = {
             "type": {
               "vec": {
                 "defined": {
-                  "name": "AgentEntry"
+                  "name": "agentEntry"
                 }
               }
             }
           },
           {
-            "name": "fee_destination",
+            "name": "feeDestination",
             "docs": [
-              "Developer fee destination \u2014 IMMUTABLE after initialization.",
+              "Developer fee destination — IMMUTABLE after initialization.",
               "Prevents a compromised owner from redirecting fees."
             ],
             "type": "pubkey"
@@ -5031,7 +5123,7 @@ export const IDL = {
             ],
             "type": {
               "defined": {
-                "name": "VaultStatus"
+                "name": "vaultStatus"
               }
             }
           },
@@ -5043,42 +5135,42 @@ export const IDL = {
             "type": "u8"
           },
           {
-            "name": "created_at",
+            "name": "createdAt",
             "docs": [
               "Unix timestamp of vault creation"
             ],
             "type": "i64"
           },
           {
-            "name": "total_transactions",
+            "name": "totalTransactions",
             "docs": [
               "Total number of agent transactions executed through this vault"
             ],
             "type": "u64"
           },
           {
-            "name": "total_volume",
+            "name": "totalVolume",
             "docs": [
               "Total volume processed in token base units"
             ],
             "type": "u64"
           },
           {
-            "name": "open_positions",
+            "name": "openPositions",
             "docs": [
               "Number of currently open positions (for perps tracking)"
             ],
             "type": "u8"
           },
           {
-            "name": "total_fees_collected",
+            "name": "totalFeesCollected",
             "docs": [
               "Cumulative developer fees collected from this vault (token base units)"
             ],
             "type": "u64"
           },
           {
-            "name": "treasury_shard",
+            "name": "treasuryShard",
             "docs": [
               "Treasury shard index assigned at vault creation.",
               "Reserved for future horizontal scaling of overlay PDAs."
@@ -5089,20 +5181,30 @@ export const IDL = {
       }
     },
     {
-      "name": "ConstraintEntry",
+      "name": "constraintEntry",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "program_id",
+            "name": "programId",
             "type": "pubkey"
           },
           {
-            "name": "data_constraints",
+            "name": "dataConstraints",
             "type": {
               "vec": {
                 "defined": {
-                  "name": "DataConstraint"
+                  "name": "dataConstraint"
+                }
+              }
+            }
+          },
+          {
+            "name": "accountConstraints",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "accountConstraint"
                 }
               }
             }
@@ -5111,36 +5213,36 @@ export const IDL = {
       }
     },
     {
-      "name": "ConstraintOperator",
+      "name": "constraintOperator",
       "type": {
         "kind": "enum",
         "variants": [
           {
-            "name": "Eq"
+            "name": "eq"
           },
           {
-            "name": "Ne"
+            "name": "ne"
           },
           {
-            "name": "Gte"
+            "name": "gte"
           },
           {
-            "name": "Lte"
+            "name": "lte"
           },
           {
-            "name": "GteSigned"
+            "name": "gteSigned"
           },
           {
-            "name": "LteSigned"
+            "name": "lteSigned"
           },
           {
-            "name": "Bitmask"
+            "name": "bitmask"
           }
         ]
       }
     },
     {
-      "name": "ConstraintsChangeApplied",
+      "name": "constraintsChangeApplied",
       "type": {
         "kind": "struct",
         "fields": [
@@ -5149,14 +5251,14 @@ export const IDL = {
             "type": "pubkey"
           },
           {
-            "name": "applied_at",
+            "name": "appliedAt",
             "type": "i64"
           }
         ]
       }
     },
     {
-      "name": "ConstraintsChangeCancelled",
+      "name": "constraintsChangeCancelled",
       "type": {
         "kind": "struct",
         "fields": [
@@ -5168,7 +5270,7 @@ export const IDL = {
       }
     },
     {
-      "name": "ConstraintsChangeQueued",
+      "name": "constraintsChangeQueued",
       "type": {
         "kind": "struct",
         "fields": [
@@ -5177,14 +5279,14 @@ export const IDL = {
             "type": "pubkey"
           },
           {
-            "name": "executes_at",
+            "name": "executesAt",
             "type": "i64"
           }
         ]
       }
     },
     {
-      "name": "DataConstraint",
+      "name": "dataConstraint",
       "type": {
         "kind": "struct",
         "fields": [
@@ -5196,7 +5298,7 @@ export const IDL = {
             "name": "operator",
             "type": {
               "defined": {
-                "name": "ConstraintOperator"
+                "name": "constraintOperator"
               }
             }
           },
@@ -5208,7 +5310,7 @@ export const IDL = {
       }
     },
     {
-      "name": "DelegationRevoked",
+      "name": "delegationRevoked",
       "type": {
         "kind": "struct",
         "fields": [
@@ -5217,7 +5319,7 @@ export const IDL = {
             "type": "pubkey"
           },
           {
-            "name": "token_account",
+            "name": "tokenAccount",
             "type": "pubkey"
           },
           {
@@ -5228,10 +5330,10 @@ export const IDL = {
       }
     },
     {
-      "name": "EpochBucket",
+      "name": "epochBucket",
       "docs": [
         "A single epoch bucket tracking aggregate USD spend.",
-        "16 bytes per bucket. USD-only \u2014 rate limiting stays client-side."
+        "16 bytes per bucket. USD-only — rate limiting stays client-side."
       ],
       "serialization": "bytemuck",
       "repr": {
@@ -5241,14 +5343,14 @@ export const IDL = {
         "kind": "struct",
         "fields": [
           {
-            "name": "epoch_id",
+            "name": "epochId",
             "docs": [
               "Epoch identifier: unix_timestamp / EPOCH_DURATION"
             ],
             "type": "i64"
           },
           {
-            "name": "usd_amount",
+            "name": "usdAmount",
             "docs": [
               "Aggregate USD spent in this epoch (6 decimals)"
             ],
@@ -5258,20 +5360,20 @@ export const IDL = {
       }
     },
     {
-      "name": "EscrowCreated",
+      "name": "escrowCreated",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "source_vault",
+            "name": "sourceVault",
             "type": "pubkey"
           },
           {
-            "name": "destination_vault",
+            "name": "destinationVault",
             "type": "pubkey"
           },
           {
-            "name": "escrow_id",
+            "name": "escrowId",
             "type": "u64"
           },
           {
@@ -5279,15 +5381,15 @@ export const IDL = {
             "type": "u64"
           },
           {
-            "name": "token_mint",
+            "name": "tokenMint",
             "type": "pubkey"
           },
           {
-            "name": "expires_at",
+            "name": "expiresAt",
             "type": "i64"
           },
           {
-            "name": "condition_hash",
+            "name": "conditionHash",
             "type": {
               "array": [
                 "u8",
@@ -5299,20 +5401,20 @@ export const IDL = {
       }
     },
     {
-      "name": "EscrowDeposit",
+      "name": "escrowDeposit",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "source_vault",
+            "name": "sourceVault",
             "type": "pubkey"
           },
           {
-            "name": "destination_vault",
+            "name": "destinationVault",
             "type": "pubkey"
           },
           {
-            "name": "escrow_id",
+            "name": "escrowId",
             "type": "u64"
           },
           {
@@ -5320,27 +5422,27 @@ export const IDL = {
             "type": "u64"
           },
           {
-            "name": "token_mint",
+            "name": "tokenMint",
             "type": "pubkey"
           },
           {
-            "name": "created_at",
+            "name": "createdAt",
             "type": "i64"
           },
           {
-            "name": "expires_at",
+            "name": "expiresAt",
             "type": "i64"
           },
           {
             "name": "status",
             "type": {
               "defined": {
-                "name": "EscrowStatus"
+                "name": "escrowStatus"
               }
             }
           },
           {
-            "name": "condition_hash",
+            "name": "conditionHash",
             "type": {
               "array": [
                 "u8",
@@ -5356,20 +5458,20 @@ export const IDL = {
       }
     },
     {
-      "name": "EscrowRefunded",
+      "name": "escrowRefunded",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "source_vault",
+            "name": "sourceVault",
             "type": "pubkey"
           },
           {
-            "name": "destination_vault",
+            "name": "destinationVault",
             "type": "pubkey"
           },
           {
-            "name": "escrow_id",
+            "name": "escrowId",
             "type": "u64"
           },
           {
@@ -5377,27 +5479,27 @@ export const IDL = {
             "type": "u64"
           },
           {
-            "name": "refunded_by",
+            "name": "refundedBy",
             "type": "pubkey"
           }
         ]
       }
     },
     {
-      "name": "EscrowSettled",
+      "name": "escrowSettled",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "source_vault",
+            "name": "sourceVault",
             "type": "pubkey"
           },
           {
-            "name": "destination_vault",
+            "name": "destinationVault",
             "type": "pubkey"
           },
           {
-            "name": "escrow_id",
+            "name": "escrowId",
             "type": "u64"
           },
           {
@@ -5405,31 +5507,31 @@ export const IDL = {
             "type": "u64"
           },
           {
-            "name": "settled_by",
+            "name": "settledBy",
             "type": "pubkey"
           }
         ]
       }
     },
     {
-      "name": "EscrowStatus",
+      "name": "escrowStatus",
       "type": {
         "kind": "enum",
         "variants": [
           {
-            "name": "Active"
+            "name": "active"
           },
           {
-            "name": "Settled"
+            "name": "settled"
           },
           {
-            "name": "Refunded"
+            "name": "refunded"
           }
         ]
       }
     },
     {
-      "name": "FeesCollected",
+      "name": "feesCollected",
       "type": {
         "kind": "struct",
         "fields": [
@@ -5438,39 +5540,39 @@ export const IDL = {
             "type": "pubkey"
           },
           {
-            "name": "token_mint",
+            "name": "tokenMint",
             "type": "pubkey"
           },
           {
-            "name": "protocol_fee_amount",
+            "name": "protocolFeeAmount",
             "type": "u64"
           },
           {
-            "name": "developer_fee_amount",
+            "name": "developerFeeAmount",
             "type": "u64"
           },
           {
-            "name": "protocol_fee_rate",
+            "name": "protocolFeeRate",
             "type": "u16"
           },
           {
-            "name": "developer_fee_rate",
+            "name": "developerFeeRate",
             "type": "u16"
           },
           {
-            "name": "transaction_amount",
+            "name": "transactionAmount",
             "type": "u64"
           },
           {
-            "name": "protocol_treasury",
+            "name": "protocolTreasury",
             "type": "pubkey"
           },
           {
-            "name": "developer_fee_destination",
+            "name": "developerFeeDestination",
             "type": "pubkey"
           },
           {
-            "name": "cumulative_developer_fees",
+            "name": "cumulativeDeveloperFees",
             "type": "u64"
           },
           {
@@ -5481,7 +5583,7 @@ export const IDL = {
       }
     },
     {
-      "name": "FundsDeposited",
+      "name": "fundsDeposited",
       "type": {
         "kind": "struct",
         "fields": [
@@ -5490,7 +5592,7 @@ export const IDL = {
             "type": "pubkey"
           },
           {
-            "name": "token_mint",
+            "name": "tokenMint",
             "type": "pubkey"
           },
           {
@@ -5505,7 +5607,7 @@ export const IDL = {
       }
     },
     {
-      "name": "FundsWithdrawn",
+      "name": "fundsWithdrawn",
       "type": {
         "kind": "struct",
         "fields": [
@@ -5514,7 +5616,7 @@ export const IDL = {
             "type": "pubkey"
           },
           {
-            "name": "token_mint",
+            "name": "tokenMint",
             "type": "pubkey"
           },
           {
@@ -5533,7 +5635,7 @@ export const IDL = {
       }
     },
     {
-      "name": "InstructionConstraints",
+      "name": "instructionConstraints",
       "type": {
         "kind": "struct",
         "fields": [
@@ -5546,7 +5648,7 @@ export const IDL = {
             "type": {
               "vec": {
                 "defined": {
-                  "name": "ConstraintEntry"
+                  "name": "constraintEntry"
                 }
               }
             }
@@ -5559,7 +5661,7 @@ export const IDL = {
       }
     },
     {
-      "name": "InstructionConstraintsClosed",
+      "name": "instructionConstraintsClosed",
       "type": {
         "kind": "struct",
         "fields": [
@@ -5575,7 +5677,7 @@ export const IDL = {
       }
     },
     {
-      "name": "InstructionConstraintsCreated",
+      "name": "instructionConstraintsCreated",
       "type": {
         "kind": "struct",
         "fields": [
@@ -5584,7 +5686,7 @@ export const IDL = {
             "type": "pubkey"
           },
           {
-            "name": "entries_count",
+            "name": "entriesCount",
             "type": "u8"
           },
           {
@@ -5595,7 +5697,7 @@ export const IDL = {
       }
     },
     {
-      "name": "InstructionConstraintsUpdated",
+      "name": "instructionConstraintsUpdated",
       "type": {
         "kind": "struct",
         "fields": [
@@ -5604,7 +5706,7 @@ export const IDL = {
             "type": "pubkey"
           },
           {
-            "name": "entries_count",
+            "name": "entriesCount",
             "type": "u8"
           },
           {
@@ -5615,7 +5717,7 @@ export const IDL = {
       }
     },
     {
-      "name": "PendingConstraintsUpdate",
+      "name": "pendingConstraintsUpdate",
       "docs": [
         "Queued instruction constraints update that becomes executable after",
         "a timelock period. Mirrors `PendingPolicyUpdate` pattern.",
@@ -5640,20 +5742,20 @@ export const IDL = {
             "type": {
               "vec": {
                 "defined": {
-                  "name": "ConstraintEntry"
+                  "name": "constraintEntry"
                 }
               }
             }
           },
           {
-            "name": "queued_at",
+            "name": "queuedAt",
             "docs": [
               "Unix timestamp when this update was queued"
             ],
             "type": "i64"
           },
           {
-            "name": "executes_at",
+            "name": "executesAt",
             "docs": [
               "Unix timestamp when this update becomes executable"
             ],
@@ -5670,7 +5772,7 @@ export const IDL = {
       }
     },
     {
-      "name": "PendingPolicyUpdate",
+      "name": "pendingPolicyUpdate",
       "docs": [
         "Queued policy update that becomes executable after a timelock period.",
         "Created by `queue_policy_update`, applied by `apply_pending_policy`,",
@@ -5689,33 +5791,33 @@ export const IDL = {
             "type": "pubkey"
           },
           {
-            "name": "queued_at",
+            "name": "queuedAt",
             "docs": [
               "Unix timestamp when this update was queued"
             ],
             "type": "i64"
           },
           {
-            "name": "executes_at",
+            "name": "executesAt",
             "docs": [
               "Unix timestamp when this update becomes executable"
             ],
             "type": "i64"
           },
           {
-            "name": "daily_spending_cap_usd",
+            "name": "dailySpendingCapUsd",
             "type": {
               "option": "u64"
             }
           },
           {
-            "name": "max_transaction_amount_usd",
+            "name": "maxTransactionAmountUsd",
             "type": {
               "option": "u64"
             }
           },
           {
-            "name": "protocol_mode",
+            "name": "protocolMode",
             "type": {
               "option": "u8"
             }
@@ -5729,47 +5831,53 @@ export const IDL = {
             }
           },
           {
-            "name": "max_leverage_bps",
+            "name": "maxLeverageBps",
             "type": {
               "option": "u16"
             }
           },
           {
-            "name": "can_open_positions",
+            "name": "canOpenPositions",
             "type": {
               "option": "bool"
             }
           },
           {
-            "name": "max_concurrent_positions",
+            "name": "maxConcurrentPositions",
             "type": {
               "option": "u8"
             }
           },
           {
-            "name": "developer_fee_rate",
+            "name": "developerFeeRate",
             "type": {
               "option": "u16"
             }
           },
           {
-            "name": "max_slippage_bps",
+            "name": "maxSlippageBps",
             "type": {
               "option": "u16"
             }
           },
           {
-            "name": "timelock_duration",
+            "name": "timelockDuration",
             "type": {
               "option": "u64"
             }
           },
           {
-            "name": "allowed_destinations",
+            "name": "allowedDestinations",
             "type": {
               "option": {
                 "vec": "pubkey"
               }
+            }
+          },
+          {
+            "name": "sessionExpirySlots",
+            "type": {
+              "option": "u64"
             }
           },
           {
@@ -5783,7 +5891,7 @@ export const IDL = {
       }
     },
     {
-      "name": "PolicyChangeApplied",
+      "name": "policyChangeApplied",
       "type": {
         "kind": "struct",
         "fields": [
@@ -5792,14 +5900,14 @@ export const IDL = {
             "type": "pubkey"
           },
           {
-            "name": "applied_at",
+            "name": "appliedAt",
             "type": "i64"
           }
         ]
       }
     },
     {
-      "name": "PolicyChangeCancelled",
+      "name": "policyChangeCancelled",
       "type": {
         "kind": "struct",
         "fields": [
@@ -5811,7 +5919,7 @@ export const IDL = {
       }
     },
     {
-      "name": "PolicyChangeQueued",
+      "name": "policyChangeQueued",
       "type": {
         "kind": "struct",
         "fields": [
@@ -5820,14 +5928,14 @@ export const IDL = {
             "type": "pubkey"
           },
           {
-            "name": "executes_at",
+            "name": "executesAt",
             "type": "i64"
           }
         ]
       }
     },
     {
-      "name": "PolicyConfig",
+      "name": "policyConfig",
       "type": {
         "kind": "struct",
         "fields": [
@@ -5839,7 +5947,7 @@ export const IDL = {
             "type": "pubkey"
           },
           {
-            "name": "daily_spending_cap_usd",
+            "name": "dailySpendingCapUsd",
             "docs": [
               "Maximum aggregate spend per rolling 24h period in USD (6 decimals).",
               "$500 = 500_000_000. This is the primary spending cap."
@@ -5847,14 +5955,14 @@ export const IDL = {
             "type": "u64"
           },
           {
-            "name": "max_transaction_size_usd",
+            "name": "maxTransactionSizeUsd",
             "docs": [
               "Maximum single transaction size in USD (6 decimals)."
             ],
             "type": "u64"
           },
           {
-            "name": "protocol_mode",
+            "name": "protocolMode",
             "docs": [
               "Protocol access control mode:",
               "0 = all allowed (protocols list ignored)",
@@ -5874,7 +5982,7 @@ export const IDL = {
             }
           },
           {
-            "name": "max_leverage_bps",
+            "name": "maxLeverageBps",
             "docs": [
               "Maximum leverage multiplier in basis points (e.g., 10000 = 100x)",
               "Set to 0 to disallow leveraged positions entirely"
@@ -5882,21 +5990,21 @@ export const IDL = {
             "type": "u16"
           },
           {
-            "name": "can_open_positions",
+            "name": "canOpenPositions",
             "docs": [
               "Whether the agent can open new positions (vs only close existing)"
             ],
             "type": "bool"
           },
           {
-            "name": "max_concurrent_positions",
+            "name": "maxConcurrentPositions",
             "docs": [
               "Maximum number of concurrent open positions"
             ],
             "type": "u8"
           },
           {
-            "name": "developer_fee_rate",
+            "name": "developerFeeRate",
             "docs": [
               "Developer fee rate (rate / 1,000,000). Applied to every finalized",
               "transaction. Max MAX_DEVELOPER_FEE_RATE (500 = 5 BPS)."
@@ -5904,7 +6012,7 @@ export const IDL = {
             "type": "u16"
           },
           {
-            "name": "max_slippage_bps",
+            "name": "maxSlippageBps",
             "docs": [
               "Maximum slippage tolerance for Jupiter swaps in basis points.",
               "0 = reject all swaps (vault owner must explicitly configure).",
@@ -5913,14 +6021,14 @@ export const IDL = {
             "type": "u16"
           },
           {
-            "name": "timelock_duration",
+            "name": "timelockDuration",
             "docs": [
               "Timelock duration in seconds for policy changes. 0 = no timelock."
             ],
             "type": "u64"
           },
           {
-            "name": "allowed_destinations",
+            "name": "allowedDestinations",
             "docs": [
               "Allowed destination addresses for agent transfers.",
               "Empty = any destination allowed. Bounded to MAX_ALLOWED_DESTINATIONS."
@@ -5930,7 +6038,7 @@ export const IDL = {
             }
           },
           {
-            "name": "has_constraints",
+            "name": "hasConstraints",
             "docs": [
               "Whether instruction constraints PDA exists for this vault.",
               "Set true by create_instruction_constraints, false by close_instruction_constraints."
@@ -5938,11 +6046,19 @@ export const IDL = {
             "type": "bool"
           },
           {
-            "name": "has_protocol_caps",
+            "name": "hasProtocolCaps",
             "docs": [
               "Whether per-protocol spend caps are configured (reserved, not enforced yet)."
             ],
             "type": "bool"
+          },
+          {
+            "name": "sessionExpirySlots",
+            "docs": [
+              "Configurable session expiry in slots. 0 = use default (SESSION_EXPIRY_SLOTS = 20).",
+              "Valid range when non-zero: 10-450 slots."
+            ],
+            "type": "u64"
           },
           {
             "name": "bump",
@@ -5955,7 +6071,7 @@ export const IDL = {
       }
     },
     {
-      "name": "PolicyUpdated",
+      "name": "policyUpdated",
       "type": {
         "kind": "struct",
         "fields": [
@@ -5964,31 +6080,31 @@ export const IDL = {
             "type": "pubkey"
           },
           {
-            "name": "daily_cap_usd",
+            "name": "dailyCapUsd",
             "type": "u64"
           },
           {
-            "name": "max_transaction_size_usd",
+            "name": "maxTransactionSizeUsd",
             "type": "u64"
           },
           {
-            "name": "protocol_mode",
+            "name": "protocolMode",
             "type": "u8"
           },
           {
-            "name": "protocols_count",
+            "name": "protocolsCount",
             "type": "u8"
           },
           {
-            "name": "max_leverage_bps",
+            "name": "maxLeverageBps",
             "type": "u16"
           },
           {
-            "name": "developer_fee_rate",
+            "name": "developerFeeRate",
             "type": "u16"
           },
           {
-            "name": "max_slippage_bps",
+            "name": "maxSlippageBps",
             "type": "u16"
           },
           {
@@ -5999,7 +6115,7 @@ export const IDL = {
       }
     },
     {
-      "name": "PositionsSynced",
+      "name": "positionsSynced",
       "type": {
         "kind": "struct",
         "fields": [
@@ -6008,11 +6124,11 @@ export const IDL = {
             "type": "pubkey"
           },
           {
-            "name": "old_count",
+            "name": "oldCount",
             "type": "u8"
           },
           {
-            "name": "new_count",
+            "name": "newCount",
             "type": "u8"
           },
           {
@@ -6023,10 +6139,10 @@ export const IDL = {
       }
     },
     {
-      "name": "ProtocolSpendCounter",
+      "name": "protocolSpendCounter",
       "docs": [
         "Reserved per-protocol spend counter for future per-protocol caps.",
-        "Zeroed at init \u2014 no enforcement logic yet.",
+        "Zeroed at init — no enforcement logic yet.",
         "48 bytes per entry (32 + 8 + 8)."
       ],
       "serialization": "bytemuck",
@@ -6049,14 +6165,14 @@ export const IDL = {
             }
           },
           {
-            "name": "window_start",
+            "name": "windowStart",
             "docs": [
               "Window start timestamp (for future rolling window)"
             ],
             "type": "i64"
           },
           {
-            "name": "window_spend",
+            "name": "windowSpend",
             "docs": [
               "Accumulated spend in window (for future cap enforcement)"
             ],
@@ -6066,7 +6182,7 @@ export const IDL = {
       }
     },
     {
-      "name": "SessionAuthority",
+      "name": "sessionAuthority",
       "type": {
         "kind": "struct",
         "fields": [
@@ -6092,33 +6208,33 @@ export const IDL = {
             "type": "bool"
           },
           {
-            "name": "authorized_amount",
+            "name": "authorizedAmount",
             "docs": [
               "Authorized action details (for verification in finalize)"
             ],
             "type": "u64"
           },
           {
-            "name": "authorized_token",
+            "name": "authorizedToken",
             "type": "pubkey"
           },
           {
-            "name": "authorized_protocol",
+            "name": "authorizedProtocol",
             "type": "pubkey"
           },
           {
-            "name": "action_type",
+            "name": "actionType",
             "docs": [
               "The action type that was authorized (stored so finalize can record it)"
             ],
             "type": {
               "defined": {
-                "name": "ActionType"
+                "name": "actionType"
               }
             }
           },
           {
-            "name": "expires_at_slot",
+            "name": "expiresAtSlot",
             "docs": [
               "Slot-based expiry: session is valid until this slot"
             ],
@@ -6132,7 +6248,7 @@ export const IDL = {
             "type": "bool"
           },
           {
-            "name": "delegation_token_account",
+            "name": "delegationTokenAccount",
             "docs": [
               "The vault's token account that was delegated to the agent",
               "(only meaningful when delegated == true)"
@@ -6140,29 +6256,29 @@ export const IDL = {
             "type": "pubkey"
           },
           {
-            "name": "protocol_fee",
+            "name": "protocolFee",
             "docs": [
               "Protocol fee collected during validate (for event logging in finalize)"
             ],
             "type": "u64"
           },
           {
-            "name": "developer_fee",
+            "name": "developerFee",
             "docs": [
               "Developer fee collected during validate (for event logging in finalize)"
             ],
             "type": "u64"
           },
           {
-            "name": "output_mint",
+            "name": "outputMint",
             "docs": [
-              "Expected output stablecoin mint for non-stablecoin\u2192stablecoin swaps.",
+              "Expected output stablecoin mint for non-stablecoin→stablecoin swaps.",
               "Pubkey::default() when input is already a stablecoin (no snapshot needed)."
             ],
             "type": "pubkey"
           },
           {
-            "name": "stablecoin_balance_before",
+            "name": "stablecoinBalanceBefore",
             "docs": [
               "Snapshot of vault's stablecoin ATA balance before swap.",
               "0 when input is already a stablecoin."
@@ -6180,7 +6296,7 @@ export const IDL = {
       }
     },
     {
-      "name": "SessionFinalized",
+      "name": "sessionFinalized",
       "type": {
         "kind": "struct",
         "fields": [
@@ -6197,7 +6313,7 @@ export const IDL = {
             "type": "bool"
           },
           {
-            "name": "is_expired",
+            "name": "isExpired",
             "type": "bool"
           },
           {
@@ -6208,7 +6324,7 @@ export const IDL = {
       }
     },
     {
-      "name": "SpendTracker",
+      "name": "spendTracker",
       "docs": [
         "Zero-copy 144-epoch circular buffer for rolling 24h USD spend tracking.",
         "Each bucket covers a 10-minute epoch. Boundary correction ensures",
@@ -6240,7 +6356,7 @@ export const IDL = {
               "array": [
                 {
                   "defined": {
-                    "name": "EpochBucket"
+                    "name": "epochBucket"
                   }
                 },
                 144
@@ -6248,7 +6364,7 @@ export const IDL = {
             }
           },
           {
-            "name": "protocol_counters",
+            "name": "protocolCounters",
             "docs": [
               "Reserved per-protocol spend counters (zeroed, no enforcement yet)"
             ],
@@ -6256,7 +6372,7 @@ export const IDL = {
               "array": [
                 {
                   "defined": {
-                    "name": "ProtocolSpendCounter"
+                    "name": "protocolSpendCounter"
                   }
                 },
                 10
@@ -6271,7 +6387,7 @@ export const IDL = {
             "type": "u8"
           },
           {
-            "name": "_padding",
+            "name": "padding",
             "docs": [
               "Padding for 8-byte alignment"
             ],
@@ -6286,7 +6402,7 @@ export const IDL = {
       }
     },
     {
-      "name": "VaultClosed",
+      "name": "vaultClosed",
       "type": {
         "kind": "struct",
         "fields": [
@@ -6306,7 +6422,7 @@ export const IDL = {
       }
     },
     {
-      "name": "VaultCreated",
+      "name": "vaultCreated",
       "type": {
         "kind": "struct",
         "fields": [
@@ -6319,7 +6435,7 @@ export const IDL = {
             "type": "pubkey"
           },
           {
-            "name": "vault_id",
+            "name": "vaultId",
             "type": "u64"
           },
           {
@@ -6330,7 +6446,7 @@ export const IDL = {
       }
     },
     {
-      "name": "VaultReactivated",
+      "name": "vaultReactivated",
       "type": {
         "kind": "struct",
         "fields": [
@@ -6339,13 +6455,13 @@ export const IDL = {
             "type": "pubkey"
           },
           {
-            "name": "new_agent",
+            "name": "newAgent",
             "type": {
               "option": "pubkey"
             }
           },
           {
-            "name": "new_agent_permissions",
+            "name": "newAgentPermissions",
             "type": {
               "option": "u64"
             }
@@ -6358,7 +6474,7 @@ export const IDL = {
       }
     },
     {
-      "name": "VaultStatus",
+      "name": "vaultStatus",
       "docs": [
         "Vault status enum"
       ],
@@ -6366,16 +6482,16 @@ export const IDL = {
         "kind": "enum",
         "variants": [
           {
-            "name": "Active"
+            "name": "active"
           },
           {
-            "name": "Frozen"
+            "name": "frozen"
           },
           {
-            "name": "Closed"
+            "name": "closed"
           }
         ]
       }
     }
   ]
-} as const;
+};
