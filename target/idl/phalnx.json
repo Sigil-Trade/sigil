@@ -110,6 +110,13 @@
           }
         },
         {
+          "name": "agent_spend_overlay",
+          "docs": [
+            "Zero-copy AgentSpendOverlay — per-agent rolling spend"
+          ],
+          "writable": true
+        },
+        {
           "name": "vault_token_account",
           "docs": [
             "Vault's PDA-owned token account (source)"
@@ -680,7 +687,7 @@
     {
       "name": "close_settled_escrow",
       "docs": [
-        "Close a settled/refunded escrow PDA \u2014 owner reclaims rent."
+        "Close a settled/refunded escrow PDA — owner reclaims rent."
       ],
       "discriminator": [
         169,
@@ -854,7 +861,7 @@
         {
           "name": "tracker",
           "docs": [
-            "Zero-copy SpendTracker \u2014 close returns rent to owner"
+            "Zero-copy SpendTracker — close returns rent to owner"
           ],
           "writable": true,
           "pda": {
@@ -881,7 +888,7 @@
         {
           "name": "agent_spend_overlay",
           "docs": [
-            "Zero-copy AgentSpendOverlay \u2014 close returns rent to owner"
+            "Zero-copy AgentSpendOverlay — close returns rent to owner"
           ],
           "writable": true
         },
@@ -989,6 +996,13 @@
           }
         },
         {
+          "name": "agent_spend_overlay",
+          "docs": [
+            "Zero-copy AgentSpendOverlay — per-agent rolling spend"
+          ],
+          "writable": true
+        },
+        {
           "name": "destination_vault",
           "pda": {
             "seeds": [
@@ -1056,7 +1070,7 @@
         {
           "name": "escrow_ata",
           "docs": [
-            "Escrow-owned ATA \u2014 init_if_needed because escrow PDA is created in same ix"
+            "Escrow-owned ATA — init_if_needed because escrow PDA is created in same ix"
           ],
           "writable": true,
           "pda": {
@@ -1322,6 +1336,10 @@
               }
             }
           }
+        },
+        {
+          "name": "strict_mode",
+          "type": "bool"
         }
       ]
     },
@@ -1733,6 +1751,13 @@
           }
         },
         {
+          "name": "agent_spend_overlay",
+          "docs": [
+            "Zero-copy AgentSpendOverlay — per-agent rolling spend"
+          ],
+          "writable": true
+        },
+        {
           "name": "vault_token_account",
           "docs": [
             "Vault's PDA token account for the session's token"
@@ -1743,7 +1768,7 @@
         {
           "name": "output_stablecoin_account",
           "docs": [
-            "Vault's stablecoin ATA for non-stablecoin\u2192stablecoin swap verification.",
+            "Vault's stablecoin ATA for non-stablecoin→stablecoin swap verification.",
             "Required when session.output_mint != Pubkey::default()."
           ],
           "writable": true,
@@ -1867,7 +1892,7 @@
         {
           "name": "agent_spend_overlay",
           "docs": [
-            "Agent spend overlay shard 0 \u2014 per-agent contribution tracking"
+            "Agent spend overlay — per-agent contribution tracking"
           ],
           "writable": true
         },
@@ -1926,6 +1951,12 @@
           "name": "allowed_destinations",
           "type": {
             "vec": "pubkey"
+          }
+        },
+        {
+          "name": "protocol_caps",
+          "type": {
+            "vec": "u64"
           }
         }
       ]
@@ -2084,6 +2115,10 @@
               }
             }
           }
+        },
+        {
+          "name": "strict_mode",
+          "type": "bool"
         }
       ]
     },
@@ -2268,6 +2303,26 @@
               "vec": "pubkey"
             }
           }
+        },
+        {
+          "name": "session_expiry_slots",
+          "type": {
+            "option": "u64"
+          }
+        },
+        {
+          "name": "has_protocol_caps",
+          "type": {
+            "option": "bool"
+          }
+        },
+        {
+          "name": "protocol_caps",
+          "type": {
+            "option": {
+              "vec": "u64"
+            }
+          }
         }
       ]
     },
@@ -2340,7 +2395,7 @@
     {
       "name": "refund_escrow",
       "docs": [
-        "Refund an escrow \u2014 source vault's agent or owner reclaims funds after expiry.",
+        "Refund an escrow — source vault's agent or owner reclaims funds after expiry.",
         "Cap charge is NOT reversed (prevents cap-washing attacks)."
       ],
       "discriminator": [
@@ -2584,7 +2639,7 @@
         {
           "name": "agent_spend_overlay",
           "docs": [
-            "Agent spend overlay (shard 0) \u2014 for claiming a per-agent tracking slot."
+            "Agent spend overlay — per-agent tracking slot."
           ],
           "writable": true
         }
@@ -2654,6 +2709,13 @@
               }
             ]
           }
+        },
+        {
+          "name": "agent_spend_overlay",
+          "docs": [
+            "Agent spend overlay — release slot on revocation."
+          ],
+          "writable": true
         }
       ],
       "args": [
@@ -2666,7 +2728,7 @@
     {
       "name": "settle_escrow",
       "docs": [
-        "Settle an escrow \u2014 destination vault's agent claims funds before expiry.",
+        "Settle an escrow — destination vault's agent claims funds before expiry.",
         "For conditional escrows, proof must match the SHA-256 condition hash."
       ],
       "discriminator": [
@@ -3144,6 +3206,10 @@
               }
             }
           }
+        },
+        {
+          "name": "strict_mode",
+          "type": "bool"
         }
       ]
     },
@@ -3294,6 +3360,26 @@
               "vec": "pubkey"
             }
           }
+        },
+        {
+          "name": "session_expiry_slots",
+          "type": {
+            "option": "u64"
+          }
+        },
+        {
+          "name": "has_protocol_caps",
+          "type": {
+            "option": "bool"
+          }
+        },
+        {
+          "name": "protocol_caps",
+          "type": {
+            "option": {
+              "vec": "u64"
+            }
+          }
         }
       ]
     },
@@ -3401,9 +3487,16 @@
           }
         },
         {
+          "name": "agent_spend_overlay",
+          "docs": [
+            "Zero-copy AgentSpendOverlay — per-agent rolling spend"
+          ],
+          "writable": true
+        },
+        {
           "name": "session",
           "docs": [
-            "Ephemeral session PDA \u2014 `init` ensures no double-authorization.",
+            "Ephemeral session PDA — `init` ensures no double-authorization.",
             "Seeds include token_mint for per-token concurrent sessions."
           ],
           "writable": true,
@@ -3446,7 +3539,7 @@
         {
           "name": "token_mint_account",
           "docs": [
-            "The token mint being spent \u2014 constrained to match token_mint arg"
+            "The token mint being spent — constrained to match token_mint arg"
           ]
         },
         {
@@ -4396,7 +4489,7 @@
     {
       "code": 6027,
       "name": "TimelockActive",
-      "msg": "Vault has timelock active \u2014 use queue_policy_update instead"
+      "msg": "Vault has timelock active — use queue_policy_update instead"
     },
     {
       "code": 6028,
@@ -4577,9 +4670,63 @@
       "code": 6063,
       "name": "AgentSpendLimitExceeded",
       "msg": "Agent rolling 24h spend exceeds per-agent spending limit"
+    },
+    {
+      "code": 6064,
+      "name": "OverlaySlotExhausted",
+      "msg": "Per-agent overlay is full; cannot register agent with spending limit"
+    },
+    {
+      "code": 6065,
+      "name": "AgentSlotNotFound",
+      "msg": "Agent has per-agent spending limit but no overlay tracking slot"
+    },
+    {
+      "code": 6066,
+      "name": "UnauthorizedTokenApproval",
+      "msg": "Unauthorized SPL Token Approve between validate and finalize"
+    },
+    {
+      "code": 6067,
+      "name": "InvalidSessionExpiry",
+      "msg": "Session expiry slots out of range (10-450)"
+    },
+    {
+      "code": 6068,
+      "name": "UnconstrainedProgramBlocked",
+      "msg": "Program has no constraint entry and strict mode is enabled"
+    },
+    {
+      "code": 6069,
+      "name": "ProtocolCapExceeded",
+      "msg": "Per-protocol daily spending cap would be exceeded"
+    },
+    {
+      "code": 6070,
+      "name": "ProtocolCapsMismatch",
+      "msg": "protocol_caps length must match protocols length when has_protocol_caps is true"
     }
   ],
   "types": [
+    {
+      "name": "AccountConstraint",
+      "docs": [
+        "Account-index constraint: requires a specific pubkey at a specific account index."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "index",
+            "type": "u8"
+          },
+          {
+            "name": "expected",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
     {
       "name": "ActionAuthorized",
       "type": {
@@ -4713,10 +4860,11 @@
     {
       "name": "AgentContributionEntry",
       "docs": [
-        "Per-agent contribution entry within a shard.",
-        "Tracks each agent's individual spend contributions using the same",
-        "144-bucket epoch scheme as the global SpendTracker.",
-        "32 (agent) + 8 * 144 (contributions) = 1,184 bytes"
+        "Per-agent contribution entry within an overlay.",
+        "Tracks each agent's individual spend contributions using a 24-bucket",
+        "hourly epoch scheme with per-entry `last_write_epoch` for correct gap-zeroing.",
+        "",
+        "Layout: 32 (agent) + 8 (last_write_epoch) + 8 × 24 (contributions) = 232 bytes"
       ],
       "serialization": "bytemuck",
       "repr": {
@@ -4738,14 +4886,24 @@
             }
           },
           {
+            "name": "last_write_epoch",
+            "docs": [
+              "The epoch number of the most recent write to this entry.",
+              "Used to derive which buckets are stale via modular arithmetic.",
+              "epoch = unix_timestamp / OVERLAY_EPOCH_DURATION (3600)"
+            ],
+            "type": "i64"
+          },
+          {
             "name": "contributions",
             "docs": [
-              "Per-epoch USD contributions from this agent (same indexing as SpendTracker buckets)"
+              "Per-epoch USD contributions from this agent.",
+              "Indexed by `epoch % OVERLAY_NUM_EPOCHS`."
             ],
             "type": {
               "array": [
                 "u64",
-                144
+                24
               ]
             }
           }
@@ -4885,14 +5043,12 @@
       "docs": [
         "Per-vault overlay PDA tracking per-agent spend contributions.",
         "",
-        "Seeds: `[b\"agent_spend\", vault.key().as_ref(), &[shard_index]]`",
+        "Seeds: `[b\"agent_spend\", vault.key().as_ref(), &[0u8]]`",
         "",
-        "One shard supports up to 7 agents. The shard index (0-based) is stored",
-        "in AgentVault.treasury_shard. Currently only shard 0 is used.",
+        "Supports up to 10 agents (matches MAX_AGENTS_PER_VAULT).",
         "",
         "Size calculation:",
-        "8 (discriminator) + 32 (vault) + 8 * 144 (sync_epochs) +",
-        "1,184 * 7 (entries) + 1 (bump) + 7 (padding) = 9,488 bytes"
+        "8 (discriminator) + 32 (vault) + 232 × 10 (entries) + 1 (bump) + 7 (padding) = 2,368 bytes"
       ],
       "serialization": "bytemuck",
       "repr": {
@@ -4909,23 +5065,9 @@
             "type": "pubkey"
           },
           {
-            "name": "sync_epochs",
-            "docs": [
-              "Per-epoch sync timestamps \u2014 used to detect stale epochs across all entries.",
-              "When an epoch is stale (older than the current epoch), all agent contributions",
-              "for that epoch index are zeroed during the next access."
-            ],
-            "type": {
-              "array": [
-                "i64",
-                144
-              ]
-            }
-          },
-          {
             "name": "entries",
             "docs": [
-              "Agent contribution entries (up to ENTRIES_PER_SHARD agents per shard)"
+              "Agent contribution entries (up to MAX_OVERLAY_ENTRIES agents)"
             ],
             "type": {
               "array": [
@@ -4934,7 +5076,7 @@
                     "name": "AgentContributionEntry"
                   }
                 },
-                7
+                10
               ]
             }
           },
@@ -5019,7 +5161,7 @@
           {
             "name": "fee_destination",
             "docs": [
-              "Developer fee destination \u2014 IMMUTABLE after initialization.",
+              "Developer fee destination — IMMUTABLE after initialization.",
               "Prevents a compromised owner from redirecting fees."
             ],
             "type": "pubkey"
@@ -5076,14 +5218,6 @@
               "Cumulative developer fees collected from this vault (token base units)"
             ],
             "type": "u64"
-          },
-          {
-            "name": "treasury_shard",
-            "docs": [
-              "Treasury shard index assigned at vault creation.",
-              "Reserved for future horizontal scaling of overlay PDAs."
-            ],
-            "type": "u8"
           }
         ]
       }
@@ -5103,6 +5237,16 @@
               "vec": {
                 "defined": {
                   "name": "DataConstraint"
+                }
+              }
+            }
+          },
+          {
+            "name": "account_constraints",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "AccountConstraint"
                 }
               }
             }
@@ -5231,7 +5375,7 @@
       "name": "EpochBucket",
       "docs": [
         "A single epoch bucket tracking aggregate USD spend.",
-        "16 bytes per bucket. USD-only \u2014 rate limiting stays client-side."
+        "16 bytes per bucket. USD-only — rate limiting stays client-side."
       ],
       "serialization": "bytemuck",
       "repr": {
@@ -5552,6 +5696,10 @@
             }
           },
           {
+            "name": "strict_mode",
+            "type": "bool"
+          },
+          {
             "name": "bump",
             "type": "u8"
           }
@@ -5588,6 +5736,10 @@
             "type": "u8"
           },
           {
+            "name": "strict_mode",
+            "type": "bool"
+          },
+          {
             "name": "timestamp",
             "type": "i64"
           }
@@ -5606,6 +5758,10 @@
           {
             "name": "entries_count",
             "type": "u8"
+          },
+          {
+            "name": "strict_mode",
+            "type": "bool"
           },
           {
             "name": "timestamp",
@@ -5644,6 +5800,13 @@
                 }
               }
             }
+          },
+          {
+            "name": "strict_mode",
+            "docs": [
+              "Whether to reject programs without matching constraint entries"
+            ],
+            "type": "bool"
           },
           {
             "name": "queued_at",
@@ -5769,6 +5932,26 @@
             "type": {
               "option": {
                 "vec": "pubkey"
+              }
+            }
+          },
+          {
+            "name": "session_expiry_slots",
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "has_protocol_caps",
+            "type": {
+              "option": "bool"
+            }
+          },
+          {
+            "name": "protocol_caps",
+            "type": {
+              "option": {
+                "vec": "u64"
               }
             }
           },
@@ -5940,9 +6123,29 @@
           {
             "name": "has_protocol_caps",
             "docs": [
-              "Whether per-protocol spend caps are configured (reserved, not enforced yet)."
+              "Whether per-protocol spend caps are configured.",
+              "Requires protocol_mode == ALLOWLIST and protocol_caps.len() == protocols.len()."
             ],
             "type": "bool"
+          },
+          {
+            "name": "protocol_caps",
+            "docs": [
+              "Per-protocol daily spending caps in USD (6 decimals).",
+              "Index-aligned with `protocols`. Only enforced when `has_protocol_caps = true`.",
+              "A value of 0 means no per-protocol limit (global cap still applies)."
+            ],
+            "type": {
+              "vec": "u64"
+            }
+          },
+          {
+            "name": "session_expiry_slots",
+            "docs": [
+              "Configurable session expiry in slots. 0 = use default (SESSION_EXPIRY_SLOTS = 20).",
+              "Valid range when non-zero: 10-450 slots."
+            ],
+            "type": "u64"
           },
           {
             "name": "bump",
@@ -6025,8 +6228,8 @@
     {
       "name": "ProtocolSpendCounter",
       "docs": [
-        "Reserved per-protocol spend counter for future per-protocol caps.",
-        "Zeroed at init \u2014 no enforcement logic yet.",
+        "Per-protocol spend counter using simple 24h window.",
+        "When current_epoch - window_start >= 144, the window is expired and resets to 0.",
         "48 bytes per entry (32 + 8 + 8)."
       ],
       "serialization": "bytemuck",
@@ -6156,7 +6359,7 @@
           {
             "name": "output_mint",
             "docs": [
-              "Expected output stablecoin mint for non-stablecoin\u2192stablecoin swaps.",
+              "Expected output stablecoin mint for non-stablecoin→stablecoin swaps.",
               "Pubkey::default() when input is already a stablecoin (no snapshot needed)."
             ],
             "type": "pubkey"
@@ -6262,6 +6465,14 @@
                 10
               ]
             }
+          },
+          {
+            "name": "last_write_epoch",
+            "docs": [
+              "Epoch of most recent record_spend() call. Enables early exit in get_rolling_24h_usd().",
+              "Zero-initialized — value 0 correctly triggers early exit (current_epoch >> 144)."
+            ],
+            "type": "i64"
           },
           {
             "name": "bump",
