@@ -24,11 +24,11 @@ use trident_fuzz::fuzzing::*;
 
 mod fuzz_accounts;
 
+use anchor_lang::prelude::Pubkey;
+use anchor_lang::{AccountDeserialize, InstructionData, ToAccountMetas};
 use phalnx::state::{
     ActionType, AgentVault, PolicyConfig, SessionAuthority, SpendTracker, VaultStatus,
 };
-use anchor_lang::prelude::Pubkey;
-use anchor_lang::{AccountDeserialize, InstructionData, ToAccountMetas};
 
 const MAX_DEVELOPER_FEE_RATE: u16 = 500;
 const SESSION_EXPIRY_SLOTS: u64 = 20;
@@ -40,8 +40,8 @@ const MINT_AMOUNT_9DEC: u64 = 10_000_000_000_000; // 10T base units for 9-decima
 
 /// Instructions sysvar address
 const INSTRUCTIONS_SYSVAR: Pubkey = Pubkey::new_from_array([
-    6, 167, 213, 23, 24, 199, 116, 201, 40, 86, 99, 152, 105, 29, 94, 182,
-    139, 94, 184, 163, 155, 75, 109, 92, 115, 85, 91, 42, 0, 0, 0, 0,
+    6, 167, 213, 23, 24, 199, 116, 201, 40, 86, 99, 152, 105, 29, 94, 182, 139, 94, 184, 163, 155,
+    75, 109, 92, 115, 85, 91, 42, 0, 0, 0, 0,
 ]);
 
 fn program_id() -> Pubkey {
@@ -131,11 +131,14 @@ impl FuzzTest {
             max_slippage_bps: 2500, // 25%
         };
 
+        let (agent_spend_overlay, _) =
+            Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
         let accounts = phalnx::accounts::InitializeVault {
             owner,
             vault,
             policy,
             tracker,
+            agent_spend_overlay,
             fee_destination: fee_dest,
             system_program: solana_sdk::system_program::ID,
         };
@@ -242,7 +245,13 @@ impl FuzzTest {
             agent,
             permissions: phalnx::state::FULL_PERMISSIONS,
         };
-        let reg_accounts = phalnx::accounts::RegisterAgent { owner, vault };
+        let (reg_agent_spend_overlay, _) =
+            Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
+        let reg_accounts = phalnx::accounts::RegisterAgent {
+            owner,
+            vault,
+            agent_spend_overlay: reg_agent_spend_overlay,
+        };
         let reg_ix = Instruction::new_with_bytes(
             program_id(),
             &reg_data.data(),
@@ -294,7 +303,14 @@ impl FuzzTest {
         let vault_ata_c =
             spl_associated_token_account::get_associated_token_address(&vault, &mint_c);
 
-        self.deposit_token(&owner, &vault, &mint_a, &owner_ata_a, &vault_ata_a, MINT_AMOUNT / 2);
+        self.deposit_token(
+            &owner,
+            &vault,
+            &mint_a,
+            &owner_ata_a,
+            &vault_ata_a,
+            MINT_AMOUNT / 2,
+        );
         self.deposit_token(
             &owner,
             &vault,
@@ -333,19 +349,13 @@ impl FuzzTest {
             &spl_token::ID,
         );
 
-        let create_mint_ix = spl_token::instruction::initialize_mint2(
-            &spl_token::ID,
-            mint,
-            owner,
-            None,
-            decimals,
-        )
-        .unwrap();
+        let create_mint_ix =
+            spl_token::instruction::initialize_mint2(&spl_token::ID, mint, owner, None, decimals)
+                .unwrap();
 
-        let _ = self.trident.process_transaction(
-            &[create_account_ix, create_mint_ix],
-            Some("CreateMint"),
-        );
+        let _ = self
+            .trident
+            .process_transaction(&[create_account_ix, create_mint_ix], Some("CreateMint"));
     }
 
     fn create_token_atas(
@@ -362,19 +372,31 @@ impl FuzzTest {
     ) {
         let create_owner_ata =
             spl_associated_token_account::instruction::create_associated_token_account(
-                owner, owner, mint, &spl_token::ID,
+                owner,
+                owner,
+                mint,
+                &spl_token::ID,
             );
         let create_vault_ata =
             spl_associated_token_account::instruction::create_associated_token_account(
-                owner, vault, mint, &spl_token::ID,
+                owner,
+                vault,
+                mint,
+                &spl_token::ID,
             );
         let create_fee_ata =
             spl_associated_token_account::instruction::create_associated_token_account(
-                owner, fee_dest, mint, &spl_token::ID,
+                owner,
+                fee_dest,
+                mint,
+                &spl_token::ID,
             );
         let create_dest_ata =
             spl_associated_token_account::instruction::create_associated_token_account(
-                owner, destination, mint, &spl_token::ID,
+                owner,
+                destination,
+                mint,
+                &spl_token::ID,
             );
 
         let _ = self.trident.process_transaction(
@@ -391,59 +413,36 @@ impl FuzzTest {
         owner_ata_field(&mut self.fuzz_accounts).insert(
             &mut self.trident,
             Some(PdaSeeds {
-                seeds: &[
-                    owner.as_ref(),
-                    spl_token::ID.as_ref(),
-                    mint.as_ref(),
-                ],
+                seeds: &[owner.as_ref(), spl_token::ID.as_ref(), mint.as_ref()],
                 program_id: spl_associated_token_account::ID,
             }),
         );
         vault_ata_field(&mut self.fuzz_accounts).insert(
             &mut self.trident,
             Some(PdaSeeds {
-                seeds: &[
-                    vault.as_ref(),
-                    spl_token::ID.as_ref(),
-                    mint.as_ref(),
-                ],
+                seeds: &[vault.as_ref(), spl_token::ID.as_ref(), mint.as_ref()],
                 program_id: spl_associated_token_account::ID,
             }),
         );
         fee_ata_field(&mut self.fuzz_accounts).insert(
             &mut self.trident,
             Some(PdaSeeds {
-                seeds: &[
-                    fee_dest.as_ref(),
-                    spl_token::ID.as_ref(),
-                    mint.as_ref(),
-                ],
+                seeds: &[fee_dest.as_ref(), spl_token::ID.as_ref(), mint.as_ref()],
                 program_id: spl_associated_token_account::ID,
             }),
         );
         dest_ata_field(&mut self.fuzz_accounts).insert(
             &mut self.trident,
             Some(PdaSeeds {
-                seeds: &[
-                    destination.as_ref(),
-                    spl_token::ID.as_ref(),
-                    mint.as_ref(),
-                ],
+                seeds: &[destination.as_ref(), spl_token::ID.as_ref(), mint.as_ref()],
                 program_id: spl_associated_token_account::ID,
             }),
         );
     }
 
     fn mint_tokens(&mut self, owner: &Pubkey, mint: &Pubkey, ata: &Pubkey, amount: u64) {
-        let mint_to_ix = spl_token::instruction::mint_to(
-            &spl_token::ID,
-            mint,
-            ata,
-            owner,
-            &[],
-            amount,
-        )
-        .unwrap();
+        let mint_to_ix =
+            spl_token::instruction::mint_to(&spl_token::ID, mint, ata, owner, &[], amount).unwrap();
 
         let _ = self
             .trident
@@ -486,15 +485,19 @@ impl FuzzTest {
     // ──────────────────────────────────────────────────────────────
 
     /// Randomly select one of the 3 tokens. Returns (mint, vault_ata, fee_dest_ata, dest_ata).
-    fn select_random_token(
-        &mut self,
-    ) -> Option<(Pubkey, Pubkey, Pubkey, Pubkey)> {
+    fn select_random_token(&mut self) -> Option<(Pubkey, Pubkey, Pubkey, Pubkey)> {
         let choice = self.trident.random_from_range(0..3);
         match choice {
             0 => {
                 let mint = self.fuzz_accounts.token_mint.get(&mut self.trident)?;
-                let vault_ata = self.fuzz_accounts.vault_token_account.get(&mut self.trident)?;
-                let fee_ata = self.fuzz_accounts.fee_dest_token_account.get(&mut self.trident)?;
+                let vault_ata = self
+                    .fuzz_accounts
+                    .vault_token_account
+                    .get(&mut self.trident)?;
+                let fee_ata = self
+                    .fuzz_accounts
+                    .fee_dest_token_account
+                    .get(&mut self.trident)?;
                 let dest_ata = self
                     .fuzz_accounts
                     .destination_token_account
@@ -561,7 +564,13 @@ impl FuzzTest {
             agent,
             permissions: phalnx::state::FULL_PERMISSIONS,
         };
-        let accounts = phalnx::accounts::RegisterAgent { owner, vault };
+        let (agent_spend_overlay, _) =
+            Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
+        let accounts = phalnx::accounts::RegisterAgent {
+            owner,
+            vault,
+            agent_spend_overlay,
+        };
 
         let ix = Instruction::new_with_bytes(
             program_id(),
@@ -639,8 +648,7 @@ impl FuzzTest {
         let vault = unwrap_or_ret!(self.fuzz_accounts.vault.get(&mut self.trident));
 
         let (mint, vault_ata, _, _) = unwrap_or_ret!(self.select_random_token());
-        let owner_ata =
-            spl_associated_token_account::get_associated_token_address(&owner, &mint);
+        let owner_ata = spl_associated_token_account::get_associated_token_address(&owner, &mint);
 
         let amount: u64 = self.trident.random_from_range(1..1_000_000);
 
@@ -690,12 +698,7 @@ impl FuzzTest {
 
         // Compute session PDA
         let (session_pda, _) = Pubkey::find_program_address(
-            &[
-                b"session",
-                vault.as_ref(),
-                agent.as_ref(),
-                mint.as_ref(),
-            ],
+            &[b"session", vault.as_ref(), agent.as_ref(), mint.as_ref()],
             &program_id(),
         );
 
@@ -703,12 +706,7 @@ impl FuzzTest {
         self.fuzz_accounts.session.insert(
             &mut self.trident,
             Some(PdaSeeds {
-                seeds: &[
-                    b"session",
-                    vault.as_ref(),
-                    agent.as_ref(),
-                    mint.as_ref(),
-                ],
+                seeds: &[b"session", vault.as_ref(), agent.as_ref(), mint.as_ref()],
                 program_id: program_id(),
             }),
         );
@@ -726,11 +724,14 @@ impl FuzzTest {
             leverage_bps: None,
         };
 
+        let (agent_spend_overlay, _) =
+            Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
         let accounts = phalnx::accounts::ValidateAndAuthorize {
             agent,
             vault,
             policy: policy_addr,
             tracker: tracker_addr,
+            agent_spend_overlay,
             session: session_pda,
             vault_token_account: vault_ata,
             token_mint_account: mint,
@@ -763,8 +764,7 @@ impl FuzzTest {
 
         // INV-3: Check session expiry is bounded (only if tx succeeded)
         if result.is_success() {
-            let session: Option<SessionAuthority> =
-                deser_anchor(&mut self.trident, &session_pda);
+            let session: Option<SessionAuthority> = deser_anchor(&mut self.trident, &session_pda);
             check_inv3_session_expiry(&session, self.current_slot);
         }
     }
@@ -781,8 +781,7 @@ impl FuzzTest {
         let session = unwrap_or_ret!(self.fuzz_accounts.session.get(&mut self.trident));
 
         // We need to figure out which token's ATAs to use based on session
-        let session_state: Option<SessionAuthority> =
-            deser_anchor(&mut self.trident, &session);
+        let session_state: Option<SessionAuthority> = deser_anchor(&mut self.trident, &session);
         if session_state.is_none() {
             return; // No active session
         }
@@ -808,6 +807,8 @@ impl FuzzTest {
         check_inv3_session_expiry(&Some(session_data), self.current_slot);
 
         let data = phalnx::instruction::FinalizeSession { success: true };
+        let (agent_spend_overlay, _) =
+            Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
         let accounts = phalnx::accounts::FinalizeSession {
             payer: agent,
             vault,
@@ -815,6 +816,7 @@ impl FuzzTest {
             session_rent_recipient: agent,
             policy: policy_addr,
             tracker: unwrap_or_ret!(self.fuzz_accounts.tracker.get(&mut self.trident)),
+            agent_spend_overlay,
             vault_token_account: Some(vault_ata),
             output_stablecoin_account: None,
             token_program: spl_token::ID,
@@ -857,8 +859,7 @@ impl FuzzTest {
         let vault = unwrap_or_ret!(self.fuzz_accounts.vault.get(&mut self.trident));
 
         let (mint, vault_ata, _, _) = unwrap_or_ret!(self.select_random_token());
-        let owner_ata =
-            spl_associated_token_account::get_associated_token_address(&owner, &mint);
+        let owner_ata = spl_associated_token_account::get_associated_token_address(&owner, &mint);
 
         let amount: u64 = self.trident.random_from_range(1..100_000);
 
@@ -907,9 +908,10 @@ impl FuzzTest {
         let tracker_addr = unwrap_or_ret!(self.fuzz_accounts.tracker.get(&mut self.trident));
 
         let (mint, vault_ata, _, dest_ata) = unwrap_or_ret!(self.select_random_token());
-        let fee_dest_ata = unwrap_or_ret!(
-            self.fuzz_accounts.fee_dest_token_account.get(&mut self.trident)
-        );
+        let fee_dest_ata = unwrap_or_ret!(self
+            .fuzz_accounts
+            .fee_dest_token_account
+            .get(&mut self.trident));
 
         let amount: u64 = self.trident.random_from_range(1..100_000);
 
@@ -917,11 +919,14 @@ impl FuzzTest {
         let pre_policy = self.snapshot_policy(&policy_addr);
 
         let data = phalnx::instruction::AgentTransfer { amount };
+        let (agent_spend_overlay, _) =
+            Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
         let accounts = phalnx::accounts::AgentTransfer {
             agent,
             vault,
             policy: policy_addr,
             tracker: tracker_addr,
+            agent_spend_overlay,
             vault_token_account: vault_ata,
             token_mint_account: mint,
             destination_token_account: dest_ata,
@@ -963,7 +968,9 @@ impl FuzzTest {
 
         let agent = unwrap_or_ret!(self.fuzz_accounts.agent.get(&mut self.trident));
 
-        let data = phalnx::instruction::RevokeAgent { agent_to_remove: agent };
+        let data = phalnx::instruction::RevokeAgent {
+            agent_to_remove: agent,
+        };
         let accounts = phalnx::accounts::RevokeAgent { owner, vault };
 
         let ix = Instruction::new_with_bytes(
@@ -972,9 +979,7 @@ impl FuzzTest {
             accounts.to_account_metas(None),
         );
 
-        let _ = self
-            .trident
-            .process_transaction(&[ix], Some("RevokeAgent"));
+        let _ = self.trident.process_transaction(&[ix], Some("RevokeAgent"));
 
         let post = self.snapshot_vault(&vault);
         check_inv4_fee_immutability(&pre, &post);
@@ -1080,9 +1085,7 @@ impl FuzzTest {
         let owner = unwrap_or_ret!(self.fuzz_accounts.owner.get(&mut self.trident));
         let vault = unwrap_or_ret!(self.fuzz_accounts.vault.get(&mut self.trident));
         let policy = unwrap_or_ret!(self.fuzz_accounts.policy.get(&mut self.trident));
-        let pending = unwrap_or_ret!(
-            self.fuzz_accounts.pending_policy.get(&mut self.trident)
-        );
+        let pending = unwrap_or_ret!(self.fuzz_accounts.pending_policy.get(&mut self.trident));
 
         let pre = self.snapshot_vault(&vault);
 
@@ -1116,9 +1119,7 @@ impl FuzzTest {
     fn cancel_pending_policy(&mut self) {
         let owner = unwrap_or_ret!(self.fuzz_accounts.owner.get(&mut self.trident));
         let vault = unwrap_or_ret!(self.fuzz_accounts.vault.get(&mut self.trident));
-        let pending = unwrap_or_ret!(
-            self.fuzz_accounts.pending_policy.get(&mut self.trident)
-        );
+        let pending = unwrap_or_ret!(self.fuzz_accounts.pending_policy.get(&mut self.trident));
 
         let pre = self.snapshot_vault(&vault);
 
@@ -1157,11 +1158,14 @@ impl FuzzTest {
         let pre = self.snapshot_vault(&vault);
 
         let data = phalnx::instruction::CloseVault {};
+        let (agent_spend_overlay, _) =
+            Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
         let accounts = phalnx::accounts::CloseVault {
             owner,
             vault,
             policy,
             tracker,
+            agent_spend_overlay,
             system_program: solana_sdk::system_program::ID,
         };
 
@@ -1171,9 +1175,7 @@ impl FuzzTest {
             accounts.to_account_metas(None),
         );
 
-        let _ = self
-            .trident
-            .process_transaction(&[ix], Some("CloseVault"));
+        let _ = self.trident.process_transaction(&[ix], Some("CloseVault"));
 
         let post = self.snapshot_vault(&vault);
         check_inv4_fee_immutability(&pre, &post);
@@ -1218,6 +1220,8 @@ impl FuzzTest {
         let tracker_addr = unwrap_or_ret!(self.fuzz_accounts.tracker.get(&mut self.trident));
 
         let data = phalnx::instruction::FinalizeSession { success: true };
+        let (agent_spend_overlay, _) =
+            Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
         let accounts = phalnx::accounts::FinalizeSession {
             payer: agent,
             vault,
@@ -1225,6 +1229,7 @@ impl FuzzTest {
             session_rent_recipient: agent,
             policy: policy_addr,
             tracker: tracker_addr,
+            agent_spend_overlay,
             vault_token_account: Some(vault_ata),
             output_stablecoin_account: None,
             token_program: spl_token::ID,
@@ -1265,13 +1270,16 @@ impl FuzzTest {
         }
 
         // Session already closed — attempt second finalize (should fail)
-        let vault_ata = unwrap_or_ret!(
-            self.fuzz_accounts.vault_token_account.get(&mut self.trident)
-        );
+        let vault_ata = unwrap_or_ret!(self
+            .fuzz_accounts
+            .vault_token_account
+            .get(&mut self.trident));
         let policy_addr = unwrap_or_ret!(self.fuzz_accounts.policy.get(&mut self.trident));
         let tracker_addr = unwrap_or_ret!(self.fuzz_accounts.tracker.get(&mut self.trident));
 
         let data = phalnx::instruction::FinalizeSession { success: true };
+        let (agent_spend_overlay, _) =
+            Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
         let accounts = phalnx::accounts::FinalizeSession {
             payer: agent,
             vault,
@@ -1279,6 +1287,7 @@ impl FuzzTest {
             session_rent_recipient: agent,
             policy: policy_addr,
             tracker: tracker_addr,
+            agent_spend_overlay,
             vault_token_account: Some(vault_ata),
             output_stablecoin_account: None,
             token_program: spl_token::ID,
@@ -1357,8 +1366,14 @@ impl FuzzTest {
         let mint_c = self.fuzz_accounts.token_mint_c.get(&mut self.trident);
 
         if mint_a.as_ref() == Some(token) {
-            let v = self.fuzz_accounts.vault_token_account.get(&mut self.trident)?;
-            let f = self.fuzz_accounts.fee_dest_token_account.get(&mut self.trident)?;
+            let v = self
+                .fuzz_accounts
+                .vault_token_account
+                .get(&mut self.trident)?;
+            let f = self
+                .fuzz_accounts
+                .fee_dest_token_account
+                .get(&mut self.trident)?;
             Some((v, f))
         } else if mint_b.as_ref() == Some(token) {
             let v = self
@@ -1429,11 +1444,9 @@ fn check_inv2_agent_cannot_modify_policy(
                 pre.developer_fee_rate, post.developer_fee_rate,
             );
             assert_eq!(
-                pre.protocol_mode,
-                post.protocol_mode,
+                pre.protocol_mode, post.protocol_mode,
                 "INV-2 violated: agent changed protocol_mode ({} -> {})",
-                pre.protocol_mode,
-                post.protocol_mode,
+                pre.protocol_mode, post.protocol_mode,
             );
             assert_eq!(
                 pre.protocols.len(),
@@ -1502,10 +1515,7 @@ fn check_inv5_revoke_permanence(
 }
 
 /// INV-6: Aggregate rolling USD spend across ALL tokens never exceeds daily cap.
-fn check_inv6_cross_token_aggregate(
-    policy: &Option<PolicyConfig>,
-    tracker: &Option<SpendTracker>,
-) {
+fn check_inv6_cross_token_aggregate(policy: &Option<PolicyConfig>, tracker: &Option<SpendTracker>) {
     if let (Some(p), Some(t)) = (policy, tracker) {
         let total_usd: u64 = t
             .buckets

@@ -96,6 +96,8 @@ export function makePolicyAccount(
     maxSlippageBps: 100,
     hasConstraints: false,
     hasProtocolCaps: false,
+    protocolCaps: [],
+    sessionExpirySlots: new BN(20),
     bump: 254,
     ...overrides,
   };
