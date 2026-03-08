@@ -351,6 +351,7 @@ describe("devnet-spending", () => {
         vault: vault.vaultPda,
         policy: vault.policyPda,
         tracker: vault.trackerPda,
+        agentSpendOverlay: vault.overlayPda,
         vaultTokenAccount: vault.vaultTokenAta,
         tokenMintAccount: mintA,
         destinationTokenAccount: destAta.address,
@@ -418,7 +419,7 @@ describe("devnet-spending", () => {
       protocolTreasuryAta: vault.protocolTreasuryAta,
     });
 
-    // Update daily cap higher (11 args — includes maxSlippageBps)
+    // Update daily cap higher (14 args — includes sessionExpirySlots)
     await program.methods
       .updatePolicy(
         new BN(500_000_000), // new daily cap
@@ -432,6 +433,7 @@ describe("devnet-spending", () => {
         null,
         null,
         null,
+        null, // sessionExpirySlots
         null, // hasProtocolCaps
         null, // protocolCaps
       )

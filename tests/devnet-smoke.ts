@@ -51,6 +51,7 @@ describe("devnet-smoke-test", () => {
   let vaultPda: PublicKey;
   let policyPda: PublicKey;
   let trackerPda: PublicKey;
+  let overlayPda: PublicKey;
   let sessionPda: PublicKey;
   let ownerUsdcAta: PublicKey;
   let vaultUsdcAta: PublicKey;
@@ -96,6 +97,10 @@ describe("devnet-smoke-test", () => {
     vaultPda = pdas.vaultPda;
     policyPda = pdas.policyPda;
     trackerPda = pdas.trackerPda;
+    [overlayPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("agent_spend"), vaultPda.toBuffer(), Buffer.from([0])],
+      program.programId,
+    );
 
     sessionPda = deriveSessionPda(
       vaultPda,
@@ -201,7 +206,7 @@ describe("devnet-smoke-test", () => {
   });
 
   it("4. update_policy", async () => {
-    // 11 optional args (includes maxSlippageBps)
+    // 14 args (includes sessionExpirySlots)
     await program.methods
       .updatePolicy(
         null, // keep daily cap
@@ -215,6 +220,7 @@ describe("devnet-smoke-test", () => {
         null, // keep maxSlippageBps
         null, // keep timelockDuration
         null, // keep allowedDestinations
+        null, // sessionExpirySlots
         null, // hasProtocolCaps
         null, // protocolCaps
       )
@@ -246,6 +252,7 @@ describe("devnet-smoke-test", () => {
         policy: policyPda,
         tracker: trackerPda,
         session: sessionPda,
+        agentSpendOverlay: overlayPda,
         vaultTokenAccount: vaultUsdcAta,
         tokenMintAccount: usdcMint,
         protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
@@ -267,6 +274,7 @@ describe("devnet-smoke-test", () => {
         sessionRentRecipient: agent.publicKey,
         policy: policyPda,
         tracker: trackerPda,
+        agentSpendOverlay: overlayPda,
         vaultTokenAccount: vaultUsdcAta,
         feeDestinationTokenAccount: null,
         protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,

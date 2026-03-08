@@ -185,6 +185,7 @@ export interface FullVaultResult {
   policyPda: PublicKey;
   trackerPda: PublicKey;
   pendingPolicyPda: PublicKey;
+  overlayPda: PublicKey;
   vaultTokenAta: PublicKey;
   ownerTokenAta: PublicKey;
   protocolTreasuryAta: PublicKey;
@@ -386,6 +387,10 @@ export async function buildAuthorizeIx(opts: AuthorizeOpts) {
     outputStablecoinAccount = null,
     remainingAccounts = [],
   } = opts;
+  const [overlayPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("agent_spend"), vaultPda.toBuffer(), Buffer.from([0])],
+    program.programId,
+  );
   return program.methods
     .validateAndAuthorize(
       actionType,
@@ -400,6 +405,7 @@ export async function buildAuthorizeIx(opts: AuthorizeOpts) {
       policy: policyPda,
       tracker: trackerPda,
       session: sessionPda,
+      agentSpendOverlay: overlayPda,
       vaultTokenAccount: vaultTokenAta,
       tokenMintAccount: mint,
       protocolTreasuryTokenAccount: protocolTreasuryAta,
@@ -446,6 +452,10 @@ export async function buildFinalizeIx(opts: FinalizeOpts) {
     outputStablecoinAccount = null,
     success,
   } = opts;
+  const [overlayPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("agent_spend"), vaultPda.toBuffer(), Buffer.from([0])],
+    program.programId,
+  );
   return program.methods
     .finalizeSession(success)
     .accounts({
@@ -455,6 +465,7 @@ export async function buildFinalizeIx(opts: FinalizeOpts) {
       sessionRentRecipient: agentPubkey,
       policy: policyPda,
       tracker: trackerPda,
+      agentSpendOverlay: overlayPda,
       vaultTokenAccount: vaultTokenAta,
       feeDestinationTokenAccount: feeDestinationAta,
       protocolTreasuryTokenAccount: protocolTreasuryAta,

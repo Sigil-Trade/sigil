@@ -349,6 +349,7 @@ describe("devnet-fees", () => {
         vault: vaultA.vaultPda,
         policy: vaultA.policyPda,
         tracker: vaultA.trackerPda,
+        agentSpendOverlay: vaultA.overlayPda,
         vaultTokenAccount: vaultA.vaultTokenAta,
         tokenMintAccount: mint,
         destinationTokenAccount: destAta.address,

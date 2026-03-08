@@ -97,6 +97,7 @@ describe("devnet-security", () => {
           null,
           null,
           null,
+          null, // sessionExpirySlots
           null, // hasProtocolCaps
           null, // protocolCaps
         )
@@ -202,6 +203,7 @@ describe("devnet-security", () => {
           policy: vault.policyPda,
           tracker: vault.trackerPda,
           session: sessionPda,
+          agentSpendOverlay: vault.overlayPda,
           vaultTokenAccount: vault.vaultTokenAta,
           tokenMintAccount: mint,
           protocolTreasuryTokenAccount: null,
@@ -235,6 +237,7 @@ describe("devnet-security", () => {
           null,
           null,
           null,
+          null, // sessionExpirySlots
           null, // hasProtocolCaps
           null, // protocolCaps
         )
