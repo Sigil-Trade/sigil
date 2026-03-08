@@ -98,8 +98,8 @@ pub const USDC_MINT: Pubkey = Pubkey::new_from_array([
 /// Test-controlled keypair — we own the mint authority for devnet testing.
 #[cfg(feature = "devnet")]
 pub const USDT_MINT: Pubkey = Pubkey::new_from_array([
-    45, 62, 128, 117, 22, 254, 177, 202, 78, 70, 249, 101, 252, 36, 244, 42, 82, 77, 95, 72,
-    170, 154, 33, 171, 68, 12, 82, 27, 106, 105, 202, 15,
+    45, 62, 128, 117, 22, 254, 177, 202, 78, 70, 249, 101, 252, 36, 244, 42, 82, 77, 95, 72, 170,
+    154, 33, 171, 68, 12, 82, 27, 106, 105, 202, 15,
 ]);
 
 /// USDT mint (mainnet: Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB)
