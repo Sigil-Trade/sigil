@@ -244,6 +244,7 @@ impl FuzzTest {
         let reg_data = phalnx::instruction::RegisterAgent {
             agent,
             permissions: phalnx::state::FULL_PERMISSIONS,
+            spending_limit_usd: 0,
         };
         let (reg_agent_spend_overlay, _) =
             Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
@@ -563,6 +564,7 @@ impl FuzzTest {
         let data = phalnx::instruction::RegisterAgent {
             agent,
             permissions: phalnx::state::FULL_PERMISSIONS,
+            spending_limit_usd: 0,
         };
         let (agent_spend_overlay, _) =
             Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
