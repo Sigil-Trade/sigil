@@ -5,10 +5,12 @@ import {
 } from "@solana/web3.js";
 
 // ─── Known Protocol Program IDs ──────────────────────────────────────────────
-// Must match integrations/jupiter.ts and integrations/flash-trade.ts
+// Must match integrations/jupiter.ts, flash-trade.ts, drift.ts, kamino.ts
 const JUPITER_PROGRAM = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4";
 const JUPITER_LEND_PROGRAM = "JLend2fEim9xUFcaHsyGePEoBzFLvkjMi3MnPcSuCdu";
 const FLASH_TRADE_PROGRAM = "FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn";
+const DRIFT_PROGRAM = "dRiftyHA39MWEi3m9aunc5MzRF1JYuBNtSVAwMHjZi1";
+const KAMINO_LEND_PROGRAM = "KLend2g3cP87ber8p1S4JQoTnbs78GDYAHB6h4WjSD9";
 
 // ─── CU Budget Defaults ─────────────────────────────────────────────────────
 // Measured via LiteSVM. Phalnx overhead (validate+finalize) is 52–62K CU.
@@ -28,6 +30,12 @@ export const CU_FLASH_TRADE = 800_000;
 
 /** Phalnx + Jupiter Lend deposit/withdraw: ~55K validate + ~200K lend + buffer */
 export const CU_JUPITER_LEND = 400_000;
+
+/** Phalnx + Drift Protocol action: ~55K validate + ~500K drift + buffer */
+export const CU_DRIFT = 800_000;
+
+/** Phalnx + Kamino Lend deposit/borrow/withdraw: ~55K validate + ~200K lend + buffer */
+export const CU_KAMINO_LEND = 400_000;
 
 /** Fallback for unknown DeFi protocols */
 export const CU_DEFAULT_COMPOSED = 800_000;
@@ -52,11 +60,15 @@ export function estimateComposedCU(
   const hasJupiter = programIds.some((id) => id === JUPITER_PROGRAM);
   const hasJupiterLend = programIds.some((id) => id === JUPITER_LEND_PROGRAM);
   const hasFlashTrade = programIds.some((id) => id === FLASH_TRADE_PROGRAM);
+  const hasDrift = programIds.some((id) => id === DRIFT_PROGRAM);
+  const hasKaminoLend = programIds.some((id) => id === KAMINO_LEND_PROGRAM);
 
   if (hasJupiter && defiInstructions.length > 2) return CU_JUPITER_MULTI_HOP;
   if (hasJupiter) return CU_JUPITER_SWAP;
   if (hasJupiterLend) return CU_JUPITER_LEND;
   if (hasFlashTrade) return CU_FLASH_TRADE;
+  if (hasDrift) return CU_DRIFT;
+  if (hasKaminoLend) return CU_KAMINO_LEND;
 
   return CU_DEFAULT_COMPOSED;
 }

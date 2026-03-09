@@ -36,7 +36,9 @@
   },
   "optionalDependencies": {
     "flash-sdk": "^15.1.4",
-    "@sqds/multisig": "^2.1.4"
+    "@sqds/multisig": "^2.1.4",
+    "@drift-labs/sdk": "^2.0.0",
+    "@kamino-finance/klend-sdk": "^5.0.0"
   },
   "devDependencies": {
     "@types/bn.js": "^5.1.5",

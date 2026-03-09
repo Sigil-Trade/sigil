@@ -114,6 +114,8 @@ export {
   CU_JUPITER_MULTI_HOP,
   CU_JUPITER_LEND,
   CU_FLASH_TRADE,
+  CU_DRIFT,
+  CU_KAMINO_LEND,
   CU_DEFAULT_COMPOSED,
   CU_VAULT_CREATION,
   CU_OWNER_ACTION,
@@ -314,6 +316,67 @@ export {
   reconcilePositions,
   countFlashTradePositions,
 } from "./integrations/flash-trade-reconcile";
+
+// --- Protocol Handler Interface + Registry ---
+
+export type {
+  ProtocolHandler,
+  ProtocolHandlerMetadata,
+  ProtocolActionDescriptor,
+  ProtocolComposeResult,
+  ProtocolContext,
+} from "./integrations/protocol-handler";
+
+export {
+  ProtocolRegistry,
+  globalProtocolRegistry,
+} from "./integrations/protocol-registry";
+
+// --- Drift Protocol Adapter ---
+
+export {
+  DRIFT_PROGRAM_ID_STR,
+  DRIFT_QUOTE_PRECISION,
+  DRIFT_BASE_PRECISION,
+  DRIFT_PRICE_PRECISION,
+  DRIFT_PERP_MARKETS,
+  DRIFT_SPOT_MARKETS,
+  composeDriftDeposit,
+  composeDriftWithdraw,
+  composeDriftPlacePerpOrder,
+  composeDriftPlaceSpotOrder,
+  composeDriftCancelOrder,
+  composeDriftModifyOrder,
+  composeDriftSettlePnl,
+  type DriftDepositParams,
+  type DriftWithdrawParams,
+  type DriftPlacePerpOrderParams,
+  type DriftPlaceSpotOrderParams,
+  type DriftCancelOrderParams,
+  type DriftModifyOrderParams,
+  type DriftSettlePnlParams,
+  type DriftComposeResult,
+} from "./integrations/drift";
+
+export { DriftHandler } from "./integrations/drift-handler";
+
+// --- Kamino Lending Adapter ---
+
+export {
+  KAMINO_LEND_PROGRAM_ID_STR,
+  KAMINO_MAIN_MARKET_STR,
+  composeKaminoDeposit,
+  composeKaminoBorrow,
+  composeKaminoRepay,
+  composeKaminoWithdraw,
+  type KaminoDepositParams,
+  type KaminoBorrowParams,
+  type KaminoRepayParams,
+  type KaminoWithdrawParams,
+  type KaminoComposeResult,
+} from "./integrations/kamino";
+
+export { KaminoHandler } from "./integrations/kamino-handler";
 
 export {
   SQUADS_V4_PROGRAM_ID,
