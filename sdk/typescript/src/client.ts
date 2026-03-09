@@ -7,6 +7,7 @@ import {
   Signer,
   Keypair,
   AddressLookupTableAccount,
+  SystemProgram,
 } from "@solana/web3.js";
 import { AnchorProvider, BN, Program, Wallet } from "@coral-xyz/anchor";
 import {
@@ -2583,5 +2584,64 @@ export class PhalnxClient {
 
   async getIntent(id: string): Promise<TransactionIntent | null> {
     return this.getIntentStorage().get(id);
+  }
+
+  // --- Fee Management Helpers ---
+
+  /** Check an agent's SOL balance (for monitoring/top-up decisions) */
+  async getAgentBalance(agent: PublicKey): Promise<number> {
+    return this.provider.connection.getBalance(agent);
+  }
+
+  /** Fund an agent with SOL from the current wallet (owner) */
+  async fundAgent(agent: PublicKey, lamports: number): Promise<string> {
+    const ix = SystemProgram.transfer({
+      fromPubkey: this.provider.wallet.publicKey,
+      toPubkey: agent,
+      lamports,
+    });
+    const { blockhash, lastValidBlockHeight } =
+      await this.provider.connection.getLatestBlockhash();
+    const msg = new TransactionMessage({
+      payerKey: this.provider.wallet.publicKey,
+      recentBlockhash: blockhash,
+      instructions: [ix],
+    }).compileToV0Message();
+    const tx = new VersionedTransaction(msg);
+    const signed = await this.provider.wallet.signTransaction(tx);
+    const sig = await this.provider.connection.sendRawTransaction(
+      signed.serialize(),
+    );
+    await this.provider.connection.confirmTransaction(
+      { signature: sig, blockhash, lastValidBlockHeight },
+      "confirmed",
+    );
+    return sig;
+  }
+
+  /** Fund a vault PDA with SOL (for fee refund reserves) */
+  async fundVaultSol(vault: PublicKey, lamports: number): Promise<string> {
+    const ix = SystemProgram.transfer({
+      fromPubkey: this.provider.wallet.publicKey,
+      toPubkey: vault,
+      lamports,
+    });
+    const { blockhash, lastValidBlockHeight } =
+      await this.provider.connection.getLatestBlockhash();
+    const msg = new TransactionMessage({
+      payerKey: this.provider.wallet.publicKey,
+      recentBlockhash: blockhash,
+      instructions: [ix],
+    }).compileToV0Message();
+    const tx = new VersionedTransaction(msg);
+    const signed = await this.provider.wallet.signTransaction(tx);
+    const sig = await this.provider.connection.sendRawTransaction(
+      signed.serialize(),
+    );
+    await this.provider.connection.confirmTransaction(
+      { signature: sig, blockhash, lastValidBlockHeight },
+      "confirmed",
+    );
+    return sig;
   }
 }

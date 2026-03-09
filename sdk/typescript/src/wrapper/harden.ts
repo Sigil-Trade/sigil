@@ -4,9 +4,11 @@ import {
   Keypair,
   Transaction,
   TransactionInstruction,
+  TransactionMessage,
   VersionedTransaction,
   AddressLookupTableAccount,
   ComputeBudgetProgram,
+  SystemProgram,
 } from "@solana/web3.js";
 import {
   getAssociatedTokenAddressSync,
@@ -73,6 +75,10 @@ export interface HardenOptions {
   /** TEE remote attestation configuration. When set, cryptographically verifies
    *  that the wallet runs inside a hardware enclave before proceeding. */
   attestation?: AttestationConfig;
+  /** SOL (in lamports) to auto-transfer from owner to agent after registration.
+   *  Funds the agent's transaction fees. Default: 10_000_000 (0.01 SOL).
+   *  Set to 0 to skip auto-funding. */
+  agentFundingLamports?: number;
 }
 
 /**
@@ -91,6 +97,10 @@ export interface HardenResult {
   policyAddress: PublicKey;
   /** The pending policy PDA address (for timelock queue/apply/cancel) */
   pendingPolicyAddress: PublicKey;
+  /** Whether agent was auto-funded with SOL */
+  agentFunded: boolean;
+  /** Amount of SOL (lamports) funded to agent. 0 if skipped or failed. */
+  agentFundingAmount: number;
 }
 
 /**
@@ -634,6 +644,42 @@ export async function harden(
     );
   }
 
+  // Auto-fund agent with SOL for transaction fees
+  const fundingAmount = options.agentFundingLamports ?? 10_000_000; // 0.01 SOL default
+  let agentFunded = false;
+  let agentFundingAmount = 0;
+  if (fundingAmount > 0) {
+    try {
+      const fundIx = SystemProgram.transfer({
+        fromPubkey: ownerPubkey,
+        toPubkey: agentPubkey,
+        lamports: fundingAmount,
+      });
+      const { blockhash } = await options.connection.getLatestBlockhash();
+      const msg = new TransactionMessage({
+        payerKey: ownerPubkey,
+        recentBlockhash: blockhash,
+        instructions: [fundIx],
+      }).compileToV0Message();
+      const fundTx = new VersionedTransaction(msg);
+      if (ownerKeypair) {
+        fundTx.sign([ownerKeypair]);
+      } else if (options.ownerWallet?.signTransaction) {
+        const signed = await options.ownerWallet.signTransaction(fundTx);
+        Object.assign(fundTx, signed);
+      }
+      await options.connection.sendRawTransaction(fundTx.serialize());
+      agentFunded = true;
+      agentFundingAmount = fundingAmount;
+    } catch (err: any) {
+      // Non-fatal: vault is functional, agent just needs manual SOL top-up
+      console.warn(
+        `Agent registered but auto-funding failed: ${err.message}. ` +
+          `Send ${fundingAmount / 1e9} SOL to ${agentPubkey.toBase58()} for transaction fees.`,
+      );
+    }
+  }
+
   // Build hardened wallet with dual enforcement
   const wallet = createHardenedWallet(
     shieldedWallet,
@@ -651,6 +697,8 @@ export async function harden(
     vaultId,
     policyAddress,
     pendingPolicyAddress,
+    agentFunded,
+    agentFundingAmount,
   };
 }
 
