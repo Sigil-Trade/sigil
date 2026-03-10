@@ -10,6 +10,7 @@ import {
   type IntentActionType,
   type TransactionIntent,
 } from "../src/intents";
+import { hasPermission, FULL_PERMISSIONS } from "../src/types";
 
 describe("intents", () => {
   const vault = Keypair.generate().publicKey;
@@ -417,6 +418,27 @@ describe("intents", () => {
           `${type} should be spending`,
         );
       }
+    });
+
+    it("all intent types map to base action keys recognized by hasPermission", () => {
+      // H-1 fix: precheck extracts base key from mapping.actionType
+      // e.g., "swap" → { swap: {} } → Object.keys()[0] = "swap" → valid in ACTION_PERMISSION_MAP
+      // When protocol-specific intents are added (e.g., "driftDeposit" → { deposit: {} }),
+      // extracting the base key ensures hasPermission uses "deposit", not "driftDeposit"
+      for (const [type, mapping] of Object.entries(ACTION_TYPE_MAP)) {
+        const baseKey = Object.keys(mapping.actionType)[0];
+        expect(
+          hasPermission(FULL_PERMISSIONS, baseKey),
+          `Base key "${baseKey}" for "${type}" not recognized by hasPermission`,
+        ).to.be.true;
+      }
+    });
+
+    it("hasPermission rejects unknown action type strings", () => {
+      // Proves the H-1 bug: passing a raw protocol-specific key would fail
+      expect(hasPermission(FULL_PERMISSIONS, "driftDeposit")).to.be.false;
+      expect(hasPermission(FULL_PERMISSIONS, "kaminoRepay")).to.be.false;
+      expect(hasPermission(FULL_PERMISSIONS, "unknownAction")).to.be.false;
     });
 
     it("marks non-spending actions correctly", () => {

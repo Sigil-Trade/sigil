@@ -1558,7 +1558,8 @@ export class PhalnxClient {
     const agentPermissions = agentEntry
       ? BigInt(agentEntry.permissions.toString())
       : 0n;
-    const permPassed = hasPermission(agentPermissions, intent.type);
+    const baseActionKey = Object.keys(mapping.actionType)[0];
+    const permPassed = hasPermission(agentPermissions, baseActionKey);
 
     // Check spending cap (for spending actions only)
     let capDetails: PrecheckResult["details"]["spendingCap"] | undefined;
@@ -1637,7 +1638,7 @@ export class PhalnxClient {
       details: {
         permission: {
           passed: permPassed,
-          requiredBit: intent.type,
+          requiredBit: baseActionKey,
           agentHas: !!agentEntry,
         },
         spendingCap: capDetails,
