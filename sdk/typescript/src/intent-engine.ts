@@ -22,7 +22,9 @@ import type {
   ProtocolActionDescriptor,
 } from "./integrations/protocol-handler";
 import { validateIntentInput, type ValidationResult } from "./intent-validator";
-import { toAgentError } from "./agent-errors";
+import { toAgentError, protocolEscalationError } from "./agent-errors";
+import { resolveProtocol, ProtocolTier } from "./protocol-resolver";
+import type { ProtocolRegistry } from "./integrations/protocol-registry";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -80,7 +82,19 @@ export class IntentEngine {
       return validation.errors[0];
     }
 
-    // 2. Precheck (unless skipped)
+    // 2. Protocol resolution (for protocol/passthrough intents — short-circuits before precheck)
+    if (intent.type === "protocol" || intent.type === "passthrough") {
+      try {
+        const resolution = await this._resolveProtocolTier(intent, vault);
+        if (resolution && resolution.tier === ProtocolTier.NOT_SUPPORTED && resolution.escalation) {
+          return protocolEscalationError(resolution.escalation);
+        }
+      } catch (err) {
+        return toAgentError(err, { phase: "protocol_resolution" });
+      }
+    }
+
+    // 3. Precheck (unless skipped)
     if (!options?.skipPrecheck) {
       try {
         const precheck = await this.precheck(intent, vault);
@@ -100,7 +114,7 @@ export class IntentEngine {
       }
     }
 
-    // 3. Execute
+    // 4. Execute
     try {
       return await this.client.execute(intent, vault, options);
     } catch (err) {
@@ -182,11 +196,7 @@ export class IntentEngine {
    * List all registered protocols and their capabilities.
    */
   listProtocols(): ProtocolInfo[] {
-    const registry = (
-      this.client as unknown as {
-        _protocolRegistry: { listAll(): ProtocolHandlerMetadata[] };
-      }
-    )._protocolRegistry;
+    const registry = this._getRegistry();
     return registry.listAll().map((meta) => ({
       protocolId: meta.protocolId,
       displayName: meta.displayName,
@@ -195,19 +205,67 @@ export class IntentEngine {
     }));
   }
 
+  // ─── Protocol Resolution (Internal) ────────────────────────────────
+
+  /**
+   * Resolve protocol tier for protocol/passthrough intents.
+   * Short-circuits before precheck if the protocol is NOT_SUPPORTED.
+   */
+  private async _resolveProtocolTier(
+    intent: IntentAction,
+    vault: PublicKey,
+  ): Promise<import("./protocol-resolver").ProtocolResolution | null> {
+    const { PublicKey: PK } = await import("@solana/web3.js");
+
+    // Extract program ID from intent
+    let programId: PublicKey | null = null;
+    if (intent.type === "protocol") {
+      const protocolId = (intent.params as any).protocolId as string | undefined;
+      if (protocolId) {
+        const registry = this._getRegistry();
+        const handler = registry.getByProtocolId(protocolId);
+        if (handler?.metadata.programIds[0]) {
+          programId = handler.metadata.programIds[0];
+        }
+      }
+    } else if (intent.type === "passthrough") {
+      const pid = (intent.params as any).programId as string | undefined;
+      if (pid) {
+        try {
+          programId = new PK(pid);
+        } catch {
+          // Invalid pubkey — will fail at execute
+        }
+      }
+    }
+
+    if (!programId) return null;
+
+    // Fetch policy + constraints
+    const [policy, constraints] = await Promise.all([
+      this.client.fetchPolicy(vault),
+      this.client.fetchConstraints(vault).catch(() => null),
+    ]);
+
+    return resolveProtocol(
+      programId,
+      this._getRegistry(),
+      { protocolMode: policy.protocolMode, protocols: policy.protocols },
+      constraints !== null && policy.hasConstraints,
+    );
+  }
+
+  private _getRegistry(): ProtocolRegistry {
+    return (
+      this.client as unknown as { _protocolRegistry: ProtocolRegistry }
+    )._protocolRegistry;
+  }
+
   /**
    * List supported actions for a specific protocol.
    */
   listActions(protocolId: string): ActionInfo[] {
-    const registry = (
-      this.client as unknown as {
-        _protocolRegistry: {
-          getByProtocolId(
-            id: string,
-          ): { metadata: ProtocolHandlerMetadata } | undefined;
-        };
-      }
-    )._protocolRegistry;
+    const registry = this._getRegistry();
     const handler = registry.getByProtocolId(protocolId);
     if (!handler) return [];
 
