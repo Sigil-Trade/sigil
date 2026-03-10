@@ -5534,4 +5534,577 @@ describe("phalnx", () => {
       }
     });
   });
+
+  // =========================================================================
+  // freeze_vault
+  // =========================================================================
+  describe("freeze_vault", () => {
+    const freezeVaultId = new BN(950);
+    let freezeVaultPda: PublicKey;
+    let freezeOverlay: PublicKey;
+    let freezePolicyPda: PublicKey;
+    let freezeTrackerPda: PublicKey;
+    const freezeAgent = Keypair.generate();
+    const freezeAgent2 = Keypair.generate();
+
+    before(async () => {
+      airdropSol(svm, freezeAgent.publicKey, 10 * LAMPORTS_PER_SOL);
+      airdropSol(svm, freezeAgent2.publicKey, 10 * LAMPORTS_PER_SOL);
+
+      [freezeVaultPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("vault"),
+          owner.publicKey.toBuffer(),
+          freezeVaultId.toArrayLike(Buffer, "le", 8),
+        ],
+        program.programId,
+      );
+      [freezePolicyPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("policy"), freezeVaultPda.toBuffer()],
+        program.programId,
+      );
+      [freezeTrackerPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("tracker"), freezeVaultPda.toBuffer()],
+        program.programId,
+      );
+      [freezeOverlay] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("agent_spend"),
+          freezeVaultPda.toBuffer(),
+          Buffer.from([0]),
+        ],
+        program.programId,
+      );
+
+      await program.methods
+        .initializeVault(
+          freezeVaultId,
+          new BN(1000_000_000),
+          new BN(1000_000_000),
+          0,
+          [],
+          new BN(0) as any,
+          1,
+          0,
+          100,
+          new BN(0),
+          [],
+          [],
+        )
+        .accounts({
+          owner: owner.publicKey,
+          vault: freezeVaultPda,
+          policy: freezePolicyPda,
+          tracker: freezeTrackerPda,
+          agentSpendOverlay: freezeOverlay,
+          feeDestination: feeDestination.publicKey,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .rpc();
+
+      await program.methods
+        .registerAgent(freezeAgent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .accounts({
+          owner: owner.publicKey,
+          vault: freezeVaultPda,
+          agentSpendOverlay: freezeOverlay,
+        } as any)
+        .rpc();
+
+      await program.methods
+        .registerAgent(freezeAgent2.publicKey, FULL_PERMISSIONS, new BN(0))
+        .accounts({
+          owner: owner.publicKey,
+          vault: freezeVaultPda,
+          agentSpendOverlay: freezeOverlay,
+        } as any)
+        .rpc();
+    });
+
+    it("owner can freeze an active vault", async () => {
+      await program.methods
+        .freezeVault()
+        .accounts({
+          owner: owner.publicKey,
+          vault: freezeVaultPda,
+        } as any)
+        .rpc();
+
+      const vault = await program.account.agentVault.fetch(freezeVaultPda);
+      expect(vault.status).to.have.property("frozen");
+    });
+
+    it("freeze preserves all agent entries", async () => {
+      const vault = await program.account.agentVault.fetch(freezeVaultPda);
+      expect(vault.agents.length).to.equal(2);
+      expect(vault.agents[0].pubkey.toString()).to.equal(
+        freezeAgent.publicKey.toString(),
+      );
+      expect(vault.agents[1].pubkey.toString()).to.equal(
+        freezeAgent2.publicKey.toString(),
+      );
+    });
+
+    it("cannot freeze an already-frozen vault", async () => {
+      try {
+        await program.methods
+          .freezeVault()
+          .accounts({
+            owner: owner.publicKey,
+            vault: freezeVaultPda,
+          } as any)
+          .rpc();
+        expect.fail("Should have thrown");
+      } catch (err: any) {
+        expect(err.toString()).to.include("VaultNotActive");
+      }
+    });
+
+    it("non-owner cannot freeze", async () => {
+      try {
+        await program.methods
+          .freezeVault()
+          .accounts({
+            owner: unauthorizedUser.publicKey,
+            vault: freezeVaultPda,
+          } as any)
+          .signers([unauthorizedUser])
+          .rpc();
+        expect.fail("Should have thrown");
+      } catch (err: any) {
+        expect(err.toString()).to.satisfy(
+          (s: string) => s.includes("ConstraintSeeds") || s.includes("has_one"),
+        );
+      }
+    });
+
+    it("reactivate unfreezes without needing to add agent (agents preserved)", async () => {
+      // Vault is currently frozen from the first test
+      await program.methods
+        .reactivateVault(null, null)
+        .accounts({ owner: owner.publicKey, vault: freezeVaultPda } as any)
+        .rpc();
+
+      const vault = await program.account.agentVault.fetch(freezeVaultPda);
+      expect(vault.status).to.have.property("active");
+      expect(vault.agents.length).to.equal(2);
+    });
+
+    it("owner can withdraw_funds from frozen vault (fund safety)", async () => {
+      // Create USDC ATA for vault and deposit
+      const vaultUsdcAta = createAtaIdempotentHelper(
+        svm,
+        (owner as any).payer,
+        usdcMint,
+        freezeVaultPda,
+        true,
+      );
+      const ownerAta = createAtaIdempotentHelper(
+        svm,
+        (owner as any).payer,
+        usdcMint,
+        owner.publicKey,
+      );
+      mintToHelper(svm, (owner as any).payer, usdcMint, ownerAta, owner.publicKey, 1_000_000n);
+
+      await program.methods
+        .depositFunds(new BN(500_000))
+        .accounts({
+          owner: owner.publicKey,
+          vault: freezeVaultPda,
+          mint: usdcMint,
+          ownerTokenAccount: ownerAta,
+          vaultTokenAccount: vaultUsdcAta,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .rpc();
+
+      // Freeze the vault
+      await program.methods
+        .freezeVault()
+        .accounts({
+          owner: owner.publicKey,
+          vault: freezeVaultPda,
+        } as any)
+        .rpc();
+
+      // Owner can still withdraw from frozen vault
+      await program.methods
+        .withdrawFunds(new BN(500_000))
+        .accounts({
+          owner: owner.publicKey,
+          vault: freezeVaultPda,
+          mint: usdcMint,
+          vaultTokenAccount: vaultUsdcAta,
+          ownerTokenAccount: ownerAta,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        } as any)
+        .rpc();
+
+      const balance = getTokenBalance(svm, vaultUsdcAta);
+      expect(balance.toString()).to.equal("0");
+
+      // Clean up: reactivate
+      await program.methods
+        .reactivateVault(null, null)
+        .accounts({ owner: owner.publicKey, vault: freezeVaultPda } as any)
+        .rpc();
+    });
+  });
+
+  // =========================================================================
+  // pause_agent / unpause_agent
+  // =========================================================================
+  describe("pause_agent / unpause_agent", () => {
+    const pauseVaultId = new BN(951);
+    let pauseVaultPda: PublicKey;
+    let pauseOverlay: PublicKey;
+    let pausePolicyPda: PublicKey;
+    let pauseTrackerPda: PublicKey;
+    const pauseAgent = Keypair.generate();
+    const pauseAgent2 = Keypair.generate();
+
+    before(async () => {
+      airdropSol(svm, pauseAgent.publicKey, 10 * LAMPORTS_PER_SOL);
+      airdropSol(svm, pauseAgent2.publicKey, 10 * LAMPORTS_PER_SOL);
+
+      [pauseVaultPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("vault"),
+          owner.publicKey.toBuffer(),
+          pauseVaultId.toArrayLike(Buffer, "le", 8),
+        ],
+        program.programId,
+      );
+      [pausePolicyPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("policy"), pauseVaultPda.toBuffer()],
+        program.programId,
+      );
+      [pauseTrackerPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("tracker"), pauseVaultPda.toBuffer()],
+        program.programId,
+      );
+      [pauseOverlay] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("agent_spend"),
+          pauseVaultPda.toBuffer(),
+          Buffer.from([0]),
+        ],
+        program.programId,
+      );
+
+      await program.methods
+        .initializeVault(
+          pauseVaultId,
+          new BN(1000_000_000),
+          new BN(1000_000_000),
+          0,
+          [jupiterProgramId],
+          new BN(0) as any,
+          1,
+          0,
+          100,
+          new BN(0),
+          [],
+          [],
+        )
+        .accounts({
+          owner: owner.publicKey,
+          vault: pauseVaultPda,
+          policy: pausePolicyPda,
+          tracker: pauseTrackerPda,
+          agentSpendOverlay: pauseOverlay,
+          feeDestination: feeDestination.publicKey,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .rpc();
+
+      await program.methods
+        .registerAgent(pauseAgent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .accounts({
+          owner: owner.publicKey,
+          vault: pauseVaultPda,
+          agentSpendOverlay: pauseOverlay,
+        } as any)
+        .rpc();
+
+      await program.methods
+        .registerAgent(pauseAgent2.publicKey, FULL_PERMISSIONS, new BN(0))
+        .accounts({
+          owner: owner.publicKey,
+          vault: pauseVaultPda,
+          agentSpendOverlay: pauseOverlay,
+        } as any)
+        .rpc();
+    });
+
+    it("owner can pause a specific agent", async () => {
+      await program.methods
+        .pauseAgent(pauseAgent.publicKey)
+        .accounts({
+          owner: owner.publicKey,
+          vault: pauseVaultPda,
+        } as any)
+        .rpc();
+
+      const vault = await program.account.agentVault.fetch(pauseVaultPda);
+      const entry = vault.agents.find(
+        (a: any) => a.pubkey.toString() === pauseAgent.publicKey.toString(),
+      );
+      expect(entry.paused).to.equal(true);
+    });
+
+    it("cannot pause an already-paused agent", async () => {
+      try {
+        await program.methods
+          .pauseAgent(pauseAgent.publicKey)
+          .accounts({
+            owner: owner.publicKey,
+            vault: pauseVaultPda,
+          } as any)
+          .rpc();
+        expect.fail("Should have thrown");
+      } catch (err: any) {
+        expect(err.toString()).to.include("AgentAlreadyPaused");
+      }
+    });
+
+    it("cannot pause an agent not in the vault", async () => {
+      const fakeAgent = Keypair.generate();
+      try {
+        await program.methods
+          .pauseAgent(fakeAgent.publicKey)
+          .accounts({
+            owner: owner.publicKey,
+            vault: pauseVaultPda,
+          } as any)
+          .rpc();
+        expect.fail("Should have thrown");
+      } catch (err: any) {
+        expect(err.toString()).to.include("UnauthorizedAgent");
+      }
+    });
+
+    it("non-owner cannot pause", async () => {
+      try {
+        await program.methods
+          .pauseAgent(pauseAgent2.publicKey)
+          .accounts({
+            owner: unauthorizedUser.publicKey,
+            vault: pauseVaultPda,
+          } as any)
+          .signers([unauthorizedUser])
+          .rpc();
+        expect.fail("Should have thrown");
+      } catch (err: any) {
+        expect(err.toString()).to.satisfy(
+          (s: string) => s.includes("ConstraintSeeds") || s.includes("has_one"),
+        );
+      }
+    });
+
+    it("other agent in same vault is NOT affected by one agent's pause", async () => {
+      const vault = await program.account.agentVault.fetch(pauseVaultPda);
+      const entry2 = vault.agents.find(
+        (a: any) => a.pubkey.toString() === pauseAgent2.publicKey.toString(),
+      );
+      expect(entry2.paused).to.equal(false);
+    });
+
+    it("paused agent is blocked by agent_transfer (AgentPaused)", async () => {
+      // Create USDC ATAs and fund vault
+      const vaultAta = createAtaIdempotentHelper(
+        svm,
+        (owner as any).payer,
+        usdcMint,
+        pauseVaultPda,
+        true,
+      );
+      const ownerAta = createAtaIdempotentHelper(
+        svm,
+        (owner as any).payer,
+        usdcMint,
+        owner.publicKey,
+      );
+      mintToHelper(svm, (owner as any).payer, usdcMint, ownerAta, owner.publicKey, 1_000_000n);
+      await program.methods
+        .depositFunds(new BN(1_000_000))
+        .accounts({
+          owner: owner.publicKey,
+          vault: pauseVaultPda,
+          mint: usdcMint,
+          ownerTokenAccount: ownerAta,
+          vaultTokenAccount: vaultAta,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .rpc();
+
+      // Destination ATA
+      const destAta = createAtaIdempotentHelper(
+        svm,
+        (owner as any).payer,
+        usdcMint,
+        owner.publicKey,
+      );
+
+      try {
+        await program.methods
+          .agentTransfer(new BN(100_000))
+          .accounts({
+            agent: pauseAgent.publicKey,
+            vault: pauseVaultPda,
+            policy: pausePolicyPda,
+            tracker: pauseTrackerPda,
+            agentSpendOverlay: pauseOverlay,
+            vaultTokenAccount: vaultAta,
+            tokenMintAccount: usdcMint,
+            destinationTokenAccount: destAta,
+            feeDestinationTokenAccount: null,
+            protocolTreasuryTokenAccount: null,
+            tokenProgram: TOKEN_PROGRAM_ID,
+          } as any)
+          .signers([pauseAgent])
+          .rpc();
+        expect.fail("Should have thrown");
+      } catch (err: any) {
+        expect(err.toString()).to.include("AgentPaused");
+      }
+    });
+
+    it("pause works on frozen vault (pre-positioning for unfreeze)", async () => {
+      // Freeze the vault
+      await program.methods
+        .freezeVault()
+        .accounts({
+          owner: owner.publicKey,
+          vault: pauseVaultPda,
+        } as any)
+        .rpc();
+
+      // Can pause agent2 while vault is frozen
+      await program.methods
+        .pauseAgent(pauseAgent2.publicKey)
+        .accounts({
+          owner: owner.publicKey,
+          vault: pauseVaultPda,
+        } as any)
+        .rpc();
+
+      const vault = await program.account.agentVault.fetch(pauseVaultPda);
+      const entry2 = vault.agents.find(
+        (a: any) => a.pubkey.toString() === pauseAgent2.publicKey.toString(),
+      );
+      expect(entry2.paused).to.equal(true);
+
+      // Clean up: unfreeze and unpause agent2
+      await program.methods
+        .reactivateVault(null, null)
+        .accounts({ owner: owner.publicKey, vault: pauseVaultPda } as any)
+        .rpc();
+      await program.methods
+        .unpauseAgent(pauseAgent2.publicKey)
+        .accounts({
+          owner: owner.publicKey,
+          vault: pauseVaultPda,
+        } as any)
+        .rpc();
+    });
+
+    it("owner can unpause a paused agent", async () => {
+      await program.methods
+        .unpauseAgent(pauseAgent.publicKey)
+        .accounts({
+          owner: owner.publicKey,
+          vault: pauseVaultPda,
+        } as any)
+        .rpc();
+
+      const vault = await program.account.agentVault.fetch(pauseVaultPda);
+      const entry = vault.agents.find(
+        (a: any) => a.pubkey.toString() === pauseAgent.publicKey.toString(),
+      );
+      expect(entry.paused).to.equal(false);
+    });
+
+    it("cannot unpause an agent that isn't paused", async () => {
+      try {
+        await program.methods
+          .unpauseAgent(pauseAgent.publicKey)
+          .accounts({
+            owner: owner.publicKey,
+            vault: pauseVaultPda,
+          } as any)
+          .rpc();
+        expect.fail("Should have thrown");
+      } catch (err: any) {
+        expect(err.toString()).to.include("AgentNotPaused");
+      }
+    });
+
+    it("non-owner cannot unpause", async () => {
+      // Pause first
+      await program.methods
+        .pauseAgent(pauseAgent.publicKey)
+        .accounts({
+          owner: owner.publicKey,
+          vault: pauseVaultPda,
+        } as any)
+        .rpc();
+
+      try {
+        await program.methods
+          .unpauseAgent(pauseAgent.publicKey)
+          .accounts({
+            owner: unauthorizedUser.publicKey,
+            vault: pauseVaultPda,
+          } as any)
+          .signers([unauthorizedUser])
+          .rpc();
+        expect.fail("Should have thrown");
+      } catch (err: any) {
+        expect(err.toString()).to.satisfy(
+          (s: string) => s.includes("ConstraintSeeds") || s.includes("has_one"),
+        );
+      }
+
+      // Clean up: unpause
+      await program.methods
+        .unpauseAgent(pauseAgent.publicKey)
+        .accounts({
+          owner: owner.publicKey,
+          vault: pauseVaultPda,
+        } as any)
+        .rpc();
+    });
+
+    it("paused agent's permissions preserved after unpause", async () => {
+      // Pause and unpause
+      await program.methods
+        .pauseAgent(pauseAgent.publicKey)
+        .accounts({
+          owner: owner.publicKey,
+          vault: pauseVaultPda,
+        } as any)
+        .rpc();
+
+      await program.methods
+        .unpauseAgent(pauseAgent.publicKey)
+        .accounts({
+          owner: owner.publicKey,
+          vault: pauseVaultPda,
+        } as any)
+        .rpc();
+
+      const vault = await program.account.agentVault.fetch(pauseVaultPda);
+      const entry = vault.agents.find(
+        (a: any) => a.pubkey.toString() === pauseAgent.publicKey.toString(),
+      );
+      expect(entry.paused).to.equal(false);
+      expect(entry.permissions.toString()).to.equal(FULL_PERMISSIONS.toString());
+    });
+  });
 });

@@ -1169,6 +1169,43 @@
       ]
     },
     {
+      "name": "freeze_vault",
+      "docs": [
+        "Freeze the vault immediately. Preserves all agent entries.",
+        "Only the owner can call this. Use reactivate_vault to unfreeze."
+      ],
+      "discriminator": [144, 211, 63, 236, 97, 31, 170, 175],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true,
+          "relations": ["vault"]
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [118, 97, 117, 108, 116]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "account",
+                "path": "vault.vault_id",
+                "account": "AgentVault"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "initialize_vault",
       "docs": [
         "Initialize a new agent vault with policy configuration.",
@@ -1302,6 +1339,48 @@
           "type": {
             "vec": "u64"
           }
+        }
+      ]
+    },
+    {
+      "name": "pause_agent",
+      "docs": [
+        "Pause a specific agent. Blocks all agent actions while preserving config.",
+        "Only the owner can call this."
+      ],
+      "discriminator": [148, 32, 1, 26, 147, 122, 178, 140],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true,
+          "relations": ["vault"]
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [118, 97, 117, 108, 116]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "account",
+                "path": "vault.vault_id",
+                "account": "AgentVault"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "agent_to_pause",
+          "type": "pubkey"
         }
       ]
     },
@@ -2012,6 +2091,48 @@
       ]
     },
     {
+      "name": "unpause_agent",
+      "docs": [
+        "Unpause a paused agent. Restores ability to execute actions.",
+        "Only the owner can call this."
+      ],
+      "discriminator": [46, 125, 165, 212, 241, 143, 190, 95],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true,
+          "relations": ["vault"]
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [118, 97, 117, 108, 116]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "account",
+                "path": "vault.vault_id",
+                "account": "AgentVault"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "agent_to_unpause",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
       "name": "update_agent_permissions",
       "docs": [
         "Update an agent's permission bitmask and spending limit.",
@@ -2666,6 +2787,10 @@
       "discriminator": [85, 90, 59, 218, 126, 8, 179, 63]
     },
     {
+      "name": "AgentPausedEvent",
+      "discriminator": [39, 74, 148, 94, 198, 166, 121, 23]
+    },
+    {
       "name": "AgentPermissionsUpdated",
       "discriminator": [203, 110, 249, 149, 51, 17, 246, 63]
     },
@@ -2684,6 +2809,10 @@
     {
       "name": "AgentTransferExecuted",
       "discriminator": [88, 52, 117, 69, 112, 152, 167, 40]
+    },
+    {
+      "name": "AgentUnpausedEvent",
+      "discriminator": [218, 187, 253, 124, 79, 192, 42, 181]
     },
     {
       "name": "ConstraintsChangeApplied",
@@ -2768,6 +2897,10 @@
     {
       "name": "VaultCreated",
       "discriminator": [117, 25, 120, 254, 75, 236, 78, 115]
+    },
+    {
+      "name": "VaultFrozen",
+      "discriminator": [13, 199, 172, 111, 88, 10, 151, 247]
     },
     {
       "name": "VaultReactivated",
@@ -3144,6 +3277,21 @@
       "code": 6073,
       "name": "PendingPolicyExists",
       "msg": "Pending policy update must be applied or cancelled before closing vault"
+    },
+    {
+      "code": 6074,
+      "name": "AgentPaused",
+      "msg": "Agent is paused and cannot execute actions"
+    },
+    {
+      "code": 6075,
+      "name": "AgentAlreadyPaused",
+      "msg": "Agent is already paused"
+    },
+    {
+      "code": 6076,
+      "name": "AgentNotPaused",
+      "msg": "Agent is not paused"
     }
   ],
   "types": [
@@ -3357,6 +3505,30 @@
           {
             "name": "spending_limit_usd",
             "type": "u64"
+          },
+          {
+            "name": "paused",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AgentPausedEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "agent",
+            "type": "pubkey"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
           }
         ]
       }
@@ -3544,6 +3716,26 @@
           {
             "name": "mint",
             "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AgentUnpausedEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "agent",
+            "type": "pubkey"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
           }
         ]
       }
@@ -4891,6 +5083,30 @@
           {
             "name": "vault_id",
             "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "VaultFrozen",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "agents_preserved",
+            "type": "u8"
           },
           {
             "name": "timestamp",
