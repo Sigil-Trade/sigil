@@ -1150,12 +1150,6 @@ export const IDL = {
           name: "success",
           type: "bool",
         },
-        {
-          name: "refund_lamports",
-          type: {
-            option: "u64",
-          },
-        },
       ],
     },
     {
@@ -2681,10 +2675,6 @@ export const IDL = {
       discriminator: [97, 27, 150, 55, 203, 179, 173, 23],
     },
     {
-      name: "FeeRefunded",
-      discriminator: [174, 73, 232, 90, 116, 128, 229, 22],
-    },
-    {
       name: "FeesCollected",
       discriminator: [233, 23, 117, 225, 107, 178, 254, 8],
     },
@@ -3924,38 +3914,6 @@ export const IDL = {
           },
           {
             name: "Refunded",
-          },
-        ],
-      },
-    },
-    {
-      name: "FeeRefunded",
-      type: {
-        kind: "struct",
-        fields: [
-          {
-            name: "vault",
-            type: "pubkey",
-          },
-          {
-            name: "agent",
-            type: "pubkey",
-          },
-          {
-            name: "requested_lamports",
-            type: "u64",
-          },
-          {
-            name: "actual_lamports",
-            type: "u64",
-          },
-          {
-            name: "vault_sol_remaining",
-            type: "u64",
-          },
-          {
-            name: "timestamp",
-            type: "i64",
           },
         ],
       },

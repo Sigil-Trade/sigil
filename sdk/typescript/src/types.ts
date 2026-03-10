@@ -31,12 +31,6 @@ export const ESCROW_ONLY = (1n << 18n) | (1n << 19n) | (1n << 20n);
 // Escrow constants
 export const MAX_ESCROW_DURATION = 2_592_000; // 30 days in seconds
 
-// Fee refund constant (matching on-chain MAX_FEE_REFUND in state/mod.rs)
-/** Maximum fee refund per transaction: 100,000 lamports = 0.0001 SOL */
-export const MAX_FEE_REFUND = 100_000;
-/** Default fee refund request: 50,000 lamports (covers base + moderate priority) */
-export const DEFAULT_FEE_REFUND_LAMPORTS = 50_000;
-
 /** Permission bit mapping for each ActionType variant */
 const ACTION_PERMISSION_MAP: Record<string, bigint> = {
   swap: 1n << 0n,
@@ -423,10 +417,6 @@ export interface ComposeActionParams {
   outputStablecoinAccount?: PublicKey;
   /** Optional: constraints PDA to pass as remaining account */
   constraintsPda?: PublicKey;
-  /** Enable fee refund in finalize_session. Default: true. Set false to skip. */
-  feeRefund?: boolean;
-  /** Lamports to request as refund. Default: DEFAULT_FEE_REFUND_LAMPORTS. On-chain caps at MAX_FEE_REFUND. */
-  feeRefundLamports?: BN;
 }
 
 // Escrow param types

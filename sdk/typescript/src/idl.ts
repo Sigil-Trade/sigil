@@ -1385,12 +1385,6 @@ export type Phalnx = {
           name: "success";
           type: "bool";
         },
-        {
-          name: "refundLamports";
-          type: {
-            option: "u64";
-          };
-        },
       ];
     },
     {
@@ -3177,10 +3171,6 @@ export type Phalnx = {
       discriminator: [97, 27, 150, 55, 203, 179, 173, 23];
     },
     {
-      name: "feeRefunded";
-      discriminator: [174, 73, 232, 90, 116, 128, 229, 22];
-    },
-    {
       name: "feesCollected";
       discriminator: [233, 23, 117, 225, 107, 178, 254, 8];
     },
@@ -4420,38 +4410,6 @@ export type Phalnx = {
           },
           {
             name: "refunded";
-          },
-        ];
-      };
-    },
-    {
-      name: "feeRefunded";
-      type: {
-        kind: "struct";
-        fields: [
-          {
-            name: "vault";
-            type: "pubkey";
-          },
-          {
-            name: "agent";
-            type: "pubkey";
-          },
-          {
-            name: "requestedLamports";
-            type: "u64";
-          },
-          {
-            name: "actualLamports";
-            type: "u64";
-          },
-          {
-            name: "vaultSolRemaining";
-            type: "u64";
-          },
-          {
-            name: "timestamp";
-            type: "i64";
           },
         ];
       };

@@ -150,8 +150,6 @@ export {
   TRANSFER_ONLY,
   ESCROW_ONLY,
   MAX_ESCROW_DURATION,
-  MAX_FEE_REFUND,
-  DEFAULT_FEE_REFUND_LAMPORTS,
   hasPermission,
   // Type exports
   type Phalnx,

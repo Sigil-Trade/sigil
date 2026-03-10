@@ -188,13 +188,12 @@ export function buildFinalizeSession(
   success: boolean,
   vaultTokenAccount: PublicKey,
   outputStablecoinAccount?: PublicKey,
-  refundLamports?: BN | null,
 ) {
   const [session] = getSessionPDA(vault, agent, tokenMint, program.programId);
   const [policy] = getPolicyPDA(vault, program.programId);
   const [tracker] = getTrackerPDA(vault, program.programId);
 
-  return program.methods.finalizeSession(success, refundLamports ?? null).accounts({
+  return program.methods.finalizeSession(success).accounts({
     payer,
     vault,
     session,

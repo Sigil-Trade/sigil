@@ -8,7 +8,6 @@ import {
 } from "@solana/web3.js";
 import { BN, Program } from "@coral-xyz/anchor";
 import type { Phalnx, ComposeActionParams } from "./types";
-import { DEFAULT_FEE_REFUND_LAMPORTS } from "./types";
 import {
   buildValidateAndAuthorize,
   buildFinalizeSession,
@@ -36,10 +35,7 @@ export async function composePermittedAction(
   connection?: Connection,
   priorityFeeConfig?: PriorityFeeConfig,
 ): Promise<TransactionInstruction[]> {
-  const baseUnits = computeUnits ?? estimateComposedCU(params.defiInstructions);
-  const refundEnabled = params.feeRefund !== false; // default: enabled
-  // Fee refund adds ~5K CU for lamport transfer + event emit
-  const units = refundEnabled ? baseUnits + 5_000 : baseUnits;
+  const units = computeUnits ?? estimateComposedCU(params.defiInstructions);
 
   const computeBudgetIx = ComputeBudgetProgram.setComputeUnitLimit({ units });
 
@@ -61,10 +57,6 @@ export async function composePermittedAction(
     params.outputStablecoinAccount,
   ).instruction();
 
-  const refundLamports = refundEnabled
-    ? (params.feeRefundLamports ?? new BN(DEFAULT_FEE_REFUND_LAMPORTS))
-    : null;
-
   const finalizeIx = await buildFinalizeSession(
     program,
     params.agent,
@@ -74,7 +66,6 @@ export async function composePermittedAction(
     params.success ?? true,
     params.vaultTokenAccount,
     params.outputStablecoinAccount,
-    refundLamports,
   ).instruction();
 
   const instructions: TransactionInstruction[] = [computeBudgetIx];
