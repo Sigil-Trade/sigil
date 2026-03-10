@@ -76,7 +76,7 @@ export interface ShieldedWallet extends WalletLike {
   updatePolicies(policies: ShieldPolicies): void;
   /** Reset all spending state */
   resetState(): void;
-  /** Pause policy enforcement — transactions pass through without checks or spend recording */
+  /** Pause the wallet — blocks all signing with ShieldDeniedError until resume() is called */
   pause(): void;
   /** Resume policy enforcement after a pause */
   resume(): void;

@@ -1762,45 +1762,57 @@ export class PhalnxClient {
       // Stablecoin-denominated amount fields
       case "transfer":
       case "deposit":
-      case "createEscrow": {
+      case "createEscrow":
+      case "driftDeposit":
+      case "kaminoDeposit":
+      case "kaminoRepay": {
         const mint = p.mint as string | undefined;
         if (!mint) return null;
         const token = resolveToken(mint);
         if (!token) return null;
         if (!isStablecoinMint(token.mint)) return null;
         const amount = parseFloat(p.amount as string);
-        return Number.isFinite(amount) ? amount : null;
+        return Number.isFinite(amount) && amount >= 0 ? amount : null;
       }
 
       // Swap: only estimate if input is stablecoin
       case "swap":
-      case "swapAndOpenPosition": {
-        const inputMint = p.inputMint as string | undefined;
+      case "swapAndOpenPosition":
+      case "driftSpotOrder": {
+        const inputMint = (p.inputMint ?? p.tokenMint) as string | undefined;
         if (!inputMint) return null;
         const token = resolveToken(inputMint);
         if (!token) return null;
         if (!isStablecoinMint(token.mint)) return null;
         const amount = parseFloat(p.amount as string);
-        return Number.isFinite(amount) ? amount : null;
+        return Number.isFinite(amount) && amount >= 0 ? amount : null;
       }
 
       // Perps: collateral is USD-denominated
       case "openPosition": {
         const collateral = parseFloat(p.collateral as string);
-        return Number.isFinite(collateral) ? collateral : null;
+        return Number.isFinite(collateral) && collateral >= 0
+          ? collateral
+          : null;
       }
       case "increasePosition":
       case "addCollateral": {
         const collateralAmount = parseFloat(p.collateralAmount as string);
-        return Number.isFinite(collateralAmount) ? collateralAmount : null;
+        return Number.isFinite(collateralAmount) && collateralAmount >= 0
+          ? collateralAmount
+          : null;
       }
 
       // Limit orders: reserve amount is USD-denominated
       case "placeLimitOrder": {
         const reserveAmount = parseFloat(p.reserveAmount as string);
-        return Number.isFinite(reserveAmount) ? reserveAmount : null;
+        return Number.isFinite(reserveAmount) && reserveAmount >= 0
+          ? reserveAmount
+          : null;
       }
 
+      // Drift perp orders: amount is notional, not directly USD — skip
+      case "driftPerpOrder":
       default:
         return null;
     }
