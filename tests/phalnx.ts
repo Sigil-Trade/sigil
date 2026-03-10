@@ -5705,7 +5705,14 @@ describe("phalnx", () => {
         usdcMint,
         owner.publicKey,
       );
-      mintToHelper(svm, (owner as any).payer, usdcMint, ownerAta, owner.publicKey, 1_000_000n);
+      mintToHelper(
+        svm,
+        (owner as any).payer,
+        usdcMint,
+        ownerAta,
+        owner.publicKey,
+        1_000_000n,
+      );
 
       await program.methods
         .depositFunds(new BN(500_000))
@@ -5928,7 +5935,14 @@ describe("phalnx", () => {
         usdcMint,
         owner.publicKey,
       );
-      mintToHelper(svm, (owner as any).payer, usdcMint, ownerAta, owner.publicKey, 1_000_000n);
+      mintToHelper(
+        svm,
+        (owner as any).payer,
+        usdcMint,
+        ownerAta,
+        owner.publicKey,
+        1_000_000n,
+      );
       await program.methods
         .depositFunds(new BN(1_000_000))
         .accounts({
@@ -6104,7 +6118,9 @@ describe("phalnx", () => {
         (a: any) => a.pubkey.toString() === pauseAgent.publicKey.toString(),
       );
       expect(entry.paused).to.equal(false);
-      expect(entry.permissions.toString()).to.equal(FULL_PERMISSIONS.toString());
+      expect(entry.permissions.toString()).to.equal(
+        FULL_PERMISSIONS.toString(),
+      );
     });
   });
 });

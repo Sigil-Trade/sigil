@@ -39,9 +39,8 @@ emergency.get("/api/actions/freeze-vault", (c) => {
 emergency.post("/api/actions/freeze-vault", async (c) => {
   try {
     const { PublicKey } = await import("@solana/web3.js");
-    const { buildFreezeVaultTransaction } = await import(
-      "../lib/build-freeze-vault-tx"
-    );
+    const { buildFreezeVaultTransaction } =
+      await import("../lib/build-freeze-vault-tx");
 
     const body = await c.req.json<{ account: string }>();
     if (!body.account) {
@@ -133,9 +132,8 @@ emergency.get("/api/actions/pause-agent", (c) => {
 emergency.post("/api/actions/pause-agent", async (c) => {
   try {
     const { PublicKey } = await import("@solana/web3.js");
-    const { buildPauseAgentTransaction } = await import(
-      "../lib/build-pause-agent-tx"
-    );
+    const { buildPauseAgentTransaction } =
+      await import("../lib/build-pause-agent-tx");
 
     const body = await c.req.json<{ account: string }>();
     if (!body.account) {
@@ -248,9 +246,8 @@ emergency.get("/api/actions/unpause-agent", (c) => {
 emergency.post("/api/actions/unpause-agent", async (c) => {
   try {
     const { PublicKey } = await import("@solana/web3.js");
-    const { buildUnpauseAgentTransaction } = await import(
-      "../lib/build-unpause-agent-tx"
-    );
+    const { buildUnpauseAgentTransaction } =
+      await import("../lib/build-unpause-agent-tx");
 
     const body = await c.req.json<{ account: string }>();
     if (!body.account) {

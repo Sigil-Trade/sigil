@@ -38,11 +38,7 @@ export {
   freezeVault,
   freezeVaultSchema,
 } from "./freeze-vault";
-export {
-  pauseAgentTool,
-  pauseAgent,
-  pauseAgentSchema,
-} from "./pause-agent";
+export { pauseAgentTool, pauseAgent, pauseAgentSchema } from "./pause-agent";
 export {
   unpauseAgentTool,
   unpauseAgent,

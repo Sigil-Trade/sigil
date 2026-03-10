@@ -23,13 +23,8 @@ export async function buildUnpauseAgentTransaction(
   } = await import("@solana/web3.js");
   const { BN, Program, AnchorProvider, Wallet } =
     await import("@coral-xyz/anchor");
-  const {
-    IDL,
-    buildUnpauseAgent,
-    getVaultPDA,
-    CU_OWNER_ACTION,
-    getEstimator,
-  } = await import("@phalnx/sdk");
+  const { IDL, buildUnpauseAgent, getVaultPDA, CU_OWNER_ACTION, getEstimator } =
+    await import("@phalnx/sdk");
 
   const connection = new Connection(RPC_URL, "confirmed");
 
