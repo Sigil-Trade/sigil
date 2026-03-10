@@ -11,6 +11,7 @@ overrides:
   ajv: '>=8.18.0'
   minimatch@^3.0.0: '>=3.1.4'
   express-rate-limit: '>=8.2.2'
+  nanoid: '>=3.3.5'
 
 importers:
 
@@ -455,7 +456,7 @@ importers:
         version: 11.7.5
       ts-node:
         specifier: ^10.9.2
-        version: 10.9.2(@types/node@25.4.0)(typescript@5.9.3)
+        version: 10.9.2(@types/node@20.19.37)(typescript@5.9.3)
       typescript:
         specifier: ^5.3.3
         version: 5.9.3
@@ -3685,11 +3686,6 @@ packages:
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
-  nanoid@3.3.4:
-    resolution: {integrity: sha512-MqBkQh/OHTS2egovRtLk45wEyNXwF+cokD+1YPf9u5VfJiRdAiRwB2froX5Co9Rh20xs4siNPm8naNotSD6RBw==}
-    engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
-    hasBin: true
-
   napi-build-utils@2.0.0:
     resolution: {integrity: sha512-GEbrYkbfF7MoNaoh2iGG84Mnf/WZfB0GdGEsM8wz7Expx/LlWf5U8t9nvJKXSp3qr5IsEbK04cBGhol/KwOsWA==}
 
@@ -5294,7 +5290,7 @@ snapshots:
       anchor-bankrun: 0.3.0(@coral-xyz/anchor@0.29.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10))(@solana/web3.js@1.98.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10))(solana-bankrun@0.3.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10))
       gill: 0.10.3(@solana/sysvars@2.3.0(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.9.3))(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.9.3)(ws@8.19.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))
       helius-laserstream: 0.1.8
-      nanoid: 3.3.4
+      nanoid: 3.3.11
       node-cache: 5.1.2
       solana-bankrun: 0.3.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)
       strict-event-emitter-types: 2.0.0
@@ -9257,9 +9253,6 @@ snapshots:
   mustache@4.2.0: {}
 
   nanoid@3.3.11: {}
-
-  nanoid@3.3.4:
-    optional: true
 
   napi-build-utils@2.0.0: {}
 
