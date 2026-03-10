@@ -5,7 +5,7 @@
 #   0. changes                — Detect which file groups changed (package-level path filtering)
 #   1. build-lint-test        — TypeScript builds, Prettier, 734 TS tests (conditional: any-ts or push)
 #   2. rust-checks            — cargo fmt + cargo clippy (conditional: rust changes or push)
-#   3. on-chain-tests         — Anchor build + LiteSVM 325 tests (conditional: rust changes or push)
+#   3. on-chain-tests         — Anchor build + LiteSVM 349 tests (conditional: rust changes or push)
 #  3b. build-verification     — Feature flag safety net (conditional: rust changes or push)
 #  3c. surfpool-integration   — Surfpool integration tests, 20 tests (conditional: rust changes or push)
 #   4. security-scan          — Sec3 X-Ray static analysis (always, BLOCKING)
@@ -24,7 +24,7 @@
 #   apps/ → Actions server tests
 #   sdk/typescript → all downstream suites (everything depends on SDK)
 #
-# Total: ~1,660 tests across 17 suites (1246 TS + 325 on-chain + 20 Surfpool + 69 devnet)
+# Total: ~1,729 tests across 17 suites (1291 TS + 349 on-chain + 20 Surfpool + 69 devnet)
 # All security checks are BLOCKING — zero tolerance for known issues.
 
 name: CI
@@ -106,7 +106,7 @@ jobs:
               - 'tsconfig*.json'
 
   # ──────────────────────────────────────────────────────────────
-  # Job 1: TypeScript build, lint, and tests (8 suites, 1246 tests)
+  # Job 1: TypeScript build, lint, and tests (8 suites, 1291 tests)
   # ──────────────────────────────────────────────────────────────
   build-lint-test:
     name: Build, Lint & TS Tests
@@ -175,7 +175,7 @@ jobs:
         working-directory: sdk/core
         run: pnpm test
 
-      - name: SDK tests (639 tests)
+      - name: SDK tests (656 tests)
         if: >-
           needs.changes.outputs.sdk-typescript == 'true' ||
           github.event_name == 'push'
@@ -214,7 +214,7 @@ jobs:
         working-directory: plugins/elizaos
         run: pnpm test
 
-      - name: MCP server tests (343 tests)
+      - name: MCP server tests (355 tests)
         if: >-
           needs.changes.outputs.packages == 'true' ||
           needs.changes.outputs.sdk-typescript == 'true' ||
@@ -222,7 +222,7 @@ jobs:
         working-directory: packages/mcp
         run: pnpm test
 
-      - name: Actions server tests (83 tests)
+      - name: Actions server tests (99 tests)
         if: >-
           needs.changes.outputs.apps == 'true' ||
           needs.changes.outputs.sdk-typescript == 'true' ||

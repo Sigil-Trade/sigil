@@ -120,7 +120,7 @@ jobs:
         working-directory: sdk/core
         run: pnpm test
 
-      - name: Run SDK tests (639 tests)
+      - name: Run SDK tests (656 tests)
         working-directory: sdk/typescript
         run: pnpm test
 
@@ -140,11 +140,11 @@ jobs:
         working-directory: plugins/elizaos
         run: pnpm test
 
-      - name: Run MCP server tests (343 tests)
+      - name: Run MCP server tests (355 tests)
         working-directory: packages/mcp
         run: pnpm test
 
-      - name: Run actions server tests (83 tests)
+      - name: Run actions server tests (99 tests)
         working-directory: apps/actions-server
         run: pnpm test
 

@@ -2,7 +2,7 @@
   "suites": [
     {
       "name": "Core vault management & permission engine",
-      "count": 87,
+      "count": 104,
       "onChain": true,
       "claudePattern": "tests/phalnx.ts` (ts-mocha + LiteSVM, no validator needed, %d tests)"
     },
@@ -26,7 +26,7 @@
     },
     {
       "name": "Security exploit scenarios",
-      "count": 142,
+      "count": 149,
       "onChain": true,
       "claudePattern": "tests/security-exploits.ts` (ts-mocha + LiteSVM, %d tests)"
     },
@@ -61,7 +61,7 @@
     },
     {
       "name": "SDK tests (`@phalnx/sdk`)",
-      "count": 639,
+      "count": 656,
       "ciStepName": "SDK tests",
       "claudePattern": "sdk/typescript/tests/` (mocha, %d tests"
     },
@@ -95,7 +95,7 @@
     },
     {
       "name": "MCP server (`@phalnx/mcp`)",
-      "count": 343,
+      "count": 355,
       "ciStepName": "MCP server tests",
       "claudePattern": "packages/mcp/tests/` (mocha, %d tests",
       "packageReadme": "packages/mcp/README.md",
@@ -103,7 +103,7 @@
     },
     {
       "name": "Actions server (`@phalnx/actions-server`)",
-      "count": 83,
+      "count": 99,
       "ciStepName": "Actions server tests",
       "claudePattern": "apps/actions-server/tests/` (mocha, %d tests)"
     }
