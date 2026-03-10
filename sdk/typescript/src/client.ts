@@ -74,6 +74,9 @@ import {
   buildFinalizeSession,
   buildRevokeAgent,
   buildReactivateVault,
+  buildFreezeVault,
+  buildPauseAgent,
+  buildUnpauseAgent,
   buildWithdrawFunds,
   buildCloseVault,
   buildQueuePolicyUpdate,
@@ -571,6 +574,21 @@ export class PhalnxClient {
       newAgent,
       newAgentPermissions,
     ).rpc();
+  }
+
+  async freezeVault(vault: PublicKey): Promise<string> {
+    const owner = this.provider.wallet.publicKey;
+    return buildFreezeVault(this.program, owner, vault).rpc();
+  }
+
+  async pauseAgent(vault: PublicKey, agent: PublicKey): Promise<string> {
+    const owner = this.provider.wallet.publicKey;
+    return buildPauseAgent(this.program, owner, vault, agent).rpc();
+  }
+
+  async unpauseAgent(vault: PublicKey, agent: PublicKey): Promise<string> {
+    const owner = this.provider.wallet.publicKey;
+    return buildUnpauseAgent(this.program, owner, vault, agent).rpc();
   }
 
   async updateAgentPermissions(

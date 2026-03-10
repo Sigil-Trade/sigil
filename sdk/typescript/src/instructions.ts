@@ -240,6 +240,41 @@ export function buildReactivateVault(
     } as any);
 }
 
+export function buildFreezeVault(
+  program: Program<Phalnx>,
+  owner: PublicKey,
+  vault: PublicKey,
+) {
+  return program.methods.freezeVault().accounts({
+    owner,
+    vault,
+  } as any);
+}
+
+export function buildPauseAgent(
+  program: Program<Phalnx>,
+  owner: PublicKey,
+  vault: PublicKey,
+  agentToPause: PublicKey,
+) {
+  return program.methods.pauseAgent(agentToPause).accounts({
+    owner,
+    vault,
+  } as any);
+}
+
+export function buildUnpauseAgent(
+  program: Program<Phalnx>,
+  owner: PublicKey,
+  vault: PublicKey,
+  agentToUnpause: PublicKey,
+) {
+  return program.methods.unpauseAgent(agentToUnpause).accounts({
+    owner,
+    vault,
+  } as any);
+}
+
 export function buildWithdrawFunds(
   program: Program<Phalnx>,
   owner: PublicKey,

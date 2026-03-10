@@ -112,6 +112,9 @@ export {
   buildFinalizeSession,
   buildRevokeAgent,
   buildReactivateVault,
+  buildFreezeVault,
+  buildPauseAgent,
+  buildUnpauseAgent,
   buildWithdrawFunds,
   buildCloseVault,
   buildQueuePolicyUpdate,
@@ -189,6 +192,7 @@ export {
   ESCROW_ONLY,
   MAX_ESCROW_DURATION,
   hasPermission,
+  isAgentPaused,
   // Type exports
   type Phalnx,
   type AgentEntry,

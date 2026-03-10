@@ -411,6 +411,7 @@ export type Phalnx = {
               },
             ];
           };
+          relations: ["vault"];
         },
         {
           name: "pendingPolicy";
@@ -1404,6 +1405,43 @@ export type Phalnx = {
       ];
     },
     {
+      name: "freezeVault";
+      docs: [
+        "Freeze the vault immediately. Preserves all agent entries.",
+        "Only the owner can call this. Use reactivate_vault to unfreeze.",
+      ];
+      discriminator: [144, 211, 63, 236, 97, 31, 170, 175];
+      accounts: [
+        {
+          name: "owner";
+          signer: true;
+          relations: ["vault"];
+        },
+        {
+          name: "vault";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [118, 97, 117, 108, 116];
+              },
+              {
+                kind: "account";
+                path: "owner";
+              },
+              {
+                kind: "account";
+                path: "vault.vault_id";
+                account: "agentVault";
+              },
+            ];
+          };
+        },
+      ];
+      args: [];
+    },
+    {
       name: "initializeVault";
       docs: [
         "Initialize a new agent vault with policy configuration.",
@@ -1537,6 +1575,48 @@ export type Phalnx = {
           type: {
             vec: "u64";
           };
+        },
+      ];
+    },
+    {
+      name: "pauseAgent";
+      docs: [
+        "Pause a specific agent. Blocks all agent actions while preserving config.",
+        "Only the owner can call this.",
+      ];
+      discriminator: [148, 32, 1, 26, 147, 122, 178, 140];
+      accounts: [
+        {
+          name: "owner";
+          signer: true;
+          relations: ["vault"];
+        },
+        {
+          name: "vault";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [118, 97, 117, 108, 116];
+              },
+              {
+                kind: "account";
+                path: "owner";
+              },
+              {
+                kind: "account";
+                path: "vault.vault_id";
+                account: "agentVault";
+              },
+            ];
+          };
+        },
+      ];
+      args: [
+        {
+          name: "agentToPause";
+          type: "pubkey";
         },
       ];
     },
@@ -1694,6 +1774,7 @@ export type Phalnx = {
         },
         {
           name: "policy";
+          writable: true;
           pda: {
             seeds: [
               {
@@ -2387,6 +2468,48 @@ export type Phalnx = {
         {
           name: "actualPositions";
           type: "u8";
+        },
+      ];
+    },
+    {
+      name: "unpauseAgent";
+      docs: [
+        "Unpause a paused agent. Restores ability to execute actions.",
+        "Only the owner can call this.",
+      ];
+      discriminator: [46, 125, 165, 212, 241, 143, 190, 95];
+      accounts: [
+        {
+          name: "owner";
+          signer: true;
+          relations: ["vault"];
+        },
+        {
+          name: "vault";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [118, 97, 117, 108, 116];
+              },
+              {
+                kind: "account";
+                path: "owner";
+              },
+              {
+                kind: "account";
+                path: "vault.vault_id";
+                account: "agentVault";
+              },
+            ];
+          };
+        },
+      ];
+      args: [
+        {
+          name: "agentToUnpause";
+          type: "pubkey";
         },
       ];
     },
@@ -3161,6 +3284,10 @@ export type Phalnx = {
       discriminator: [85, 90, 59, 218, 126, 8, 179, 63];
     },
     {
+      name: "agentPausedEvent";
+      discriminator: [39, 74, 148, 94, 198, 166, 121, 23];
+    },
+    {
       name: "agentPermissionsUpdated";
       discriminator: [203, 110, 249, 149, 51, 17, 246, 63];
     },
@@ -3179,6 +3306,10 @@ export type Phalnx = {
     {
       name: "agentTransferExecuted";
       discriminator: [88, 52, 117, 69, 112, 152, 167, 40];
+    },
+    {
+      name: "agentUnpausedEvent";
+      discriminator: [218, 187, 253, 124, 79, 192, 42, 181];
     },
     {
       name: "constraintsChangeApplied";
@@ -3263,6 +3394,10 @@ export type Phalnx = {
     {
       name: "vaultCreated";
       discriminator: [117, 25, 120, 254, 75, 236, 78, 115];
+    },
+    {
+      name: "vaultFrozen";
+      discriminator: [13, 199, 172, 111, 88, 10, 151, 247];
     },
     {
       name: "vaultReactivated";
@@ -3640,6 +3775,21 @@ export type Phalnx = {
       name: "pendingPolicyExists";
       msg: "Pending policy update must be applied or cancelled before closing vault";
     },
+    {
+      code: 6074;
+      name: "agentPaused";
+      msg: "Agent is paused and cannot execute actions";
+    },
+    {
+      code: 6075;
+      name: "agentAlreadyPaused";
+      msg: "Agent is already paused";
+    },
+    {
+      code: 6076;
+      name: "agentNotPaused";
+      msg: "Agent is not paused";
+    },
   ];
   types: [
     {
@@ -3853,6 +4003,30 @@ export type Phalnx = {
             name: "spendingLimitUsd";
             type: "u64";
           },
+          {
+            name: "paused";
+            type: "bool";
+          },
+        ];
+      };
+    },
+    {
+      name: "agentPausedEvent";
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "vault";
+            type: "pubkey";
+          },
+          {
+            name: "agent";
+            type: "pubkey";
+          },
+          {
+            name: "timestamp";
+            type: "i64";
+          },
         ];
       };
     },
@@ -4039,6 +4213,26 @@ export type Phalnx = {
           {
             name: "mint";
             type: "pubkey";
+          },
+        ];
+      };
+    },
+    {
+      name: "agentUnpausedEvent";
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "vault";
+            type: "pubkey";
+          },
+          {
+            name: "agent";
+            type: "pubkey";
+          },
+          {
+            name: "timestamp";
+            type: "i64";
           },
         ];
       };
@@ -4999,6 +5193,14 @@ export type Phalnx = {
             type: "bool";
           },
           {
+            name: "hasPendingPolicy";
+            docs: [
+              "Whether a pending policy update PDA exists for this vault.",
+              "Set true by queue_policy_update, false by apply/cancel_pending_policy.",
+            ];
+            type: "bool";
+          },
+          {
             name: "hasProtocolCaps";
             docs: [
               "Whether per-protocol spend caps are configured.",
@@ -5376,6 +5578,30 @@ export type Phalnx = {
           {
             name: "vaultId";
             type: "u64";
+          },
+          {
+            name: "timestamp";
+            type: "i64";
+          },
+        ];
+      };
+    },
+    {
+      name: "vaultFrozen";
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "vault";
+            type: "pubkey";
+          },
+          {
+            name: "owner";
+            type: "pubkey";
+          },
+          {
+            name: "agentsPreserved";
+            type: "u8";
           },
           {
             name: "timestamp";

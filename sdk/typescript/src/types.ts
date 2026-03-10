@@ -116,7 +116,13 @@ export type AgentEntry = {
   pubkey: PublicKey;
   permissions: BN;
   spendingLimitUsd: BN;
+  paused: boolean;
 };
+
+/** Check if an agent entry is paused. */
+export function isAgentPaused(entry: AgentEntry): boolean {
+  return entry.paused;
+}
 
 // Re-export IDL types for convenience
 export type AgentVaultAccount = {

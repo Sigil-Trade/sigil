@@ -99,6 +99,23 @@ const SDK_ERROR_MAP: Record<number, ErrorEntry> = {
     suggestion:
       "Wait for the rolling window or increase the agent's spending_limit_usd.",
   },
+  6074: {
+    name: "AgentPaused",
+    message: "Agent is paused and cannot execute actions",
+    suggestion:
+      "The vault owner has paused this agent. Contact the owner to unpause.",
+  },
+  6075: {
+    name: "AgentAlreadyPaused",
+    message: "Agent is already paused",
+    suggestion: "The agent is already paused — no action needed.",
+  },
+  6076: {
+    name: "AgentNotPaused",
+    message: "Agent is not paused",
+    suggestion:
+      "Cannot unpause an agent that is not paused. Check agent status first.",
+  },
 };
 
 /**
