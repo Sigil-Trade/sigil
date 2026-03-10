@@ -129,7 +129,9 @@ describe("intent-validator", () => {
         },
       });
       expect(result.valid).to.be.false;
-      const addrError = result.errors.find((e) => e.context.field === "destination");
+      const addrError = result.errors.find(
+        (e) => e.context.field === "destination",
+      );
       expect(addrError).to.not.be.undefined;
       expect(addrError!.message).to.include("base58");
     });
@@ -438,7 +440,9 @@ describe("intent-validator", () => {
         expect(err.code).to.equal("INTENT_VALIDATION_FAILED");
         expect(err.category).to.equal("INPUT_VALIDATION");
         expect(err.retryable).to.be.false;
-        expect(err.recovery_actions).to.be.an("array").with.length.greaterThan(0);
+        expect(err.recovery_actions)
+          .to.be.an("array")
+          .with.length.greaterThan(0);
         expect(err.context).to.have.property("field");
         expect(err.context).to.have.property("received");
       }

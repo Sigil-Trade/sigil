@@ -147,9 +147,7 @@ describe("ProtocolRegistry", () => {
 
   describe("has", () => {
     it("returns true for registered, false for unregistered", () => {
-      registry.register(
-        makeStubHandler("exists", "Exists", [programA]),
-      );
+      registry.register(makeStubHandler("exists", "Exists", [programA]));
       expect(registry.has("exists")).to.be.true;
       expect(registry.has("nope")).to.be.false;
     });

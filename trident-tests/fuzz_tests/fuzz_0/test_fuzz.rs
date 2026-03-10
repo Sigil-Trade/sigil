@@ -1142,9 +1142,12 @@ impl FuzzTest {
         let pre = self.snapshot_vault(&vault);
 
         let data = phalnx::instruction::CancelPendingPolicy {};
+        let policy = unwrap_or_ret!(self.fuzz_accounts.policy.get(&mut self.trident));
+
         let accounts = phalnx::accounts::CancelPendingPolicy {
             owner,
             vault,
+            policy,
             pending_policy: pending,
         };
 

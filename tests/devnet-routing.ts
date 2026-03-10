@@ -565,9 +565,7 @@ describe("devnet-routing", () => {
     } catch (err: any) {
       expectError(err, "InvalidTokenAccount", "TokenNotRegistered", "6014");
     }
-    console.log(
-      "    Non-stablecoin without output stablecoin rejected",
-    );
+    console.log("    Non-stablecoin without output stablecoin rejected");
   });
 
   // ── agent_transfer tests ────────────────────────────────────────────
@@ -606,7 +604,9 @@ describe("devnet-routing", () => {
 
     const balance = await getTokenBalance(connection, destAta.address);
     // Protocol fee = 10_000_000 * 200 / 1_000_000 = 2000
-    const expected = 10_000_000 - Math.floor((10_000_000 * PROTOCOL_FEE_RATE) / FEE_RATE_DENOMINATOR);
+    const expected =
+      10_000_000 -
+      Math.floor((10_000_000 * PROTOCOL_FEE_RATE) / FEE_RATE_DENOMINATOR);
     expect(balance).to.equal(expected);
     console.log(`    agent_transfer USDC succeeded, dest received ${balance}`);
   });
@@ -644,7 +644,9 @@ describe("devnet-routing", () => {
       .rpc();
 
     const balance = await getTokenBalance(connection, destAta.address);
-    const expected = 10_000_000 - Math.floor((10_000_000 * PROTOCOL_FEE_RATE) / FEE_RATE_DENOMINATOR);
+    const expected =
+      10_000_000 -
+      Math.floor((10_000_000 * PROTOCOL_FEE_RATE) / FEE_RATE_DENOMINATOR);
     expect(balance).to.equal(expected);
     console.log(`    agent_transfer USDT succeeded, dest received ${balance}`);
   });

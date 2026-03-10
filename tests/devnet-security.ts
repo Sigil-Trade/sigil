@@ -55,8 +55,19 @@ describe("devnet-security", () => {
     await fundKeypair(provider, agent.publicKey);
     await fundKeypair(provider, attacker.publicKey);
 
-    mint = await ensureStablecoinMint(connection, payer, TEST_USDC_KEYPAIR, owner.publicKey, 6);
-    unregisteredMint = await createNonStablecoinMint(connection, payer, owner.publicKey, 6);
+    mint = await ensureStablecoinMint(
+      connection,
+      payer,
+      TEST_USDC_KEYPAIR,
+      owner.publicKey,
+      6,
+    );
+    unregisteredMint = await createNonStablecoinMint(
+      connection,
+      payer,
+      owner.publicKey,
+      6,
+    );
 
     vaultId = nextVaultId(4);
 
@@ -476,7 +487,11 @@ describe("devnet-security", () => {
     // the error will be UnauthorizedAgent (agent removed) rather than VaultNotActive.
     await program.methods
       .revokeAgent(freshAgent.publicKey)
-      .accounts({ owner: owner.publicKey, vault: freshVault.vaultPda, agentSpendOverlay: freshVault.overlayPda } as any)
+      .accounts({
+        owner: owner.publicKey,
+        vault: freshVault.vaultPda,
+        agentSpendOverlay: freshVault.overlayPda,
+      } as any)
       .rpc();
 
     const sessionPda = deriveSessionPda(
@@ -536,7 +551,11 @@ describe("devnet-security", () => {
     // Freeze — revoking the only agent freezes the vault
     await program.methods
       .revokeAgent(freshAgent.publicKey)
-      .accounts({ owner: owner.publicKey, vault: freshVault.vaultPda, agentSpendOverlay: freshVault.overlayPda } as any)
+      .accounts({
+        owner: owner.publicKey,
+        vault: freshVault.vaultPda,
+        agentSpendOverlay: freshVault.overlayPda,
+      } as any)
       .rpc();
 
     // Deposit should succeed even when frozen
@@ -659,9 +678,7 @@ describe("devnet-security", () => {
     } catch (err: any) {
       expectError(err, "TokenNotRegistered", "InvalidTokenAccount", "6014");
     }
-    console.log(
-      "    Non-stablecoin mint rejected in validate_and_authorize",
-    );
+    console.log("    Non-stablecoin mint rejected in validate_and_authorize");
   });
 
   it("13. frozen vault rejects agent_transfer with stablecoin", async () => {
@@ -686,7 +703,11 @@ describe("devnet-security", () => {
     // Freeze vault by revoking the only agent
     await program.methods
       .revokeAgent(freshAgent.publicKey)
-      .accounts({ owner: owner.publicKey, vault: freshVault.vaultPda, agentSpendOverlay: freshVault.overlayPda } as any)
+      .accounts({
+        owner: owner.publicKey,
+        vault: freshVault.vaultPda,
+        agentSpendOverlay: freshVault.overlayPda,
+      } as any)
       .rpc();
 
     // Try agent_transfer with stablecoin on frozen vault
@@ -720,9 +741,7 @@ describe("devnet-security", () => {
     } catch (err: any) {
       expectError(err, "VaultNotActive", "UnauthorizedAgent", "not active");
     }
-    console.log(
-      "    Frozen vault rejects agent_transfer with stablecoin",
-    );
+    console.log("    Frozen vault rejects agent_transfer with stablecoin");
   });
 
   it("14. max_transaction_size_usd enforced on stablecoin", async () => {
@@ -768,8 +787,6 @@ describe("devnet-security", () => {
     } catch (err: any) {
       expectError(err, "TransactionTooLarge", "maximum");
     }
-    console.log(
-      "    max_transaction_size_usd enforced on stablecoin",
-    );
+    console.log("    max_transaction_size_usd enforced on stablecoin");
   });
 });

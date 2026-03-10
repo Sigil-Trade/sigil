@@ -9,7 +9,10 @@
  */
 
 import type { PublicKey } from "@solana/web3.js";
-import type { ProtocolHandler, ProtocolHandlerMetadata } from "./protocol-handler";
+import type {
+  ProtocolHandler,
+  ProtocolHandlerMetadata,
+} from "./protocol-handler";
 
 export class ProtocolRegistry {
   /** Protocol ID → handler */

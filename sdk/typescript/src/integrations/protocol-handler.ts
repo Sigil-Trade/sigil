@@ -6,7 +6,12 @@
  * handlers (Tier 2) into a uniform dispatch mechanism.
  */
 
-import type { PublicKey, TransactionInstruction, Connection, Signer } from "@solana/web3.js";
+import type {
+  PublicKey,
+  TransactionInstruction,
+  Connection,
+  Signer,
+} from "@solana/web3.js";
 import type { BN, Program } from "@coral-xyz/anchor";
 import type { Phalnx, ActionType } from "../types";
 

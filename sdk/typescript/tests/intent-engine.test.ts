@@ -1,13 +1,20 @@
 import { expect } from "chai";
 import { IntentEngine } from "../src/intent-engine";
 import type { PhalnxClient } from "../src/client";
-import type { IntentAction, PrecheckResult, ExecuteResult } from "../src/intents";
+import type {
+  IntentAction,
+  PrecheckResult,
+  ExecuteResult,
+} from "../src/intents";
 import { isAgentError, type AgentError } from "../src/agent-errors";
 import { PublicKey } from "@solana/web3.js";
 
 // Mock PhalnxClient with minimal interface
 function createMockClient(overrides?: {
-  precheck?: (intent: IntentAction, vault: PublicKey) => Promise<PrecheckResult>;
+  precheck?: (
+    intent: IntentAction,
+    vault: PublicKey,
+  ) => Promise<PrecheckResult>;
   execute?: (
     intent: IntentAction,
     vault: PublicKey,
@@ -26,7 +33,10 @@ function createMockClient(overrides?: {
 
   const mockExecuteResult: ExecuteResult = {
     signature: "mock-sig-123",
-    intent: { type: "swap", params: { inputMint: "USDC", outputMint: "SOL", amount: "100" } },
+    intent: {
+      type: "swap",
+      params: { inputMint: "USDC", outputMint: "SOL", amount: "100" },
+    },
     summary: "Swapped 100 USDC → SOL",
   };
 
@@ -120,7 +130,12 @@ describe("IntentEngine", () => {
           details: {
             permission: { passed: true, requiredBit: "0", agentHas: true },
             protocol: { passed: true, inAllowlist: true },
-            spendingCap: { passed: false, spent24h: 900, cap: 1000, remaining: 100 },
+            spendingCap: {
+              passed: false,
+              spent24h: 900,
+              cap: 1000,
+              remaining: 100,
+            },
           },
           summary: "Spending cap check failed",
           riskFlags: ["cap_near_limit"],

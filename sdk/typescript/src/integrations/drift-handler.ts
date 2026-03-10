@@ -72,20 +72,16 @@ export class DriftHandler implements ProtocolHandler {
 
     switch (action) {
       case "deposit": {
-        const result = await composeDriftDeposit(
-          ctx.program,
-          ctx.connection,
-          {
-            ...common,
-            amount: params.amount as any,
-            marketIndex: params.marketIndex as number,
-            tokenMint: params.tokenMint as PublicKey,
-            subAccountId: params.subAccountId as number | undefined,
-            feeDestinationTokenAccount: params.feeDestinationTokenAccount as
-              | PublicKey
-              | undefined,
-          },
-        );
+        const result = await composeDriftDeposit(ctx.program, ctx.connection, {
+          ...common,
+          amount: params.amount as any,
+          marketIndex: params.marketIndex as number,
+          tokenMint: params.tokenMint as PublicKey,
+          subAccountId: params.subAccountId as number | undefined,
+          feeDestinationTokenAccount: params.feeDestinationTokenAccount as
+            | PublicKey
+            | undefined,
+        });
         return {
           instructions: result.instructions,
           additionalSigners: result.additionalSigners,
@@ -93,20 +89,16 @@ export class DriftHandler implements ProtocolHandler {
       }
 
       case "withdraw": {
-        const result = await composeDriftWithdraw(
-          ctx.program,
-          ctx.connection,
-          {
-            ...common,
-            amount: params.amount as any,
-            marketIndex: params.marketIndex as number,
-            tokenMint: params.tokenMint as PublicKey,
-            subAccountId: params.subAccountId as number | undefined,
-            feeDestinationTokenAccount: params.feeDestinationTokenAccount as
-              | PublicKey
-              | undefined,
-          },
-        );
+        const result = await composeDriftWithdraw(ctx.program, ctx.connection, {
+          ...common,
+          amount: params.amount as any,
+          marketIndex: params.marketIndex as number,
+          tokenMint: params.tokenMint as PublicKey,
+          subAccountId: params.subAccountId as number | undefined,
+          feeDestinationTokenAccount: params.feeDestinationTokenAccount as
+            | PublicKey
+            | undefined,
+        });
         return {
           instructions: result.instructions,
           additionalSigners: result.additionalSigners,

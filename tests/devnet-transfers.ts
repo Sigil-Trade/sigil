@@ -53,7 +53,13 @@ describe("devnet-transfers", () => {
     await fundKeypair(provider, agent.publicKey);
     await fundKeypair(provider, attacker.publicKey);
 
-    mint = await ensureStablecoinMint(connection, payer, TEST_USDC_KEYPAIR, owner.publicKey, 6);
+    mint = await ensureStablecoinMint(
+      connection,
+      payer,
+      TEST_USDC_KEYPAIR,
+      owner.publicKey,
+      6,
+    );
 
     // Create destination ATAs
     const ataA = await getOrCreateAssociatedTokenAccount(

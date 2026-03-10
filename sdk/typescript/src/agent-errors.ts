@@ -92,7 +92,8 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     recovery_actions: [
       {
         action: "check_agent_registration",
-        description: "Verify the agent keypair is registered on the target vault",
+        description:
+          "Verify the agent keypair is registered on the target vault",
         tool: "phalnx_check_vault",
       },
       {
@@ -116,7 +117,8 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   },
   6003: {
     name: "TokenNotRegistered",
-    message: "Token is not a recognized stablecoin (only USDC and USDT supported)",
+    message:
+      "Token is not a recognized stablecoin (only USDC and USDT supported)",
     category: "INPUT_VALIDATION",
     retryable: false,
     recovery_actions: [
@@ -151,7 +153,8 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     recovery_actions: [
       {
         action: "reduce_amount",
-        description: "Reduce the transaction amount below maxTransactionSizeUsd",
+        description:
+          "Reduce the transaction amount below maxTransactionSizeUsd",
       },
       {
         action: "check_limits",
@@ -178,7 +181,8 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
       {
         action: "wait",
-        description: "Wait for the 24h rolling window to release spent capacity",
+        description:
+          "Wait for the 24h rolling window to release spent capacity",
       },
     ],
   },
@@ -403,7 +407,8 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     recovery_actions: [
       {
         action: "use_different_key",
-        description: "Use a different keypair for the agent (cannot be the same as owner)",
+        description:
+          "Use a different keypair for the agent (cannot be the same as owner)",
       },
     ],
   },
@@ -427,7 +432,8 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     recovery_actions: [
       {
         action: "verify_token_account",
-        description: "Ensure the token account is owned by the vault PDA and has the correct mint",
+        description:
+          "Ensure the token account is owned by the vault PDA and has the correct mint",
       },
     ],
   },
@@ -441,13 +447,15 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     recovery_actions: [
       {
         action: "wait",
-        description: "Wait for the timelock period to expire before applying the update",
+        description:
+          "Wait for the timelock period to expire before applying the update",
       },
     ],
   },
   6027: {
     name: "TimelockActive",
-    message: "Vault has timelock active — use queue_policy_update instead of direct update",
+    message:
+      "Vault has timelock active — use queue_policy_update instead of direct update",
     category: "POLICY_VIOLATION",
     retryable: false,
     recovery_actions: [
@@ -502,13 +510,15 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   },
   6031: {
     name: "InvalidProtocolMode",
-    message: "Invalid protocol mode (must be 0=all, 1=allowlist, or 2=denylist)",
+    message:
+      "Invalid protocol mode (must be 0=all, 1=allowlist, or 2=denylist)",
     category: "INPUT_VALIDATION",
     retryable: false,
     recovery_actions: [
       {
         action: "fix_mode",
-        description: "Set protocolMode to 0 (all), 1 (allowlist), or 2 (denylist)",
+        description:
+          "Set protocolMode to 0 (all), 1 (allowlist), or 2 (denylist)",
       },
     ],
   },
@@ -522,7 +532,8 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     recovery_actions: [
       {
         action: "set_zero_amount",
-        description: "Set amount to 0 for non-spending actions (close, cancel, etc.)",
+        description:
+          "Set amount to 0 for non-spending actions (close, cancel, etc.)",
       },
     ],
   },
@@ -541,25 +552,29 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   },
   6034: {
     name: "CpiCallNotAllowed",
-    message: "Instruction must be top-level (CPI calls not allowed for validate/finalize)",
+    message:
+      "Instruction must be top-level (CPI calls not allowed for validate/finalize)",
     category: "FATAL",
     retryable: false,
     recovery_actions: [
       {
         action: "fix_transaction",
-        description: "Ensure validate_and_authorize is called at the top level, not via CPI",
+        description:
+          "Ensure validate_and_authorize is called at the top level, not via CPI",
       },
     ],
   },
   6035: {
     name: "MissingFinalizeInstruction",
-    message: "Transaction must include finalize_session after validate_and_authorize",
+    message:
+      "Transaction must include finalize_session after validate_and_authorize",
     category: "FATAL",
     retryable: false,
     recovery_actions: [
       {
         action: "use_sdk",
-        description: "Use the SDK's compose functions which automatically include finalize_session",
+        description:
+          "Use the SDK's compose functions which automatically include finalize_session",
       },
     ],
   },
@@ -567,14 +582,16 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   // --- Stablecoin-only enforcement errors ---
   6036: {
     name: "NonTrackedSwapMustReturnStablecoin",
-    message: "Non-stablecoin swap must return stablecoin (vault stablecoin balance did not increase)",
+    message:
+      "Non-stablecoin swap must return stablecoin (vault stablecoin balance did not increase)",
     category: "POLICY_VIOLATION",
     retryable: true,
     retry_after_ms: 5_000,
     recovery_actions: [
       {
         action: "increase_slippage",
-        description: "Increase slippage tolerance — the swap may have failed silently",
+        description:
+          "Increase slippage tolerance — the swap may have failed silently",
       },
       {
         action: "retry",
@@ -584,14 +601,16 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   },
   6037: {
     name: "SlippageTooHigh",
-    message: "Jupiter slippage exceeds policy max_slippage_bps or quoted output is zero",
+    message:
+      "Jupiter slippage exceeds policy max_slippage_bps or quoted output is zero",
     category: "POLICY_VIOLATION",
     retryable: true,
     retry_after_ms: 5_000,
     recovery_actions: [
       {
         action: "reduce_slippage",
-        description: "Use a lower slippageBps value within the vault's maxSlippageBps",
+        description:
+          "Use a lower slippageBps value within the vault's maxSlippageBps",
       },
       {
         action: "check_policy",
@@ -612,7 +631,8 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     recovery_actions: [
       {
         action: "use_sdk",
-        description: "Use the SDK's composeJupiterSwap — manual instruction building is error-prone",
+        description:
+          "Use the SDK's composeJupiterSwap — manual instruction building is error-prone",
       },
     ],
   },
@@ -637,19 +657,22 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     recovery_actions: [
       {
         action: "retry",
-        description: "Retry — the oracle price feed may have been temporarily unavailable",
+        description:
+          "Retry — the oracle price feed may have been temporarily unavailable",
       },
     ],
   },
   6041: {
     name: "DustDepositDetected",
-    message: "Top-level SPL Token transfer detected between validate and finalize (potential exploit)",
+    message:
+      "Top-level SPL Token transfer detected between validate and finalize (potential exploit)",
     category: "FATAL",
     retryable: false,
     recovery_actions: [
       {
         action: "use_sdk",
-        description: "Use the SDK's compose functions — do not insert raw SPL transfers in the sandwich",
+        description:
+          "Use the SDK's compose functions — do not insert raw SPL transfers in the sandwich",
       },
     ],
   },
@@ -679,13 +702,15 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   },
   6044: {
     name: "ProtocolMismatch",
-    message: "DeFi instruction program does not match the declared target_protocol",
+    message:
+      "DeFi instruction program does not match the declared target_protocol",
     category: "INPUT_VALIDATION",
     retryable: false,
     recovery_actions: [
       {
         action: "fix_protocol",
-        description: "Ensure target_protocol matches the actual DeFi instruction's program ID",
+        description:
+          "Ensure target_protocol matches the actual DeFi instruction's program ID",
       },
     ],
   },
@@ -741,7 +766,8 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     recovery_actions: [
       {
         action: "fix_permissions",
-        description: "Use valid permission constants (FULL_PERMISSIONS, SWAP_ONLY, etc.)",
+        description:
+          "Use valid permission constants (FULL_PERMISSIONS, SWAP_ONLY, etc.)",
       },
     ],
   },
@@ -797,7 +823,8 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     recovery_actions: [
       {
         action: "verify_vaults",
-        description: "Ensure source and destination vault addresses match the escrow",
+        description:
+          "Ensure source and destination vault addresses match the escrow",
       },
     ],
   },
@@ -809,7 +836,8 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     recovery_actions: [
       {
         action: "provide_proof",
-        description: "Provide the correct pre-image for the escrow's condition_hash",
+        description:
+          "Provide the correct pre-image for the escrow's condition_hash",
       },
     ],
   },
@@ -821,7 +849,8 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     recovery_actions: [
       {
         action: "reduce_duration",
-        description: "Set escrow duration to 2,592,000 seconds (30 days) or less",
+        description:
+          "Set escrow duration to 2,592,000 seconds (30 days) or less",
       },
     ],
   },
@@ -835,7 +864,8 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     recovery_actions: [
       {
         action: "fix_constraints",
-        description: "Ensure constraint entries are within bounds (max 16 entries, 8 data constraints each)",
+        description:
+          "Ensure constraint entries are within bounds (max 16 entries, 8 data constraints each)",
       },
     ],
   },
@@ -847,12 +877,14 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     recovery_actions: [
       {
         action: "check_constraints",
-        description: "Review the vault's instruction constraints to understand what is allowed",
+        description:
+          "Review the vault's instruction constraints to understand what is allowed",
         tool: "phalnx_check_vault",
       },
       {
         action: "modify_instruction",
-        description: "Modify the instruction parameters to satisfy the constraints",
+        description:
+          "Modify the instruction parameters to satisfy the constraints",
       },
     ],
   },
@@ -888,11 +920,13 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     recovery_actions: [
       {
         action: "cancel_existing",
-        description: "Cancel the existing pending update before queuing a new one",
+        description:
+          "Cancel the existing pending update before queuing a new one",
       },
       {
         action: "apply_existing",
-        description: "Apply the existing pending update if the timelock has expired",
+        description:
+          "Apply the existing pending update if the timelock has expired",
       },
     ],
   },
@@ -916,7 +950,8 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     recovery_actions: [
       {
         action: "verify_pda",
-        description: "Use the correct pending constraints PDA derived from the vault",
+        description:
+          "Use the correct pending constraints PDA derived from the vault",
       },
     ],
   },
@@ -936,14 +971,16 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   // --- Per-agent spend limit errors ---
   6063: {
     name: "AgentSpendLimitExceeded",
-    message: "Agent's rolling 24h spend exceeds their individual spending limit",
+    message:
+      "Agent's rolling 24h spend exceeds their individual spending limit",
     category: "SPENDING_CAP",
     retryable: true,
     retry_after_ms: 3_600_000,
     recovery_actions: [
       {
         action: "reduce_amount",
-        description: "Reduce the amount to fit within the agent's remaining limit",
+        description:
+          "Reduce the amount to fit within the agent's remaining limit",
       },
       {
         action: "check_spending",
@@ -952,13 +989,15 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
       {
         action: "wait",
-        description: "Wait for the 24h rolling window to release spent capacity",
+        description:
+          "Wait for the 24h rolling window to release spent capacity",
       },
     ],
   },
   6064: {
     name: "OverlaySlotExhausted",
-    message: "Per-agent overlay is full — cannot register agent with spending limit",
+    message:
+      "Per-agent overlay is full — cannot register agent with spending limit",
     category: "FATAL",
     retryable: false,
     recovery_actions: [
@@ -977,19 +1016,22 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     recovery_actions: [
       {
         action: "contact_support",
-        description: "This is an internal consistency error — the overlay may need reinitialization",
+        description:
+          "This is an internal consistency error — the overlay may need reinitialization",
       },
     ],
   },
   6066: {
     name: "UnauthorizedTokenApproval",
-    message: "Unauthorized SPL Token Approve detected between validate and finalize",
+    message:
+      "Unauthorized SPL Token Approve detected between validate and finalize",
     category: "FATAL",
     retryable: false,
     recovery_actions: [
       {
         action: "use_sdk",
-        description: "Use the SDK's compose functions — do not insert raw SPL Approve in the sandwich",
+        description:
+          "Use the SDK's compose functions — do not insert raw SPL Approve in the sandwich",
       },
     ],
   },
@@ -1013,7 +1055,8 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     recovery_actions: [
       {
         action: "add_constraint",
-        description: "Add a constraint entry for this program, or disable strict mode",
+        description:
+          "Add a constraint entry for this program, or disable strict mode",
       },
       {
         action: "check_constraints",
@@ -1033,7 +1076,8 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     recovery_actions: [
       {
         action: "reduce_amount",
-        description: "Reduce the amount to fit within the protocol's remaining cap",
+        description:
+          "Reduce the amount to fit within the protocol's remaining cap",
       },
       {
         action: "use_different_protocol",
@@ -1041,19 +1085,22 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
       {
         action: "wait",
-        description: "Wait for the 24h rolling window to release spent capacity",
+        description:
+          "Wait for the 24h rolling window to release spent capacity",
       },
     ],
   },
   6070: {
     name: "ProtocolCapsMismatch",
-    message: "protocol_caps length must match protocols length when has_protocol_caps is true",
+    message:
+      "protocol_caps length must match protocols length when has_protocol_caps is true",
     category: "INPUT_VALIDATION",
     retryable: false,
     recovery_actions: [
       {
         action: "fix_config",
-        description: "Ensure protocol_caps array length matches the protocols array length",
+        description:
+          "Ensure protocol_caps array length matches the protocols array length",
       },
     ],
   },
@@ -1073,7 +1120,8 @@ const SDK_ERRORS: Record<string, ErrorMapping> = {
     recovery_actions: [
       {
         action: "retry",
-        description: "Retry the request — the RPC node may be temporarily unavailable",
+        description:
+          "Retry the request — the RPC node may be temporarily unavailable",
       },
     ],
   },
@@ -1165,7 +1213,8 @@ const SDK_ERRORS: Record<string, ErrorMapping> = {
     recovery_actions: [
       {
         action: "fix_inputs",
-        description: "Fix the invalid parameters identified in the error context",
+        description:
+          "Fix the invalid parameters identified in the error context",
       },
     ],
   },
@@ -1240,7 +1289,10 @@ export function toAgentError(
   if (message.includes("blockhash") && message.includes("not found")) {
     return fromSdkMapping("BLOCKHASH_EXPIRED", context, message);
   }
-  if (message.includes("simulation") || message.includes("SimulateTransaction")) {
+  if (
+    message.includes("simulation") ||
+    message.includes("SimulateTransaction")
+  ) {
     return fromSdkMapping("SIMULATION_FAILED", context, message);
   }
   if (message.includes("Precheck failed")) {
@@ -1331,7 +1383,9 @@ export function isAgentError(value: unknown): value is AgentError {
  * Get all mapped on-chain error codes (for testing/documentation).
  */
 export function getAllOnChainErrorCodes(): number[] {
-  return Object.keys(ON_CHAIN_ERROR_MAP).map(Number).sort((a, b) => a - b);
+  return Object.keys(ON_CHAIN_ERROR_MAP)
+    .map(Number)
+    .sort((a, b) => a - b);
 }
 
 /**
@@ -1350,7 +1404,8 @@ function extractErrorCode(error: unknown): number | null {
   const e = error as Record<string, unknown>;
 
   // Direct code property
-  if (typeof e.code === "number" && e.code >= 6000 && e.code <= 6070) return e.code;
+  if (typeof e.code === "number" && e.code >= 6000 && e.code <= 6070)
+    return e.code;
 
   // Anchor error structure
   if (e.error && typeof e.error === "object") {

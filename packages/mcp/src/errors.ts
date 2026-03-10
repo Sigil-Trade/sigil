@@ -522,8 +522,7 @@ const ERROR_MAP: Record<number, ErrorInfo> = {
   6072: {
     code: 6072,
     name: "ConstraintsNotClosed",
-    message:
-      "Instruction constraints must be closed before closing vault",
+    message: "Instruction constraints must be closed before closing vault",
     suggestion:
       "Close instruction constraints using closeInstructionConstraints before closing the vault.",
   },

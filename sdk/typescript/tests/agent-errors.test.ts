@@ -28,7 +28,10 @@ describe("agent-errors", () => {
       expect(result.code).to.equal("6047");
       expect(result.category).to.equal("PERMISSION");
       expect(result.retryable).to.be.false;
-      expect(result.context).to.have.property("error_name", "InsufficientPermissions");
+      expect(result.context).to.have.property(
+        "error_name",
+        "InsufficientPermissions",
+      );
     });
 
     it("converts hex error from log message", () => {
@@ -200,7 +203,10 @@ describe("agent-errors", () => {
     it("every on-chain code has a non-empty message", () => {
       for (let code = 6000; code <= 6070; code++) {
         const err = agentErrorFromCode(String(code));
-        expect(err.message.length).to.be.greaterThan(0, `Code ${code} has empty message`);
+        expect(err.message.length).to.be.greaterThan(
+          0,
+          `Code ${code} has empty message`,
+        );
       }
     });
 
@@ -258,7 +264,12 @@ describe("agent-errors", () => {
     });
 
     it("TRANSIENT SDK errors are retryable", () => {
-      const transientCodes = ["NETWORK_ERROR", "RPC_ERROR", "SIMULATION_FAILED", "BLOCKHASH_EXPIRED"];
+      const transientCodes = [
+        "NETWORK_ERROR",
+        "RPC_ERROR",
+        "SIMULATION_FAILED",
+        "BLOCKHASH_EXPIRED",
+      ];
       for (const code of transientCodes) {
         const err = agentErrorFromCode(code);
         expect(err.category).to.equal("TRANSIENT");
@@ -278,7 +289,9 @@ describe("agent-errors", () => {
 
     it("InsufficientPermissions has check_permissions action with tool reference", () => {
       const err = agentErrorFromCode("6047");
-      const checkAction = err.recovery_actions.find((a) => a.action === "check_permissions");
+      const checkAction = err.recovery_actions.find(
+        (a) => a.action === "check_permissions",
+      );
       expect(checkAction).to.not.be.undefined;
       expect(checkAction!.tool).to.equal("phalnx_check_vault");
     });
@@ -287,7 +300,10 @@ describe("agent-errors", () => {
       for (let code = 6000; code <= 6070; code++) {
         const err = agentErrorFromCode(String(code));
         for (const action of err.recovery_actions) {
-          expect(action.action.length).to.be.greaterThan(0, `Code ${code}: empty action name`);
+          expect(action.action.length).to.be.greaterThan(
+            0,
+            `Code ${code}: empty action name`,
+          );
           expect(action.description.length).to.be.greaterThan(
             0,
             `Code ${code}: empty description for ${action.action}`,

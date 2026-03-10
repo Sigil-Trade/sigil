@@ -53,7 +53,13 @@ describe("devnet-fees", () => {
     await fundKeypair(provider, agentA.publicKey);
     await fundKeypair(provider, agentB.publicKey);
 
-    mint = await ensureStablecoinMint(connection, payer, TEST_USDC_KEYPAIR, owner.publicKey, 6);
+    mint = await ensureStablecoinMint(
+      connection,
+      payer,
+      TEST_USDC_KEYPAIR,
+      owner.publicKey,
+      6,
+    );
 
     vaultIdA = nextVaultId(2);
     vaultIdB = nextVaultId(2);

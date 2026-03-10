@@ -39,7 +39,13 @@ describe("devnet-positions", () => {
 
   before(async () => {
     await fundKeypair(provider, agent.publicKey);
-    mint = await ensureStablecoinMint(connection, payer, TEST_USDC_KEYPAIR, owner.publicKey, 6);
+    mint = await ensureStablecoinMint(
+      connection,
+      payer,
+      TEST_USDC_KEYPAIR,
+      owner.publicKey,
+      6,
+    );
   });
 
   /** Create a position-enabled vault */

@@ -51,7 +51,9 @@ export interface PhalnxTool {
   /** Zod schema with .describe() on every parameter */
   parameters: ZodObject<ZodRawShape>;
   /** Execute the tool — returns structured result or AgentError */
-  execute: (params: Record<string, unknown>) => Promise<ExecuteResult | AgentError>;
+  execute: (
+    params: Record<string, unknown>,
+  ) => Promise<ExecuteResult | AgentError>;
 }
 
 // ---------------------------------------------------------------------------
@@ -112,7 +114,9 @@ function defiTools(engine: IntentEngine): PhalnxTool[] {
           .min(0)
           .max(10000)
           .default(50)
-          .describe("Max slippage in basis points. Default 50 (0.5%). Range 0-10000."),
+          .describe(
+            "Max slippage in basis points. Default 50 (0.5%). Range 0-10000.",
+          ),
       }),
       execute: async (params) =>
         engine.run(
@@ -136,7 +140,9 @@ function defiTools(engine: IntentEngine): PhalnxTool[] {
         "in the vault's allowedDestinations list (if configured).",
       parameters: z.object({
         vault: solanaAddress.describe("Source vault address"),
-        destination: solanaAddress.describe("Destination address (must be in vault's allowlist)"),
+        destination: solanaAddress.describe(
+          "Destination address (must be in vault's allowlist)",
+        ),
         mint: tokenMintOrSymbol.describe("Stablecoin mint (USDC or USDT)"),
         amount: humanAmount.describe("Amount to transfer"),
       }),
@@ -206,14 +212,18 @@ function defiTools(engine: IntentEngine): PhalnxTool[] {
         vault: solanaAddress.describe("Vault address"),
         market: z
           .string()
-          .describe('Market identifier (e.g., "SOL-PERP", "BTC-PERP", "ETH-PERP")'),
+          .describe(
+            'Market identifier (e.g., "SOL-PERP", "BTC-PERP", "ETH-PERP")',
+          ),
         side: z.enum(["long", "short"]).describe("Position direction"),
         collateral: humanAmount.describe("Collateral amount in USD"),
         leverage: z
           .number()
           .min(1)
           .max(100)
-          .describe("Leverage multiplier (1-100x). Must be within vault policy limits."),
+          .describe(
+            "Leverage multiplier (1-100x). Must be within vault policy limits.",
+          ),
       }),
       execute: async (params) =>
         engine.run(
@@ -236,8 +246,13 @@ function defiTools(engine: IntentEngine): PhalnxTool[] {
         "Returns collateral + PnL to the vault.",
       parameters: z.object({
         vault: solanaAddress.describe("Vault address"),
-        market: z.string().describe("Market identifier of the position to close"),
-        positionId: z.string().optional().describe("Specific position ID (optional)"),
+        market: z
+          .string()
+          .describe("Market identifier of the position to close"),
+        positionId: z
+          .string()
+          .optional()
+          .describe("Specific position ID (optional)"),
       }),
       execute: async (params) =>
         engine.run(
@@ -270,7 +285,10 @@ function vaultTools(engine: IntentEngine): PhalnxTool[] {
           const protocols = engine.listProtocols();
           return {
             signature: "",
-            intent: { type: "protocol" as const, params: { protocolId: "phalnx", action: "check_vault" } },
+            intent: {
+              type: "protocol" as const,
+              params: { protocolId: "phalnx", action: "check_vault" },
+            },
             summary: `Vault ${String(params.vault)} — ${protocols.length} protocols registered`,
           };
         } catch (err) {
@@ -299,11 +317,15 @@ function escrowTools(engine: IntentEngine): PhalnxTool[] {
           .int()
           .min(1)
           .max(2_592_000)
-          .describe("Duration in seconds before the escrow expires (max 30 days = 2592000)"),
+          .describe(
+            "Duration in seconds before the escrow expires (max 30 days = 2592000)",
+          ),
         conditionHash: z
           .string()
           .optional()
-          .describe("Optional SHA-256 hash for conditional settlement (hex string)"),
+          .describe(
+            "Optional SHA-256 hash for conditional settlement (hex string)",
+          ),
       }),
       execute: async (params) =>
         engine.run(
@@ -328,7 +350,9 @@ function escrowTools(engine: IntentEngine): PhalnxTool[] {
         "must be provided as proof.",
       parameters: z.object({
         vault: solanaAddress.describe("Destination vault address (your vault)"),
-        sourceVault: solanaAddress.describe("Source vault that created the escrow"),
+        sourceVault: solanaAddress.describe(
+          "Source vault that created the escrow",
+        ),
         escrowId: z.string().describe("Escrow identifier"),
         conditionProof: z
           .string()
@@ -355,7 +379,9 @@ function escrowTools(engine: IntentEngine): PhalnxTool[] {
         "after the escrow's expiration time has passed.",
       parameters: z.object({
         vault: solanaAddress.describe("Source vault address (your vault)"),
-        destinationVault: solanaAddress.describe("Destination vault of the escrow"),
+        destinationVault: solanaAddress.describe(
+          "Destination vault of the escrow",
+        ),
         escrowId: z.string().describe("Escrow identifier"),
       }),
       execute: async (params) =>
@@ -394,10 +420,16 @@ function policyTools(engine: IntentEngine): PhalnxTool[] {
               amount: "0.01",
             },
           };
-          const precheck = await engine.precheck(intent, new PublicKey(String(params.vault)));
+          const precheck = await engine.precheck(
+            intent,
+            new PublicKey(String(params.vault)),
+          );
           return {
             signature: "",
-            intent: { type: "protocol" as const, params: { protocolId: "phalnx", action: "check_spending" } },
+            intent: {
+              type: "protocol" as const,
+              params: { protocolId: "phalnx", action: "check_spending" },
+            },
             precheck,
             summary: precheck.summary,
           };
@@ -427,12 +459,16 @@ function marketTools(): PhalnxTool[] {
       execute: async (params) => {
         try {
           // Dynamic import to avoid circular deps
-          const { getJupiterPrices } = await import("./integrations/jupiter-price");
+          const { getJupiterPrices } =
+            await import("./integrations/jupiter-price");
           const mintIds = params.mints as string[];
           const prices = await getJupiterPrices({ ids: mintIds });
           return {
             signature: "",
-            intent: { type: "protocol" as const, params: { protocolId: "jupiter", action: "get_prices" } },
+            intent: {
+              type: "protocol" as const,
+              params: { protocolId: "jupiter", action: "get_prices" },
+            },
             summary: `Fetched prices for ${mintIds.length} token(s)`,
             precheck: undefined,
           } as ExecuteResult & { prices?: unknown };
@@ -451,15 +487,23 @@ function marketTools(): PhalnxTool[] {
         query: z
           .string()
           .min(1)
-          .describe('Search query: token name, symbol, or partial mint. Examples: "USDC", "Jupiter", "bonk"'),
+          .describe(
+            'Search query: token name, symbol, or partial mint. Examples: "USDC", "Jupiter", "bonk"',
+          ),
       }),
       execute: async (params) => {
         try {
-          const { searchJupiterTokens } = await import("./integrations/jupiter-tokens");
-          const tokens = await searchJupiterTokens({ query: String(params.query) });
+          const { searchJupiterTokens } =
+            await import("./integrations/jupiter-tokens");
+          const tokens = await searchJupiterTokens({
+            query: String(params.query),
+          });
           return {
             signature: "",
-            intent: { type: "protocol" as const, params: { protocolId: "jupiter", action: "search_tokens" } },
+            intent: {
+              type: "protocol" as const,
+              params: { protocolId: "jupiter", action: "search_tokens" },
+            },
             summary: `Found ${tokens.length} token(s) matching "${params.query}"`,
           };
         } catch (err) {

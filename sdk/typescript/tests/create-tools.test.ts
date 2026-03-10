@@ -1,5 +1,9 @@
 import { expect } from "chai";
-import { createPhalnxTools, type PhalnxTool, type PluginName } from "../src/create-tools";
+import {
+  createPhalnxTools,
+  type PhalnxTool,
+  type PluginName,
+} from "../src/create-tools";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import { z } from "zod";
 
@@ -90,7 +94,13 @@ describe("createPhalnxTools", () => {
     });
 
     it("loads all plugins", () => {
-      const allPlugins: PluginName[] = ["defi", "vault", "escrow", "policy", "market"];
+      const allPlugins: PluginName[] = [
+        "defi",
+        "vault",
+        "escrow",
+        "policy",
+        "market",
+      ];
       const tools = createPhalnxTools(mockWallet(), RPC_URL, {
         plugins: allPlugins,
       });
@@ -122,7 +132,13 @@ describe("createPhalnxTools", () => {
 
   describe("tool structure", () => {
     it("every tool has name, description, parameters, execute", () => {
-      const allPlugins: PluginName[] = ["defi", "vault", "escrow", "policy", "market"];
+      const allPlugins: PluginName[] = [
+        "defi",
+        "vault",
+        "escrow",
+        "policy",
+        "market",
+      ];
       const tools = createPhalnxTools(mockWallet(), RPC_URL, {
         plugins: allPlugins,
       });
@@ -157,7 +173,9 @@ describe("createPhalnxTools", () => {
         amount: "100",
         slippageBps: 50,
       });
-      expect(parsed.vault).to.equal("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+      expect(parsed.vault).to.equal(
+        "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      );
     });
 
     it("swap tool schema rejects invalid vault address", () => {

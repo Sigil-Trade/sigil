@@ -108,12 +108,11 @@ revokeAgent.post("/api/actions/revoke-agent", async (c) => {
       );
     }
 
-    const { transaction, vaultAddress } =
-      await buildRevokeAgentTransaction({
-        owner,
-        agentToRemove,
-        vaultId,
-      });
+    const { transaction, vaultAddress } = await buildRevokeAgentTransaction({
+      owner,
+      agentToRemove,
+      vaultId,
+    });
 
     const serialized = Buffer.from(transaction.serialize()).toString("base64");
 

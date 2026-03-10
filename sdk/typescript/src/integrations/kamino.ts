@@ -185,7 +185,7 @@ export async function composeKaminoDeposit(
 
   const defiInstructions = extractKaminoInstructions(kaminoAction);
 
-  const kaminoProgramId = new (require("@solana/web3.js")).PublicKey(
+  const kaminoProgramId = new (require("@solana/web3.js").PublicKey)(
     KAMINO_LEND_PROGRAM_ID_STR,
   );
 
@@ -249,7 +249,7 @@ export async function composeKaminoBorrow(
 
   const defiInstructions = extractKaminoInstructions(kaminoAction);
 
-  const kaminoProgramId = new (require("@solana/web3.js")).PublicKey(
+  const kaminoProgramId = new (require("@solana/web3.js").PublicKey)(
     KAMINO_LEND_PROGRAM_ID_STR,
   );
 
@@ -312,7 +312,7 @@ export async function composeKaminoRepay(
 
   const defiInstructions = extractKaminoInstructions(kaminoAction);
 
-  const kaminoProgramId = new (require("@solana/web3.js")).PublicKey(
+  const kaminoProgramId = new (require("@solana/web3.js").PublicKey)(
     KAMINO_LEND_PROGRAM_ID_STR,
   );
 
@@ -373,7 +373,7 @@ export async function composeKaminoWithdraw(
 
   const defiInstructions = extractKaminoInstructions(kaminoAction);
 
-  const kaminoProgramId = new (require("@solana/web3.js")).PublicKey(
+  const kaminoProgramId = new (require("@solana/web3.js").PublicKey)(
     KAMINO_LEND_PROGRAM_ID_STR,
   );
 

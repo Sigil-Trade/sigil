@@ -272,20 +272,23 @@ export function buildCloseVault(
 
   // Always pass PendingPolicyUpdate PDA — on-chain guard requires it when
   // has_pending_policy is true, and harmlessly ignores it when false.
-  return program.methods.closeVault().accounts({
-    owner,
-    vault,
-    policy,
-    tracker,
-    agentSpendOverlay,
-    systemProgram: SystemProgram.programId,
-  } as any).remainingAccounts([
-    {
-      pubkey: pendingPolicy,
-      isWritable: true,
-      isSigner: false,
-    },
-  ]);
+  return program.methods
+    .closeVault()
+    .accounts({
+      owner,
+      vault,
+      policy,
+      tracker,
+      agentSpendOverlay,
+      systemProgram: SystemProgram.programId,
+    } as any)
+    .remainingAccounts([
+      {
+        pubkey: pendingPolicy,
+        isWritable: true,
+        isSigner: false,
+      },
+    ]);
 }
 
 export function buildQueuePolicyUpdate(
@@ -442,7 +445,10 @@ export function buildCreateEscrow(
 ) {
   const [policy] = getPolicyPDA(sourceVault, program.programId);
   const [tracker] = getTrackerPDA(sourceVault, program.programId);
-  const [agentSpendOverlay] = getAgentOverlayPDA(sourceVault, program.programId);
+  const [agentSpendOverlay] = getAgentOverlayPDA(
+    sourceVault,
+    program.programId,
+  );
   const [escrow] = getEscrowPDA(
     sourceVault,
     destinationVault,

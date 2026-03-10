@@ -95,7 +95,11 @@ export function validateIntentInput(intent: IntentAction): ValidationResult {
       validateNonEmpty(errors, intent.params.market, "market");
       validateSide(errors, intent.params.side, "side");
       validateAmount(errors, intent.params.sizeDelta, "sizeDelta");
-      validateAmount(errors, intent.params.collateralAmount, "collateralAmount");
+      validateAmount(
+        errors,
+        intent.params.collateralAmount,
+        "collateralAmount",
+      );
       if (intent.params.leverageBps !== undefined) {
         validateLeverageBps(errors, intent.params.leverageBps, "leverageBps");
       }
@@ -110,13 +114,21 @@ export function validateIntentInput(intent: IntentAction): ValidationResult {
     case "addCollateral":
       validateNonEmpty(errors, intent.params.market, "market");
       validateSide(errors, intent.params.side, "side");
-      validateAmount(errors, intent.params.collateralAmount, "collateralAmount");
+      validateAmount(
+        errors,
+        intent.params.collateralAmount,
+        "collateralAmount",
+      );
       break;
 
     case "removeCollateral":
       validateNonEmpty(errors, intent.params.market, "market");
       validateSide(errors, intent.params.side, "side");
-      validateAmount(errors, intent.params.collateralDeltaUsd, "collateralDeltaUsd");
+      validateAmount(
+        errors,
+        intent.params.collateralDeltaUsd,
+        "collateralDeltaUsd",
+      );
       break;
 
     case "placeTriggerOrder":
@@ -150,7 +162,11 @@ export function validateIntentInput(intent: IntentAction): ValidationResult {
         validateAmount(errors, intent.params.stopLossPrice, "stopLossPrice");
       }
       if (intent.params.takeProfitPrice !== undefined) {
-        validateAmount(errors, intent.params.takeProfitPrice, "takeProfitPrice");
+        validateAmount(
+          errors,
+          intent.params.takeProfitPrice,
+          "takeProfitPrice",
+        );
       }
       if (intent.params.leverageBps !== undefined) {
         validateLeverageBps(errors, intent.params.leverageBps, "leverageBps");
@@ -168,7 +184,11 @@ export function validateIntentInput(intent: IntentAction): ValidationResult {
         validateAmount(errors, intent.params.stopLossPrice, "stopLossPrice");
       }
       if (intent.params.takeProfitPrice !== undefined) {
-        validateAmount(errors, intent.params.takeProfitPrice, "takeProfitPrice");
+        validateAmount(
+          errors,
+          intent.params.takeProfitPrice,
+          "takeProfitPrice",
+        );
       }
       if (intent.params.leverageBps !== undefined) {
         validateLeverageBps(errors, intent.params.leverageBps, "leverageBps");
@@ -204,10 +224,18 @@ export function validateIntentInput(intent: IntentAction): ValidationResult {
       break;
 
     case "createEscrow":
-      validateAddress(errors, intent.params.destinationVault, "destinationVault");
+      validateAddress(
+        errors,
+        intent.params.destinationVault,
+        "destinationVault",
+      );
       validateAmount(errors, intent.params.amount, "amount");
       validateAddress(errors, intent.params.mint, "mint");
-      validateEscrowDuration(errors, intent.params.expiresInSeconds, "expiresInSeconds");
+      validateEscrowDuration(
+        errors,
+        intent.params.expiresInSeconds,
+        "expiresInSeconds",
+      );
       break;
 
     case "settleEscrow":
@@ -216,7 +244,11 @@ export function validateIntentInput(intent: IntentAction): ValidationResult {
       break;
 
     case "refundEscrow":
-      validateAddress(errors, intent.params.destinationVault, "destinationVault");
+      validateAddress(
+        errors,
+        intent.params.destinationVault,
+        "destinationVault",
+      );
       validateNonEmpty(errors, intent.params.escrowId, "escrowId");
       break;
 
@@ -273,9 +305,15 @@ export function validateIntentInput(intent: IntentAction): ValidationResult {
 // Field validators
 // ---------------------------------------------------------------------------
 
-function validateAmount(errors: AgentError[], value: string, field: string): void {
+function validateAmount(
+  errors: AgentError[],
+  value: string,
+  field: string,
+): void {
   if (typeof value !== "string" || value.trim() === "") {
-    errors.push(makeError(field, value, "Amount must be a non-empty numeric string"));
+    errors.push(
+      makeError(field, value, "Amount must be a non-empty numeric string"),
+    );
     return;
   }
 
@@ -321,7 +359,11 @@ function validateAmount(errors: AgentError[], value: string, field: string): voi
   }
 }
 
-function validateAddress(errors: AgentError[], value: string, field: string): void {
+function validateAddress(
+  errors: AgentError[],
+  value: string,
+  field: string,
+): void {
   if (typeof value !== "string" || value.trim() === "") {
     errors.push(makeError(field, value, "Address must be a non-empty string"));
     return;
@@ -329,15 +371,24 @@ function validateAddress(errors: AgentError[], value: string, field: string): vo
 
   if (!BASE58_REGEX.test(value)) {
     errors.push(
-      makeError(field, value, "Invalid Solana address (must be 32-44 base58 characters)", {
-        action: "fix_address",
-        description: `Provide a valid base58-encoded Solana public key for ${field}`,
-      }),
+      makeError(
+        field,
+        value,
+        "Invalid Solana address (must be 32-44 base58 characters)",
+        {
+          action: "fix_address",
+          description: `Provide a valid base58-encoded Solana public key for ${field}`,
+        },
+      ),
     );
   }
 }
 
-function validateSlippageBps(errors: AgentError[], value: number, field: string): void {
+function validateSlippageBps(
+  errors: AgentError[],
+  value: number,
+  field: string,
+): void {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     errors.push(makeError(field, value, "Slippage must be a finite number"));
     return;
@@ -348,15 +399,24 @@ function validateSlippageBps(errors: AgentError[], value: number, field: string)
   }
   if (value < 0 || value > MAX_SLIPPAGE_BPS) {
     errors.push(
-      makeError(field, value, `Slippage BPS must be between 0 and ${MAX_SLIPPAGE_BPS}`, {
-        action: "fix_slippage",
-        description: "Common values: 50 (0.5%), 100 (1%), 300 (3%)",
-      }),
+      makeError(
+        field,
+        value,
+        `Slippage BPS must be between 0 and ${MAX_SLIPPAGE_BPS}`,
+        {
+          action: "fix_slippage",
+          description: "Common values: 50 (0.5%), 100 (1%), 300 (3%)",
+        },
+      ),
     );
   }
 }
 
-function validateLeverage(errors: AgentError[], value: number, field: string): void {
+function validateLeverage(
+  errors: AgentError[],
+  value: number,
+  field: string,
+): void {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     errors.push(makeError(field, value, "Leverage must be a finite number"));
     return;
@@ -371,9 +431,15 @@ function validateLeverage(errors: AgentError[], value: number, field: string): v
   }
 }
 
-function validateLeverageBps(errors: AgentError[], value: number, field: string): void {
+function validateLeverageBps(
+  errors: AgentError[],
+  value: number,
+  field: string,
+): void {
   if (typeof value !== "number" || !Number.isFinite(value)) {
-    errors.push(makeError(field, value, "Leverage BPS must be a finite number"));
+    errors.push(
+      makeError(field, value, "Leverage BPS must be a finite number"),
+    );
     return;
   }
   if (!Number.isInteger(value)) {
@@ -382,15 +448,24 @@ function validateLeverageBps(errors: AgentError[], value: number, field: string)
   }
   if (value <= 0 || value > MAX_LEVERAGE_BPS) {
     errors.push(
-      makeError(field, value, `Leverage BPS must be > 0 and <= ${MAX_LEVERAGE_BPS}`, {
-        action: "fix_leverage",
-        description: `Set leverageBps between 1 and ${MAX_LEVERAGE_BPS} (10000 = 1x)`,
-      }),
+      makeError(
+        field,
+        value,
+        `Leverage BPS must be > 0 and <= ${MAX_LEVERAGE_BPS}`,
+        {
+          action: "fix_leverage",
+          description: `Set leverageBps between 1 and ${MAX_LEVERAGE_BPS} (10000 = 1x)`,
+        },
+      ),
     );
   }
 }
 
-function validateSide(errors: AgentError[], value: string, field: string): void {
+function validateSide(
+  errors: AgentError[],
+  value: string,
+  field: string,
+): void {
   if (value !== "long" && value !== "short") {
     errors.push(
       makeError(field, value, 'Side must be "long" or "short"', {
@@ -401,29 +476,51 @@ function validateSide(errors: AgentError[], value: string, field: string): void 
   }
 }
 
-function validateNonEmpty(errors: AgentError[], value: unknown, field: string): void {
+function validateNonEmpty(
+  errors: AgentError[],
+  value: unknown,
+  field: string,
+): void {
   if (typeof value !== "string" || value.trim() === "") {
     errors.push(makeError(field, value, `${field} must be a non-empty string`));
   }
 }
 
-function validateNonNegativeInt(errors: AgentError[], value: number, field: string): void {
+function validateNonNegativeInt(
+  errors: AgentError[],
+  value: number,
+  field: string,
+): void {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     errors.push(makeError(field, value, `${field} must be a finite number`));
     return;
   }
   if (!Number.isInteger(value) || value < 0) {
-    errors.push(makeError(field, value, `${field} must be a non-negative integer`));
+    errors.push(
+      makeError(field, value, `${field} must be a non-negative integer`),
+    );
   }
 }
 
-function validateEscrowDuration(errors: AgentError[], value: number, field: string): void {
+function validateEscrowDuration(
+  errors: AgentError[],
+  value: number,
+  field: string,
+): void {
   if (typeof value !== "number" || !Number.isFinite(value)) {
-    errors.push(makeError(field, value, "Escrow duration must be a finite number"));
+    errors.push(
+      makeError(field, value, "Escrow duration must be a finite number"),
+    );
     return;
   }
   if (!Number.isInteger(value) || value <= 0) {
-    errors.push(makeError(field, value, "Escrow duration must be a positive integer (seconds)"));
+    errors.push(
+      makeError(
+        field,
+        value,
+        "Escrow duration must be a positive integer (seconds)",
+      ),
+    );
     return;
   }
   if (value > MAX_ESCROW_DURATION) {

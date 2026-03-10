@@ -309,8 +309,7 @@ export class PhalnxClient {
       this.priorityFeeConfig = opts.priorityFees ?? {};
       this._simulateBeforeSend = opts.simulateBeforeSend ?? false;
       this._intentStorage = opts.intentStorage;
-      this._protocolRegistry =
-        opts.protocolRegistry ?? globalProtocolRegistry;
+      this._protocolRegistry = opts.protocolRegistry ?? globalProtocolRegistry;
       if (opts.jupiterApiConfig) {
         configureJupiterApi(opts.jupiterApiConfig);
       }
@@ -1678,8 +1677,7 @@ export class PhalnxClient {
     agent: PublicKey,
     signers?: Signer[],
   ): Promise<string> {
-    const { blockhash } =
-      await this.provider.connection.getLatestBlockhash();
+    const { blockhash } = await this.provider.connection.getLatestBlockhash();
     const messageV0 = new TransactionMessage({
       payerKey: agent,
       recentBlockhash: blockhash,
@@ -1735,8 +1733,7 @@ export class PhalnxClient {
 
     const result = await handler.compose(ctx, action, params);
     const allSigners = result.additionalSigners ?? [];
-    const { blockhash } =
-      await this.provider.connection.getLatestBlockhash();
+    const { blockhash } = await this.provider.connection.getLatestBlockhash();
     const messageV0 = new TransactionMessage({
       payerKey: this.provider.wallet.publicKey,
       recentBlockhash: blockhash,
@@ -2297,7 +2294,8 @@ export class PhalnxClient {
       case "driftPerpOrder": {
         const p = intent.params;
         const usdcMint =
-          resolveToken("USDC")?.mint ?? new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+          resolveToken("USDC")?.mint ??
+          new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
         const result = await this.driftPlacePerpOrder({
           owner,
           vaultId,
@@ -2316,7 +2314,8 @@ export class PhalnxClient {
       case "driftSpotOrder": {
         const p = intent.params;
         const usdcMint =
-          resolveToken("USDC")?.mint ?? new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+          resolveToken("USDC")?.mint ??
+          new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
         const result = await this.driftPlaceSpotOrder({
           owner,
           vaultId,
@@ -2334,7 +2333,8 @@ export class PhalnxClient {
       case "driftCancelOrder": {
         const p = intent.params;
         const usdcMint =
-          resolveToken("USDC")?.mint ?? new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+          resolveToken("USDC")?.mint ??
+          new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
         const result = await this.driftCancelOrder({
           owner,
           vaultId,
@@ -2445,7 +2445,8 @@ export class PhalnxClient {
   get intents(): import("./intent-engine").IntentEngine {
     if (!this._intentsEngine) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { IntentEngine } = require("./intent-engine") as typeof import("./intent-engine");
+      const { IntentEngine } =
+        require("./intent-engine") as typeof import("./intent-engine");
       this._intentsEngine = new IntentEngine(this);
     }
     return this._intentsEngine;

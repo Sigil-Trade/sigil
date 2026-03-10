@@ -54,19 +54,15 @@ export class KaminoHandler implements ProtocolHandler {
 
     switch (action) {
       case "deposit": {
-        const result = await composeKaminoDeposit(
-          ctx.program,
-          ctx.connection,
-          {
-            ...common,
-            amount: params.amount as any,
-            tokenMint: params.tokenMint as PublicKey,
-            market: params.market as PublicKey | undefined,
-            feeDestinationTokenAccount: params.feeDestinationTokenAccount as
-              | PublicKey
-              | undefined,
-          },
-        );
+        const result = await composeKaminoDeposit(ctx.program, ctx.connection, {
+          ...common,
+          amount: params.amount as any,
+          tokenMint: params.tokenMint as PublicKey,
+          market: params.market as PublicKey | undefined,
+          feeDestinationTokenAccount: params.feeDestinationTokenAccount as
+            | PublicKey
+            | undefined,
+        });
         return {
           instructions: result.instructions,
           additionalSigners: result.additionalSigners,
@@ -74,19 +70,15 @@ export class KaminoHandler implements ProtocolHandler {
       }
 
       case "borrow": {
-        const result = await composeKaminoBorrow(
-          ctx.program,
-          ctx.connection,
-          {
-            ...common,
-            amount: params.amount as any,
-            tokenMint: params.tokenMint as PublicKey,
-            market: params.market as PublicKey | undefined,
-            feeDestinationTokenAccount: params.feeDestinationTokenAccount as
-              | PublicKey
-              | undefined,
-          },
-        );
+        const result = await composeKaminoBorrow(ctx.program, ctx.connection, {
+          ...common,
+          amount: params.amount as any,
+          tokenMint: params.tokenMint as PublicKey,
+          market: params.market as PublicKey | undefined,
+          feeDestinationTokenAccount: params.feeDestinationTokenAccount as
+            | PublicKey
+            | undefined,
+        });
         return {
           instructions: result.instructions,
           additionalSigners: result.additionalSigners,
@@ -94,19 +86,15 @@ export class KaminoHandler implements ProtocolHandler {
       }
 
       case "repay": {
-        const result = await composeKaminoRepay(
-          ctx.program,
-          ctx.connection,
-          {
-            ...common,
-            amount: params.amount as any,
-            tokenMint: params.tokenMint as PublicKey,
-            market: params.market as PublicKey | undefined,
-            feeDestinationTokenAccount: params.feeDestinationTokenAccount as
-              | PublicKey
-              | undefined,
-          },
-        );
+        const result = await composeKaminoRepay(ctx.program, ctx.connection, {
+          ...common,
+          amount: params.amount as any,
+          tokenMint: params.tokenMint as PublicKey,
+          market: params.market as PublicKey | undefined,
+          feeDestinationTokenAccount: params.feeDestinationTokenAccount as
+            | PublicKey
+            | undefined,
+        });
         return {
           instructions: result.instructions,
           additionalSigners: result.additionalSigners,

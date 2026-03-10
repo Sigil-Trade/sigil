@@ -235,4 +235,3 @@ pub struct EscrowRefunded {
     pub amount: u64,
     pub refunded_by: Pubkey,
 }
-

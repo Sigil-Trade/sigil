@@ -48,8 +48,20 @@ describe("devnet-spending", () => {
 
   before(async () => {
     await fundKeypair(provider, agent.publicKey);
-    mintA = await ensureStablecoinMint(connection, payer, TEST_USDC_KEYPAIR, owner.publicKey, 6);
-    mintB = await ensureStablecoinMint(connection, payer, TEST_USDT_KEYPAIR, owner.publicKey, 6);
+    mintA = await ensureStablecoinMint(
+      connection,
+      payer,
+      TEST_USDC_KEYPAIR,
+      owner.publicKey,
+      6,
+    );
+    mintB = await ensureStablecoinMint(
+      connection,
+      payer,
+      TEST_USDT_KEYPAIR,
+      owner.publicKey,
+      6,
+    );
     console.log("  MintA (USDC):", mintA.toString());
     console.log("  MintB (USDT):", mintB.toString());
   });

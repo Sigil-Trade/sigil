@@ -86,7 +86,9 @@ export class IntentEngine {
         const precheck = await this.precheck(intent, vault);
         if (!precheck.allowed) {
           return toAgentError(
-            new Error(`Precheck failed: ${precheck.reason ?? precheck.summary}`),
+            new Error(
+              `Precheck failed: ${precheck.reason ?? precheck.summary}`,
+            ),
             {
               precheck_details: precheck.details,
               risk_flags: precheck.riskFlags,
@@ -120,7 +122,10 @@ export class IntentEngine {
    * Check if the intent would succeed given current vault state.
    * Verifies permissions, spending caps, protocol allowlist, etc.
    */
-  async precheck(intent: IntentAction, vault: PublicKey): Promise<PrecheckResult> {
+  async precheck(
+    intent: IntentAction,
+    vault: PublicKey,
+  ): Promise<PrecheckResult> {
     return this.client.precheck(intent, vault);
   }
 
@@ -177,7 +182,11 @@ export class IntentEngine {
    * List all registered protocols and their capabilities.
    */
   listProtocols(): ProtocolInfo[] {
-    const registry = (this.client as unknown as { _protocolRegistry: { listAll(): ProtocolHandlerMetadata[] } })._protocolRegistry;
+    const registry = (
+      this.client as unknown as {
+        _protocolRegistry: { listAll(): ProtocolHandlerMetadata[] };
+      }
+    )._protocolRegistry;
     return registry.listAll().map((meta) => ({
       protocolId: meta.protocolId,
       displayName: meta.displayName,
@@ -190,7 +199,15 @@ export class IntentEngine {
    * List supported actions for a specific protocol.
    */
   listActions(protocolId: string): ActionInfo[] {
-    const registry = (this.client as unknown as { _protocolRegistry: { getByProtocolId(id: string): { metadata: ProtocolHandlerMetadata } | undefined } })._protocolRegistry;
+    const registry = (
+      this.client as unknown as {
+        _protocolRegistry: {
+          getByProtocolId(
+            id: string,
+          ): { metadata: ProtocolHandlerMetadata } | undefined;
+        };
+      }
+    )._protocolRegistry;
     const handler = registry.getByProtocolId(protocolId);
     if (!handler) return [];
 

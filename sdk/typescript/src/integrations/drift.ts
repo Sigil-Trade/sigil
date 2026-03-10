@@ -25,7 +25,8 @@ import { getVaultPDA } from "../accounts";
 // ─── Drift Program ID ────────────────────────────────────────────────────────
 
 /** Drift V2 mainnet program ID */
-export const DRIFT_PROGRAM_ID_STR = "dRiftyHA39MWEi3m9aunc5MzRF1JYuBNtSVAwMHjZi1";
+export const DRIFT_PROGRAM_ID_STR =
+  "dRiftyHA39MWEi3m9aunc5MzRF1JYuBNtSVAwMHjZi1";
 
 // ─── Precision Constants ─────────────────────────────────────────────────────
 

@@ -61,10 +61,7 @@ export {
 } from "./agent-errors";
 
 // Intent Input Validation
-export {
-  validateIntentInput,
-  type ValidationResult,
-} from "./intent-validator";
+export { validateIntentInput, type ValidationResult } from "./intent-validator";
 
 // IntentEngine (Agent-first facade)
 export {
