@@ -49,5 +49,26 @@ pub fn handler(ctx: Context<CloseInstructionConstraints>) -> Result<()> {
         timestamp: Clock::get()?.unix_timestamp,
     });
 
+    // If caller provides PendingConstraintsUpdate in remaining_accounts, close it too
+    if let Some(pending_info) = ctx.remaining_accounts.first() {
+        // Verify it's the correct PDA
+        let (expected_pda, _) = Pubkey::find_program_address(
+            &[b"pending_constraints", ctx.accounts.vault.key().as_ref()],
+            ctx.program_id,
+        );
+        if pending_info.key() == expected_pda && pending_info.lamports() > 0 {
+            // Transfer lamports to owner (close the account)
+            let owner_info = ctx.accounts.owner.to_account_info();
+            let dest_lamports = owner_info.lamports();
+            **owner_info.try_borrow_mut_lamports()? = dest_lamports
+                .checked_add(pending_info.lamports())
+                .ok_or(error!(PhalnxError::Overflow))?;
+            **pending_info.try_borrow_mut_lamports()? = 0;
+            // Zero the data to mark account as closed
+            pending_info.assign(&anchor_lang::system_program::ID);
+            pending_info.realloc(0, false)?;
+        }
+    }
+
     Ok(())
 }
