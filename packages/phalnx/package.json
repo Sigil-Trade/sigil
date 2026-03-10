@@ -13,8 +13,8 @@
     "test": "NODE_OPTIONS='--no-experimental-strip-types' mocha --require ts-node/register 'tests/**/*.test.ts' --timeout 10000"
   },
   "dependencies": {
-    "commander": "^12.1.0",
-    "@clack/prompts": "^0.7.0"
+    "commander": "^14.0.3",
+    "@clack/prompts": "^1.1.0"
   },
   "devDependencies": {
     "@types/chai": "^4.3.11",
