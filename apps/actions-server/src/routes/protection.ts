@@ -68,6 +68,8 @@ protection.get("/api/actions/protection", (c) => {
         "Spending caps (rolling 24h window, USD-denominated)",
         "Protocol whitelists (Jupiter, Flash Trade, Orca, Raydium)",
         "Owner kill-switch (revoke agent instantly)",
+        "Emergency vault freeze (instant, preserves all agent config)",
+        "Per-agent pause/unpause (granular suspension without revocation)",
         "Immutable fee destination (cannot be redirected)",
         "Stablecoin-only USD tracking with on-chain slippage enforcement",
         "On-chain audit trail (Anchor events + SpendTracker)",

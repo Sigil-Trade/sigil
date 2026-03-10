@@ -8,6 +8,7 @@ import { protection } from "./routes/protection";
 import { revokeAgent } from "./routes/revoke-agent";
 import { syncPositions } from "./routes/sync-positions";
 import { escrow } from "./routes/escrow";
+import { emergency } from "./routes/emergency";
 
 const app = new Hono();
 
@@ -21,6 +22,7 @@ app.route("/", protection);
 app.route("/", revokeAgent);
 app.route("/", syncPositions);
 app.route("/", escrow);
+app.route("/", emergency);
 
 // Health check
 app.get("/health", (c) => c.json({ status: "ok" }));
