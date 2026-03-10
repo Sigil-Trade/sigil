@@ -2,6 +2,7 @@ import { PublicKey } from "@solana/web3.js";
 import { BN } from "@coral-xyz/anchor";
 import { randomUUID } from "crypto";
 import type { ActionType } from "./types";
+import type { ProtocolRegistry } from "./integrations/protocol-registry";
 
 export const DEFAULT_INTENT_TTL_MS = 3_600_000; // 1 hour
 
@@ -481,6 +482,33 @@ export function summarizeAction(action: IntentAction): string {
     case "protocol":
       return `${action.params.protocolId}: ${action.params.action}`;
   }
+}
+
+/**
+ * Resolve the correct on-chain ActionType for a generic protocol action.
+ *
+ * Looks up the protocol handler's supportedActions to find the correct
+ * ActionType instead of defaulting to { swap: {} } for all protocol actions.
+ *
+ * @returns The resolved ActionType mapping, or the default from ACTION_TYPE_MAP
+ */
+export function resolveProtocolActionType(
+  registry: ProtocolRegistry,
+  protocolId: string,
+  action: string,
+): { actionType: ActionType; isSpending: boolean } {
+  const handler = registry.getByProtocolId(protocolId);
+  if (handler) {
+    const descriptor = handler.metadata.supportedActions.get(action);
+    if (descriptor) {
+      return {
+        actionType: descriptor.actionType,
+        isSpending: descriptor.isSpending,
+      };
+    }
+  }
+  // Fall back to the static default (swap) — only for truly unknown actions
+  return ACTION_TYPE_MAP.protocol;
 }
 
 /**

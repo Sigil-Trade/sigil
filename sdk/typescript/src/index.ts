@@ -18,6 +18,7 @@ export {
 export {
   createIntent,
   summarizeAction,
+  resolveProtocolActionType,
   MemoryIntentStorage,
   DEFAULT_INTENT_TTL_MS,
   ACTION_TYPE_MAP,
@@ -29,6 +30,12 @@ export {
   type PrecheckResult,
   type ExecuteResult,
 } from "./intents";
+
+// Adapter Verifier
+export {
+  verifyAdapterOutput,
+  type AdapterVerifyResult,
+} from "./integrations/adapter-verifier";
 
 // Token Resolution
 export {
