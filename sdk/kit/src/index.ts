@@ -301,5 +301,23 @@ export type {
   IntentEngineConfig,
 } from "./intent-engine.js";
 
+// ─── PhalnxKitClient ────────────────────────────────────────────────────────
+export { PhalnxKitClient } from "./client.js";
+export type { PhalnxKitClientConfig } from "./client.js";
+
+// ─── Harden / withVault ─────────────────────────────────────────────────────
+export {
+  mapPoliciesToVaultParams,
+  findNextVaultId,
+  harden,
+  withVault,
+} from "./harden.js";
+export type {
+  HardenOptions,
+  HardenResult,
+  WithVaultOptions,
+  WithVaultResult,
+} from "./harden.js";
+
 // NOTE: compat.ts is intentionally NOT exported.
 // It is for internal use only when bridging T2 protocol SDKs.
