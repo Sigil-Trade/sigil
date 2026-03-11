@@ -4,7 +4,11 @@
  * Fail-closed: simulation failure blocks signing.
  */
 
-import type { Rpc, SolanaRpcApi } from "@solana/kit";
+import type {
+  Rpc,
+  SolanaRpcApi,
+  Base64EncodedWireTransaction,
+} from "@solana/kit";
 
 // ─── Risk Flags ──────────────────────────────────────────────────────────────
 
@@ -98,7 +102,7 @@ const ANCHOR_ERROR_MAP: Record<number, { name: string; suggestion: string }> = {
  */
 export async function simulateBeforeSend(
   rpc: Rpc<SolanaRpcApi>,
-  encodedTransaction: string,
+  encodedTransaction: Base64EncodedWireTransaction,
   options?: SimulationOptions,
 ): Promise<SimulationResult> {
   const timeoutMs = options?.timeoutMs ?? 3_000;

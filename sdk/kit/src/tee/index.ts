@@ -15,6 +15,14 @@ export {
 export { AttestationCache, DEFAULT_CACHE_TTL_MS } from "./cache";
 
 export {
+  isTeeWallet,
+  TeeAttestationError,
+  AttestationCertChainError,
+  AttestationPcrMismatchError,
+} from "./wallet-types.js";
+export type { WalletLike, TeeWallet } from "./wallet-types.js";
+
+export {
   verifyTeeAttestation,
   clearAttestationCache,
   deleteFromAttestationCache,

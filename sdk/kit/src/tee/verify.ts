@@ -6,9 +6,9 @@
  * manages caching, and enforces requireAttestation + minAttestationLevel.
  */
 
-import type { WalletLike, TeeWallet } from "../shield";
-import { isTeeWallet } from "../shield";
-import { TeeAttestationError } from "../errors";
+import type { WalletLike, TeeWallet } from "./wallet-types.js";
+import { isTeeWallet } from "./wallet-types.js";
+import { TeeAttestationError } from "./wallet-types.js";
 import { AttestationCache, DEFAULT_CACHE_TTL_MS } from "./cache";
 import {
   AttestationStatus,
@@ -74,7 +74,8 @@ export async function verifyTeeAttestation(
   wallet: WalletLike,
   config?: AttestationConfig,
 ): Promise<AttestationResult> {
-  const publicKey = wallet.publicKey.toBase58();
+  // Kit Address is already base58 — no conversion needed
+  const publicKey = wallet.publicKey;
   const cacheTtlMs = config?.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
   const useCache = Number.isFinite(cacheTtlMs) && cacheTtlMs > 0;
 

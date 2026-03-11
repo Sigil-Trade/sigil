@@ -7,7 +7,7 @@
  * is confirmed, ProviderTrusted as fallback.
  */
 
-import type { WalletLike, TeeWallet } from "../../shield";
+import type { WalletLike, TeeWallet } from "../wallet-types.js";
 import {
   AttestationStatus,
   type AttestationResult,
@@ -18,7 +18,8 @@ export async function verifyCrossmint(
   wallet: WalletLike,
   _config?: AttestationConfig,
 ): Promise<AttestationResult> {
-  const publicKey = wallet.publicKey.toBase58();
+  // Kit Address is already base58 — no conversion needed
+  const publicKey = wallet.publicKey;
   const teeWallet = wallet as TeeWallet;
 
   // Attempt API-based custody verification

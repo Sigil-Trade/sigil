@@ -5,7 +5,7 @@
  * seed encoding. All 8 PDA types are derivable.
  */
 
-import type { Address } from "@solana/kit";
+import type { Address, ReadonlyUint8Array } from "@solana/kit";
 import {
   getAddressEncoder,
   getProgramDerivedAddress,
@@ -17,22 +17,24 @@ import { PHALNX_PROGRAM_ADDRESS } from "./generated/programs/phalnx.js";
 const encoder = getAddressEncoder();
 const textEncoder = new TextEncoder();
 
-function seedString(s: string): Uint8Array {
+type Seed = ReadonlyUint8Array | Uint8Array;
+
+function seedString(s: string): Seed {
   return textEncoder.encode(s);
 }
 
-function seedAddress(addr: Address): Uint8Array {
+function seedAddress(addr: Address): Seed {
   return encoder.encode(addr);
 }
 
-function seedU64Le(value: bigint): Uint8Array {
+function seedU64Le(value: bigint): Seed {
   const buf = new Uint8Array(8);
   const view = new DataView(buf.buffer);
   view.setBigUint64(0, value, true); // little-endian
   return buf;
 }
 
-function seedU8(value: number): Uint8Array {
+function seedU8(value: number): Seed {
   return new Uint8Array([value]);
 }
 

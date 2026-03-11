@@ -5,7 +5,7 @@
  * 3-layer fallback: Helius → Kit RPC → static.
  */
 
-import type { IInstruction, Rpc, SolanaRpcApi } from "@solana/kit";
+import type { Instruction, Rpc, SolanaRpcApi } from "@solana/kit";
 
 // ─── Known Protocol Program Addresses ────────────────────────────────────────
 
@@ -32,7 +32,7 @@ export const CU_OWNER_ACTION = 200_000;
  * Detect CU budget based on the DeFi instructions in a composed transaction.
  * Uses `programAddress` (Kit convention, not `programId`).
  */
-export function estimateComposedCU(defiInstructions: IInstruction[]): number {
+export function estimateComposedCU(defiInstructions: Instruction[]): number {
   if (defiInstructions.length === 0) return CU_AGENT_TRANSFER;
 
   const programAddresses = defiInstructions.map(

@@ -8,10 +8,11 @@
  * This module will throw at runtime if they are not installed.
  */
 
-import type { Address, IInstruction, IAccountMeta } from "@solana/kit";
+import type { Address, Instruction, AccountMeta } from "@solana/kit";
+import { AccountRole } from "@solana/kit";
 
 /**
- * Convert a web3.js TransactionInstruction to a Kit IInstruction.
+ * Convert a web3.js TransactionInstruction to a Kit Instruction.
  * Used when wrapping T2 protocol SDKs that return web3.js types.
  */
 export function toKitInstruction(
@@ -24,19 +25,19 @@ export function toKitInstruction(
     }>;
     data: Buffer | Uint8Array;
   },
-): IInstruction {
-  const accounts: IAccountMeta[] = ix.keys.map((key) => {
+): Instruction {
+  const accounts: AccountMeta[] = ix.keys.map((key) => {
     const address = key.pubkey.toBase58() as Address;
     if (key.isSigner && key.isWritable) {
-      return { address, role: 3 /* WritableSigner */ } as IAccountMeta;
+      return { address, role: AccountRole.WRITABLE_SIGNER } as AccountMeta;
     }
     if (key.isSigner) {
-      return { address, role: 2 /* ReadonlySigner */ } as IAccountMeta;
+      return { address, role: AccountRole.READONLY_SIGNER } as AccountMeta;
     }
     if (key.isWritable) {
-      return { address, role: 1 /* Writable */ } as IAccountMeta;
+      return { address, role: AccountRole.WRITABLE } as AccountMeta;
     }
-    return { address, role: 0 /* Readonly */ } as IAccountMeta;
+    return { address, role: AccountRole.READONLY } as AccountMeta;
   });
 
   return {

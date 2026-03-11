@@ -19,6 +19,7 @@
  */
 
 import * as crypto from "node:crypto";
+import { getAddressEncoder } from "@solana/kit";
 import {
   AttestationStatus,
   type AttestationResult,
@@ -32,8 +33,8 @@ import {
   TeeAttestationError,
   AttestationCertChainError,
   AttestationPcrMismatchError,
-} from "../../errors";
-import type { TeeWallet } from "../../shield";
+} from "../wallet-types.js";
+import type { TeeWallet } from "../wallet-types.js";
 
 // Allow overriding the root CA for testing
 let rootCaPem = AWS_NITRO_ROOT_CA_PEM;
@@ -311,7 +312,8 @@ export async function verifyTurnkey(
   wallet: TeeWallet,
   config?: AttestationConfig,
 ): Promise<AttestationResult> {
-  const publicKey = wallet.publicKey.toBase58();
+  // Kit Address is already base58 — no conversion needed
+  const publicKey = wallet.publicKey;
 
   // Check if wallet provides attestation data
   const walletRecord = wallet as unknown as Record<string, unknown>;
@@ -513,7 +515,10 @@ export async function verifyTurnkey(
       // the attested enclave. This MUST be checked regardless of whether the app key
       // matches the boot key — the signature is the binding proof, not key equality.
       const appSig = Buffer.from(bundle.appSignature, "hex");
-      const walletPubKeyBytes = wallet.publicKey.toBuffer();
+      // Kit Address → 32-byte Ed25519 public key via encoder
+      const walletPubKeyBytes = Buffer.from(
+        getAddressEncoder().encode(wallet.publicKey),
+      );
 
       const keyObj = crypto.createPublicKey({
         key: Buffer.concat([

@@ -5,16 +5,11 @@
  * [ComputeBudget, PriorityFee?, ValidateAndAuthorize, ...defiIxs, FinalizeSession]
  */
 
-import type {
-  Address,
-  IInstruction,
-  TransactionMessageWithBlockhashLifetime,
-} from "@solana/kit";
+import type { Address, Instruction } from "@solana/kit";
 import {
   pipe,
   createTransactionMessage,
   setTransactionMessageFeePayer,
-  appendTransactionMessageInstruction,
   appendTransactionMessageInstructions,
   setTransactionMessageLifetimeUsingBlockhash,
   compileTransaction,
@@ -33,11 +28,11 @@ export interface ComposeTransactionParams {
   /** Fee payer (typically the agent) */
   feePayer: Address;
   /** The validate_and_authorize instruction */
-  validateIx: IInstruction;
+  validateIx: Instruction;
   /** DeFi protocol instruction(s) to sandwich */
-  defiInstructions: IInstruction[];
+  defiInstructions: Instruction[];
   /** The finalize_session instruction */
-  finalizeIx: IInstruction;
+  finalizeIx: Instruction;
   /** Recent blockhash for lifetime */
   blockhash: {
     blockhash: string;
@@ -48,11 +43,7 @@ export interface ComposeTransactionParams {
   /** Optional: priority fee in microLamports per CU */
   priorityFeeMicroLamports?: number;
   /** Optional: address lookup tables (Kit format) */
-  addressLookupTables?: Parameters<
-    typeof appendTransactionMessageInstruction
-  >[0] extends infer T
-    ? never
-    : never;
+  addressLookupTables?: readonly unknown[];
 }
 
 /**
@@ -69,7 +60,7 @@ export function composePhalnxTransaction(
 
   const computeBudgetIx = getSetComputeUnitLimitInstruction({ units });
 
-  const allInstructions: IInstruction[] = [computeBudgetIx];
+  const allInstructions: Instruction[] = [computeBudgetIx];
 
   if (
     params.priorityFeeMicroLamports !== undefined &&
@@ -100,9 +91,7 @@ export function composePhalnxTransaction(
     (tx) => appendTransactionMessageInstructions(allInstructions, tx),
   );
 
-  return compileTransaction(
-    txMessage as TransactionMessageWithBlockhashLifetime,
-  );
+  return compileTransaction(txMessage as any);
 }
 
 /**
