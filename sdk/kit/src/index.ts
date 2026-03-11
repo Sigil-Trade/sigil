@@ -176,5 +176,87 @@ export type {
   TurnkeyAttestationBundle,
 } from "./tee/index.js";
 
+// ─── Agent Errors ─────────────────────────────────────────────────────────────
+export {
+  ON_CHAIN_ERROR_MAP,
+  toAgentError,
+  protocolEscalationError,
+  parseOnChainErrorCode,
+  isAgentError,
+  getAllOnChainErrorCodes,
+  getAllSdkErrorCodes,
+} from "./agent-errors.js";
+export type {
+  ErrorCategory,
+  RecoveryAction,
+  AgentError,
+} from "./agent-errors.js";
+
+// ─── Intents ──────────────────────────────────────────────────────────────────
+export {
+  DEFAULT_INTENT_TTL_MS,
+  ACTION_TYPE_MAP,
+  summarizeAction,
+  resolveProtocolActionType,
+} from "./intents.js";
+export type {
+  IntentAction,
+  IntentActionType,
+  IntentStatus,
+  PrecheckResult,
+  ExecuteResult,
+  TransactionIntent,
+  IntentStorage,
+  ProtocolRegistryLike,
+} from "./intents.js";
+
+// ─── Intent Validator ─────────────────────────────────────────────────────────
+export { validateIntentInput } from "./intent-validator.js";
+export type { ValidationResult } from "./intent-validator.js";
+
+// ─── Intent Storage ──────────────────────────────────────────────────────────
+export {
+  createIntent,
+  MemoryIntentStorage,
+} from "./intent-storage.js";
+
+// ─── Protocol Handler Interface ──────────────────────────────────────────────
+export type {
+  ProtocolComposeResult,
+  ProtocolContext,
+  ProtocolActionDescriptor,
+  ProtocolHandlerMetadata,
+  ProtocolHandler,
+} from "./integrations/protocol-handler.js";
+
+// ─── Protocol Registry ───────────────────────────────────────────────────────
+export {
+  ProtocolRegistry,
+  globalProtocolRegistry,
+} from "./integrations/protocol-registry.js";
+
+// ─── Adapter Verifier ────────────────────────────────────────────────────────
+export { verifyAdapterOutput } from "./integrations/adapter-verifier.js";
+export type { AdapterVerifyResult } from "./integrations/adapter-verifier.js";
+
+// ─── Protocol Resolver ───────────────────────────────────────────────────────
+export {
+  ProtocolTier,
+  isProtocolAllowed,
+  resolveProtocol,
+} from "./protocol-resolver.js";
+export type {
+  ProtocolResolution,
+  EscalationInfo,
+} from "./protocol-resolver.js";
+
+// ─── Inspector ───────────────────────────────────────────────────────────────
+export { analyzeInstructions } from "./inspector.js";
+export type {
+  InspectableInstruction,
+  TokenTransferInfo,
+  InstructionAnalysis,
+} from "./inspector.js";
+
 // NOTE: compat.ts is intentionally NOT exported.
 // It is for internal use only when bridging T2 protocol SDKs.
