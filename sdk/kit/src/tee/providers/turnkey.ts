@@ -27,8 +27,8 @@ import {
   type NitroPcrValues,
   type TeeProvider,
   type TurnkeyAttestationBundle,
-} from "../types";
-import { AWS_NITRO_ROOT_CA_PEM } from "../nitro-root";
+} from "../types.js";
+import { AWS_NITRO_ROOT_CA_PEM } from "../nitro-root.js";
 import {
   TeeAttestationError,
   AttestationCertChainError,
@@ -41,11 +41,7 @@ let rootCaPem = AWS_NITRO_ROOT_CA_PEM;
 
 /** Override the root CA PEM for testing. Only available in test environments. */
 export function setTestRootCa(pem: string): void {
-  if (
-    typeof process !== "undefined" &&
-    process.env.NODE_ENV !== "test" &&
-    process.env.NODE_ENV !== undefined
-  ) {
+  if (typeof process === "undefined" || process.env.NODE_ENV !== "test") {
     throw new Error(
       "setTestRootCa() is only available in test environments (NODE_ENV=test)",
     );

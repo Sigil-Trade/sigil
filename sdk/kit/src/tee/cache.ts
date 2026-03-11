@@ -5,7 +5,7 @@
  * Pattern follows PriorityFeeEstimator in priority-fees.ts.
  */
 
-import type { AttestationResult } from "./types";
+import type { AttestationResult } from "./types.js";
 
 interface CacheEntry {
   result: AttestationResult;

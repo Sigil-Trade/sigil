@@ -9,17 +9,17 @@
 import type { WalletLike, TeeWallet } from "./wallet-types.js";
 import { isTeeWallet } from "./wallet-types.js";
 import { TeeAttestationError } from "./wallet-types.js";
-import { AttestationCache, DEFAULT_CACHE_TTL_MS } from "./cache";
+import { AttestationCache, DEFAULT_CACHE_TTL_MS } from "./cache.js";
 import {
   AttestationStatus,
   type AttestationResult,
   type AttestationConfig,
   type AttestationLevel,
   type TeeProvider,
-} from "./types";
-import { verifyCrossmint } from "./providers/crossmint";
-import { verifyPrivy } from "./providers/privy";
-import { verifyTurnkey } from "./providers/turnkey";
+} from "./types.js";
+import { verifyCrossmint } from "./providers/crossmint.js";
+import { verifyPrivy } from "./providers/privy.js";
+import { verifyTurnkey } from "./providers/turnkey.js";
 
 /** Module-level singleton cache. */
 const globalCache = new AttestationCache(DEFAULT_CACHE_TTL_MS);

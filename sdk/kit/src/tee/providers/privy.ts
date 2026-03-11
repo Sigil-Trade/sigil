@@ -12,7 +12,7 @@ import {
   AttestationStatus,
   type AttestationResult,
   type AttestationConfig,
-} from "../types";
+} from "../types.js";
 
 export async function verifyPrivy(
   wallet: WalletLike,

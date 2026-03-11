@@ -10,9 +10,9 @@ export {
   type VerifiedTeeWallet,
   type NitroPcrValues,
   type TurnkeyAttestationBundle,
-} from "./types";
+} from "./types.js";
 
-export { AttestationCache, DEFAULT_CACHE_TTL_MS } from "./cache";
+export { AttestationCache, DEFAULT_CACHE_TTL_MS } from "./cache.js";
 
 export {
   isTeeWallet,
@@ -26,8 +26,8 @@ export {
   verifyTeeAttestation,
   clearAttestationCache,
   deleteFromAttestationCache,
-} from "./verify";
+} from "./verify.js";
 
-export { verifyCrossmint } from "./providers/crossmint";
-export { verifyPrivy } from "./providers/privy";
-export { verifyTurnkey } from "./providers/turnkey";
+export { verifyCrossmint } from "./providers/crossmint.js";
+export { verifyPrivy } from "./providers/privy.js";
+export { verifyTurnkey } from "./providers/turnkey.js";

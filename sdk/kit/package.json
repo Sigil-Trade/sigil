@@ -30,13 +30,15 @@
     "build": "tsc",
     "clean": "rm -rf dist",
     "codama": "node codama.mjs",
-    "test": "NODE_OPTIONS='--no-experimental-strip-types --loader ts-node/esm' mocha --require ts-node/esm tests/**/*.test.ts --timeout 30000"
+    "pretest": "tsc -p tsconfig.test.json --noEmit",
+    "test": "mocha --require tsx tests/**/*.test.ts --timeout 30000"
   },
   "dependencies": {
-    "@phalnx/core": "workspace:*"
+    "@phalnx/core": "workspace:*",
+    "@solana-program/compute-budget": "^0.14.0"
   },
   "peerDependencies": {
-    "@solana/kit": "6.2.0"
+    "@solana/kit": "^6.2.0"
   },
   "optionalDependencies": {
     "@solana/web3.js": "^1.95.0",
@@ -45,7 +47,6 @@
   "devDependencies": {
     "@codama/nodes-from-anchor": "^1.3.9",
     "@codama/renderers-js": "^2.0.3",
-    "@solana-program/compute-budget": "^0.14.0",
     "@types/chai": "^5.2.3",
     "@types/mocha": "^10.0.6",
     "chai": "^6.2.2",
