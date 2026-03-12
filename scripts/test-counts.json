@@ -109,9 +109,9 @@
     },
     {
       "name": "Kit-native SDK (`@phalnx/kit`)",
-      "count": 513,
+      "count": 597,
       "ciStepName": "Kit SDK tests",
-      "claudePattern": "sdk/kit/tests/` (mocha + tsx, %d tests — types, resolve-accounts, composer, events, priority-fees, simulation, tokens, policies, tee-attestation, compat, rpc-helpers, transaction-executor, drift-compose, e2e-execute)"
+      "claudePattern": "sdk/kit/tests/` (mocha + tsx, %d tests — types, resolve-accounts, composer, events, priority-fees, simulation, tokens, policies, tee-attestation, compat, rpc-helpers, transaction-executor, drift-compose, flash-compose, kamino-compose, e2e-execute)"
     }
   ]
 }

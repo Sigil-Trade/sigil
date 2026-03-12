@@ -144,7 +144,7 @@ jobs:
         working-directory: packages/mcp
         run: pnpm test
 
-      - name: Run Kit SDK tests (513 tests)
+      - name: Run Kit SDK tests (597 tests)
         working-directory: sdk/kit
         run: pnpm test
 
