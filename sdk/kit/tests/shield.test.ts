@@ -186,6 +186,86 @@ describe("shield", () => {
     });
   });
 
+  describe("spend limit violations", () => {
+    it("detects spend limit exceeded", () => {
+      const ctx = shield({
+        maxSpend: { mint: USDC_MINT, amount: 1_000_000n },
+      });
+      const result = ctx.check(
+        [buildTransferIx(2_000_000n, SIGNER)],
+        SIGNER,
+      );
+      expect(result.allowed).to.be.false;
+      expect(result.violations.some((v) => v.rule === "spend_limit")).to.be.true;
+    });
+
+    it("tracks spend accumulation across enforce() calls", () => {
+      const ctx = shield({
+        maxSpend: { mint: "", amount: 1_000_000n },
+      });
+      // First enforcement: 600k (passes, under 1M limit)
+      ctx.enforce([buildTransferIx(600_000n, SIGNER)], SIGNER);
+
+      // Second check: another 600k (total 1.2M > 1M limit)
+      const result = ctx.check(
+        [buildTransferIx(600_000n, SIGNER)],
+        SIGNER,
+      );
+      expect(result.allowed).to.be.false;
+      expect(result.violations.some((v) => v.rule === "spend_limit")).to.be.true;
+    });
+  });
+
+  describe("rate limit violations", () => {
+    it("blocks after max transactions exceeded", () => {
+      const ctx = shield({
+        rateLimit: { maxTransactions: 2, windowMs: 60_000 },
+      });
+      // Consume rate limit
+      ctx.enforce(
+        [noopIx("11111111111111111111111111111111" as Address)],
+        SIGNER,
+      );
+      ctx.enforce(
+        [noopIx("11111111111111111111111111111111" as Address)],
+        SIGNER,
+      );
+      // Third should fail
+      expect(() =>
+        ctx.enforce(
+          [noopIx("11111111111111111111111111111111" as Address)],
+          SIGNER,
+        ),
+      ).to.throw(ShieldDeniedError);
+    });
+  });
+
+  describe("custom check violations", () => {
+    it("blocks when custom check returns not allowed", () => {
+      const ctx = shield({
+        customCheck: () => ({ allowed: false, reason: "blocked by policy" }),
+      });
+      expect(() =>
+        ctx.enforce(
+          [noopIx("11111111111111111111111111111111" as Address)],
+          SIGNER,
+        ),
+      ).to.throw(ShieldDeniedError);
+    });
+
+    it("passes when custom check returns allowed", () => {
+      const ctx = shield({
+        customCheck: () => ({ allowed: true }),
+      });
+      ctx.enforce(
+        [noopIx("11111111111111111111111111111111" as Address)],
+        SIGNER,
+      );
+      // No throw = pass
+      expect(ctx.getSpendingSummary().rateLimit.count).to.equal(1);
+    });
+  });
+
   describe("evaluateInstructions", () => {
     it("blocks unknown programs when blockUnknownPrograms=true", () => {
       const resolved = {
@@ -195,7 +275,7 @@ describe("shield", () => {
         rateLimit: { maxTransactions: 100, windowMs: 3_600_000 },
       };
       const state = new ShieldState();
-      const violations = evaluateInstructions(
+      const { violations } = evaluateInstructions(
         [noopIx(UNKNOWN_PROGRAM)],
         SIGNER,
         resolved as any,
@@ -213,7 +293,7 @@ describe("shield", () => {
         rateLimit: { maxTransactions: 100, windowMs: 3_600_000 },
       };
       const state = new ShieldState();
-      const violations = evaluateInstructions(
+      const { violations } = evaluateInstructions(
         [noopIx("11111111111111111111111111111111" as Address)],
         SIGNER,
         resolved as any,

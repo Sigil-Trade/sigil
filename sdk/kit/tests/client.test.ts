@@ -2,6 +2,7 @@ import { expect } from "chai";
 import type { Address } from "@solana/kit";
 import { PhalnxKitClient, type PhalnxKitClientConfig } from "../src/client.js";
 import { ProtocolRegistry } from "../src/integrations/protocol-registry.js";
+import { isAgentError } from "../src/agent-errors.js";
 
 const AGENT = "Agent111111111111111111111111111111111111111" as Address;
 
@@ -131,6 +132,72 @@ describe("PhalnxKitClient", () => {
         "Vault111111111111111111111111111111111111111" as Address,
       );
       expect(result.allowed).to.be.false;
+    });
+  });
+
+  describe("run() delegation", () => {
+    it("returns AgentError for invalid intent", async () => {
+      const client = buildClient();
+      const result = await client.run(
+        { type: "swap", params: { inputMint: "", outputMint: "", amount: "" } },
+        "Vault111111111111111111111111111111111111111" as Address,
+        { skipPrecheck: true },
+      );
+      expect(isAgentError(result)).to.be.true;
+    });
+  });
+
+  describe("execute() delegation", () => {
+    it("throws for invalid intent", async () => {
+      const client = buildClient();
+      try {
+        await client.execute(
+          { type: "swap", params: { inputMint: "", outputMint: "", amount: "" } },
+          "Vault111111111111111111111111111111111111111" as Address,
+        );
+        expect.fail("Should have thrown");
+      } catch (err: any) {
+        // Validation error before RPC is hit
+        expect(err).to.exist;
+      }
+    });
+  });
+
+  describe("explain() delegation", () => {
+    it("returns AgentError for invalid intent", async () => {
+      const client = buildClient();
+      const result = await client.explain(
+        { type: "swap", params: { inputMint: "", outputMint: "", amount: "" } },
+        "Vault111111111111111111111111111111111111111" as Address,
+      );
+      expect(isAgentError(result)).to.be.true;
+    });
+  });
+
+  describe("getVaultAddress()", () => {
+    it("returns deterministic PDA", async () => {
+      const client = buildClient();
+      const addr1 = await client.getVaultAddress(AGENT, 0n);
+      const addr2 = await client.getVaultAddress(AGENT, 0n);
+      expect(addr1).to.equal(addr2);
+      expect(typeof addr1).to.equal("string");
+      expect(addr1.length).to.be.greaterThan(0);
+    });
+  });
+
+  describe("fetchVault() error handling", () => {
+    it("throws on RPC failure", async () => {
+      const client = buildClient({
+        rpc: {
+          getAccountInfo: () => { throw new Error("connection refused"); },
+        } as any,
+      });
+      try {
+        await client.fetchVault("Vault111111111111111111111111111111111111111" as Address);
+        expect.fail("Should have thrown");
+      } catch (err: any) {
+        expect(err.message).to.include("connection refused");
+      }
     });
   });
 });
