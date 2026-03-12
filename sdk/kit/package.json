@@ -30,6 +30,9 @@
     "build": "tsc",
     "clean": "rm -rf dist",
     "codama": "node codama.mjs",
+    "codama:flash": "node codama.mjs --protocol=flash-trade",
+    "codama:kamino": "node codama.mjs --protocol=kamino",
+    "codama:all": "node codama.mjs --all",
     "pretest": "tsc -p tsconfig.test.json --noEmit",
     "test": "mocha --require tsx tests/**/*.test.ts --timeout 30000"
   },
