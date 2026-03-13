@@ -38,6 +38,17 @@ function requireField<T>(params: Record<string, unknown>, field: string): T {
   return val as T;
 }
 
+function safeBigInt(value: unknown, field: string): bigint {
+  try {
+    return BigInt(value as string | number | bigint);
+  } catch {
+    throw new KaminoComposeError(
+      "INVALID_BIGINT",
+      `Invalid numeric value for ${field}: ${String(value)}`,
+    );
+  }
+}
+
 // ─── Signer Helper ───────────────────────────────────────────────────────────
 
 function addressAsSigner(address: Address): TransactionSigner {
@@ -103,7 +114,7 @@ async function composeDeposit(
     collateralTokenProgram: TOKEN_PROGRAM,
     liquidityTokenProgram: TOKEN_PROGRAM,
     instructionSysvarAccount: IX_SYSVAR,
-    liquidityAmount: BigInt(amount),
+    liquidityAmount: safeBigInt(amount, "amount"),
   }, { programAddress: KAMINO_LEND_PROGRAM }) as Instruction;
 
   return { instructions: [refreshReserve, refreshObligation, depositIx] };
@@ -135,7 +146,7 @@ async function composeBorrow(
     referrerTokenState: null as unknown as Address, // Optional referrer
     tokenProgram: TOKEN_PROGRAM,
     instructionSysvarAccount: IX_SYSVAR,
-    liquidityAmount: BigInt(amount),
+    liquidityAmount: safeBigInt(amount, "amount"),
   }, { programAddress: KAMINO_LEND_PROGRAM }) as Instruction;
 
   return { instructions: [refreshReserve, refreshObligation, borrowIx] };
@@ -164,7 +175,7 @@ async function composeRepay(
     userSourceLiquidity: ctx.vault,
     tokenProgram: TOKEN_PROGRAM,
     instructionSysvarAccount: IX_SYSVAR,
-    liquidityAmount: BigInt(amount),
+    liquidityAmount: safeBigInt(amount, "amount"),
   }, { programAddress: KAMINO_LEND_PROGRAM }) as Instruction;
 
   return { instructions: [refreshReserve, refreshObligation, repayIx] };
@@ -198,7 +209,7 @@ async function composeWithdraw(
     collateralTokenProgram: TOKEN_PROGRAM,
     liquidityTokenProgram: TOKEN_PROGRAM,
     instructionSysvarAccount: IX_SYSVAR,
-    collateralAmount: BigInt(amount),
+    collateralAmount: safeBigInt(amount, "amount"),
   }, { programAddress: KAMINO_LEND_PROGRAM }) as Instruction;
 
   return { instructions: [refreshReserve, refreshObligation, withdrawIx] };
