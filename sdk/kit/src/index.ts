@@ -152,6 +152,7 @@ export {
   AttestationStatus,
   AttestationCache,
   DEFAULT_CACHE_TTL_MS,
+  VALID_TEE_PROVIDERS,
   isTeeWallet,
   TeeAttestationError,
   AttestationCertChainError,
@@ -391,10 +392,80 @@ export * from "./analytics/index.js";
 
 // ─── Compose Errors ──────────────────────────────────────────────────────
 export {
+  COMPOSE_ERROR_CODES,
   ComposeError,
   FlashTradeComposeError,
   KaminoComposeError,
+  createSafeBigInt,
+  createRequireField,
+  addressAsSigner,
 } from "./integrations/compose-errors.js";
+export type { ComposeErrorCode } from "./integrations/compose-errors.js";
+
+// ─── x402 HTTP 402 Payment Required ───────────────────────────────────────
+export {
+  // Core
+  shieldedFetch,
+  createShieldedFetch,
+  // Codec
+  decodePaymentRequiredHeader,
+  encodePaymentSignatureHeader,
+  decodePaymentResponseHeader,
+  // Selector
+  selectPaymentOption,
+  // Transfer Builder
+  buildX402TransferInstruction,
+  deriveAta,
+  transferToInspectable,
+  X402_TOKEN_PROGRAM_ID,
+  X402_ATA_PROGRAM_ID,
+  // Nonce Tracker
+  NonceTracker,
+  // Amount Guard
+  validatePaymentAmount,
+  recordPaymentAmount,
+  resetPaymentHistory,
+  // Policy Bridge
+  evaluateX402Payment,
+  recordX402Spend,
+  // Facilitator
+  validateSettlement,
+  // Audit
+  emitPaymentEvent,
+  createPaymentEvent,
+  // Errors
+  X402ParseError,
+  X402PaymentError,
+  X402UnsupportedError,
+  X402DestinationBlockedError,
+  X402ReplayError,
+} from "./x402/index.js";
+export type {
+  PaymentRequired,
+  PaymentRequirements,
+  ResourceInfo,
+  PaymentPayload,
+  SettleResponse,
+  X402Config,
+  ShieldedFetchOptions,
+  ShieldedFetchResponse,
+  X402PaymentResult,
+  X402PaymentEvent,
+  FacilitatorVerifyResult,
+} from "./x402/index.js";
+
+// ─── VelocityTracker ──────────────────────────────────────────────────────
+export { VelocityTracker } from "./velocity-tracker.js";
+export type { VelocityConfig } from "./velocity-tracker.js";
+
+// ─── Intent-Drift Detection ──────────────────────────────────────────────
+export { detectIntentDrift, enforceIntentDrift } from "./intent-drift.js";
+export type {
+  DriftViolationType,
+  DriftViolation,
+  DriftCheckResult,
+  DriftConfig,
+} from "./intent-drift.js";
 
 // NOTE: compat.ts is intentionally NOT exported.
 // It is for internal use only when bridging T2 protocol SDKs.
