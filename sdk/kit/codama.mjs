@@ -11,7 +11,7 @@ import { rootNodeFromAnchor } from "@codama/nodes-from-anchor";
 import { renderVisitor } from "@codama/renderers-js";
 import { createFromRoot } from "codama";
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync, mkdtempSync, cpSync, rmSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync, cpSync, rmSync, existsSync, mkdirSync, renameSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
@@ -25,16 +25,19 @@ const PROTOCOLS = {
     idlPath: join(__dirname, "..", "..", "target", "idl", "phalnx.json"),
     outputDir: join(__dirname, "src", "generated"),
     generateEventMap: true,
+    expectedHash: null, // Phalnx IDL changes with builds
   },
   "flash-trade": {
     idlPath: join(__dirname, "idls", "perpetuals.json"),
     outputDir: join(__dirname, "src", "generated", "protocols", "flash-trade"),
     generateEventMap: false,
+    expectedHash: "66db991046f4c0029f0027a5a43ee11f58789cbc8276dd3108026ad2b4a24339",
   },
   kamino: {
     idlPath: join(__dirname, "idls", "kamino-lending.json"),
     outputDir: join(__dirname, "src", "generated", "protocols", "kamino"),
     generateEventMap: false,
+    expectedHash: "5958e26f571077a32f730382bb481ad2b138ca28a18067bfcb28c46586c3a783",
   },
 };
 
@@ -43,6 +46,35 @@ const PROTOCOLS = {
 const args = process.argv.slice(2);
 const allFlag = args.includes("--all");
 const protocolArg = args.find((a) => a.startsWith("--protocol="))?.split("=")[1];
+const updateHashes = args.includes("--update-hashes");
+const skipHashCheck = args.includes("--skip-hash-check");
+
+// ─── IDL Validation ─────────────────────────────────────────────────────────
+
+function validateIdl(idl, protocol) {
+  const errors = [];
+  if (typeof idl !== "object" || idl === null) errors.push("IDL root must be an object");
+  // Support both top-level name/version and metadata.name/version (Anchor IDL spec variations)
+  const hasName = typeof idl.name === "string" || typeof idl.metadata?.name === "string";
+  const hasVersion = typeof idl.version === "string" || typeof idl.metadata?.version === "string";
+  if (!hasName) errors.push("Missing 'name' field (checked root and metadata)");
+  if (!hasVersion) errors.push("Missing 'version' field (checked root and metadata)");
+  if (!Array.isArray(idl.instructions)) {
+    errors.push("Missing 'instructions' array");
+  } else {
+    for (const [i, ix] of idl.instructions.entries()) {
+      if (typeof ix.name !== "string") errors.push(`instructions[${i}] missing 'name'`);
+      if (!Array.isArray(ix.accounts)) errors.push(`instructions[${i}].${ix.name ?? i} missing 'accounts'`);
+      if (!Array.isArray(ix.args)) errors.push(`instructions[${i}].${ix.name ?? i} missing 'args'`);
+    }
+  }
+  if (idl.accounts && !Array.isArray(idl.accounts)) errors.push("'accounts' must be an array");
+  if (errors.length > 0) {
+    console.error(`IDL validation failed for ${protocol}:`);
+    errors.forEach((e) => console.error(`  - ${e}`));
+    process.exit(1);
+  }
+}
 
 let protocolsToGenerate;
 if (allFlag) {
@@ -70,20 +102,69 @@ for (const protocolName of protocolsToGenerate) {
 
   console.log(`\n─── Generating ${protocolName} ───`);
 
-  const anchorIdl = JSON.parse(readFileSync(config.idlPath, "utf-8"));
+  // ─── IDL hash verification (Step 5) ─────────────────────────────────────
+  const idlContent = readFileSync(config.idlPath);
+  if (config.expectedHash) {
+    const fileHash = createHash("sha256").update(idlContent).digest("hex");
+    if (updateHashes) {
+      console.log(`  IDL hash for ${protocolName}: ${fileHash}`);
+    } else if (!skipHashCheck) {
+      if (fileHash !== config.expectedHash) {
+        console.error(`IDL content hash mismatch for ${protocolName}!`);
+        console.error(`  Expected: ${config.expectedHash}`);
+        console.error(`  Actual:   ${fileHash}`);
+        process.exit(1);
+      }
+      console.log(`  IDL hash verified: ${fileHash.substring(0, 12)}...`);
+    }
+  }
+
+  // ─── IDL schema validation (Step 4) ─────────────────────────────────────
+  const anchorIdl = JSON.parse(idlContent.toString("utf-8"));
+  validateIdl(anchorIdl, protocolName);
+
   const codama = createFromRoot(rootNodeFromAnchor(anchorIdl));
 
-  // Render to temp dir, then copy src/generated/ to output dir
+  // Render to temp dir
   const tempDir = mkdtempSync(join(tmpdir(), `codama-${protocolName}-`));
   await codama.accept(renderVisitor(tempDir));
 
-  // For protocol sub-dirs, ensure parent exists
-  rmSync(config.outputDir, { recursive: true, force: true });
+  // ─── Two-phase atomic generation (Step 6) ───────────────────────────────
+  const generatedSrc = join(tempDir, "src", "generated");
+  if (!existsSync(generatedSrc)) {
+    console.error(`Generation produced no output for ${protocolName}`);
+    rmSync(tempDir, { recursive: true, force: true });
+    process.exit(1);
+  }
+
+  const backupDir = `${config.outputDir}.bak`;
   const parentDir = dirname(config.outputDir);
   if (!existsSync(parentDir)) {
     mkdirSync(parentDir, { recursive: true });
   }
-  cpSync(join(tempDir, "src", "generated"), config.outputDir, { recursive: true });
+
+  // Phase 1: backup existing
+  if (existsSync(config.outputDir)) {
+    renameSync(config.outputDir, backupDir);
+  }
+
+  try {
+    // Phase 2: copy new
+    cpSync(generatedSrc, config.outputDir, { recursive: true });
+    // Success — remove backup
+    if (existsSync(backupDir)) {
+      rmSync(backupDir, { recursive: true, force: true });
+    }
+  } catch (err) {
+    // Rollback — restore backup
+    console.error(`Generation failed for ${protocolName}, rolling back: ${err.message}`);
+    if (existsSync(backupDir)) {
+      if (existsSync(config.outputDir)) rmSync(config.outputDir, { recursive: true, force: true });
+      renameSync(backupDir, config.outputDir);
+    }
+    rmSync(tempDir, { recursive: true, force: true });
+    process.exit(1);
+  }
   rmSync(tempDir, { recursive: true, force: true });
 
   const ixCount = anchorIdl.instructions?.length ?? 0;
