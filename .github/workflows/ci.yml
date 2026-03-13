@@ -239,6 +239,20 @@ jobs:
           github.event_name == 'push'
         run: npx tsx scripts/verify-codama-staleness.ts
 
+      - name: Verify Codama generated code is fresh
+        if: >-
+          needs.changes.outputs.sdk-kit == 'true' ||
+          github.event_name == 'push'
+        working-directory: sdk/kit
+        run: |
+          node codama.mjs --all --skip-hash-check
+          if [ -n "$(git diff --name-only src/generated/)" ]; then
+            echo "::error::Generated code is stale. Run 'pnpm codama:all' and commit."
+            git diff --stat src/generated/
+            exit 1
+          fi
+          echo "Generated code is up-to-date."
+
       - name: Actions server tests (99 tests)
         if: >-
           needs.changes.outputs.apps == 'true' ||
