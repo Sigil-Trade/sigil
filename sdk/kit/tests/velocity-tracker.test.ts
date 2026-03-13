@@ -164,6 +164,28 @@ describe("VelocityTracker", () => {
     });
   });
 
+  describe("cross-mint aggregation (BUG-3)", () => {
+    it("USD/hour sees DeFi spend with mint 'USDC' + x402 spend with mint 'USDT'", () => {
+      const state = new ShieldState();
+      const tracker = new VelocityTracker(state, { maxUsdPerHour: 500_000n });
+      // DeFi records with actual mint key
+      state.recordSpend("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", 300_000n);
+      // x402 records with a different mint key
+      state.recordSpend("Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", 250_000n);
+      // Total = 550_000 > 500_000 limit
+      expect(() => tracker.check(SIGNER)).to.throw(ShieldDeniedError);
+    });
+
+    it("getStats returns aggregated USD/hour across mints", () => {
+      const state = new ShieldState();
+      const tracker = new VelocityTracker(state);
+      state.recordSpend("USDC", 100_000n);
+      state.recordSpend("USDT", 200_000n);
+      const stats = tracker.getStats();
+      expect(stats.usdPerHour).to.equal(300_000n);
+    });
+  });
+
   describe("default config", () => {
     it("uses sane defaults", () => {
       const tracker = makeTracker();

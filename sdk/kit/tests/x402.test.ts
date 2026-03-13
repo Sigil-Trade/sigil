@@ -102,6 +102,20 @@ describe("x402/codec", () => {
     expect(() => decodePaymentRequiredHeader(encoded)).to.throw("valid integer string");
   });
 
+  it("throws on empty string amount (BUG-7)", () => {
+    const pr = makePaymentRequired({ amount: "" });
+    const encoded = encodeHeader(pr);
+    expect(() => decodePaymentRequiredHeader(encoded)).to.throw("non-empty string");
+  });
+
+  it("accepts very large amount string without precision loss (BUG-15)", () => {
+    const largeAmount = "99999999999999999999"; // > Number.MAX_SAFE_INTEGER
+    const pr = makePaymentRequired({ amount: largeAmount });
+    const encoded = encodeHeader(pr);
+    const decoded = decodePaymentRequiredHeader(encoded);
+    expect(decoded.accepts[0].amount).to.equal(largeAmount);
+  });
+
   it("validates required fields in accepts entries", () => {
     const pr = { x402Version: 2, accepts: [{ scheme: "exact" }] };
     const encoded = base64Encode(JSON.stringify(pr));
@@ -275,6 +289,18 @@ describe("x402/policy-bridge", () => {
     const violations = evaluateX402Payment(selected, ctx);
     expect(violations).to.have.lengthOf(0);
   });
+
+  it("cross-asset cumulative: $500 USDC + $500 USDT exceeds $800 limit (BUG-4)", () => {
+    const ctx = shield();
+    const config: X402Config = { maxCumulativeSpend: 800_000n };
+    // Record USDC spend from DeFi
+    ctx.state.recordSpend("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", 500_000n);
+    // Now try USDT x402 payment of 500_000 (total = 1_000_000 > 800_000)
+    const selected = makePaymentRequired({ amount: "500000", asset: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB" as Address }).accepts[0];
+    const violations = evaluateX402Payment(selected, ctx, config);
+    expect(violations.length).to.be.greaterThan(0);
+    expect(violations[0]).to.include("Cumulative");
+  });
 });
 
 // ─── Transfer Builder Tests ─────────────────────────────────────────────────
@@ -391,6 +417,24 @@ describe("x402/nonce-tracker", () => {
   it("builds deterministic nonce keys", () => {
     const key = NonceTracker.buildKey("https://api.com", TRUSTED_PAYTO, "1000");
     expect(key).to.equal(`https://api.com|${TRUSTED_PAYTO}|1000`);
+  });
+
+  it("normalizes trailing slash in nonce key (BUG-12)", () => {
+    const key1 = NonceTracker.buildKey("https://api.com/data", TRUSTED_PAYTO, "1000");
+    const key2 = NonceTracker.buildKey("https://api.com/data/", TRUSTED_PAYTO, "1000");
+    expect(key1).to.equal(key2);
+  });
+
+  it("strips query params in nonce key (BUG-12)", () => {
+    const key1 = NonceTracker.buildKey("https://api.com/data", TRUSTED_PAYTO, "1000");
+    const key2 = NonceTracker.buildKey("https://api.com/data?ts=123", TRUSTED_PAYTO, "1000");
+    expect(key1).to.equal(key2);
+  });
+
+  it("trailing slash + query normalized → same key detects replay", () => {
+    tracker.record("https://api.com/data", TRUSTED_PAYTO, "1000");
+    expect(tracker.isDuplicate("https://api.com/data/", TRUSTED_PAYTO, "1000")).to.equal(true);
+    expect(tracker.isDuplicate("https://api.com/data?ts=456", TRUSTED_PAYTO, "1000")).to.equal(true);
   });
 });
 

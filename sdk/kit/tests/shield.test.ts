@@ -80,6 +80,29 @@ describe("shield", () => {
       expect(state.getSpendInWindow("USDC", 60_000)).to.equal(0n);
       expect(state.getTransactionCountInWindow(60_000)).to.equal(0);
     });
+
+    it("getTotalSpendInWindow sums across different mints", () => {
+      const state = new ShieldState();
+      state.recordSpend("USDC", 100n);
+      state.recordSpend("USDT", 200n);
+      state.recordSpend("SOL", 50n);
+      expect(state.getTotalSpendInWindow(60_000)).to.equal(350n);
+    });
+
+    it("getTotalSpendInWindow respects time window", () => {
+      const state = new ShieldState();
+      state.recordSpend("USDC", 100n);
+      state.recordSpend("USDT", 200n);
+      // Within window should return total
+      expect(state.getTotalSpendInWindow(60_000)).to.equal(300n);
+      // getSpendInWindow with same window only returns USDC
+      expect(state.getSpendInWindow("USDC", 60_000)).to.equal(100n);
+    });
+
+    it("getTotalSpendInWindow returns 0n for empty state", () => {
+      const state = new ShieldState();
+      expect(state.getTotalSpendInWindow(60_000)).to.equal(0n);
+    });
   });
 
   describe("ShieldDeniedError", () => {
@@ -90,6 +113,16 @@ describe("shield", () => {
       expect(err.message).to.include("blocked");
       expect(err.violations).to.have.length(1);
       expect(err.name).to.equal("ShieldDeniedError");
+    });
+
+    it("accepts optional error code", () => {
+      const err = new ShieldDeniedError([{ rule: "test", message: "x" }], 7021);
+      expect(err.code).to.equal(7021);
+    });
+
+    it("code is undefined when not provided", () => {
+      const err = new ShieldDeniedError([{ rule: "test", message: "x" }]);
+      expect(err.code).to.equal(undefined);
     });
   });
 

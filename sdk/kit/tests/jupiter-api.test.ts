@@ -41,5 +41,23 @@ describe("jupiter-api", () => {
       const config = getJupiterApiConfig();
       expect(config.baseUrl).to.match(/^https:\/\//);
     });
+
+    it("rejects http://localhost.evil.com bypass (BUG-5)", () => {
+      expect(() =>
+        configureJupiterApi({ baseUrl: "http://localhost.evil.com" }),
+      ).to.throw("Jupiter API base URL must use HTTPS");
+    });
+
+    it("accepts http://127.0.0.1:8080 for testing", () => {
+      expect(() =>
+        configureJupiterApi({ baseUrl: "http://127.0.0.1:8080" }),
+      ).to.not.throw();
+    });
+
+    it("rejects ftp:// protocol", () => {
+      expect(() =>
+        configureJupiterApi({ baseUrl: "ftp://api.jup.ag" }),
+      ).to.throw();
+    });
   });
 });

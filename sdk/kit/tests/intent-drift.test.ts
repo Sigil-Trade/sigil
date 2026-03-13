@@ -249,6 +249,167 @@ describe("intent-drift", () => {
     });
   });
 
+  describe("TransferChecked destination index (BUG-2)", () => {
+    function makeSplTransferChecked(authority: Address, dest: Address, amount: bigint): InspectableInstruction {
+      // SPL TransferChecked discriminator = 12, amount = 8 bytes LE, decimals = 1 byte
+      const data = new Uint8Array(10);
+      data[0] = 12; // TransferChecked discriminator
+      let a = amount;
+      for (let i = 1; i <= 8; i++) {
+        data[i] = Number(a & 0xFFn);
+        a >>= 8n;
+      }
+      data[9] = 6; // decimals
+      return {
+        programAddress: TOKEN_PROGRAM,
+        data,
+        accounts: [
+          { address: "source1111111111111111111111111111111111111" as Address }, // source
+          { address: "mint111111111111111111111111111111111111111" as Address }, // mint
+          { address: dest },       // destination at index 2
+          { address: authority },   // authority at index 3
+        ],
+      };
+    }
+
+    it("detects recipient mismatch using correct index for TransferChecked", () => {
+      const WRONG_DEST = "WrongDest111111111111111111111111111111111" as Address;
+      const instructions = [
+        makeIx(PHALNX),
+        makeSplTransferChecked(SIGNER, WRONG_DEST, 1_000_000n),
+      ];
+      const result = detectIntentDrift(
+        intent("transfer", { destination: DEST, amount: "1000000" }),
+        instructions, SIGNER,
+      );
+      expect(result.violations.some(v => v.type === "recipient_mismatch")).to.equal(true);
+    });
+
+    it("passes when TransferChecked destination matches declared", () => {
+      const instructions = [
+        makeIx(PHALNX),
+        makeSplTransferChecked(SIGNER, DEST, 1_000_000n),
+      ];
+      const result = detectIntentDrift(
+        intent("transfer", { destination: DEST, amount: "1000000" }),
+        instructions, SIGNER,
+      );
+      const recipientViolations = result.violations.filter(v => v.type === "recipient_mismatch");
+      expect(recipientViolations).to.have.lengthOf(0);
+    });
+  });
+
+  describe("Drift intent types (BUG-6)", () => {
+    const DRIFT = "dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH" as Address;
+
+    it("driftPerpOrder does not trigger program mismatch for Drift program", () => {
+      const instructions = [
+        makeIx(COMPUTE_BUDGET),
+        makeIx(PHALNX),
+        makeIx(DRIFT),
+        makeIx(PHALNX),
+      ];
+      const result = detectIntentDrift(intent("driftPerpOrder"), instructions, SIGNER);
+      const programViolations = result.violations.filter(v => v.type === "program_mismatch");
+      expect(programViolations).to.have.lengthOf(0);
+    });
+
+    it("driftDeposit does not trigger program mismatch", () => {
+      const instructions = [makeIx(PHALNX), makeIx(DRIFT)];
+      const result = detectIntentDrift(intent("driftDeposit"), instructions, SIGNER);
+      const programViolations = result.violations.filter(v => v.type === "program_mismatch");
+      expect(programViolations).to.have.lengthOf(0);
+    });
+
+    it("driftSpotOrder does not trigger program mismatch", () => {
+      const instructions = [makeIx(PHALNX), makeIx(DRIFT)];
+      const result = detectIntentDrift(intent("driftSpotOrder"), instructions, SIGNER);
+      const programViolations = result.violations.filter(v => v.type === "program_mismatch");
+      expect(programViolations).to.have.lengthOf(0);
+    });
+  });
+
+  describe("enforceIntentDrift error code (BUG-8)", () => {
+    it("ShieldDeniedError has code 7021 on high severity", () => {
+      const instructions = [makeIx(UNKNOWN_PROGRAM)];
+      try {
+        enforceIntentDrift(intent("swap"), instructions, SIGNER);
+        expect.fail("should throw");
+      } catch (err) {
+        expect(err).to.be.instanceOf(ShieldDeniedError);
+        expect((err as ShieldDeniedError).code).to.equal(7021);
+      }
+    });
+  });
+
+  describe("amount=0 with non-zero transfer (BUG-13)", () => {
+    it("flags amount mismatch when declared=0 but transfer exists", () => {
+      const instructions = [
+        makeIx(PHALNX),
+        makeSplTransfer(SIGNER, DEST, 500_000n),
+      ];
+      const result = detectIntentDrift(
+        intent("transfer", { destination: DEST, amount: "0" }),
+        instructions, SIGNER,
+      );
+      expect(result.violations.some(v => v.type === "amount_mismatch")).to.equal(true);
+      expect(result.violations.some(v => v.message.includes("Declared amount is 0"))).to.equal(true);
+    });
+
+    it("no violation when declared=0 and no transfers", () => {
+      const instructions = [makeIx(PHALNX)];
+      const result = detectIntentDrift(
+        intent("transfer", { amount: "0" }),
+        instructions, SIGNER,
+      );
+      const amountViolations = result.violations.filter(v => v.type === "amount_mismatch");
+      expect(amountViolations).to.have.lengthOf(0);
+    });
+  });
+
+  describe("recipient check for deposit types (BUG-10)", () => {
+    it("checks recipient for deposit intent", () => {
+      const WRONG_DEST = "WrongDest111111111111111111111111111111111" as Address;
+      const instructions = [
+        makeIx(PHALNX),
+        makeSplTransfer(SIGNER, WRONG_DEST, 1_000_000n),
+      ];
+      const result = detectIntentDrift(
+        intent("deposit", { destination: DEST, amount: "1000000" }),
+        instructions, SIGNER,
+      );
+      expect(result.violations.some(v => v.type === "recipient_mismatch")).to.equal(true);
+    });
+
+    it("checks recipient for kaminoDeposit intent", () => {
+      const WRONG_DEST = "WrongDest111111111111111111111111111111111" as Address;
+      const instructions = [
+        makeIx(PHALNX),
+        makeSplTransfer(SIGNER, WRONG_DEST, 1_000_000n),
+      ];
+      const result = detectIntentDrift(
+        intent("kaminoDeposit", { destination: DEST, amount: "1000000" }),
+        instructions, SIGNER,
+      );
+      expect(result.violations.some(v => v.type === "recipient_mismatch")).to.equal(true);
+    });
+
+    it("does not check recipient for swap intent", () => {
+      const WRONG_DEST = "WrongDest111111111111111111111111111111111" as Address;
+      const instructions = [
+        makeIx(PHALNX),
+        makeIx(JUPITER),
+        makeSplTransfer(SIGNER, WRONG_DEST, 1_000_000n),
+      ];
+      const result = detectIntentDrift(
+        intent("swap", { destination: DEST, amount: "1000000" }),
+        instructions, SIGNER,
+      );
+      const recipientViolations = result.violations.filter(v => v.type === "recipient_mismatch");
+      expect(recipientViolations).to.have.lengthOf(0);
+    });
+  });
+
   describe("config overrides", () => {
     it("custom amountTolerancePct", () => {
       // 20% off should pass with 25% tolerance
