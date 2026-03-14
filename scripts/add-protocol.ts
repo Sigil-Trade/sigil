@@ -13,7 +13,8 @@
  *   npx tsx scripts/add-protocol.ts --yaml ... --force
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, createHash } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { join, dirname, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 import type { AnnotationConfig, AnchorIdl, PipelineOptions } from "./add-protocol/types.js";
