@@ -1,5 +1,5 @@
 import type { AnnotationConfig } from "../types.js";
-import { pascalCase } from "../naming.js";
+import { pascalCase, upperSnake } from "../naming.js";
 
 /**
  * Prints human-readable diff-style instructions for the 4 registry files
@@ -8,6 +8,7 @@ import { pascalCase } from "../naming.js";
 export function generateRegistryPatches(config: AnnotationConfig): string {
   const { protocol } = config;
   const pascal = pascalCase(protocol.id);
+  const upper = upperSnake(protocol.id);
 
   const sections: string[] = [];
 
@@ -46,7 +47,7 @@ export function generateRegistryPatches(config: AnnotationConfig): string {
     `  // ${protocol.displayName}`,
   );
   sections.push(
-    `  export { ${protocol.id.toUpperCase().replace(/-/g, "_")}_SCHEMA, ${protocol.id.toUpperCase().replace(/-/g, "_")}_PROGRAM } from "./protocols/${protocol.id}-schema.js";`,
+    `  export { ${upper}_SCHEMA, ${upper}_PROGRAM } from "./protocols/${protocol.id}-schema.js";`,
   );
   sections.push(
     `  export { ${pascal}Descriptor } from "./protocols/${protocol.id}-descriptor.js";`,
@@ -74,7 +75,7 @@ export function generateRegistryPatches(config: AnnotationConfig): string {
   sections.push(`Add the schema import at the top for Layer 2 checks:`);
   sections.push(``);
   sections.push(
-    `  import { ${protocol.id.toUpperCase().replace(/-/g, "_")}_SCHEMA } from "../sdk/kit/src/constraints/protocols/${protocol.id}-schema.js";`,
+    `  import { ${upper}_SCHEMA } from "../sdk/kit/src/constraints/protocols/${protocol.id}-schema.js";`,
   );
 
   // 4. sdk/kit/src/intent-engine.ts

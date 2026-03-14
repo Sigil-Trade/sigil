@@ -44,7 +44,7 @@ export function generateHandler(
  * Actions: ${parsed.length}
  */
 
-import type { Address, Rpc, SolanaRpcApi } from "@solana/kit";
+import type { Address } from "@solana/kit";
 import type {
   ProtocolHandler,
   ProtocolHandlerMetadata,
