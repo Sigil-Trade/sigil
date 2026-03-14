@@ -51,8 +51,26 @@ export {
   PermissionBuilder,
   // Types
   ACTION_PERMISSION_MAP,
+  // Overlay constants
+  OVERLAY_EPOCH_DURATION,
+  OVERLAY_NUM_EPOCHS,
+  ROLLING_WINDOW_SECONDS,
 } from "./types.js";
 export type { Network, PositionEffect } from "./types.js";
+
+// ─── State Resolver ──────────────────────────────────────────────────────────
+export {
+  resolveVaultState,
+  getRolling24hUsd,
+  getAgentRolling24hUsd,
+  getProtocolSpend,
+  bytesToAddress,
+} from "./state-resolver.js";
+export type {
+  EffectiveBudget,
+  ProtocolBudget,
+  ResolvedVaultState,
+} from "./state-resolver.js";
 
 // ─── PDA Resolution ───────────────────────────────────────────────────────────
 export {

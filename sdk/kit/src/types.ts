@@ -72,6 +72,12 @@ export const MAX_SLIPPAGE_BPS = 5_000; // 50%
 export const EPOCH_DURATION = 600; // 10 minutes in seconds
 export const NUM_EPOCHS = 144; // 144 × 10 min = 24h
 
+// ─── AgentSpendOverlay Constants ─────────────────────────────────────────────
+
+export const OVERLAY_EPOCH_DURATION = 3600; // 1 hour in seconds
+export const OVERLAY_NUM_EPOCHS = 24; // 24 × 1h = 24h
+export const ROLLING_WINDOW_SECONDS = 86_400; // 24 hours in seconds
+
 // ─── Protocol Mode ────────────────────────────────────────────────────────────
 
 export const PROTOCOL_MODE_ALL = 0;
