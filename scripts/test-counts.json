@@ -95,7 +95,7 @@
     },
     {
       "name": "MCP server (`@phalnx/mcp`)",
-      "count": 443,
+      "count": 472,
       "ciStepName": "MCP server tests",
       "claudePattern": "packages/mcp/tests/` (mocha, %d tests",
       "packageReadme": "packages/mcp/README.md",
