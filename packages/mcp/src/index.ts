@@ -61,6 +61,11 @@ import { applyConstraintsUpdate } from "./tools/apply-constraints-update";
 import { cancelConstraintsUpdate } from "./tools/cancel-constraints-update";
 import { checkConstraints } from "./tools/check-constraints";
 
+// Constraint Builder tools (no wallet required — pure computation)
+import { buildConstraints } from "./tools/build-constraints";
+import { getConstraintRuleTypes } from "./tools/get-constraint-rule-types";
+import { estimateConstraintBudget } from "./tools/estimate-constraint-budget";
+
 // Jupiter expanded integration tools
 import { getPrices } from "./tools/get-prices";
 
@@ -102,21 +107,37 @@ import {
   phalnxSetup,
   phalnxManageSchema,
   phalnxManage,
+  phalnxAdviseSchema,
+  phalnxAdvise,
 } from "./tools-v2";
 
 // Resources
 import { getPolicyResource } from "./resources/policy";
 import { getSpendingResource } from "./resources/spending";
 import { getActivityResource } from "./resources/activity";
+import { getAgentsResource } from "./resources/agents";
+import { getProtocolsResource } from "./resources/protocols";
+import { getOwnerVaultsResource } from "./resources/owner-vaults";
+import { getTokensResource } from "./resources/tokens";
+
+// Prompts
+import {
+  setupVaultPrompt,
+  setupVaultArgsSchema,
+  safeSwapPrompt,
+  safeSwapArgsSchema,
+  emergencyFreezePrompt,
+  emergencyFreezeArgsSchema,
+} from "./prompts";
 
 const NOT_CONFIGURED_MSG =
   "Phalnx is not configured yet. " +
-  'Use shield_setup_status to check status, or ask me to "Set up Phalnx".';
+  "Use phalnx_setup step='status' to check status, or ask me to \"Set up Phalnx\".";
 
 const LOCAL_KEYPAIR_WARNING =
   "⚠️  LOCAL KEYPAIR MODE — DEVNET ONLY\n" +
   "Your agent's private key is stored unencrypted at ~/.phalnx/wallets/agent.json.\n" +
-  "Safe for devnet testing only. Run `shield_configure` to provision a TEE wallet before mainnet.\n" +
+  "Safe for devnet testing only. Run phalnx_setup step='configure' to provision a TEE wallet before mainnet.\n" +
   "─────────────────────────────────────────────────────────────\n\n";
 
 /**
@@ -160,7 +181,7 @@ async function main() {
     } else {
       console.error(
         "[phalnx-mcp] No wallet configured — running in setup mode. " +
-          "Use shield_setup_status or shield_configure to get started.",
+          "Use phalnx_setup step='status' or phalnx_setup step='configure' to get started.",
       );
     }
   } catch (err) {
@@ -217,7 +238,7 @@ async function main() {
   });
 
   // ── MCP Tool Mode (v2 | legacy | dual) ────────────────────────
-  const mcpMode = process.env.PHALNX_MCP_MODE ?? "dual";
+  const mcpMode = process.env.PHALNX_MCP_MODE ?? "v2";
   const registerV2 = mcpMode === "v2" || mcpMode === "dual";
   const registerLegacy = mcpMode === "legacy" || mcpMode === "dual";
 
@@ -282,7 +303,25 @@ async function main() {
       ),
     );
 
-    console.error(`[phalnx-mcp] V2 tools registered (4 intent-based tools)`);
+    registerTool(
+      server,
+      "phalnx_advise",
+      "Agent reasoning support. Returns structured JSON guidance for deciding which tool to call next, diagnosing errors, comparing protocols, and checking capabilities. Never modifies state.",
+      {
+        question: (phalnxAdviseSchema.shape as any).question,
+        context: (phalnxAdviseSchema.shape as any).context,
+      },
+      async (input) => ({
+        content: [
+          {
+            type: "text" as const,
+            text: await phalnxAdvise(client, config, input, custodyWallet),
+          },
+        ],
+      }),
+    );
+
+    console.error(`[phalnx-mcp] V2 tools registered (5 intent-based tools)`);
   }
 
   if (!registerLegacy) {
@@ -1264,6 +1303,76 @@ async function main() {
       requireClient((input) => cancelConstraintsUpdate(client!, input)),
     );
 
+    // ── Constraint Builder Tools (no wallet required) ──────────
+
+    registerTool(
+      server,
+      "shield_build_constraints",
+      "Compile protocol constraint configurations into on-chain ConstraintEntryArgs[]. Takes dashboard-friendly JSON rules and produces optimized entries. Supports Flash Trade and Kamino. No wallet required.",
+      {
+        configs: z
+          .array(
+            z.object({
+              protocolId: z.string().describe("Protocol ID (e.g., 'flash-trade', 'kamino')"),
+              actionRules: z
+                .array(
+                  z.object({
+                    actions: z.array(z.string()).describe("Instruction names"),
+                    type: z.string().describe("Rule type"),
+                    params: z.record(z.string(), z.unknown()).describe("Rule-specific params"),
+                  }),
+                )
+                .describe("Rules for this protocol"),
+              strictMode: z.boolean().optional().describe("If true, reject actions without any rule"),
+            }),
+          )
+          .describe("Protocol constraint configurations"),
+      },
+      async (input) => ({
+        content: [{ type: "text", text: await buildConstraints(null, input) }],
+      }),
+    );
+
+    registerTool(
+      server,
+      "shield_get_constraint_rule_types",
+      "Get available constraint rule types for a protocol. Returns rule types, parameters, and applicable actions. No wallet required.",
+      {
+        protocolId: z.string().describe("Protocol ID (e.g., 'flash-trade', 'kamino')"),
+      },
+      async (input) => ({
+        content: [{ type: "text", text: await getConstraintRuleTypes(null, input) }],
+      }),
+    );
+
+    registerTool(
+      server,
+      "shield_estimate_constraint_budget",
+      "Estimate constraint entry count for protocol configurations without full compilation. No wallet required.",
+      {
+        configs: z
+          .array(
+            z.object({
+              protocolId: z.string().describe("Protocol ID"),
+              actionRules: z
+                .array(
+                  z.object({
+                    actions: z.array(z.string()).describe("Instruction names"),
+                    type: z.string().describe("Rule type"),
+                    params: z.record(z.string(), z.unknown()).describe("Rule-specific params"),
+                  }),
+                )
+                .describe("Rules for this protocol"),
+              strictMode: z.boolean().optional().describe("Strict mode flag"),
+            }),
+          )
+          .describe("Protocol configs to estimate"),
+      },
+      async (input) => ({
+        content: [{ type: "text", text: await estimateConstraintBudget(null, input) }],
+      }),
+    );
+
     // ── Platform Tools ─────────────────────────────────────────
 
     registerTool(
@@ -1765,6 +1874,120 @@ async function main() {
         ],
       };
     },
+  );
+
+  (server as any).resource(
+    "vault-agents",
+    "shield://vault/{address}/agents",
+    { description: "Agent permissions, spending limits, and status for a vault" },
+    async (uri: URL) => {
+      if (!client) {
+        return {
+          contents: [
+            {
+              uri: uri.href,
+              mimeType: "text/plain",
+              text: NOT_CONFIGURED_MSG,
+            },
+          ],
+        };
+      }
+      const address = uri.pathname.split("/")[2];
+      return {
+        contents: [
+          {
+            uri: uri.href,
+            mimeType: "application/json",
+            text: await getAgentsResource(client, address),
+          },
+        ],
+      };
+    },
+  );
+
+  (server as any).resource(
+    "protocols",
+    "shield://protocols",
+    { description: "All known DeFi protocols and their program IDs" },
+    async (uri: URL) => ({
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: "application/json",
+          text: await getProtocolsResource(),
+        },
+      ],
+    }),
+  );
+
+  (server as any).resource(
+    "owner-vaults",
+    "shield://owner/{address}/vaults",
+    { description: "All vaults owned by an address (scans first 10 IDs)" },
+    async (uri: URL) => {
+      if (!client) {
+        return {
+          contents: [
+            {
+              uri: uri.href,
+              mimeType: "text/plain",
+              text: NOT_CONFIGURED_MSG,
+            },
+          ],
+        };
+      }
+      const address = uri.pathname.split("/")[2];
+      return {
+        contents: [
+          {
+            uri: uri.href,
+            mimeType: "application/json",
+            text: await getOwnerVaultsResource(client, address),
+          },
+        ],
+      };
+    },
+  );
+
+  (server as any).resource(
+    "tokens",
+    "shield://tokens/{query}",
+    { description: "Search tokens by name, symbol, or address via Jupiter" },
+    async (uri: URL) => {
+      const query = uri.pathname.split("/")[2] ?? "";
+      return {
+        contents: [
+          {
+            uri: uri.href,
+            mimeType: "application/json",
+            text: await getTokensResource(query),
+          },
+        ],
+      };
+    },
+  );
+
+  // ── MCP Prompts ───────────────────────────────────────────
+
+  (server as any).prompt(
+    "setup-vault",
+    "Structured workflow for vault initialization — from unconfigured to operational",
+    setupVaultArgsSchema,
+    async (args: any) => setupVaultPrompt(args),
+  );
+
+  (server as any).prompt(
+    "safe-swap",
+    "Pre-flight checklist for executing a swap with full policy validation",
+    safeSwapArgsSchema,
+    async (args: any) => safeSwapPrompt(args),
+  );
+
+  (server as any).prompt(
+    "emergency-freeze",
+    "Emergency response procedure — freeze vault, capture state, assess threat",
+    emergencyFreezeArgsSchema,
+    async (args: any) => emergencyFreezePrompt(args),
   );
 
   // ── Start Server ────────────────────────────────────────────

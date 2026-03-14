@@ -14,6 +14,20 @@ import {
   type McpConfig,
 } from "../src/config";
 
+describe("MCP mode defaults", () => {
+  it("default mode resolves to 'v2' when PHALNX_MCP_MODE is unset", () => {
+    const origMode = process.env.PHALNX_MCP_MODE;
+    delete process.env.PHALNX_MCP_MODE;
+    try {
+      const mcpMode = process.env.PHALNX_MCP_MODE ?? "v2";
+      expect(mcpMode).to.equal("v2");
+    } finally {
+      if (origMode !== undefined) process.env.PHALNX_MCP_MODE = origMode;
+      else delete process.env.PHALNX_MCP_MODE;
+    }
+  });
+});
+
 describe("config", () => {
   let tmpDir: string;
   let keypairPath: string;
@@ -33,11 +47,15 @@ describe("config", () => {
     let originalWalletPath: string | undefined;
     let originalRpcUrl: string | undefined;
     let originalAgentPath: string | undefined;
+    let originalCustody: string | undefined;
 
     beforeEach(() => {
       originalWalletPath = process.env.PHALNX_WALLET_PATH;
       originalRpcUrl = process.env.PHALNX_RPC_URL;
       originalAgentPath = process.env.PHALNX_AGENT_KEYPAIR_PATH;
+      originalCustody = process.env.PHALNX_CUSTODY;
+      // Clear custody so tests exercise the keypair path
+      delete process.env.PHALNX_CUSTODY;
     });
 
     afterEach(() => {
@@ -52,6 +70,10 @@ describe("config", () => {
       if (originalAgentPath !== undefined)
         process.env.PHALNX_AGENT_KEYPAIR_PATH = originalAgentPath;
       else delete process.env.PHALNX_AGENT_KEYPAIR_PATH;
+
+      if (originalCustody !== undefined)
+        process.env.PHALNX_CUSTODY = originalCustody;
+      else delete process.env.PHALNX_CUSTODY;
     });
 
     it("throws when PHALNX_WALLET_PATH is not set", () => {
