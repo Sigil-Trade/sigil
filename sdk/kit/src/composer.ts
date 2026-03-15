@@ -6,12 +6,14 @@
  */
 
 import type { Address, Instruction } from "@solana/kit";
+import type { AddressesByLookupTableAddress } from "@solana/kit";
 import {
   pipe,
   createTransactionMessage,
   setTransactionMessageFeePayer,
   appendTransactionMessageInstructions,
   setTransactionMessageLifetimeUsingBlockhash,
+  compressTransactionMessageUsingAddressLookupTables,
   compileTransaction,
   getBase64EncodedWireTransaction,
 } from "@solana/kit";
@@ -42,8 +44,8 @@ export interface ComposeTransactionParams {
   computeUnits?: number;
   /** Optional: priority fee in microLamports per CU */
   priorityFeeMicroLamports?: number;
-  /** Optional: address lookup tables (Kit format) */
-  addressLookupTables?: readonly unknown[];
+  /** Resolved address lookup tables for transaction compression */
+  addressLookupTables?: AddressesByLookupTableAddress;
 }
 
 /**
@@ -78,7 +80,7 @@ export function composePhalnxTransaction(
     params.finalizeIx,
   );
 
-  const txMessage = pipe(
+  let txMessage = pipe(
     createTransactionMessage({ version: 0 }),
     (tx) => setTransactionMessageFeePayer(params.feePayer, tx),
     (tx) =>
@@ -90,6 +92,17 @@ export function composePhalnxTransaction(
       ),
     (tx) => appendTransactionMessageInstructions(allInstructions, tx),
   );
+
+  // Apply ALT compression if lookup tables provided
+  if (
+    params.addressLookupTables &&
+    Object.keys(params.addressLookupTables).length > 0
+  ) {
+    txMessage = compressTransactionMessageUsingAddressLookupTables(
+      txMessage as any,
+      params.addressLookupTables,
+    ) as typeof txMessage;
+  }
 
   return compileTransaction(txMessage as any);
 }
@@ -112,3 +125,22 @@ export function validateTransactionSize(
   }
   return wireBytes;
 }
+
+/**
+ * Measure transaction wire size without throwing.
+ * Non-throwing alternative to validateTransactionSize for pre-send checks.
+ */
+export function measureTransactionSize(
+  compiledTx: ReturnType<typeof compileTransaction>,
+): {
+  wireBase64: string;
+  byteLength: number;
+  withinLimit: boolean;
+} {
+  const wireBase64 = getBase64EncodedWireTransaction(compiledTx);
+  const byteLength = Math.ceil((wireBase64.length * 3) / 4);
+  return { wireBase64, byteLength, withinLimit: byteLength <= MAX_TX_SIZE };
+}
+
+/** Exported for use in fallback checks */
+export { MAX_TX_SIZE };
