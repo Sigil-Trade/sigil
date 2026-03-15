@@ -60,6 +60,9 @@ export const phalnxExecuteSchema = z.object({
       "kaminoBorrow",
       "kaminoRepay",
       "kaminoWithdraw",
+      "kaminoVaultDeposit",
+      "kaminoVaultWithdraw",
+      "kaminoMultiply",
       // Generic
       "protocol",
       "passthrough",

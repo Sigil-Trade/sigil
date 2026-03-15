@@ -33,6 +33,9 @@ export const phalnxQuerySchema = z.object({
       "protocols",
       "actions",
       "squadsStatus",
+      "kaminoMarkets",
+      "kaminoPositionHealth",
+      "kaminoYields",
     ])
     .describe("The query type"),
   params: z
@@ -258,6 +261,24 @@ export async function phalnxQuery(
 
       case "positions": {
         return "Use query 'portfolio' to view positions";
+      }
+
+      case "kaminoMarkets": {
+        const { getKaminoMarketsResource } = await import("../resources/kamino-markets");
+        return getKaminoMarketsResource();
+      }
+
+      case "kaminoYields": {
+        const { getKaminoYieldsResource } = await import("../resources/kamino-yields");
+        return getKaminoYieldsResource();
+      }
+
+      case "kaminoPositionHealth": {
+        const walletAddr =
+          (params.wallet as string) ??
+          client.provider.wallet.publicKey.toBase58();
+        const { getKaminoPositionsResource } = await import("../resources/kamino-positions");
+        return getKaminoPositionsResource(walletAddr);
       }
 
       case "squadsStatus": {

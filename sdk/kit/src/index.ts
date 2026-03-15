@@ -417,6 +417,42 @@ export type {
 // ─── Flash Trade Analytics ──────────────────────────────────────────────────
 export * from "./analytics/index.js";
 
+// ─── Kamino API ──────────────────────────────────────────────────────────
+export {
+  // Config
+  configureKaminoApi,
+  getKaminoApiConfig,
+  resetKaminoApiConfig,
+  KaminoApiError,
+  // Data queries
+  fetchKaminoMarkets,
+  fetchReserveMetrics,
+  fetchLeverageMetrics,
+  fetchObligations,
+  fetchLoanInfo,
+  fetchObligationPnl,
+  fetchStakingYields,
+  fetchUserRewards,
+  // Deserialization
+  deserializeKaminoInstruction,
+} from "./integrations/kamino-api.js";
+export type {
+  KaminoApiConfig,
+  KaminoSerializedInstruction,
+  KaminoTxResponse,
+  KaminoMarketInfo,
+  KaminoReserveMetrics,
+  KaminoLeverageMetrics,
+  KaminoObligation,
+  KaminoLoanInfo,
+  KaminoPnl,
+  StakingYield,
+  KaminoRewards,
+} from "./integrations/kamino-api.js";
+
+// ─── Kamino Verification ──────────────────────────────────────────────────
+export { verifyKaminoInstructions } from "./integrations/kamino-verify.js";
+
 // ─── Compose Errors ──────────────────────────────────────────────────────
 export {
   COMPOSE_ERROR_CODES,
@@ -483,7 +519,7 @@ export type {
 
 // ─── VelocityTracker ──────────────────────────────────────────────────────
 export { VelocityTracker } from "./velocity-tracker.js";
-export type { VelocityConfig } from "./velocity-tracker.js";
+export type { VelocityConfig, SpendStatus } from "./velocity-tracker.js";
 
 // ─── Intent-Drift Detection ──────────────────────────────────────────────
 export { detectIntentDrift, enforceIntentDrift } from "./intent-drift.js";
