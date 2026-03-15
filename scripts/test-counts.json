@@ -78,22 +78,6 @@
       "claudePattern": "sdk/custody/crossmint/tests/` (mocha, %d tests)"
     },
     {
-      "name": "SAK plugin (`@phalnx/plugin-solana-agent-kit`)",
-      "count": 34,
-      "ciStepName": "SAK plugin tests",
-      "claudePattern": "plugins/solana-agent-kit/tests/plugin.test.ts` (mocha, %d tests)",
-      "packageReadme": "plugins/solana-agent-kit/README.md",
-      "packageReadmePattern": "# Runs %d tests covering"
-    },
-    {
-      "name": "ElizaOS plugin (`@phalnx/plugin-elizaos`)",
-      "count": 35,
-      "ciStepName": "ElizaOS plugin tests",
-      "claudePattern": "plugins/elizaos/tests/plugin.test.ts` (mocha, %d tests)",
-      "packageReadme": "plugins/elizaos/README.md",
-      "packageReadmePattern": "# Runs %d tests covering"
-    },
-    {
       "name": "MCP server (`@phalnx/mcp`)",
       "count": 472,
       "ciStepName": "MCP server tests",
@@ -109,9 +93,9 @@
     },
     {
       "name": "Kit-native SDK (`@phalnx/kit`)",
-      "count": 1011,
+      "count": 1042,
       "ciStepName": "Kit SDK tests",
-      "claudePattern": "sdk/kit/tests/` (mocha + tsx, %d tests — types, resolve-accounts, composer, events, priority-fees, simulation, tokens, policies, tee-attestation, compat, rpc-helpers, transaction-executor, drift-compose, flash-compose, kamino-compose, e2e-execute, x402, velocity-tracker, intent-drift, agent-errors, jupiter-api, frozen-registry, tee, intent-engine, jupiter-handler)"
+      "claudePattern": "sdk/kit/tests/` (mocha + tsx, %d tests — types, resolve-accounts, composer, events, priority-fees, simulation, tokens, policies, tee-attestation, compat, rpc-helpers, transaction-executor, drift-compose, flash-compose, kamino-compose, e2e-execute, x402, velocity-tracker, intent-drift, agent-errors, jupiter-api, frozen-registry, tee, intent-engine, jupiter-handler, alt-loader, alt-integration)"
     }
   ]
 }

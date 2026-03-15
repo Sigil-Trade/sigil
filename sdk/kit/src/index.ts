@@ -90,10 +90,19 @@ export type {
   ResolvedAccounts,
 } from "./resolve-accounts.js";
 
+// ─── ALT (Address Lookup Table) ──────────────────────────────────────────────
+export {
+  PHALNX_ALT_DEVNET,
+  PHALNX_ALT_MAINNET,
+  getPhalnxAltAddress,
+} from "./alt-config.js";
+export { AltCache, mergeAltAddresses } from "./alt-loader.js";
+
 // ─── Transaction Composer ─────────────────────────────────────────────────────
 export {
   composePhalnxTransaction,
   validateTransactionSize,
+  measureTransactionSize,
 } from "./composer.js";
 export type { ComposeTransactionParams } from "./composer.js";
 
