@@ -14,7 +14,7 @@ import type {
 import { ActionType } from "../generated/types/actionType.js";
 import { dispatchDriftCompose } from "./drift-compose.js";
 import { dispatchFlashTradeCompose } from "./flash-compose.js";
-import { dispatchKaminoCompose } from "./kamino-compose.js";
+import { dispatchKaminoCompose } from "./kamino-api.js";
 
 // ─── Program IDs ────────────────────────────────────────────────────────────
 
@@ -130,6 +130,9 @@ const KAMINO_METADATA: ProtocolHandlerMetadata = {
     ["borrow", { actionType: ActionType.Withdraw, isSpending: false }],
     ["repay", { actionType: ActionType.Deposit, isSpending: true }],
     ["withdraw", { actionType: ActionType.Withdraw, isSpending: false }],
+    ["vaultDeposit", { actionType: ActionType.Deposit, isSpending: true }],
+    ["vaultWithdraw", { actionType: ActionType.Withdraw, isSpending: false }],
+    ["multiply", { actionType: ActionType.Deposit, isSpending: true }],
   ]),
 };
 
@@ -145,7 +148,16 @@ export class KaminoHandler implements ProtocolHandler {
   }
 
   summarize(action: string, params: Record<string, unknown>): string {
-    return `Kamino ${action} ${params.amount ?? ""} ${params.tokenMint ?? ""}`.trim();
+    switch (action) {
+      case "deposit": return `Kamino deposit ${params.amount ?? ""} ${params.tokenMint ?? ""}`.trim();
+      case "withdraw": return `Kamino withdraw ${params.amount ?? ""} ${params.tokenMint ?? ""}`.trim();
+      case "borrow": return `Kamino borrow ${params.amount ?? ""} ${params.tokenMint ?? ""}`.trim();
+      case "repay": return `Kamino repay ${params.amount ?? ""} ${params.tokenMint ?? ""}`.trim();
+      case "vaultDeposit": return `Kamino vault deposit ${params.amount ?? ""} to ${params.kvault ?? ""}`.trim();
+      case "vaultWithdraw": return `Kamino vault withdraw ${params.amount ?? ""} from ${params.kvault ?? ""}`.trim();
+      case "multiply": return `Kamino multiply ${params.amount ?? ""} ${params.depositToken ?? ""} @ ${params.targetLeverage ?? "2"}x`.trim();
+      default: return `Kamino ${action}`;
+    }
   }
 }
 

@@ -274,6 +274,31 @@ export type IntentAction =
         market?: string;
       };
     }
+  | {
+      type: "kaminoVaultDeposit";
+      params: {
+        kvault: string;
+        amount: string;
+      };
+    }
+  | {
+      type: "kaminoVaultWithdraw";
+      params: {
+        kvault: string;
+        amount: string;
+      };
+    }
+  | {
+      type: "kaminoMultiply";
+      params: {
+        depositToken: string;
+        borrowToken: string;
+        amount: string;
+        targetLeverage?: number;
+        maxLoops?: number;
+        market?: string;
+      };
+    }
   // --- Generic Protocol (escape hatch for registry-based dispatch) ---
   | {
       type: "protocol";
@@ -380,6 +405,9 @@ export const ACTION_TYPE_MAP: Record<
   kaminoBorrow: { actionType: ActionType.Withdraw, isSpending: false },
   kaminoRepay: { actionType: ActionType.Deposit, isSpending: true },
   kaminoWithdraw: { actionType: ActionType.Withdraw, isSpending: false },
+  kaminoVaultDeposit: { actionType: ActionType.Deposit, isSpending: true },
+  kaminoVaultWithdraw: { actionType: ActionType.Withdraw, isSpending: false },
+  kaminoMultiply: { actionType: ActionType.Deposit, isSpending: true },
   // Generic protocol (resolved dynamically via registry)
   protocol: { actionType: ActionType.Swap, isSpending: true },
   // Passthrough (raw instructions validated on-chain via constraints)
@@ -397,6 +425,8 @@ export type IntentStatus =
 export interface PrecheckResult {
   allowed: boolean;
   reason?: string;
+  /** On-chain error code for correlation (e.g. 6006 for DailyCapExceeded) */
+  errorCode?: number;
   details: {
     permission: {
       passed: boolean;
@@ -405,10 +435,12 @@ export interface PrecheckResult {
     };
     spendingCap?: {
       passed: boolean;
-      spent24h: number;
-      cap: number;
-      remaining: number;
-      intentAmount?: number;
+      spent24h: bigint;
+      cap: bigint;
+      remaining: bigint;
+      intentAmount?: bigint;
+      /** true when non-stablecoin or unresolvable token — cap check deferred to finalize_session */
+      deferred?: boolean;
     };
     protocol: { passed: boolean; inAllowlist: boolean };
     slippage?: {
@@ -416,6 +448,25 @@ export interface PrecheckResult {
       intentBps: number;
       vaultMaxBps: number;
     };
+    transactionSize?: { passed: boolean; maxUsd: bigint; intentUsd: bigint };
+    leverage?: { passed: boolean; maxBps: number; intentBps: number };
+    positions?: {
+      passed: boolean;
+      max: number;
+      current: number;
+      canOpen: boolean;
+    };
+  };
+  budget?: {
+    global: { spent24h: bigint; cap: bigint; remaining: bigint };
+    agent: { spent24h: bigint; cap: bigint; remaining: bigint } | null;
+    protocols: Array<{
+      protocol: string;
+      spent24h: bigint;
+      cap: bigint;
+      remaining: bigint;
+    }>;
+    maxTransactionUsd: bigint;
   };
   summary: string;
   riskFlags: string[];
@@ -521,6 +572,12 @@ export function summarizeAction(action: IntentAction): string {
       return `Kamino repay ${action.params.amount} of ${action.params.tokenMint}`;
     case "kaminoWithdraw":
       return `Kamino withdraw ${action.params.amount} of ${action.params.tokenMint}`;
+    case "kaminoVaultDeposit":
+      return `Kamino vault deposit ${action.params.amount} to ${action.params.kvault}`;
+    case "kaminoVaultWithdraw":
+      return `Kamino vault withdraw ${action.params.amount} from ${action.params.kvault}`;
+    case "kaminoMultiply":
+      return `Kamino multiply ${action.params.amount} ${action.params.depositToken} @ ${action.params.targetLeverage ?? 2}x leverage`;
     // Generic protocol
     case "protocol":
       return `${action.params.protocolId}: ${action.params.action}`;

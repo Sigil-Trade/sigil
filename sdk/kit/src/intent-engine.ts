@@ -838,7 +838,8 @@ export class IntentEngine {
    */
   private _getComposeAction(intent: IntentAction): string {
     if (intent.type.startsWith("kamino")) {
-      return intent.type.slice(6).toLowerCase();
+      const stripped = intent.type.slice(6);
+      return stripped.charAt(0).toLowerCase() + stripped.slice(1);
     }
     return intent.type;
   }
@@ -913,7 +914,10 @@ export class IntentEngine {
       intent.type === "kaminoDeposit" ||
       intent.type === "kaminoBorrow" ||
       intent.type === "kaminoRepay" ||
-      intent.type === "kaminoWithdraw"
+      intent.type === "kaminoWithdraw" ||
+      intent.type === "kaminoVaultDeposit" ||
+      intent.type === "kaminoVaultWithdraw" ||
+      intent.type === "kaminoMultiply"
     ) {
       return this.registry.getByProtocolId("kamino-lending");
     }

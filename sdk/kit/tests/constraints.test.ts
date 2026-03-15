@@ -61,11 +61,13 @@ import {
 } from "../src/constraints/protocols/kamino-schema.js";
 import { KaminoDescriptor } from "../src/constraints/protocols/kamino-descriptor.js";
 
-// Kamino Codama discriminators
-import { DEPOSIT_OBLIGATION_COLLATERAL_DISCRIMINATOR } from "../src/generated/protocols/kamino/instructions/depositObligationCollateral.js";
-import { BORROW_OBLIGATION_LIQUIDITY_DISCRIMINATOR } from "../src/generated/protocols/kamino/instructions/borrowObligationLiquidity.js";
-import { REPAY_OBLIGATION_LIQUIDITY_DISCRIMINATOR } from "../src/generated/protocols/kamino/instructions/repayObligationLiquidity.js";
-import { WITHDRAW_OBLIGATION_COLLATERAL_AND_REDEEM_RESERVE_COLLATERAL_DISCRIMINATOR } from "../src/generated/protocols/kamino/instructions/withdrawObligationCollateralAndRedeemReserveCollateral.js";
+// Kamino discriminators (from schema, not Codama generated)
+import {
+  DEPOSIT_OBLIGATION_COLLATERAL_DISCRIMINATOR,
+  BORROW_OBLIGATION_LIQUIDITY_DISCRIMINATOR,
+  REPAY_OBLIGATION_LIQUIDITY_DISCRIMINATOR,
+  WITHDRAW_OBLIGATION_COLLATERAL_AND_REDEEM_RESERVE_COLLATERAL_DISCRIMINATOR,
+} from "../src/constraints/protocols/kamino-schema.js";
 
 // Kamino market config
 import { KAMINO_RESERVES } from "../src/integrations/config/kamino-markets.js";
