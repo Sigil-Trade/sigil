@@ -5,8 +5,8 @@
  * Every error includes a category, retryability flag, and
  * recovery actions that tell the agent exactly what to do next.
  *
- * Maps all 77 on-chain error codes (6000-6076) plus 33 SDK
- * error codes (7000-7032) to AgentError with machine-readable metadata.
+ * Maps all 77 on-chain error codes (6000-6076) plus 34 SDK
+ * error codes (7000-7033) to AgentError with machine-readable metadata.
  *
  * Zero dependency on @solana/web3.js or @coral-xyz/anchor.
  * Uses bigint instead of BN for context values.
@@ -1184,7 +1184,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
 };
 
 // ---------------------------------------------------------------------------
-// SDK error codes (7000-7032) — numeric to match agent error code pattern
+// SDK error codes (7000-7033) — numeric to match agent error code pattern
 // ---------------------------------------------------------------------------
 
 const SDK_ERROR_CODES: Record<number, string> = {
@@ -1221,6 +1221,7 @@ const SDK_ERROR_CODES: Record<number, string> = {
   7030: "X402_FACILITATOR_UNTRUSTED",
   7031: "X402_CONNECTION_REQUIRED",
   7032: "X402_SETTLEMENT_FAILED",
+  7033: "TX_SIZE_OVERFLOW",
 };
 
 const SDK_ERRORS: Record<string, ErrorMapping> = {
@@ -1661,6 +1662,22 @@ const SDK_ERRORS: Record<string, ErrorMapping> = {
       },
     ],
   },
+  TX_SIZE_OVERFLOW: {
+    name: "TxSizeOverflow",
+    message: "Transaction exceeds Solana's 1,232-byte wire size limit",
+    category: "INPUT_VALIDATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "use_alt",
+        description: "Enable address lookup tables to compress the transaction",
+      },
+      {
+        action: "simplify_route",
+        description: "Use a simpler swap route with fewer hops or accounts",
+      },
+    ],
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -1672,7 +1689,7 @@ const SDK_ERRORS: Record<string, ErrorMapping> = {
  *
  * Handles:
  * - On-chain Anchor errors (code 6000-6076)
- * - SDK errors (code 7000-7032)
+ * - SDK errors (code 7000-7033)
  * - Network/RPC errors (from message patterns)
  * - Unknown errors (wrapped as FATAL)
  *
@@ -1947,7 +1964,7 @@ function extractSdkCode(error: unknown): number | null {
   if (!error || typeof error !== "object") return null;
   const e = error as Record<string, unknown>;
 
-  if (typeof e.code === "number" && e.code >= 7000 && e.code <= 7032)
+  if (typeof e.code === "number" && e.code >= 7000 && e.code <= 7033)
     return e.code;
 
   return null;

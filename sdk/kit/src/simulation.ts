@@ -31,7 +31,7 @@ export const RISK_FLAG_ERROR_MAP: Record<RiskFlag, number> = {
   [RISK_FLAG_UNKNOWN_RECIPIENT]: 7002,
   [RISK_FLAG_FULL_DRAIN]: 7003,
   [RISK_FLAG_MULTI_OUTPUT]: 7004,
-  [RISK_FLAG_SIZE_OVERFLOW]: 7005,
+  [RISK_FLAG_SIZE_OVERFLOW]: 7033,
 };
 
 // ─── Types ───────────────────────────────────────────────────────────────────

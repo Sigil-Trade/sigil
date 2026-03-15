@@ -189,15 +189,15 @@ describe("agent-errors", () => {
 
   // ─── SDK error codes ──────────────────────────────────────────────────────
 
-  describe("SDK error codes (7000-7032)", () => {
-    it("getAllSdkErrorCodes returns 33 entries", () => {
+  describe("SDK error codes (7000-7033)", () => {
+    it("getAllSdkErrorCodes returns 34 entries", () => {
       const codes = getAllSdkErrorCodes();
-      expect(codes).to.have.lengthOf(33);
+      expect(codes).to.have.lengthOf(34);
       expect(codes[0].code).to.equal(7000);
-      expect(codes[codes.length - 1].code).to.equal(7032);
+      expect(codes[codes.length - 1].code).to.equal(7033);
     });
 
-    it("all 33 SDK codes map to valid error names", () => {
+    it("all 34 SDK codes map to valid error names", () => {
       const codes = getAllSdkErrorCodes();
       const expectedNames = [
         "NETWORK_ERROR",
@@ -233,8 +233,22 @@ describe("agent-errors", () => {
         "X402_FACILITATOR_UNTRUSTED",
         "X402_CONNECTION_REQUIRED",
         "X402_SETTLEMENT_FAILED",
+        "TX_SIZE_OVERFLOW",
       ];
       expect(codes.map((c) => c.name)).to.deep.equal(expectedNames);
+    });
+
+    it("7033 maps to TX_SIZE_OVERFLOW", () => {
+      const err = toAgentError({ code: 7033, message: "TX too big" });
+      expect(err.code).to.equal("TX_SIZE_OVERFLOW");
+      expect(err.category).to.equal("INPUT_VALIDATION");
+      expect(err.retryable).to.be.false;
+    });
+
+    it("7005 maps to INTENT_EXPIRED (not SIZE_OVERFLOW)", () => {
+      const err = toAgentError({ code: 7005, message: "expired" });
+      expect(err.code).to.equal("INTENT_EXPIRED");
+      expect(err.category).to.equal("TRANSIENT");
     });
 
     it("SDK code 7014 (TEE_VERIFICATION_FAILED) is FATAL and not retryable", () => {
