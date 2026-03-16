@@ -16,7 +16,7 @@ export const protocolConfigSchema = z.object({
 
 // ── Shared kit loader + descriptor map ───────────────────────
 
-let kitCache: Awaited<ReturnType<typeof import("@phalnx/kit")>> | null = null;
+let kitCache: typeof import("@phalnx/kit") | null = null;
 
 export async function loadKit() {
   if (!kitCache) {
