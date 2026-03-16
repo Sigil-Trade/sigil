@@ -38,7 +38,8 @@
       "minimatch@^3.0.0": ">=3.1.4",
       "express-rate-limit": ">=8.2.2",
       "nanoid": ">=3.3.5",
-      "tar": ">=7.5.11"
+      "tar": ">=7.5.11",
+      "undici": ">=6.24.0"
     }
   },
   "devDependencies": {
