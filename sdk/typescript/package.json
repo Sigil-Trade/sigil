@@ -27,8 +27,8 @@
   "dependencies": {
     "@phalnx/core": "workspace:*",
     "@solana/spl-token": "^0.4.0",
-    "@x402/core": "^2.4.0",
-    "cbor-x": "^1.6.0"
+    "@x402/core": "^2.6.0",
+    "cbor-x": "^1.6.4"
   },
   "peerDependencies": {
     "@coral-xyz/anchor": "^0.32.1",
@@ -36,10 +36,10 @@
     "zod": "^3.22.0"
   },
   "optionalDependencies": {
-    "flash-sdk": "^15.1.4",
+    "flash-sdk": "^15.9.0",
     "@sqds/multisig": "^2.1.4",
     "@drift-labs/sdk": "^2.0.0",
-    "@kamino-finance/klend-sdk": "^5.0.0"
+    "@kamino-finance/klend-sdk": "^7.3.20"
   },
   "devDependencies": {
     "@types/bn.js": "^5.1.5",
