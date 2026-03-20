@@ -20,8 +20,9 @@ import {
 } from "@solana/spl-token";
 import { expect } from "chai";
 import BN from "bn.js";
-import { FLASH_TRADE_PROGRAM_ID } from "../sdk/typescript/src/integrations/flash-trade";
-import { CU_FLASH_TRADE } from "../sdk/typescript/src/priority-fees";
+// Inlined constants — sdk/typescript was deleted in Phase 0 nuclear cleanup
+const FLASH_TRADE_PROGRAM_ID = new PublicKey("FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn");
+const CU_FLASH_TRADE = 800_000;
 import {
   createTestEnv,
   airdropSol,
@@ -759,33 +760,26 @@ describe("flash-trade-integration", () => {
   });
 
   // =========================================================================
-  // Spend tracking recorded correctly (V2 epoch buckets)
+  // Spend tracking: outcome-based (V2 epoch buckets)
   // =========================================================================
-  describe("spend tracking", () => {
-    it("records spending from perpetual actions in tracker buckets", async () => {
-      // The main vault already has several transactions from earlier tests
-      // (open, close, increase, decrease). V2 SpendTracker uses epoch
-      // buckets instead of per-transaction records.
+  describe("spend tracking (outcome-based)", () => {
+    it("records zero spend with mock DeFi actions (no real token movement)", async () => {
+      // Outcome-based enforcement (Phase 1): finalize_session measures
+      // actual stablecoin balance delta. Mock DeFi instructions don't move
+      // tokens, so actual_spend = 0 and no spending is recorded in the
+      // tracker. This verifies the outcome-based measurement is correct —
+      // cap enforcement with real token movement is tested via Rust unit
+      // tests and devnet E2E with real DeFi programs.
       const tracker = await program.account.spendTracker.fetch(trackerPda);
 
-      // At least one bucket should have non-zero USD spend
+      // All buckets should have zero USD spend (mock actions = no real balance change)
       const nonZeroBuckets = tracker.buckets.filter(
         (b: any) => b.usdAmount.toNumber() > 0,
       );
       expect(
         nonZeroBuckets.length,
-        "should have at least one non-zero bucket",
-      ).to.be.greaterThan(0);
-
-      // The aggregate spend should reflect all transactions
-      const totalBucketSpend = nonZeroBuckets.reduce(
-        (acc: number, b: any) => acc + b.usdAmount.toNumber(),
-        0,
-      );
-      expect(
-        totalBucketSpend,
-        "total bucket spend should be greater than zero",
-      ).to.be.greaterThan(0);
+        "all buckets should be zero (outcome-based: mock DeFi = no spend)",
+      ).to.equal(0);
 
       // Verify vault-level counters confirm all actions executed
       const vault = await program.account.agentVault.fetch(vaultPda);

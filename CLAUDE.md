@@ -150,7 +150,6 @@ Specs live in `programs/phalnx/src/certora/specs/`:
 ## Error Codes (6000–6069)
 
 70 error codes. Source of truth: `programs/phalnx/src/errors.rs`. See `docs/ERROR-CODES.md` for full table.
-MCP server maps all 70 codes to human-readable suggestions in `packages/mcp/src/errors.ts`.
 
 ---
 
@@ -176,7 +175,7 @@ MCP server maps all 70 codes to human-readable suggestions in `packages/mcp/src/
 
 ## Current State
 
-On-chain program has 29 instructions, 9 PDA types, and is under active development (not frozen). The SDK is pivoting from per-protocol IntentEngine to protocol-agnostic `wrap()` API. See `WRAP-ARCHITECTURE-PLAN.md` for the definitive implementation plan and `scripts/test-counts.json` for test counts.
+On-chain program has 29 instructions, 9 PDA types, and is under active development (not frozen). The SDK uses the protocol-agnostic `wrap()` API as the primary entry point, with `createVault()` for vault provisioning. Spending enforcement is **outcome-based**: `finalize_session` measures actual stablecoin balance delta (not declared amounts) for cap checks. See `WRAP-ARCHITECTURE-PLAN.md` for the definitive implementation plan and `scripts/test-counts.json` for test counts.
 
 ### Wrap Architecture (Definitive Direction)
 

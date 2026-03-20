@@ -7,7 +7,7 @@
 > Program: `programs/phalnx/` — Anchor 0.32.1, Rust 1.89.0
 > 29 instruction handlers, 9 PDA account types, 70 error codes, 31 events.
 >
-> Cross-reference: See PRODUCTION_AUDIT.md for the latest audit findings.
+> Cross-reference: See `docs/ARCHITECTURE.md` for account model and `sdk/kit/src/agent-errors.ts` for error mappings.
 
 ---
 
@@ -28,8 +28,8 @@ The owner holds full authority. The agent is an execute-only key that can only o
 
 Phalnx bundles three layers of protection:
 
-1. **Client-side policy engine** (`@phalnx/sdk`) — Software policy enforcement, fast deny before transactions hit the network.
-2. **On-chain vault** (`@phalnx/sdk` + TEE custody) — TEE key custody (Crossmint/Turnkey) + on-chain PDA vaults with cryptographic guarantees. Cannot be bypassed by compromised software. Production.
+1. **Client-side policy engine** (`@phalnx/kit`) — Software policy enforcement, fast deny before transactions hit the network.
+2. **On-chain vault** (`@phalnx/kit` + TEE custody) — TEE key custody (Crossmint/Turnkey) + on-chain PDA vaults with cryptographic guarantees. Cannot be bypassed by compromised software. Production.
 
 This document covers the on-chain vault component.
 
@@ -82,6 +82,9 @@ The `daily_spending_cap_usd` is an aggregate rolling 24-hour cap across all toke
 
 ### INV-8: Timelocked Policy Changes
 When `PolicyConfig.timelock_duration > 0`, direct `update_policy` calls are blocked (`TimelockActive`, error 6027). Policy changes must go through `queue_policy_update` → (wait `timelock_duration` seconds) → `apply_pending_policy`. The owner can cancel at any time via `cancel_pending_policy`.
+
+### INV-9: Outcome-Based Spending Enforcement
+Spending caps are enforced in `finalize_session` based on **actual stablecoin balance delta**, not declared intent. `validate_and_authorize` snapshots the vault's stablecoin balance before fees/DeFi execution. `finalize_session` measures the current balance and computes `actual_spend = total_decrease - fees_collected`. Only when `actual_spend > 0` are caps checked (daily rolling cap, per-agent cap, per-protocol cap, per-transaction max). This prevents agents from under-declaring amounts to bypass caps — the program measures reality, not promises. Standalone instructions (`agentTransfer`, `createEscrow`) retain inline cap checks since they move tokens directly.
 
 ---
 
@@ -265,9 +268,8 @@ The SDK trusts RPC account data for client-side precheck. A malicious RPC can su
 - Program entrypoint in `programs/phalnx/src/lib.rs`
 
 ### Out of Scope
-- TypeScript SDK (`sdk/typescript/`) — off-chain code
-- MCP server (`packages/mcp/`) — AI tool integration
-- Actions server (`apps/actions-server/`) — Solana Actions/Blinks
+- Kit SDK (`sdk/kit/`) — off-chain code
+- Custody adapters (`sdk/custody/`) — TEE provider integrations
 - Plugins (`plugins/`) — framework integrations
 - Dashboard (separate repo)
 

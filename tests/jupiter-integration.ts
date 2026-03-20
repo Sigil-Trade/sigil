@@ -20,11 +20,27 @@ import {
 } from "@solana/spl-token";
 import { expect } from "chai";
 import BN from "bn.js";
-import {
-  JUPITER_PROGRAM_ID,
-  deserializeInstruction,
-} from "../sdk/typescript/src/integrations/jupiter";
-import { CU_JUPITER_SWAP } from "../sdk/typescript/src/priority-fees";
+// Inlined constants — sdk/typescript was deleted in Phase 0 nuclear cleanup
+const JUPITER_PROGRAM_ID = new PublicKey("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4");
+const CU_JUPITER_SWAP = 600_000;
+
+interface JupiterSerializedInstruction {
+  programId: string;
+  accounts: Array<{ pubkey: string; isSigner: boolean; isWritable: boolean }>;
+  data: string;
+}
+
+function deserializeInstruction(ix: JupiterSerializedInstruction): TransactionInstruction {
+  return new TransactionInstruction({
+    programId: new PublicKey(ix.programId),
+    keys: ix.accounts.map((acc) => ({
+      pubkey: new PublicKey(acc.pubkey),
+      isSigner: acc.isSigner,
+      isWritable: acc.isWritable,
+    })),
+    data: Buffer.from(ix.data, "base64"),
+  });
+}
 import {
   createTestEnv,
   airdropSol,
@@ -371,12 +387,19 @@ describe("jupiter-integration", () => {
   });
 
   // =========================================================================
-  // Error: daily cap exceeded
+  // Outcome-based spending: mock swaps record zero actual spend
   // =========================================================================
-  describe("daily cap exceeded", () => {
-    it("reverts entire atomic TX when amount exceeds remaining daily budget", async () => {
-      // Already spent 80 USDC (50 + 30). Cap is 500 USDC. Max tx = 200 USDC.
-      // First spend 200 USDC twice more (80+200+200 = 480, under 500 cap)
+  describe("outcome-based spending with mock swaps", () => {
+    it("succeeds when declared amount exceeds cap because actual spend is zero (outcome-based)", async () => {
+      // Outcome-based enforcement (Phase 1): finalize_session measures the
+      // actual stablecoin balance delta, not the declared amount. Mock swap
+      // instructions don't move tokens, so actual_spend = 0 and the cap check
+      // is never triggered. Cap enforcement with real token movement is tested
+      // via Rust unit tests and devnet E2E with real DeFi programs.
+
+      // Already spent 80 USDC in declared amounts from happy path tests.
+      // With outcome-based: tracker has 0 recorded spend (mock swaps).
+      // Send more swaps — all succeed because actual_spend = 0.
       await sendComposedSwap(
         vaultPda,
         policyPda,
@@ -396,46 +419,28 @@ describe("jupiter-integration", () => {
         jupiterProtocol,
       );
 
-      // Now at 480 spent. Try 50 USDC — total would be 530 > 500 cap
-      const [session] = PublicKey.findProgramAddressSync(
-        [
-          Buffer.from("session"),
-          vaultPda.toBuffer(),
-          agent.publicKey.toBuffer(),
-          usdcMint.toBuffer(),
-        ],
-        program.programId,
+      // This would exceed the 500 USDC cap if spending were declaration-based,
+      // but succeeds because outcome-based enforcement measures zero actual spend.
+      await sendComposedSwap(
+        vaultPda,
+        policyPda,
+        trackerPda,
+        agent,
+        usdcMint,
+        new BN(50_000_000),
+        jupiterProtocol,
       );
 
-      try {
-        await sendComposedSwap(
-          vaultPda,
-          policyPda,
-          trackerPda,
-          agent,
-          usdcMint,
-          new BN(50_000_000),
-          jupiterProtocol,
-        );
-        expect.fail("Should have thrown");
-      } catch (err: any) {
-        if (err.message === "Should have thrown") throw err;
-        expect(err.message || err.toString()).to.include("SpendingCapExceeded");
-      }
+      // Verify vault recorded all transactions (finalize succeeds with actual_spend=0)
+      const vault = await program.account.agentVault.fetch(vaultPda);
+      expect(vault.totalTransactions.toNumber()).to.be.greaterThanOrEqual(5);
 
-      // Verify session was NOT created (atomic revert)
-      try {
-        await program.account.sessionAuthority.fetch(session);
-        expect.fail("Session should not exist after revert");
-      } catch (err: any) {
-        // LiteSVM proxy returns "Account does not exist"; Anchor provider
-        // returns "Could not find". Both confirm the session PDA was closed.
-        expect(err.toString()).to.satisfy(
-          (s: string) =>
-            s.includes("Account does not exist") ||
-            s.includes("Could not find"),
-        );
-      }
+      // Verify tracker has zero rolling spend (mock swaps produce no balance delta)
+      const tracker = await program.account.spendTracker.fetch(trackerPda);
+      const nonZeroBuckets = tracker.buckets.filter(
+        (b: any) => b.usdAmount.toNumber() > 0,
+      );
+      expect(nonZeroBuckets.length).to.equal(0);
     });
   });
 
@@ -721,7 +726,11 @@ describe("jupiter-integration", () => {
         .rpc();
     });
 
-    it("allows multiple swaps under cap, then rejects when exceeded", async () => {
+    it("all swaps succeed with outcome-based enforcement (mock swaps = zero spend)", async () => {
+      // Outcome-based enforcement: finalize_session measures actual stablecoin
+      // balance delta. Mock swaps don't move tokens → actual_spend = 0 →
+      // cap check skipped. All swaps succeed regardless of declared amounts.
+
       // Verify agent is registered
       const vaultState = await program.account.agentVault.fetch(rollingVault);
       expect(vaultState.agents[0].pubkey.toString()).to.equal(
@@ -729,7 +738,7 @@ describe("jupiter-integration", () => {
         "Agent should be registered for rolling window vault",
       );
 
-      // Swap 1: 40 USDC (total: 40 / 100)
+      // Swap 1: 40 USDC declared (actual spend = 0)
       await sendComposedSwap(
         rollingVault,
         rollingPolicy,
@@ -745,7 +754,7 @@ describe("jupiter-integration", () => {
       let vault = await program.account.agentVault.fetch(rollingVault);
       expect(vault.totalTransactions.toNumber()).to.equal(1);
 
-      // Swap 2: 40 USDC (total: 80 / 100)
+      // Swap 2: 40 USDC declared (actual spend = 0)
       await sendComposedSwap(
         rollingVault,
         rollingPolicy,
@@ -761,28 +770,23 @@ describe("jupiter-integration", () => {
       vault = await program.account.agentVault.fetch(rollingVault);
       expect(vault.totalTransactions.toNumber()).to.equal(2);
 
-      // Swap 3: 30 USDC (total: 110 > 100 cap) — should fail
-      try {
-        await sendComposedSwap(
-          rollingVault,
-          rollingPolicy,
-          rollingTracker,
-          agent,
-          usdcMint,
-          new BN(30_000_000),
-          jupiterProtocol,
-          true,
-          rollingVaultUsdcAta,
-        );
-        expect.fail("Should have thrown");
-      } catch (err: any) {
-        if (err.message === "Should have thrown") throw err;
-        expect(err.message || err.toString()).to.include("SpendingCapExceeded");
-      }
+      // Swap 3: 30 USDC declared — would exceed 100 cap if declaration-based,
+      // but succeeds because outcome-based enforcement sees zero actual spend.
+      await sendComposedSwap(
+        rollingVault,
+        rollingPolicy,
+        rollingTracker,
+        agent,
+        usdcMint,
+        new BN(30_000_000),
+        jupiterProtocol,
+        true,
+        rollingVaultUsdcAta,
+      );
 
-      // Verify state wasn't modified by the failed tx
+      // All 3 TXs succeeded
       vault = await program.account.agentVault.fetch(rollingVault);
-      expect(vault.totalTransactions.toNumber()).to.equal(2);
+      expect(vault.totalTransactions.toNumber()).to.equal(3);
     });
   });
 
