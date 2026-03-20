@@ -58,8 +58,8 @@ const SDK_ERROR_MAP: Record<number, ErrorEntry> = {
     suggestion: "Reduce the amount or increase maxTransactionSizeUsd.",
   },
   6006: {
-    name: "DailyCapExceeded",
-    message: "Daily spending cap would be exceeded",
+    name: "SpendingCapExceeded",
+    message: "Rolling 24h spending cap would be exceeded",
     suggestion:
       "Wait for the 24h rolling window to reset or increase dailySpendingCapUsd.",
   },
@@ -84,33 +84,33 @@ const SDK_ERROR_MAP: Record<number, ErrorEntry> = {
     suggestion: "Add the destination to allowedDestinations.",
   },
   6037: {
-    name: "SlippageTooHigh",
-    message: "Slippage exceeds policy max_slippage_bps",
+    name: "SwapSlippageExceeded",
+    message: "Swap slippage exceeds policy max_slippage_bps",
     suggestion: "Reduce slippage tolerance or increase maxSlippageBps.",
   },
-  6047: {
+  6044: {
     name: "InsufficientPermissions",
     message: "Agent lacks permission for this action type",
     suggestion: "Update the agent's permission bitmask to include this action.",
   },
-  6063: {
+  6056: {
     name: "AgentSpendLimitExceeded",
     message: "Agent's rolling 24h spend exceeds their individual limit",
     suggestion:
       "Wait for the rolling window or increase the agent's spending_limit_usd.",
   },
-  6074: {
+  6067: {
     name: "AgentPaused",
     message: "Agent is paused and cannot execute actions",
     suggestion:
       "The vault owner has paused this agent. Contact the owner to unpause.",
   },
-  6075: {
+  6068: {
     name: "AgentAlreadyPaused",
     message: "Agent is already paused",
     suggestion: "The agent is already paused — no action needed.",
   },
-  6076: {
+  6069: {
     name: "AgentNotPaused",
     message: "Agent is not paused",
     suggestion:

@@ -49,7 +49,7 @@ describe("shield_create_constraints", () => {
 
   it("returns error on SDK failure", async () => {
     const client = createMockClient({
-      shouldThrow: Object.assign(new Error("test"), { code: 6055 }),
+      shouldThrow: Object.assign(new Error("test"), { code: 6052 }),
     });
     const result = await createConstraints(client as any, {
       vault,

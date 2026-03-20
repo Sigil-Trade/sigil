@@ -27,7 +27,7 @@ describe("shield_refund_escrow", () => {
 
   it("returns error when not expired", async () => {
     const client = createMockClient({
-      shouldThrow: Object.assign(new Error("test"), { code: 6051 }),
+      shouldThrow: Object.assign(new Error("test"), { code: 6048 }),
     });
     const result = await refundEscrow(client as any, {
       sourceVault: TEST_VAULT_PDA.toBase58(),

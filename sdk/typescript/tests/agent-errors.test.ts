@@ -18,14 +18,14 @@ describe("agent-errors", () => {
       expect(result.retryable).to.be.true;
       expect(result.retry_after_ms).to.equal(3_600_000);
       expect(result.recovery_actions.length).to.be.greaterThan(0);
-      expect(result.context).to.have.property("error_name", "DailyCapExceeded");
+      expect(result.context).to.have.property("error_name", "SpendingCapExceeded");
     });
 
     it("converts Anchor-format error", () => {
       const result = toAgentError({
-        error: { errorCode: { number: 6047 } },
+        error: { errorCode: { number: 6044 } },
       });
-      expect(result.code).to.equal("6047");
+      expect(result.code).to.equal("6044");
       expect(result.category).to.equal("PERMISSION");
       expect(result.retryable).to.be.false;
       expect(result.context).to.have.property(
@@ -117,7 +117,7 @@ describe("agent-errors", () => {
 
   describe("agentErrorFromCode", () => {
     it("resolves on-chain code", () => {
-      const result = agentErrorFromCode("6047");
+      const result = agentErrorFromCode("6044");
       expect(result.category).to.equal("PERMISSION");
       expect(result.recovery_actions.length).to.be.greaterThan(0);
     });
@@ -167,11 +167,11 @@ describe("agent-errors", () => {
   });
 
   describe("error code coverage", () => {
-    it("maps all 71 on-chain error codes (6000-6070)", () => {
+    it("maps all 70 on-chain error codes (6000-6069)", () => {
       const codes = getAllOnChainErrorCodes();
-      expect(codes).to.have.length(71);
+      expect(codes).to.have.length(70);
       expect(codes[0]).to.equal(6000);
-      expect(codes[codes.length - 1]).to.equal(6070);
+      expect(codes[codes.length - 1]).to.equal(6069);
 
       // Verify continuous range
       for (let i = 0; i < codes.length; i++) {
@@ -191,7 +191,7 @@ describe("agent-errors", () => {
         "FATAL",
       ];
 
-      for (let code = 6000; code <= 6070; code++) {
+      for (let code = 6000; code <= 6069; code++) {
         const err = agentErrorFromCode(String(code));
         expect(validCategories).to.include(
           err.category,
@@ -201,7 +201,7 @@ describe("agent-errors", () => {
     });
 
     it("every on-chain code has a non-empty message", () => {
-      for (let code = 6000; code <= 6070; code++) {
+      for (let code = 6000; code <= 6069; code++) {
         const err = agentErrorFromCode(String(code));
         expect(err.message.length).to.be.greaterThan(
           0,
@@ -211,7 +211,7 @@ describe("agent-errors", () => {
     });
 
     it("every on-chain code has recovery_actions array", () => {
-      for (let code = 6000; code <= 6070; code++) {
+      for (let code = 6000; code <= 6069; code++) {
         const err = agentErrorFromCode(String(code));
         expect(Array.isArray(err.recovery_actions)).to.be.true;
         expect(err.recovery_actions.length).to.be.greaterThan(
@@ -246,7 +246,7 @@ describe("agent-errors", () => {
     });
 
     it("PERMISSION errors are not retryable", () => {
-      const permCodes = [6001, 6002, 6010, 6047];
+      const permCodes = [6001, 6002, 6010, 6044];
       for (const code of permCodes) {
         const err = agentErrorFromCode(String(code));
         expect(err.category).to.equal("PERMISSION");
@@ -279,7 +279,7 @@ describe("agent-errors", () => {
   });
 
   describe("recovery actions", () => {
-    it("DailyCapExceeded has reduce_amount, check_spending, and wait actions", () => {
+    it("SpendingCapExceeded has reduce_amount, check_spending, and wait actions", () => {
       const err = agentErrorFromCode("6006");
       const actions = err.recovery_actions.map((a) => a.action);
       expect(actions).to.include("reduce_amount");
@@ -288,7 +288,7 @@ describe("agent-errors", () => {
     });
 
     it("InsufficientPermissions has check_permissions action with tool reference", () => {
-      const err = agentErrorFromCode("6047");
+      const err = agentErrorFromCode("6044");
       const checkAction = err.recovery_actions.find(
         (a) => a.action === "check_permissions",
       );
@@ -297,7 +297,7 @@ describe("agent-errors", () => {
     });
 
     it("recovery actions have non-empty descriptions", () => {
-      for (let code = 6000; code <= 6070; code++) {
+      for (let code = 6000; code <= 6069; code++) {
         const err = agentErrorFromCode(String(code));
         for (const action of err.recovery_actions) {
           expect(action.action.length).to.be.greaterThan(

@@ -3,8 +3,8 @@ import { lookupError, formatError, ERROR_MAP } from "../src/errors";
 
 describe("errors", () => {
   describe("ERROR_MAP", () => {
-    it("has entries for error codes 6000–6073", () => {
-      for (let code = 6000; code <= 6073; code++) {
+    it("has entries for error codes 6000–6069", () => {
+      for (let code = 6000; code <= 6069; code++) {
         expect(ERROR_MAP[code], `Missing error code ${code}`).to.exist;
         expect(ERROR_MAP[code].code).to.equal(code);
         expect(ERROR_MAP[code].name).to.be.a("string");
@@ -13,8 +13,8 @@ describe("errors", () => {
       }
     });
 
-    it("has exactly 77 entries", () => {
-      expect(Object.keys(ERROR_MAP)).to.have.length(77);
+    it("has exactly 70 entries", () => {
+      expect(Object.keys(ERROR_MAP)).to.have.length(70);
     });
 
     it("no suggestion string contains legacy shield_ tool names", () => {
@@ -35,9 +35,9 @@ describe("errors", () => {
       expect(info.suggestion).to.include("reactivate");
     });
 
-    it("returns DailyCapExceeded for code 6006", () => {
+    it("returns SpendingCapExceeded for code 6006", () => {
       const info = lookupError(6006);
-      expect(info.name).to.equal("DailyCapExceeded");
+      expect(info.name).to.equal("SpendingCapExceeded");
       expect(info.suggestion).to.include("rolling window");
     });
 
@@ -57,7 +57,7 @@ describe("errors", () => {
     it("formats Anchor errors with code and suggestion", () => {
       const error = { code: 6003 };
       const msg = formatError(error);
-      expect(msg).to.include("TokenNotRegistered");
+      expect(msg).to.include("UnsupportedToken");
       expect(msg).to.include("Suggestion:");
     });
 
@@ -132,7 +132,7 @@ describe("errors", () => {
     });
 
     it("includes suggestion for every Anchor error", () => {
-      for (let code = 6000; code <= 6070; code++) {
+      for (let code = 6000; code <= 6069; code++) {
         const msg = formatError({ code });
         expect(msg, `Code ${code} missing suggestion`).to.include(
           "Suggestion:",
@@ -140,12 +140,12 @@ describe("errors", () => {
       }
     });
 
-    it("formatError maps new stablecoin-only errors", () => {
+    it("formatError maps stablecoin-only errors", () => {
       const slippage = formatError({ code: 6037 });
-      expect(slippage).to.include("SlippageTooHigh");
+      expect(slippage).to.include("SwapSlippageExceeded");
 
-      const dustDeposit = formatError({ code: 6041 });
-      expect(dustDeposit).to.include("DustDepositDetected");
+      const tokenTransfer = formatError({ code: 6039 });
+      expect(tokenTransfer).to.include("UnauthorizedTokenTransfer");
 
       const nonTracked = formatError({ code: 6036 });
       expect(nonTracked).to.include("NonTrackedSwapMustReturnStablecoin");

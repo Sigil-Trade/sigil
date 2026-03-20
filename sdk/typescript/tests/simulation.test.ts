@@ -16,8 +16,8 @@ import { TransactionSimulationError } from "../src/wrapper/errors";
 
 describe("simulation", () => {
   describe("ANCHOR_ERROR_MAP", () => {
-    it("has all 64 error codes (6000-6063)", () => {
-      for (let code = 6000; code <= 6063; code++) {
+    it("has all 70 error codes (6000-6069)", () => {
+      for (let code = 6000; code <= 6069; code++) {
         expect(ANCHOR_ERROR_MAP[code], `Missing error code ${code}`).to.exist;
         expect(ANCHOR_ERROR_MAP[code].name).to.be.a("string");
         expect(ANCHOR_ERROR_MAP[code].suggestion).to.be.a("string");
@@ -28,37 +28,37 @@ describe("simulation", () => {
       expect(ANCHOR_ERROR_MAP[6000].name).to.equal("VaultNotActive");
     });
 
-    it("maps 6006 to DailyCapExceeded", () => {
-      expect(ANCHOR_ERROR_MAP[6006].name).to.equal("DailyCapExceeded");
+    it("maps 6006 to SpendingCapExceeded", () => {
+      expect(ANCHOR_ERROR_MAP[6006].name).to.equal("SpendingCapExceeded");
     });
 
     it("maps 6024 to Overflow", () => {
       expect(ANCHOR_ERROR_MAP[6024].name).to.equal("Overflow");
     });
 
-    it("maps 6046 to MaxAgentsReached", () => {
-      expect(ANCHOR_ERROR_MAP[6046].name).to.equal("MaxAgentsReached");
+    it("maps 6043 to MaxAgentsReached", () => {
+      expect(ANCHOR_ERROR_MAP[6043].name).to.equal("MaxAgentsReached");
     });
 
-    it("maps 6049 to EscrowNotActive", () => {
-      expect(ANCHOR_ERROR_MAP[6049].name).to.equal("EscrowNotActive");
+    it("maps 6046 to EscrowNotActive", () => {
+      expect(ANCHOR_ERROR_MAP[6046].name).to.equal("EscrowNotActive");
     });
 
-    it("maps 6055 to InvalidConstraintConfig", () => {
-      expect(ANCHOR_ERROR_MAP[6055].name).to.equal("InvalidConstraintConfig");
+    it("maps 6052 to InvalidConstraintConfig", () => {
+      expect(ANCHOR_ERROR_MAP[6052].name).to.equal("InvalidConstraintConfig");
     });
 
-    it("maps 6063 to AgentSpendLimitExceeded", () => {
-      expect(ANCHOR_ERROR_MAP[6063].name).to.equal("AgentSpendLimitExceeded");
+    it("maps 6056 to AgentSpendLimitExceeded", () => {
+      expect(ANCHOR_ERROR_MAP[6056].name).to.equal("AgentSpendLimitExceeded");
     });
 
-    it("has no entries outside 6000-6063", () => {
+    it("has no entries outside 6000-6069", () => {
       const codes = Object.keys(ANCHOR_ERROR_MAP).map(Number);
       for (const code of codes) {
         expect(code).to.be.at.least(6000);
-        expect(code).to.be.at.most(6063);
+        expect(code).to.be.at.most(6069);
       }
-      expect(codes).to.have.lengthOf(64);
+      expect(codes).to.have.lengthOf(70);
     });
   });
 
@@ -173,7 +173,7 @@ describe("simulation", () => {
       const result = await simulateTransaction(mockConnection, tx);
       expect(result.success).to.be.false;
       expect(result.error!.anchorCode).to.equal(0x1776); // 6006
-      expect(result.error!.anchorName).to.equal("DailyCapExceeded");
+      expect(result.error!.anchorName).to.equal("SpendingCapExceeded");
       expect(result.error!.suggestion).to.include("spending cap");
     });
 

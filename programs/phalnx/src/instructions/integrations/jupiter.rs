@@ -270,10 +270,10 @@ pub fn verify_jupiter_slippage(ix_data: &[u8], max_slippage_bps: u16) -> Result<
     let slippage_bps = u16::from_le_bytes([ix_data[cursor + 16], ix_data[cursor + 17]]);
 
     // 7. Verify slippage within policy
-    require!(quoted_out > 0, PhalnxError::SlippageTooHigh);
+    require!(quoted_out > 0, PhalnxError::SwapSlippageExceeded);
     require!(
         slippage_bps <= max_slippage_bps,
-        PhalnxError::SlippageTooHigh
+        PhalnxError::SwapSlippageExceeded
     );
 
     Ok(())
@@ -622,7 +622,7 @@ mod tests {
         );
     }
 
-    // --- Test 14: Slippage exceeds policy → SlippageTooHigh ---
+    // --- Test 14: Slippage exceeds policy → SwapSlippageExceeded ---
     #[test]
     fn slippage_exceeds_policy() {
         let data = build_v1_data(
@@ -638,11 +638,11 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err(),
-            anchor_lang::error!(PhalnxError::SlippageTooHigh)
+            anchor_lang::error!(PhalnxError::SwapSlippageExceeded)
         );
     }
 
-    // --- Test 15: Zero quoted output → SlippageTooHigh ---
+    // --- Test 15: Zero quoted output → SwapSlippageExceeded ---
     #[test]
     fn zero_quoted_output_rejected() {
         let data = build_v1_data(
@@ -658,7 +658,7 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err(),
-            anchor_lang::error!(PhalnxError::SlippageTooHigh)
+            anchor_lang::error!(PhalnxError::SwapSlippageExceeded)
         );
     }
 
@@ -711,7 +711,7 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err(),
-            anchor_lang::error!(PhalnxError::SlippageTooHigh)
+            anchor_lang::error!(PhalnxError::SwapSlippageExceeded)
         );
     }
 

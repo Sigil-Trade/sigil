@@ -5,7 +5,7 @@
  * Every error includes a category, retryability flag, and
  * recovery actions that tell the agent exactly what to do next.
  *
- * Maps all 71 on-chain error codes (6000-6070) plus common
+ * Maps all 70 on-chain error codes (6000-6069) plus common
  * SDK/network errors to AgentError with machine-readable metadata.
  */
 
@@ -54,7 +54,7 @@ export interface AgentError {
 }
 
 // ---------------------------------------------------------------------------
-// On-chain error code mapping (6000-6070)
+// On-chain error code mapping (6000-6069)
 // ---------------------------------------------------------------------------
 
 interface ErrorMapping {
@@ -118,7 +118,7 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     ],
   },
   6003: {
-    name: "TokenNotRegistered",
+    name: "UnsupportedToken",
     message:
       "Token is not a recognized stablecoin (only USDC and USDT supported)",
     category: "INPUT_VALIDATION",
@@ -166,8 +166,8 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     ],
   },
   6006: {
-    name: "DailyCapExceeded",
-    message: "Daily spending cap would be exceeded",
+    name: "SpendingCapExceeded",
+    message: "Rolling 24h spending cap would be exceeded",
     category: "SPENDING_CAP",
     retryable: true,
     retry_after_ms: 3_600_000, // 1 hour — rolling window releases over time
@@ -602,9 +602,8 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     ],
   },
   6037: {
-    name: "SlippageTooHigh",
-    message:
-      "Jupiter slippage exceeds policy max_slippage_bps or quoted output is zero",
+    name: "SwapSlippageExceeded",
+    message: "Swap slippage exceeds policy max_slippage_bps",
     category: "POLICY_VIOLATION",
     retryable: true,
     retry_after_ms: 5_000,
@@ -639,33 +638,7 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     ],
   },
   6039: {
-    name: "InvalidFlashTradeInstruction",
-    message: "Cannot parse Flash Trade instruction data",
-    category: "FATAL",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "use_sdk",
-        description: "Use the SDK's Flash Trade compose functions",
-      },
-    ],
-  },
-  6040: {
-    name: "FlashTradePriceZero",
-    message: "Flash Trade priceWithSlippage is zero",
-    category: "INPUT_VALIDATION",
-    retryable: true,
-    retry_after_ms: 5_000,
-    recovery_actions: [
-      {
-        action: "retry",
-        description:
-          "Retry — the oracle price feed may have been temporarily unavailable",
-      },
-    ],
-  },
-  6041: {
-    name: "DustDepositDetected",
+    name: "UnauthorizedTokenTransfer",
     message:
       "Top-level SPL Token transfer detected between validate and finalize (potential exploit)",
     category: "FATAL",
@@ -678,19 +651,7 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6042: {
-    name: "InvalidJupiterLendInstruction",
-    message: "Cannot parse Jupiter Lend instruction data",
-    category: "FATAL",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "use_sdk",
-        description: "Use the SDK's Jupiter Lend compose functions",
-      },
-    ],
-  },
-  6043: {
+  6040: {
     name: "SlippageBpsTooHigh",
     message: "Slippage BPS exceeds maximum allowed (5000 = 50%)",
     category: "INPUT_VALIDATION",
@@ -702,7 +663,7 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6044: {
+  6041: {
     name: "ProtocolMismatch",
     message:
       "DeFi instruction program does not match the declared target_protocol",
@@ -716,7 +677,7 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6045: {
+  6042: {
     name: "TooManyDeFiInstructions",
     message: "Non-stablecoin swap allows exactly one DeFi instruction",
     category: "INPUT_VALIDATION",
@@ -730,7 +691,7 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   },
 
   // --- Multi-Agent errors ---
-  6046: {
+  6043: {
     name: "MaxAgentsReached",
     message: "Maximum agents per vault reached (limit: 10)",
     category: "POLICY_VIOLATION",
@@ -743,7 +704,7 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6047: {
+  6044: {
     name: "InsufficientPermissions",
     message: "Agent lacks permission for this action type",
     category: "PERMISSION",
@@ -760,7 +721,7 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6048: {
+  6045: {
     name: "InvalidPermissions",
     message: "Permission bitmask contains invalid bits (only 21 bits valid)",
     category: "INPUT_VALIDATION",
@@ -775,7 +736,7 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   },
 
   // --- Escrow errors ---
-  6049: {
+  6046: {
     name: "EscrowNotActive",
     message: "Escrow is not in Active status",
     category: "RESOURCE_NOT_FOUND",
@@ -787,7 +748,7 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6050: {
+  6047: {
     name: "EscrowExpired",
     message: "Escrow has expired — can only be refunded now",
     category: "POLICY_VIOLATION",
@@ -800,7 +761,7 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6051: {
+  6048: {
     name: "EscrowNotExpired",
     message: "Escrow has not expired yet — cannot refund before expiry",
     category: "POLICY_VIOLATION",
@@ -817,7 +778,7 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6052: {
+  6049: {
     name: "InvalidEscrowVault",
     message: "Invalid escrow vault — source or destination vault mismatch",
     category: "INPUT_VALIDATION",
@@ -830,7 +791,7 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6053: {
+  6050: {
     name: "EscrowConditionsNotMet",
     message: "Escrow settlement conditions not met (SHA-256 proof invalid)",
     category: "INPUT_VALIDATION",
@@ -843,7 +804,7 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6054: {
+  6051: {
     name: "EscrowDurationExceeded",
     message: "Escrow duration exceeds maximum (30 days)",
     category: "INPUT_VALIDATION",
@@ -858,7 +819,7 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   },
 
   // --- Instruction constraints errors ---
-  6055: {
+  6052: {
     name: "InvalidConstraintConfig",
     message: "Invalid constraint configuration: bounds exceeded",
     category: "INPUT_VALIDATION",
@@ -871,7 +832,7 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6056: {
+  6053: {
     name: "ConstraintViolated",
     message: "Instruction violated a configured constraint",
     category: "POLICY_VIOLATION",
@@ -890,7 +851,7 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6057: {
+  6054: {
     name: "InvalidConstraintsPda",
     message: "Invalid constraints PDA: wrong owner or vault",
     category: "INPUT_VALIDATION",
@@ -902,49 +863,7 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6058: {
-    name: "NoPendingConstraintsUpdate",
-    message: "No pending constraints update to apply or cancel",
-    category: "RESOURCE_NOT_FOUND",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "queue_update",
-        description: "Queue a constraints update first before applying",
-      },
-    ],
-  },
-  6059: {
-    name: "PendingConstraintsUpdateExists",
-    message: "A pending constraints update already exists",
-    category: "INPUT_VALIDATION",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "cancel_existing",
-        description:
-          "Cancel the existing pending update before queuing a new one",
-      },
-      {
-        action: "apply_existing",
-        description:
-          "Apply the existing pending update if the timelock has expired",
-      },
-    ],
-  },
-  6060: {
-    name: "ConstraintsUpdateNotExpired",
-    message: "Constraints update timelock has not expired yet",
-    category: "POLICY_VIOLATION",
-    retryable: true,
-    recovery_actions: [
-      {
-        action: "wait",
-        description: "Wait for the timelock period to expire",
-      },
-    ],
-  },
-  6061: {
+  6055: {
     name: "InvalidPendingConstraintsPda",
     message: "Invalid pending constraints PDA: wrong owner or vault",
     category: "INPUT_VALIDATION",
@@ -957,21 +876,9 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6062: {
-    name: "ConstraintsUpdateExpired",
-    message: "Pending constraints update has expired and is stale",
-    category: "RESOURCE_NOT_FOUND",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "cancel_and_requeue",
-        description: "Cancel the expired update and queue a fresh one",
-      },
-    ],
-  },
 
   // --- Per-agent spend limit errors ---
-  6063: {
+  6056: {
     name: "AgentSpendLimitExceeded",
     message:
       "Agent's rolling 24h spend exceeds their individual spending limit",
@@ -996,7 +903,7 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6064: {
+  6057: {
     name: "OverlaySlotExhausted",
     message:
       "Per-agent overlay is full — cannot register agent with spending limit",
@@ -1010,7 +917,7 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6065: {
+  6058: {
     name: "AgentSlotNotFound",
     message: "Agent has per-agent spending limit but no overlay tracking slot",
     category: "FATAL",
@@ -1023,7 +930,7 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6066: {
+  6059: {
     name: "UnauthorizedTokenApproval",
     message:
       "Unauthorized SPL Token Approve detected between validate and finalize",
@@ -1037,7 +944,7 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6067: {
+  6060: {
     name: "InvalidSessionExpiry",
     message: "Session expiry slots out of range (10-450)",
     category: "INPUT_VALIDATION",
@@ -1049,7 +956,9 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6068: {
+
+  // --- Generic constraints V2 errors ---
+  6061: {
     name: "UnconstrainedProgramBlocked",
     message: "Program has no constraint entry and strict mode is enabled",
     category: "POLICY_VIOLATION",
@@ -1069,9 +978,9 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   },
 
   // --- Per-protocol spend cap errors ---
-  6069: {
+  6062: {
     name: "ProtocolCapExceeded",
-    message: "Per-protocol daily spending cap would be exceeded",
+    message: "Per-protocol rolling 24h spending cap would be exceeded",
     category: "SPENDING_CAP",
     retryable: true,
     retry_after_ms: 3_600_000,
@@ -1092,7 +1001,7 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6070: {
+  6063: {
     name: "ProtocolCapsMismatch",
     message:
       "protocol_caps length must match protocols length when has_protocol_caps is true",
@@ -1103,6 +1012,89 @@ const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
         action: "fix_config",
         description:
           "Ensure protocol_caps array length matches the protocols array length",
+      },
+    ],
+  },
+
+  // --- Vault cleanup guard errors ---
+  6064: {
+    name: "ActiveEscrowsExist",
+    message: "Cannot close vault with active escrow deposits",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "settle_escrows",
+        description:
+          "Settle or refund all active escrows before closing the vault",
+      },
+    ],
+  },
+  6065: {
+    name: "ConstraintsNotClosed",
+    message:
+      "Instruction constraints must be closed before closing vault",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "close_constraints",
+        description:
+          "Close the instruction constraints PDA before closing the vault",
+      },
+    ],
+  },
+  6066: {
+    name: "PendingPolicyExists",
+    message:
+      "Pending policy update must be applied or cancelled before closing vault",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "resolve_pending_policy",
+        description:
+          "Apply or cancel the pending policy update before closing the vault",
+      },
+    ],
+  },
+
+  // --- Agent pause errors ---
+  6067: {
+    name: "AgentPaused",
+    message: "Agent is paused and cannot execute actions",
+    category: "PERMISSION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "check_agent_status",
+        description:
+          "The vault owner has paused this agent — contact the owner to unpause",
+      },
+    ],
+  },
+  6068: {
+    name: "AgentAlreadyPaused",
+    message: "Agent is already paused",
+    category: "INPUT_VALIDATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "check_agent_status",
+        description: "The agent is already paused — no action needed",
+      },
+    ],
+  },
+  6069: {
+    name: "AgentNotPaused",
+    message: "Agent is not paused",
+    category: "INPUT_VALIDATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "check_agent_status",
+        description:
+          "Cannot unpause an agent that is not paused — check agent status first",
       },
     ],
   },
@@ -1230,7 +1222,7 @@ const SDK_ERRORS: Record<string, ErrorMapping> = {
  * Convert any error into a structured AgentError.
  *
  * Handles:
- * - On-chain Anchor errors (code 6000-6070)
+ * - On-chain Anchor errors (code 6000-6069)
  * - PhalnxSDKError instances
  * - Network/RPC errors (from message patterns)
  * - Unknown errors (wrapped as FATAL)
@@ -1406,7 +1398,7 @@ function extractErrorCode(error: unknown): number | null {
   const e = error as Record<string, unknown>;
 
   // Direct code property
-  if (typeof e.code === "number" && e.code >= 6000 && e.code <= 6070)
+  if (typeof e.code === "number" && e.code >= 6000 && e.code <= 6069)
     return e.code;
 
   // Anchor error structure
@@ -1423,7 +1415,7 @@ function extractErrorCode(error: unknown): number | null {
     const match = e.message.match(/custom program error: 0x([0-9a-fA-F]+)/);
     if (match) {
       const code = parseInt(match[1], 16);
-      if (code >= 6000 && code <= 6070) return code;
+      if (code >= 6000 && code <= 6069) return code;
     }
   }
 

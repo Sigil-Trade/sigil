@@ -252,7 +252,7 @@ PHALNX_WALLET_PATH=~/.config/solana/id.json node dist/index.js
 - **Transport**: stdio only (local subprocess of the AI tool)
 - **SDK**: Wraps `PhalnxClient` from `@phalnx/sdk` — V2 tools delegate to intent engine, legacy tools delegate to individual handlers
 - **Setup mode**: Starts without a wallet — `phalnx_setup` available until configured
-- **Error handling**: All 77 Anchor error codes (6000-6076) mapped to human-readable messages with V2 tool name suggestions
+- **Error handling**: All 70 Anchor error codes (6000-6069) mapped to human-readable messages with V2 tool name suggestions
 
 ## Support
 

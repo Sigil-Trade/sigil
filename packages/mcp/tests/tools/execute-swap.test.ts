@@ -133,6 +133,6 @@ describe("shield_execute_swap", () => {
       amount: "1000000",
       slippageBps: 50,
     });
-    expect(result).to.include("TokenNotRegistered");
+    expect(result).to.include("UnsupportedToken");
   });
 });

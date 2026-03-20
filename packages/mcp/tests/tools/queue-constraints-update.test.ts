@@ -27,14 +27,16 @@ describe("shield_queue_constraints_update", () => {
     expect(result).to.include("mock-sig-queue-constraints");
   });
 
-  it("returns error when pending exists", async () => {
+  it("returns error when Anchor init fails (account already exists)", async () => {
+    // Anchor's init constraint fails with a system error when the PDA already exists.
+    // The MCP error handler falls back to a generic message for non-Phalnx errors.
     const client = createMockClient({
-      shouldThrow: Object.assign(new Error("test"), { code: 6059 }),
+      shouldThrow: new Error("failed to send transaction: Transaction simulation failed"),
     });
     const result = await queueConstraintsUpdate(client as any, {
       vault,
       entries: [entry],
     });
-    expect(result).to.include("PendingConstraintsUpdateExists");
+    expect(result).to.include("Transaction failed");
   });
 });

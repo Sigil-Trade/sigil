@@ -356,8 +356,8 @@ function categorizeError(code: number): string {
   if (code >= 6006 && code <= 6011) return "SPENDING_CAP";
   if (code === 6012 || code === 6013) return "RATE_LIMIT";
   if (code >= 6014 && code <= 6020) return "POLICY_VIOLATION";
-  if (code >= 6046 && code <= 6048) return "PERMISSION";
-  if (code >= 6074 && code <= 6076) return "PERMISSION";
+  if (code >= 6043 && code <= 6045) return "PERMISSION";
+  if (code >= 6067 && code <= 6069) return "PERMISSION";
   return "TRANSIENT";
 }
 

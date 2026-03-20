@@ -425,7 +425,7 @@ export type IntentStatus =
 export interface PrecheckResult {
   allowed: boolean;
   reason?: string;
-  /** On-chain error code for correlation (e.g. 6006 for DailyCapExceeded) */
+  /** On-chain error code for correlation (e.g. 6006 for SpendingCapExceeded) */
   errorCode?: number;
   details: {
     permission: {

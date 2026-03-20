@@ -21,7 +21,7 @@ describe("shield_close_settled_escrow", () => {
 
   it("returns error when not settled", async () => {
     const client = createMockClient({
-      shouldThrow: Object.assign(new Error("test"), { code: 6049 }),
+      shouldThrow: Object.assign(new Error("test"), { code: 6046 }),
     });
     const result = await closeSettledEscrow(client as any, {
       sourceVault: TEST_VAULT_PDA.toBase58(),

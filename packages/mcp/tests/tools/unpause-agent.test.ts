@@ -42,7 +42,7 @@ describe("shield_unpause_agent", () => {
 
   it("returns error when agent not paused", async () => {
     const client = createMockClient({
-      shouldThrow: Object.assign(new Error("test"), { code: 6076 }),
+      shouldThrow: Object.assign(new Error("test"), { code: 6069 }),
     });
     const result = await unpauseAgent(client as any, {
       vault: TEST_VAULT_PDA.toBase58(),

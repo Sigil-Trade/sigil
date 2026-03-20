@@ -420,7 +420,7 @@ describe("jupiter-integration", () => {
         expect.fail("Should have thrown");
       } catch (err: any) {
         if (err.message === "Should have thrown") throw err;
-        expect(err.message || err.toString()).to.include("DailyCapExceeded");
+        expect(err.message || err.toString()).to.include("SpendingCapExceeded");
       }
 
       // Verify session was NOT created (atomic revert)
@@ -445,7 +445,7 @@ describe("jupiter-integration", () => {
   describe("disallowed token", () => {
     it("reverts when token is not in policy allowlist", async () => {
       // Create vault ATA for solMint so Anchor account validation passes,
-      // allowing the handler's TokenNotRegistered check to fire.
+      // allowing the handler's UnsupportedToken check to fire.
       const vaultSolAta = createAtaIdempotentHelper(
         svm,
         (owner as any).payer,
@@ -472,7 +472,7 @@ describe("jupiter-integration", () => {
         expect(err.message || err.toString()).to.satisfy(
           (s: string) =>
             s.includes("InvalidTokenAccount") ||
-            s.includes("TokenNotRegistered"),
+            s.includes("UnsupportedToken"),
         );
       }
     });
@@ -777,7 +777,7 @@ describe("jupiter-integration", () => {
         expect.fail("Should have thrown");
       } catch (err: any) {
         if (err.message === "Should have thrown") throw err;
-        expect(err.message || err.toString()).to.include("DailyCapExceeded");
+        expect(err.message || err.toString()).to.include("SpendingCapExceeded");
       }
 
       // Verify state wasn't modified by the failed tx

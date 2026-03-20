@@ -39,7 +39,7 @@ export function isHeliusConnection(connection: Connection): boolean {
 }
 
 /**
- * All Phalnx Anchor error codes (6000–6063) mapped to human-readable names and suggestions.
+ * All Phalnx Anchor error codes (6000–6069) mapped to human-readable names and suggestions.
  */
 export const ANCHOR_ERROR_MAP: Record<
   number,
@@ -58,8 +58,8 @@ export const ANCHOR_ERROR_MAP: Record<
     suggestion: "Only the vault owner can call this instruction.",
   },
   6003: {
-    name: "TokenNotRegistered",
-    suggestion: "Use USDC or USDT — only recognized stablecoins are accepted.",
+    name: "UnsupportedToken",
+    suggestion: "Use USDC or USDT — only supported stablecoins are accepted.",
   },
   6004: {
     name: "ProtocolNotAllowed",
@@ -71,7 +71,7 @@ export const ANCHOR_ERROR_MAP: Record<
     suggestion: "Break the transaction into smaller parts.",
   },
   6006: {
-    name: "DailyCapExceeded",
+    name: "SpendingCapExceeded",
     suggestion:
       "Rolling 24h spending cap would be exceeded. Wait or increase the cap.",
   },
@@ -205,9 +205,9 @@ export const ANCHOR_ERROR_MAP: Record<
     suggestion: "Non-stablecoin swaps must output to a stablecoin (USDC/USDT).",
   },
   6037: {
-    name: "SlippageTooHigh",
+    name: "SwapSlippageExceeded",
     suggestion:
-      "Slippage exceeds policy max_slippage_bps. Reduce slippage tolerance or update policy.",
+      "Swap slippage exceeds policy max_slippage_bps. Reduce slippage tolerance or update policy.",
   },
   6038: {
     name: "InvalidJupiterInstruction",
@@ -215,113 +215,145 @@ export const ANCHOR_ERROR_MAP: Record<
       "Cannot parse Jupiter swap instruction data. Verify instruction format.",
   },
   6039: {
-    name: "InvalidFlashTradeInstruction",
-    suggestion:
-      "Cannot parse Flash Trade instruction data. Verify instruction format.",
-  },
-  6040: {
-    name: "FlashTradePriceZero",
-    suggestion:
-      "Flash Trade priceWithSlippage is zero. Check oracle/price data.",
-  },
-  6041: {
-    name: "DustDepositDetected",
+    name: "UnauthorizedTokenTransfer",
     suggestion:
       "Top-level SPL Token transfers are blocked between validate and finalize.",
   },
-  6042: {
-    name: "InvalidJupiterLendInstruction",
-    suggestion: "Cannot parse Jupiter Lend instruction data.",
-  },
-  6043: {
+  6040: {
     name: "SlippageBpsTooHigh",
     suggestion: "max_slippage_bps cannot exceed 5000 (50%).",
   },
-  6044: {
+  6041: {
     name: "ProtocolMismatch",
     suggestion:
       "DeFi instruction program does not match declared target_protocol.",
   },
-  6045: {
+  6042: {
     name: "TooManyDeFiInstructions",
     suggestion: "Non-stablecoin swaps allow exactly one DeFi instruction.",
   },
-  6046: {
+  6043: {
     name: "MaxAgentsReached",
     suggestion:
       "Vault already has 10 agents. Remove one before adding another.",
   },
-  6047: {
+  6044: {
     name: "InsufficientPermissions",
     suggestion:
       "Agent lacks permission for this action type. Update permissions.",
   },
-  6048: {
+  6045: {
     name: "InvalidPermissions",
     suggestion:
       "Permission bitmask contains invalid bits beyond the 21 defined action types.",
   },
-  6049: {
+  6046: {
     name: "EscrowNotActive",
     suggestion: "Escrow is not in Active status.",
   },
-  6050: {
+  6047: {
     name: "EscrowExpired",
     suggestion: "Escrow has expired. Use refund_escrow to reclaim funds.",
   },
-  6051: {
+  6048: {
     name: "EscrowNotExpired",
     suggestion: "Cannot refund escrow before expiry. Wait or settle instead.",
   },
-  6052: {
+  6049: {
     name: "InvalidEscrowVault",
     suggestion: "Source or destination vault does not match the escrow.",
   },
-  6053: {
+  6050: {
     name: "EscrowConditionsNotMet",
     suggestion: "SHA-256 proof does not match escrow condition_hash.",
   },
-  6054: {
+  6051: {
     name: "EscrowDurationExceeded",
     suggestion: "Escrow duration exceeds 30-day maximum.",
   },
-  6055: {
+  6052: {
     name: "InvalidConstraintConfig",
     suggestion:
       "Constraint configuration exceeds bounds (max 10 entries, 5 constraints each).",
   },
-  6056: {
+  6053: {
     name: "ConstraintViolated",
     suggestion: "Instruction data violates a configured constraint.",
   },
-  6057: {
+  6054: {
     name: "InvalidConstraintsPda",
     suggestion:
       "Constraints PDA does not match expected address for this vault.",
   },
-  6058: {
-    name: "NoPendingConstraintsUpdate",
-    suggestion: "No pending constraints update to apply or cancel.",
-  },
-  6059: {
-    name: "PendingConstraintsUpdateExists",
-    suggestion: "Cancel existing pending update before queueing a new one.",
-  },
-  6060: {
-    name: "ConstraintsUpdateNotExpired",
-    suggestion: "Constraints update timelock has not expired yet.",
-  },
-  6061: {
+  6055: {
     name: "InvalidPendingConstraintsPda",
     suggestion: "Pending constraints PDA does not match expected address.",
   },
-  6062: {
-    name: "ConstraintsUpdateExpired",
-    suggestion: "Pending constraints update has expired. Queue a new one.",
-  },
-  6063: {
+  6056: {
     name: "AgentSpendLimitExceeded",
     suggestion: "Agent's rolling 24h spend exceeds per-agent spending limit.",
+  },
+  6057: {
+    name: "OverlaySlotExhausted",
+    suggestion:
+      "Per-agent overlay is full; cannot register agent with spending limit.",
+  },
+  6058: {
+    name: "AgentSlotNotFound",
+    suggestion:
+      "Agent has per-agent spending limit but no overlay tracking slot.",
+  },
+  6059: {
+    name: "UnauthorizedTokenApproval",
+    suggestion:
+      "Unauthorized SPL Token Approve between validate and finalize.",
+  },
+  6060: {
+    name: "InvalidSessionExpiry",
+    suggestion: "Session expiry slots out of range (10-450).",
+  },
+  6061: {
+    name: "UnconstrainedProgramBlocked",
+    suggestion:
+      "Program has no constraint entry and strict mode is enabled.",
+  },
+  6062: {
+    name: "ProtocolCapExceeded",
+    suggestion:
+      "Per-protocol rolling 24h spending cap would be exceeded.",
+  },
+  6063: {
+    name: "ProtocolCapsMismatch",
+    suggestion:
+      "protocol_caps length must match protocols length when has_protocol_caps is true.",
+  },
+  6064: {
+    name: "ActiveEscrowsExist",
+    suggestion:
+      "Cannot close vault with active escrow deposits.",
+  },
+  6065: {
+    name: "ConstraintsNotClosed",
+    suggestion:
+      "Instruction constraints must be closed before closing vault.",
+  },
+  6066: {
+    name: "PendingPolicyExists",
+    suggestion:
+      "Pending policy update must be applied or cancelled before closing vault.",
+  },
+  6067: {
+    name: "AgentPaused",
+    suggestion:
+      "Agent is paused and cannot execute actions.",
+  },
+  6068: {
+    name: "AgentAlreadyPaused",
+    suggestion: "Agent is already paused.",
+  },
+  6069: {
+    name: "AgentNotPaused",
+    suggestion: "Agent is not paused.",
   },
 };
 

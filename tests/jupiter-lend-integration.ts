@@ -406,7 +406,7 @@ describe("jupiter-lend-integration", () => {
         expect.fail("Should have thrown");
       } catch (err: any) {
         if (err.message === "Should have thrown") throw err;
-        expect(err.message || err.toString()).to.include("DailyCapExceeded");
+        expect(err.message || err.toString()).to.include("SpendingCapExceeded");
       }
     });
   });
@@ -701,7 +701,7 @@ describe("jupiter-lend-integration", () => {
         expect.fail("Should have thrown");
       } catch (err: any) {
         if (err.message === "Should have thrown") throw err;
-        expect(err.message || err.toString()).to.include("DailyCapExceeded");
+        expect(err.message || err.toString()).to.include("SpendingCapExceeded");
       }
 
       // Verify state was not modified by failed tx

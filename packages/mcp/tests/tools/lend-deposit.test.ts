@@ -69,7 +69,7 @@ describe("shield_lend_deposit", () => {
       validInput,
       mockCustodyWallet,
     );
-    expect(result).to.include("DailyCapExceeded");
+    expect(result).to.include("SpendingCapExceeded");
   });
 
   it("returns error on invalid vault address", async () => {

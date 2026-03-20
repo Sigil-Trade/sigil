@@ -599,7 +599,7 @@ describe("IntentEngine", () => {
     });
 
     // Test 2: Spending exceeds agent limit (within vault cap)
-    it("rejects when spending exceeds agent limit (6063)", async () => {
+    it("rejects when spending exceeds agent limit (6056)", async () => {
       const engine = buildPrecheckEngine({
         globalBudget: {
           spent24h: 0n,
@@ -624,12 +624,12 @@ describe("IntentEngine", () => {
       });
       const result = await engine.precheck(usdcSwap("20000000"), VAULT);
       expect(result.allowed).to.be.false;
-      expect(result.errorCode).to.equal(6063);
+      expect(result.errorCode).to.equal(6056);
       expect(result.reason).to.equal("AGENT_SPEND_LIMIT_EXCEEDED");
     });
 
     // Test 3: Spending exceeds protocol cap
-    it("rejects when spending exceeds protocol cap (6069)", async () => {
+    it("rejects when spending exceeds protocol cap (6062)", async () => {
       const engine = buildPrecheckEngine({
         protocolBudgets: [
           {
@@ -642,7 +642,7 @@ describe("IntentEngine", () => {
       });
       const result = await engine.precheck(usdcSwap("20000000"), VAULT);
       expect(result.allowed).to.be.false;
-      expect(result.errorCode).to.equal(6069);
+      expect(result.errorCode).to.equal(6062);
       expect(result.reason).to.equal("PROTOCOL_CAP_EXCEEDED");
     });
 

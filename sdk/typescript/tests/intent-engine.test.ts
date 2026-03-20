@@ -161,7 +161,7 @@ describe("IntentEngine", () => {
     it("returns AgentError on execute failure", async () => {
       const client = createMockClient({
         execute: async () => {
-          throw new Error("custom program error: 0x1776"); // 6006 DailyCapExceeded
+          throw new Error("custom program error: 0x1776"); // 6006 SpendingCapExceeded
         },
       });
 

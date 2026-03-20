@@ -215,7 +215,7 @@ pub fn handler(ctx: Context<FinalizeSession>, success: bool) -> Result<()> {
             .ok_or(PhalnxError::Overflow)?;
         require!(
             new_total <= policy.daily_spending_cap_usd,
-            PhalnxError::DailyCapExceeded
+            PhalnxError::SpendingCapExceeded
         );
 
         // --- Per-agent cap check via contribution overlay ---

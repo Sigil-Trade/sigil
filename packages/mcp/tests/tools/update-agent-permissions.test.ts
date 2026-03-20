@@ -46,7 +46,7 @@ describe("shield_update_agent_permissions", () => {
 
   it("returns error on insufficient permissions", async () => {
     const client = createMockClient({
-      shouldThrow: Object.assign(new Error("test"), { code: 6047 }),
+      shouldThrow: Object.assign(new Error("test"), { code: 6044 }),
     });
     const result = await updateAgentPermissions(client as any, validInput);
     expect(result).to.include("InsufficientPermissions");

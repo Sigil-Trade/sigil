@@ -217,7 +217,7 @@ pub fn handler(
 
             require!(
                 new_total_usd <= policy.daily_spending_cap_usd,
-                PhalnxError::DailyCapExceeded
+                PhalnxError::SpendingCapExceeded
             );
 
             // --- Per-agent cap check via contribution overlay ---
@@ -299,7 +299,7 @@ pub fn handler(
             // Verify it's actually a stablecoin mint
             require!(
                 is_stablecoin_mint(&stablecoin_acct.mint),
-                PhalnxError::TokenNotRegistered
+                PhalnxError::UnsupportedToken
             );
 
             output_mint = stablecoin_acct.mint;
@@ -357,7 +357,7 @@ pub fn handler(
                             return Err(error!(PhalnxError::UnauthorizedTokenApproval));
                         }
                         if ix.data[0] == 3 || ix.data[0] == 12 {
-                            return Err(error!(PhalnxError::DustDepositDetected));
+                            return Err(error!(PhalnxError::UnauthorizedTokenTransfer));
                         }
                     }
 
@@ -367,7 +367,7 @@ pub fn handler(
                             return Err(error!(PhalnxError::UnauthorizedTokenApproval));
                         }
                         if ix.data[0] == 3 || ix.data[0] == 12 || ix.data[0] == 26 {
-                            return Err(error!(PhalnxError::DustDepositDetected));
+                            return Err(error!(PhalnxError::UnauthorizedTokenTransfer));
                         }
                     }
 
@@ -463,7 +463,7 @@ pub fn handler(
                             return Err(error!(PhalnxError::UnauthorizedTokenApproval));
                         }
                         if ix.data[0] == 3 || ix.data[0] == 12 {
-                            return Err(error!(PhalnxError::DustDepositDetected));
+                            return Err(error!(PhalnxError::UnauthorizedTokenTransfer));
                         }
                     }
 
@@ -473,7 +473,7 @@ pub fn handler(
                             return Err(error!(PhalnxError::UnauthorizedTokenApproval));
                         }
                         if ix.data[0] == 3 || ix.data[0] == 12 || ix.data[0] == 26 {
-                            return Err(error!(PhalnxError::DustDepositDetected));
+                            return Err(error!(PhalnxError::UnauthorizedTokenTransfer));
                         }
                     }
 

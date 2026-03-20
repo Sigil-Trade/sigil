@@ -151,7 +151,7 @@ Use `shield_agent_transfer` to send tokens from the vault to a destination addre
 
 When a tool returns an error:
 
-- **DailyCapExceeded**: Tell the user their daily limit is reached. Show remaining time until reset.
+- **SpendingCapExceeded**: Tell the user their rolling 24h spending cap is reached. Show remaining time until reset.
 - **TokenNotAllowed**: Suggest adding the token via policy update, or use an allowed token.
 - **ProtocolNotAllowed**: Suggest adding the protocol, or route through an allowed one.
 - **TransactionTooLarge**: Suggest splitting into smaller amounts.

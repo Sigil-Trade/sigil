@@ -6,7 +6,7 @@ export interface ErrorInfo {
 }
 
 /**
- * Maps all 77 Phalnx Anchor error codes (6000–6076) to
+ * Maps all 70 Phalnx Anchor error codes (6000–6069) to
  * human-readable messages with actionable suggestions for AI tools.
  */
 const ERROR_MAP: Record<number, ErrorInfo> = {
@@ -33,10 +33,10 @@ const ERROR_MAP: Record<number, ErrorInfo> = {
   },
   6003: {
     code: 6003,
-    name: "TokenNotRegistered",
-    message: "Token is not a recognized stablecoin",
+    name: "UnsupportedToken",
+    message: "Token is not a supported stablecoin (only USDC and USDT)",
     suggestion:
-      "Only USDC and USDT are supported for spending. Use a stablecoin for transfers, or swap non-stablecoins through a stablecoin pair.",
+      "Only USDC and USDT are supported. Use a stablecoin for transfers, or swap non-stablecoins through a stablecoin pair.",
   },
   6004: {
     code: 6004,
@@ -54,10 +54,10 @@ const ERROR_MAP: Record<number, ErrorInfo> = {
   },
   6006: {
     code: 6006,
-    name: "DailyCapExceeded",
-    message: "Daily spending cap would be exceeded",
+    name: "SpendingCapExceeded",
+    message: "Rolling 24h spending cap would be exceeded",
     suggestion:
-      "Wait for the 24h rolling window to reset, or use phalnx_manage action='updatePolicy' to increase dailySpendingCapUsd.",
+      "Wait for the 24h rolling window to reset, or use phalnx_manage action='updatePolicy' to increase spendingCapUsd.",
   },
   6007: {
     code: 6007,
@@ -267,9 +267,9 @@ const ERROR_MAP: Record<number, ErrorInfo> = {
   },
   6037: {
     code: 6037,
-    name: "SlippageTooHigh",
+    name: "SwapSlippageExceeded",
     message:
-      "Jupiter slippage exceeds policy max_slippage_bps or quoted_out is zero",
+      "Swap slippage exceeds policy max_slippage_bps or quoted output is zero",
     suggestion:
       "Reduce the slippage tolerance or use phalnx_manage action='updatePolicy' to increase maxSlippageBps.",
   },
@@ -282,49 +282,28 @@ const ERROR_MAP: Record<number, ErrorInfo> = {
   },
   6039: {
     code: 6039,
-    name: "InvalidFlashTradeInstruction",
-    message: "Cannot parse Flash Trade instruction data",
-    suggestion:
-      "The Flash Trade instruction has an unrecognized discriminator. Ensure you are using a supported Flash Trade action.",
-  },
-  6040: {
-    code: 6040,
-    name: "FlashTradePriceZero",
-    message: "Flash Trade priceWithSlippage is zero",
-    suggestion:
-      "The Flash Trade instruction has a zero price, which would accept any fill price. Provide a valid priceWithSlippage.",
-  },
-  6041: {
-    code: 6041,
-    name: "DustDepositDetected",
+    name: "UnauthorizedTokenTransfer",
     message:
       "Top-level SPL Token transfer not allowed between validate and finalize",
     suggestion:
-      "A top-level SPL Token Transfer or TransferChecked instruction was detected between validate and finalize. All token movements must happen via CPI through recognized DeFi programs (Jupiter, Flash Trade), not as top-level SPL Token instructions.",
+      "A top-level SPL Token Transfer or TransferChecked instruction was detected between validate and finalize. All token movements must happen via CPI through recognized DeFi programs, not as top-level SPL Token instructions.",
   },
-  6042: {
-    code: 6042,
-    name: "InvalidJupiterLendInstruction",
-    message: "Cannot parse Jupiter Lend instruction data",
-    suggestion:
-      "The Jupiter Lend instruction has an unrecognized format. Ensure you are using Jupiter Lend deposit or withdraw instructions from the official API.",
-  },
-  6043: {
-    code: 6043,
+  6040: {
+    code: 6040,
     name: "SlippageBpsTooHigh",
     message: "Slippage BPS exceeds maximum (5000 = 50%)",
     suggestion:
       "The max_slippage_bps policy value exceeds the hard cap of 5000 (50%). Use a value between 0 and 5000.",
   },
-  6044: {
-    code: 6044,
+  6041: {
+    code: 6041,
     name: "ProtocolMismatch",
     message: "DeFi instruction program does not match declared target_protocol",
     suggestion:
       "The DeFi instruction targets a different program than declared in target_protocol. Ensure target_protocol matches the actual program ID of the DeFi instruction in the transaction.",
   },
-  6045: {
-    code: 6045,
+  6042: {
+    code: 6042,
     name: "TooManyDeFiInstructions",
     message: "Non-stablecoin swap allows exactly one DeFi instruction",
     suggestion:
@@ -332,22 +311,22 @@ const ERROR_MAP: Record<number, ErrorInfo> = {
   },
 
   // --- Multi-Agent errors (Workstream A) ---
-  6046: {
-    code: 6046,
+  6043: {
+    code: 6043,
     name: "MaxAgentsReached",
     message: "Maximum agents per vault reached (limit: 10)",
     suggestion:
       "Remove an existing agent with phalnx_manage action='revokeAgent' before registering a new one. Maximum 10 agents per vault.",
   },
-  6047: {
-    code: 6047,
+  6044: {
+    code: 6044,
     name: "InsufficientPermissions",
     message: "Agent lacks permission for this action type",
     suggestion:
       "The agent's permission bitmask does not include this action. Use phalnx_manage action='updateAgentPermissions' to grant the required permission bits.",
   },
-  6048: {
-    code: 6048,
+  6045: {
+    code: 6045,
     name: "InvalidPermissions",
     message: "Permission bitmask contains invalid bits",
     suggestion:
@@ -355,43 +334,43 @@ const ERROR_MAP: Record<number, ErrorInfo> = {
   },
 
   // --- Escrow errors (Workstream B) ---
-  6049: {
-    code: 6049,
+  6046: {
+    code: 6046,
     name: "EscrowNotActive",
     message: "Escrow is not in Active status",
     suggestion:
       "The escrow has already been settled or refunded. Check the escrow status with phalnx_query query='escrow'.",
   },
-  6050: {
-    code: 6050,
+  6047: {
+    code: 6047,
     name: "EscrowExpired",
     message: "Escrow has expired",
     suggestion:
       "The escrow expiration time has passed. Use phalnx_execute action='refundEscrow' to return funds to the source vault.",
   },
-  6051: {
-    code: 6051,
+  6048: {
+    code: 6048,
     name: "EscrowNotExpired",
     message: "Escrow has not expired yet",
     suggestion:
       "The escrow is still within its active period. Wait for expiration before requesting a refund, or settle it with valid proof.",
   },
-  6052: {
-    code: 6052,
+  6049: {
+    code: 6049,
     name: "InvalidEscrowVault",
     message: "Invalid escrow vault",
     suggestion:
       "The source or destination vault does not match the escrow's recorded vaults. Verify the vault addresses.",
   },
-  6053: {
-    code: 6053,
+  6050: {
+    code: 6050,
     name: "EscrowConditionsNotMet",
     message: "Escrow conditions not met",
     suggestion:
       "The provided proof does not match the escrow's condition_hash (SHA-256). Verify the proof data.",
   },
-  6054: {
-    code: 6054,
+  6051: {
+    code: 6051,
     name: "EscrowDurationExceeded",
     message: "Escrow duration exceeds maximum (30 days)",
     suggestion:
@@ -399,158 +378,130 @@ const ERROR_MAP: Record<number, ErrorInfo> = {
   },
 
   // --- Instruction Constraints errors (Workstream C) ---
-  6055: {
-    code: 6055,
+  6052: {
+    code: 6052,
     name: "InvalidConstraintConfig",
     message: "Invalid constraint configuration: bounds exceeded",
     suggestion:
       "The constraint configuration exceeds maximum limits. Check entry count and data constraint sizes.",
   },
-  6056: {
-    code: 6056,
+  6053: {
+    code: 6053,
     name: "ConstraintViolated",
     message: "Instruction constraint violated",
     suggestion:
       "A DeFi instruction in the transaction violates the vault's instruction constraints. Check the constraint rules with phalnx_query query='constraints'.",
   },
-  6057: {
-    code: 6057,
+  6054: {
+    code: 6054,
     name: "InvalidConstraintsPda",
     message: "Invalid constraints PDA: wrong owner or vault",
     suggestion:
       "The constraints account does not belong to the specified vault. Verify the vault address.",
   },
-  6058: {
-    code: 6058,
-    name: "NoPendingConstraintsUpdate",
-    message: "No pending constraints update to apply or cancel",
-    suggestion:
-      "No constraints update is queued. Use phalnx_manage action='queueConstraintsUpdate' to queue one first.",
-  },
-  6059: {
-    code: 6059,
-    name: "PendingConstraintsUpdateExists",
-    message: "A pending constraints update already exists",
-    suggestion:
-      "Cancel the existing pending update with phalnx_manage action='cancelConstraintsUpdate' before queuing a new one.",
-  },
-  6060: {
-    code: 6060,
-    name: "ConstraintsUpdateNotExpired",
-    message: "Constraints update timelock has not expired",
-    suggestion:
-      "Wait for the timelock period to expire before applying the pending constraints update.",
-  },
-  6061: {
-    code: 6061,
+  6055: {
+    code: 6055,
     name: "InvalidPendingConstraintsPda",
     message: "Invalid pending constraints PDA: wrong owner or vault",
     suggestion:
       "The pending constraints account does not belong to the specified vault. Verify the vault address.",
   },
-  6062: {
-    code: 6062,
-    name: "ConstraintsUpdateExpired",
-    message: "Pending constraints update has expired and is stale",
-    suggestion:
-      "The pending constraints update is past its expiration window. Cancel it and queue a fresh update.",
-  },
-  6063: {
-    code: 6063,
+  6056: {
+    code: 6056,
     name: "AgentSpendLimitExceeded",
     message:
       "Agent's rolling 24h spend exceeds their individual spending limit",
     suggestion:
       "This agent has reached their per-agent spending cap. Wait for the rolling window to expire or ask the vault owner to increase the agent's spending_limit_usd via update_agent_permissions.",
   },
-  6064: {
-    code: 6064,
+  6057: {
+    code: 6057,
     name: "OverlaySlotExhausted",
     message:
       "Per-agent overlay is full; cannot register agent with spending limit",
     suggestion:
       "The agent spend overlay has no free slots. Remove an agent with a per-agent spending limit before registering a new one.",
   },
-  6065: {
-    code: 6065,
+  6058: {
+    code: 6058,
     name: "AgentSlotNotFound",
     message: "Agent has per-agent spending limit but no overlay tracking slot",
     suggestion:
       "The agent's spending overlay slot is missing. This is an internal inconsistency — re-register the agent or contact support.",
   },
-  6066: {
-    code: 6066,
+  6059: {
+    code: 6059,
     name: "UnauthorizedTokenApproval",
     message: "Unauthorized SPL Token Approve between validate and finalize",
     suggestion:
       "SPL Token Approve instructions are not allowed between validate_and_authorize and finalize_session. Remove the Approve instruction from the transaction.",
   },
-  6067: {
-    code: 6067,
+  6060: {
+    code: 6060,
     name: "InvalidSessionExpiry",
     message: "Session expiry slots out of range (10-450)",
     suggestion:
       "Set sessionExpirySlots to a value between 10 and 450 (inclusive). Default is 20 slots.",
   },
-  6068: {
-    code: 6068,
+  6061: {
+    code: 6061,
     name: "UnconstrainedProgramBlocked",
     message: "Program has no constraint entry and strict mode is enabled",
     suggestion:
       "The transaction includes an instruction for a program that has no matching constraint entry. Add a constraint entry for this program or disable strict mode.",
   },
-  6069: {
-    code: 6069,
+  6062: {
+    code: 6062,
     name: "ProtocolCapExceeded",
-    message: "Per-protocol daily spending cap would be exceeded",
+    message: "Per-protocol rolling 24h spending cap would be exceeded",
     suggestion:
       "This protocol has reached its individual spending cap. Wait for the rolling window to expire or increase the protocol's cap via phalnx_manage action='updatePolicy'.",
   },
-  6070: {
-    code: 6070,
+  6063: {
+    code: 6063,
     name: "ProtocolCapsMismatch",
     message:
       "protocol_caps length must match protocols length when has_protocol_caps is true",
     suggestion:
       "When has_protocol_caps is true, the protocol_caps array must have the same length as the protocols array. Ensure both arrays match.",
   },
-  6071: {
-    code: 6071,
+  6064: {
+    code: 6064,
     name: "ActiveEscrowsExist",
     message: "Cannot close vault with active escrow deposits",
     suggestion:
       "Settle or refund all active escrow deposits before closing the vault. Use settleEscrow or refundEscrow instructions first.",
   },
-  6072: {
-    code: 6072,
+  6065: {
+    code: 6065,
     name: "ConstraintsNotClosed",
     message: "Instruction constraints must be closed before closing vault",
     suggestion:
       "Close instruction constraints using closeInstructionConstraints before closing the vault.",
   },
-  6073: {
-    code: 6073,
+  6066: {
+    code: 6066,
     name: "PendingPolicyExists",
     message:
       "Pending policy update must be applied or cancelled before closing vault",
     suggestion:
       "Apply the pending policy update using applyPendingPolicy, or cancel it using cancelPendingPolicy, before closing the vault. Alternatively, pass the PendingPolicyUpdate PDA in remainingAccounts to clean it up during close.",
   },
-  6074: {
-    code: 6074,
+  6067: {
+    code: 6067,
     name: "AgentPaused",
     message: "Agent is paused and cannot execute actions",
     suggestion:
       "The vault owner has paused this agent. Use phalnx_manage action='unpauseAgent' to restore access.",
   },
-  6075: {
-    code: 6075,
+  6068: {
+    code: 6068,
     name: "AgentAlreadyPaused",
     message: "Agent is already paused",
     suggestion: "The agent is already paused — no action needed.",
   },
-  6076: {
-    code: 6076,
+  6069: {
+    code: 6069,
     name: "AgentNotPaused",
     message: "Agent is not paused",
     suggestion:

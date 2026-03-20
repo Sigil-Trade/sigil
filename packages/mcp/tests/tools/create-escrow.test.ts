@@ -60,7 +60,7 @@ describe("shield_create_escrow", () => {
 
   it("returns error on SDK failure", async () => {
     const client = createMockClient({
-      shouldThrow: Object.assign(new Error("test"), { code: 6054 }),
+      shouldThrow: Object.assign(new Error("test"), { code: 6051 }),
     });
     const result = await createEscrow(client as any, {
       sourceVault: TEST_VAULT_PDA.toBase58(),

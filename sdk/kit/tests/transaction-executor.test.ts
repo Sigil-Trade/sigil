@@ -138,7 +138,7 @@ describe("TransactionExecutor", () => {
           value: {
             err: "error",
             logs: [
-              "Program log: Error Code: DailyCapExceeded. Error Number: 6006",
+              "Program log: Error Code: SpendingCapExceeded. Error Number: 6006",
             ],
             unitsConsumed: 100_000,
           },
@@ -153,7 +153,7 @@ describe("TransactionExecutor", () => {
         computeUnits,
         MOCK_BLOCKHASH,
       );
-      expect(simulation.error?.anchorName).to.equal("DailyCapExceeded");
+      expect(simulation.error?.anchorName).to.equal("SpendingCapExceeded");
       expect(simulation.error?.suggestion).to.include("spending cap");
     });
 

@@ -1240,7 +1240,7 @@ describe("phalnx", () => {
       recordCU("validate+finalize:spend_cap", txResult2);
 
       // Now try to spend another 100 USDC — total would be 250 > 200 cap.
-      // This should fail with DailyCapExceeded (error fires before MissingFinalizeInstruction check).
+      // This should fail with SpendingCapExceeded (error fires before MissingFinalizeInstruction check).
       try {
         await program.methods
           .validateAndAuthorize(
@@ -1270,7 +1270,7 @@ describe("phalnx", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expect(err.toString()).to.include("DailyCapExceeded");
+        expect(err.toString()).to.include("SpendingCapExceeded");
       }
 
       // Restore daily cap to 500 USDC for subsequent tests
@@ -4289,7 +4289,7 @@ describe("phalnx", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expect(err.toString()).to.include("DailyCapExceeded");
+        expect(err.toString()).to.include("SpendingCapExceeded");
       }
     });
 
@@ -4753,7 +4753,7 @@ describe("phalnx", () => {
       expect(vault.agents.length).to.equal(10);
     });
 
-    it("11th agent → MaxAgentsReached (6046)", async () => {
+    it("11th agent → MaxAgentsReached (6043)", async () => {
       const extra = Keypair.generate();
       try {
         await program.methods
@@ -4835,7 +4835,7 @@ describe("phalnx", () => {
       );
     });
 
-    it("invalid permission bitmask → InvalidPermissions (6048)", async () => {
+    it("invalid permission bitmask → InvalidPermissions (6045)", async () => {
       const badAgent = Keypair.generate();
       // Bit 21+ is invalid (only 21 ActionType variants, bits 0-20 valid)
       const BAD_PERMS = new BN(1n << 21n);

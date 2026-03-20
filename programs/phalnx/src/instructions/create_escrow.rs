@@ -129,7 +129,7 @@ pub fn handler(
     let token_mint_key = ctx.accounts.token_mint.key();
     require!(
         is_stablecoin_mint(&token_mint_key),
-        PhalnxError::TokenNotRegistered
+        PhalnxError::UnsupportedToken
     );
 
     // 3. Amount must be positive
@@ -160,7 +160,7 @@ pub fn handler(
         .ok_or(PhalnxError::Overflow)?;
     require!(
         new_total_usd <= policy.daily_spending_cap_usd,
-        PhalnxError::DailyCapExceeded
+        PhalnxError::SpendingCapExceeded
     );
     tracker.record_spend(&clock, usd_amount)?;
     drop(tracker);

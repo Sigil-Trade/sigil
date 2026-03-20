@@ -229,7 +229,7 @@ describe("phalnx_execute", () => {
 
   it("Anchor error thrown inside run() returns formatted error with suggestion", async () => {
     const client = makeMockClientWithIntents(async () => {
-      throw Object.assign(new Error("DailyCapExceeded"), { code: 6006 });
+      throw Object.assign(new Error("SpendingCapExceeded"), { code: 6006 });
     });
     const config: McpConfig = {
       rpcUrl: "https://mock.rpc",
@@ -244,7 +244,7 @@ describe("phalnx_execute", () => {
         vault: TEST_VAULT_PDA.toBase58(),
       },
     );
-    expect(result).to.include("DailyCapExceeded");
+    expect(result).to.include("SpendingCapExceeded");
     expect(result).to.include("Suggestion:");
     expect(result).to.not.include("shield_");
   });

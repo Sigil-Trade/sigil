@@ -478,7 +478,7 @@ export class IntentEngine {
               );
             }
 
-            // Check 3: Per-agent cap (on-chain line 235, error 6063)
+            // Check 3: Per-agent cap (on-chain line 235, error 6056)
             if (state.agentBudget) {
               const newAgentTotal = state.agentBudget.spent24h + amountUsd;
               if (newAgentTotal > state.agentBudget.cap) {
@@ -503,12 +503,12 @@ export class IntentEngine {
                       inAllowlist: protocolInAllowlist,
                     },
                   },
-                  6063,
+                  6056,
                 );
               }
             }
 
-            // Check 4: Per-protocol cap (on-chain line 261, error 6069)
+            // Check 4: Per-protocol cap (on-chain line 261, error 6062)
             const protocolAddr = this._resolveProtocolAddress(intent);
             if (protocolAddr) {
               const protocolBudget = state.protocolBudgets.find(
@@ -538,7 +538,7 @@ export class IntentEngine {
                         inAllowlist: protocolInAllowlist,
                       },
                     },
-                    6069,
+                    6062,
                   );
                 }
               }

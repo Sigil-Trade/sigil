@@ -10,8 +10,8 @@ describe("errors", () => {
     it("extends Error with structured metadata", () => {
       const err = new PhalnxSDKError({
         code: 6006,
-        name: "DailyCapExceeded",
-        message: "Daily spending cap would be exceeded",
+        name: "SpendingCapExceeded",
+        message: "Rolling 24h spending cap would be exceeded",
         expected: "amount <= $50 remaining",
         actual: "requested $100",
         field: "amount",
@@ -21,7 +21,7 @@ describe("errors", () => {
       expect(err).to.be.instanceOf(Error);
       expect(err.name).to.equal("PhalnxSDKError");
       expect(err.code).to.equal(6006);
-      expect(err.errorName).to.equal("DailyCapExceeded");
+      expect(err.errorName).to.equal("SpendingCapExceeded");
       expect(err.message).to.equal("Daily spending cap would be exceeded");
       expect(err.expected).to.equal("amount <= $50 remaining");
       expect(err.actual).to.equal("requested $100");
@@ -48,16 +48,16 @@ describe("errors", () => {
       const err = parseOnChainError({ code: 6006 });
       expect(err).to.not.be.null;
       expect(err!.code).to.equal(6006);
-      expect(err!.errorName).to.equal("DailyCapExceeded");
+      expect(err!.errorName).to.equal("SpendingCapExceeded");
       expect(err!.suggestion).to.include("rolling window");
     });
 
     it("parses Anchor-format error", () => {
       const err = parseOnChainError({
-        error: { errorCode: { number: 6047 } },
+        error: { errorCode: { number: 6044 } },
       });
       expect(err).to.not.be.null;
-      expect(err!.code).to.equal(6047);
+      expect(err!.code).to.equal(6044);
       expect(err!.errorName).to.equal("InsufficientPermissions");
     });
 
@@ -97,10 +97,10 @@ describe("errors", () => {
       expect(err!.errorName).to.equal("ProtocolNotAllowed");
     });
 
-    it("maps error 6037 (SlippageTooHigh)", () => {
+    it("maps error 6037 (SwapSlippageExceeded)", () => {
       const err = parseOnChainError({ code: 6037 });
       expect(err).to.not.be.null;
-      expect(err!.errorName).to.equal("SlippageTooHigh");
+      expect(err!.errorName).to.equal("SwapSlippageExceeded");
     });
   });
 

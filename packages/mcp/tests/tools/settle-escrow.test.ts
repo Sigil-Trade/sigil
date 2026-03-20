@@ -30,7 +30,7 @@ describe("shield_settle_escrow", () => {
 
   it("returns error on conditions not met", async () => {
     const client = createMockClient({
-      shouldThrow: Object.assign(new Error("test"), { code: 6053 }),
+      shouldThrow: Object.assign(new Error("test"), { code: 6050 }),
     });
     const result = await settleEscrow(client as any, {
       destinationVault: destVault,

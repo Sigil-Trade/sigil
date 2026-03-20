@@ -5,7 +5,7 @@
 > control model, PDA derivation paths, error catalog, and trust assumptions.
 >
 > Program: `programs/phalnx/` — Anchor 0.32.1, Rust 1.89.0
-> 29 instruction handlers, 9 PDA account types, 77 error codes, 31 events.
+> 29 instruction handlers, 9 PDA account types, 70 error codes, 31 events.
 >
 > Cross-reference: See PRODUCTION_AUDIT.md for the latest audit findings.
 
@@ -146,7 +146,7 @@ Vault seeds include `vault_id` (a `u64`) to allow one owner to create multiple i
 
 ## 5. Error Code Catalog
 
-77 error codes (6000–6076) using Anchor's `#[error_code]`. See `docs/ERROR-CODES.md` for the full table with categories. Source of truth: `programs/phalnx/src/errors.rs`.
+70 error codes (6000–6069) using Anchor's `#[error_code]`. See `docs/ERROR-CODES.md` for the full table with categories. Source of truth: `programs/phalnx/src/errors.rs`.
 
 **Categories:** Vault state (7), Access control (2), Stablecoin (2), Policy (5), Spending (1), Session (2), Fee (3), Validation (6), Timelock (3), Security (5), Integration (4), Multi-agent (6), Escrow (6), Constraints (8), Arithmetic (1).
 
@@ -260,7 +260,7 @@ The SDK trusts RPC account data for client-side precheck. A malicious RPC can su
 - All 29 instruction handlers in `programs/phalnx/src/instructions/`
 - All 9 PDA account types in `programs/phalnx/src/state/`
 - DeFi integration verifiers in `programs/phalnx/src/instructions/integrations/`
-- Error definitions in `programs/phalnx/src/errors.rs` (77 codes)
+- Error definitions in `programs/phalnx/src/errors.rs` (70 codes)
 - Event definitions in `programs/phalnx/src/events.rs` (31 events)
 - Program entrypoint in `programs/phalnx/src/lib.rs`
 

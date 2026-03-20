@@ -42,7 +42,7 @@ describe("shield_pause_agent", () => {
 
   it("returns error when agent already paused", async () => {
     const client = createMockClient({
-      shouldThrow: Object.assign(new Error("test"), { code: 6075 }),
+      shouldThrow: Object.assign(new Error("test"), { code: 6068 }),
     });
     const result = await pauseAgent(client as any, {
       vault: TEST_VAULT_PDA.toBase58(),
