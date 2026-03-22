@@ -70,6 +70,10 @@ export {
   getProtocolSpend,
   bytesToAddress,
   findVaultsByOwner,
+  findEscrowsByVault,
+  findSessionsByVault,
+  getPendingPolicyForVault,
+  getPendingConstraintsForVault,
 } from "./state-resolver.js";
 export type {
   EffectiveBudget,
