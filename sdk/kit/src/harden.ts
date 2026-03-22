@@ -23,6 +23,7 @@ import {
   getPolicyPDA,
   getPendingPolicyPDA,
 } from "./resolve-accounts.js";
+import { findVaultsByOwner } from "./state-resolver.js";
 import { fetchMaybeAgentVault } from "./generated/accounts/agentVault.js";
 import { PHALNX_PROGRAM_ADDRESS } from "./generated/programs/phalnx.js";
 import { validateNetwork, type Network } from "./types.js";
@@ -179,15 +180,28 @@ export async function findNextVaultId(
   owner: Address,
   programAddress: Address = PHALNX_PROGRAM_ADDRESS,
 ): Promise<bigint> {
-  // Sequential probe — most owners have < 5 vaults
-  for (let i = 0n; i < 256n; i++) {
+  // Fast path: sequential probe for first 5 slots (common case)
+  for (let i = 0n; i < 5n; i++) {
     const [vaultPda] = await getVaultPDA(owner, i, programAddress);
     const account = await fetchMaybeAgentVault(rpc, vaultPda);
     if (!account.exists) {
       return i;
     }
   }
-  throw new Error("All 256 vault slots are in use for this owner.");
+
+  // Slow path: owner has 5+ vaults — batch-discover via GPA and find max ID
+  const vaults = await findVaultsByOwner(rpc, owner, 100);
+  if (vaults.length === 0) return 0n;
+
+  let maxId = 0n;
+  for (const v of vaults) {
+    if (v.vaultId > maxId) maxId = v.vaultId;
+  }
+  const nextId = maxId + 1n;
+  if (nextId >= 256n) {
+    throw new Error("All 256 vault slots are in use for this owner.");
+  }
+  return nextId;
 }
 
 // ─── Harden ─────────────────────────────────────────────────────────────────

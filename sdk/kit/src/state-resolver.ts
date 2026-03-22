@@ -556,8 +556,13 @@ export async function findVaultsByOwner(
     // Sort by vaultId for consistent ordering regardless of RPC response order
     return verified.sort((a, b) => (a.vaultId < b.vaultId ? -1 : a.vaultId > b.vaultId ? 1 : 0));
   } catch (err) {
+    // Rate limits must propagate — never fall back to slow probing under rate limit
+    const code = (err as { code?: number }).code;
+    if (code === -32005 || (err instanceof Error && err.message.includes("429"))) {
+      throw err;
+    }
     // Only fall back to probing if the RPC doesn't support getProgramAccounts.
-    // Network errors, auth errors, rate limits should propagate.
+    // Network errors, auth errors should propagate.
     if (!isGpaUnsupportedError(err)) {
       throw err;
     }

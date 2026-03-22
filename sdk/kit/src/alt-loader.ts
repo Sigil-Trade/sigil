@@ -26,9 +26,11 @@ interface CacheEntry {
 export class AltCache {
   private cache: Map<string, CacheEntry> = new Map();
   private readonly ttlMs: number;
+  private readonly maxSize: number;
 
-  constructor(ttlMs?: number) {
+  constructor(ttlMs?: number, maxSize?: number) {
     this.ttlMs = ttlMs ?? DEFAULT_TTL_MS;
+    this.maxSize = maxSize ?? 50;
   }
 
   /**
@@ -64,7 +66,7 @@ export class AltCache {
       try {
         const fetched = await fetchAddressesForLookupTables(
           uncached,
-          rpc as any,
+          rpc as Parameters<typeof fetchAddressesForLookupTables>[1],
         );
 
         // Store each ALT separately in cache
@@ -74,6 +76,13 @@ export class AltCache {
             expiresAt: now + this.ttlMs,
           };
           this.cache.set(altAddr, cacheEntry);
+        }
+
+        // LRU eviction: remove oldest entries when cache exceeds maxSize
+        while (this.cache.size > this.maxSize) {
+          const oldest = this.cache.keys().next().value;
+          if (oldest !== undefined) this.cache.delete(oldest);
+          else break;
         }
 
         Object.assign(result, fetched);

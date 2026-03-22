@@ -157,10 +157,25 @@ export class ShieldState {
 
   recordSpend(mint: string, amount: bigint): void {
     this.spendEntries.push({ mint, amount, timestamp: Date.now() });
+    this.prune();
   }
 
   recordTransaction(): void {
     this.txEntries.push({ timestamp: Date.now() });
+    this.prune();
+  }
+
+  /** Prune stale entries when arrays exceed threshold. */
+  private prune(): void {
+    const PRUNE_THRESHOLD = 10_000;
+    if (this.spendEntries.length > PRUNE_THRESHOLD) {
+      const cutoff = Date.now() - 86_400_000;
+      this.spendEntries = this.spendEntries.filter((e) => e.timestamp >= cutoff);
+    }
+    if (this.txEntries.length > PRUNE_THRESHOLD) {
+      const cutoff = Date.now() - 86_400_000;
+      this.txEntries = this.txEntries.filter((e) => e.timestamp >= cutoff);
+    }
   }
 
   /** Sync spending baseline from on-chain state. Resets local additions. */
