@@ -560,6 +560,209 @@ export function deriveSessionPda(
   return sessionPda;
 }
 
+// ─── Overlay PDA derivation ──────────────────────────────────────────────────
+
+/**
+ * Derive the AgentSpendOverlay PDA for a vault (page index 0).
+ */
+export function deriveOverlayPda(
+  vaultPda: PublicKey,
+  programId: PublicKey,
+): PublicKey {
+  const [overlayPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("agent_spend"), vaultPda.toBuffer(), Buffer.from([0])],
+    programId,
+  );
+  return overlayPda;
+}
+
+// ─── Escrow PDA derivation ───────────────────────────────────────────────────
+
+/**
+ * Derive escrow PDA and its USDC ATA.
+ */
+export function deriveEscrowPda(
+  srcVault: PublicKey,
+  dstVault: PublicKey,
+  escrowId: BN,
+  programId: PublicKey,
+): { escrowPda: PublicKey; escrowUsdcAta: PublicKey } {
+  const [escrowPda] = PublicKey.findProgramAddressSync(
+    [
+      Buffer.from("escrow"),
+      srcVault.toBuffer(),
+      dstVault.toBuffer(),
+      escrowId.toArrayLike(Buffer, "le", 8),
+    ],
+    programId,
+  );
+  const escrowUsdcAta = getAssociatedTokenAddressSync(
+    DEVNET_USDC_MINT,
+    escrowPda,
+    true,
+  );
+  return { escrowPda, escrowUsdcAta };
+}
+
+// ─── Vault setup helper ─────────────────────────────────────────────────────
+
+export interface SetupVaultOpts {
+  dailyCap?: BN;
+  maxTxSize?: BN;
+  vaultFunding?: number;
+  agentPermissions?: BN;
+  agentSpendingLimit?: BN;
+  timelockDuration?: BN;
+  allowedDestinations?: PublicKey[];
+  developerFeeRate?: number;
+  maxSlippageBps?: number;
+  owner?: Keypair;
+  protocolCaps?: any[];
+  skipAgent?: boolean;
+}
+
+export interface VaultSetupResult {
+  vaultId: BN;
+  agent: Keypair;
+  feeDestination: Keypair;
+  vaultPda: PublicKey;
+  policyPda: PublicKey;
+  trackerPda: PublicKey;
+  pendingPolicyPda: PublicKey;
+  overlayPda: PublicKey;
+  vaultUsdcAta: PublicKey;
+  protocolTreasuryAta: PublicKey;
+}
+
+const FULL_PERMISSIONS_BN = new BN((1n << 21n) - 1n);
+
+/**
+ * Create a vault with agent, fund it, and return all PDAs and keypairs.
+ * Consolidates the 7-step setup pattern used in every Surfpool test suite.
+ */
+export async function setupVaultWithAgent(
+  env: SurfpoolTestEnv,
+  program: Program<any>,
+  opts: SetupVaultOpts = {},
+): Promise<VaultSetupResult> {
+  const {
+    dailyCap = new BN(500_000_000),
+    maxTxSize = new BN(100_000_000),
+    vaultFunding = 1_000_000_000,
+    agentPermissions = FULL_PERMISSIONS_BN,
+    agentSpendingLimit = new BN(0),
+    timelockDuration = new BN(0),
+    allowedDestinations = [],
+    developerFeeRate = 0,
+    maxSlippageBps = 100,
+    owner = env.payer,
+    protocolCaps = [],
+    skipAgent = false,
+  } = opts;
+
+  const vaultId = nextVaultId();
+  const agent = await createWallet(env.connection, "agent", 10);
+  const feeDestination = await createWallet(env.connection, "feeDest", 2);
+
+  const pdas = derivePDAs(owner.publicKey, vaultId, program.programId);
+  const overlayPda = deriveOverlayPda(pdas.vaultPda, program.programId);
+
+  await program.methods
+    .initializeVault(
+      vaultId,
+      dailyCap,
+      maxTxSize,
+      0, // protocolMode: all
+      [],
+      new BN(0) as any, // max_leverage_bps
+      3, // max_concurrent_positions
+      developerFeeRate,
+      maxSlippageBps,
+      timelockDuration,
+      allowedDestinations,
+      protocolCaps,
+    )
+    .accounts({
+      owner: owner.publicKey,
+      vault: pdas.vaultPda,
+      policy: pdas.policyPda,
+      tracker: pdas.trackerPda,
+      agentSpendOverlay: overlayPda,
+      feeDestination: feeDestination.publicKey,
+      systemProgram: SystemProgram.programId,
+    } as any)
+    .signers(owner === env.payer ? [] : [owner])
+    .rpc();
+
+  if (!skipAgent) {
+    await program.methods
+      .registerAgent(agent.publicKey, agentPermissions, agentSpendingLimit)
+      .accounts({
+        owner: owner.publicKey,
+        vault: pdas.vaultPda,
+        agentSpendOverlay: overlayPda,
+      } as any)
+      .signers(owner === env.payer ? [] : [owner])
+      .rpc();
+  }
+
+  const vaultUsdcAta = await fundWithTokens(
+    env.connection,
+    pdas.vaultPda,
+    DEVNET_USDC_MINT,
+    vaultFunding,
+  );
+
+  const protocolTreasuryAta = await fundWithTokens(
+    env.connection,
+    PROTOCOL_TREASURY,
+    DEVNET_USDC_MINT,
+    0,
+  );
+
+  return {
+    vaultId,
+    agent,
+    feeDestination,
+    vaultPda: pdas.vaultPda,
+    policyPda: pdas.policyPda,
+    trackerPda: pdas.trackerPda,
+    pendingPolicyPda: pdas.pendingPolicyPda,
+    overlayPda,
+    vaultUsdcAta,
+    protocolTreasuryAta,
+  };
+}
+
+// ─── Error expectation helper ────────────────────────────────────────────────
+
+/**
+ * Send a transaction expecting it to fail with a specific error substring.
+ * Re-throws AssertionErrors from expect.fail() to prevent false passes.
+ */
+export async function expectTxError(
+  connection: Connection,
+  ixs: TransactionInstruction[],
+  signer: Keypair,
+  errorSubstring: string,
+  additionalSigners: Keypair[] = [],
+): Promise<void> {
+  try {
+    await sendVersionedTx(connection, ixs, signer, additionalSigners);
+    throw new Error(
+      `Expected error containing "${errorSubstring}" but transaction succeeded`,
+    );
+  } catch (err: any) {
+    if (err.message?.startsWith("Expected error containing")) throw err;
+    const errStr = err.message || JSON.stringify(err);
+    if (!errStr.includes(errorSubstring)) {
+      throw new Error(
+        `Expected "${errorSubstring}" but got: ${errStr.slice(0, 200)}`,
+      );
+    }
+  }
+}
+
 // ─── Collision-free vault ID generator (prefix 50_xxx) ──────────────────────
 
 let vaultIdCounter = 0;
