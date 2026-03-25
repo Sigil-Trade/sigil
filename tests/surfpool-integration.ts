@@ -1748,4 +1748,470 @@ describe("surfpool-integration", function () {
       );
     });
   });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Suite 9: Emergency operations (freeze, reactivate, pause, unpause)
+  // ═══════════════════════════════════════════════════════════════════════════
+  describe("9. emergency operations", () => {
+    let setup: VaultSetupResult;
+    let agent2: Keypair;
+
+    before(async () => {
+      setup = await setupVaultWithAgent(env, program);
+
+      // Register a second agent for pause isolation tests
+      agent2 = await createWallet(env.connection, "agent2", 10);
+      await program.methods
+        .registerAgent(agent2.publicKey, FULL_PERMISSIONS, new BN(0))
+        .accounts({
+          owner: env.payer.publicKey,
+          vault: setup.vaultPda,
+          agentSpendOverlay: setup.overlayPda,
+        } as any)
+        .rpc();
+    });
+
+    it("freeze_vault blocks validate+finalize", async () => {
+      await program.methods
+        .freezeVault()
+        .accounts({
+          owner: env.payer.publicKey,
+          vault: setup.vaultPda,
+        } as any)
+        .rpc();
+
+      const vault = await program.account.agentVault.fetch(setup.vaultPda);
+      expect(vault.status).to.have.property("frozen");
+
+      // Attempt composed TX — should fail
+      const sessionPda = deriveSessionPda(
+        setup.vaultPda,
+        setup.agent.publicKey,
+        DEVNET_USDC_MINT,
+        program.programId,
+      );
+      const validateIx = await program.methods
+        .validateAndAuthorize(
+          { swap: {} },
+          DEVNET_USDC_MINT,
+          new BN(10_000_000),
+          program.programId,
+          null,
+        )
+        .accountsPartial({
+          agent: setup.agent.publicKey,
+          vault: setup.vaultPda,
+          policy: setup.policyPda,
+          tracker: setup.trackerPda,
+          session: sessionPda,
+          vaultTokenAccount: setup.vaultUsdcAta,
+          tokenMintAccount: DEVNET_USDC_MINT,
+          protocolTreasuryTokenAccount: setup.protocolTreasuryAta,
+          feeDestinationTokenAccount: null,
+          outputStablecoinAccount: null,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          agentSpendOverlay: setup.overlayPda,
+          instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .instruction();
+
+      const finalizeIx = await program.methods
+        .finalizeSession(true)
+        .accountsPartial({
+          payer: setup.agent.publicKey,
+          vault: setup.vaultPda,
+          session: sessionPda,
+          sessionRentRecipient: setup.agent.publicKey,
+          policy: setup.policyPda,
+          tracker: setup.trackerPda,
+          vaultTokenAccount: setup.vaultUsdcAta,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          agentSpendOverlay: setup.overlayPda,
+          instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+          outputStablecoinAccount: null,
+        })
+        .instruction();
+
+      await expectTxError(
+        env.connection,
+        [validateIx, finalizeIx],
+        setup.agent,
+        "VaultNotActive",
+      );
+    });
+
+    it("reactivate_vault restores operations", async () => {
+      await program.methods
+        .reactivateVault(null, null)
+        .accounts({
+          owner: env.payer.publicKey,
+          vault: setup.vaultPda,
+        } as any)
+        .rpc();
+
+      const vault = await program.account.agentVault.fetch(setup.vaultPda);
+      expect(vault.status).to.have.property("active");
+
+      // Composed TX should now succeed
+      const sessionPda = deriveSessionPda(
+        setup.vaultPda,
+        setup.agent.publicKey,
+        DEVNET_USDC_MINT,
+        program.programId,
+      );
+      const validateIx = await program.methods
+        .validateAndAuthorize(
+          { swap: {} },
+          DEVNET_USDC_MINT,
+          new BN(5_000_000),
+          program.programId,
+          null,
+        )
+        .accountsPartial({
+          agent: setup.agent.publicKey,
+          vault: setup.vaultPda,
+          policy: setup.policyPda,
+          tracker: setup.trackerPda,
+          session: sessionPda,
+          vaultTokenAccount: setup.vaultUsdcAta,
+          tokenMintAccount: DEVNET_USDC_MINT,
+          protocolTreasuryTokenAccount: setup.protocolTreasuryAta,
+          feeDestinationTokenAccount: null,
+          outputStablecoinAccount: null,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          agentSpendOverlay: setup.overlayPda,
+          instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .instruction();
+
+      const finalizeIx = await program.methods
+        .finalizeSession(true)
+        .accountsPartial({
+          payer: setup.agent.publicKey,
+          vault: setup.vaultPda,
+          session: sessionPda,
+          sessionRentRecipient: setup.agent.publicKey,
+          policy: setup.policyPda,
+          tracker: setup.trackerPda,
+          vaultTokenAccount: setup.vaultUsdcAta,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          agentSpendOverlay: setup.overlayPda,
+          instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+          outputStablecoinAccount: null,
+        })
+        .instruction();
+
+      const result = await sendVersionedTx(
+        env.connection,
+        [validateIx, finalizeIx],
+        setup.agent,
+      );
+      expect(result.signature).to.be.a("string");
+    });
+
+    it("non-owner cannot reactivate frozen vault", async () => {
+      // Freeze first
+      await program.methods
+        .freezeVault()
+        .accounts({
+          owner: env.payer.publicKey,
+          vault: setup.vaultPda,
+        } as any)
+        .rpc();
+
+      // Non-owner (agent) tries to reactivate
+      const reactivateIx = await program.methods
+        .reactivateVault(null, null)
+        .accounts({
+          owner: setup.agent.publicKey,
+          vault: setup.vaultPda,
+        } as any)
+        .instruction();
+
+      await expectTxError(
+        env.connection,
+        [reactivateIx],
+        setup.agent,
+        "ConstraintHasOne",
+      );
+
+      // Unfreeze for subsequent tests
+      await program.methods
+        .reactivateVault(null, null)
+        .accounts({
+          owner: env.payer.publicKey,
+          vault: setup.vaultPda,
+        } as any)
+        .rpc();
+    });
+
+    it("pause_agent blocks that agent", async () => {
+      await program.methods
+        .pauseAgent(setup.agent.publicKey)
+        .accounts({
+          owner: env.payer.publicKey,
+          vault: setup.vaultPda,
+        } as any)
+        .rpc();
+
+      const vault = await program.account.agentVault.fetch(setup.vaultPda);
+      const agentEntry = vault.agents.find(
+        (a: any) =>
+          a.pubkey.toString() === setup.agent.publicKey.toString(),
+      );
+      expect(agentEntry.paused).to.equal(true);
+
+      // Agent's composed TX should fail
+      const sessionPda = deriveSessionPda(
+        setup.vaultPda,
+        setup.agent.publicKey,
+        DEVNET_USDC_MINT,
+        program.programId,
+      );
+      const validateIx = await program.methods
+        .validateAndAuthorize(
+          { swap: {} },
+          DEVNET_USDC_MINT,
+          new BN(5_000_000),
+          program.programId,
+          null,
+        )
+        .accountsPartial({
+          agent: setup.agent.publicKey,
+          vault: setup.vaultPda,
+          policy: setup.policyPda,
+          tracker: setup.trackerPda,
+          session: sessionPda,
+          vaultTokenAccount: setup.vaultUsdcAta,
+          tokenMintAccount: DEVNET_USDC_MINT,
+          protocolTreasuryTokenAccount: setup.protocolTreasuryAta,
+          feeDestinationTokenAccount: null,
+          outputStablecoinAccount: null,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          agentSpendOverlay: setup.overlayPda,
+          instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .instruction();
+
+      const finalizeIx = await program.methods
+        .finalizeSession(true)
+        .accountsPartial({
+          payer: setup.agent.publicKey,
+          vault: setup.vaultPda,
+          session: sessionPda,
+          sessionRentRecipient: setup.agent.publicKey,
+          policy: setup.policyPda,
+          tracker: setup.trackerPda,
+          vaultTokenAccount: setup.vaultUsdcAta,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          agentSpendOverlay: setup.overlayPda,
+          instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+          outputStablecoinAccount: null,
+        })
+        .instruction();
+
+      await expectTxError(
+        env.connection,
+        [validateIx, finalizeIx],
+        setup.agent,
+        "AgentPaused",
+      );
+    });
+
+    it("paused agent does not affect other agent", async () => {
+      // agent2 should still work (agent1 is paused)
+      const sessionPda = deriveSessionPda(
+        setup.vaultPda,
+        agent2.publicKey,
+        DEVNET_USDC_MINT,
+        program.programId,
+      );
+
+      const validateIx = await program.methods
+        .validateAndAuthorize(
+          { swap: {} },
+          DEVNET_USDC_MINT,
+          new BN(5_000_000),
+          program.programId,
+          null,
+        )
+        .accountsPartial({
+          agent: agent2.publicKey,
+          vault: setup.vaultPda,
+          policy: setup.policyPda,
+          tracker: setup.trackerPda,
+          session: sessionPda,
+          vaultTokenAccount: setup.vaultUsdcAta,
+          tokenMintAccount: DEVNET_USDC_MINT,
+          protocolTreasuryTokenAccount: setup.protocolTreasuryAta,
+          feeDestinationTokenAccount: null,
+          outputStablecoinAccount: null,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          agentSpendOverlay: setup.overlayPda,
+          instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .instruction();
+
+      const finalizeIx = await program.methods
+        .finalizeSession(true)
+        .accountsPartial({
+          payer: agent2.publicKey,
+          vault: setup.vaultPda,
+          session: sessionPda,
+          sessionRentRecipient: agent2.publicKey,
+          policy: setup.policyPda,
+          tracker: setup.trackerPda,
+          vaultTokenAccount: setup.vaultUsdcAta,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          agentSpendOverlay: setup.overlayPda,
+          instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+          outputStablecoinAccount: null,
+        })
+        .instruction();
+
+      const result = await sendVersionedTx(
+        env.connection,
+        [validateIx, finalizeIx],
+        agent2,
+      );
+      expect(result.signature).to.be.a("string");
+    });
+
+    it("unpause_agent restores operations", async () => {
+      await program.methods
+        .unpauseAgent(setup.agent.publicKey)
+        .accounts({
+          owner: env.payer.publicKey,
+          vault: setup.vaultPda,
+        } as any)
+        .rpc();
+
+      const vault = await program.account.agentVault.fetch(setup.vaultPda);
+      const agentEntry = vault.agents.find(
+        (a: any) =>
+          a.pubkey.toString() === setup.agent.publicKey.toString(),
+      );
+      expect(agentEntry.paused).to.equal(false);
+
+      // Agent's composed TX should work again
+      const sessionPda = deriveSessionPda(
+        setup.vaultPda,
+        setup.agent.publicKey,
+        DEVNET_USDC_MINT,
+        program.programId,
+      );
+      const validateIx = await program.methods
+        .validateAndAuthorize(
+          { swap: {} },
+          DEVNET_USDC_MINT,
+          new BN(5_000_000),
+          program.programId,
+          null,
+        )
+        .accountsPartial({
+          agent: setup.agent.publicKey,
+          vault: setup.vaultPda,
+          policy: setup.policyPda,
+          tracker: setup.trackerPda,
+          session: sessionPda,
+          vaultTokenAccount: setup.vaultUsdcAta,
+          tokenMintAccount: DEVNET_USDC_MINT,
+          protocolTreasuryTokenAccount: setup.protocolTreasuryAta,
+          feeDestinationTokenAccount: null,
+          outputStablecoinAccount: null,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          agentSpendOverlay: setup.overlayPda,
+          instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .instruction();
+
+      const finalizeIx = await program.methods
+        .finalizeSession(true)
+        .accountsPartial({
+          payer: setup.agent.publicKey,
+          vault: setup.vaultPda,
+          session: sessionPda,
+          sessionRentRecipient: setup.agent.publicKey,
+          policy: setup.policyPda,
+          tracker: setup.trackerPda,
+          vaultTokenAccount: setup.vaultUsdcAta,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          agentSpendOverlay: setup.overlayPda,
+          instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+          outputStablecoinAccount: null,
+        })
+        .instruction();
+
+      const result = await sendVersionedTx(
+        env.connection,
+        [validateIx, finalizeIx],
+        setup.agent,
+      );
+      expect(result.signature).to.be.a("string");
+    });
+
+    it("frozen vault blocks agent_transfer too", async () => {
+      // Create a destination for agent_transfer
+      const destWallet = await createWallet(env.connection, "emergDest", 2);
+      const destUsdcAta = await fundWithTokens(
+        env.connection,
+        destWallet.publicKey,
+        DEVNET_USDC_MINT,
+        0,
+      );
+
+      // Freeze vault
+      await program.methods
+        .freezeVault()
+        .accounts({
+          owner: env.payer.publicKey,
+          vault: setup.vaultPda,
+        } as any)
+        .rpc();
+
+      // agent_transfer should also fail
+      const transferIx = await program.methods
+        .agentTransfer(new BN(5_000_000))
+        .accounts({
+          agent: setup.agent.publicKey,
+          vault: setup.vaultPda,
+          policy: setup.policyPda,
+          tracker: setup.trackerPda,
+          agentSpendOverlay: setup.overlayPda,
+          vaultTokenAccount: setup.vaultUsdcAta,
+          tokenMintAccount: DEVNET_USDC_MINT,
+          destinationTokenAccount: destUsdcAta,
+          feeDestinationTokenAccount: null,
+          protocolTreasuryTokenAccount: setup.protocolTreasuryAta,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        } as any)
+        .instruction();
+
+      await expectTxError(
+        env.connection,
+        [transferIx],
+        setup.agent,
+        "VaultNotActive",
+      );
+
+      // Unfreeze for any subsequent tests
+      await program.methods
+        .reactivateVault(null, null)
+        .accounts({
+          owner: env.payer.publicKey,
+          vault: setup.vaultPda,
+        } as any)
+        .rpc();
+    });
+  });
 });
