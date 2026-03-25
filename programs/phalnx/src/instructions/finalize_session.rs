@@ -489,16 +489,11 @@ pub fn handler(ctx: Context<FinalizeSession>, success: bool) -> Result<()> {
     // Using an unbounded scan instead of a fixed 20-instruction window ensures
     // coverage at any transaction size, including SIMD-0296's proposed 4,096 bytes.
     let mut post_idx = current_ix_index.saturating_add(1);
-    loop {
-        match load_instruction_at_checked(post_idx, &ix_sysvar_info) {
-            Ok(ix) => {
-                require!(
-                    ix.program_id == compute_budget_id || ix.program_id == system_id,
-                    PhalnxError::UnauthorizedPostFinalizeInstruction
-                );
-            }
-            Err(_) => break, // End of transaction — no more instructions
-        }
+    while let Ok(ix) = load_instruction_at_checked(post_idx, &ix_sysvar_info) {
+        require!(
+            ix.program_id == compute_budget_id || ix.program_id == system_id,
+            PhalnxError::UnauthorizedPostFinalizeInstruction
+        );
         post_idx = post_idx.saturating_add(1);
     }
 

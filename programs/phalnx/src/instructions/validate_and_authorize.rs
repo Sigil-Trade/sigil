@@ -265,91 +265,83 @@ pub fn handler(
         let mut scan_idx = current_idx_usize.saturating_add(1);
         // Unbounded scan: terminates at finalize_session (break) or end of tx (Err).
         // Removes fixed 20-instruction cap to ensure coverage at any transaction size.
-        loop {
-            match load_instruction_at_checked(scan_idx, &ix_sysvar) {
-                Ok(ix) => {
-                    // Stop at finalize_session
-                    if ix.program_id == crate::ID
-                        && ix.data.len() >= 8
-                        && ix.data[..8] == finalize_hash
-                    {
-                        found_finalize = true;
-                        break;
-                    }
-
-                    // 1. Block ALL top-level SPL Token Transfer/TransferChecked/Approve.
-                    // Legitimate DeFi interactions move tokens via CPI, never
-                    // as top-level SPL Token instructions.
-                    if ix.program_id == spl_token_id && !ix.data.is_empty() {
-                        if ix.data[0] == 4 {
-                            return Err(error!(PhalnxError::UnauthorizedTokenApproval));
-                        }
-                        if ix.data[0] == 3 || ix.data[0] == 12 {
-                            return Err(error!(PhalnxError::UnauthorizedTokenTransfer));
-                        }
-                    }
-
-                    // 1b. Block Token-2022 Transfer/Approve/TransferChecked/TransferCheckedWithFee
-                    if ix.program_id == TOKEN_2022_PROGRAM_ID && !ix.data.is_empty() {
-                        if ix.data[0] == 4 {
-                            return Err(error!(PhalnxError::UnauthorizedTokenApproval));
-                        }
-                        if ix.data[0] == 3 || ix.data[0] == 12 || ix.data[0] == 26 {
-                            return Err(error!(PhalnxError::UnauthorizedTokenTransfer));
-                        }
-                    }
-
-                    // 2. Whitelist infrastructure programs (no policy check needed)
-                    if ix.program_id == compute_budget_id
-                        || ix.program_id == anchor_lang::solana_program::system_program::ID
-                    {
-                        scan_idx = scan_idx.saturating_add(1);
-                        continue;
-                    }
-
-                    // 3. All other programs must pass policy check
-                    require!(
-                        policy.is_protocol_allowed(&ix.program_id),
-                        PhalnxError::ProtocolNotAllowed
-                    );
-
-                    // 3b. Generic instruction constraints (OR across entries)
-                    if let Some(ref constraints) = loaded_constraints {
-                        let matched = generic_constraints::verify_against_entries(
-                            &constraints.entries,
-                            &ix.program_id,
-                            &ix.data,
-                            &ix.accounts,
-                        )?;
-                        if !matched && constraints.strict_mode {
-                            return Err(error!(PhalnxError::UnconstrainedProgramBlocked));
-                        }
-                    }
-
-                    // 4. Recognized DeFi: protocol mismatch + slippage verification
-                    let is_recognized_defi = ix.program_id == JUPITER_PROGRAM
-                        || ix.program_id == FLASH_TRADE_PROGRAM
-                        || ix.program_id == JUPITER_LEND_PROGRAM
-                        || ix.program_id == JUPITER_EARN_PROGRAM
-                        || ix.program_id == JUPITER_BORROW_PROGRAM;
-
-                    if is_recognized_defi {
-                        require!(
-                            ix.program_id == target_protocol,
-                            PhalnxError::ProtocolMismatch
-                        );
-                        defi_ix_count = defi_ix_count.saturating_add(1);
-                    }
-
-                    // Slippage verification on Jupiter V6 swaps
-                    if ix.program_id == JUPITER_PROGRAM {
-                        jupiter::verify_jupiter_slippage(&ix.data, policy.max_slippage_bps)?;
-                    }
-
-                    scan_idx = scan_idx.saturating_add(1);
-                }
-                Err(_) => break,
+        while let Ok(ix) = load_instruction_at_checked(scan_idx, &ix_sysvar) {
+            // Stop at finalize_session
+            if ix.program_id == crate::ID && ix.data.len() >= 8 && ix.data[..8] == finalize_hash {
+                found_finalize = true;
+                break;
             }
+
+            // 1. Block ALL top-level SPL Token Transfer/TransferChecked/Approve.
+            // Legitimate DeFi interactions move tokens via CPI, never
+            // as top-level SPL Token instructions.
+            if ix.program_id == spl_token_id && !ix.data.is_empty() {
+                if ix.data[0] == 4 {
+                    return Err(error!(PhalnxError::UnauthorizedTokenApproval));
+                }
+                if ix.data[0] == 3 || ix.data[0] == 12 {
+                    return Err(error!(PhalnxError::UnauthorizedTokenTransfer));
+                }
+            }
+
+            // 1b. Block Token-2022 Transfer/Approve/TransferChecked/TransferCheckedWithFee
+            if ix.program_id == TOKEN_2022_PROGRAM_ID && !ix.data.is_empty() {
+                if ix.data[0] == 4 {
+                    return Err(error!(PhalnxError::UnauthorizedTokenApproval));
+                }
+                if ix.data[0] == 3 || ix.data[0] == 12 || ix.data[0] == 26 {
+                    return Err(error!(PhalnxError::UnauthorizedTokenTransfer));
+                }
+            }
+
+            // 2. Whitelist infrastructure programs (no policy check needed)
+            if ix.program_id == compute_budget_id
+                || ix.program_id == anchor_lang::solana_program::system_program::ID
+            {
+                scan_idx = scan_idx.saturating_add(1);
+                continue;
+            }
+
+            // 3. All other programs must pass policy check
+            require!(
+                policy.is_protocol_allowed(&ix.program_id),
+                PhalnxError::ProtocolNotAllowed
+            );
+
+            // 3b. Generic instruction constraints (OR across entries)
+            if let Some(ref constraints) = loaded_constraints {
+                let matched = generic_constraints::verify_against_entries(
+                    &constraints.entries,
+                    &ix.program_id,
+                    &ix.data,
+                    &ix.accounts,
+                )?;
+                if !matched && constraints.strict_mode {
+                    return Err(error!(PhalnxError::UnconstrainedProgramBlocked));
+                }
+            }
+
+            // 4. Recognized DeFi: protocol mismatch + slippage verification
+            let is_recognized_defi = ix.program_id == JUPITER_PROGRAM
+                || ix.program_id == FLASH_TRADE_PROGRAM
+                || ix.program_id == JUPITER_LEND_PROGRAM
+                || ix.program_id == JUPITER_EARN_PROGRAM
+                || ix.program_id == JUPITER_BORROW_PROGRAM;
+
+            if is_recognized_defi {
+                require!(
+                    ix.program_id == target_protocol,
+                    PhalnxError::ProtocolMismatch
+                );
+                defi_ix_count = defi_ix_count.saturating_add(1);
+            }
+
+            // Slippage verification on Jupiter V6 swaps
+            if ix.program_id == JUPITER_PROGRAM {
+                jupiter::verify_jupiter_slippage(&ix.data, policy.max_slippage_bps)?;
+            }
+
+            scan_idx = scan_idx.saturating_add(1);
         }
 
         // 5. Prevent multi-DeFi-instruction attacks in all spending transactions.
@@ -374,68 +366,61 @@ pub fn handler(
     if !is_spending {
         let mut found_finalize = false;
         let mut idx = current_idx_usize.saturating_add(1);
-        // Unbounded scan: terminates at finalize_session (break) or end of tx (Err).
-        loop {
-            match load_instruction_at_checked(idx, &ix_sysvar) {
-                Ok(ix) => {
-                    // Stop at finalize_session
-                    if ix.program_id == crate::ID
-                        && ix.data.len() >= 8
-                        && ix.data[..8] == finalize_hash
-                    {
-                        found_finalize = true;
-                        break;
-                    }
-
-                    // 1. Block top-level SPL Token Transfer/TransferChecked/Approve
-                    if ix.program_id == spl_token_id && !ix.data.is_empty() {
-                        if ix.data[0] == 4 {
-                            return Err(error!(PhalnxError::UnauthorizedTokenApproval));
-                        }
-                        if ix.data[0] == 3 || ix.data[0] == 12 {
-                            return Err(error!(PhalnxError::UnauthorizedTokenTransfer));
-                        }
-                    }
-
-                    // 1b. Block Token-2022 Transfer/Approve/TransferChecked/TransferCheckedWithFee
-                    if ix.program_id == TOKEN_2022_PROGRAM_ID && !ix.data.is_empty() {
-                        if ix.data[0] == 4 {
-                            return Err(error!(PhalnxError::UnauthorizedTokenApproval));
-                        }
-                        if ix.data[0] == 3 || ix.data[0] == 12 || ix.data[0] == 26 {
-                            return Err(error!(PhalnxError::UnauthorizedTokenTransfer));
-                        }
-                    }
-
-                    // 2. Whitelist infrastructure programs (no policy check needed)
-                    if ix.program_id == compute_budget_id
-                        || ix.program_id == anchor_lang::solana_program::system_program::ID
-                    {
-                        idx = idx.saturating_add(1);
-                        continue;
-                    }
-
-                    // 3. All other programs must pass policy protocol check
-                    require!(
-                        policy.is_protocol_allowed(&ix.program_id),
-                        PhalnxError::ProtocolNotAllowed
-                    );
-
-                    // 4. Generic constraints (OR across entries + strict_mode)
-                    if let Some(ref constraints) = loaded_constraints {
-                        let matched = generic_constraints::verify_against_entries(
-                            &constraints.entries,
-                            &ix.program_id,
-                            &ix.data,
-                            &ix.accounts,
-                        )?;
-                        if !matched && constraints.strict_mode {
-                            return Err(error!(PhalnxError::UnconstrainedProgramBlocked));
-                        }
-                    }
-                }
-                Err(_) => break,
+        // Unbounded scan: terminates at finalize_session (break) or end of tx (while let Err).
+        while let Ok(ix) = load_instruction_at_checked(idx, &ix_sysvar) {
+            // Stop at finalize_session
+            if ix.program_id == crate::ID && ix.data.len() >= 8 && ix.data[..8] == finalize_hash {
+                found_finalize = true;
+                break;
             }
+
+            // 1. Block top-level SPL Token Transfer/TransferChecked/Approve
+            if ix.program_id == spl_token_id && !ix.data.is_empty() {
+                if ix.data[0] == 4 {
+                    return Err(error!(PhalnxError::UnauthorizedTokenApproval));
+                }
+                if ix.data[0] == 3 || ix.data[0] == 12 {
+                    return Err(error!(PhalnxError::UnauthorizedTokenTransfer));
+                }
+            }
+
+            // 1b. Block Token-2022 Transfer/Approve/TransferChecked/TransferCheckedWithFee
+            if ix.program_id == TOKEN_2022_PROGRAM_ID && !ix.data.is_empty() {
+                if ix.data[0] == 4 {
+                    return Err(error!(PhalnxError::UnauthorizedTokenApproval));
+                }
+                if ix.data[0] == 3 || ix.data[0] == 12 || ix.data[0] == 26 {
+                    return Err(error!(PhalnxError::UnauthorizedTokenTransfer));
+                }
+            }
+
+            // 2. Whitelist infrastructure programs (no policy check needed)
+            if ix.program_id == compute_budget_id
+                || ix.program_id == anchor_lang::solana_program::system_program::ID
+            {
+                idx = idx.saturating_add(1);
+                continue;
+            }
+
+            // 3. All other programs must pass policy protocol check
+            require!(
+                policy.is_protocol_allowed(&ix.program_id),
+                PhalnxError::ProtocolNotAllowed
+            );
+
+            // 4. Generic constraints (OR across entries + strict_mode)
+            if let Some(ref constraints) = loaded_constraints {
+                let matched = generic_constraints::verify_against_entries(
+                    &constraints.entries,
+                    &ix.program_id,
+                    &ix.data,
+                    &ix.accounts,
+                )?;
+                if !matched && constraints.strict_mode {
+                    return Err(error!(PhalnxError::UnconstrainedProgramBlocked));
+                }
+            }
+
             idx = idx.saturating_add(1);
         }
 
