@@ -3463,4 +3463,218 @@ describe("surfpool-integration", function () {
       }
     });
   });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Suite 15: Instruction constraints with timelock
+  // ═══════════════════════════════════════════════════════════════════════════
+  describe("15. instruction constraints with timelock", () => {
+    let setup: VaultSetupResult;
+    let constraintsPda: PublicKey;
+    let pendingConstraintsPda: PublicKey;
+
+    // Use a well-known program ID for constraint entries
+    const dummyProtocol = new PublicKey(
+      "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+    ); // Jupiter V6
+
+    const sampleEntry = {
+      programId: dummyProtocol,
+      dataConstraints: [
+        {
+          offset: 0,
+          operator: { eq: {} },
+          value: Buffer.from([0xe5, 0x17, 0xcb, 0x97, 0x7a, 0xe3, 0xad, 0x2a]),
+        },
+      ],
+      accountConstraints: [],
+    };
+
+    before(async () => {
+      // Create vault WITH timelock for queue/apply tests
+      setup = await setupVaultWithAgent(env, program, {
+        timelockDuration: new BN(60), // 60 seconds
+      });
+
+      [constraintsPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("constraints"), setup.vaultPda.toBuffer()],
+        program.programId,
+      );
+      [pendingConstraintsPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("pending_constraints"), setup.vaultPda.toBuffer()],
+        program.programId,
+      );
+    });
+
+    it("create_instruction_constraints succeeds", async () => {
+      await program.methods
+        .createInstructionConstraints([sampleEntry], false)
+        .accounts({
+          owner: env.payer.publicKey,
+          vault: setup.vaultPda,
+          policy: setup.policyPda,
+          constraints: constraintsPda,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .rpc();
+
+      const constraints =
+        await program.account.instructionConstraints.fetch(constraintsPda);
+      expect(constraints.entries.length).to.equal(1);
+      expect(constraints.entries[0].programId.toString()).to.equal(
+        dummyProtocol.toString(),
+      );
+    });
+
+    it("update_instruction_constraints modifies entries", async () => {
+      const updatedEntry = {
+        ...sampleEntry,
+        dataConstraints: [
+          {
+            offset: 0,
+            operator: { ne: {} },
+            value: Buffer.from([0x00, 0x00, 0x00, 0x00]),
+          },
+        ],
+      };
+
+      await program.methods
+        .updateInstructionConstraints([updatedEntry], true)
+        .accounts({
+          owner: env.payer.publicKey,
+          vault: setup.vaultPda,
+          policy: setup.policyPda,
+          constraints: constraintsPda,
+        } as any)
+        .rpc();
+
+      const constraints =
+        await program.account.instructionConstraints.fetch(constraintsPda);
+      expect(constraints.strictMode).to.equal(true);
+    });
+
+    it("close_instruction_constraints reclaims rent", async () => {
+      // Need a separate vault for close test (can't close the one we'll queue on)
+      const closeSetup = await setupVaultWithAgent(env, program);
+      const [closePda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("constraints"), closeSetup.vaultPda.toBuffer()],
+        program.programId,
+      );
+
+      // Create
+      await program.methods
+        .createInstructionConstraints([sampleEntry], false)
+        .accounts({
+          owner: env.payer.publicKey,
+          vault: closeSetup.vaultPda,
+          policy: closeSetup.policyPda,
+          constraints: closePda,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .rpc();
+
+      // Close
+      await program.methods
+        .closeInstructionConstraints()
+        .accounts({
+          owner: env.payer.publicKey,
+          vault: closeSetup.vaultPda,
+          policy: closeSetup.policyPda,
+          constraints: closePda,
+        } as any)
+        .rpc();
+
+      // PDA should be gone
+      try {
+        await program.account.instructionConstraints.fetch(closePda);
+        expect.fail("Constraints PDA should be closed");
+      } catch (err: any) {
+        if (err.name === "AssertionError") throw err;
+        // Expected — account doesn't exist
+      }
+    });
+
+    it("queue + time travel + apply constraints update succeeds", async () => {
+      // Queue update
+      const queuedEntry = {
+        programId: dummyProtocol,
+        dataConstraints: [
+          {
+            offset: 8,
+            operator: { gt: {} },
+            value: Buffer.from([0x01, 0x00, 0x00, 0x00]),
+          },
+        ],
+        accountConstraints: [],
+      };
+
+      await program.methods
+        .queueConstraintsUpdate([queuedEntry], false)
+        .accounts({
+          owner: env.payer.publicKey,
+          vault: setup.vaultPda,
+          policy: setup.policyPda,
+          constraints: constraintsPda,
+          pendingConstraints: pendingConstraintsPda,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .rpc();
+
+      // Time travel past the 60-second timelock
+      const clock = await getClock(env.connection);
+      await timeTravel(env.connection, {
+        absoluteTimestamp: (clock.timestamp + 120) * 1000,
+      });
+
+      // Apply should succeed
+      await program.methods
+        .applyConstraintsUpdate()
+        .accounts({
+          owner: env.payer.publicKey,
+          vault: setup.vaultPda,
+          policy: setup.policyPda,
+          constraints: constraintsPda,
+          pendingConstraints: pendingConstraintsPda,
+        } as any)
+        .rpc();
+
+      const constraints =
+        await program.account.instructionConstraints.fetch(constraintsPda);
+      expect(constraints.entries.length).to.equal(1);
+      expect(constraints.strictMode).to.equal(false);
+    });
+
+    it("apply before timelock expires fails", async () => {
+      // Queue another update
+      await program.methods
+        .queueConstraintsUpdate([sampleEntry], true)
+        .accounts({
+          owner: env.payer.publicKey,
+          vault: setup.vaultPda,
+          policy: setup.policyPda,
+          constraints: constraintsPda,
+          pendingConstraints: pendingConstraintsPda,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .rpc();
+
+      // Try to apply immediately — should fail
+      const applyIx = await program.methods
+        .applyConstraintsUpdate()
+        .accounts({
+          owner: env.payer.publicKey,
+          vault: setup.vaultPda,
+          policy: setup.policyPda,
+          constraints: constraintsPda,
+          pendingConstraints: pendingConstraintsPda,
+        } as any)
+        .instruction();
+
+      await expectTxError(
+        env.connection,
+        [applyIx],
+        env.payer,
+        "TimelockNotExpired",
+      );
+    });
+  });
 });
