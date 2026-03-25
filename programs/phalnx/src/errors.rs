@@ -11,8 +11,8 @@ pub enum PhalnxError {
     #[msg("Unauthorized: signer is not the vault owner")]
     UnauthorizedOwner,
 
-    #[msg("Token is not a recognized stablecoin")]
-    TokenNotRegistered,
+    #[msg("Token is not a supported stablecoin (only USDC and USDT)")]
+    UnsupportedToken,
 
     #[msg("Protocol not allowed by policy")]
     ProtocolNotAllowed,
@@ -20,8 +20,8 @@ pub enum PhalnxError {
     #[msg("Transaction exceeds maximum single transaction size")]
     TransactionTooLarge,
 
-    #[msg("Daily spending cap would be exceeded")]
-    DailyCapExceeded,
+    #[msg("Rolling 24h spending cap would be exceeded")]
+    SpendingCapExceeded,
 
     #[msg("Leverage exceeds maximum allowed")]
     LeverageTooHigh,
@@ -100,7 +100,7 @@ pub enum PhalnxError {
     #[msg("Invalid protocol mode (must be 0, 1, or 2)")]
     InvalidProtocolMode,
 
-    // --- Flash Trade expansion errors ---
+    // --- Transaction validation errors ---
     #[msg("Non-spending action must have amount = 0")]
     InvalidNonSpendingAmount,
 
@@ -117,23 +117,14 @@ pub enum PhalnxError {
     #[msg("Non-stablecoin swap must return stablecoin (balance did not increase)")]
     NonTrackedSwapMustReturnStablecoin,
 
-    #[msg("Jupiter slippage exceeds policy max_slippage_bps or quoted_out is zero")]
-    SlippageTooHigh,
+    #[msg("Swap slippage exceeds policy max_slippage_bps or quoted output is zero")]
+    SwapSlippageExceeded,
 
     #[msg("Cannot parse Jupiter swap instruction data")]
     InvalidJupiterInstruction,
 
-    #[msg("Cannot parse Flash Trade instruction data")]
-    InvalidFlashTradeInstruction,
-
-    #[msg("Flash Trade priceWithSlippage is zero")]
-    FlashTradePriceZero,
-
     #[msg("Top-level SPL Token transfer not allowed between validate and finalize")]
-    DustDepositDetected,
-
-    #[msg("Cannot parse Jupiter Lend instruction data")]
-    InvalidJupiterLendInstruction,
+    UnauthorizedTokenTransfer,
 
     #[msg("Slippage BPS exceeds maximum (5000 = 50%)")]
     SlippageBpsTooHigh,
@@ -141,10 +132,10 @@ pub enum PhalnxError {
     #[msg("DeFi instruction program does not match declared target_protocol")]
     ProtocolMismatch,
 
-    #[msg("Non-stablecoin swap allows exactly one DeFi instruction")]
+    #[msg("Spending allows at most one DeFi instruction")]
     TooManyDeFiInstructions,
 
-    // --- Multi-Agent errors (Workstream A) ---
+    // --- Multi-Agent errors ---
     #[msg("Maximum agents per vault reached (limit: 10)")]
     MaxAgentsReached,
 
@@ -154,7 +145,7 @@ pub enum PhalnxError {
     #[msg("Permission bitmask contains invalid bits")]
     InvalidPermissions,
 
-    // --- Escrow errors (Workstream B) ---
+    // --- Escrow errors ---
     #[msg("Escrow is not in Active status")]
     EscrowNotActive,
 
@@ -173,7 +164,7 @@ pub enum PhalnxError {
     #[msg("Escrow duration exceeds maximum (30 days)")]
     EscrowDurationExceeded,
 
-    // --- Instruction constraints errors (6055-6062) ---
+    // --- Instruction constraints errors ---
     #[msg("Invalid constraint configuration: bounds exceeded")]
     InvalidConstraintConfig,
 
@@ -183,23 +174,10 @@ pub enum PhalnxError {
     #[msg("Invalid constraints PDA: wrong owner or vault")]
     InvalidConstraintsPda,
 
-    #[msg("No pending constraints update to apply or cancel")]
-    NoPendingConstraintsUpdate,
-
-    #[msg("A pending constraints update already exists")]
-    PendingConstraintsUpdateExists,
-
-    #[msg("Constraints update timelock has not expired")]
-    ConstraintsUpdateNotExpired,
-
     #[msg("Invalid pending constraints PDA: wrong owner or vault")]
     InvalidPendingConstraintsPda,
 
-    // Reserved — no expiry mechanism currently implemented
-    #[msg("Pending constraints update has expired and is stale")]
-    ConstraintsUpdateExpired,
-
-    // --- Per-agent spend limit errors (6063) ---
+    // --- Per-agent spend limit errors ---
     #[msg("Agent rolling 24h spend exceeds per-agent spending limit")]
     AgentSpendLimitExceeded,
 
@@ -215,29 +193,28 @@ pub enum PhalnxError {
     #[msg("Session expiry slots out of range (10-450)")]
     InvalidSessionExpiry,
 
-    // --- Generic constraints V2 errors (6068) ---
+    // --- Generic constraints V2 errors ---
     #[msg("Program has no constraint entry and strict mode is enabled")]
     UnconstrainedProgramBlocked,
 
-    // --- Per-protocol spend cap errors (6069-6070) ---
-    #[msg("Per-protocol daily spending cap would be exceeded")]
+    // --- Per-protocol spend cap errors ---
+    #[msg("Per-protocol rolling 24h spending cap would be exceeded")]
     ProtocolCapExceeded,
 
     #[msg("protocol_caps length must match protocols length when has_protocol_caps is true")]
     ProtocolCapsMismatch,
 
-    // --- Audit fix errors (6071-6072) ---
+    // --- Vault cleanup guard errors ---
     #[msg("Cannot close vault with active escrow deposits")]
     ActiveEscrowsExist,
 
     #[msg("Instruction constraints must be closed before closing vault")]
     ConstraintsNotClosed,
 
-    // 6073
     #[msg("Pending policy update must be applied or cancelled before closing vault")]
     PendingPolicyExists,
 
-    // --- Emergency response errors (6074-6076) ---
+    // --- Emergency response errors ---
     #[msg("Agent is paused and cannot execute actions")]
     AgentPaused,
 
@@ -246,4 +223,8 @@ pub enum PhalnxError {
 
     #[msg("Agent is not paused")]
     AgentNotPaused,
+
+    // --- Post-finalize instruction check ---
+    #[msg("Instructions after finalize_session must be ComputeBudget or SystemProgram only")]
+    UnauthorizedPostFinalizeInstruction,
 }

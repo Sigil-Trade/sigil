@@ -1,5 +1,5 @@
 // @phalnx/kit — Kit-native SDK for Phalnx
-// ESM-only, zero web3.js dependency (except internal compat.ts)
+// ESM-only, zero web3.js dependency
 
 // ─── Generated Client ─────────────────────────────────────────────────────────
 export * from "./generated/index.js";
@@ -47,6 +47,8 @@ export {
   parseActionType,
   isSpendingAction,
   getPositionEffect,
+  validateNetwork,
+  toInstruction,
   // Permission builder
   PermissionBuilder,
   // Types
@@ -63,15 +65,27 @@ export type { Network, PositionEffect } from "./types.js";
 // ─── State Resolver ──────────────────────────────────────────────────────────
 export {
   resolveVaultState,
+  resolveVaultStateForOwner,
+  resolveVaultBudget,
   getRolling24hUsd,
   getAgentRolling24hUsd,
   getProtocolSpend,
+  getSpendingHistory,
   bytesToAddress,
+  findVaultsByOwner,
+  findEscrowsByVault,
+  findSessionsByVault,
+  getPendingPolicyForVault,
+  getPendingConstraintsForVault,
 } from "./state-resolver.js";
 export type {
   EffectiveBudget,
   ProtocolBudget,
+  SpendingEpoch,
   ResolvedVaultState,
+  ResolvedVaultStateForOwner,
+  ResolvedBudget,
+  DiscoveredVault,
 } from "./state-resolver.js";
 
 // ─── PDA Resolution ───────────────────────────────────────────────────────────
@@ -109,8 +123,18 @@ export {
 export type { ComposeTransactionParams } from "./composer.js";
 
 // ─── Event Parser ─────────────────────────────────────────────────────────────
-export { parsePhalnxEvents, filterEvents, getEventNames } from "./events.js";
-export type { PhalnxEvent, PhalnxEventName } from "./events.js";
+export {
+  parsePhalnxEvents,
+  filterEvents,
+  getEventNames,
+  decodePhalnxEvent,
+  parseAndDecodePhalnxEvents,
+} from "./events.js";
+export type {
+  PhalnxEvent,
+  PhalnxEventName,
+  DecodedPhalnxEvent,
+} from "./events.js";
 
 // ─── Priority Fees ────────────────────────────────────────────────────────────
 export {
@@ -134,12 +158,15 @@ export {
   simulateBeforeSend,
   detectDrainAttempt,
   adjustCU,
+  parseTokenBalance,
   RISK_FLAG_LARGE_OUTFLOW,
   RISK_FLAG_UNKNOWN_RECIPIENT,
   RISK_FLAG_FULL_DRAIN,
   RISK_FLAG_MULTI_OUTPUT,
   RISK_FLAG_SIZE_OVERFLOW,
   RISK_FLAG_ERROR_MAP,
+  DEFAULT_WARNING_PERCENT,
+  DEFAULT_BLOCK_PERCENT,
 } from "./simulation.js";
 export type {
   SimulationOptions,
@@ -148,16 +175,141 @@ export type {
   BalanceDelta,
   RiskFlag,
   DrainDetectionInput,
+  DrainThresholds,
 } from "./simulation.js";
 
 // ─── Token Resolution ─────────────────────────────────────────────────────────
 export { resolveToken, toBaseUnits, fromBaseUnits } from "./tokens.js";
 export type { ResolvedToken } from "./tokens.js";
 
+// ─── Display Formatting ──────────────────────────────────────────────────────
+export {
+  formatUsd,
+  formatUsdCompact,
+  formatUsdSigned,
+  formatPercent,
+  formatPercentSigned,
+  formatDuration,
+  formatRelativeTime,
+  formatTimeUntil,
+  formatAddress,
+  formatTokenAmount,
+  formatTokenAmountCompact,
+} from "./formatting.js";
+
+// ─── Spending Analytics ──────────────────────────────────────────────────────
+export {
+  getSpendingVelocity,
+  getSpendingBreakdown,
+  getAgentSpendingHistory,
+} from "./spending-analytics.js";
+export type {
+  SpendingVelocity,
+  SpendingBreakdown,
+} from "./spending-analytics.js";
+
+// ─── Event Analytics ─────────────────────────────────────────────────────────
+export {
+  categorizeEvent,
+  describeEvent,
+  buildActivityItem,
+  getVaultActivity,
+} from "./event-analytics.js";
+export type {
+  EventCategory,
+  VaultActivityItem,
+} from "./event-analytics.js";
+
+// ─── Security Analytics ──────────────────────────────────────────────────────
+export {
+  getSecurityPosture,
+  evaluateAlertConditions,
+  getAuditTrail,
+} from "./security-analytics.js";
+export type {
+  SecurityPosture,
+  SecurityCheck,
+  Alert,
+  AuditEntry,
+} from "./security-analytics.js";
+
+// ─── Agent Analytics ─────────────────────────────────────────────────────────
+export {
+  getAgentProfile,
+  getAgentLeaderboard,
+  getAgentComparison,
+  getAgentErrorBreakdown,
+} from "./agent-analytics.js";
+export type {
+  AgentProfile,
+  AgentRanking,
+  AgentComparisonData,
+  AgentErrorBreakdown,
+} from "./agent-analytics.js";
+
+// ─── Portfolio Analytics ─────────────────────────────────────────────────────
+export {
+  getPortfolioOverview,
+  aggregatePortfolio,
+  getCrossVaultAgentRanking,
+  getPortfolioTimeSeries,
+} from "./portfolio-analytics.js";
+export type {
+  PortfolioOverview,
+  CrossVaultAgentRanking,
+  PortfolioTimeSeries,
+} from "./portfolio-analytics.js";
+
+// ─── Protocol Analytics ──────────────────────────────────────────────────────
+export {
+  getProtocolBreakdown,
+  getProtocolUsageAcrossVaults,
+} from "./protocol-analytics.js";
+export type {
+  ProtocolBreakdownItem,
+  PlatformProtocolUsage,
+} from "./protocol-analytics.js";
+
+// ─── Advanced Analytics ──────────────────────────────────────────────────────
+export {
+  getSlippageEfficiency,
+  getCapVelocity,
+  getSessionDeviationRate,
+  getIdleCapitalDuration,
+  getPermissionEscalationLatency,
+  getInstructionCoverageRatio,
+  getPermissionUtilizationRate,
+} from "./advanced-analytics.js";
+export type {
+  SlippageReport,
+  CapVelocityReport,
+  DeviationReport,
+  IdleCapitalReport,
+  EscalationReport,
+  CoverageReport,
+  PermissionUtilization,
+} from "./advanced-analytics.js";
+
+// ─── Protocol Names ──────────────────────────────────────────────────────────
+export { resolveProtocolName, PROTOCOL_NAMES } from "./protocol-names.js";
+
+// ─── Vault Analytics ─────────────────────────────────────────────────────────
+export {
+  getVaultHealth,
+  getVaultSummary,
+} from "./vault-analytics.js";
+export type {
+  VaultHealth,
+  VaultSummary,
+  VaultStats,
+  VaultSecurityCheck,
+} from "./vault-analytics.js";
+
 // ─── Policy Engine ────────────────────────────────────────────────────────────
 export {
   resolvePolicies,
   toCoreAnalysis,
+  validateSpendLimitMints,
   DEFAULT_POLICIES,
   parseSpendLimit,
 } from "./policies.js";
@@ -166,7 +318,6 @@ export type {
   SpendLimit,
   TransactionAnalysis,
   TokenTransfer,
-  SpendingSummary,
   ResolvedPolicies,
   RateLimitConfig,
   PolicyCheckResult,
@@ -215,56 +366,14 @@ export {
   isAgentError,
   getAllOnChainErrorCodes,
   getAllSdkErrorCodes,
+  categorizeError,
 } from "./agent-errors.js";
 export type {
   ErrorCategory,
   RecoveryAction,
   AgentError,
+  PhalnxErrorCategory,
 } from "./agent-errors.js";
-
-// ─── Intents ──────────────────────────────────────────────────────────────────
-export {
-  DEFAULT_INTENT_TTL_MS,
-  ACTION_TYPE_MAP,
-  summarizeAction,
-  resolveProtocolActionType,
-} from "./intents.js";
-export type {
-  IntentAction,
-  IntentActionType,
-  IntentStatus,
-  PrecheckResult,
-  ExecuteResult,
-  TransactionIntent,
-  IntentStorage,
-  ProtocolRegistryLike,
-} from "./intents.js";
-
-// ─── Intent Validator ─────────────────────────────────────────────────────────
-export { validateIntentInput } from "./intent-validator.js";
-export type { ValidationResult } from "./intent-validator.js";
-
-// ─── Intent Storage ──────────────────────────────────────────────────────────
-export { createIntent, MemoryIntentStorage } from "./intent-storage.js";
-
-// ─── Protocol Handler Interface ──────────────────────────────────────────────
-export type {
-  ProtocolComposeResult,
-  ProtocolContext,
-  ProtocolActionDescriptor,
-  ProtocolHandlerMetadata,
-  ProtocolHandler,
-} from "./integrations/protocol-handler.js";
-
-// ─── Protocol Registry ───────────────────────────────────────────────────────
-export {
-  ProtocolRegistry,
-  globalProtocolRegistry,
-} from "./integrations/protocol-registry.js";
-
-// ─── Adapter Verifier ────────────────────────────────────────────────────────
-export { verifyAdapterOutput } from "./integrations/adapter-verifier.js";
-export type { AdapterVerifyResult } from "./integrations/adapter-verifier.js";
 
 // ─── Protocol Resolver ───────────────────────────────────────────────────────
 export {
@@ -283,26 +392,8 @@ export type {
   InspectableInstruction,
   TokenTransferInfo,
   InstructionAnalysis,
+  DangerousTokenOperation,
 } from "./inspector.js";
-
-// ─── Jupiter Handler (T1) ───────────────────────────────────────────────────
-export {
-  deserializeJupiterInstruction,
-  JupiterHandler,
-} from "./integrations/jupiter-handler.js";
-export type { JupiterSerializedInstruction } from "./integrations/jupiter-handler.js";
-
-// ─── T2 Protocol Handlers ───────────────────────────────────────────────────
-export {
-  DriftHandler,
-  FlashTradeHandler,
-  KaminoHandler,
-  SquadsHandler,
-  driftHandler,
-  flashTradeHandler,
-  kaminoHandler,
-  squadsHandler,
-} from "./integrations/t2-handlers.js";
 
 // ─── Shield ─────────────────────────────────────────────────────────────────
 export {
@@ -315,24 +406,35 @@ export {
 export type {
   PolicyViolation,
   ShieldCheckResult,
-  SpendingSummary as ShieldSpendingSummary,
+  SpendingSummary,
   ShieldOptions,
   ShieldedContext,
   ShieldedSignerOptions,
 } from "./shield.js";
 
-// ─── Intent Engine ──────────────────────────────────────────────────────────
-export { IntentEngine } from "./intent-engine.js";
-export type {
-  ExplainResult,
-  ProtocolInfo,
-  ActionInfo,
-  IntentEngineConfig,
-} from "./intent-engine.js";
+// ─── Wrap ──────────────────────────────────────────────────────────────────
+export { wrap, PhalnxClient, replaceAgentAtas } from "./wrap.js";
+export type { WrapParams, WrapResult, PhalnxClientConfig, ClientWrapOpts, ExecuteResult } from "./wrap.js";
 
-// ─── PhalnxKitClient ────────────────────────────────────────────────────────
-export { PhalnxKitClient } from "./client.js";
-export type { PhalnxKitClientConfig } from "./client.js";
+// ─── Create Vault ──────────────────────────────────────────────────────────
+export { createVault } from "./create-vault.js";
+export type { CreateVaultOptions, CreateVaultResult } from "./create-vault.js";
+
+// ─── Vault Presets ───────────────────────────────────────────────────────────
+export {
+  VAULT_PRESETS,
+  getPreset,
+  listPresets,
+  presetToCreateVaultFields,
+} from "./presets.js";
+export type { VaultPreset, PresetName } from "./presets.js";
+
+// ─── Owner Transaction ───────────────────────────────────────────────────────
+export { buildOwnerTransaction } from "./owner-transaction.js";
+export type {
+  BuildOwnerTransactionParams,
+  OwnerTransactionResult,
+} from "./owner-transaction.js";
 
 // ─── Harden / withVault ─────────────────────────────────────────────────────
 export {
@@ -357,102 +459,8 @@ export type {
 } from "./transaction-executor.js";
 
 // ─── RPC Helpers ───────────────────────────────────────────────────────────
-export { BlockhashCache, sendAndConfirmTransaction } from "./rpc-helpers.js";
+export { BlockhashCache, signAndEncode, sendAndConfirmTransaction } from "./rpc-helpers.js";
 export type { Blockhash, SendAndConfirmOptions } from "./rpc-helpers.js";
-
-// ─── Constraint Builder ──────────────────────────────────────────────────
-export {
-  // Builder
-  ConstraintBuilder,
-  ConstraintBudgetExceededError,
-  // Flash Trade
-  FlashTradeDescriptor,
-  FLASH_TRADE_SCHEMA,
-  FLASH_TRADE_PROGRAM,
-  checkStrictModeWarnings,
-  // Kamino
-  KaminoDescriptor,
-  KAMINO_SCHEMA,
-  KAMINO_LENDING_PROGRAM,
-  KAMINO_SPENDING_ACTIONS,
-  KAMINO_RISK_REDUCING_ACTIONS,
-  KAMINO_AMOUNT_CONSTRAINED_ACTIONS,
-  // Encoding
-  bigintToLeBytes,
-  numberToLeBytes,
-  mapOperator,
-  fieldTypeToSize,
-  // Schema constants
-  SPENDING_ACTIONS,
-  RISK_REDUCING_ACTIONS,
-  SIZE_CONSTRAINED_ACTIONS,
-  COLLATERAL_CONSTRAINED_ACTIONS,
-  ORDER_SIZE_ACTIONS,
-} from "./constraints/index.js";
-export type {
-  FieldType,
-  InstructionFieldSchema,
-  InstructionSchema,
-  ProtocolSchema,
-  ProtocolRuleConfig,
-  ActionRule,
-  CompiledConstraint,
-  ProtocolDescriptor,
-  ConstraintBuildResult,
-  RuleTypeMetadata,
-  RuleParamMeta,
-} from "./constraints/index.js";
-
-// ─── Flash Trade Analytics ──────────────────────────────────────────────────
-export * from "./analytics/index.js";
-
-// ─── Kamino API ──────────────────────────────────────────────────────────
-export {
-  // Config
-  configureKaminoApi,
-  getKaminoApiConfig,
-  resetKaminoApiConfig,
-  KaminoApiError,
-  // Data queries
-  fetchKaminoMarkets,
-  fetchReserveMetrics,
-  fetchLeverageMetrics,
-  fetchObligations,
-  fetchLoanInfo,
-  fetchObligationPnl,
-  fetchStakingYields,
-  fetchUserRewards,
-  // Deserialization
-  deserializeKaminoInstruction,
-} from "./integrations/kamino-api.js";
-export type {
-  KaminoApiConfig,
-  KaminoSerializedInstruction,
-  KaminoTxResponse,
-  KaminoMarketInfo,
-  KaminoReserveMetrics,
-  KaminoLeverageMetrics,
-  KaminoObligation,
-  KaminoLoanInfo,
-  KaminoPnl,
-  StakingYield,
-  KaminoRewards,
-} from "./integrations/kamino-api.js";
-
-// ─── Kamino Verification ──────────────────────────────────────────────────
-export { verifyKaminoInstructions } from "./integrations/kamino-verify.js";
-
-// ─── Compose Errors ──────────────────────────────────────────────────────
-export {
-  COMPOSE_ERROR_CODES,
-  ComposeError,
-  FlashTradeComposeError,
-  KaminoComposeError,
-  createSafeBigInt,
-  createRequireField,
-  addressAsSigner,
-} from "./integrations/compose-errors.js";
-export type { ComposeErrorCode } from "./integrations/compose-errors.js";
 
 // ─── x402 HTTP 402 Payment Required ───────────────────────────────────────
 export {
@@ -510,14 +518,16 @@ export type {
 export { VelocityTracker } from "./velocity-tracker.js";
 export type { VelocityConfig, SpendStatus } from "./velocity-tracker.js";
 
-// ─── Intent-Drift Detection ──────────────────────────────────────────────
-export { detectIntentDrift, enforceIntentDrift } from "./intent-drift.js";
+// ─── Balance Tracker / P&L ──────────────────────────────────────────────────
+export {
+  getVaultPnL,
+  getVaultTokenBalances,
+  getBalancePnL,
+  BalanceSnapshotStore,
+} from "./balance-tracker.js";
 export type {
-  DriftViolationType,
-  DriftViolation,
-  DriftCheckResult,
-  DriftConfig,
-} from "./intent-drift.js";
-
-// NOTE: compat.ts is intentionally NOT exported.
-// It is for internal use only when bridging T2 protocol SDKs.
+  TokenBalance,
+  BalanceSnapshot,
+  VaultPnL,
+  BalancePnL,
+} from "./balance-tracker.js";

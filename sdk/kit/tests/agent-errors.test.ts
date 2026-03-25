@@ -14,15 +14,15 @@ describe("agent-errors", () => {
   // ─── On-chain error map completeness ──────────────────────────────────────
 
   describe("ON_CHAIN_ERROR_MAP completeness", () => {
-    it("maps all 77 error codes (6000-6076)", () => {
+    it("maps all 70 error codes (6000-6069)", () => {
       const codes = getAllOnChainErrorCodes();
-      expect(codes).to.have.lengthOf(77);
+      expect(codes).to.have.lengthOf(70);
       expect(codes[0]).to.equal(6000);
-      expect(codes[codes.length - 1]).to.equal(6076);
+      expect(codes[codes.length - 1]).to.equal(6069);
     });
 
-    it("every code from 6000-6076 is present with no gaps", () => {
-      for (let code = 6000; code <= 6076; code++) {
+    it("every code from 6000-6069 is present with no gaps", () => {
+      for (let code = 6000; code <= 6069; code++) {
         const entry = ON_CHAIN_ERROR_MAP[code];
         expect(entry, `Missing error code ${code}`).to.exist;
         expect(entry.name).to.be.a("string").and.not.be.empty;
@@ -45,10 +45,10 @@ describe("agent-errors", () => {
       expect(err!.context.error_name).to.equal("VaultNotActive");
     });
 
-    it("parses numeric code 6076 (AgentNotPaused)", () => {
-      const err = parseOnChainErrorCode(6076);
+    it("parses numeric code 6069 (AgentNotPaused)", () => {
+      const err = parseOnChainErrorCode(6069);
       expect(err).to.not.be.null;
-      expect(err!.code).to.equal("6076");
+      expect(err!.code).to.equal("6069");
       expect(err!.category).to.equal("INPUT_VALIDATION");
       expect(err!.context.error_name).to.equal("AgentNotPaused");
     });
@@ -60,17 +60,17 @@ describe("agent-errors", () => {
       expect(err!.context.error_name).to.equal("VaultNotActive");
     });
 
-    it("parses hex string 0x17B4 (= 6068 UnconstrainedProgramBlocked)", () => {
-      const err = parseOnChainErrorCode("0x17B4");
+    it("parses hex string 0x17AD (= 6061 UnconstrainedProgramBlocked)", () => {
+      const err = parseOnChainErrorCode("0x17AD");
       expect(err).to.not.be.null;
-      expect(err!.code).to.equal("6068");
+      expect(err!.code).to.equal("6061");
       expect(err!.context.error_name).to.equal("UnconstrainedProgramBlocked");
     });
 
-    it("parses decimal string '6047'", () => {
-      const err = parseOnChainErrorCode("6047");
+    it("parses decimal string '6044'", () => {
+      const err = parseOnChainErrorCode("6044");
       expect(err).to.not.be.null;
-      expect(err!.code).to.equal("6047");
+      expect(err!.code).to.equal("6044");
       expect(err!.category).to.equal("PERMISSION");
     });
 

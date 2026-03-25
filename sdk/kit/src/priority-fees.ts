@@ -12,8 +12,8 @@ import type { Instruction, Rpc, SolanaRpcApi } from "@solana/kit";
 const JUPITER_PROGRAM = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4";
 const JUPITER_LEND_PROGRAM = "JLend2fEim9xUFcaHsyGePEoBzFLvkjMi3MnPcSuCdu";
 const FLASH_TRADE_PROGRAM = "FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn";
-const DRIFT_PROGRAM = "dRiftyHA39MWEi3m9aunc5MzRF1JYuBNtSVAwMHjZi1";
-const KAMINO_LEND_PROGRAM = "KLend2g3cP87ber8p1S4JQoTnbs78GDYAHB6h4WjSD9";
+const DRIFT_PROGRAM = "dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH";
+const KAMINO_LEND_PROGRAM = "KLend2g3cP87ber8CzRaqeECGwNvLFM9acPVcRkRHvM";
 
 // ─── CU Budget Defaults ─────────────────────────────────────────────────────
 

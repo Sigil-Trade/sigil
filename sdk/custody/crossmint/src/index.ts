@@ -6,7 +6,7 @@
  *
  * @example One-liner with shieldWallet():
  * ```typescript
- * import { shieldWallet } from '@phalnx/sdk';
+ * import { shieldWallet } from '@phalnx/kit';
  * import { crossmint } from '@phalnx/custody-crossmint';
  *
  * const wallet = shieldWallet(
@@ -17,7 +17,7 @@
  *
  * @example Zero-config from environment:
  * ```typescript
- * import { shieldWallet } from '@phalnx/sdk';
+ * import { shieldWallet } from '@phalnx/kit';
  * import { crossmintFromEnv } from '@phalnx/custody-crossmint';
  *
  * // Reads CROSSMINT_API_KEY (+ optional CROSSMINT_WALLET_LOCATOR) from env

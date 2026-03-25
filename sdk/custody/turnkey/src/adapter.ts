@@ -18,7 +18,7 @@ import { TurnkeyWalletConfig, validateConfig } from "./config";
 import { createHash, sign, createPrivateKey } from "crypto";
 
 /**
- * Minimal wallet interface — identical to the one in @phalnx/sdk.
+ * Minimal wallet interface — identical to the one in @phalnx/kit.
  * Duplicated here to avoid a hard dependency on the wrapper package.
  */
 export interface WalletLike {

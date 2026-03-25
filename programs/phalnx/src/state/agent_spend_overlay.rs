@@ -15,7 +15,7 @@ pub const OVERLAY_ROLLING_WINDOW_SECONDS: i64 = 86_400;
 
 /// Maximum number of agent entries per overlay.
 /// 10 matches MAX_AGENTS_PER_VAULT so every registered agent can have per-agent tracking.
-/// Account size: 2,368 bytes (well within Solana's 10,240-byte CPI limit).
+/// Account size: 2,528 bytes (well within Solana's 10,240-byte CPI limit).
 pub const MAX_OVERLAY_ENTRIES: usize = 10;
 
 /// Per-agent contribution entry within an overlay.
@@ -45,7 +45,7 @@ pub struct AgentContributionEntry {
 /// Supports up to 10 agents (matches MAX_AGENTS_PER_VAULT).
 ///
 /// Size calculation:
-///   8 (discriminator) + 32 (vault) + 232 × 10 (entries) + 1 (bump) + 7 (padding) = 2,368 bytes
+///   8 (discriminator) + 32 (vault) + 232 × 10 (entries) + 1 (bump) + 7 (padding) + 80 (lifetime_spend) + 80 (lifetime_tx_count) = 2,528 bytes
 #[account(zero_copy)]
 pub struct AgentSpendOverlay {
     /// Associated vault pubkey
@@ -59,13 +59,28 @@ pub struct AgentSpendOverlay {
 
     /// Padding for 8-byte alignment
     pub _padding: [u8; 7], // 7 bytes
+
+    /// Per-agent cumulative spend in USD base units. Index matches entries[i].
+    /// Appended AFTER existing layout to preserve zero-copy byte offsets.
+    pub lifetime_spend: [u64; MAX_OVERLAY_ENTRIES], // 80 bytes
+
+    /// Per-agent cumulative transaction count. Index matches entries[i].
+    /// Incremented in finalize_session for EVERY successful spending session.
+    /// Used for: avg TX size (lifetime_spend / lifetime_tx_count), agent activity ranking.
+    pub lifetime_tx_count: [u64; MAX_OVERLAY_ENTRIES], // 80 bytes
 }
-// Total data: 2,360 bytes + 8 (discriminator) = 2,368 bytes
+// Total data: 2,360 + 80 + 80 bytes + 8 (discriminator) = 2,528 bytes
 
 impl AgentSpendOverlay {
     /// Total account size including 8-byte discriminator
-    pub const SIZE: usize = 8 + 32 + (232 * MAX_OVERLAY_ENTRIES) + 1 + 7;
-    // = 8 + 32 + 2320 + 1 + 7 = 2,368
+    pub const SIZE: usize = 8
+        + 32
+        + (232 * MAX_OVERLAY_ENTRIES)
+        + 1
+        + 7
+        + (8 * MAX_OVERLAY_ENTRIES)
+        + (8 * MAX_OVERLAY_ENTRIES);
+    // = 8 + 32 + 2320 + 1 + 7 + 80 + 80 = 2,528
 
     /// Find the slot index for a given agent, or None if not present.
     pub fn find_agent_slot(&self, agent: &Pubkey) -> Option<usize> {
@@ -97,6 +112,8 @@ impl AgentSpendOverlay {
         for i in 0..OVERLAY_NUM_EPOCHS {
             self.entries[slot_idx].contributions[i] = 0;
         }
+        self.lifetime_spend[slot_idx] = 0;
+        self.lifetime_tx_count[slot_idx] = 0;
     }
 
     /// Zero contribution buckets in the gap between last_write_epoch and current_epoch.

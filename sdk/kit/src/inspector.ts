@@ -6,12 +6,6 @@
  *   - SPL Token transfers (Transfer and TransferChecked)
  *   - Estimated USD value of outgoing transfers
  *
- * Kit differences from web3.js version:
- *   - Works on Instruction[] not compiled transactions
- *   - Uses ix.programAddress instead of ix.programId
- *   - Uses ix.accounts[].address instead of ix.keys[].pubkey
- *   - Uses ix.data as Uint8Array directly
- *   - All addresses are Address (branded strings) — no .toBase58()/.equals()
  */
 
 import type { Address } from "@solana/kit";
@@ -23,7 +17,12 @@ const TOKEN_2022_PROGRAM_ID = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 
 /** SPL Token instruction discriminators */
 const SPL_TRANSFER_DISCRIMINATOR = 3;
+const SPL_APPROVE_DISCRIMINATOR = 4;
+const SPL_REVOKE_DISCRIMINATOR = 5;
+const SPL_SET_AUTHORITY_DISCRIMINATOR = 6;
+const SPL_CLOSE_ACCOUNT_DISCRIMINATOR = 9;
 const SPL_TRANSFER_CHECKED_DISCRIMINATOR = 12;
+const SPL_APPROVE_CHECKED_DISCRIMINATOR = 13;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -51,6 +50,14 @@ export interface TokenTransferInfo {
   authority: Address;
 }
 
+/** A dangerous SPL Token operation detected by the inspector. */
+export interface DangerousTokenOperation {
+  /** Type of dangerous operation */
+  type: "approve" | "setAuthority" | "closeAccount" | "revoke";
+  /** The token account being affected */
+  account: Address;
+}
+
 /** Result of analyzing a set of instructions */
 export interface InstructionAnalysis {
   /** Unique program IDs referenced across all instructions */
@@ -59,6 +66,8 @@ export interface InstructionAnalysis {
   tokenTransfers: TokenTransferInfo[];
   /** Sum of outgoing transfer amounts (where authority === signerAddress) */
   estimatedValue: bigint;
+  /** Dangerous SPL Token operations (approve, setAuthority, closeAccount) */
+  dangerousOperations: DangerousTokenOperation[];
 }
 
 // ─── Core ────────────────────────────────────────────────────────────────────
@@ -77,6 +86,7 @@ export function analyzeInstructions(
 ): InstructionAnalysis {
   const programIdSet = new Set<string>();
   const tokenTransfers: TokenTransferInfo[] = [];
+  const dangerousOperations: DangerousTokenOperation[] = [];
   let estimatedValue = 0n;
 
   for (const ix of instructions) {
@@ -144,12 +154,47 @@ export function analyzeInstructions(
         estimatedValue += amount;
       }
     }
+
+    // Detect dangerous token operations (approve, setAuthority, closeAccount, revoke)
+    if (
+      discriminator === SPL_APPROVE_DISCRIMINATOR ||
+      discriminator === SPL_APPROVE_CHECKED_DISCRIMINATOR
+    ) {
+      if (accounts.length >= 1) {
+        dangerousOperations.push({
+          type: "approve",
+          account: accounts[0].address,
+        });
+      }
+    } else if (discriminator === SPL_SET_AUTHORITY_DISCRIMINATOR) {
+      if (accounts.length >= 1) {
+        dangerousOperations.push({
+          type: "setAuthority",
+          account: accounts[0].address,
+        });
+      }
+    } else if (discriminator === SPL_CLOSE_ACCOUNT_DISCRIMINATOR) {
+      if (accounts.length >= 1) {
+        dangerousOperations.push({
+          type: "closeAccount",
+          account: accounts[0].address,
+        });
+      }
+    } else if (discriminator === SPL_REVOKE_DISCRIMINATOR) {
+      if (accounts.length >= 1) {
+        dangerousOperations.push({
+          type: "revoke",
+          account: accounts[0].address,
+        });
+      }
+    }
   }
 
   return {
     programIds: Array.from(programIdSet) as Address[],
     tokenTransfers,
     estimatedValue,
+    dangerousOperations,
   };
 }
 

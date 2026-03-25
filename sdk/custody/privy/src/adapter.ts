@@ -12,7 +12,7 @@ import { PublicKey, Transaction, VersionedTransaction } from "@solana/web3.js";
 import { PrivyWalletConfig, validateConfig } from "./config";
 
 /**
- * Minimal wallet interface — identical to the one in @phalnx/sdk.
+ * Minimal wallet interface — identical to the one in @phalnx/kit.
  * Duplicated here to avoid a hard dependency on the wrapper package.
  */
 export interface WalletLike {

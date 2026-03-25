@@ -830,6 +830,7 @@ impl FuzzTest {
             output_stablecoin_account: None,
             token_program: spl_token::ID,
             system_program: solana_sdk::system_program::ID,
+            instructions_sysvar: solana_sdk::sysvar::instructions::ID,
         };
 
         let ix = Instruction::new_with_bytes(
@@ -1255,6 +1256,7 @@ impl FuzzTest {
             output_stablecoin_account: None,
             token_program: spl_token::ID,
             system_program: solana_sdk::system_program::ID,
+            instructions_sysvar: solana_sdk::sysvar::instructions::ID,
         };
 
         let ix = Instruction::new_with_bytes(
@@ -1313,6 +1315,7 @@ impl FuzzTest {
             output_stablecoin_account: None,
             token_program: spl_token::ID,
             system_program: solana_sdk::system_program::ID,
+            instructions_sysvar: solana_sdk::sysvar::instructions::ID,
         };
 
         let ix = Instruction::new_with_bytes(

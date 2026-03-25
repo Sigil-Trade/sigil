@@ -3,9 +3,9 @@
 # Runs on every push to main and on pull requests.
 # Eight jobs (1 detection + 6 parallel + 1 gate):
 #   0. changes                — Detect which file groups changed (package-level path filtering)
-#   1. build-lint-test        — TypeScript builds, Prettier, 2515 TS tests (conditional: any-ts or push)
+#   1. build-lint-test        — TypeScript builds, Prettier, 920 TS tests (conditional: any-ts or push)
 #   2. rust-checks            — cargo fmt + cargo clippy (conditional: rust changes or push)
-#   3. on-chain-tests         — Anchor build + LiteSVM 349 tests (conditional: rust changes or push)
+#   3. on-chain-tests         — Anchor build + LiteSVM 432 tests (conditional: rust changes or push)
 #  3b. build-verification     — Feature flag safety net (conditional: rust changes or push)
 #  3c. surfpool-integration   — Surfpool integration tests, 20 tests (conditional: rust changes or push)
 #   4. security-scan          — Sec3 X-Ray static analysis (always, BLOCKING)
@@ -21,9 +21,9 @@
 #   sdk/core → core tests + SDK tests that depend on it
 #   packages/ → MCP tests
 #   apps/ → Actions server tests
-#   sdk/typescript → all downstream suites (everything depends on SDK)
+#   sdk/kit → Kit SDK tests
 #
-# Total: ~2,953 tests across 16 suites (2515 TS + 349 on-chain + 20 Surfpool + 69 devnet)
+# Total: ~1,450 tests across 17 suites (920 TS + 432 on-chain + 20 Surfpool + 78 devnet)
 # All security checks are BLOCKING — zero tolerance for known issues.
 
 name: CI
@@ -59,12 +59,9 @@ jobs:
       rust: ${{ steps.filter.outputs.rust }}
       certora: ${{ steps.filter.outputs.certora }}
       sdk-core: ${{ steps.filter.outputs.sdk-core }}
-      sdk-typescript: ${{ steps.filter.outputs.sdk-typescript }}
       sdk-platform: ${{ steps.filter.outputs.sdk-platform }}
       sdk-crossmint: ${{ steps.filter.outputs.sdk-crossmint }}
       sdk-kit: ${{ steps.filter.outputs.sdk-kit }}
-      packages: ${{ steps.filter.outputs.packages }}
-      apps: ${{ steps.filter.outputs.apps }}
       any-ts: ${{ steps.filter.outputs.any-ts }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -82,29 +79,21 @@ jobs:
               - 'certora/**'
             sdk-core:
               - 'sdk/core/**'
-            sdk-typescript:
-              - 'sdk/typescript/**'
             sdk-platform:
               - 'sdk/platform/**'
             sdk-crossmint:
               - 'sdk/custody/crossmint/**'
-            packages:
-              - 'packages/**'
-            apps:
-              - 'apps/**'
             sdk-kit:
               - 'sdk/kit/**'
             any-ts:
               - 'sdk/**'
-              - 'packages/**'
-              - 'apps/**'
               - 'tests/**'
               - 'package.json'
               - 'pnpm-lock.yaml'
               - 'tsconfig*.json'
 
   # ──────────────────────────────────────────────────────────────
-  # Job 1: TypeScript build, lint, and tests (7 suites, 2515 tests)
+  # Job 1: TypeScript build, lint, and tests (5 suites, 920 tests)
   # ──────────────────────────────────────────────────────────────
   build-lint-test:
     name: Build, Lint & TS Tests
@@ -151,37 +140,23 @@ jobs:
       - name: Build all packages
         run: pnpm -r run build
 
-      - name: Lint (Prettier — 7 packages)
+      - name: Lint (Prettier — 3 packages)
         run: |
           npx prettier --check \
             "sdk/core/src/**/*.ts" \
-            "sdk/typescript/src/**/*.ts" \
             "sdk/platform/src/**/*.ts" \
-            "sdk/custody/crossmint/src/**/*.ts" \
-            "packages/mcp/src/**/*.ts" \
-            "packages/mcp/tests/**/*.ts" \
-            "apps/actions-server/src/**/*.ts" \
-            "apps/actions-server/tests/**/*.ts"
+            "sdk/custody/crossmint/src/**/*.ts"
 
       - name: Core policy engine tests (66 tests)
         if: >-
           needs.changes.outputs.sdk-core == 'true' ||
-          needs.changes.outputs.sdk-typescript == 'true' ||
           github.event_name == 'push'
         working-directory: sdk/core
-        run: pnpm test
-
-      - name: SDK tests (656 tests)
-        if: >-
-          needs.changes.outputs.sdk-typescript == 'true' ||
-          github.event_name == 'push'
-        working-directory: sdk/typescript
         run: pnpm test
 
       - name: Platform client tests (17 tests)
         if: >-
           needs.changes.outputs.sdk-platform == 'true' ||
-          needs.changes.outputs.sdk-typescript == 'true' ||
           github.event_name == 'push'
         working-directory: sdk/platform
         run: pnpm test
@@ -189,23 +164,13 @@ jobs:
       - name: Crossmint custody adapter tests (29 tests)
         if: >-
           needs.changes.outputs.sdk-crossmint == 'true' ||
-          needs.changes.outputs.sdk-typescript == 'true' ||
           github.event_name == 'push'
         working-directory: sdk/custody/crossmint
         run: pnpm test
 
-      - name: MCP server tests (472 tests)
-        if: >-
-          needs.changes.outputs.packages == 'true' ||
-          needs.changes.outputs.sdk-typescript == 'true' ||
-          github.event_name == 'push'
-        working-directory: packages/mcp
-        run: pnpm test
-
-      - name: Kit SDK tests (1176 tests)
+      - name: Kit SDK tests (802 tests)
         if: >-
           needs.changes.outputs.sdk-kit == 'true' ||
-          needs.changes.outputs.sdk-typescript == 'true' ||
           github.event_name == 'push'
         working-directory: sdk/kit
         run: pnpm test
@@ -230,14 +195,6 @@ jobs:
           fi
           echo "Generated code is up-to-date."
 
-      - name: Actions server tests (99 tests)
-        if: >-
-          needs.changes.outputs.apps == 'true' ||
-          needs.changes.outputs.sdk-typescript == 'true' ||
-          github.event_name == 'push'
-        working-directory: apps/actions-server
-        run: pnpm test
-
       - name: Generate test summary
         if: always()
         run: |
@@ -245,7 +202,7 @@ jobs:
           echo "Branch: ${{ github.ref_name }}" >> test-summary.txt
           echo "Commit: ${{ github.sha }}" >> test-summary.txt
           echo "---" >> test-summary.txt
-          echo "All 9 TypeScript test suites executed." >> test-summary.txt
+          echo "All 5 TypeScript test suites executed." >> test-summary.txt
           echo "See individual step logs for detailed output." >> test-summary.txt
 
       - name: Upload test summary

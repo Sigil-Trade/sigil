@@ -1,15 +1,18 @@
 /**
- * Shield — Kit-native Client-Side Policy Enforcement
+ * Shield — Kit-native Client-Side Policy Enforcement (Defense-in-Depth)
  *
  * Wraps instruction signing with spending limits, rate limits,
  * program allowlists, and custom checks.
  *
- * Kit differences from web3.js version:
- *   - Works at Instruction[] level, not Transaction level
- *   - Uses analyzeInstructions() from inspector instead of analyzeTransaction()
- *   - Pre-compilation analysis (analyzeInstructions) needs no ALT resolution
- *   - ShieldedSigner (post-compilation) requires AltCache for ALT-compressed accounts
- *   - Address (string) instead of PublicKey throughout
+ * IMPORTANT: Shield is a CLIENT-SIDE advisory layer, NOT a security boundary.
+ * The on-chain program (validate_and_authorize + finalize_session) provides the
+ * hard enforcement of spending caps, permissions, and protocol allowlists.
+ * Shield reduces blast radius by catching violations before signing, but callers
+ * CAN bypass Shield by using the underlying TransactionSigner directly.
+ * This is by design — Shield prevents accidents, on-chain prevents catastrophe.
+ *
+ * State (spending counters, velocity limits) is in-memory and resets on process
+ * restart. Use syncFromOnChain() to re-sync with the authoritative on-chain state.
  */
 
 import type {
@@ -35,13 +38,12 @@ import { simulateBeforeSend } from "./simulation.js";
 import { PHALNX_PROGRAM_ADDRESS } from "./generated/programs/phalnx.js";
 import { VALIDATE_AND_AUTHORIZE_DISCRIMINATOR } from "./generated/instructions/validateAndAuthorize.js";
 import { FINALIZE_SESSION_DISCRIMINATOR } from "./generated/instructions/finalizeSession.js";
-import { ACTION_TYPE_MAP, type IntentAction } from "./intents.js";
 import type { AltCache } from "./alt-loader.js";
 import {
   resolveVaultState,
   type ResolvedVaultState,
 } from "./state-resolver.js";
-import { isStablecoinMint, type Network } from "./types.js";
+import { isStablecoinMint, validateNetwork, type Network } from "./types.js";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -67,6 +69,8 @@ export class ShieldDeniedError extends Error {
 export interface ShieldCheckResult {
   allowed: boolean;
   violations: PolicyViolation[];
+  /** Non-fatal warnings (e.g., ALT index out of bounds during analysis). */
+  warnings?: string[];
 }
 
 export interface SpendingSummary {
@@ -153,10 +157,25 @@ export class ShieldState {
 
   recordSpend(mint: string, amount: bigint): void {
     this.spendEntries.push({ mint, amount, timestamp: Date.now() });
+    this.prune();
   }
 
   recordTransaction(): void {
     this.txEntries.push({ timestamp: Date.now() });
+    this.prune();
+  }
+
+  /** Prune stale entries when arrays exceed threshold. */
+  private prune(): void {
+    const PRUNE_THRESHOLD = 10_000;
+    if (this.spendEntries.length > PRUNE_THRESHOLD) {
+      const cutoff = Date.now() - 86_400_000;
+      this.spendEntries = this.spendEntries.filter((e) => e.timestamp >= cutoff);
+    }
+    if (this.txEntries.length > PRUNE_THRESHOLD) {
+      const cutoff = Date.now() - 86_400_000;
+      this.txEntries = this.txEntries.filter((e) => e.timestamp >= cutoff);
+    }
   }
 
   /** Sync spending baseline from on-chain state. Resets local additions. */
@@ -270,6 +289,7 @@ export function evaluateInstructions(
   state: ShieldState,
   network?: Network,
 ): { violations: PolicyViolation[]; analysis: InstructionAnalysis } {
+  if (network) validateNetwork(network);
   const violations: PolicyViolation[] = [];
   const analysis = analyzeInstructions(instructions, signerAddress);
 
@@ -500,6 +520,7 @@ export function shield(
   const state = new ShieldState();
   let paused = false;
   const syncConfig = options?.onChainSync;
+  if (syncConfig) validateNetwork(syncConfig.network);
   const stalenessThreshold = options?.stalenessWarnThresholdSec ?? 300;
 
   // S-1: Warn when no onChainSync — spend tracking is ephemeral
@@ -709,11 +730,6 @@ export function shield(
 export interface ShieldedSignerOptions {
   /** Property 3: RPC for fail-closed simulation. */
   rpc?: Rpc<SolanaRpcApi>;
-  /** Property 1: Intent context for intent-TX correspondence check. */
-  intentContext?: {
-    intent: IntentAction;
-    expectedOutputMints?: Address[];
-  };
   /** Property 5: Session binding context. */
   sessionContext?: {
     sessionPda: Address;
@@ -764,11 +780,6 @@ export function createShieldedSigner(
           tx,
           options?.altCache,
         );
-
-        // Property 1: Intent-TX correspondence (SOFT)
-        if (options?.intentContext) {
-          checkIntentCorrespondence(instructions, options.intentContext);
-        }
 
         // Property 2: Velocity ceiling (HARD)
         if (options?.velocityThresholds) {
@@ -854,14 +865,17 @@ export function createShieldedSigner(
       }
 
       // Delegate to base signer
-      const signer = baseSigner as any;
+      const signer = baseSigner as TransactionSigner & {
+        modifyAndSignTransactions?: (...args: unknown[]) => Promise<readonly unknown[]>;
+        signTransactions?: (...args: unknown[]) => Promise<readonly unknown[]>;
+      };
       if (signer.modifyAndSignTransactions) {
         return signer.modifyAndSignTransactions(txs);
       } else if (signer.signTransactions) {
         const sigs = await signer.signTransactions(txs);
         return txs.map((tx: any, i: number) => ({
           ...tx,
-          signatures: { ...tx.signatures, ...sigs[i] },
+          signatures: { ...tx.signatures, ...(sigs[i] as Record<string, unknown>) },
         }));
       }
       throw new Error(
@@ -883,6 +897,7 @@ export function createShieldedSigner(
 export function _extractInstructionsFromCompiled(
   tx: any,
   altCache?: AltCache,
+  warnings?: string[],
 ): InspectableInstruction[] {
   const msg = tx.compiledMessage;
   if (!msg?.staticAccounts?.length || !msg?.instructions?.length) {
@@ -893,43 +908,32 @@ export function _extractInstructionsFromCompiled(
   let accountTable: Address[] = [...msg.staticAccounts];
 
   if (msg.addressTableLookups?.length && altCache) {
+    // S-3: Resolve ALT index with bounds check, accumulating warnings on OOB
+    const resolveAltIndex = (idx: number, resolved: Address[]): Address => {
+      if (idx < resolved.length) return resolved[idx];
+      warnings?.push(
+        `ALT index ${idx} out of bounds (table has ${resolved.length} entries) — account substituted with system program for analysis`,
+      );
+      return "11111111111111111111111111111111" as Address;
+    };
+
     // Two-pass ordering: Solana compiled messages order ALL writables from
     // ALL lookups first, then ALL readonlys from ALL lookups.
     // Pass 1: ALL writables from ALL lookups (in lookup order)
     for (const lookup of msg.addressTableLookups) {
-      const resolved = altCache.getCachedAddresses(
-        lookup.lookupTableAddress as Address,
-      );
+      const resolved = altCache.getCachedAddresses(lookup.lookupTableAddress as Address);
       if (resolved) {
         for (const idx of lookup.writableIndexes ?? []) {
-          // S-3: Bounds check before pushing ALT-resolved address
-          if (idx < resolved.length) {
-            accountTable.push(resolved[idx]);
-          } else {
-            console.warn(
-              `[Shield] ALT index ${idx} out of bounds (${resolved.length} entries)`,
-            );
-            accountTable.push("11111111111111111111111111111111" as Address);
-          }
+          accountTable.push(resolveAltIndex(idx, resolved));
         }
       }
     }
     // Pass 2: ALL readonlys from ALL lookups
     for (const lookup of msg.addressTableLookups) {
-      const resolved = altCache.getCachedAddresses(
-        lookup.lookupTableAddress as Address,
-      );
+      const resolved = altCache.getCachedAddresses(lookup.lookupTableAddress as Address);
       if (resolved) {
         for (const idx of lookup.readonlyIndexes ?? []) {
-          // S-3: Bounds check before pushing ALT-resolved address
-          if (idx < resolved.length) {
-            accountTable.push(resolved[idx]);
-          } else {
-            console.warn(
-              `[Shield] ALT index ${idx} out of bounds (${resolved.length} entries)`,
-            );
-            accountTable.push("11111111111111111111111111111111" as Address);
-          }
+          accountTable.push(resolveAltIndex(idx, resolved));
         }
       }
     }
@@ -1039,29 +1043,6 @@ function checkSessionBinding(
       throw new ShieldDeniedError([{ rule: "session_binding", message }]);
     }
     console.warn(message);
-  }
-}
-
-/**
- * Property 1: Check intent-TX correspondence. SOFT — warns.
- */
-function checkIntentCorrespondence(
-  instructions: InspectableInstruction[],
-  intentContext: NonNullable<ShieldedSignerOptions["intentContext"]>,
-): void {
-  const entry = ACTION_TYPE_MAP[intentContext.intent.type];
-  if (!entry) return;
-
-  // For spending intents, verify at least one non-system program is present
-  if (entry.isSpending) {
-    const hasNonSystem = instructions.some(
-      (ix) => !SYSTEM_PROGRAMS.has(ix.programAddress),
-    );
-    if (!hasNonSystem) {
-      console.warn(
-        `[ShieldedSigner] Intent '${intentContext.intent.type}' (spending) but no protocol programs found`,
-      );
-    }
   }
 }
 

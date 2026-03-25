@@ -3,7 +3,7 @@ import {
   BlockhashCache,
   sendAndConfirmTransaction,
 } from "../src/rpc-helpers.js";
-import type { Rpc, SolanaRpcApi } from "@solana/kit";
+import type { Rpc, SolanaRpcApi, Base64EncodedWireTransaction } from "@solana/kit";
 
 // ─── Mock RPC Factory ───────────────────────────────────────────────────────
 
@@ -117,7 +117,7 @@ describe("rpc-helpers", () => {
   describe("sendAndConfirmTransaction", () => {
     it("returns signature on successful confirmation", async () => {
       const rpc = createMockRpc();
-      const sig = await sendAndConfirmTransaction(rpc, "base64encodedtx");
+      const sig = await sendAndConfirmTransaction(rpc, "base64encodedtx" as Base64EncodedWireTransaction);
       expect(sig).to.be.a("string");
       expect(sig.length).to.be.greaterThan(0);
     });
@@ -135,7 +135,7 @@ describe("rpc-helpers", () => {
       });
 
       try {
-        await sendAndConfirmTransaction(rpc, "base64encodedtx", {
+        await sendAndConfirmTransaction(rpc, "base64encodedtx" as Base64EncodedWireTransaction, {
           timeoutMs: 2_000,
         });
         expect.fail("Should have thrown");
@@ -152,7 +152,7 @@ describe("rpc-helpers", () => {
       });
 
       try {
-        await sendAndConfirmTransaction(rpc, "base64encodedtx", {
+        await sendAndConfirmTransaction(rpc, "base64encodedtx" as Base64EncodedWireTransaction, {
           timeoutMs: 100,
           pollIntervalMs: 20,
         });
@@ -169,7 +169,7 @@ describe("rpc-helpers", () => {
         }),
       });
 
-      const sig = await sendAndConfirmTransaction(rpc, "base64encodedtx");
+      const sig = await sendAndConfirmTransaction(rpc, "base64encodedtx" as Base64EncodedWireTransaction);
       expect(sig).to.be.a("string");
     });
   });

@@ -82,6 +82,12 @@ export interface X402Config {
   onPayment?: (event: X402PaymentEvent) => void;
   /** Allow http:// URLs (testing only — NEVER in production) */
   allowInsecureUrls?: boolean;
+  /** Verify payment TX on-chain before recording spend (default: true).
+   *  When true, calls getSignatureStatuses() after settlement to confirm
+   *  the TX landed. Falls back to recording on timeout (defense-in-depth). */
+  confirmPayment?: boolean;
+  /** On-chain confirmation timeout in ms (default: 10_000) */
+  confirmPaymentTimeoutMs?: number;
 }
 
 /** Options for shieldedFetch(). */

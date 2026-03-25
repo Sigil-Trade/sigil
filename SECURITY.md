@@ -4,10 +4,8 @@
 
 | Package                   | Supported |
 | ------------------------- | --------- |
-| @phalnx/sdk >= 0.4.0      | Yes       |
-| @phalnx/mcp >= 0.4.0      | Yes       |
+| @phalnx/kit >= 0.1.0      | Yes       |
 | @phalnx/core >= 0.1.0     | Yes       |
-| @phalnx/sdk >= 0.5.0      | Yes       |
 | On-chain program (phalnx) | Yes       |
 
 ## Reporting a Vulnerability
@@ -37,9 +35,7 @@ Include as much detail as possible:
 The following are in scope for security reports:
 
 - On-chain Anchor program (`programs/phalnx/`)
-- SDK transaction construction (`sdk/typescript/`)
-- MCP server tool handlers (`packages/mcp/`)
-- Serverless API endpoints (`api/`)
+- Kit SDK transaction construction (`sdk/kit/`)
 - Session authority lifecycle
 - Fee calculation and distribution
 

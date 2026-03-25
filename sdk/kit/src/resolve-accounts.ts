@@ -2,7 +2,7 @@
  * Kit-native PDA resolution for Phalnx accounts.
  *
  * Uses Kit's `getProgramDerivedAddress()` and `getAddressEncoder()` for
- * seed encoding. All 8 PDA types are derivable.
+ * seed encoding. All 9 PDA types are derivable.
  */
 
 import type { Address, ReadonlyUint8Array } from "@solana/kit";

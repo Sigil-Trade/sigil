@@ -36,11 +36,33 @@ export const RISK_FLAG_ERROR_MAP: Record<RiskFlag, number> = {
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+export interface DrainThresholds {
+  /** Percentage of vault balance outflow that triggers LARGE_OUTFLOW. Default: 50 */
+  warningPercent?: number;
+  /** Percentage of vault balance outflow that triggers FULL_DRAIN. Default: 95 */
+  blockPercent?: number;
+}
+
+export const DEFAULT_WARNING_PERCENT = 50;
+export const DEFAULT_BLOCK_PERCENT = 95;
+
 export interface SimulationOptions {
   /** Timeout in milliseconds. Default: 3000 */
   timeoutMs?: number;
   /** Whether to replace recent blockhash. Default: true */
   replaceRecentBlockhash?: boolean;
+  /** Token accounts to monitor for balance changes (drain detection) */
+  monitorAccounts?: string[];
+  /** Pre-simulation balances for monitored accounts */
+  preBalances?: Map<string, bigint>;
+  /** Vault address for drain detection */
+  vaultAddress?: string;
+  /** Total vault stablecoin balance */
+  totalVaultBalance?: bigint;
+  /** Known recipients (treasury, fee destination) */
+  knownRecipients?: Set<string>;
+  /** Configurable drain thresholds */
+  drainThresholds?: DrainThresholds;
 }
 
 export interface BalanceDelta {
@@ -82,7 +104,7 @@ const ANCHOR_ERROR_MAP: Record<number, { name: string; suggestion: string }> = {
     name: "UnauthorizedOwner",
     suggestion: "Only the vault owner can call this.",
   },
-  6003: { name: "TokenNotRegistered", suggestion: "Use USDC or USDT." },
+  6003: { name: "UnsupportedToken", suggestion: "Use USDC or USDT." },
   6004: {
     name: "ProtocolNotAllowed",
     suggestion: "Protocol not in vault's allowlist.",
@@ -92,7 +114,7 @@ const ANCHOR_ERROR_MAP: Record<number, { name: string; suggestion: string }> = {
     suggestion: "Break into smaller parts.",
   },
   6006: {
-    name: "DailyCapExceeded",
+    name: "SpendingCapExceeded",
     suggestion: "Rolling 24h spending cap exceeded.",
   },
   6007: { name: "LeverageTooHigh", suggestion: "Reduce leverage." },
@@ -207,7 +229,7 @@ const ANCHOR_ERROR_MAP: Record<number, { name: string; suggestion: string }> = {
     suggestion: "Non-stablecoin swap must return stablecoin.",
   },
   6037: {
-    name: "SlippageTooHigh",
+    name: "SwapSlippageExceeded",
     suggestion: "Slippage exceeds policy max_slippage_bps.",
   },
   6038: {
@@ -215,148 +237,120 @@ const ANCHOR_ERROR_MAP: Record<number, { name: string; suggestion: string }> = {
     suggestion: "Cannot parse Jupiter swap instruction.",
   },
   6039: {
-    name: "InvalidFlashTradeInstruction",
-    suggestion: "Cannot parse Flash Trade instruction.",
-  },
-  6040: {
-    name: "FlashTradePriceZero",
-    suggestion: "Flash Trade priceWithSlippage is zero.",
-  },
-  6041: {
-    name: "DustDepositDetected",
+    name: "UnauthorizedTokenTransfer",
     suggestion:
       "Top-level SPL Token transfer not allowed between validate and finalize.",
   },
-  6042: {
-    name: "InvalidJupiterLendInstruction",
-    suggestion: "Cannot parse Jupiter Lend instruction.",
-  },
-  6043: {
+  6040: {
     name: "SlippageBpsTooHigh",
     suggestion: "Slippage BPS exceeds maximum (5000 = 50%).",
   },
-  6044: {
+  6041: {
     name: "ProtocolMismatch",
     suggestion:
       "DeFi instruction program doesn't match declared target_protocol.",
   },
-  6045: {
+  6042: {
     name: "TooManyDeFiInstructions",
     suggestion: "Non-stablecoin swap allows exactly one DeFi instruction.",
   },
-  6046: {
+  6043: {
     name: "MaxAgentsReached",
     suggestion: "Remove an agent first (max 10).",
   },
-  6047: {
+  6044: {
     name: "InsufficientPermissions",
     suggestion: "Agent lacks permission for this action type.",
   },
-  6048: {
+  6045: {
     name: "InvalidPermissions",
     suggestion: "Permission bitmask contains invalid bits.",
   },
-  6049: {
+  6046: {
     name: "EscrowNotActive",
     suggestion: "Escrow is not in Active status.",
   },
-  6050: { name: "EscrowExpired", suggestion: "Escrow has expired." },
-  6051: {
+  6047: { name: "EscrowExpired", suggestion: "Escrow has expired." },
+  6048: {
     name: "EscrowNotExpired",
     suggestion: "Escrow has not expired yet — wait for expiry.",
   },
-  6052: { name: "InvalidEscrowVault", suggestion: "Invalid escrow vault." },
-  6053: {
+  6049: { name: "InvalidEscrowVault", suggestion: "Invalid escrow vault." },
+  6050: {
     name: "EscrowConditionsNotMet",
     suggestion: "Escrow conditions not met.",
   },
-  6054: {
+  6051: {
     name: "EscrowDurationExceeded",
     suggestion: "Escrow duration exceeds max (30 days).",
   },
-  6055: {
+  6052: {
     name: "InvalidConstraintConfig",
     suggestion: "Constraint configuration exceeds bounds.",
   },
-  6056: {
+  6053: {
     name: "ConstraintViolated",
     suggestion: "Instruction violates a constraint.",
   },
-  6057: {
+  6054: {
     name: "InvalidConstraintsPda",
     suggestion: "Wrong constraints PDA owner or vault.",
   },
-  6058: {
-    name: "NoPendingConstraintsUpdate",
-    suggestion: "No pending constraints update to apply.",
-  },
-  6059: {
-    name: "PendingConstraintsUpdateExists",
-    suggestion: "Cancel existing pending update first.",
-  },
-  6060: {
-    name: "ConstraintsUpdateNotExpired",
-    suggestion: "Constraints update timelock not expired.",
-  },
-  6061: {
+  6055: {
     name: "InvalidPendingConstraintsPda",
     suggestion: "Wrong pending constraints PDA.",
   },
-  6062: {
-    name: "ConstraintsUpdateExpired",
-    suggestion: "Pending constraints update is stale.",
-  },
-  6063: {
+  6056: {
     name: "AgentSpendLimitExceeded",
     suggestion: "Agent rolling 24h spend exceeds per-agent limit.",
   },
-  6064: {
+  6057: {
     name: "OverlaySlotExhausted",
     suggestion:
       "Per-agent overlay full — cannot register agent with spending limit.",
   },
-  6065: {
+  6058: {
     name: "AgentSlotNotFound",
     suggestion: "Agent has spending limit but no overlay tracking slot.",
   },
-  6066: {
+  6059: {
     name: "UnauthorizedTokenApproval",
     suggestion: "Unauthorized SPL Token Approve between validate and finalize.",
   },
-  6067: {
+  6060: {
     name: "InvalidSessionExpiry",
     suggestion: "Session expiry slots out of range (10-450).",
   },
-  6068: {
+  6061: {
     name: "UnconstrainedProgramBlocked",
     suggestion: "Program has no constraint entry and strict mode is enabled.",
   },
-  6069: {
+  6062: {
     name: "ProtocolCapExceeded",
-    suggestion: "Per-protocol daily spending cap exceeded.",
+    suggestion: "Per-protocol rolling 24h spending cap exceeded.",
   },
-  6070: {
+  6063: {
     name: "ProtocolCapsMismatch",
     suggestion: "protocol_caps length must match protocols length.",
   },
-  6071: {
+  6064: {
     name: "ActiveEscrowsExist",
     suggestion: "Close active escrow deposits before closing vault.",
   },
-  6072: {
+  6065: {
     name: "ConstraintsNotClosed",
     suggestion: "Close instruction constraints before closing vault.",
   },
-  6073: {
+  6066: {
     name: "PendingPolicyExists",
     suggestion: "Apply or cancel pending policy update before closing vault.",
   },
-  6074: {
+  6067: {
     name: "AgentPaused",
     suggestion: "Agent is paused — unpause before executing actions.",
   },
-  6075: { name: "AgentAlreadyPaused", suggestion: "Agent is already paused." },
-  6076: { name: "AgentNotPaused", suggestion: "Agent is not paused." },
+  6068: { name: "AgentAlreadyPaused", suggestion: "Agent is already paused." },
+  6069: { name: "AgentNotPaused", suggestion: "Agent is not paused." },
 };
 
 // ─── Core Simulation ─────────────────────────────────────────────────────────
@@ -385,17 +379,30 @@ export async function simulateBeforeSend(
       const config: Record<string, unknown> = {
         encoding: "base64" as const,
         replaceRecentBlockhash,
-        sigVerify: false,
+        sigVerify: false as const,
         commitment: "confirmed" as const,
       };
 
+      // When monitorAccounts provided, request post-simulation account state
+      if (options?.monitorAccounts?.length) {
+        config.accounts = {
+          addresses: options.monitorAccounts,
+          encoding: "base64" as const,
+        };
+      }
+
       const result = await rpc
-        .simulateTransaction(encodedTransaction, config as any)
+        .simulateTransaction(encodedTransaction, config as Parameters<typeof rpc.simulateTransaction>[1])
         .send({ abortSignal: controller.signal });
 
       clearTimeout(timeout);
 
-      const value = result.value as any;
+      const value = result.value as {
+        err: unknown;
+        logs: string[] | null;
+        unitsConsumed: bigint | null;
+        accounts?: ({ data: [string, string] } | null)[] | null;
+      } | null;
       const err = value?.err;
       const logs: string[] = value?.logs ?? [];
       const unitsConsumed = value?.unitsConsumed
@@ -403,11 +410,50 @@ export async function simulateBeforeSend(
         : undefined;
 
       if (!err) {
+        // Build balance deltas + drain detection when monitorAccounts provided
+        const riskFlags: RiskFlag[] = [];
+        let balanceDeltas: BalanceDelta[] | undefined;
+
+        if (
+          options?.monitorAccounts?.length &&
+          value?.accounts &&
+          options.vaultAddress &&
+          options.totalVaultBalance !== undefined
+        ) {
+          balanceDeltas = [];
+          for (let i = 0; i < options.monitorAccounts.length; i++) {
+            const acctData = value.accounts[i];
+            if (!acctData?.data?.[0]) continue;
+            const postBalance = parseTokenBalance(acctData.data[0]);
+            const preBalance = options.preBalances?.get(options.monitorAccounts[i]) ?? 0n;
+            balanceDeltas.push({
+              account: options.monitorAccounts[i],
+              preBalance,
+              postBalance,
+              delta: postBalance - preBalance,
+            });
+          }
+
+          if (balanceDeltas.length > 0) {
+            const drainFlags = detectDrainAttempt(
+              {
+                balanceDeltas,
+                vaultAddress: options.vaultAddress,
+                totalVaultBalance: options.totalVaultBalance,
+                knownRecipients: options.knownRecipients,
+              },
+              options.drainThresholds,
+            );
+            riskFlags.push(...drainFlags);
+          }
+        }
+
         return {
           success: true,
           unitsConsumed,
           logs,
-          riskFlags: [],
+          balanceDeltas,
+          riskFlags,
         };
       }
 
@@ -446,6 +492,27 @@ export async function simulateBeforeSend(
   }
 }
 
+// ─── Token Balance Parsing ───────────────────────────────────────────────────
+
+/**
+ * Parse SPL Token account balance from base64-encoded account data.
+ * Reads u64 LE at byte offset 64 (SPL Token layout: 32 mint + 32 owner + 8 amount).
+ * Returns 0n for data shorter than 72 bytes.
+ */
+export function parseTokenBalance(base64Data: string): bigint {
+  try {
+    const binary = atob(base64Data);
+    if (binary.length < 72) return 0n;
+    let result = 0n;
+    for (let i = 0; i < 8; i++) {
+      result |= BigInt(binary.charCodeAt(64 + i)) << BigInt(i * 8);
+    }
+    return result;
+  } catch {
+    return 0n; // Malformed base64 → graceful degradation
+  }
+}
+
 // ─── Drain Detection ─────────────────────────────────────────────────────────
 
 export interface DrainDetectionInput {
@@ -458,9 +525,21 @@ export interface DrainDetectionInput {
 /**
  * Detect potential drain attempts from balance deltas.
  * Returns an array of risk flags.
+ *
+ * @param input - Balance deltas and vault context
+ * @param drainThresholds - Optional configurable thresholds (defaults: 50% warning, 95% block)
  */
-export function detectDrainAttempt(input: DrainDetectionInput): RiskFlag[] {
+export function detectDrainAttempt(
+  input: DrainDetectionInput,
+  drainThresholds?: DrainThresholds,
+): RiskFlag[] {
   const flags: RiskFlag[] = [];
+  const rawWarning = drainThresholds?.warningPercent ?? DEFAULT_WARNING_PERCENT;
+  const rawBlock = drainThresholds?.blockPercent ?? DEFAULT_BLOCK_PERCENT;
+  // Clamp to [0, 100] — prevents NaN/Infinity crashes (BigInt throws on non-finite)
+  // and negative values which would invert the threshold logic
+  const warningPct = Math.max(0, Math.min(100, Number.isFinite(rawWarning) ? rawWarning : DEFAULT_WARNING_PERCENT));
+  const blockPct = Math.max(0, Math.min(100, Number.isFinite(rawBlock) ? rawBlock : DEFAULT_BLOCK_PERCENT));
 
   const vaultDelta = input.balanceDeltas.find(
     (d) => d.account === input.vaultAddress,
@@ -469,18 +548,18 @@ export function detectDrainAttempt(input: DrainDetectionInput): RiskFlag[] {
   if (vaultDelta && vaultDelta.delta < 0n) {
     const outflow = -vaultDelta.delta;
 
-    // LARGE_OUTFLOW: >50% of vault balance leaving
+    // LARGE_OUTFLOW: outflow exceeds warningPercent of vault balance
     if (
       input.totalVaultBalance > 0n &&
-      outflow * 2n > input.totalVaultBalance
+      outflow * 100n > input.totalVaultBalance * BigInt(warningPct)
     ) {
       flags.push(RISK_FLAG_LARGE_OUTFLOW);
     }
 
-    // FULL_DRAIN: >95% of vault balance leaving
+    // FULL_DRAIN: outflow exceeds blockPercent of vault balance
     if (
       input.totalVaultBalance > 0n &&
-      outflow * 100n > input.totalVaultBalance * 95n
+      outflow * 100n > input.totalVaultBalance * BigInt(blockPct)
     ) {
       flags.push(RISK_FLAG_FULL_DRAIN);
     }

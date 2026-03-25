@@ -15,7 +15,6 @@ import {
   type ShieldedContext,
 } from "../src/shield.js";
 import type { InspectableInstruction } from "../src/inspector.js";
-import type { IntentAction } from "../src/intents.js";
 import { PHALNX_PROGRAM_ADDRESS } from "../src/generated/programs/phalnx.js";
 import { VALIDATE_AND_AUTHORIZE_DISCRIMINATOR } from "../src/generated/instructions/validateAndAuthorize.js";
 import { FINALIZE_SESSION_DISCRIMINATOR } from "../src/generated/instructions/finalizeSession.js";
@@ -321,49 +320,6 @@ describe("createShieldedSigner", () => {
       expect(signCalls).to.have.length(1);
     });
 
-    it("logs warning when intent doesn't match TX programs (does NOT throw)", async () => {
-      const { signer } = createMockSigner();
-      const shieldCtx = shield();
-      const intent: IntentAction = {
-        type: "swap",
-        params: { inputMint: "USDC", outputMint: "SOL", amount: "100" },
-      };
-      const shielded = createShieldedSigner(signer, shieldCtx, {
-        intentContext: { intent },
-      }) as any;
-
-      // TX with only system programs — doesn't match swap intent
-      const tx = buildCompiledTx([
-        noopIx(SYSTEM_PROGRAM),
-        noopIx(COMPUTE_BUDGET),
-      ]);
-      const { warnings } = await captureWarnsAsync(() =>
-        shielded.modifyAndSignTransactions([tx]),
-      );
-
-      expect(warnings.some((w) => w.includes("no protocol programs found"))).to
-        .be.true;
-    });
-
-    it("passes silently when intent matches TX programs", async () => {
-      const { signer } = createMockSigner();
-      const shieldCtx = shield();
-      const intent: IntentAction = {
-        type: "swap",
-        params: { inputMint: "USDC", outputMint: "SOL", amount: "100" },
-      };
-      const shielded = createShieldedSigner(signer, shieldCtx, {
-        intentContext: { intent },
-      }) as any;
-
-      // TX with Jupiter program — matches swap intent
-      const tx = buildCompiledTx([noopIx(JUPITER_PROGRAM)]);
-      const { warnings } = await captureWarnsAsync(() =>
-        shielded.modifyAndSignTransactions([tx]),
-      );
-
-      expect(warnings).to.have.length(0);
-    });
   });
 
   // ─── Property 2: Velocity Ceiling (HARD) ────────────────────────────

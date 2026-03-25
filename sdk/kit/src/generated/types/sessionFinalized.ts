@@ -16,6 +16,10 @@ import {
   getI64Encoder,
   getStructDecoder,
   getStructEncoder,
+  getU64Decoder,
+  getU64Encoder,
+  getU8Decoder,
+  getU8Encoder,
   type Address,
   type FixedSizeCodec,
   type FixedSizeDecoder,
@@ -28,6 +32,9 @@ export type SessionFinalized = {
   success: boolean;
   isExpired: boolean;
   timestamp: bigint;
+  actualSpendUsd: bigint;
+  balanceAfterUsd: bigint;
+  actionType: number;
 };
 
 export type SessionFinalizedArgs = {
@@ -36,6 +43,9 @@ export type SessionFinalizedArgs = {
   success: boolean;
   isExpired: boolean;
   timestamp: number | bigint;
+  actualSpendUsd: number | bigint;
+  balanceAfterUsd: number | bigint;
+  actionType: number;
 };
 
 export function getSessionFinalizedEncoder(): FixedSizeEncoder<SessionFinalizedArgs> {
@@ -45,6 +55,9 @@ export function getSessionFinalizedEncoder(): FixedSizeEncoder<SessionFinalizedA
     ["success", getBooleanEncoder()],
     ["isExpired", getBooleanEncoder()],
     ["timestamp", getI64Encoder()],
+    ["actualSpendUsd", getU64Encoder()],
+    ["balanceAfterUsd", getU64Encoder()],
+    ["actionType", getU8Encoder()],
   ]);
 }
 
@@ -55,6 +68,9 @@ export function getSessionFinalizedDecoder(): FixedSizeDecoder<SessionFinalized>
     ["success", getBooleanDecoder()],
     ["isExpired", getBooleanDecoder()],
     ["timestamp", getI64Decoder()],
+    ["actualSpendUsd", getU64Decoder()],
+    ["balanceAfterUsd", getU64Decoder()],
+    ["actionType", getU8Decoder()],
   ]);
 }
 

@@ -99,12 +99,26 @@ export function composePhalnxTransaction(
     Object.keys(params.addressLookupTables).length > 0
   ) {
     txMessage = compressTransactionMessageUsingAddressLookupTables(
-      txMessage as any,
+      txMessage as Parameters<typeof compressTransactionMessageUsingAddressLookupTables>[0],
       params.addressLookupTables,
     ) as typeof txMessage;
   }
 
-  return compileTransaction(txMessage as any);
+  return compileTransaction(txMessage as Parameters<typeof compileTransaction>[0]);
+}
+
+/**
+ * Compute actual byte length from a padded base64 string.
+ * The naive `Math.ceil(len * 3 / 4)` overestimates by 1-2 bytes
+ * when padding is present (RFC 4648). At the 1232-byte TX limit,
+ * this causes false rejections of valid transactions.
+ */
+function base64ByteLength(b64: string): number {
+  const len = b64.length;
+  let padding = 0;
+  if (len > 0 && b64[len - 1] === "=") padding++;
+  if (len > 1 && b64[len - 2] === "=") padding++;
+  return (len / 4) * 3 - padding;
 }
 
 /**
@@ -115,8 +129,7 @@ export function validateTransactionSize(
   compiledTx: ReturnType<typeof compileTransaction>,
 ): string {
   const wireBytes = getBase64EncodedWireTransaction(compiledTx);
-  // Base64 encodes 3 bytes as 4 chars. Decode to check actual size.
-  const byteLength = Math.ceil((wireBytes.length * 3) / 4);
+  const byteLength = base64ByteLength(wireBytes);
   if (byteLength > MAX_TX_SIZE) {
     throw new Error(
       `Transaction size ${byteLength} bytes exceeds limit of ${MAX_TX_SIZE} bytes. ` +
@@ -138,7 +151,7 @@ export function measureTransactionSize(
   withinLimit: boolean;
 } {
   const wireBase64 = getBase64EncodedWireTransaction(compiledTx);
-  const byteLength = Math.ceil((wireBase64.length * 3) / 4);
+  const byteLength = base64ByteLength(wireBase64);
   return { wireBase64, byteLength, withinLimit: byteLength <= MAX_TX_SIZE };
 }
 

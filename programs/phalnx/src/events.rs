@@ -58,6 +58,9 @@ pub struct ActionAuthorized {
     pub amount: u64,
     pub usd_amount: u64,
     pub protocol: Pubkey,
+    /// DEPRECATED (v5): Always 0 since outcome-based spending.
+    /// Actual rolling spend is in SessionFinalized.actual_spend_usd.
+    /// Retained for IDL backward compatibility.
     pub rolling_spend_usd_after: u64,
     pub daily_cap_usd: u64,
     pub delegated: bool,
@@ -71,6 +74,13 @@ pub struct SessionFinalized {
     pub success: bool,
     pub is_expired: bool,
     pub timestamp: i64,
+    /// Actual stablecoin spend measured by balance delta (0 for non-spending actions).
+    /// For stablecoin-input: outflow minus fees. For non-stablecoin-input: stablecoin gain.
+    pub actual_spend_usd: u64,
+    /// Vault stablecoin balance after this transaction (0 for non-spending).
+    pub balance_after_usd: u64,
+    /// ActionType as u8 for downstream classification (permission_bit() value, 0-20).
+    pub action_type: u8,
 }
 
 #[event]

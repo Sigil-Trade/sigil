@@ -16,6 +16,14 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./testing": {
+      "import": "./dist/testing/index.js",
+      "types": "./dist/testing/index.d.ts"
+    },
+    "./testing/devnet": {
+      "import": "./dist/testing/devnet.js",
+      "types": "./dist/testing/devnet.d.ts"
     }
   },
   "files": [
@@ -34,7 +42,9 @@
     "codama:kamino": "node codama.mjs --protocol=kamino",
     "codama:all": "node codama.mjs --all",
     "pretest": "tsc -p tsconfig.test.json --noEmit",
-    "test": "mocha --require tsx tests/**/*.test.ts --timeout 30000"
+    "test": "mocha --require tsx tests/*.test.ts --timeout 30000",
+    "test:devnet": "mocha --require tsx tests/devnet/**/*.test.ts --timeout 300000",
+    "test:experimental": "mocha --require tsx tests/experimental/**/*.test.ts --timeout 30000"
   },
   "dependencies": {
     "@phalnx/core": "workspace:*",
@@ -44,9 +54,10 @@
     "@solana/kit": "^6.2.0"
   },
   "optionalDependencies": {
-    "@solana/web3.js": "^1.95.0",
     "@coral-xyz/anchor": "^0.32.1",
-    "@drift-labs/sdk": "^2.100.0"
+    "@drift-labs/sdk": "^2.100.0",
+    "@solana/web3.js": "^1.95.0",
+    "cbor-x": "^1.6.0"
   },
   "devDependencies": {
     "@codama/nodes-from-anchor": "1.3.9",
@@ -57,6 +68,7 @@
     "codama": "1.5.1",
     "mocha": "^11.7.5",
     "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
     "typescript": "^5.3.3"
   },
   "keywords": [

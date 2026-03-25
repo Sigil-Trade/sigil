@@ -1,32 +1,23 @@
 /**
- * Protocol Resolver — Kit-native 4-Tier Dispatch + Escalation
+ * Protocol Resolver — Kit-native
  *
- * Determines which tier handles a given protocol request:
- *   T1: API-Mediated (Jupiter REST API)
- *   T2: SDK-Wrapped (Drift, Flash Trade, Kamino)
- *   T3: IDL-Generated (future)
- *   T4: Passthrough (raw instructions + on-chain constraints)
- *   T5: NOT_SUPPORTED (structured escalation to human)
- *
- * Kit differences from web3.js version:
- *   - PublicKey → Address (branded string)
- *   - .toBase58() → direct string use
- *   - .equals() → string ===
+ * Determines protocol tier for allowlist/constraint enforcement:
+ *   KNOWN: Program is in the known protocols registry
+ *   DEFAULT: Passthrough with on-chain constraints
+ *   NOT_ALLOWED: Blocked by policy
  */
 
 import type { Address } from "@solana/kit";
-import type { ProtocolRegistry } from "./integrations/protocol-registry.js";
+import * as Core from "@phalnx/core";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 export enum ProtocolTier {
-  T1_API = 1,
-  T2_SDK = 2,
-  T3_IDL = 3,
-  T4_PASSTHROUGH = 4,
-  NOT_SUPPORTED = 5,
+  KNOWN = 1,
+  DEFAULT = 2,
+  NOT_ALLOWED = 3,
 }
 
 export interface ProtocolResolution {
@@ -47,24 +38,7 @@ export interface EscalationInfo {
     | "not_in_allowlist_and_no_handler";
   message: string;
   requiredActions: string[];
-  alternatives?: {
-    protocolId: string;
-    displayName: string;
-    tier: ProtocolTier;
-  }[];
 }
-
-// ---------------------------------------------------------------------------
-// T1 protocols (API-mediated)
-// ---------------------------------------------------------------------------
-
-const T1_PROTOCOL_IDS = new Set(["jupiter"]);
-
-// ---------------------------------------------------------------------------
-// T2 protocols (SDK-wrapped) — keyed by registry protocolId
-// ---------------------------------------------------------------------------
-
-const T2_PROTOCOL_IDS = new Set(["drift", "flash-trade", "kamino-lending"]);
 
 // ---------------------------------------------------------------------------
 // Core Logic
@@ -82,7 +56,6 @@ export function isProtocolAllowed(
   policy: { protocolMode: number; protocols: Address[] },
 ): boolean {
   if (policy.protocolMode === 0) return true; // mode 0: all allowed
-  // Address is a string — direct === comparison
   const isInList = policy.protocols.some((p) => p === programId);
   if (policy.protocolMode === 1) return isInList; // allowlist
   return !isInList; // denylist
@@ -92,37 +65,32 @@ export function isProtocolAllowed(
  * Resolve the tier and escalation info for a given protocol.
  *
  * Resolution logic:
- * 1. Handler exists + in allowlist  -> T1 or T2
- * 2. Handler exists + NOT in allowlist  -> NOT_SUPPORTED ("not_in_allowlist")
- * 3. No handler + in allowlist + constraints  -> T4_PASSTHROUGH
- * 4. No handler + in allowlist + NO constraints  -> NOT_SUPPORTED ("no_handler_no_constraints")
- * 5. No handler + NOT in allowlist  -> NOT_SUPPORTED ("not_in_allowlist_and_no_handler")
+ * 1. Known program + in allowlist -> KNOWN
+ * 2. Known program + NOT in allowlist -> NOT_ALLOWED
+ * 3. Unknown program + in allowlist + constraints -> DEFAULT (passthrough)
+ * 4. Unknown program + in allowlist + NO constraints -> NOT_ALLOWED (escalation)
+ * 5. Unknown program + NOT in allowlist -> NOT_ALLOWED (escalation)
  */
 export function resolveProtocol(
   programId: Address,
-  registry: ProtocolRegistry,
   policy: { protocolMode: number; protocols: Address[] },
   constraintsConfigured: boolean,
 ): ProtocolResolution {
-  // Check registry for a handler
-  const handler = registry.getByProgramId(programId);
   const allowed = isProtocolAllowed(programId, policy);
+  const knownName = Core.KNOWN_PROTOCOLS.get(programId as string);
 
-  if (handler) {
-    const protocolId = handler.metadata.protocolId;
-    const displayName = handler.metadata.displayName;
-
+  if (knownName) {
     if (!allowed) {
-      // Path 2: Handler exists but not in allowlist
+      // Path 2: Known but not in allowlist
       return {
-        tier: ProtocolTier.NOT_SUPPORTED,
-        protocolId,
+        tier: ProtocolTier.NOT_ALLOWED,
+        protocolId: programId,
         programId,
-        displayName,
-        reason: `${displayName} is not in the vault's protocol allowlist`,
+        displayName: knownName,
+        reason: `${knownName} is not in the vault's protocol allowlist`,
         escalation: {
           type: "not_in_allowlist",
-          message: `${displayName} (${programId}) is not in your vault's protocol allowlist.`,
+          message: `${knownName} (${programId}) is not in your vault's protocol allowlist.`,
           requiredActions: [
             `Add program ${programId} to the vault's protocol allowlist`,
           ],
@@ -130,90 +98,63 @@ export function resolveProtocol(
       };
     }
 
-    // Path 1: Handler exists + allowed
-    const tier = T1_PROTOCOL_IDS.has(protocolId)
-      ? ProtocolTier.T1_API
-      : T2_PROTOCOL_IDS.has(protocolId)
-        ? ProtocolTier.T2_SDK
-        : ProtocolTier.T3_IDL;
-
+    // Path 1: Known + allowed
     return {
-      tier,
-      protocolId,
+      tier: ProtocolTier.KNOWN,
+      protocolId: programId,
       programId,
-      displayName,
-      reason: `${displayName} handled via ${tier === ProtocolTier.T1_API ? "API" : tier === ProtocolTier.T2_SDK ? "SDK" : "IDL-generated"} adapter`,
+      displayName: knownName,
+      reason: `${knownName} is a known protocol`,
     };
   }
 
-  // No handler — check allowlist and constraints
+  // Unknown protocol
   if (allowed && constraintsConfigured) {
-    // Path 3: No handler + allowed + constraints -> T4 Passthrough
+    // Path 3: Unknown + allowed + constraints -> passthrough
     return {
-      tier: ProtocolTier.T4_PASSTHROUGH,
+      tier: ProtocolTier.DEFAULT,
       protocolId: programId,
       programId,
       displayName: programId,
       reason:
-        "No SDK handler — using on-chain constraint validation (passthrough)",
+        "Unknown protocol — using on-chain constraint validation (passthrough)",
       constraintsConfigured: true,
     };
   }
 
   if (allowed && !constraintsConfigured) {
-    // Path 4: No handler + allowed + NO constraints
+    // Path 4: Unknown + allowed + no constraints
     return {
-      tier: ProtocolTier.NOT_SUPPORTED,
+      tier: ProtocolTier.NOT_ALLOWED,
       protocolId: programId,
       programId,
       displayName: programId,
       reason:
-        "Protocol is allowed but no handler or constraints are configured",
+        "Protocol is allowed but no constraints are configured for validation",
       escalation: {
         type: "no_handler_no_constraints",
-        message: `Program ${programId} is in the allowlist but has no SDK handler and no on-chain instruction constraints configured.`,
+        message: `Program ${programId} is in the allowlist but has no on-chain instruction constraints configured.`,
         requiredActions: [
           `Configure instruction constraints for program ${programId} using createConstraints`,
         ],
-        alternatives: buildAlternatives(registry, "lending"),
       },
     };
   }
 
-  // Path 5: No handler + NOT in allowlist
+  // Path 5: Unknown + not in allowlist
   return {
-    tier: ProtocolTier.NOT_SUPPORTED,
+    tier: ProtocolTier.NOT_ALLOWED,
     protocolId: programId,
     programId,
     displayName: programId,
-    reason: "Protocol has no handler and is not in the vault's allowlist",
+    reason: "Protocol is not in the vault's allowlist",
     escalation: {
       type: "not_in_allowlist_and_no_handler",
-      message: `Program ${programId} is not in the vault's protocol allowlist and has no registered SDK handler.`,
+      message: `Program ${programId} is not in the vault's protocol allowlist.`,
       requiredActions: [
         `Add program ${programId} to the vault's protocol allowlist`,
         `Configure instruction constraints for program ${programId}`,
       ],
-      alternatives: buildAlternatives(registry, "general"),
     },
   };
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function buildAlternatives(
-  registry: ProtocolRegistry,
-  _category: string,
-): EscalationInfo["alternatives"] {
-  return registry.listAll().map((meta) => ({
-    protocolId: meta.protocolId,
-    displayName: meta.displayName,
-    tier: T1_PROTOCOL_IDS.has(meta.protocolId)
-      ? ProtocolTier.T1_API
-      : T2_PROTOCOL_IDS.has(meta.protocolId)
-        ? ProtocolTier.T2_SDK
-        : ProtocolTier.T3_IDL,
-  }));
 }

@@ -449,6 +449,102 @@ export async function getProfilesByTag(
   ]);
 }
 
+// ─── Anchor error code → name lookup ─────────────────────────────────────────
+
+/**
+ * Phalnx custom error codes (6000-6070) mapped to Anchor error names.
+ * Source of truth: programs/phalnx/src/errors.rs
+ * Surfnet does NOT return program logs for failed TXs via getTransaction(),
+ * so we must decode the numeric error code to include the name in errors.
+ */
+const PHALNX_ERROR_NAMES: Record<number, string> = {
+  6000: "VaultNotActive",
+  6001: "UnauthorizedAgent",
+  6002: "UnauthorizedOwner",
+  6003: "UnsupportedToken",
+  6004: "ProtocolNotAllowed",
+  6005: "TransactionTooLarge",
+  6006: "SpendingCapExceeded",
+  6007: "LeverageTooHigh",
+  6008: "TooManyPositions",
+  6009: "PositionOpeningDisallowed",
+  6010: "SessionNotAuthorized",
+  6011: "InvalidSession",
+  6012: "OpenPositionsExist",
+  6013: "TooManyAllowedProtocols",
+  6014: "AgentAlreadyRegistered",
+  6015: "NoAgentRegistered",
+  6016: "VaultNotFrozen",
+  6017: "VaultAlreadyClosed",
+  6018: "InsufficientBalance",
+  6019: "DeveloperFeeTooHigh",
+  6020: "InvalidFeeDestination",
+  6021: "InvalidProtocolTreasury",
+  6022: "InvalidAgentKey",
+  6023: "AgentIsOwner",
+  6024: "Overflow",
+  6025: "InvalidTokenAccount",
+  6026: "TimelockNotExpired",
+  6027: "TimelockActive",
+  6028: "NoTimelockConfigured",
+  6029: "DestinationNotAllowed",
+  6030: "TooManyDestinations",
+  6031: "InvalidProtocolMode",
+  6032: "InvalidNonSpendingAmount",
+  6033: "NoPositionsToClose",
+  6034: "CpiCallNotAllowed",
+  6035: "MissingFinalizeInstruction",
+  6036: "NonTrackedSwapMustReturnStablecoin",
+  6037: "SwapSlippageExceeded",
+  6038: "InvalidJupiterInstruction",
+  6039: "UnauthorizedTokenTransfer",
+  6040: "SlippageBpsTooHigh",
+  6041: "ProtocolMismatch",
+  6042: "TooManyDeFiInstructions",
+  6043: "MaxAgentsReached",
+  6044: "InsufficientPermissions",
+  6045: "InvalidPermissions",
+  6046: "EscrowNotActive",
+  6047: "EscrowExpired",
+  6048: "EscrowNotExpired",
+  6049: "InvalidEscrowVault",
+  6050: "EscrowConditionsNotMet",
+  6051: "EscrowDurationExceeded",
+  6052: "InvalidConstraintConfig",
+  6053: "ConstraintViolated",
+  6054: "InvalidConstraintsPda",
+  6055: "InvalidPendingConstraintsPda",
+  6056: "AgentSpendLimitExceeded",
+  6057: "OverlaySlotExhausted",
+  6058: "AgentSlotNotFound",
+  6059: "UnauthorizedTokenApproval",
+  6060: "InvalidSessionExpiry",
+  6061: "UnconstrainedProgramBlocked",
+  6062: "ProtocolCapExceeded",
+  6063: "ProtocolCapsMismatch",
+  6064: "ActiveEscrowsExist",
+  6065: "ConstraintsNotClosed",
+  6066: "PendingPolicyExists",
+  6067: "AgentPaused",
+  6068: "AgentAlreadyPaused",
+  6069: "AgentNotPaused",
+  6070: "UnauthorizedPostFinalizeInstruction",
+};
+
+/**
+ * Extract custom error code from Solana transaction error and resolve to name.
+ */
+function resolveErrorName(err: any): string {
+  const errJson = JSON.stringify(err);
+  const match = errJson.match(/"Custom":(\d+)/);
+  if (match) {
+    const code = parseInt(match[1], 10);
+    const name = PHALNX_ERROR_NAMES[code];
+    if (name) return `${name} (${code})`;
+  }
+  return "";
+}
+
 // ─── Composed transaction helper ────────────────────────────────────────────
 
 export interface VersionedTxResult {
@@ -460,6 +556,10 @@ export interface VersionedTxResult {
 /**
  * Build, sign, and send a versioned transaction — mirrors litesvm-setup API.
  * Returns the signature and logs.
+ *
+ * Error handling: Surfnet does not return program logs for failed TXs via
+ * getTransaction(). We decode the error code from confirmation.value.err
+ * and include the Anchor error name in the thrown error message.
  */
 export async function sendVersionedTx(
   connection: Connection,
@@ -495,8 +595,9 @@ export async function sendVersionedTx(
       commitment: "confirmed",
     });
     const logs = txDetails?.meta?.logMessages ?? [];
+    const errorName = resolveErrorName(confirmation.value.err);
     throw new Error(
-      `Transaction failed: ${JSON.stringify(confirmation.value.err)} Logs: ${logs.join(" ")}`,
+      `Transaction failed: ${errorName} ${JSON.stringify(confirmation.value.err)} Logs: ${logs.join(" ")}`,
     );
   }
 
@@ -558,6 +659,209 @@ export function deriveSessionPda(
     programId,
   );
   return sessionPda;
+}
+
+// ─── Overlay PDA derivation ──────────────────────────────────────────────────
+
+/**
+ * Derive the AgentSpendOverlay PDA for a vault (page index 0).
+ */
+export function deriveOverlayPda(
+  vaultPda: PublicKey,
+  programId: PublicKey,
+): PublicKey {
+  const [overlayPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("agent_spend"), vaultPda.toBuffer(), Buffer.from([0])],
+    programId,
+  );
+  return overlayPda;
+}
+
+// ─── Escrow PDA derivation ───────────────────────────────────────────────────
+
+/**
+ * Derive escrow PDA and its USDC ATA.
+ */
+export function deriveEscrowPda(
+  srcVault: PublicKey,
+  dstVault: PublicKey,
+  escrowId: BN,
+  programId: PublicKey,
+): { escrowPda: PublicKey; escrowUsdcAta: PublicKey } {
+  const [escrowPda] = PublicKey.findProgramAddressSync(
+    [
+      Buffer.from("escrow"),
+      srcVault.toBuffer(),
+      dstVault.toBuffer(),
+      escrowId.toArrayLike(Buffer, "le", 8),
+    ],
+    programId,
+  );
+  const escrowUsdcAta = getAssociatedTokenAddressSync(
+    DEVNET_USDC_MINT,
+    escrowPda,
+    true,
+  );
+  return { escrowPda, escrowUsdcAta };
+}
+
+// ─── Vault setup helper ─────────────────────────────────────────────────────
+
+export interface SetupVaultOpts {
+  dailyCap?: BN;
+  maxTxSize?: BN;
+  vaultFunding?: number;
+  agentPermissions?: BN;
+  agentSpendingLimit?: BN;
+  timelockDuration?: BN;
+  allowedDestinations?: PublicKey[];
+  developerFeeRate?: number;
+  maxSlippageBps?: number;
+  owner?: Keypair;
+  protocolCaps?: any[];
+  skipAgent?: boolean;
+}
+
+export interface VaultSetupResult {
+  vaultId: BN;
+  agent: Keypair;
+  feeDestination: Keypair;
+  vaultPda: PublicKey;
+  policyPda: PublicKey;
+  trackerPda: PublicKey;
+  pendingPolicyPda: PublicKey;
+  overlayPda: PublicKey;
+  vaultUsdcAta: PublicKey;
+  protocolTreasuryAta: PublicKey;
+}
+
+const FULL_PERMISSIONS_BN = new BN((1n << 21n) - 1n);
+
+/**
+ * Create a vault with agent, fund it, and return all PDAs and keypairs.
+ * Consolidates the 7-step setup pattern used in every Surfpool test suite.
+ */
+export async function setupVaultWithAgent(
+  env: SurfpoolTestEnv,
+  program: Program<any>,
+  opts: SetupVaultOpts = {},
+): Promise<VaultSetupResult> {
+  const {
+    dailyCap = new BN(500_000_000),
+    maxTxSize = new BN(100_000_000),
+    vaultFunding = 1_000_000_000,
+    agentPermissions = FULL_PERMISSIONS_BN,
+    agentSpendingLimit = new BN(0),
+    timelockDuration = new BN(0),
+    allowedDestinations = [],
+    developerFeeRate = 0,
+    maxSlippageBps = 100,
+    owner = env.payer,
+    protocolCaps = [],
+    skipAgent = false,
+  } = opts;
+
+  const vaultId = nextVaultId();
+  const agent = await createWallet(env.connection, "agent", 10);
+  const feeDestination = await createWallet(env.connection, "feeDest", 2);
+
+  const pdas = derivePDAs(owner.publicKey, vaultId, program.programId);
+  const overlayPda = deriveOverlayPda(pdas.vaultPda, program.programId);
+
+  await program.methods
+    .initializeVault(
+      vaultId,
+      dailyCap,
+      maxTxSize,
+      0, // protocolMode: all
+      [],
+      new BN(0) as any, // max_leverage_bps
+      3, // max_concurrent_positions
+      developerFeeRate,
+      maxSlippageBps,
+      timelockDuration,
+      allowedDestinations,
+      protocolCaps,
+    )
+    .accounts({
+      owner: owner.publicKey,
+      vault: pdas.vaultPda,
+      policy: pdas.policyPda,
+      tracker: pdas.trackerPda,
+      agentSpendOverlay: overlayPda,
+      feeDestination: feeDestination.publicKey,
+      systemProgram: SystemProgram.programId,
+    } as any)
+    .signers(owner === env.payer ? [] : [owner])
+    .rpc();
+
+  if (!skipAgent) {
+    await program.methods
+      .registerAgent(agent.publicKey, agentPermissions, agentSpendingLimit)
+      .accounts({
+        owner: owner.publicKey,
+        vault: pdas.vaultPda,
+        agentSpendOverlay: overlayPda,
+      } as any)
+      .signers(owner === env.payer ? [] : [owner])
+      .rpc();
+  }
+
+  const vaultUsdcAta = await fundWithTokens(
+    env.connection,
+    pdas.vaultPda,
+    DEVNET_USDC_MINT,
+    vaultFunding,
+  );
+
+  const protocolTreasuryAta = await fundWithTokens(
+    env.connection,
+    PROTOCOL_TREASURY,
+    DEVNET_USDC_MINT,
+    0,
+  );
+
+  return {
+    vaultId,
+    agent,
+    feeDestination,
+    vaultPda: pdas.vaultPda,
+    policyPda: pdas.policyPda,
+    trackerPda: pdas.trackerPda,
+    pendingPolicyPda: pdas.pendingPolicyPda,
+    overlayPda,
+    vaultUsdcAta,
+    protocolTreasuryAta,
+  };
+}
+
+// ─── Error expectation helper ────────────────────────────────────────────────
+
+/**
+ * Send a transaction expecting it to fail with a specific error substring.
+ * Re-throws AssertionErrors from expect.fail() to prevent false passes.
+ */
+export async function expectTxError(
+  connection: Connection,
+  ixs: TransactionInstruction[],
+  signer: Keypair,
+  errorSubstring: string,
+  additionalSigners: Keypair[] = [],
+): Promise<void> {
+  try {
+    await sendVersionedTx(connection, ixs, signer, additionalSigners);
+    throw new Error(
+      `Expected error containing "${errorSubstring}" but transaction succeeded`,
+    );
+  } catch (err: any) {
+    if (err.message?.startsWith("Expected error containing")) throw err;
+    const errStr = err.message || JSON.stringify(err);
+    if (!errStr.includes(errorSubstring)) {
+      throw new Error(
+        `Expected "${errorSubstring}" but got: ${errStr.slice(0, 200)}`,
+      );
+    }
+  }
 }
 
 // ─── Collision-free vault ID generator (prefix 50_xxx) ──────────────────────

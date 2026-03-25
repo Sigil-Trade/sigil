@@ -1396,6 +1396,10 @@ export type Phalnx = {
           name: "systemProgram";
           address: "11111111111111111111111111111111";
         },
+        {
+          name: "instructionsSysvar";
+          address: "Sysvar1nstructions1111111111111111111111111";
+        },
       ];
       args: [
         {
@@ -3422,8 +3426,8 @@ export type Phalnx = {
     },
     {
       code: 6003;
-      name: "tokenNotRegistered";
-      msg: "Token is not a recognized stablecoin";
+      name: "unsupportedToken";
+      msg: "Token is not a supported stablecoin (only USDC and USDT)";
     },
     {
       code: 6004;
@@ -3437,8 +3441,8 @@ export type Phalnx = {
     },
     {
       code: 6006;
-      name: "dailyCapExceeded";
-      msg: "Daily spending cap would be exceeded";
+      name: "spendingCapExceeded";
+      msg: "Rolling 24h spending cap would be exceeded";
     },
     {
       code: 6007;
@@ -3592,8 +3596,8 @@ export type Phalnx = {
     },
     {
       code: 6037;
-      name: "slippageTooHigh";
-      msg: "Jupiter slippage exceeds policy max_slippage_bps or quoted_out is zero";
+      name: "swapSlippageExceeded";
+      msg: "Swap slippage exceeds policy max_slippage_bps or quoted output is zero";
     },
     {
       code: 6038;
@@ -3602,193 +3606,163 @@ export type Phalnx = {
     },
     {
       code: 6039;
-      name: "invalidFlashTradeInstruction";
-      msg: "Cannot parse Flash Trade instruction data";
-    },
-    {
-      code: 6040;
-      name: "flashTradePriceZero";
-      msg: "Flash Trade priceWithSlippage is zero";
-    },
-    {
-      code: 6041;
-      name: "dustDepositDetected";
+      name: "unauthorizedTokenTransfer";
       msg: "Top-level SPL Token transfer not allowed between validate and finalize";
     },
     {
-      code: 6042;
-      name: "invalidJupiterLendInstruction";
-      msg: "Cannot parse Jupiter Lend instruction data";
-    },
-    {
-      code: 6043;
+      code: 6040;
       name: "slippageBpsTooHigh";
       msg: "Slippage BPS exceeds maximum (5000 = 50%)";
     },
     {
-      code: 6044;
+      code: 6041;
       name: "protocolMismatch";
       msg: "DeFi instruction program does not match declared target_protocol";
     },
     {
-      code: 6045;
+      code: 6042;
       name: "tooManyDeFiInstructions";
-      msg: "Non-stablecoin swap allows exactly one DeFi instruction";
+      msg: "Spending allows at most one DeFi instruction";
     },
     {
-      code: 6046;
+      code: 6043;
       name: "maxAgentsReached";
       msg: "Maximum agents per vault reached (limit: 10)";
     },
     {
-      code: 6047;
+      code: 6044;
       name: "insufficientPermissions";
       msg: "Agent lacks permission for this action type";
     },
     {
-      code: 6048;
+      code: 6045;
       name: "invalidPermissions";
       msg: "Permission bitmask contains invalid bits";
     },
     {
-      code: 6049;
+      code: 6046;
       name: "escrowNotActive";
       msg: "Escrow is not in Active status";
     },
     {
-      code: 6050;
+      code: 6047;
       name: "escrowExpired";
       msg: "Escrow has expired";
     },
     {
-      code: 6051;
+      code: 6048;
       name: "escrowNotExpired";
       msg: "Escrow has not expired yet";
     },
     {
-      code: 6052;
+      code: 6049;
       name: "invalidEscrowVault";
       msg: "Invalid escrow vault";
     },
     {
-      code: 6053;
+      code: 6050;
       name: "escrowConditionsNotMet";
       msg: "Escrow conditions not met";
     },
     {
-      code: 6054;
+      code: 6051;
       name: "escrowDurationExceeded";
       msg: "Escrow duration exceeds maximum (30 days)";
     },
     {
-      code: 6055;
+      code: 6052;
       name: "invalidConstraintConfig";
       msg: "Invalid constraint configuration: bounds exceeded";
     },
     {
-      code: 6056;
+      code: 6053;
       name: "constraintViolated";
       msg: "Instruction constraint violated";
     },
     {
-      code: 6057;
+      code: 6054;
       name: "invalidConstraintsPda";
       msg: "Invalid constraints PDA: wrong owner or vault";
     },
     {
-      code: 6058;
-      name: "noPendingConstraintsUpdate";
-      msg: "No pending constraints update to apply or cancel";
-    },
-    {
-      code: 6059;
-      name: "pendingConstraintsUpdateExists";
-      msg: "A pending constraints update already exists";
-    },
-    {
-      code: 6060;
-      name: "constraintsUpdateNotExpired";
-      msg: "Constraints update timelock has not expired";
-    },
-    {
-      code: 6061;
+      code: 6055;
       name: "invalidPendingConstraintsPda";
       msg: "Invalid pending constraints PDA: wrong owner or vault";
     },
     {
-      code: 6062;
-      name: "constraintsUpdateExpired";
-      msg: "Pending constraints update has expired and is stale";
-    },
-    {
-      code: 6063;
+      code: 6056;
       name: "agentSpendLimitExceeded";
       msg: "Agent rolling 24h spend exceeds per-agent spending limit";
     },
     {
-      code: 6064;
+      code: 6057;
       name: "overlaySlotExhausted";
       msg: "Per-agent overlay is full; cannot register agent with spending limit";
     },
     {
-      code: 6065;
+      code: 6058;
       name: "agentSlotNotFound";
       msg: "Agent has per-agent spending limit but no overlay tracking slot";
     },
     {
-      code: 6066;
+      code: 6059;
       name: "unauthorizedTokenApproval";
       msg: "Unauthorized SPL Token Approve between validate and finalize";
     },
     {
-      code: 6067;
+      code: 6060;
       name: "invalidSessionExpiry";
       msg: "Session expiry slots out of range (10-450)";
     },
     {
-      code: 6068;
+      code: 6061;
       name: "unconstrainedProgramBlocked";
       msg: "Program has no constraint entry and strict mode is enabled";
     },
     {
-      code: 6069;
+      code: 6062;
       name: "protocolCapExceeded";
-      msg: "Per-protocol daily spending cap would be exceeded";
+      msg: "Per-protocol rolling 24h spending cap would be exceeded";
     },
     {
-      code: 6070;
+      code: 6063;
       name: "protocolCapsMismatch";
       msg: "protocol_caps length must match protocols length when has_protocol_caps is true";
     },
     {
-      code: 6071;
+      code: 6064;
       name: "activeEscrowsExist";
       msg: "Cannot close vault with active escrow deposits";
     },
     {
-      code: 6072;
+      code: 6065;
       name: "constraintsNotClosed";
       msg: "Instruction constraints must be closed before closing vault";
     },
     {
-      code: 6073;
+      code: 6066;
       name: "pendingPolicyExists";
       msg: "Pending policy update must be applied or cancelled before closing vault";
     },
     {
-      code: 6074;
+      code: 6067;
       name: "agentPaused";
       msg: "Agent is paused and cannot execute actions";
     },
     {
-      code: 6075;
+      code: 6068;
       name: "agentAlreadyPaused";
       msg: "Agent is already paused";
     },
     {
-      code: 6076;
+      code: 6069;
       name: "agentNotPaused";
       msg: "Agent is not paused";
+    },
+    {
+      code: 6070;
+      name: "unauthorizedPostFinalizeInstruction";
+      msg: "Unauthorized instruction after finalize_session scan window";
     },
   ];
   types: [
@@ -4148,7 +4122,7 @@ export type Phalnx = {
         "Supports up to 10 agents (matches MAX_AGENTS_PER_VAULT).",
         "",
         "Size calculation:",
-        "8 (discriminator) + 32 (vault) + 232 × 10 (entries) + 1 (bump) + 7 (padding) = 2,368 bytes",
+        "8 (discriminator) + 32 (vault) + 232 × 10 (entries) + 1 (bump) + 7 (padding) + 80 (lifetime_spend) + 80 (lifetime_tx_count) = 2,528 bytes",
       ];
       serialization: "bytemuck";
       repr: {
@@ -4188,6 +4162,24 @@ export type Phalnx = {
             docs: ["Padding for 8-byte alignment"];
             type: {
               array: ["u8", 7];
+            };
+          },
+          {
+            name: "lifetimeSpend";
+            docs: [
+              "Per-agent cumulative spend in USD base units. Index matches entries[i].",
+            ];
+            type: {
+              array: ["u64", 10];
+            };
+          },
+          {
+            name: "lifetimeTxCount";
+            docs: [
+              "Per-agent cumulative transaction count. Index matches entries[i].",
+            ];
+            type: {
+              array: ["u64", 10];
             };
           },
         ];
@@ -4323,6 +4315,25 @@ export type Phalnx = {
             docs: [
               "Cumulative developer fees collected from this vault (token base units)",
             ];
+            type: "u64";
+          },
+          {
+            name: "totalDepositedUsd";
+            docs: [
+              "Cumulative stablecoin deposits in base units (USDC/USDT, 6 decimals)",
+            ];
+            type: "u64";
+          },
+          {
+            name: "totalWithdrawnUsd";
+            docs: [
+              "Cumulative stablecoin withdrawals in base units (USDC/USDT, 6 decimals)",
+            ];
+            type: "u64";
+          },
+          {
+            name: "totalFailedTransactions";
+            docs: ["Cumulative failed + expired session count"];
             type: "u64";
           },
         ];
@@ -5463,6 +5474,18 @@ export type Phalnx = {
           {
             name: "timestamp";
             type: "i64";
+          },
+          {
+            name: "actualSpendUsd";
+            type: "u64";
+          },
+          {
+            name: "balanceAfterUsd";
+            type: "u64";
+          },
+          {
+            name: "actionType";
+            type: "u8";
           },
         ];
       };

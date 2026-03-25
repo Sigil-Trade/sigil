@@ -333,7 +333,7 @@ describe("devnet-transfers", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectError(err, "DailyCapExceeded", "cap");
+      expectError(err, "SpendingCapExceeded", "cap");
     }
     console.log("    agent_transfer respects daily cap");
   });

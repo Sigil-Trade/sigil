@@ -104,13 +104,13 @@ describe("ALT integration", () => {
       expect(getPhalnxAltAddress("devnet")).to.equal(PHALNX_ALT_DEVNET);
     });
 
-    it("getPhalnxAltAddress returns mainnet ALT for mainnet-beta", () => {
-      expect(getPhalnxAltAddress("mainnet-beta")).to.equal(PHALNX_ALT_MAINNET);
+    it("getPhalnxAltAddress throws for mainnet while ALT is placeholder", () => {
+      expect(() => getPhalnxAltAddress("mainnet-beta")).to.throw(/not yet deployed/);
     });
 
-    it("expected ALT contents have 5 entries per network", () => {
-      expect(EXPECTED_ALT_CONTENTS_DEVNET).to.have.lengthOf(5);
-      expect(EXPECTED_ALT_CONTENTS_MAINNET).to.have.lengthOf(5);
+    it("expected ALT contents have correct entry count per network", () => {
+      expect(EXPECTED_ALT_CONTENTS_DEVNET).to.have.lengthOf(7); // 5 base + 2 treasury ATAs
+      expect(EXPECTED_ALT_CONTENTS_MAINNET).to.have.lengthOf(5); // mainnet ATAs not yet added
     });
 
     it("devnet and mainnet ALT contents differ in mints", () => {
@@ -130,27 +130,8 @@ describe("ALT integration", () => {
       expect(agentErr.retryable).to.be.false;
     });
 
-    it("error context includes altsApplied field", () => {
-      const err = new Error("TX too large") as any;
-      err.code = 7033;
-      err.context = { byteLength: 1400, limit: 1232, altsApplied: true };
-
-      expect(err.code).to.equal(7033);
-      expect(err.context.altsApplied).to.be.true;
-      expect(err.context.byteLength).to.equal(1400);
-    });
-
-    it("distinguishes with-ALTs vs without-ALTs in message", () => {
-      const errWithAlts = new Error(
-        "Transaction 1400B exceeds 1232B limit even with ALTs applied.",
-      );
-      const errWithoutAlts = new Error(
-        "Transaction 1400B exceeds 1232B limit. ALT fetch may have failed.",
-      );
-
-      expect(errWithAlts.message).to.include("even with ALTs");
-      expect(errWithoutAlts.message).to.include("ALT fetch may have failed");
-    });
+    // Deleted 2 false-positive tests that constructed error objects and asserted
+    // their own properties. Replaced with a real test that exercises validateTransactionSize().
   });
 
   describe("mergeAltAddresses with protocol ALTs", () => {

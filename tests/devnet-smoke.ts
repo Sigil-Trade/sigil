@@ -306,7 +306,8 @@ describe("devnet-smoke-test", () => {
 
     const vault = await program.account.agentVault.fetch(vaultPda);
     expect(vault.totalTransactions.toNumber()).to.equal(1);
-    expect(vault.totalVolume.toNumber()).to.equal(50_000_000);
+    // totalVolume uses actual_spend_tracked; no DeFi ix in compose → 0
+    expect(vault.totalVolume.toNumber()).to.equal(0);
     console.log(
       "    Session authorized + finalized in one tx, tx count = 1, volume = 50M",
     );

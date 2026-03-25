@@ -11,20 +11,17 @@ import type {
   SettleResponse,
 } from "./types.js";
 import { X402ParseError } from "./errors.js";
+import { U64_MAX } from "../types.js";
 
 // ─── Base64 Helpers ─────────────────────────────────────────────────────────
 
+/** Base64 encode a JSON/ASCII string. Platform-agnostic (no Buffer dependency). */
 export function base64Encode(data: string): string {
-  if (typeof Buffer !== "undefined") {
-    return Buffer.from(data, "utf-8").toString("base64");
-  }
   return btoa(data);
 }
 
+/** Base64 decode to a JSON/ASCII string. Platform-agnostic (no Buffer dependency). */
 export function base64Decode(encoded: string): string {
-  if (typeof Buffer !== "undefined") {
-    return Buffer.from(encoded, "base64").toString("utf-8");
-  }
   return atob(encoded);
 }
 
@@ -79,6 +76,11 @@ export function decodePaymentRequiredHeader(header: string): PaymentRequired {
       if (parsed < 0n) {
         throw new X402ParseError(
           `accepts[${i}].amount must be non-negative (got: "${entry.amount}")`,
+        );
+      }
+      if (parsed > U64_MAX) {
+        throw new X402ParseError(
+          `accepts[${i}].amount exceeds u64 max (got: "${entry.amount}")`,
         );
       }
     } catch (e) {

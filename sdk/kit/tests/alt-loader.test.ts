@@ -1,6 +1,6 @@
 import { expect } from "chai";
-import type { Address } from "@solana/kit";
-import { AltCache, mergeAltAddresses } from "../src/alt-loader.js";
+import type { Address, AddressesByLookupTableAddress } from "@solana/kit";
+import { AltCache, mergeAltAddresses, verifyPhalnxAlt } from "../src/alt-loader.js";
 
 const ALT_A = "ALTaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as Address;
 const ALT_B = "ALTbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" as Address;
@@ -119,6 +119,75 @@ describe("alt-loader", () => {
     it("phalnx ALT always comes first", () => {
       const result = mergeAltAddresses(ALT_B, [ALT_A]);
       expect(result[0]).to.equal(ALT_B);
+    });
+  });
+
+  describe("verifyPhalnxAlt", () => {
+    it("passes when all expected addresses are present", () => {
+      const resolved: AddressesByLookupTableAddress = {
+        [ALT_A]: [ADDR_1, ADDR_2, ADDR_3],
+      };
+      // Should not throw
+      verifyPhalnxAlt(resolved, ALT_A, [ADDR_1, ADDR_2]);
+    });
+
+    it("passes when ALT has extra addresses beyond expected", () => {
+      const resolved: AddressesByLookupTableAddress = {
+        [ALT_A]: [ADDR_1, ADDR_2, ADDR_3],
+      };
+      // Extra ADDR_3 is fine — ALTs can have more than expected
+      verifyPhalnxAlt(resolved, ALT_A, [ADDR_1, ADDR_2]);
+    });
+
+    it("throws when expected address is missing from ALT", () => {
+      const resolved: AddressesByLookupTableAddress = {
+        [ALT_A]: [ADDR_1], // missing ADDR_2
+      };
+      expect(() =>
+        verifyPhalnxAlt(resolved, ALT_A, [ADDR_1, ADDR_2]),
+      ).to.throw(/missing 1 expected address/);
+    });
+
+    it("throws with address details when multiple addresses missing", () => {
+      const resolved: AddressesByLookupTableAddress = {
+        [ALT_A]: [], // missing all
+      };
+      expect(() =>
+        verifyPhalnxAlt(resolved, ALT_A, [ADDR_1, ADDR_2, ADDR_3]),
+      ).to.throw(/missing 3 expected address/);
+    });
+
+    it("is a no-op when Phalnx ALT was not resolved (graceful degradation)", () => {
+      const resolved: AddressesByLookupTableAddress = {
+        // ALT_A not present — RPC fetch failed for this ALT
+      };
+      // Should not throw — graceful degradation
+      verifyPhalnxAlt(resolved, ALT_A, [ADDR_1, ADDR_2]);
+    });
+
+    it("is a no-op with completely empty resolved map", () => {
+      const resolved: AddressesByLookupTableAddress = {};
+      verifyPhalnxAlt(resolved, ALT_A, [ADDR_1, ADDR_2]);
+    });
+
+    it("stale cache scenario: first verify throws, second with fresh data passes", () => {
+      // Simulates the retry pattern in wrap.ts:
+      // 1. Cache has old ALT (2 entries), expected has 3 entries → throws
+      // 2. Cache invalidated, fresh fetch has 3 entries → passes
+
+      const staleResolved: AddressesByLookupTableAddress = {
+        [ALT_A]: [ADDR_1, ADDR_2], // missing ADDR_3
+      };
+      const freshResolved: AddressesByLookupTableAddress = {
+        [ALT_A]: [ADDR_1, ADDR_2, ADDR_3], // all present after re-fetch
+      };
+      const expected = [ADDR_1, ADDR_2, ADDR_3];
+
+      // First attempt throws (stale)
+      expect(() => verifyPhalnxAlt(staleResolved, ALT_A, expected)).to.throw(/missing 1/);
+
+      // Second attempt passes (fresh) — simulates the retry in wrap.ts
+      verifyPhalnxAlt(freshResolved, ALT_A, expected);
     });
   });
 });

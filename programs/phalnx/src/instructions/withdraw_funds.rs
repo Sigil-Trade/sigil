@@ -11,6 +11,7 @@ pub struct WithdrawFunds<'info> {
     pub owner: Signer<'info>,
 
     #[account(
+        mut,
         has_one = owner @ PhalnxError::UnauthorizedOwner,
         seeds = [b"vault", owner.key().as_ref(), vault.vault_id.to_le_bytes().as_ref()],
         bump = vault.bump,
@@ -39,7 +40,7 @@ pub struct WithdrawFunds<'info> {
 }
 
 pub fn handler(ctx: Context<WithdrawFunds>, amount: u64) -> Result<()> {
-    let vault = &ctx.accounts.vault;
+    let vault = &mut ctx.accounts.vault;
 
     require!(
         vault.status != VaultStatus::Closed,
@@ -65,7 +66,7 @@ pub fn handler(ctx: Context<WithdrawFunds>, amount: u64) -> Result<()> {
     let cpi_accounts = Transfer {
         from: ctx.accounts.vault_token_account.to_account_info(),
         to: ctx.accounts.owner_token_account.to_account_info(),
-        authority: ctx.accounts.vault.to_account_info(),
+        authority: vault.to_account_info(),
     };
     let cpi_ctx = CpiContext::new_with_signer(
         ctx.accounts.token_program.to_account_info(),
@@ -73,6 +74,14 @@ pub fn handler(ctx: Context<WithdrawFunds>, amount: u64) -> Result<()> {
         &binding,
     );
     token::transfer(cpi_ctx, amount)?;
+
+    // P&L tracking: increment lifetime withdrawal counter for stablecoin mints only.
+    if is_stablecoin_mint(&ctx.accounts.mint.key()) {
+        vault.total_withdrawn_usd = vault
+            .total_withdrawn_usd
+            .checked_add(amount)
+            .ok_or(error!(PhalnxError::Overflow))?;
+    }
 
     let clock = Clock::get()?;
     emit!(FundsWithdrawn {

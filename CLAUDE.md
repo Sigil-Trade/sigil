@@ -2,46 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Read docs/PROJECT.md for full specification. Read docs/INSTRUCTIONS.md for all coding rules and guardrails. Read docs/ROADMAP.md for priorities and build progress.**
-
-## Working Methodology
-
-### Thinking Order
-1. **Big picture first.** Before touching any file, before writing any code, before making any recommendation — understand the full system. What does this codebase do? What are the architectural boundaries? What are the constraints? What are the goals? Map the territory before you move through it.
-2. **Then drill down.** Only after you have a clear macro-level understanding should you examine specific files, functions, or implementations. Never invert this order. If you find yourself diving into details without understanding the surrounding system, stop and zoom out.
-
-### Core Rules
-
-**Never assume.** If anything is unclear, ambiguous, or underspecified — STOP and ask before proceeding. Do not guess at intent, architecture decisions, or expected behavior. Do not infer requirements from naming conventions or patterns alone. Verify. Your confidence must be 100% before you commit to a direction. If it is not, ask questions until it is.
-
-**Use subagents aggressively.** Spin up subagents for every distinct investigation, analysis, or verification task. There is no upper limit — use 5, 20, 100, whatever the problem demands. Run them in the background so the main agent context stays clean and focused. Each subagent should have a clearly scoped task: one question, one investigation, one file analysis per subagent. The main agent's job is to orchestrate, synthesize, and verify — not to do all the work itself.
-
-**Adversarial verification is essential.** Treat every finding — yours or a subagent's — as a hypothesis, not a conclusion. Actively attempt to disprove each finding before accepting it. Ask: "What would make this wrong? What edge case breaks this? What am I not seeing?" Stress-test assumptions. Look for counterexamples. Challenge the reasoning chain. If you cannot disprove a finding after rigorous scrutiny, then and only then accept it as correct.
-
-**Label confidence on every finding.** Use: CONFIRMED (could not disprove), LIKELY (strong evidence but not fully stress-tested), or UNCERTAIN (needs more investigation).
-
-### Output Mode: Report Only (Default)
-Unless explicitly told to implement, your output is a verified report only. Do NOT modify, create, or delete any files. Structure reports as:
-1. **System Understanding** — Big-picture assessment of the relevant system/context.
-2. **Findings** — Each finding with: what you found, the evidence, what you did to try to disprove it, and your confidence level.
-3. **Recommendations** — What should be done about each finding, ordered by severity/impact.
-4. **Open Questions** — Anything you could not resolve to 100% confidence that needs human input.
-
-No filler. Every sentence should carry information.
-
-### Output Mode: Implementation (When Told to Implement)
-- Before implementing anything, state what you are about to change and why. Wait for confirmation if the change is non-trivial.
-- Implement one finding at a time. After each change, verify it works before moving to the next.
-- Use subagents to validate your own changes — do not self-certify.
-- Do not batch multiple unrelated changes into one commit.
-
-### What Never To Do
-- Do not skip the big-picture step. Ever.
-- Do not accept the first answer you find. Verify it.
-- Do not waste main agent context on work a subagent could do.
-- Do not present uncertain findings as confirmed. Be honest about confidence levels.
-
----
+**Read docs/PROJECT.md for full specification. Read docs/INSTRUCTIONS.md for all coding rules and guardrails. Read WRAP-ARCHITECTURE-PLAN.md for the definitive implementation plan and priorities.**
 
 ## What This Is
 
@@ -131,7 +92,7 @@ Nine PDA account types in `state/`:
 
 | PDA | Seeds | Size |
 |-----|-------|------|
-| **AgentVault** | `[b"vault", owner, vault_id]` | 610 bytes |
+| **AgentVault** | `[b"vault", owner, vault_id]` | 634 bytes |
 | **PolicyConfig** | `[b"policy", vault]` | 817 bytes |
 | **SpendTracker** | `[b"tracker", vault]` | 2,840 bytes (zero-copy) |
 | **SessionAuthority** | `[b"session", vault, agent, token_mint]` | Standard |
@@ -139,7 +100,7 @@ Nine PDA account types in `state/`:
 | **EscrowDeposit** | `[b"escrow", source_vault, dest_vault, escrow_id]` | 170 bytes |
 | **InstructionConstraints** | `[b"constraints", vault]` | 8,318 bytes |
 | **PendingConstraintsUpdate** | `[b"pending_constraints", vault]` | 8,334 bytes |
-| **AgentSpendOverlay** | `[b"agent_spend", vault]` | 2,368 bytes (zero-copy) |
+| **AgentSpendOverlay** | `[b"agent_spend", vault]` | 2,528 bytes (zero-copy) |
 
 See `docs/ARCHITECTURE.md` for full account descriptions, ActionType classification, validate_and_authorize flow, on-chain constants, and x402 payment flow.
 
@@ -186,10 +147,9 @@ Specs live in `programs/phalnx/src/certora/specs/`:
 
 ---
 
-## Error Codes (6000–6076)
+## Error Codes (6000–6070)
 
-77 error codes. Source of truth: `programs/phalnx/src/errors.rs`. See `docs/ERROR-CODES.md` for full table.
-MCP server maps all 77 codes to human-readable suggestions in `packages/mcp/src/errors.ts`.
+71 error codes. Source of truth: `programs/phalnx/src/errors.rs`. See `docs/ERROR-CODES.md` for full table.
 
 ---
 
@@ -215,7 +175,36 @@ MCP server maps all 77 codes to human-readable suggestions in `packages/mcp/src/
 
 ## Current State
 
-Phases 1–5, A, B, C, D, E, F, F.5, G, G.3, H, I, J.1, K, Option C complete. Kit-native SDK Phases 0-5 complete. SAK & ElizaOS plugins removed. On-chain program feature-complete and frozen. See `docs/ROADMAP.md` for priorities and `scripts/test-counts.json` for current test counts.
+On-chain program has 29 instructions, 9 PDA types, and is under active development (not frozen). Spending enforcement is **outcome-based**: `finalize_session` measures actual stablecoin balance delta (not declared amounts) for cap checks, with post-finalize instruction scan (error 6070) as defense-in-depth. See `WRAP-ARCHITECTURE-PLAN.md` for the definitive implementation plan and `scripts/test-counts.json` for test counts.
+
+### Wrap Architecture (Definitive Direction)
+
+Phalnx is a **security wrapper**, not a DeFi SDK. The `wrap()` function takes arbitrary DeFi instructions from any source (Jupiter API, Solana Agent Kit, MCP servers) and sandwiches them with `validate_and_authorize` + `finalize_session`. `PhalnxClient` is the primary API — holds vault/agent/network context, delegates to `wrap()` with instance-level caches.
+
+**Phase 5 (SDK additions) — COMPLETE (all 10 steps):**
+- `PhalnxClient` promoted (5.3): stateful client with `wrap()`, `executeAndConfirm()`, `getPnL()`, `getVaultState()`, `getTokenBalances()`, `getAgentBudget()`, static `createVault()`
+- Test utilities (5.4): `@phalnx/kit/testing` subpath with `createMockRpc()`, `createMockVaultState()`, devnet helpers
+- Formatting (5.5): 11 functions in `formatting.ts` with full-precision defaults (6 decimals USD, full token decimals)
+- Vault presets (5.6): `presets.ts` with Jupiter/perps/lending/full-access templates
+- Owner transactions (5.7): `buildOwnerTransaction()` in `owner-transaction.ts`
+- Spending history (5.8): `getSpendingHistory()` in `state-resolver.ts` — 144-epoch circular buffer to chart-ready time series
+- Post-finalize scan (5.9): defense-in-depth instruction check after finalize, error 6070
+- SAK plugin (5.10): `packages/plugin-solana-agent-kit/` — thin adapter with swap/transfer/status actions via `PhalnxClient.executeAndConfirm()`
+
+**Phase 6 (Analytics Data Layer) — COMPLETE (42 functions across 11 modules):**
+- `formatting.ts` (11): USD/percent/time/address/token display with full-precision defaults
+- `spending-analytics.ts` (3): velocity, breakdown, per-agent history
+- `vault-analytics.ts` (2): health assessment, one-call summary
+- `event-analytics.ts` (4): categorize, describe, build activity items, fetch feed
+- `agent-analytics.ts` (4): profiles, leaderboard, comparison, error breakdown
+- `security-analytics.ts` (3): 13-point posture, alert conditions, audit trail
+- `portfolio-analytics.ts` (4): cross-vault aggregation, agent ranking, time series
+- `protocol-analytics.ts` (2): per-protocol breakdown, cross-vault usage
+- `advanced-analytics.ts` (7): slippage, cap velocity, deviation, idle capital, escalation latency, coverage ratio, permission utilization
+- `protocol-names.ts` (1): shared protocol name resolution
+- `math-utils.ts` (1): shared Herfindahl computation (bigint-safe)
+
+See `WRAP-ARCHITECTURE-PLAN.md` for full spec and `WRAP-DISCRIMINATOR-TABLES.md` for verified discriminator bytes.
 
 ---
 
@@ -225,7 +214,7 @@ Test counts are in `scripts/test-counts.json` (run `node scripts/update-test-cou
 
 | Tier | Tool | Speed | When to use |
 |------|------|-------|-------------|
-| Unit | LiteSVM | ~45s for 325 tests | Policy logic, error paths, security exploits, composed TX with mocks |
+| Unit | LiteSVM | ~45s for 361 tests | Policy logic, error paths, security exploits, composed TX with mocks |
 | Integration | Surfpool | ~60s for 20 tests | Session expiry, real token balances, CU profiling, time travel |
 | Cluster | Devnet | ~5min for 69 tests | End-to-end with deployed program, costs SOL |
 

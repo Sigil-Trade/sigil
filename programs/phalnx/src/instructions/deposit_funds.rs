@@ -12,6 +12,7 @@ pub struct DepositFunds<'info> {
     pub owner: Signer<'info>,
 
     #[account(
+        mut,
         has_one = owner @ PhalnxError::UnauthorizedOwner,
         seeds = [b"vault", owner.key().as_ref(), vault.vault_id.to_le_bytes().as_ref()],
         bump = vault.bump,
@@ -43,7 +44,7 @@ pub struct DepositFunds<'info> {
 }
 
 pub fn handler(ctx: Context<DepositFunds>, amount: u64) -> Result<()> {
-    let vault = &ctx.accounts.vault;
+    let vault = &mut ctx.accounts.vault;
     require!(
         vault.status != VaultStatus::Closed,
         PhalnxError::VaultAlreadyClosed
@@ -57,6 +58,14 @@ pub fn handler(ctx: Context<DepositFunds>, amount: u64) -> Result<()> {
     };
     let cpi_ctx = CpiContext::new(ctx.accounts.token_program.to_account_info(), cpi_accounts);
     token::transfer(cpi_ctx, amount)?;
+
+    // P&L tracking: increment lifetime deposit counter for stablecoin mints only.
+    if is_stablecoin_mint(&ctx.accounts.mint.key()) {
+        vault.total_deposited_usd = vault
+            .total_deposited_usd
+            .checked_add(amount)
+            .ok_or(error!(PhalnxError::Overflow))?;
+    }
 
     let clock = Clock::get()?;
     emit!(FundsDeposited {

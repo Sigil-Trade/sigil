@@ -1,13 +1,10 @@
 /**
  * Kit-native policy engine for Phalnx.
- *
- * Port of sdk/typescript/src/wrapper/policies.ts with Kit Address type
- * instead of web3.js PublicKey. Since Kit Address IS a string, the
- * conversion layer is simplified — no .toBase58() needed.
  */
 
 import type { Address } from "@solana/kit";
 import * as Core from "@phalnx/core";
+import { isStablecoinMint, type Network } from "./types.js";
 
 // Re-export core types that don't need Solana adaptation
 export type { RateLimitConfig, PolicyCheckResult } from "@phalnx/core";
@@ -57,25 +54,6 @@ export interface TokenTransfer {
   direction: "outgoing" | "incoming" | "unknown";
   /** Destination account */
   destination?: Address;
-}
-
-/** Summary of current spending state relative to policy limits */
-export interface SpendingSummary {
-  tokens: Array<{
-    mint: string;
-    symbol: string | undefined;
-    spent: bigint;
-    limit: bigint;
-    remaining: bigint;
-    windowMs: number;
-  }>;
-  rateLimit: {
-    count: number;
-    limit: number;
-    remaining: number;
-    windowMs: number;
-  };
-  isPaused: boolean;
 }
 
 /** Internal resolved policy representation (extends core with customCheck) */
@@ -155,4 +133,25 @@ export function toCoreAnalysis(
     })),
     estimatedValueLamports: analysis.estimatedValueLamports,
   };
+}
+
+/**
+ * Validate that spend limit mints are recognized stablecoins.
+ * Returns warnings for unrecognized mints (does not throw).
+ */
+export function validateSpendLimitMints(
+  resolved: ResolvedPolicies,
+  network: Network,
+): string[] {
+  const warnings: string[] = [];
+  if (!resolved.spendLimits) return warnings;
+  for (const limit of resolved.spendLimits) {
+    if (!isStablecoinMint(limit.mint as Address, network)) {
+      warnings.push(
+        `Spend limit mint ${limit.mint} is not a recognized stablecoin on ${network}. ` +
+          `On-chain enforcement uses stablecoin-only USD tracking.`,
+      );
+    }
+  }
+  return warnings;
 }

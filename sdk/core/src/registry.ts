@@ -28,7 +28,7 @@ export const KNOWN_PROTOCOLS: ReadonlyMap<string, string> = new Map([
   ["MNGOHoFrnGrovWiCc9kHZB8xEBKM1XPYnZCpWFbRCev", "Mango Markets V4"],
 
   // Lending / Borrowing
-  ["KLend2g3cP87ber8LQVCZFzRSVDMZDnySKFHpagfJgbk", "Kamino Lending"],
+  ["KLend2g3cP87ber8CzRaqeECGwNvLFM9acPVcRkRHvM", "Kamino Lending"],
   ["MFv2hWf31Z9kbCa1snEPYctwafyhdvnV7FZnsebVacA", "Marginfi V2"],
   ["So1endDq2YkqhipRh3WViPa8hFMqDSRbsHTE15WSnBt", "Solend"],
 

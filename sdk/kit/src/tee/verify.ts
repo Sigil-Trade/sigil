@@ -178,13 +178,15 @@ export async function verifyTeeAttestation(
     }
   }
 
-  // Enforce minAttestationLevel if configured
-  if (config?.minAttestationLevel) {
-    if (
-      !attestationStatusMeetsLevel(result.status, config.minAttestationLevel)
-    ) {
+  // Enforce minAttestationLevel — defaults to ProviderVerified when requireAttestation
+  // is true but no explicit level is set (prevents ProviderTrusted from passing silently)
+  const effectiveMinLevel =
+    config?.minAttestationLevel ??
+    (config?.requireAttestation ? AttestationStatus.ProviderVerified : undefined);
+  if (effectiveMinLevel) {
+    if (!attestationStatusMeetsLevel(result.status, effectiveMinLevel)) {
       throw new TeeAttestationError(
-        `Attestation level ${result.status} does not meet minimum required level: ${config.minAttestationLevel}`,
+        `Attestation level ${result.status} does not meet minimum required level: ${effectiveMinLevel}`,
       );
     }
   }
@@ -198,8 +200,11 @@ export function clearAttestationCache(): void {
 }
 
 /** Delete a single entry from the global cache. */
+/** Delete all cache entries for a wallet (including PCR3-suffixed variants). */
 export function deleteFromAttestationCache(publicKey: string): boolean {
-  return globalCache.delete(publicKey);
+  const directDeleted = globalCache.delete(publicKey);
+  const prefixDeleted = globalCache.deleteByPrefix(`${publicKey}:`);
+  return directDeleted || prefixDeleted > 0;
 }
 
 /**

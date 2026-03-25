@@ -23,6 +23,8 @@ import {
   getBytesEncoder,
   getStructDecoder,
   getStructEncoder,
+  getU64Decoder,
+  getU64Encoder,
   getU8Decoder,
   getU8Encoder,
   transformEncoder,
@@ -65,6 +67,10 @@ export type AgentSpendOverlay = {
   bump: number;
   /** Padding for 8-byte alignment */
   padding: ReadonlyUint8Array;
+  /** Per-agent cumulative spend in USD base units */
+  lifetimeSpend: Array<bigint>;
+  /** Per-agent cumulative transaction count */
+  lifetimeTxCount: Array<bigint>;
 };
 
 export type AgentSpendOverlayArgs = {
@@ -76,6 +82,10 @@ export type AgentSpendOverlayArgs = {
   bump: number;
   /** Padding for 8-byte alignment */
   padding: ReadonlyUint8Array;
+  /** Per-agent cumulative spend in USD base units */
+  lifetimeSpend: Array<number | bigint>;
+  /** Per-agent cumulative transaction count */
+  lifetimeTxCount: Array<number | bigint>;
 };
 
 /** Gets the encoder for {@link AgentSpendOverlayArgs} account data. */
@@ -90,6 +100,8 @@ export function getAgentSpendOverlayEncoder(): FixedSizeEncoder<AgentSpendOverla
       ],
       ["bump", getU8Encoder()],
       ["padding", fixEncoderSize(getBytesEncoder(), 7)],
+      ["lifetimeSpend", getArrayEncoder(getU64Encoder(), { size: 10 })],
+      ["lifetimeTxCount", getArrayEncoder(getU64Encoder(), { size: 10 })],
     ]),
     (value) => ({ ...value, discriminator: AGENT_SPEND_OVERLAY_DISCRIMINATOR }),
   );
@@ -106,6 +118,8 @@ export function getAgentSpendOverlayDecoder(): FixedSizeDecoder<AgentSpendOverla
     ],
     ["bump", getU8Decoder()],
     ["padding", fixDecoderSize(getBytesDecoder(), 7)],
+    ["lifetimeSpend", getArrayDecoder(getU64Decoder(), { size: 10 })],
+    ["lifetimeTxCount", getArrayDecoder(getU64Decoder(), { size: 10 })],
   ]);
 }
 
@@ -184,5 +198,5 @@ export async function fetchAllMaybeAgentSpendOverlay(
 }
 
 export function getAgentSpendOverlaySize(): number {
-  return 2368;
+  return 2528;
 }

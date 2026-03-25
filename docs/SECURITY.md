@@ -5,9 +5,9 @@
 > control model, PDA derivation paths, error catalog, and trust assumptions.
 >
 > Program: `programs/phalnx/` — Anchor 0.32.1, Rust 1.89.0
-> 29 instruction handlers, 9 PDA account types, 77 error codes, 31 events.
+> 29 instruction handlers, 9 PDA account types, 70 error codes, 31 events.
 >
-> Cross-reference: See PRODUCTION_AUDIT.md for the latest audit findings.
+> Cross-reference: See `docs/ARCHITECTURE.md` for account model and `sdk/kit/src/agent-errors.ts` for error mappings.
 
 ---
 
@@ -28,8 +28,8 @@ The owner holds full authority. The agent is an execute-only key that can only o
 
 Phalnx bundles three layers of protection:
 
-1. **Client-side policy engine** (`@phalnx/sdk`) — Software policy enforcement, fast deny before transactions hit the network.
-2. **On-chain vault** (`@phalnx/sdk` + TEE custody) — TEE key custody (Crossmint/Turnkey) + on-chain PDA vaults with cryptographic guarantees. Cannot be bypassed by compromised software. Production.
+1. **Client-side policy engine** (`@phalnx/kit`) — Software policy enforcement, fast deny before transactions hit the network.
+2. **On-chain vault** (`@phalnx/kit` + TEE custody) — TEE key custody (Crossmint/Turnkey) + on-chain PDA vaults with cryptographic guarantees. Cannot be bypassed by compromised software. Production.
 
 This document covers the on-chain vault component.
 
@@ -82,6 +82,9 @@ The `daily_spending_cap_usd` is an aggregate rolling 24-hour cap across all toke
 
 ### INV-8: Timelocked Policy Changes
 When `PolicyConfig.timelock_duration > 0`, direct `update_policy` calls are blocked (`TimelockActive`, error 6027). Policy changes must go through `queue_policy_update` → (wait `timelock_duration` seconds) → `apply_pending_policy`. The owner can cancel at any time via `cancel_pending_policy`.
+
+### INV-9: Outcome-Based Spending Enforcement
+Spending caps are enforced in `finalize_session` based on **actual stablecoin balance delta**, not declared intent. `validate_and_authorize` snapshots the vault's stablecoin balance before fees/DeFi execution. `finalize_session` measures the current balance and computes `actual_spend = total_decrease - fees_collected`. Only when `actual_spend > 0` are caps checked (daily rolling cap, per-agent cap, per-protocol cap, per-transaction max). This prevents agents from under-declaring amounts to bypass caps — the program measures reality, not promises. Standalone instructions (`agentTransfer`, `createEscrow`) retain inline cap checks since they move tokens directly.
 
 ---
 
@@ -146,7 +149,7 @@ Vault seeds include `vault_id` (a `u64`) to allow one owner to create multiple i
 
 ## 5. Error Code Catalog
 
-77 error codes (6000–6076) using Anchor's `#[error_code]`. See `docs/ERROR-CODES.md` for the full table with categories. Source of truth: `programs/phalnx/src/errors.rs`.
+70 error codes (6000–6069) using Anchor's `#[error_code]`. See `docs/ERROR-CODES.md` for the full table with categories. Source of truth: `programs/phalnx/src/errors.rs`.
 
 **Categories:** Vault state (7), Access control (2), Stablecoin (2), Policy (5), Spending (1), Session (2), Fee (3), Validation (6), Timelock (3), Security (5), Integration (4), Multi-agent (6), Escrow (6), Constraints (8), Arithmetic (1).
 
@@ -246,7 +249,7 @@ The program does not perform CPI calls to untrusted programs. All CPI calls are 
 
 ### 8.10 Account Size Limits
 
-`PolicyConfig` has a fixed maximum size of 817 bytes (10 protocols × 32 bytes + 10 destinations × 32 bytes + fields). `SpendTracker` is a zero-copy account of 2,840 bytes (144 epoch buckets + 10 protocol counters). `AgentSpendOverlay` is a zero-copy account of 2,368 bytes (10 agent slots, no shards). `InstructionConstraints` is up to 8,318 bytes (16 constraint entries). All sizes are within Solana's 10MB account limit.
+`PolicyConfig` has a fixed maximum size of 817 bytes (10 protocols × 32 bytes + 10 destinations × 32 bytes + fields). `SpendTracker` is a zero-copy account of 2,840 bytes (144 epoch buckets + 10 protocol counters). `AgentSpendOverlay` is a zero-copy account of 2,528 bytes (10 agent slots, no shards). `InstructionConstraints` is up to 8,318 bytes (16 constraint entries). All sizes are within Solana's 10MB account limit.
 
 ### 8.11 RPC Trust Boundary
 
@@ -260,14 +263,13 @@ The SDK trusts RPC account data for client-side precheck. A malicious RPC can su
 - All 29 instruction handlers in `programs/phalnx/src/instructions/`
 - All 9 PDA account types in `programs/phalnx/src/state/`
 - DeFi integration verifiers in `programs/phalnx/src/instructions/integrations/`
-- Error definitions in `programs/phalnx/src/errors.rs` (77 codes)
+- Error definitions in `programs/phalnx/src/errors.rs` (70 codes)
 - Event definitions in `programs/phalnx/src/events.rs` (31 events)
 - Program entrypoint in `programs/phalnx/src/lib.rs`
 
 ### Out of Scope
-- TypeScript SDK (`sdk/typescript/`) — off-chain code
-- MCP server (`packages/mcp/`) — AI tool integration
-- Actions server (`apps/actions-server/`) — Solana Actions/Blinks
+- Kit SDK (`sdk/kit/`) — off-chain code
+- Custody adapters (`sdk/custody/`) — TEE provider integrations
 - Plugins (`plugins/`) — framework integrations
 - Dashboard (separate repo)
 

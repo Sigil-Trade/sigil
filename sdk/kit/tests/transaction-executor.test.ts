@@ -4,6 +4,10 @@ import {
   TransactionExecutor,
   type ExecuteTransactionParams,
 } from "../src/transaction-executor.js";
+import {
+  RISK_FLAG_FULL_DRAIN,
+  RISK_FLAG_LARGE_OUTFLOW,
+} from "../src/simulation.js";
 
 // ─── Mock Helpers ────────────────────────────────────────────────────────────
 
@@ -138,7 +142,7 @@ describe("TransactionExecutor", () => {
           value: {
             err: "error",
             logs: [
-              "Program log: Error Code: DailyCapExceeded. Error Number: 6006",
+              "Program log: Error Code: SpendingCapExceeded. Error Number: 6006",
             ],
             unitsConsumed: 100_000,
           },
@@ -153,7 +157,7 @@ describe("TransactionExecutor", () => {
         computeUnits,
         MOCK_BLOCKHASH,
       );
-      expect(simulation.error?.anchorName).to.equal("DailyCapExceeded");
+      expect(simulation.error?.anchorName).to.equal("SpendingCapExceeded");
       expect(simulation.error?.suggestion).to.include("spending cap");
     });
 
@@ -265,9 +269,9 @@ describe("TransactionExecutor", () => {
           value: { err: "error", logs: [], unitsConsumed: 0 },
         },
       });
-      const executor = new TransactionExecutor(rpc, mockAgent());
+      const executor = new TransactionExecutor(rpc, mockAgent(), { skipSimulation: true });
       const result = await executor.executeTransaction(
-        baseParams({ skipSimulation: true }),
+        baseParams(),
       );
       expect(result.signature).to.equal(MOCK_SIGNATURE);
     });
@@ -286,13 +290,121 @@ describe("TransactionExecutor", () => {
       });
       const executor = new TransactionExecutor(rpc, mockAgent(), {
         confirmOptions: { timeoutMs: 100, pollIntervalMs: 20 },
+        skipSimulation: true,
       });
       try {
-        await executor.executeTransaction(baseParams({ skipSimulation: true }));
+        await executor.executeTransaction(baseParams());
         expect.fail("Should have thrown");
       } catch (e: any) {
         expect(e.message).to.include("timed out");
       }
+    });
+  });
+
+  describe("drain detection integration", () => {
+    /** Encode a mock SPL Token account with given balance at byte offset 64 (u64 LE). */
+    function encodeMockTokenBalance(balance: bigint): string {
+      const bytes = new Uint8Array(72); // 32 mint + 32 owner + 8 amount
+      const view = new DataView(bytes.buffer);
+      view.setBigUint64(64, balance, true);
+      let binary = "";
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      return btoa(binary);
+    }
+
+    it("executes normally without vaultMonitoring (backward compat)", async () => {
+      const executor = new TransactionExecutor(createMockRpc(), mockAgent());
+      const result = await executor.executeTransaction(baseParams());
+      expect(result.signature).to.equal(MOCK_SIGNATURE);
+      expect(result.warnings).to.be.undefined;
+    });
+
+    it("passes vaultMonitoring through and produces LARGE_OUTFLOW warning", async () => {
+      // Vault starts with 1000 tokens, simulation shows 200 remaining (80% outflow > 50% threshold)
+      const postBalance = encodeMockTokenBalance(200n);
+      const rpc = createMockRpc({
+        simulateResult: {
+          value: {
+            err: null,
+            logs: [],
+            unitsConsumed: 400_000,
+            accounts: [{ data: [postBalance, "base64"] }],
+          },
+        },
+      });
+      const executor = new TransactionExecutor(rpc, mockAgent());
+      const result = await executor.executeTransaction(
+        baseParams({
+          vaultMonitoring: {
+            vaultAddress: MOCK_PAYER,
+            monitorAccounts: [MOCK_PAYER],
+            preBalances: new Map([[MOCK_PAYER, 1000n]]),
+            totalVaultBalance: 1000n,
+          },
+        }),
+      );
+      expect(result.signature).to.equal(MOCK_SIGNATURE);
+      expect(result.warnings).to.include(RISK_FLAG_LARGE_OUTFLOW);
+    });
+
+    it("blocks FULL_DRAIN when outflow exceeds blockPercent", async () => {
+      // Vault starts with 1000, simulation shows 10 remaining (99% outflow > 95% block)
+      const postBalance = encodeMockTokenBalance(10n);
+      const rpc = createMockRpc({
+        simulateResult: {
+          value: {
+            err: null,
+            logs: [],
+            unitsConsumed: 400_000,
+            accounts: [{ data: [postBalance, "base64"] }],
+          },
+        },
+      });
+      const executor = new TransactionExecutor(rpc, mockAgent());
+      try {
+        await executor.executeTransaction(
+          baseParams({
+            vaultMonitoring: {
+              vaultAddress: MOCK_PAYER,
+              monitorAccounts: [MOCK_PAYER],
+              preBalances: new Map([[MOCK_PAYER, 1000n]]),
+              totalVaultBalance: 1000n,
+            },
+          }),
+        );
+        expect.fail("Should have thrown");
+      } catch (e: any) {
+        expect(e.message).to.include("drain detection triggered");
+        expect(e.message).to.include(RISK_FLAG_FULL_DRAIN);
+      }
+    });
+
+    it("clean TX passes drain detection with no warnings", async () => {
+      // Vault starts with 1000, simulation shows 900 remaining (10% outflow < 50%)
+      const postBalance = encodeMockTokenBalance(900n);
+      const rpc = createMockRpc({
+        simulateResult: {
+          value: {
+            err: null,
+            logs: [],
+            unitsConsumed: 400_000,
+            accounts: [{ data: [postBalance, "base64"] }],
+          },
+        },
+      });
+      const executor = new TransactionExecutor(rpc, mockAgent());
+      const result = await executor.executeTransaction(
+        baseParams({
+          vaultMonitoring: {
+            vaultAddress: MOCK_PAYER,
+            monitorAccounts: [MOCK_PAYER],
+            preBalances: new Map([[MOCK_PAYER, 1000n]]),
+            totalVaultBalance: 1000n,
+          },
+        }),
+      );
+      expect(result.signature).to.equal(MOCK_SIGNATURE);
+      expect(result.warnings).to.be.undefined;
     });
   });
 });

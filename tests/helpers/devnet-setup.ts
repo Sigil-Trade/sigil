@@ -520,7 +520,7 @@ export async function buildFinalizeIx(opts: FinalizeOpts) {
   );
   return program.methods
     .finalizeSession(success)
-    .accounts({
+    .accountsPartial({
       payer: payer.publicKey,
       vault: vaultPda,
       session: sessionPda,
@@ -529,13 +529,11 @@ export async function buildFinalizeIx(opts: FinalizeOpts) {
       tracker: trackerPda,
       agentSpendOverlay: overlayPda,
       vaultTokenAccount: vaultTokenAta,
-      feeDestinationTokenAccount: feeDestinationAta,
-      protocolTreasuryTokenAccount: protocolTreasuryAta,
       outputStablecoinAccount,
       tokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
       instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
-    } as any)
+    })
     .instruction();
 }
 

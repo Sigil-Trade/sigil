@@ -1,9 +1,5 @@
 /**
- * TransactionExecutor — Pipeline steps 9-12 for Kit SDK.
- *
- * Separated from IntentEngine for clean separation of concerns:
- * IntentEngine handles orchestration (steps 1-8),
- * TransactionExecutor handles network I/O (steps 9-12).
+ * TransactionExecutor — Kit-native transaction pipeline.
  *
  * Steps:
  *   9. Compose versioned transaction (blockhash + compile)
@@ -31,11 +27,16 @@ import { AltCache } from "./alt-loader.js";
 import {
   simulateBeforeSend,
   adjustCU,
+  RISK_FLAG_FULL_DRAIN,
   type SimulationResult,
+  type SimulationOptions,
+  type RiskFlag,
+  type DrainThresholds,
 } from "./simulation.js";
 import { parsePhalnxEvents, type PhalnxEvent } from "./events.js";
 import {
   BlockhashCache,
+  signAndEncode,
   sendAndConfirmTransaction,
   type SendAndConfirmOptions,
 } from "./rpc-helpers.js";
@@ -56,10 +57,17 @@ export interface ExecuteTransactionParams {
   computeUnits?: number;
   /** Optional: priority fee in microLamports per CU */
   priorityFeeMicroLamports?: number;
-  /** Skip simulation (default: false — simulation is fail-closed) */
-  skipSimulation?: boolean;
   /** Resolved address lookup tables for transaction compression */
   addressLookupTables?: AddressesByLookupTableAddress;
+  /** Vault monitoring context for drain detection during simulation.
+   *  Populated from WrapResult.vaultContext by the caller. */
+  vaultMonitoring?: {
+    vaultAddress: string;
+    monitorAccounts: string[];
+    preBalances: Map<string, bigint>;
+    totalVaultBalance: bigint;
+    knownRecipients?: Set<string>;
+  };
 }
 
 export interface ExecuteTransactionResult {
@@ -71,6 +79,8 @@ export interface ExecuteTransactionResult {
   logs?: string[];
   /** Parsed Phalnx events */
   events: PhalnxEvent[];
+  /** Risk flag warnings (LARGE_OUTFLOW, UNKNOWN_RECIPIENT) — non-blocking */
+  warnings?: RiskFlag[];
 }
 
 export interface TransactionExecutorOptions {
@@ -78,6 +88,14 @@ export interface TransactionExecutorOptions {
   blockhashCacheTtlMs?: number;
   /** Send+confirm options */
   confirmOptions?: SendAndConfirmOptions;
+  /**
+   * Skip simulation (default: false — simulation is fail-closed).
+   * WARNING: This bypasses the pre-sign safety gate. Only use in test environments.
+   * Moved from per-call params to constructor-only to prevent accidental bypass.
+   */
+  skipSimulation?: boolean;
+  /** Configurable drain detection thresholds (defaults: 50% warning, 95% block) */
+  drainThresholds?: DrainThresholds;
 }
 
 // ─── TransactionExecutor ────────────────────────────────────────────────────
@@ -87,6 +105,8 @@ export class TransactionExecutor {
   readonly agent: TransactionSigner;
   private readonly blockhashCache: BlockhashCache;
   private readonly confirmOptions: SendAndConfirmOptions;
+  private readonly _skipSimulation: boolean;
+  private readonly _drainThresholds?: DrainThresholds;
   private altCache?: AltCache;
 
   constructor(
@@ -98,6 +118,8 @@ export class TransactionExecutor {
     this.agent = agent;
     this.blockhashCache = new BlockhashCache(options?.blockhashCacheTtlMs);
     this.confirmOptions = options?.confirmOptions ?? {};
+    this._skipSimulation = options?.skipSimulation ?? false;
+    this._drainThresholds = options?.drainThresholds;
   }
 
   /**
@@ -171,7 +193,19 @@ export class TransactionExecutor {
     finalCU: number;
   }> {
     const wireBase64 = getBase64EncodedWireTransaction(compiledTx);
-    const simulation = await simulateBeforeSend(this.rpc, wireBase64);
+
+    // Build simulation options from vault monitoring context + drain thresholds
+    const simOptions: SimulationOptions | undefined =
+      params.vaultMonitoring ? {
+        monitorAccounts: params.vaultMonitoring.monitorAccounts,
+        preBalances: params.vaultMonitoring.preBalances,
+        vaultAddress: params.vaultMonitoring.vaultAddress,
+        totalVaultBalance: params.vaultMonitoring.totalVaultBalance,
+        knownRecipients: params.vaultMonitoring.knownRecipients,
+        drainThresholds: this._drainThresholds,
+      } : undefined;
+
+    const simulation = await simulateBeforeSend(this.rpc, wireBase64, simOptions);
 
     if (!simulation.success) {
       return { simulation, finalCU: estimatedCU };
@@ -203,22 +237,12 @@ export class TransactionExecutor {
   async signSendConfirm(
     compiledTx: ReturnType<typeof composePhalnxTransaction>,
   ): Promise<{ signature: string; logs?: string[] }> {
-    // Sign using Kit's TransactionSigner interface.
-    // TransactionSigner is a union type — use the available signing method.
-    const signer = this.agent as any;
-    const signFn = signer.modifyAndSignTransactions ?? signer.signTransactions;
-    if (!signFn) {
-      throw new Error("Agent signer does not implement a signing method");
-    }
-    const [signedTx] = await signFn.call(signer, [compiledTx]);
-    const wireBase64 = getBase64EncodedWireTransaction(signedTx as any);
-
+    const wireBase64 = await signAndEncode(this.agent, compiledTx);
     const signature = await sendAndConfirmTransaction(
       this.rpc,
       wireBase64,
       this.confirmOptions,
     );
-
     return { signature };
   }
 
@@ -237,8 +261,9 @@ export class TransactionExecutor {
     let txToSign = compiledTx;
     let simLogs: string[] | undefined;
     let unitsConsumed: number | undefined;
+    const riskWarnings: RiskFlag[] = [];
 
-    if (!params.skipSimulation) {
+    if (!this._skipSimulation) {
       const { simulation, recomposedTx } = await this.simulate(
         params,
         compiledTx,
@@ -252,6 +277,16 @@ export class TransactionExecutor {
           simulation.error?.message ??
           "Simulation failed";
         throw new Error(`Simulation failed: ${errMsg}`);
+      }
+
+      // Drain detection: FULL_DRAIN blocks TX, others are warnings
+      if (simulation.riskFlags.length > 0) {
+        if (simulation.riskFlags.includes(RISK_FLAG_FULL_DRAIN)) {
+          throw new Error(
+            `Transaction blocked: drain detection triggered (${simulation.riskFlags.join(", ")})`,
+          );
+        }
+        riskWarnings.push(...simulation.riskFlags);
       }
 
       simLogs = simulation.logs;
@@ -272,6 +307,7 @@ export class TransactionExecutor {
       unitsConsumed,
       logs: simLogs,
       events,
+      warnings: riskWarnings.length > 0 ? riskWarnings : undefined,
     };
   }
 }

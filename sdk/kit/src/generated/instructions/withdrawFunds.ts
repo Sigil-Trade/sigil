@@ -72,7 +72,7 @@ export type WithdrawFundsInstruction<
             AccountSignerMeta<TAccountOwner>
         : TAccountOwner,
       TAccountVault extends string
-        ? ReadonlyAccount<TAccountVault>
+        ? WritableAccount<TAccountVault>
         : TAccountVault,
       TAccountMint extends string
         ? ReadonlyAccount<TAccountMint>
@@ -178,7 +178,7 @@ export async function getWithdrawFundsInstructionAsync<
   // Original accounts.
   const originalAccounts = {
     owner: { value: input.owner ?? null, isWritable: true },
-    vault: { value: input.vault ?? null, isWritable: false },
+    vault: { value: input.vault ?? null, isWritable: true },
     mint: { value: input.mint ?? null, isWritable: false },
     vaultTokenAccount: {
       value: input.vaultTokenAccount ?? null,
@@ -329,7 +329,7 @@ export function getWithdrawFundsInstruction<
   // Original accounts.
   const originalAccounts = {
     owner: { value: input.owner ?? null, isWritable: true },
-    vault: { value: input.vault ?? null, isWritable: false },
+    vault: { value: input.vault ?? null, isWritable: true },
     mint: { value: input.mint ?? null, isWritable: false },
     vaultTokenAccount: {
       value: input.vaultTokenAccount ?? null,

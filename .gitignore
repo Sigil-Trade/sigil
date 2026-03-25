@@ -17,7 +17,7 @@ test-ledger/
 .next/
 
 # Internal development docs (not for public repo)
-docs/
+docs
 CLAUDE.md
 .vercel
 
@@ -45,15 +45,13 @@ certora/output/
 .claude
 /MEMORY
 /Plans
-packages/mcp/Plans
-apps/actions-server/Plans
 sdk/core/Plans
 sdk/custody/crossmint/Plans
 sdk/custody/turnkey/Plans
 programs/phalnx/Plans
 
-# Production audit
-PRODUCTION_AUDIT.md
-CODAMA-SIMULATION-ROADMAP.md
-ONCHAIN-FEATURE-INVENTORY.md
-PROTOCOL-INTEGRATION-GUIDE.md
+DASHBOARD-DESIGN-GAPS.md
+DASHBOARD-PLAN.md
+MAINNET_DEPLOYMENT_CHECKLIST.md
+MCP-REBUILD-PLAN.md
+WRAP-DISCRIMINATOR-TABLES.md

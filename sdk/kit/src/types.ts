@@ -5,7 +5,7 @@
  * and `bigint` instead of `BN`.
  */
 
-import type { Address } from "@solana/kit";
+import type { Address, Instruction } from "@solana/kit";
 
 // Re-export the program address from generated code
 export { PHALNX_PROGRAM_ADDRESS } from "./generated/programs/phalnx.js";
@@ -96,12 +96,14 @@ export const PROTOCOL_MODE_DENYLIST = 2;
 
 // ─── Stablecoin Mints ─────────────────────────────────────────────────────────
 
+// Devnet mints: test-controlled keypairs matching on-chain state/mod.rs
+// (we own the mint authority for devnet testing)
 export const USDC_MINT_DEVNET =
-  "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU" as Address;
+  "DMFEQFCRsvGrYzoL2gfwTEd9J8eVBQEjg7HjbJHd6oGH" as Address;
 export const USDC_MINT_MAINNET =
   "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" as Address;
 export const USDT_MINT_DEVNET =
-  "EJwZgeZrdC8TXTQbQBoL6bfuAnFUQS5S4iC5A2ciQtCK" as Address;
+  "43cd9ma7P968BssTtAKNs5qu6zgsErupwxwdjkiuMHze" as Address;
 export const USDT_MINT_MAINNET =
   "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB" as Address;
 
@@ -109,6 +111,18 @@ export const JUPITER_PROGRAM_ADDRESS =
   "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" as Address;
 
 export type Network = "devnet" | "mainnet-beta";
+
+/** Validate that a string is a recognized Network value. */
+export function validateNetwork(network: string): asserts network is Network {
+  if (network !== "devnet" && network !== "mainnet-beta") {
+    throw new Error(`Invalid network: "${network}". Must be "devnet" or "mainnet-beta".`);
+  }
+}
+
+/** Type-safe instruction conversion from Codama builders. */
+export function toInstruction(ix: { programAddress: Address; accounts?: readonly unknown[]; data?: unknown }): Instruction {
+  return ix as Instruction;
+}
 
 /** Check if a mint address is a recognized stablecoin (network-aware). */
 export function isStablecoinMint(mint: Address, network: Network): boolean {
@@ -166,10 +180,17 @@ export function permissionsToStrings(permissions: bigint): string[] {
   return result;
 }
 
-/** Parse an action type enum object to its string key */
+/**
+ * Parse an action type to its string key.
+ * Accepts either a numeric ActionType enum value or an Anchor-style { Swap: {} } object.
+ */
 export function parseActionType(
-  actionType: Record<string, unknown>,
+  actionType: number | Record<string, unknown>,
 ): string | undefined {
+  if (typeof actionType === "number") {
+    const entries = Object.entries(ACTION_PERMISSION_MAP);
+    return entries[actionType]?.[0];
+  }
   return Object.keys(actionType)[0];
 }
 

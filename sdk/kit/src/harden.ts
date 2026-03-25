@@ -23,12 +23,10 @@ import {
   getPolicyPDA,
   getPendingPolicyPDA,
 } from "./resolve-accounts.js";
+import { findVaultsByOwner } from "./state-resolver.js";
 import { fetchMaybeAgentVault } from "./generated/accounts/agentVault.js";
 import { PHALNX_PROGRAM_ADDRESS } from "./generated/programs/phalnx.js";
-import type { Network } from "./types.js";
-import type { ProtocolRuleConfig } from "./constraints/types.js";
-import type { ConstraintEntryArgs } from "./generated/index.js";
-import type { ConstraintBuilder } from "./constraints/builder.js";
+import { validateNetwork, type Network } from "./types.js";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -64,10 +62,6 @@ export interface HardenOptions {
   allowedDestinations?: Address[];
   /** Skip TEE wallet requirement — devnet testing only. Default: false */
   unsafeSkipTeeCheck?: boolean;
-  /** Protocol constraint configs to compile during provisioning. */
-  protocolConstraints?: ProtocolRuleConfig[];
-  /** Pre-configured ConstraintBuilder with registered descriptors. Required if protocolConstraints is provided. */
-  constraintBuilder?: ConstraintBuilder;
 }
 
 /** Result of hardening a wallet. */
@@ -84,16 +78,6 @@ export interface HardenResult {
   agentAddress: Address;
   /** Owner address */
   ownerAddress: Address;
-  /** Compiled constraint entries (if protocolConstraints provided) */
-  constraintEntries?: ConstraintEntryArgs[];
-  /** Constraint build warnings */
-  constraintWarnings?: string[];
-  /** Constraint budget info */
-  constraintBudget?: {
-    used: number;
-    total: number;
-    perProtocol: Record<string, number>;
-  };
 }
 
 /** Configuration for withVault() convenience wrapper. */
@@ -196,15 +180,28 @@ export async function findNextVaultId(
   owner: Address,
   programAddress: Address = PHALNX_PROGRAM_ADDRESS,
 ): Promise<bigint> {
-  // Sequential probe — most owners have < 5 vaults
-  for (let i = 0n; i < 256n; i++) {
+  // Fast path: sequential probe for first 5 slots (common case)
+  for (let i = 0n; i < 5n; i++) {
     const [vaultPda] = await getVaultPDA(owner, i, programAddress);
     const account = await fetchMaybeAgentVault(rpc, vaultPda);
     if (!account.exists) {
       return i;
     }
   }
-  throw new Error("All 256 vault slots are in use for this owner.");
+
+  // Slow path: owner has 5+ vaults — batch-discover via GPA and find max ID
+  const vaults = await findVaultsByOwner(rpc, owner, 100);
+  if (vaults.length === 0) return 0n;
+
+  let maxId = 0n;
+  for (const v of vaults) {
+    if (v.vaultId > maxId) maxId = v.vaultId;
+  }
+  const nextId = maxId + 1n;
+  if (nextId >= 256n) {
+    throw new Error("All 256 vault slots are in use for this owner.");
+  }
+  return nextId;
 }
 
 // ─── Harden ─────────────────────────────────────────────────────────────────
@@ -223,7 +220,8 @@ export async function findNextVaultId(
  * - getUpdatePolicyInstructionAsync()
  */
 export async function harden(options: HardenOptions): Promise<HardenResult> {
-  const { rpc, owner, agent } = options;
+  const { rpc, network, owner, agent } = options;
+  validateNetwork(network);
 
   // Validate owner ≠ agent
   if (owner.address === agent.address) {
@@ -242,29 +240,6 @@ export async function harden(options: HardenOptions): Promise<HardenResult> {
   const [policyAddress] = await getPolicyPDA(vaultAddress);
   const [pendingPolicyAddress] = await getPendingPolicyPDA(vaultAddress);
 
-  // Compile constraints if provided
-  let constraintEntries: ConstraintEntryArgs[] | undefined;
-  let constraintWarnings: string[] | undefined;
-  let constraintBudget:
-    | { used: number; total: number; perProtocol: Record<string, number> }
-    | undefined;
-
-  if (options.protocolConstraints && options.protocolConstraints.length > 0) {
-    if (!options.constraintBuilder) {
-      throw new Error(
-        "protocolConstraints requires a constraintBuilder with registered descriptors. " +
-          "Create a ConstraintBuilder, register descriptors, and pass it via options.constraintBuilder.",
-      );
-    }
-
-    const buildResult = options.constraintBuilder.compile(
-      options.protocolConstraints,
-    );
-    constraintEntries = buildResult.entries;
-    constraintWarnings = buildResult.warnings;
-    constraintBudget = buildResult.budget;
-  }
-
   return {
     vaultAddress,
     vaultId,
@@ -272,9 +247,6 @@ export async function harden(options: HardenOptions): Promise<HardenResult> {
     pendingPolicyAddress,
     agentAddress: agent.address,
     ownerAddress: owner.address,
-    constraintEntries,
-    constraintWarnings,
-    constraintBudget,
   };
 }
 

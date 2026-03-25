@@ -506,8 +506,10 @@ describe("shield", () => {
           remaining: 1_000_000_000n,
         },
         agentBudget: null,
+        allAgentBudgets: new Map(),
         protocolBudgets: [],
         maxTransactionUsd: 500_000_000n,
+        stablecoinBalances: { usdc: 0n, usdt: 0n },
         resolvedAtTimestamp: BigInt(Math.floor(Date.now() / 1000)),
         ...overrides,
       };
@@ -903,8 +905,10 @@ describe("shield", () => {
           remaining: 1_000_000_000n,
         },
         agentBudget: null,
+        allAgentBudgets: new Map(),
         protocolBudgets: [],
         maxTransactionUsd: 500_000_000n,
+        stablecoinBalances: { usdc: 0n, usdt: 0n },
         resolvedAtTimestamp: BigInt(Math.floor(Date.now() / 1000)),
         ...overrides,
       };
@@ -1114,47 +1118,39 @@ describe("shield", () => {
 
     it("warns and substitutes placeholder for out-of-bounds ALT index", () => {
       const warnings: string[] = [];
-      const origWarn = console.warn;
-      console.warn = (msg: string) => {
-        warnings.push(msg);
+      const cache = new AltCache();
+      // Only 1 address in cache, but reference index 5
+      populateCache(cache, ALT_A, [ACCT_W1]);
+
+      const tx = {
+        compiledMessage: {
+          staticAccounts: [PROG],
+          instructions: [
+            {
+              programAddressIndex: 0,
+              accountIndices: [1], // references the ALT-resolved entry
+              data: new Uint8Array([1]),
+            },
+          ],
+          addressTableLookups: [
+            {
+              lookupTableAddress: ALT_A,
+              writableIndexes: [5], // out of bounds!
+              readonlyIndexes: [],
+            },
+          ],
+        },
       };
-      try {
-        const cache = new AltCache();
-        // Only 1 address in cache, but reference index 5
-        populateCache(cache, ALT_A, [ACCT_W1]);
 
-        const tx = {
-          compiledMessage: {
-            staticAccounts: [PROG],
-            instructions: [
-              {
-                programAddressIndex: 0,
-                accountIndices: [1], // references the ALT-resolved entry
-                data: new Uint8Array([1]),
-              },
-            ],
-            addressTableLookups: [
-              {
-                lookupTableAddress: ALT_A,
-                writableIndexes: [5], // out of bounds!
-                readonlyIndexes: [],
-              },
-            ],
-          },
-        };
-
-        const ixs = _extractInstructionsFromCompiled(tx, cache);
-        expect(ixs).to.have.length(1);
-        // Should have warned about OOB
-        expect(warnings.some((w) => w.includes("ALT index 5 out of bounds"))).to
-          .be.true;
-        // Placeholder address
-        expect(ixs[0].accounts![0].address).to.equal(
-          "11111111111111111111111111111111",
-        );
-      } finally {
-        console.warn = origWarn;
-      }
+      const ixs = _extractInstructionsFromCompiled(tx, cache, warnings);
+      expect(ixs).to.have.length(1);
+      // Should have accumulated warning about OOB
+      expect(warnings.some((w) => w.includes("ALT index 5 out of bounds"))).to
+        .be.true;
+      // Placeholder address
+      expect(ixs[0].accounts![0].address).to.equal(
+        "11111111111111111111111111111111",
+      );
     });
   });
 });

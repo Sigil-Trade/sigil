@@ -89,7 +89,7 @@ describe("priority-fees", () => {
     });
 
     it("Drift program returns CU_DRIFT", () => {
-      const ixs = [mockIx("dRiftyHA39MWEi3m9aunc5MzRF1JYuBNtSVAwMHjZi1")];
+      const ixs = [mockIx("dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH")];
       expect(estimateComposedCU(ixs)).to.equal(CU_DRIFT);
     });
 
@@ -104,7 +104,7 @@ describe("priority-fees", () => {
     });
 
     it("Kamino Lend program returns CU_KAMINO_LEND", () => {
-      const ixs = [mockIx("KLend2g3cP87ber8p1S4JQoTnbs78GDYAHB6h4WjSD9")];
+      const ixs = [mockIx("KLend2g3cP87ber8CzRaqeECGwNvLFM9acPVcRkRHvM")];
       expect(estimateComposedCU(ixs)).to.equal(CU_KAMINO_LEND);
     });
   });

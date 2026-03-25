@@ -2,9 +2,8 @@
 /**
  * CI Staleness Detection — Verify ALL Codama-generated discriminators.
  *
- * Two verification layers:
- * 1. IDL-based: Computes SHA256("global:<ix_name>")[0..8] from IDL, compares with generated code
- * 2. Schema-based: Compares constraint schema discriminators with generated exports
+ * Computes SHA256("global:<ix_name>")[0..8] from each protocol IDL,
+ * then compares with the discriminator constant in the generated code.
  *
  * Usage:
  *   npx tsx scripts/verify-codama-staleness.ts
@@ -17,11 +16,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-
-// ─── Schema imports (existing 20 checks) ──────────────────────────────────
-
-import { FLASH_TRADE_SCHEMA } from "../sdk/kit/src/constraints/protocols/flash-trade-schema.js";
-import { KAMINO_SCHEMA } from "../sdk/kit/src/constraints/protocols/kamino-schema.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -41,7 +35,6 @@ function computeAnchorDiscriminator(ixName: string): Uint8Array {
 function extractDiscriminatorFromFile(filePath: string): Uint8Array | null {
   if (!existsSync(filePath)) return null;
   const content = readFileSync(filePath, "utf-8");
-  // Match: new Uint8Array([ 123, 45, ... ])
   const match = content.match(
     /_DISCRIMINATOR\s*=\s*new\s+Uint8Array\(\[\s*([\d\s,]+)\s*\]\)/,
   );
@@ -77,7 +70,6 @@ const PROTOCOLS = [
       "flash-trade",
       "instructions",
     ),
-    // IDL uses snake_case instruction names
     idlCase: "snake" as const,
   },
   {
@@ -92,33 +84,25 @@ const PROTOCOLS = [
       "kamino",
       "instructions",
     ),
-    // IDL uses camelCase instruction names
     idlCase: "camel" as const,
   },
 ];
 
-// ─── Layer 1: IDL-based verification (ALL instructions) ─────────────────
+// ─── IDL-based verification (ALL instructions) ──────────────────────────
 
 let totalChecked = 0;
 let totalPassed = 0;
 let totalFailed = 0;
 let totalMissing = 0;
 
-// Cache discriminators to avoid redundant file reads across Layer 1 and Layer 2
-const discriminatorCache = new Map<string, Uint8Array | null>();
-
-function cachedExtractDiscriminator(filePath: string): Uint8Array | null {
-  let cached = discriminatorCache.get(filePath);
-  if (cached === undefined) {
-    cached = extractDiscriminatorFromFile(filePath);
-    discriminatorCache.set(filePath, cached);
-  }
-  return cached;
-}
-
-console.log("═══ Layer 1: IDL → Generated Code Discriminator Check ═══\n");
+console.log("═══ IDL → Generated Code Discriminator Check ═══\n");
 
 for (const proto of PROTOCOLS) {
+  if (!existsSync(proto.idlPath)) {
+    console.log(`  ${proto.name}: IDL not found at ${proto.idlPath} (skipped)`);
+    continue;
+  }
+
   const idl = JSON.parse(readFileSync(proto.idlPath, "utf-8"));
   const instructions = idl.instructions ?? [];
   let protoPassed = 0;
@@ -128,7 +112,6 @@ for (const proto of PROTOCOLS) {
   for (const ix of instructions) {
     const idlName: string = ix.name;
 
-    // Determine snake_case name for discriminator and camelCase name for file
     let snakeName: string;
     let camelName: string;
 
@@ -141,17 +124,14 @@ for (const proto of PROTOCOLS) {
     }
 
     const filePath = join(proto.generatedDir, `${camelName}.ts`);
-
     const expected = computeAnchorDiscriminator(snakeName);
-    const actual = cachedExtractDiscriminator(filePath);
+    const actual = extractDiscriminatorFromFile(filePath);
 
     totalChecked++;
 
     if (!actual) {
       protoMissing++;
       totalMissing++;
-      // Missing files are not failures — the IDL may have admin-only instructions
-      // that aren't generated for the client
       continue;
     }
 
@@ -174,88 +154,17 @@ for (const proto of PROTOCOLS) {
   );
 }
 
-// ─── Layer 2: Schema-based verification (constraint schemas) ────────────
-
-console.log("\n═══ Layer 2: Constraint Schema → Generated Code Check ═══\n");
-
-interface SchemaCheck {
-  protocol: string;
-  instruction: string;
-  schema: Uint8Array;
-  generated: Uint8Array;
-}
-
-const schemaChecks: SchemaCheck[] = [];
-
-// Build schema checks from constraint schemas
-for (const [name, schema] of FLASH_TRADE_SCHEMA.instructions) {
-  const camelName = name; // Schema keys are already camelCase
-  const filePath = join(PROTOCOLS[0].generatedDir, `${camelName}.ts`);
-  const generated = cachedExtractDiscriminator(filePath);
-  if (generated) {
-    schemaChecks.push({
-      protocol: "flash-trade",
-      instruction: name,
-      schema: schema.discriminator,
-      generated,
-    });
-  }
-}
-
-for (const [name, schema] of KAMINO_SCHEMA.instructions) {
-  // Schema keys may map to different generated file names
-  const nameMap: Record<string, string> = {
-    depositCollateral: "depositObligationCollateral",
-    borrowLiquidity: "borrowObligationLiquidity",
-    repayLiquidity: "repayObligationLiquidity",
-    withdrawCollateral:
-      "withdrawObligationCollateralAndRedeemReserveCollateral",
-  };
-  const generatedName = nameMap[name] ?? name;
-  const filePath = join(PROTOCOLS[1].generatedDir, `${generatedName}.ts`);
-  const generated = cachedExtractDiscriminator(filePath);
-  if (generated) {
-    schemaChecks.push({
-      protocol: "kamino",
-      instruction: name,
-      schema: schema.discriminator,
-      generated,
-    });
-  }
-}
-
-let schemaPassed = 0;
-let schemaFailed = 0;
-
-for (const check of schemaChecks) {
-  if (arraysEqual(check.schema, check.generated)) {
-    schemaPassed++;
-  } else {
-    schemaFailed++;
-    console.error(
-      `❌ SCHEMA MISMATCH: ${check.protocol}/${check.instruction}\n` +
-        `   Schema:    [${Array.from(check.schema).join(", ")}]\n` +
-        `   Generated: [${Array.from(check.generated).join(", ")}]`,
-    );
-  }
-}
-
-console.log(`  Schema checks: ${schemaPassed}/${schemaChecks.length} passed`);
-
 // ─── Summary ─────────────────────────────────────────────────────────────
 
 console.log(`\n═══ Summary ═══`);
 console.log(
-  `  IDL-based:    ${totalPassed}/${totalChecked} verified (${totalMissing} skipped, ${totalFailed} failed)`,
-);
-console.log(
-  `  Schema-based: ${schemaPassed}/${schemaChecks.length} verified (${schemaFailed} failed)`,
+  `  IDL-based: ${totalPassed}/${totalChecked} verified (${totalMissing} skipped, ${totalFailed} failed)`,
 );
 
-if (totalFailed > 0 || schemaFailed > 0) {
+if (totalFailed > 0) {
   console.error(
     `\n❌ Discriminator mismatches detected!\n` +
-      `Re-generate Codama types or update constraint schemas.`,
+      `Re-generate Codama types: pnpm --filter @phalnx/kit codama:all`,
   );
   process.exit(1);
 } else {

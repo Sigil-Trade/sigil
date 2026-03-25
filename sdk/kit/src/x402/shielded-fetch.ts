@@ -21,7 +21,7 @@ import {
   setTransactionMessageLifetimeUsingBlockhash,
   appendTransactionMessageInstruction,
   compileTransaction,
-  getBase64EncodedWireTransaction,
+  getBase58Decoder,
 } from "@solana/kit";
 import type { ShieldedContext } from "../shield.js";
 import type {
@@ -31,6 +31,7 @@ import type {
   SettleResponse,
 } from "./types.js";
 import { X402PaymentError } from "./errors.js";
+import { signAndEncode } from "../rpc-helpers.js";
 import {
   decodePaymentRequiredHeader,
   encodePaymentSignatureHeader,
@@ -47,6 +48,37 @@ import { resolveToken } from "../tokens.js";
 
 // Global nonce tracker instance
 const globalNonceTracker = new NonceTracker();
+
+/**
+ * Poll getSignatureStatuses() to confirm a payment TX landed on-chain.
+ * Returns 3-state result:
+ *   'confirmed' — TX confirmed/finalized on-chain
+ *   'failed'    — TX explicitly errored on-chain (definitive failure)
+ *   'timeout'   — No definitive answer within timeout
+ * Pattern reused from rpc-helpers.ts sendAndConfirmTransaction polling.
+ */
+async function confirmSettlementOnChain(
+  rpc: Rpc<SolanaRpcApi>,
+  txSignature: string,
+  timeoutMs: number,
+): Promise<"confirmed" | "failed" | "timeout"> {
+  const deadline = Date.now() + timeoutMs;
+  let delay = 500;
+  while (Date.now() < deadline) {
+    const result = await rpc.getSignatureStatuses([txSignature as unknown as Parameters<typeof rpc.getSignatureStatuses>[0][0]]).send();
+    const statuses = (result as unknown as { value: readonly (unknown | null)[] }).value;
+    if (statuses?.[0]) {
+      const status = statuses[0] as { err?: unknown; confirmationStatus?: string };
+      if (status.err) return "failed";
+      if (status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized") {
+        return "confirmed";
+      }
+    }
+    await new Promise(r => setTimeout(r, delay));
+    delay = Math.min(delay * 1.5, 3000);
+  }
+  return "timeout";
+}
 
 /**
  * Fetch a URL with automatic x402 payment support — Kit-native.
@@ -82,6 +114,14 @@ export async function shieldedFetch(
   const urlStr = url.toString();
   const maxRetries = Math.min(Math.max(config?.maxRetries ?? 1, 1), 3);
   const effectiveRpc = fetchOptions?.rpc ?? rpc;
+
+  // Step 0: Config warnings
+  if (!config?.allowedDestinations || config.allowedDestinations.size === 0) {
+    console.warn(
+      "[x402] No allowedDestinations configured — accepting all payTo destinations. " +
+        "Set X402Config.allowedDestinations for production use.",
+    );
+  }
 
   // Step 1: URL protocol validation (HTTPS only unless test override)
   if (!config?.allowInsecureUrls) {
@@ -138,7 +178,7 @@ export async function shieldedFetch(
 
   // Step 9: Replay check
   if (config?.enableReplayProtection !== false) {
-    globalNonceTracker.checkOrThrow(urlStr, selected.payTo, selected.amount);
+    await globalNonceTracker.checkOrThrow(urlStr, selected.payTo, selected.amount);
   }
 
   // Step 10: Amount sanity
@@ -230,19 +270,26 @@ export async function shieldedFetch(
     (tx) => appendTransactionMessageInstruction(transferIx, tx),
   );
 
-  const compiledTx = compileTransaction(txMessage as any);
+  const compiledTx = compileTransaction(
+    txMessage as Parameters<typeof compileTransaction>[0]
+  );
 
-  // Sign using Kit's TransactionSigner interface
-  const signerAny = signer as any;
-  const signFn =
-    signerAny.modifyAndSignTransactions ?? signerAny.signTransactions;
-  if (!signFn) {
-    throw new X402PaymentError(
-      "Signer does not implement a signing method (modifyAndSignTransactions or signTransactions)",
-    );
+  // Sign + encode using shared utility
+  const wireBase64 = await signAndEncode(signer, compiledTx);
+
+  // Extract client's expected TX signature from wire format
+  // Wire format: 1 byte (compact-u16 sig count) + 64 bytes (first signature)
+  let expectedTxSig: string | undefined;
+  try {
+    const wireBinary = atob(wireBase64);
+    if (wireBinary.length > 64) {
+      const sigBytes = new Uint8Array(64);
+      for (let i = 0; i < 64; i++) sigBytes[i] = wireBinary.charCodeAt(i + 1);
+      expectedTxSig = getBase58Decoder().decode(sigBytes);
+    }
+  } catch {
+    // Non-fatal — sig extraction is for audit, not blocking
   }
-  const [signedTx] = await signFn.call(signerAny, [compiledTx]);
-  const wireBase64 = getBase64EncodedWireTransaction(signedTx as any);
 
   // Encode x402 payload
   const encodedPayload = encodePaymentSignatureHeader({
@@ -253,7 +300,7 @@ export async function shieldedFetch(
   });
 
   // Step 15: Retry with PAYMENT-SIGNATURE header
-  const retryHeaders = new Headers(init.headers as any);
+  const retryHeaders = new Headers(init.headers as Record<string, string>);
   retryHeaders.set("PAYMENT-SIGNATURE", encodedPayload);
 
   let retryResponse = (await globalThis.fetch(urlStr, {
@@ -282,7 +329,7 @@ export async function shieldedFetch(
   if (paymentResponseHeader) {
     try {
       settlement = decodePaymentResponseHeader(paymentResponseHeader);
-      const verification = validateSettlement(settlement);
+      const verification = await validateSettlement(settlement);
       if (verification.warnings.length > 0) {
         console.warn("[x402] Settlement warnings:", verification.warnings);
       }
@@ -291,14 +338,61 @@ export async function shieldedFetch(
     }
   }
 
-  // Step 17: Record spend ONLY on successful payment (BUG-1 fix)
+  // Settlement signature verification (D1: signature comparison)
+  if (
+    expectedTxSig &&
+    settlement?.transaction &&
+    settlement.transaction !== expectedTxSig
+  ) {
+    emitPaymentEvent(
+      config,
+      createPaymentEvent({
+        url: urlStr,
+        payTo: selected.payTo,
+        asset: selected.asset,
+        amount: selected.amount,
+        paid: true,
+        deniedReason: `Settlement signature mismatch: expected ${expectedTxSig}, got ${settlement.transaction}`,
+        startTime,
+      }),
+    );
+  }
+
+  // Step 17: Record spend after on-chain confirmation (2.9.2 fix)
   if (retryResponse.ok) {
     if (config?.enableReplayProtection !== false) {
-      globalNonceTracker.record(urlStr, selected.payTo, selected.amount);
+      await globalNonceTracker.record(urlStr, selected.payTo, selected.amount);
     }
     recordPaymentAmount(parsedAmount);
 
-    if (shieldCtx) {
+    // On-chain confirmation gate (2.9.2):
+    //   confirmed → record spend
+    //   failed    → DON'T record (TX errored on-chain)
+    //   timeout   → record spend (defense-in-depth, can't confirm either way)
+    //   disabled  → record spend (confirmPayment: false)
+    let shouldRecordSpend = true;
+    if (
+      config?.confirmPayment !== false &&
+      settlement?.transaction &&
+      effectiveRpc
+    ) {
+      const timeout = config?.confirmPaymentTimeoutMs ?? 10_000;
+      const status = await confirmSettlementOnChain(
+        effectiveRpc, settlement.transaction, timeout,
+      );
+      if (status === "failed") {
+        shouldRecordSpend = false;
+        console.warn(
+          `[x402] Payment TX ${settlement.transaction} failed on-chain — spend NOT recorded`,
+        );
+      } else if (status === "timeout") {
+        console.warn(
+          `[x402] Payment TX ${settlement.transaction} not confirmed within ${timeout}ms — recording spend (defense-in-depth)`,
+        );
+      }
+    }
+
+    if (shieldCtx && shouldRecordSpend) {
       recordX402Spend(shieldCtx, selected.asset, parsedAmount);
     }
 

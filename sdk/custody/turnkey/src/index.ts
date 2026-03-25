@@ -6,7 +6,7 @@
  *
  * @example One-liner with shieldWallet():
  * ```typescript
- * import { shieldWallet } from '@phalnx/sdk';
+ * import { shieldWallet } from '@phalnx/kit';
  * import { turnkey } from '@phalnx/custody-turnkey';
  *
  * const wallet = shieldWallet(
@@ -17,7 +17,7 @@
  *
  * @example Zero-config from environment:
  * ```typescript
- * import { shieldWallet } from '@phalnx/sdk';
+ * import { shieldWallet } from '@phalnx/kit';
  * import { turnkeyFromEnv } from '@phalnx/custody-turnkey';
  *
  * // Reads TURNKEY_ORGANIZATION_ID + TURNKEY_API_KEY_ID + TURNKEY_API_PRIVATE_KEY from env

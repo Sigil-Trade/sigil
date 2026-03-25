@@ -332,9 +332,9 @@ describe("devnet-routing", () => {
         amount: new BN(1_000_000), // 1 USDC over cap
         protocol: jupiterProgramId,
       });
-      expect.fail("Should have thrown DailyCapExceeded");
+      expect.fail("Should have thrown SpendingCapExceeded");
     } catch (err: any) {
-      expectError(err, "DailyCapExceeded", "cap");
+      expectError(err, "SpendingCapExceeded", "cap");
     }
     console.log("    USDC + USDT aggregate cap enforced");
   });
@@ -408,12 +408,12 @@ describe("devnet-routing", () => {
     } catch (err: any) {
       // The composed TX has validate+finalize but no DeFi instruction between them.
       // Non-stablecoin input path requires exactly one DeFi instruction, so validate
-      // rejects with TooManyDeFiInstructions (6045) — proves non-stablecoin input
+      // rejects with TooManyDeFiInstructions (6042) — proves non-stablecoin input
       // with stablecoin output enters the non-stablecoin code path (not rejected outright).
-      expectError(err, "TooManyDeFiInstructions", "6045");
+      expectError(err, "TooManyDeFiInstructions", "6042");
     }
     console.log(
-      "    Non-stablecoin input with stablecoin output: rejected without DeFi instruction (6045)",
+      "    Non-stablecoin input with stablecoin output: rejected without DeFi instruction (6042)",
     );
   });
 
@@ -563,7 +563,7 @@ describe("devnet-routing", () => {
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectError(err, "InvalidTokenAccount", "TokenNotRegistered", "6014");
+      expectError(err, "InvalidTokenAccount", "UnsupportedToken", "6014");
     }
     console.log("    Non-stablecoin without output stablecoin rejected");
   });
@@ -718,10 +718,10 @@ describe("devnet-routing", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectError(err, "TokenNotRegistered", "6014");
+      expectError(err, "UnsupportedToken", "6014");
     }
     console.log(
-      "    agent_transfer non-stablecoin rejected with TokenNotRegistered (6014)",
+      "    agent_transfer non-stablecoin rejected with UnsupportedToken (6014)",
     );
   });
 
@@ -800,9 +800,9 @@ describe("devnet-routing", () => {
         amount: new BN(1_000_000), // 1 USDC over cap
         protocol: jupiterProgramId,
       });
-      expect.fail("Should have thrown DailyCapExceeded");
+      expect.fail("Should have thrown SpendingCapExceeded");
     } catch (err: any) {
-      expectError(err, "DailyCapExceeded", "cap");
+      expectError(err, "SpendingCapExceeded", "cap");
     }
     console.log("    Full chain USDC+USDT cap aggregation enforced");
   });

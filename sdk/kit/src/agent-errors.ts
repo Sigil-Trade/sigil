@@ -5,7 +5,7 @@
  * Every error includes a category, retryability flag, and
  * recovery actions that tell the agent exactly what to do next.
  *
- * Maps all 77 on-chain error codes (6000-6076) plus 34 SDK
+ * Maps all 70 on-chain error codes (6000-6069) plus 34 SDK
  * error codes (7000-7033) to AgentError with machine-readable metadata.
  *
  * Zero dependency on @solana/web3.js or @coral-xyz/anchor.
@@ -57,7 +57,7 @@ export interface AgentError {
 }
 
 // ---------------------------------------------------------------------------
-// On-chain error code mapping (6000-6076)
+// On-chain error code mapping (6000-6069)
 // ---------------------------------------------------------------------------
 
 interface ErrorMapping {
@@ -121,9 +121,9 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     ],
   },
   6003: {
-    name: "TokenNotRegistered",
+    name: "UnsupportedToken",
     message:
-      "Token is not a recognized stablecoin (only USDC and USDT supported)",
+      "Token is not a supported stablecoin (only USDC and USDT)",
     category: "INPUT_VALIDATION",
     retryable: false,
     recovery_actions: [
@@ -169,8 +169,8 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     ],
   },
   6006: {
-    name: "DailyCapExceeded",
-    message: "Daily spending cap would be exceeded",
+    name: "SpendingCapExceeded",
+    message: "Rolling 24h spending cap would be exceeded",
     category: "SPENDING_CAP",
     retryable: true,
     retry_after_ms: 3_600_000,
@@ -601,9 +601,9 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     ],
   },
   6037: {
-    name: "SlippageTooHigh",
+    name: "SwapSlippageExceeded",
     message:
-      "Jupiter slippage exceeds policy max_slippage_bps or quoted output is zero",
+      "Swap slippage exceeds policy max_slippage_bps or quoted output is zero",
     category: "POLICY_VIOLATION",
     retryable: false,
     recovery_actions: [
@@ -633,34 +633,9 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     ],
   },
   6039: {
-    name: "InvalidFlashTradeInstruction",
-    message: "Cannot parse Flash Trade instruction data",
-    category: "INPUT_VALIDATION",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "use_sdk",
-        description: "Use the SDK's Flash Trade compose functions",
-      },
-    ],
-  },
-  6040: {
-    name: "FlashTradePriceZero",
-    message: "Flash Trade priceWithSlippage is zero",
-    category: "INPUT_VALIDATION",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "retry",
-        description:
-          "Retry — the oracle price feed may have been temporarily unavailable",
-      },
-    ],
-  },
-  6041: {
-    name: "DustDepositDetected",
+    name: "UnauthorizedTokenTransfer",
     message:
-      "Top-level SPL Token transfer detected between validate and finalize (potential exploit)",
+      "Top-level SPL Token transfer not allowed between validate and finalize",
     category: "POLICY_VIOLATION",
     retryable: false,
     recovery_actions: [
@@ -671,19 +646,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6042: {
-    name: "InvalidJupiterLendInstruction",
-    message: "Cannot parse Jupiter Lend instruction data",
-    category: "INPUT_VALIDATION",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "use_sdk",
-        description: "Use the SDK's Jupiter Lend compose functions",
-      },
-    ],
-  },
-  6043: {
+  6040: {
     name: "SlippageBpsTooHigh",
     message: "Slippage BPS exceeds maximum allowed (5000 = 50%)",
     category: "INPUT_VALIDATION",
@@ -695,7 +658,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6044: {
+  6041: {
     name: "ProtocolMismatch",
     message:
       "DeFi instruction program does not match the declared target_protocol",
@@ -709,7 +672,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6045: {
+  6042: {
     name: "TooManyDeFiInstructions",
     message: "Non-stablecoin swap allows exactly one DeFi instruction",
     category: "INPUT_VALIDATION",
@@ -723,7 +686,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   },
 
   // --- Multi-Agent errors ---
-  6046: {
+  6043: {
     name: "MaxAgentsReached",
     message: "Maximum agents per vault reached (limit: 10)",
     category: "INPUT_VALIDATION",
@@ -736,7 +699,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6047: {
+  6044: {
     name: "InsufficientPermissions",
     message: "Agent lacks permission for this action type",
     category: "PERMISSION",
@@ -753,7 +716,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6048: {
+  6045: {
     name: "InvalidPermissions",
     message: "Permission bitmask contains invalid bits (only 21 bits valid)",
     category: "INPUT_VALIDATION",
@@ -768,7 +731,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   },
 
   // --- Escrow errors ---
-  6049: {
+  6046: {
     name: "EscrowNotActive",
     message: "Escrow is not in Active status",
     category: "RESOURCE_NOT_FOUND",
@@ -780,7 +743,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6050: {
+  6047: {
     name: "EscrowExpired",
     message: "Escrow has expired — can only be refunded now",
     category: "RESOURCE_NOT_FOUND",
@@ -793,7 +756,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6051: {
+  6048: {
     name: "EscrowNotExpired",
     message: "Escrow has not expired yet — cannot refund before expiry",
     category: "INPUT_VALIDATION",
@@ -810,7 +773,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6052: {
+  6049: {
     name: "InvalidEscrowVault",
     message: "Invalid escrow vault — source or destination vault mismatch",
     category: "INPUT_VALIDATION",
@@ -823,7 +786,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6053: {
+  6050: {
     name: "EscrowConditionsNotMet",
     message: "Escrow settlement conditions not met (SHA-256 proof invalid)",
     category: "INPUT_VALIDATION",
@@ -836,7 +799,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6054: {
+  6051: {
     name: "EscrowDurationExceeded",
     message: "Escrow duration exceeds maximum (30 days)",
     category: "INPUT_VALIDATION",
@@ -851,7 +814,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   },
 
   // --- Instruction constraints errors ---
-  6055: {
+  6052: {
     name: "InvalidConstraintConfig",
     message: "Invalid constraint configuration: bounds exceeded",
     category: "INPUT_VALIDATION",
@@ -864,7 +827,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6056: {
+  6053: {
     name: "ConstraintViolated",
     message: "Instruction violated a configured constraint",
     category: "POLICY_VIOLATION",
@@ -883,7 +846,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6057: {
+  6054: {
     name: "InvalidConstraintsPda",
     message: "Invalid constraints PDA: wrong owner or vault",
     category: "INPUT_VALIDATION",
@@ -895,50 +858,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6058: {
-    name: "NoPendingConstraintsUpdate",
-    message: "No pending constraints update to apply or cancel",
-    category: "RESOURCE_NOT_FOUND",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "queue_update",
-        description: "Queue a constraints update first before applying",
-      },
-    ],
-  },
-  6059: {
-    name: "PendingConstraintsUpdateExists",
-    message: "A pending constraints update already exists",
-    category: "INPUT_VALIDATION",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "cancel_existing",
-        description:
-          "Cancel the existing pending update before queuing a new one",
-      },
-      {
-        action: "apply_existing",
-        description:
-          "Apply the existing pending update if the timelock has expired",
-      },
-    ],
-  },
-  6060: {
-    name: "ConstraintsUpdateNotExpired",
-    message: "Constraints update timelock has not expired yet",
-    category: "POLICY_VIOLATION",
-    retryable: true,
-    retry_after_ms: 60_000,
-    recovery_actions: [
-      {
-        action: "wait",
-        description: "Wait for the timelock period to expire",
-      },
-    ],
-  },
-  6061: {
+  6055: {
     name: "InvalidPendingConstraintsPda",
     message: "Invalid pending constraints PDA: wrong owner or vault",
     category: "INPUT_VALIDATION",
@@ -951,21 +871,9 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6062: {
-    name: "ConstraintsUpdateExpired",
-    message: "Pending constraints update has expired and is stale",
-    category: "RESOURCE_NOT_FOUND",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "cancel_and_requeue",
-        description: "Cancel the expired update and queue a fresh one",
-      },
-    ],
-  },
 
   // --- Per-agent spend limit errors ---
-  6063: {
+  6056: {
     name: "AgentSpendLimitExceeded",
     message:
       "Agent's rolling 24h spend exceeds their individual spending limit",
@@ -990,7 +898,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6064: {
+  6057: {
     name: "OverlaySlotExhausted",
     message:
       "Per-agent overlay is full — cannot register agent with spending limit",
@@ -1004,7 +912,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6065: {
+  6058: {
     name: "AgentSlotNotFound",
     message: "Agent has per-agent spending limit but no overlay tracking slot",
     category: "RESOURCE_NOT_FOUND",
@@ -1017,7 +925,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6066: {
+  6059: {
     name: "UnauthorizedTokenApproval",
     message:
       "Unauthorized SPL Token Approve detected between validate and finalize",
@@ -1031,7 +939,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6067: {
+  6060: {
     name: "InvalidSessionExpiry",
     message: "Session expiry slots out of range (10-450)",
     category: "INPUT_VALIDATION",
@@ -1043,7 +951,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6068: {
+  6061: {
     name: "UnconstrainedProgramBlocked",
     message: "Program has no constraint entry and strict mode is enabled",
     category: "POLICY_VIOLATION",
@@ -1063,9 +971,9 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   },
 
   // --- Per-protocol spend cap errors ---
-  6069: {
+  6062: {
     name: "ProtocolCapExceeded",
-    message: "Per-protocol daily spending cap would be exceeded",
+    message: "Per-protocol rolling 24h spending cap would be exceeded",
     category: "SPENDING_CAP",
     retryable: true,
     retry_after_ms: 3_600_000,
@@ -1086,7 +994,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6070: {
+  6063: {
     name: "ProtocolCapsMismatch",
     message:
       "protocol_caps length must match protocols length when has_protocol_caps is true",
@@ -1102,7 +1010,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   },
 
   // --- Vault closure guard errors ---
-  6071: {
+  6064: {
     name: "ActiveEscrowsExist",
     message: "Active escrow deposits exist — close them before closing vault",
     category: "RESOURCE_NOT_FOUND",
@@ -1115,7 +1023,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6072: {
+  6065: {
     name: "ConstraintsNotClosed",
     message:
       "Instruction constraints PDA still exists — close it before closing vault",
@@ -1129,7 +1037,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6073: {
+  6066: {
     name: "PendingPolicyExists",
     message:
       "A pending policy update exists — apply or cancel it before closing vault",
@@ -1145,7 +1053,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   },
 
   // --- Agent pause errors ---
-  6074: {
+  6067: {
     name: "AgentPaused",
     message: "Agent is paused — unpause before executing actions",
     category: "PERMISSION",
@@ -1157,7 +1065,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6075: {
+  6068: {
     name: "AgentAlreadyPaused",
     message: "Agent is already paused",
     category: "INPUT_VALIDATION",
@@ -1169,7 +1077,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6076: {
+  6069: {
     name: "AgentNotPaused",
     message: "Agent is not paused — cannot unpause",
     category: "INPUT_VALIDATION",
@@ -1699,7 +1607,7 @@ const SDK_ERRORS: Record<string, ErrorMapping> = {
  * Convert any error into a structured AgentError.
  *
  * Handles:
- * - On-chain Anchor errors (code 6000-6076)
+ * - On-chain Anchor errors (code 6000-6069)
  * - SDK errors (code 7000-7033)
  * - Network/RPC errors (from message patterns)
  * - Unknown errors (wrapped as FATAL)
@@ -1929,6 +1837,111 @@ export function getAllOnChainErrorCodes(): number[] {
     .sort((a, b) => a - b);
 }
 
+// ---------------------------------------------------------------------------
+// Typed error categories (Step 5.5 — discriminated union for TypeScript switch)
+// ---------------------------------------------------------------------------
+
+/**
+ * Discriminated union for TypeScript switch exhaustiveness with typed context.
+ *
+ * Complements `ErrorCategory` (string literal union for agent decision-making).
+ * Use `PhalnxErrorCategory` when you need typed access to error-specific fields
+ * like `remaining` for spending errors or `protocol` for protocol errors.
+ */
+export type PhalnxErrorCategory =
+  | { type: "spending"; code: number; remaining: bigint; cap: bigint }
+  | { type: "permission"; code: number; required: string }
+  | { type: "protocol"; code: number; protocol: string }
+  | { type: "vault"; code: number; status: string }
+  | { type: "network"; code: number; retryable: boolean };
+
+/** Map from ErrorCategory string → PhalnxErrorCategory.type */
+const CATEGORY_TYPE_MAP: Record<ErrorCategory, PhalnxErrorCategory["type"]> = {
+  SPENDING_CAP: "spending",
+  PERMISSION: "permission",
+  PROTOCOL_NOT_SUPPORTED: "protocol",
+  RESOURCE_NOT_FOUND: "vault",
+  INPUT_VALIDATION: "vault",
+  POLICY_VIOLATION: "permission",
+  ESCALATION_REQUIRED: "permission",
+  TRANSIENT: "network",
+  RATE_LIMIT: "network",
+  FATAL: "network",
+};
+
+/**
+ * Convert an AgentError into a typed PhalnxErrorCategory for switch exhaustiveness.
+ *
+ * Extracts typed context from the AgentError.context bag into the appropriate
+ * discriminated union variant. Returns the variant matching the error's category.
+ *
+ * @example
+ * ```typescript
+ * const err = toAgentError(error);
+ * const cat = categorizeError(err);
+ * switch (cat.type) {
+ *   case "spending": console.log(`${cat.remaining} remaining of ${cat.cap}`); break;
+ *   case "permission": console.log(`Need: ${cat.required}`); break;
+ *   case "protocol": console.log(`Unknown: ${cat.protocol}`); break;
+ *   case "vault": console.log(`Vault ${cat.status}`); break;
+ *   case "network": console.log(`Retryable: ${cat.retryable}`); break;
+ * }
+ * ```
+ */
+/** Safely convert unknown context values to bigint without throwing. */
+function safeBigInt(value: unknown): bigint {
+  if (typeof value === "bigint") return value;
+  if (typeof value === "number" && Number.isFinite(value))
+    return BigInt(Math.trunc(value));
+  if (typeof value === "string") {
+    try {
+      return BigInt(value);
+    } catch {
+      return 0n;
+    }
+  }
+  return 0n;
+}
+
+export function categorizeError(err: AgentError): PhalnxErrorCategory {
+  const code = parseInt(err.code, 10) || 0;
+  const categoryType = CATEGORY_TYPE_MAP[err.category] ?? "network";
+
+  switch (categoryType) {
+    case "spending":
+      return {
+        type: "spending",
+        code,
+        remaining: safeBigInt(err.context.remaining),
+        cap: safeBigInt(err.context.cap),
+      };
+    case "permission":
+      return {
+        type: "permission",
+        code,
+        required: (err.context.required_permission as string) ?? err.message,
+      };
+    case "protocol":
+      return {
+        type: "protocol",
+        code,
+        protocol: (err.context.protocol as string) ?? "unknown",
+      };
+    case "vault":
+      return {
+        type: "vault",
+        code,
+        status: (err.context.vault_status as string) ?? err.message,
+      };
+    case "network":
+      return {
+        type: "network",
+        code,
+        retryable: err.retryable,
+      };
+  }
+}
+
 /**
  * Get all SDK error codes (for testing/documentation).
  */
@@ -1947,7 +1960,7 @@ function extractErrorCode(error: unknown): number | null {
   const e = error as Record<string, unknown>;
 
   // Direct code property
-  if (typeof e.code === "number" && e.code >= 6000 && e.code <= 6076)
+  if (typeof e.code === "number" && e.code >= 6000 && e.code <= 6069)
     return e.code;
 
   // Anchor error structure
@@ -1964,7 +1977,7 @@ function extractErrorCode(error: unknown): number | null {
     const match = e.message.match(/custom program error: 0x([0-9a-fA-F]+)/);
     if (match) {
       const code = parseInt(match[1], 16);
-      if (code >= 6000 && code <= 6076) return code;
+      if (code >= 6000 && code <= 6069) return code;
     }
   }
 

@@ -76,7 +76,7 @@ export type DepositFundsInstruction<
             AccountSignerMeta<TAccountOwner>
         : TAccountOwner,
       TAccountVault extends string
-        ? ReadonlyAccount<TAccountVault>
+        ? WritableAccount<TAccountVault>
         : TAccountVault,
       TAccountMint extends string
         ? ReadonlyAccount<TAccountMint>
@@ -198,7 +198,7 @@ export async function getDepositFundsInstructionAsync<
   // Original accounts.
   const originalAccounts = {
     owner: { value: input.owner ?? null, isWritable: true },
-    vault: { value: input.vault ?? null, isWritable: false },
+    vault: { value: input.vault ?? null, isWritable: true },
     mint: { value: input.mint ?? null, isWritable: false },
     ownerTokenAccount: {
       value: input.ownerTokenAccount ?? null,
@@ -376,7 +376,7 @@ export function getDepositFundsInstruction<
   // Original accounts.
   const originalAccounts = {
     owner: { value: input.owner ?? null, isWritable: true },
-    vault: { value: input.vault ?? null, isWritable: false },
+    vault: { value: input.vault ?? null, isWritable: true },
     mint: { value: input.mint ?? null, isWritable: false },
     ownerTokenAccount: {
       value: input.ownerTokenAccount ?? null,

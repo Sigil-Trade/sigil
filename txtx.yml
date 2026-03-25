@@ -22,4 +22,4 @@ environments:
     rpc_api_url: http://localhost:8899
   devnet:
     network_id: devnet
-    rpc_api_url: https://api.devnet.solana.com
+    rpc_api_url: ${ANCHOR_PROVIDER_URL:-https://api.devnet.solana.com}

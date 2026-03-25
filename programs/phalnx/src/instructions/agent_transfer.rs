@@ -114,7 +114,7 @@ pub fn handler(ctx: Context<AgentTransfer>, amount: u64) -> Result<()> {
     // 3. Token must be a stablecoin (stablecoin-only enforcement)
     require!(
         is_stablecoin_mint(&token_mint),
-        PhalnxError::TokenNotRegistered
+        PhalnxError::UnsupportedToken
     );
 
     // 4. Destination must be allowed
@@ -149,7 +149,7 @@ pub fn handler(ctx: Context<AgentTransfer>, amount: u64) -> Result<()> {
         .ok_or(PhalnxError::Overflow)?;
     require!(
         new_total_usd <= policy.daily_spending_cap_usd,
-        PhalnxError::DailyCapExceeded
+        PhalnxError::SpendingCapExceeded
     );
 
     // --- Per-agent cap check via contribution overlay ---

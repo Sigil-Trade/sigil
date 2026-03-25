@@ -90,6 +90,12 @@ export type AgentVault = {
   activeEscrowCount: number;
   /** Cumulative developer fees collected from this vault (token base units) */
   totalFeesCollected: bigint;
+  /** Cumulative stablecoin deposits in base units (USDC/USDT, 6 decimals) */
+  totalDepositedUsd: bigint;
+  /** Cumulative stablecoin withdrawals in base units (USDC/USDT, 6 decimals) */
+  totalWithdrawnUsd: bigint;
+  /** Cumulative failed + expired session count */
+  totalFailedTransactions: bigint;
 };
 
 export type AgentVaultArgs = {
@@ -120,6 +126,12 @@ export type AgentVaultArgs = {
   activeEscrowCount: number;
   /** Cumulative developer fees collected from this vault (token base units) */
   totalFeesCollected: number | bigint;
+  /** Cumulative stablecoin deposits in base units (USDC/USDT, 6 decimals) */
+  totalDepositedUsd: number | bigint;
+  /** Cumulative stablecoin withdrawals in base units (USDC/USDT, 6 decimals) */
+  totalWithdrawnUsd: number | bigint;
+  /** Cumulative failed + expired session count */
+  totalFailedTransactions: number | bigint;
 };
 
 /** Gets the encoder for {@link AgentVaultArgs} account data. */
@@ -139,6 +151,9 @@ export function getAgentVaultEncoder(): Encoder<AgentVaultArgs> {
       ["openPositions", getU8Encoder()],
       ["activeEscrowCount", getU8Encoder()],
       ["totalFeesCollected", getU64Encoder()],
+      ["totalDepositedUsd", getU64Encoder()],
+      ["totalWithdrawnUsd", getU64Encoder()],
+      ["totalFailedTransactions", getU64Encoder()],
     ]),
     (value) => ({ ...value, discriminator: AGENT_VAULT_DISCRIMINATOR }),
   );
@@ -160,6 +175,9 @@ export function getAgentVaultDecoder(): Decoder<AgentVault> {
     ["openPositions", getU8Decoder()],
     ["activeEscrowCount", getU8Decoder()],
     ["totalFeesCollected", getU64Decoder()],
+    ["totalDepositedUsd", getU64Decoder()],
+    ["totalWithdrawnUsd", getU64Decoder()],
+    ["totalFailedTransactions", getU64Decoder()],
   ]);
 }
 

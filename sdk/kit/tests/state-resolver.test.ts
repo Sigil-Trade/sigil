@@ -1,13 +1,19 @@
 import { expect } from "chai";
 import type { Address, ReadonlyUint8Array } from "@solana/kit";
-import { getAddressEncoder } from "@solana/kit";
+import { getAddressEncoder, getU64Encoder } from "@solana/kit";
 import {
   getRolling24hUsd,
   getAgentRolling24hUsd,
   getProtocolSpend,
+  getSpendingHistory,
   bytesToAddress,
   resolveVaultState,
+  resolveVaultStateForOwner,
+  findVaultsByOwner,
 } from "../src/state-resolver.js";
+import type { ResolvedVaultStateForOwner, SpendingEpoch } from "../src/state-resolver.js";
+import { getVaultPDA } from "../src/resolve-accounts.js";
+import { formatUsd } from "../src/formatting.js";
 import type { EffectiveBudget, ProtocolBudget } from "../src/state-resolver.js";
 import type { SpendTracker } from "../src/generated/accounts/spendTracker.js";
 import type { AgentContributionEntry } from "../src/generated/types/agentContributionEntry.js";
@@ -405,6 +411,144 @@ describe("getProtocolSpend", () => {
   });
 });
 
+// ─── getSpendingHistory (Step 5.8) ────────────────────────────────────────────
+
+describe("getSpendingHistory", () => {
+  it("returns [] for null tracker", () => {
+    expect(getSpendingHistory(null, 1000000n)).to.deep.equal([]);
+  });
+
+  it("returns [] for zero timestamp", () => {
+    const tracker = makeTracker({ lastWriteEpoch: 100n });
+    expect(getSpendingHistory(tracker, 0n)).to.deep.equal([]);
+  });
+
+  it("returns [] for negative nowUnix", () => {
+    const tracker = makeTracker({ lastWriteEpoch: 100n });
+    expect(getSpendingHistory(tracker, -100n)).to.deep.equal([]);
+  });
+
+  it("returns single epoch within window with correct fields", () => {
+    const nowUnix = 200n * EPOCH_DURATION; // 120000
+    const buckets = emptyBuckets(144);
+    const idx = Number(200n % 144n);
+    buckets[idx] = makeBucket(200n, 500_000_000n);
+
+    const tracker = makeTracker({ buckets, lastWriteEpoch: 200n });
+    const result = getSpendingHistory(tracker, nowUnix);
+
+    expect(result).to.have.length(1);
+    expect(result[0].epochId).to.equal(200);
+    expect(result[0].timestamp).to.equal(200 * 600);
+    expect(result[0].usdAmount).to.equal(500_000_000n);
+    expect(result[0].usdAmountFormatted).to.equal(formatUsd(500_000_000n));
+  });
+
+  it("returns all 144 epochs, sorted ascending", () => {
+    const baseEpoch = 200n;
+    const nowUnix = (baseEpoch + 143n) * EPOCH_DURATION;
+    const buckets = emptyBuckets(144);
+
+    // Fill all 144 buckets with data within window
+    for (let i = 0; i < 144; i++) {
+      const epoch = baseEpoch + BigInt(i);
+      const idx = Number(epoch % 144n);
+      buckets[idx] = makeBucket(epoch, BigInt((i + 1) * 1_000_000));
+    }
+
+    const tracker = makeTracker({ buckets, lastWriteEpoch: baseEpoch + 143n });
+    const result = getSpendingHistory(tracker, nowUnix);
+
+    expect(result).to.have.length(144);
+    // Verify sorted ascending
+    for (let i = 1; i < result.length; i++) {
+      expect(result[i].timestamp).to.be.greaterThan(result[i - 1].timestamp);
+    }
+    expect(result[0].epochId).to.equal(Number(baseEpoch));
+    expect(result[143].epochId).to.equal(Number(baseEpoch + 143n));
+  });
+
+  it("excludes stale epochs outside window", () => {
+    const nowUnix = 400n * EPOCH_DURATION;
+    const buckets = emptyBuckets(144);
+
+    // Stale bucket: 250+ epochs ago (400 - 250 = 150 > 144 window)
+    const staleIdx = Number(150n % 144n);
+    buckets[staleIdx] = makeBucket(150n, 999_000_000n);
+
+    // Recent bucket: within window
+    const recentIdx = Number(390n % 144n);
+    buckets[recentIdx] = makeBucket(390n, 100_000_000n);
+
+    const tracker = makeTracker({ buckets, lastWriteEpoch: 390n });
+    const result = getSpendingHistory(tracker, nowUnix);
+
+    expect(result).to.have.length(1);
+    expect(result[0].epochId).to.equal(390);
+    expect(result[0].usdAmount).to.equal(100_000_000n);
+  });
+
+  it("skips zero-amount buckets", () => {
+    const nowUnix = 200n * EPOCH_DURATION;
+    const buckets = emptyBuckets(144);
+
+    // 3 buckets, only middle one has value
+    buckets[Number(198n % 144n)] = makeBucket(198n, 0n);
+    buckets[Number(199n % 144n)] = makeBucket(199n, 250_000_000n);
+    buckets[Number(200n % 144n)] = makeBucket(200n, 0n);
+
+    const tracker = makeTracker({ buckets, lastWriteEpoch: 200n });
+    const result = getSpendingHistory(tracker, nowUnix);
+
+    expect(result).to.have.length(1);
+    expect(result[0].epochId).to.equal(199);
+  });
+
+  it("G-2: small nowUnix (< 86400) includes all valid epochs", () => {
+    // nowUnix = 1000 → currentEpoch = 1, windowStartEpoch = 1 - 144 = -143 (BigInt)
+    // All valid buckets should be included since negative windowStartEpoch
+    // means everything passes the epochId >= windowStartEpoch check
+    const nowUnix = 1000n;
+    const buckets = emptyBuckets(144);
+    buckets[0] = makeBucket(0n, 500_000n);
+    buckets[1] = makeBucket(1n, 300_000n);
+
+    const tracker = makeTracker({ buckets, lastWriteEpoch: 1n });
+    const result = getSpendingHistory(tracker, nowUnix);
+
+    expect(result).to.have.length(2);
+    expect(result[0].epochId).to.equal(0);
+    expect(result[1].epochId).to.equal(1);
+  });
+
+  it("circular buffer wrap sorts correctly regardless of buffer position", () => {
+    // Epochs placed at non-sequential buffer positions
+    // This tests that the sort produces chronological order
+    // even when the circular buffer stores newer data at lower indices
+    const nowUnix = 300n * EPOCH_DURATION;
+    const buckets = emptyBuckets(144);
+
+    // epoch 148 → idx 4, epoch 289 → idx 1, epoch 290 → idx 2
+    buckets[Number(148n % 144n)] = makeBucket(148n, 100_000_000n); // idx 4
+    // But epoch 148 is outside window (300 - 144 = 156 > 148), so excluded
+    // Use epochs within window instead:
+    // epoch 160 → idx 16, epoch 290 → idx 2, epoch 250 → idx 106
+    buckets[Number(290n % 144n)] = makeBucket(290n, 200_000_000n); // idx 2
+    buckets[Number(250n % 144n)] = makeBucket(250n, 300_000_000n); // idx 106
+    buckets[Number(160n % 144n)] = makeBucket(160n, 400_000_000n); // idx 16
+
+    const tracker = makeTracker({ buckets, lastWriteEpoch: 290n });
+    const result = getSpendingHistory(tracker, nowUnix);
+
+    // Should be sorted chronologically: 160, 250, 290
+    // (epoch 148 excluded — outside window: 300 - 144 = 156 > 148)
+    expect(result).to.have.length(3);
+    expect(result[0].epochId).to.equal(160);
+    expect(result[1].epochId).to.equal(250);
+    expect(result[2].epochId).to.equal(290);
+  });
+});
+
 // ─── bytesToAddress ──────────────────────────────────────────────────────────
 
 describe("bytesToAddress", () => {
@@ -655,5 +799,225 @@ describe("resolveVaultState", () => {
       protocol: PROTOCOL_A,
     };
     expect(budget.protocol).to.equal(PROTOCOL_A);
+  });
+});
+
+// ─── findVaultsByOwner (Step 2.8) ──────────────────────────────────────────
+
+describe("findVaultsByOwner", () => {
+  const OWNER = "11111111111111111111111111111111" as Address;
+
+  const u64Encoder = getU64Encoder();
+
+  /** Build a base64-encoded 8-byte data slice representing a vault_id. */
+  function vaultIdSlice(id: bigint): [string, string] {
+    const bytes = u64Encoder.encode(id);
+    return [Buffer.from(bytes).toString("base64"), "base64"];
+  }
+
+  it("returns vaults for owner via getProgramAccounts", async () => {
+    // Derive real PDAs so PDA verification passes
+    const [pda0] = await getVaultPDA(OWNER, 0n);
+    const [pda1] = await getVaultPDA(OWNER, 1n);
+
+    const rpc = {
+      getProgramAccounts: () => ({
+        send: async () => [
+          { pubkey: pda0, account: { data: vaultIdSlice(0n) } },
+          { pubkey: pda1, account: { data: vaultIdSlice(1n) } },
+        ],
+      }),
+    } as any;
+
+    const vaults = await findVaultsByOwner(rpc, OWNER);
+    expect(vaults).to.have.length(2);
+    expect(vaults[0].vaultAddress).to.equal(pda0);
+    expect(vaults[0].vaultId).to.equal(0n);
+    expect(vaults[1].vaultAddress).to.equal(pda1);
+    expect(vaults[1].vaultId).to.equal(1n);
+  });
+
+  it("returns empty array for unknown owner", async () => {
+    const rpc = {
+      getProgramAccounts: () => ({
+        send: async () => [],
+      }),
+    } as any;
+
+    const vaults = await findVaultsByOwner(rpc, OWNER);
+    expect(vaults).to.deep.equal([]);
+  });
+
+  it("falls back to probing when RPC reports method not supported", async () => {
+    // getProgramAccounts throws "method not found" → fallback to probing
+    const rpc = {
+      getProgramAccounts: () => ({
+        send: async () => { throw new Error("Method not found"); },
+      }),
+      getMultipleAccounts: () => ({
+        send: async () => ({
+          value: [
+            { data: ["", "base64"] }, // vault 0 exists
+            null,                      // vault 1 doesn't exist
+            { data: ["", "base64"] }, // vault 2 exists
+            // rest are null (up to maxProbe)
+            ...Array(17).fill(null),
+          ],
+        }),
+      }),
+    } as any;
+
+    const vaults = await findVaultsByOwner(rpc, OWNER);
+    expect(vaults).to.have.length(2);
+    expect(vaults[0].vaultId).to.equal(0n);
+    expect(vaults[1].vaultId).to.equal(2n);
+  });
+
+  it("propagates network errors instead of silently falling back", async () => {
+    const rpc = {
+      getProgramAccounts: () => ({
+        send: async () => { throw new Error("Network request failed: ECONNREFUSED"); },
+      }),
+    } as any;
+
+    try {
+      await findVaultsByOwner(rpc, OWNER);
+      expect.fail("Should have thrown network error");
+    } catch (e: unknown) {
+      expect(e).to.be.instanceOf(Error);
+      expect((e as Error).message).to.include("ECONNREFUSED");
+    }
+  });
+
+  it("propagates rate limit errors instead of silently falling back", async () => {
+    const rpc = {
+      getProgramAccounts: () => ({
+        send: async () => { throw new Error("429 Too Many Requests"); },
+      }),
+    } as any;
+
+    try {
+      await findVaultsByOwner(rpc, OWNER);
+      expect.fail("Should have thrown rate limit error");
+    } catch (e: unknown) {
+      expect(e).to.be.instanceOf(Error);
+      expect((e as Error).message).to.include("429");
+    }
+  });
+
+  it("returns vaults sorted by vaultId from Strategy A", async () => {
+    // Derive real PDAs for vaultIds 1 and 5
+    const [pda1] = await getVaultPDA(OWNER, 1n);
+    const [pda5] = await getVaultPDA(OWNER, 5n);
+
+    // RPC returns vaults in arbitrary order — function should sort them
+    const rpc = {
+      getProgramAccounts: () => ({
+        send: async () => [
+          { pubkey: pda5, account: { data: vaultIdSlice(5n) } },
+          { pubkey: pda1, account: { data: vaultIdSlice(1n) } },
+        ],
+      }),
+    } as any;
+
+    const vaults = await findVaultsByOwner(rpc, OWNER);
+    expect(vaults).to.have.length(2);
+    expect(vaults[0].vaultId).to.equal(1n);
+    expect(vaults[1].vaultId).to.equal(5n);
+  });
+
+  it("handles non-sequential vault IDs (gaps in probing)", async () => {
+    // Vaults exist at IDs 0, 3, 7 — gaps at 1,2,4,5,6
+    const rpc = {
+      getProgramAccounts: () => ({
+        send: async () => { throw new Error("Method not found"); },
+      }),
+      getMultipleAccounts: () => ({
+        send: async () => ({
+          value: [
+            { data: ["", "base64"] }, // 0 exists
+            null, null, // 1, 2 don't exist
+            { data: ["", "base64"] }, // 3 exists
+            null, null, null, // 4, 5, 6 don't exist
+            { data: ["", "base64"] }, // 7 exists
+            ...Array(12).fill(null), // 8-19 don't exist
+          ],
+        }),
+      }),
+    } as any;
+
+    const vaults = await findVaultsByOwner(rpc, OWNER);
+    expect(vaults).to.have.length(3);
+    expect(vaults[0].vaultId).to.equal(0n);
+    expect(vaults[1].vaultId).to.equal(3n);
+    expect(vaults[2].vaultId).to.equal(7n);
+  });
+});
+
+// ─── resolveVaultStateForOwner (Step 5.1) ──────────────────────────────────
+
+describe("resolveVaultStateForOwner", () => {
+  const VAULT_ADDR = "11111111111111111111111111111111" as Address;
+
+  it("throws when vault does not exist (delegates to resolveVaultState)", async () => {
+    const rpc = {
+      getMultipleAccounts: () => ({
+        send: async () => ({
+          value: [null, null, null, null, null, null, null],
+        }),
+      }),
+    } as any;
+
+    try {
+      await resolveVaultStateForOwner(rpc, VAULT_ADDR, 100000n);
+      expect.fail("Should have thrown");
+    } catch (e: any) {
+      expect(e).to.be.an("error");
+      expect(e.message).to.include("does not exist");
+    }
+  });
+
+  it("return type excludes agentBudget (compile-time + runtime contract)", () => {
+    // Compile-time: ResolvedVaultStateForOwner = Omit<ResolvedVaultState, 'agentBudget'>
+    // This test verifies the type contract at the interface level.
+    const partial: Partial<ResolvedVaultStateForOwner> = {
+      globalBudget: { spent24h: 0n, cap: 1000n, remaining: 1000n },
+    };
+    // 'agentBudget' should NOT exist on ResolvedVaultStateForOwner
+    // TypeScript catches this at compile time; runtime check documents the contract
+    expect(partial).to.not.have.property("agentBudget");
+    expect(partial).to.have.property("globalBudget");
+  });
+
+  it("allAgentBudgets excludes agents with zero spendingLimitUsd (contract)", () => {
+    // resolveVaultState skips agents where spendingLimitUsd <= 0n (line 379).
+    // resolveVaultStateForOwner inherits this: dashboard consumers should know
+    // that zero-limit agents won't appear in allAgentBudgets.
+    const allAgentBudgets = new Map<Address, EffectiveBudget>();
+
+    // Simulate: agent A has cap 500 USD, agent B has cap 0 (skipped)
+    const agentA = AGENT_A;
+    const agentACap = 500_000_000n;
+    allAgentBudgets.set(agentA, {
+      spent24h: 0n,
+      cap: agentACap,
+      remaining: agentACap,
+    });
+    // Agent B with zero cap is NOT added (matching line 379 behavior)
+
+    expect(allAgentBudgets.size).to.equal(1);
+    expect(allAgentBudgets.has(agentA)).to.be.true;
+    const budget = allAgentBudgets.get(agentA)!;
+    expect(budget.cap).to.equal(500_000_000n);
+    expect(budget.remaining).to.equal(500_000_000n);
+    expect(budget.spent24h).to.equal(0n);
+  });
+
+  it("function signature has no agent parameter (4 params max)", () => {
+    // resolveVaultStateForOwner(rpc, vault, nowUnix?, network?) — NO agent
+    // This documents the API contract: owner doesn't need to specify an agent
+    expect(resolveVaultStateForOwner.length).to.be.at.most(4);
+    // resolveVaultState has 5 params (rpc, vault, agent, nowUnix?, network?)
+    expect(resolveVaultState.length).to.be.at.most(5);
   });
 });

@@ -10,12 +10,12 @@ Crossmint TEE custody adapter for Phalnx — hardware-enclave signing for AI age
 npm install @phalnx/custody-crossmint @solana/web3.js
 ```
 
-Optional peer dependency: `@phalnx/sdk` (for `shieldWallet()` integration)
+Optional peer dependency: `@phalnx/kit` (for `shieldWallet()` integration)
 
 ## Quick Start
 
 ```typescript
-import { shieldWallet } from "@phalnx/sdk";
+import { shieldWallet } from "@phalnx/kit";
 import { crossmint } from "@phalnx/custody-crossmint";
 
 // Create a TEE-backed wallet and wrap it with spending controls
@@ -30,7 +30,7 @@ await wallet.signTransaction(tx);
 ### Zero-Config from Environment
 
 ```typescript
-import { shieldWallet } from "@phalnx/sdk";
+import { shieldWallet } from "@phalnx/kit";
 import { crossmintFromEnv } from "@phalnx/custody-crossmint";
 
 // Reads CROSSMINT_API_KEY from environment
@@ -113,7 +113,7 @@ interface CrossmintWalletConfig {
 ## Integration with shieldWallet()
 
 ```typescript
-import { shieldWallet, ShieldDeniedError } from "@phalnx/sdk";
+import { shieldWallet, ShieldDeniedError } from "@phalnx/kit";
 import { crossmint } from "@phalnx/custody-crossmint";
 
 const teeWallet = await crossmint({ apiKey: "sk_..." });
@@ -139,9 +139,8 @@ try {
 
 | Package                                                                          | Description                                      |
 | -------------------------------------------------------------------------------- | ------------------------------------------------ |
-| [`@phalnx/sdk`](https://www.npmjs.com/package/@phalnx/sdk)                       | On-chain guardrails — `withVault()` primary API  |
+| [`@phalnx/kit`](https://www.npmjs.com/package/@phalnx/kit)                       | On-chain guardrails — `withVault()` primary API  |
 | [`@phalnx/core`](https://www.npmjs.com/package/@phalnx/core)                     | Pure TypeScript policy engine                    |
-| [`@phalnx/mcp`](https://www.npmjs.com/package/@phalnx/mcp)                       | MCP server for AI tools                          |
 
 ## Support
 

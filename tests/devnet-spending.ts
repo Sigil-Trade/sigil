@@ -209,7 +209,7 @@ describe("devnet-spending", () => {
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectError(err, "DailyCapExceeded", "cap");
+      expectError(err, "SpendingCapExceeded", "cap");
     }
     console.log("    Aggregate USD cap enforced across two tokens");
   });
@@ -397,7 +397,7 @@ describe("devnet-spending", () => {
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectError(err, "DailyCapExceeded", "cap");
+      expectError(err, "SpendingCapExceeded", "cap");
     }
     console.log("    Session + agent_transfer spends tracked together at cap");
   });

@@ -47,6 +47,7 @@ export {
 
 // Nonce Tracker
 export { NonceTracker } from "./nonce-tracker.js";
+export type { NonceStorage } from "./nonce-tracker.js";
 
 // Amount Guard
 export {

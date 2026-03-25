@@ -6,7 +6,7 @@
  *
  * @example One-liner with shieldWallet():
  * ```typescript
- * import { shieldWallet } from '@phalnx/sdk';
+ * import { shieldWallet } from '@phalnx/kit';
  * import { privy } from '@phalnx/custody-privy';
  *
  * const wallet = shieldWallet(
@@ -17,7 +17,7 @@
  *
  * @example Zero-config from environment:
  * ```typescript
- * import { shieldWallet } from '@phalnx/sdk';
+ * import { shieldWallet } from '@phalnx/kit';
  * import { privyFromEnv } from '@phalnx/custody-privy';
  *
  * // Reads PRIVY_APP_ID + PRIVY_APP_SECRET (+ optional PRIVY_WALLET_ID) from env

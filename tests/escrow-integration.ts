@@ -793,9 +793,9 @@ describe("escrow-integration", () => {
   });
 
   // =========================================================================
-  // Test 8: Settle after expiry -> EscrowExpired (6050)
+  // Test 8: Settle after expiry -> EscrowExpired (6047)
   // =========================================================================
-  it("rejects settle after expiry — EscrowExpired (6050)", async () => {
+  it("rejects settle after expiry — EscrowExpired (6047)", async () => {
     const escrowId = new BN(9);
     const escrowAmount = new BN(10_000_000); // 10 USDC
 
@@ -830,14 +830,14 @@ describe("escrow-integration", () => {
         .rpc();
       expect.fail("should have failed with EscrowExpired");
     } catch (e: any) {
-      expect(e.toString()).to.include("6050");
+      expect(e.toString()).to.include("6047");
     }
   });
 
   // =========================================================================
-  // Test 9: Refund before expiry -> EscrowNotExpired (6051)
+  // Test 9: Refund before expiry -> EscrowNotExpired (6048)
   // =========================================================================
-  it("rejects refund before expiry — EscrowNotExpired (6051)", async () => {
+  it("rejects refund before expiry — EscrowNotExpired (6048)", async () => {
     const escrowId = new BN(10);
     const escrowAmount = new BN(10_000_000); // 10 USDC
 
@@ -869,14 +869,14 @@ describe("escrow-integration", () => {
         .rpc();
       expect.fail("should have failed with EscrowNotExpired");
     } catch (e: any) {
-      expect(e.toString()).to.include("6051");
+      expect(e.toString()).to.include("6048");
     }
   });
 
   // =========================================================================
-  // Test 10: Wrong condition proof -> EscrowConditionsNotMet (6053)
+  // Test 10: Wrong condition proof -> EscrowConditionsNotMet (6050)
   // =========================================================================
-  it("rejects settle with wrong proof — EscrowConditionsNotMet (6053)", async () => {
+  it("rejects settle with wrong proof — EscrowConditionsNotMet (6050)", async () => {
     const escrowId = new BN(11);
     const escrowAmount = new BN(10_000_000); // 10 USDC
 
@@ -917,7 +917,7 @@ describe("escrow-integration", () => {
         .rpc();
       expect.fail("should have failed with EscrowConditionsNotMet");
     } catch (e: any) {
-      expect(e.toString()).to.include("6053");
+      expect(e.toString()).to.include("6050");
     }
   });
 
@@ -962,9 +962,9 @@ describe("escrow-integration", () => {
   });
 
   // =========================================================================
-  // Test 12: Exceeds spending cap -> DailyCapExceeded (6006)
+  // Test 12: Exceeds spending cap -> SpendingCapExceeded (6006)
   // =========================================================================
-  it("rejects escrow exceeding daily spending cap — DailyCapExceeded (6006)", async () => {
+  it("rejects escrow exceeding daily spending cap — SpendingCapExceeded (6006)", async () => {
     // The source vault has a $500 daily cap. Create a large escrow that exceeds it.
     // Previous tests have already consumed some cap. We try a single $500 escrow
     // which together with prior spending should exceed the $500 cap.
@@ -1003,9 +1003,9 @@ describe("escrow-integration", () => {
         } as any)
         .signers([sourceAgent])
         .rpc();
-      expect.fail("should have failed with DailyCapExceeded");
+      expect.fail("should have failed with SpendingCapExceeded");
     } catch (e: any) {
-      // Could be DailyCapExceeded (6006) or TransactionTooLarge (6005)
+      // Could be SpendingCapExceeded (6006) or TransactionTooLarge (6005)
       // depending on whether single-tx check or rolling check triggers first.
       // $500 > $100 max_transaction_size_usd, so 6005 triggers first.
       const errStr = e.toString();
@@ -1014,9 +1014,9 @@ describe("escrow-integration", () => {
   });
 
   // =========================================================================
-  // Test 13: Non-stablecoin -> TokenNotRegistered (6003)
+  // Test 13: Non-stablecoin -> UnsupportedToken (6003)
   // =========================================================================
-  it("rejects escrow with non-stablecoin token — TokenNotRegistered (6003)", async () => {
+  it("rejects escrow with non-stablecoin token — UnsupportedToken (6003)", async () => {
     const escrowId = new BN(14);
     const escrowAmount = new BN(1_000_000_000); // 1 token
 
@@ -1070,16 +1070,16 @@ describe("escrow-integration", () => {
         } as any)
         .signers([sourceAgent])
         .rpc();
-      expect.fail("should have failed with TokenNotRegistered");
+      expect.fail("should have failed with UnsupportedToken");
     } catch (e: any) {
       expect(e.toString()).to.include("6003");
     }
   });
 
   // =========================================================================
-  // Test 14: Double settle -> EscrowNotActive (6049)
+  // Test 14: Double settle -> EscrowNotActive (6046)
   // =========================================================================
-  it("rejects double settle — EscrowNotActive (6049)", async () => {
+  it("rejects double settle — EscrowNotActive (6046)", async () => {
     const escrowId = new BN(15);
     const escrowAmount = new BN(10_000_000); // 10 USDC
 
@@ -1139,7 +1139,7 @@ describe("escrow-integration", () => {
         .rpc();
       expect.fail("should have failed with EscrowNotActive");
     } catch (e: any) {
-      expect(e.toString()).to.include("6049");
+      expect(e.toString()).to.include("6046");
     }
   });
 });

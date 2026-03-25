@@ -123,6 +123,9 @@ pub fn handler(
     vault.total_volume = 0;
     vault.open_positions = 0;
     vault.total_fees_collected = 0;
+    vault.total_deposited_usd = 0;
+    vault.total_withdrawn_usd = 0;
+    vault.total_failed_transactions = 0;
 
     // Initialize policy
     let policy = &mut ctx.accounts.policy;

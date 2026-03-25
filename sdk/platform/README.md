@@ -145,9 +145,9 @@ interface ActionMetadata {
 
 | Package                                                      | Description                                     |
 | ------------------------------------------------------------ | ----------------------------------------------- |
-| [`@phalnx/sdk`](https://www.npmjs.com/package/@phalnx/sdk)   | On-chain guardrails — `withVault()` primary API |
+| [`@phalnx/kit`](https://www.npmjs.com/package/@phalnx/kit)   | On-chain guardrails — `withVault()` primary API |
 | [`@phalnx/core`](https://www.npmjs.com/package/@phalnx/core) | Pure TypeScript policy engine                   |
-| [`@phalnx/mcp`](https://www.npmjs.com/package/@phalnx/mcp)   | MCP server for AI tools                         |
+
 
 ## Support
 

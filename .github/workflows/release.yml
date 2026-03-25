@@ -120,10 +120,6 @@ jobs:
         working-directory: sdk/core
         run: pnpm test
 
-      - name: Run SDK tests (656 tests)
-        working-directory: sdk/typescript
-        run: pnpm test
-
       - name: Run platform client tests (17 tests)
         working-directory: sdk/platform
         run: pnpm test
@@ -132,16 +128,8 @@ jobs:
         working-directory: sdk/custody/crossmint
         run: pnpm test
 
-      - name: Run MCP server tests (472 tests)
-        working-directory: packages/mcp
-        run: pnpm test
-
-      - name: Run Kit SDK tests (1176 tests)
+      - name: Run Kit SDK tests (802 tests)
         working-directory: sdk/kit
-        run: pnpm test
-
-      - name: Run actions server tests (99 tests)
-        working-directory: apps/actions-server
         run: pnpm test
 
       - name: Create Release Pull Request or Publish

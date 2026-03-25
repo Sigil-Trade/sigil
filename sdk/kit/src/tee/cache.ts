@@ -69,6 +69,18 @@ export class AttestationCache {
     return this.cache.delete(publicKey);
   }
 
+  /** Remove all entries whose key starts with the given prefix. */
+  deleteByPrefix(prefix: string): number {
+    let count = 0;
+    for (const key of [...this.cache.keys()]) {
+      if (key.startsWith(prefix)) {
+        this.cache.delete(key);
+        count++;
+      }
+    }
+    return count;
+  }
+
   /** Clear all cached entries. */
   clear(): void {
     this.cache.clear();

@@ -5,7 +5,7 @@
  * Confirms the same constraints that LiteSVM tests verify actually hold
  * on the deployed devnet binary.
  *
- *     Stablecoin-only architecture. Non-stablecoin tokens -> TokenNotRegistered.
+ *     Stablecoin-only architecture. Non-stablecoin tokens -> UnsupportedToken.
  *     updatePolicy: no tracker in accounts.
  */
 import * as anchor from "@coral-xyz/anchor";
@@ -263,7 +263,7 @@ describe("devnet-security", () => {
     console.log("    Agent update_policy rejected (owner-only)");
   });
 
-  it("7. over-cap spending blocked with DailyCapExceeded", async () => {
+  it("7. over-cap spending blocked with SpendingCapExceeded", async () => {
     // Spend 40 USDC twice (within maxTx=50 each, composed validate+finalize)
     const sessionPda1 = deriveSessionPda(
       vault.vaultPda,
@@ -332,7 +332,7 @@ describe("devnet-security", () => {
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectError(err, "DailyCapExceeded", "cap");
+      expectError(err, "SpendingCapExceeded", "cap");
     }
     console.log("    Over-cap spending correctly blocked");
   });
@@ -676,7 +676,7 @@ describe("devnet-security", () => {
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectError(err, "TokenNotRegistered", "InvalidTokenAccount", "6014");
+      expectError(err, "UnsupportedToken", "InvalidTokenAccount", "6014");
     }
     console.log("    Non-stablecoin mint rejected in validate_and_authorize");
   });

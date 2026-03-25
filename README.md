@@ -1,7 +1,7 @@
 # Phalnx
 
 [![CI](https://github.com/Kaleb-Rupe/phalnx/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Kaleb-Rupe/phalnx/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-2953-brightgreen)
+![Tests](https://img.shields.io/badge/tests-1450-brightgreen)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 
 On-chain guardrails for AI agents on Solana. Your policies are enforced by Solana validators, not software promises.
@@ -15,16 +15,10 @@ Every AI agent on Solana today operates with unrestricted wallet access. Framewo
 Phalnx wraps your agent's wallet with on-chain policy enforcement. One call gives you client-side fast deny, TEE key custody, and on-chain vault enforcement — bundled as one product.
 
 ```typescript
-import { withVault } from "@phalnx/sdk";
+import { wrap } from "@phalnx/kit";
 
-const result = await withVault(
-  teeWallet,
-  { maxSpend: "500 USDC/day" },
-  {
-    connection,
-  },
-);
-// result.wallet is ready — policies enforced by Solana validators
+// wrap() sandwiches any DeFi instruction with Phalnx security
+// policies enforced by Solana validators
 ```
 
 ### Security Model
@@ -47,9 +41,6 @@ Phalnx provides three layers of protection in a single integration:
 - **Kill switch** — owner can freeze any vault instantly, revoking all agent permissions
 - **On-chain audit trail** — every action emits Anchor events for full transaction history
 - **x402 payments** — `shieldedFetch()` for automatic HTTP 402 payment negotiation, policy-enforced
-- **MCP server** — 49 tools + 3 resources for Claude Desktop, Cursor, and any MCP client
-- **OpenClaw skill** — AI agent skill for autonomous vault management
-- **Solana Actions/Blinks** — provision vaults via shareable action URLs
 
 ### How It Works
 
@@ -115,73 +106,30 @@ All instructions succeed or all revert atomically. The agent's signing key is va
 | Package                                                         | Description                                                          | npm                                                                                                                                   |
 | --------------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | [`@phalnx/core`](./sdk/core)                                    | Pure TypeScript policy engine — zero blockchain dependencies         | [![npm](https://img.shields.io/npm/v/@phalnx/core)](https://www.npmjs.com/package/@phalnx/core)                                       |
-| [`@phalnx/sdk`](./sdk/typescript)                               | On-chain guardrails — `withVault()` primary API                      | [![npm](https://img.shields.io/npm/v/@phalnx/sdk)](https://www.npmjs.com/package/@phalnx/sdk)                                         |
+| [`@phalnx/kit`](./sdk/kit)                                      | Kit-native SDK — `wrap()` API, TEE custody, protocol-agnostic        | [![npm](https://img.shields.io/npm/v/@phalnx/kit)](https://www.npmjs.com/package/@phalnx/kit)                                         |
 | [`@phalnx/platform`](./sdk/platform)                            | Platform client — request TEE wallet provisioning via Solana Actions | [![npm](https://img.shields.io/npm/v/@phalnx/platform)](https://www.npmjs.com/package/@phalnx/platform)                               |
 | [`@phalnx/custody-crossmint`](./sdk/custody/crossmint)          | Crossmint TEE custody adapter — hardware-enclave signing             | [![npm](https://img.shields.io/npm/v/@phalnx/custody-crossmint)](https://www.npmjs.com/package/@phalnx/custody-crossmint)             |
-| [`@phalnx/mcp`](./packages/mcp)                                 | MCP server — 49 tools, 3 resources for AI tool management            | [![npm](https://img.shields.io/npm/v/@phalnx/mcp)](https://www.npmjs.com/package/@phalnx/mcp)                                         |
 
 ## Quick Start
 
 ### Option A — Add to an Existing Project
 
 ```bash
-npm install @phalnx/sdk
+npm install @phalnx/kit
 ```
 
 ```typescript
-import { withVault } from "@phalnx/sdk";
+import { wrap } from "@phalnx/kit";
 
-// One call = full protection (client-side + TEE + on-chain vault)
-const result = await withVault(
-  teeWallet,
-  { maxSpend: "500 USDC/day" },
-  { connection },
-);
-
-// Use it like a normal wallet — policies enforced transparently
-const agent = new SolanaAgentKit(result.wallet, RPC_URL, config);
+// wrap() sandwiches any DeFi instruction with Phalnx security
+// policies enforced by Solana validators
 ```
-
-For devnet testing without TEE:
-
-```typescript
-const result = await withVault(
-  wallet,
-  { maxSpend: "500 USDC/day" },
-  { connection, unsafeSkipTeeCheck: true },
-);
-```
-
-### Option B — MCP Server (Claude Desktop / Cursor)
-
-Add to your Claude Desktop config (`claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "phalnx": {
-      "command": "npx",
-      "args": ["@phalnx/mcp"]
-    }
-  }
-}
-```
-
-Then ask Claude: _"Set up Phalnx"_
-
-The `shield_configure` tool handles everything automatically — generates a keypair, provisions a TEE wallet, and creates your on-chain vault. No env vars or private keys needed.
 
 ## Program
 
 | Network | Program ID                                                                                                                                        |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Devnet  | [`4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL`](https://explorer.solana.com/address/4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL?cluster=devnet) |
-
-## Deployment
-
-| Service        | URL                                                                |
-| -------------- | ------------------------------------------------------------------ |
-| Actions Server | [agent-middleware.vercel.app](https://agent-middleware.vercel.app) |
 
 ## Development
 
@@ -192,13 +140,13 @@ anchor build --no-idl
 # Generate IDL separately (requires nightly Rust — anchor-syn 0.32.1 bug)
 RUSTUP_TOOLCHAIN=nightly anchor idl build -o target/idl/phalnx.json
 
-# Run on-chain tests (349 LiteSVM tests — no validator needed)
+# Run on-chain tests (432 LiteSVM tests — no validator needed)
 npx ts-mocha -p ./tsconfig.json -t 300000 \
   tests/phalnx.ts tests/jupiter-integration.ts \
   tests/flash-trade-integration.ts tests/security-exploits.ts \
   tests/instruction-constraints.ts tests/escrow-integration.ts
 
-# Run all TypeScript tests (~750 tests across 10 suites)
+# Run all TypeScript tests (~637 tests across 5 suites)
 pnpm -r run test
 
 # Lint
@@ -210,23 +158,24 @@ cargo fmt --check --manifest-path programs/phalnx/Cargo.toml
 
 | Suite                                                | Tests   |
 | ---------------------------------------------------- | ------- |
-| Core vault management & permission engine            |     104 |
+| Core vault management & permission engine            |     108 |
 | Jupiter integration (composed swaps)                 |       8 |
 | Jupiter Lend integration (deposit/withdraw)          |       6 |
 | Flash Trade integration (leveraged perps)            |      29 |
-| Security exploit scenarios                           |     149 |
+| Security exploit scenarios                           |     150 |
 | Instruction constraints (generic enforcement)        |      39 |
 | Escrow integration (deposit/settle/refund)           |      14 |
+| Analytics counters (failed TX + per-agent TX count)  |       7 |
 | Devnet integration tests (real network)              |      69 |
 | Surfpool integration tests (local Surfnet)           |      20 |
 | Core policy engine (`@phalnx/core`)                  |      66 |
-| SDK tests (`@phalnx/sdk`)                            |     656 |
 | Platform client tests (`@phalnx/platform`)           |      17 |
 | Crossmint custody adapter                            |      29 |
-| MCP server (`@phalnx/mcp`)                           |     472 |
-| Actions server (`@phalnx/actions-server`)            |      99 |
-| Kit-native SDK (`@phalnx/kit`)                       |    1176 |
-| **Total**                                            | **2953** |
+| Kit-native SDK (`@phalnx/kit`)                       |     802 |
+| Kit SDK devnet tests (`@phalnx/kit` devnet)          |       9 |
+| SAK plugin (`@phalnx/plugin-solana-agent-kit`)       |       6 |
+| Rust unit tests (cargo test)                         |      71 |
+| **Total**                                            | **1450** |
 
 ## Security
 

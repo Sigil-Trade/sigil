@@ -20,14 +20,14 @@ export const PHALNX_ERROR__VAULT_NOT_ACTIVE = 0x1770; // 6000
 export const PHALNX_ERROR__UNAUTHORIZED_AGENT = 0x1771; // 6001
 /** UnauthorizedOwner: Unauthorized: signer is not the vault owner */
 export const PHALNX_ERROR__UNAUTHORIZED_OWNER = 0x1772; // 6002
-/** TokenNotRegistered: Token is not a recognized stablecoin */
-export const PHALNX_ERROR__TOKEN_NOT_REGISTERED = 0x1773; // 6003
+/** UnsupportedToken: Token is not a supported stablecoin (only USDC and USDT) */
+export const PHALNX_ERROR__UNSUPPORTED_TOKEN = 0x1773; // 6003
 /** ProtocolNotAllowed: Protocol not allowed by policy */
 export const PHALNX_ERROR__PROTOCOL_NOT_ALLOWED = 0x1774; // 6004
 /** TransactionTooLarge: Transaction exceeds maximum single transaction size */
 export const PHALNX_ERROR__TRANSACTION_TOO_LARGE = 0x1775; // 6005
-/** DailyCapExceeded: Daily spending cap would be exceeded */
-export const PHALNX_ERROR__DAILY_CAP_EXCEEDED = 0x1776; // 6006
+/** SpendingCapExceeded: Rolling 24h spending cap would be exceeded */
+export const PHALNX_ERROR__SPENDING_CAP_EXCEEDED = 0x1776; // 6006
 /** LeverageTooHigh: Leverage exceeds maximum allowed */
 export const PHALNX_ERROR__LEVERAGE_TOO_HIGH = 0x1777; // 6007
 /** TooManyPositions: Maximum concurrent open positions reached */
@@ -88,86 +88,74 @@ export const PHALNX_ERROR__CPI_CALL_NOT_ALLOWED = 0x1792; // 6034
 export const PHALNX_ERROR__MISSING_FINALIZE_INSTRUCTION = 0x1793; // 6035
 /** NonTrackedSwapMustReturnStablecoin: Non-stablecoin swap must return stablecoin (balance did not increase) */
 export const PHALNX_ERROR__NON_TRACKED_SWAP_MUST_RETURN_STABLECOIN = 0x1794; // 6036
-/** SlippageTooHigh: Jupiter slippage exceeds policy max_slippage_bps or quoted_out is zero */
-export const PHALNX_ERROR__SLIPPAGE_TOO_HIGH = 0x1795; // 6037
+/** SwapSlippageExceeded: Swap slippage exceeds policy max_slippage_bps or quoted output is zero */
+export const PHALNX_ERROR__SWAP_SLIPPAGE_EXCEEDED = 0x1795; // 6037
 /** InvalidJupiterInstruction: Cannot parse Jupiter swap instruction data */
 export const PHALNX_ERROR__INVALID_JUPITER_INSTRUCTION = 0x1796; // 6038
-/** InvalidFlashTradeInstruction: Cannot parse Flash Trade instruction data */
-export const PHALNX_ERROR__INVALID_FLASH_TRADE_INSTRUCTION = 0x1797; // 6039
-/** FlashTradePriceZero: Flash Trade priceWithSlippage is zero */
-export const PHALNX_ERROR__FLASH_TRADE_PRICE_ZERO = 0x1798; // 6040
-/** DustDepositDetected: Top-level SPL Token transfer not allowed between validate and finalize */
-export const PHALNX_ERROR__DUST_DEPOSIT_DETECTED = 0x1799; // 6041
-/** InvalidJupiterLendInstruction: Cannot parse Jupiter Lend instruction data */
-export const PHALNX_ERROR__INVALID_JUPITER_LEND_INSTRUCTION = 0x179a; // 6042
+/** UnauthorizedTokenTransfer: Top-level SPL Token transfer not allowed between validate and finalize */
+export const PHALNX_ERROR__UNAUTHORIZED_TOKEN_TRANSFER = 0x1797; // 6039
 /** SlippageBpsTooHigh: Slippage BPS exceeds maximum (5000 = 50%) */
-export const PHALNX_ERROR__SLIPPAGE_BPS_TOO_HIGH = 0x179b; // 6043
+export const PHALNX_ERROR__SLIPPAGE_BPS_TOO_HIGH = 0x1798; // 6040
 /** ProtocolMismatch: DeFi instruction program does not match declared target_protocol */
-export const PHALNX_ERROR__PROTOCOL_MISMATCH = 0x179c; // 6044
-/** TooManyDeFiInstructions: Non-stablecoin swap allows exactly one DeFi instruction */
-export const PHALNX_ERROR__TOO_MANY_DE_FI_INSTRUCTIONS = 0x179d; // 6045
+export const PHALNX_ERROR__PROTOCOL_MISMATCH = 0x1799; // 6041
+/** TooManyDeFiInstructions: Spending allows at most one DeFi instruction */
+export const PHALNX_ERROR__TOO_MANY_DE_FI_INSTRUCTIONS = 0x179a; // 6042
 /** MaxAgentsReached: Maximum agents per vault reached (limit: 10) */
-export const PHALNX_ERROR__MAX_AGENTS_REACHED = 0x179e; // 6046
+export const PHALNX_ERROR__MAX_AGENTS_REACHED = 0x179b; // 6043
 /** InsufficientPermissions: Agent lacks permission for this action type */
-export const PHALNX_ERROR__INSUFFICIENT_PERMISSIONS = 0x179f; // 6047
+export const PHALNX_ERROR__INSUFFICIENT_PERMISSIONS = 0x179c; // 6044
 /** InvalidPermissions: Permission bitmask contains invalid bits */
-export const PHALNX_ERROR__INVALID_PERMISSIONS = 0x17a0; // 6048
+export const PHALNX_ERROR__INVALID_PERMISSIONS = 0x179d; // 6045
 /** EscrowNotActive: Escrow is not in Active status */
-export const PHALNX_ERROR__ESCROW_NOT_ACTIVE = 0x17a1; // 6049
+export const PHALNX_ERROR__ESCROW_NOT_ACTIVE = 0x179e; // 6046
 /** EscrowExpired: Escrow has expired */
-export const PHALNX_ERROR__ESCROW_EXPIRED = 0x17a2; // 6050
+export const PHALNX_ERROR__ESCROW_EXPIRED = 0x179f; // 6047
 /** EscrowNotExpired: Escrow has not expired yet */
-export const PHALNX_ERROR__ESCROW_NOT_EXPIRED = 0x17a3; // 6051
+export const PHALNX_ERROR__ESCROW_NOT_EXPIRED = 0x17a0; // 6048
 /** InvalidEscrowVault: Invalid escrow vault */
-export const PHALNX_ERROR__INVALID_ESCROW_VAULT = 0x17a4; // 6052
+export const PHALNX_ERROR__INVALID_ESCROW_VAULT = 0x17a1; // 6049
 /** EscrowConditionsNotMet: Escrow conditions not met */
-export const PHALNX_ERROR__ESCROW_CONDITIONS_NOT_MET = 0x17a5; // 6053
+export const PHALNX_ERROR__ESCROW_CONDITIONS_NOT_MET = 0x17a2; // 6050
 /** EscrowDurationExceeded: Escrow duration exceeds maximum (30 days) */
-export const PHALNX_ERROR__ESCROW_DURATION_EXCEEDED = 0x17a6; // 6054
+export const PHALNX_ERROR__ESCROW_DURATION_EXCEEDED = 0x17a3; // 6051
 /** InvalidConstraintConfig: Invalid constraint configuration: bounds exceeded */
-export const PHALNX_ERROR__INVALID_CONSTRAINT_CONFIG = 0x17a7; // 6055
+export const PHALNX_ERROR__INVALID_CONSTRAINT_CONFIG = 0x17a4; // 6052
 /** ConstraintViolated: Instruction constraint violated */
-export const PHALNX_ERROR__CONSTRAINT_VIOLATED = 0x17a8; // 6056
+export const PHALNX_ERROR__CONSTRAINT_VIOLATED = 0x17a5; // 6053
 /** InvalidConstraintsPda: Invalid constraints PDA: wrong owner or vault */
-export const PHALNX_ERROR__INVALID_CONSTRAINTS_PDA = 0x17a9; // 6057
-/** NoPendingConstraintsUpdate: No pending constraints update to apply or cancel */
-export const PHALNX_ERROR__NO_PENDING_CONSTRAINTS_UPDATE = 0x17aa; // 6058
-/** PendingConstraintsUpdateExists: A pending constraints update already exists */
-export const PHALNX_ERROR__PENDING_CONSTRAINTS_UPDATE_EXISTS = 0x17ab; // 6059
-/** ConstraintsUpdateNotExpired: Constraints update timelock has not expired */
-export const PHALNX_ERROR__CONSTRAINTS_UPDATE_NOT_EXPIRED = 0x17ac; // 6060
+export const PHALNX_ERROR__INVALID_CONSTRAINTS_PDA = 0x17a6; // 6054
 /** InvalidPendingConstraintsPda: Invalid pending constraints PDA: wrong owner or vault */
-export const PHALNX_ERROR__INVALID_PENDING_CONSTRAINTS_PDA = 0x17ad; // 6061
-/** ConstraintsUpdateExpired: Pending constraints update has expired and is stale */
-export const PHALNX_ERROR__CONSTRAINTS_UPDATE_EXPIRED = 0x17ae; // 6062
+export const PHALNX_ERROR__INVALID_PENDING_CONSTRAINTS_PDA = 0x17a7; // 6055
 /** AgentSpendLimitExceeded: Agent rolling 24h spend exceeds per-agent spending limit */
-export const PHALNX_ERROR__AGENT_SPEND_LIMIT_EXCEEDED = 0x17af; // 6063
+export const PHALNX_ERROR__AGENT_SPEND_LIMIT_EXCEEDED = 0x17a8; // 6056
 /** OverlaySlotExhausted: Per-agent overlay is full; cannot register agent with spending limit */
-export const PHALNX_ERROR__OVERLAY_SLOT_EXHAUSTED = 0x17b0; // 6064
+export const PHALNX_ERROR__OVERLAY_SLOT_EXHAUSTED = 0x17a9; // 6057
 /** AgentSlotNotFound: Agent has per-agent spending limit but no overlay tracking slot */
-export const PHALNX_ERROR__AGENT_SLOT_NOT_FOUND = 0x17b1; // 6065
+export const PHALNX_ERROR__AGENT_SLOT_NOT_FOUND = 0x17aa; // 6058
 /** UnauthorizedTokenApproval: Unauthorized SPL Token Approve between validate and finalize */
-export const PHALNX_ERROR__UNAUTHORIZED_TOKEN_APPROVAL = 0x17b2; // 6066
+export const PHALNX_ERROR__UNAUTHORIZED_TOKEN_APPROVAL = 0x17ab; // 6059
 /** InvalidSessionExpiry: Session expiry slots out of range (10-450) */
-export const PHALNX_ERROR__INVALID_SESSION_EXPIRY = 0x17b3; // 6067
+export const PHALNX_ERROR__INVALID_SESSION_EXPIRY = 0x17ac; // 6060
 /** UnconstrainedProgramBlocked: Program has no constraint entry and strict mode is enabled */
-export const PHALNX_ERROR__UNCONSTRAINED_PROGRAM_BLOCKED = 0x17b4; // 6068
-/** ProtocolCapExceeded: Per-protocol daily spending cap would be exceeded */
-export const PHALNX_ERROR__PROTOCOL_CAP_EXCEEDED = 0x17b5; // 6069
+export const PHALNX_ERROR__UNCONSTRAINED_PROGRAM_BLOCKED = 0x17ad; // 6061
+/** ProtocolCapExceeded: Per-protocol rolling 24h spending cap would be exceeded */
+export const PHALNX_ERROR__PROTOCOL_CAP_EXCEEDED = 0x17ae; // 6062
 /** ProtocolCapsMismatch: protocol_caps length must match protocols length when has_protocol_caps is true */
-export const PHALNX_ERROR__PROTOCOL_CAPS_MISMATCH = 0x17b6; // 6070
+export const PHALNX_ERROR__PROTOCOL_CAPS_MISMATCH = 0x17af; // 6063
 /** ActiveEscrowsExist: Cannot close vault with active escrow deposits */
-export const PHALNX_ERROR__ACTIVE_ESCROWS_EXIST = 0x17b7; // 6071
+export const PHALNX_ERROR__ACTIVE_ESCROWS_EXIST = 0x17b0; // 6064
 /** ConstraintsNotClosed: Instruction constraints must be closed before closing vault */
-export const PHALNX_ERROR__CONSTRAINTS_NOT_CLOSED = 0x17b8; // 6072
+export const PHALNX_ERROR__CONSTRAINTS_NOT_CLOSED = 0x17b1; // 6065
 /** PendingPolicyExists: Pending policy update must be applied or cancelled before closing vault */
-export const PHALNX_ERROR__PENDING_POLICY_EXISTS = 0x17b9; // 6073
+export const PHALNX_ERROR__PENDING_POLICY_EXISTS = 0x17b2; // 6066
 /** AgentPaused: Agent is paused and cannot execute actions */
-export const PHALNX_ERROR__AGENT_PAUSED = 0x17ba; // 6074
+export const PHALNX_ERROR__AGENT_PAUSED = 0x17b3; // 6067
 /** AgentAlreadyPaused: Agent is already paused */
-export const PHALNX_ERROR__AGENT_ALREADY_PAUSED = 0x17bb; // 6075
+export const PHALNX_ERROR__AGENT_ALREADY_PAUSED = 0x17b4; // 6068
 /** AgentNotPaused: Agent is not paused */
-export const PHALNX_ERROR__AGENT_NOT_PAUSED = 0x17bc; // 6076
+export const PHALNX_ERROR__AGENT_NOT_PAUSED = 0x17b5; // 6069
+/** UnauthorizedPostFinalizeInstruction: Instructions after finalize_session must be ComputeBudget or SystemProgram only */
+export const PHALNX_ERROR__UNAUTHORIZED_POST_FINALIZE_INSTRUCTION = 0x17b6; // 6070
 
 export type PhalnxError =
   | typeof PHALNX_ERROR__ACTIVE_ESCROWS_EXIST
@@ -179,20 +167,15 @@ export type PhalnxError =
   | typeof PHALNX_ERROR__AGENT_SLOT_NOT_FOUND
   | typeof PHALNX_ERROR__AGENT_SPEND_LIMIT_EXCEEDED
   | typeof PHALNX_ERROR__CONSTRAINTS_NOT_CLOSED
-  | typeof PHALNX_ERROR__CONSTRAINTS_UPDATE_EXPIRED
-  | typeof PHALNX_ERROR__CONSTRAINTS_UPDATE_NOT_EXPIRED
   | typeof PHALNX_ERROR__CONSTRAINT_VIOLATED
   | typeof PHALNX_ERROR__CPI_CALL_NOT_ALLOWED
-  | typeof PHALNX_ERROR__DAILY_CAP_EXCEEDED
   | typeof PHALNX_ERROR__DESTINATION_NOT_ALLOWED
   | typeof PHALNX_ERROR__DEVELOPER_FEE_TOO_HIGH
-  | typeof PHALNX_ERROR__DUST_DEPOSIT_DETECTED
   | typeof PHALNX_ERROR__ESCROW_CONDITIONS_NOT_MET
   | typeof PHALNX_ERROR__ESCROW_DURATION_EXCEEDED
   | typeof PHALNX_ERROR__ESCROW_EXPIRED
   | typeof PHALNX_ERROR__ESCROW_NOT_ACTIVE
   | typeof PHALNX_ERROR__ESCROW_NOT_EXPIRED
-  | typeof PHALNX_ERROR__FLASH_TRADE_PRICE_ZERO
   | typeof PHALNX_ERROR__INSUFFICIENT_BALANCE
   | typeof PHALNX_ERROR__INSUFFICIENT_PERMISSIONS
   | typeof PHALNX_ERROR__INVALID_AGENT_KEY
@@ -200,9 +183,7 @@ export type PhalnxError =
   | typeof PHALNX_ERROR__INVALID_CONSTRAINTS_PDA
   | typeof PHALNX_ERROR__INVALID_ESCROW_VAULT
   | typeof PHALNX_ERROR__INVALID_FEE_DESTINATION
-  | typeof PHALNX_ERROR__INVALID_FLASH_TRADE_INSTRUCTION
   | typeof PHALNX_ERROR__INVALID_JUPITER_INSTRUCTION
-  | typeof PHALNX_ERROR__INVALID_JUPITER_LEND_INSTRUCTION
   | typeof PHALNX_ERROR__INVALID_NON_SPENDING_AMOUNT
   | typeof PHALNX_ERROR__INVALID_PENDING_CONSTRAINTS_PDA
   | typeof PHALNX_ERROR__INVALID_PERMISSIONS
@@ -216,13 +197,11 @@ export type PhalnxError =
   | typeof PHALNX_ERROR__MISSING_FINALIZE_INSTRUCTION
   | typeof PHALNX_ERROR__NO_AGENT_REGISTERED
   | typeof PHALNX_ERROR__NON_TRACKED_SWAP_MUST_RETURN_STABLECOIN
-  | typeof PHALNX_ERROR__NO_PENDING_CONSTRAINTS_UPDATE
   | typeof PHALNX_ERROR__NO_POSITIONS_TO_CLOSE
   | typeof PHALNX_ERROR__NO_TIMELOCK_CONFIGURED
   | typeof PHALNX_ERROR__OPEN_POSITIONS_EXIST
   | typeof PHALNX_ERROR__OVERFLOW
   | typeof PHALNX_ERROR__OVERLAY_SLOT_EXHAUSTED
-  | typeof PHALNX_ERROR__PENDING_CONSTRAINTS_UPDATE_EXISTS
   | typeof PHALNX_ERROR__PENDING_POLICY_EXISTS
   | typeof PHALNX_ERROR__POSITION_OPENING_DISALLOWED
   | typeof PHALNX_ERROR__PROTOCOL_CAP_EXCEEDED
@@ -231,10 +210,10 @@ export type PhalnxError =
   | typeof PHALNX_ERROR__PROTOCOL_NOT_ALLOWED
   | typeof PHALNX_ERROR__SESSION_NOT_AUTHORIZED
   | typeof PHALNX_ERROR__SLIPPAGE_BPS_TOO_HIGH
-  | typeof PHALNX_ERROR__SLIPPAGE_TOO_HIGH
+  | typeof PHALNX_ERROR__SPENDING_CAP_EXCEEDED
+  | typeof PHALNX_ERROR__SWAP_SLIPPAGE_EXCEEDED
   | typeof PHALNX_ERROR__TIMELOCK_ACTIVE
   | typeof PHALNX_ERROR__TIMELOCK_NOT_EXPIRED
-  | typeof PHALNX_ERROR__TOKEN_NOT_REGISTERED
   | typeof PHALNX_ERROR__TOO_MANY_ALLOWED_PROTOCOLS
   | typeof PHALNX_ERROR__TOO_MANY_DE_FI_INSTRUCTIONS
   | typeof PHALNX_ERROR__TOO_MANY_DESTINATIONS
@@ -242,8 +221,11 @@ export type PhalnxError =
   | typeof PHALNX_ERROR__TRANSACTION_TOO_LARGE
   | typeof PHALNX_ERROR__UNAUTHORIZED_AGENT
   | typeof PHALNX_ERROR__UNAUTHORIZED_OWNER
+  | typeof PHALNX_ERROR__UNAUTHORIZED_POST_FINALIZE_INSTRUCTION
   | typeof PHALNX_ERROR__UNAUTHORIZED_TOKEN_APPROVAL
+  | typeof PHALNX_ERROR__UNAUTHORIZED_TOKEN_TRANSFER
   | typeof PHALNX_ERROR__UNCONSTRAINED_PROGRAM_BLOCKED
+  | typeof PHALNX_ERROR__UNSUPPORTED_TOKEN
   | typeof PHALNX_ERROR__VAULT_ALREADY_CLOSED
   | typeof PHALNX_ERROR__VAULT_NOT_ACTIVE
   | typeof PHALNX_ERROR__VAULT_NOT_FROZEN;
@@ -260,20 +242,15 @@ if (process.env.NODE_ENV !== "production") {
     [PHALNX_ERROR__AGENT_SLOT_NOT_FOUND]: `Agent has per-agent spending limit but no overlay tracking slot`,
     [PHALNX_ERROR__AGENT_SPEND_LIMIT_EXCEEDED]: `Agent rolling 24h spend exceeds per-agent spending limit`,
     [PHALNX_ERROR__CONSTRAINTS_NOT_CLOSED]: `Instruction constraints must be closed before closing vault`,
-    [PHALNX_ERROR__CONSTRAINTS_UPDATE_EXPIRED]: `Pending constraints update has expired and is stale`,
-    [PHALNX_ERROR__CONSTRAINTS_UPDATE_NOT_EXPIRED]: `Constraints update timelock has not expired`,
     [PHALNX_ERROR__CONSTRAINT_VIOLATED]: `Instruction constraint violated`,
     [PHALNX_ERROR__CPI_CALL_NOT_ALLOWED]: `Instruction must be top-level (CPI calls not allowed)`,
-    [PHALNX_ERROR__DAILY_CAP_EXCEEDED]: `Daily spending cap would be exceeded`,
     [PHALNX_ERROR__DESTINATION_NOT_ALLOWED]: `Destination not in allowed list`,
     [PHALNX_ERROR__DEVELOPER_FEE_TOO_HIGH]: `Developer fee rate exceeds maximum (500 / 1,000,000 = 5 BPS)`,
-    [PHALNX_ERROR__DUST_DEPOSIT_DETECTED]: `Top-level SPL Token transfer not allowed between validate and finalize`,
     [PHALNX_ERROR__ESCROW_CONDITIONS_NOT_MET]: `Escrow conditions not met`,
     [PHALNX_ERROR__ESCROW_DURATION_EXCEEDED]: `Escrow duration exceeds maximum (30 days)`,
     [PHALNX_ERROR__ESCROW_EXPIRED]: `Escrow has expired`,
     [PHALNX_ERROR__ESCROW_NOT_ACTIVE]: `Escrow is not in Active status`,
     [PHALNX_ERROR__ESCROW_NOT_EXPIRED]: `Escrow has not expired yet`,
-    [PHALNX_ERROR__FLASH_TRADE_PRICE_ZERO]: `Flash Trade priceWithSlippage is zero`,
     [PHALNX_ERROR__INSUFFICIENT_BALANCE]: `Insufficient vault balance for withdrawal`,
     [PHALNX_ERROR__INSUFFICIENT_PERMISSIONS]: `Agent lacks permission for this action type`,
     [PHALNX_ERROR__INVALID_AGENT_KEY]: `Invalid agent: cannot be the zero address`,
@@ -281,9 +258,7 @@ if (process.env.NODE_ENV !== "production") {
     [PHALNX_ERROR__INVALID_CONSTRAINTS_PDA]: `Invalid constraints PDA: wrong owner or vault`,
     [PHALNX_ERROR__INVALID_ESCROW_VAULT]: `Invalid escrow vault`,
     [PHALNX_ERROR__INVALID_FEE_DESTINATION]: `Fee destination account invalid`,
-    [PHALNX_ERROR__INVALID_FLASH_TRADE_INSTRUCTION]: `Cannot parse Flash Trade instruction data`,
     [PHALNX_ERROR__INVALID_JUPITER_INSTRUCTION]: `Cannot parse Jupiter swap instruction data`,
-    [PHALNX_ERROR__INVALID_JUPITER_LEND_INSTRUCTION]: `Cannot parse Jupiter Lend instruction data`,
     [PHALNX_ERROR__INVALID_NON_SPENDING_AMOUNT]: `Non-spending action must have amount = 0`,
     [PHALNX_ERROR__INVALID_PENDING_CONSTRAINTS_PDA]: `Invalid pending constraints PDA: wrong owner or vault`,
     [PHALNX_ERROR__INVALID_PERMISSIONS]: `Permission bitmask contains invalid bits`,
@@ -297,34 +272,35 @@ if (process.env.NODE_ENV !== "production") {
     [PHALNX_ERROR__MISSING_FINALIZE_INSTRUCTION]: `Transaction must include finalize_session after validate`,
     [PHALNX_ERROR__NO_AGENT_REGISTERED]: `No agent registered for this vault`,
     [PHALNX_ERROR__NON_TRACKED_SWAP_MUST_RETURN_STABLECOIN]: `Non-stablecoin swap must return stablecoin (balance did not increase)`,
-    [PHALNX_ERROR__NO_PENDING_CONSTRAINTS_UPDATE]: `No pending constraints update to apply or cancel`,
     [PHALNX_ERROR__NO_POSITIONS_TO_CLOSE]: `No open positions to close or cancel`,
     [PHALNX_ERROR__NO_TIMELOCK_CONFIGURED]: `No timelock configured on this vault`,
     [PHALNX_ERROR__OPEN_POSITIONS_EXIST]: `Vault has open positions, cannot close`,
     [PHALNX_ERROR__OVERFLOW]: `Arithmetic overflow`,
     [PHALNX_ERROR__OVERLAY_SLOT_EXHAUSTED]: `Per-agent overlay is full; cannot register agent with spending limit`,
-    [PHALNX_ERROR__PENDING_CONSTRAINTS_UPDATE_EXISTS]: `A pending constraints update already exists`,
     [PHALNX_ERROR__PENDING_POLICY_EXISTS]: `Pending policy update must be applied or cancelled before closing vault`,
     [PHALNX_ERROR__POSITION_OPENING_DISALLOWED]: `Cannot open new positions (policy disallows)`,
-    [PHALNX_ERROR__PROTOCOL_CAP_EXCEEDED]: `Per-protocol daily spending cap would be exceeded`,
+    [PHALNX_ERROR__PROTOCOL_CAP_EXCEEDED]: `Per-protocol rolling 24h spending cap would be exceeded`,
     [PHALNX_ERROR__PROTOCOL_CAPS_MISMATCH]: `protocol_caps length must match protocols length when has_protocol_caps is true`,
     [PHALNX_ERROR__PROTOCOL_MISMATCH]: `DeFi instruction program does not match declared target_protocol`,
     [PHALNX_ERROR__PROTOCOL_NOT_ALLOWED]: `Protocol not allowed by policy`,
     [PHALNX_ERROR__SESSION_NOT_AUTHORIZED]: `Session not authorized`,
     [PHALNX_ERROR__SLIPPAGE_BPS_TOO_HIGH]: `Slippage BPS exceeds maximum (5000 = 50%)`,
-    [PHALNX_ERROR__SLIPPAGE_TOO_HIGH]: `Jupiter slippage exceeds policy max_slippage_bps or quoted_out is zero`,
+    [PHALNX_ERROR__SPENDING_CAP_EXCEEDED]: `Rolling 24h spending cap would be exceeded`,
+    [PHALNX_ERROR__SWAP_SLIPPAGE_EXCEEDED]: `Swap slippage exceeds policy max_slippage_bps or quoted output is zero`,
     [PHALNX_ERROR__TIMELOCK_ACTIVE]: `Vault has timelock active — use queue_policy_update instead`,
     [PHALNX_ERROR__TIMELOCK_NOT_EXPIRED]: `Timelock period has not expired yet`,
-    [PHALNX_ERROR__TOKEN_NOT_REGISTERED]: `Token is not a recognized stablecoin`,
     [PHALNX_ERROR__TOO_MANY_ALLOWED_PROTOCOLS]: `Policy configuration invalid: too many allowed protocols`,
-    [PHALNX_ERROR__TOO_MANY_DE_FI_INSTRUCTIONS]: `Non-stablecoin swap allows exactly one DeFi instruction`,
+    [PHALNX_ERROR__TOO_MANY_DE_FI_INSTRUCTIONS]: `Spending allows at most one DeFi instruction`,
     [PHALNX_ERROR__TOO_MANY_DESTINATIONS]: `Too many destinations (max 10)`,
     [PHALNX_ERROR__TOO_MANY_POSITIONS]: `Maximum concurrent open positions reached`,
     [PHALNX_ERROR__TRANSACTION_TOO_LARGE]: `Transaction exceeds maximum single transaction size`,
     [PHALNX_ERROR__UNAUTHORIZED_AGENT]: `Unauthorized: signer is not the registered agent`,
     [PHALNX_ERROR__UNAUTHORIZED_OWNER]: `Unauthorized: signer is not the vault owner`,
+    [PHALNX_ERROR__UNAUTHORIZED_POST_FINALIZE_INSTRUCTION]: `Instructions after finalize_session must be ComputeBudget or SystemProgram only`,
     [PHALNX_ERROR__UNAUTHORIZED_TOKEN_APPROVAL]: `Unauthorized SPL Token Approve between validate and finalize`,
+    [PHALNX_ERROR__UNAUTHORIZED_TOKEN_TRANSFER]: `Top-level SPL Token transfer not allowed between validate and finalize`,
     [PHALNX_ERROR__UNCONSTRAINED_PROGRAM_BLOCKED]: `Program has no constraint entry and strict mode is enabled`,
+    [PHALNX_ERROR__UNSUPPORTED_TOKEN]: `Token is not a supported stablecoin (only USDC and USDT)`,
     [PHALNX_ERROR__VAULT_ALREADY_CLOSED]: `Vault is already closed`,
     [PHALNX_ERROR__VAULT_NOT_ACTIVE]: `Vault is not active`,
     [PHALNX_ERROR__VAULT_NOT_FROZEN]: `Vault is not frozen (expected frozen for reactivation)`,

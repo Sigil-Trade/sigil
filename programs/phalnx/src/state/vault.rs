@@ -48,6 +48,22 @@ pub struct AgentVault {
 
     /// Cumulative developer fees collected from this vault (token base units)
     pub total_fees_collected: u64,
+
+    /// Cumulative stablecoin deposits in base units (USDC/USDT, 6 decimals).
+    /// Incremented in deposit_funds for stablecoin mints only.
+    /// Used for P&L: current_balance - total_deposited_usd + total_withdrawn_usd.
+    /// Cumulative gross — never decremented. Informational only, never authorization input.
+    pub total_deposited_usd: u64,
+
+    /// Cumulative stablecoin withdrawals in base units (USDC/USDT, 6 decimals).
+    /// Incremented in withdraw_funds for stablecoin mints only.
+    pub total_withdrawn_usd: u64,
+
+    /// Cumulative failed + expired session count.
+    /// Incremented in finalize_session when success=false OR is_expired=true.
+    /// Used for success rate: total_transactions / (total_transactions + total_failed_transactions).
+    /// Informational only — never used in authorization decisions.
+    pub total_failed_transactions: u64,
 }
 
 impl AgentVault {
@@ -55,10 +71,26 @@ impl AgentVault {
     /// agents vec prefix (4) + agents data (49 * 10) +
     /// fee_destination (32) + status (1) + bump (1) +
     /// created_at (8) + total_transactions (8) + total_volume (8) +
-    /// open_positions (1) + active_escrow_count (1) + total_fees_collected (8)
-    pub const SIZE: usize =
-        8 + 32 + 8 + 4 + (49 * MAX_AGENTS_PER_VAULT) + 32 + 1 + 1 + 8 + 8 + 8 + 1 + 1 + 8;
-    // = 610
+    /// open_positions (1) + active_escrow_count (1) + total_fees_collected (8) +
+    /// total_deposited_usd (8) + total_withdrawn_usd (8) + total_failed_transactions (8)
+    pub const SIZE: usize = 8
+        + 32
+        + 8
+        + 4
+        + (49 * MAX_AGENTS_PER_VAULT)
+        + 32
+        + 1
+        + 1
+        + 8
+        + 8
+        + 8
+        + 1
+        + 1
+        + 8
+        + 8
+        + 8
+        + 8;
+    // = 634
 
     pub fn is_active(&self) -> bool {
         self.status == VaultStatus::Active

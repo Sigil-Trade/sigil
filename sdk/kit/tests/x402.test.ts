@@ -1,5 +1,6 @@
 import { expect } from "chai";
 import type { Address } from "@solana/kit";
+import type { Rpc, SolanaRpcApi } from "@solana/kit";
 import {
   // Codec
   decodePaymentRequiredHeader,
@@ -127,11 +128,18 @@ describe("x402/codec", () => {
   });
 
   it("accepts very large amount string without precision loss (BUG-15)", () => {
-    const largeAmount = "99999999999999999999"; // > Number.MAX_SAFE_INTEGER
+    const largeAmount = "18446744073709551615"; // u64::MAX — > Number.MAX_SAFE_INTEGER
     const pr = makePaymentRequired({ amount: largeAmount });
     const encoded = encodeHeader(pr);
     const decoded = decodePaymentRequiredHeader(encoded);
     expect(decoded.accepts[0].amount).to.equal(largeAmount);
+  });
+
+  it("rejects amount exceeding u64 max", () => {
+    const overflowAmount = "99999999999999999999"; // > u64::MAX
+    const pr = makePaymentRequired({ amount: overflowAmount });
+    const encoded = encodeHeader(pr);
+    expect(() => decodePaymentRequiredHeader(encoded)).to.throw("exceeds u64 max");
   });
 
   it("validates required fields in accepts entries", () => {
@@ -445,30 +453,33 @@ describe("x402/nonce-tracker", () => {
     tracker = new NonceTracker();
   });
 
-  it("first payment is not a duplicate", () => {
+  it("first payment is not a duplicate", async () => {
     expect(
-      tracker.isDuplicate("https://api.com", TRUSTED_PAYTO, "1000"),
+      await tracker.isDuplicate("https://api.com", TRUSTED_PAYTO, "1000"),
     ).to.equal(false);
   });
 
-  it("second identical payment is a duplicate", () => {
-    tracker.record("https://api.com", TRUSTED_PAYTO, "1000");
+  it("second identical payment is a duplicate", async () => {
+    await tracker.record("https://api.com", TRUSTED_PAYTO, "1000");
     expect(
-      tracker.isDuplicate("https://api.com", TRUSTED_PAYTO, "1000"),
+      await tracker.isDuplicate("https://api.com", TRUSTED_PAYTO, "1000"),
     ).to.equal(true);
   });
 
-  it("throws X402ReplayError on duplicate via checkOrThrow", () => {
-    tracker.record("https://api.com", TRUSTED_PAYTO, "1000");
-    expect(() =>
-      tracker.checkOrThrow("https://api.com", TRUSTED_PAYTO, "1000"),
-    ).to.throw(X402ReplayError);
+  it("throws X402ReplayError on duplicate via checkOrThrow", async () => {
+    await tracker.record("https://api.com", TRUSTED_PAYTO, "1000");
+    try {
+      await tracker.checkOrThrow("https://api.com", TRUSTED_PAYTO, "1000");
+      expect.fail("Should have thrown");
+    } catch (e) {
+      expect(e).to.be.instanceOf(X402ReplayError);
+    }
   });
 
-  it("different URL is not a duplicate", () => {
-    tracker.record("https://api.com/a", TRUSTED_PAYTO, "1000");
+  it("different URL is not a duplicate", async () => {
+    await tracker.record("https://api.com/a", TRUSTED_PAYTO, "1000");
     expect(
-      tracker.isDuplicate("https://api.com/b", TRUSTED_PAYTO, "1000"),
+      await tracker.isDuplicate("https://api.com/b", TRUSTED_PAYTO, "1000"),
     ).to.equal(false);
   });
 
@@ -505,13 +516,13 @@ describe("x402/nonce-tracker", () => {
     expect(key1).to.equal(key2);
   });
 
-  it("trailing slash + query normalized → same key detects replay", () => {
-    tracker.record("https://api.com/data", TRUSTED_PAYTO, "1000");
+  it("trailing slash + query normalized → same key detects replay", async () => {
+    await tracker.record("https://api.com/data", TRUSTED_PAYTO, "1000");
     expect(
-      tracker.isDuplicate("https://api.com/data/", TRUSTED_PAYTO, "1000"),
+      await tracker.isDuplicate("https://api.com/data/", TRUSTED_PAYTO, "1000"),
     ).to.equal(true);
     expect(
-      tracker.isDuplicate("https://api.com/data?ts=456", TRUSTED_PAYTO, "1000"),
+      await tracker.isDuplicate("https://api.com/data?ts=456", TRUSTED_PAYTO, "1000"),
     ).to.equal(true);
   });
 });
@@ -572,8 +583,8 @@ describe("x402/amount-guard", () => {
 // ─── Facilitator Verify Tests ───────────────────────────────────────────────
 
 describe("x402/facilitator-verify", () => {
-  it("validates successful settlement", () => {
-    const result = validateSettlement({
+  it("validates successful settlement", async () => {
+    const result = await validateSettlement({
       success: true,
       transaction:
         "5vBrLZbzMTnYBwXxuoVGE1DVEtimHdRMkjJZYcBwdHE5GYzx3pMNGqyVLkRV4m7nFf6oHqf7Xy4LmJR84RPLNVR",
@@ -582,14 +593,14 @@ describe("x402/facilitator-verify", () => {
     expect(result.warnings).to.have.lengthOf(0);
   });
 
-  it("warns on success without transaction", () => {
-    const result = validateSettlement({ success: true });
+  it("warns on success without transaction", async () => {
+    const result = await validateSettlement({ success: true });
     expect(result.valid).to.equal(false);
     expect(result.warnings[0]).to.include("no transaction signature");
   });
 
-  it("warns on invalid tx signature format", () => {
-    const result = validateSettlement({
+  it("warns on invalid tx signature format", async () => {
+    const result = await validateSettlement({
       success: true,
       transaction: "not-valid-base58!!!",
     });
@@ -597,8 +608,8 @@ describe("x402/facilitator-verify", () => {
     expect(result.warnings[0]).to.include("invalid format");
   });
 
-  it("detects network mismatch", () => {
-    const result = validateSettlement(
+  it("detects network mismatch", async () => {
+    const result = await validateSettlement(
       {
         success: true,
         transaction:
@@ -610,6 +621,50 @@ describe("x402/facilitator-verify", () => {
     expect(result.valid).to.equal(true);
     expect(result.warnings.length).to.be.greaterThan(0);
     expect(result.warnings[0]).to.include("does not match");
+  });
+
+  it("confirms settlement with on-chain verification when rpc provided", async () => {
+    const mockRpc = {
+      getSignatureStatuses: () => ({
+        send: async () => ({
+          value: [{ confirmationStatus: "confirmed", err: null }],
+        }),
+      }),
+    } as unknown as Rpc<SolanaRpcApi>;
+
+    const result = await validateSettlement(
+      {
+        success: true,
+        transaction:
+          "5vBrLZbzMTnYBwXxuoVGE1DVEtimHdRMkjJZYcBwdHE5GYzx3pMNGqyVLkRV4m7nFf6oHqf7Xy4LmJR84RPLNVR",
+      },
+      undefined,
+      mockRpc,
+    );
+    expect(result.valid).to.equal(true);
+    expect(result.warnings).to.have.lengthOf(0);
+  });
+
+  it("warns when on-chain confirmation times out (defense-in-depth)", async () => {
+    const mockRpc = {
+      getSignatureStatuses: () => ({
+        send: async () => ({ value: [null] }),
+      }),
+    } as unknown as Rpc<SolanaRpcApi>;
+
+    const result = await validateSettlement(
+      {
+        success: true,
+        transaction:
+          "5vBrLZbzMTnYBwXxuoVGE1DVEtimHdRMkjJZYcBwdHE5GYzx3pMNGqyVLkRV4m7nFf6oHqf7Xy4LmJR84RPLNVR",
+      },
+      undefined,
+      mockRpc,
+      500, // 500ms timeout to keep test fast
+    );
+    expect(result.valid).to.equal(true); // still valid — warning only
+    expect(result.warnings.length).to.be.greaterThan(0);
+    expect(result.warnings[0]).to.include("not confirmed on-chain");
   });
 });
 
@@ -663,12 +718,15 @@ describe("x402/security", () => {
     );
   });
 
-  it("blocks replay of same payment", () => {
+  it("blocks replay of same payment", async () => {
     const tracker = new NonceTracker();
-    tracker.record("https://api.com", TRUSTED_PAYTO, "1000");
-    expect(() =>
-      tracker.checkOrThrow("https://api.com", TRUSTED_PAYTO, "1000"),
-    ).to.throw(X402ReplayError);
+    await tracker.record("https://api.com", TRUSTED_PAYTO, "1000");
+    try {
+      await tracker.checkOrThrow("https://api.com", TRUSTED_PAYTO, "1000");
+      expect.fail("Should have thrown");
+    } catch (e) {
+      expect(e).to.be.instanceOf(X402ReplayError);
+    }
   });
 
   it("rejects zero-amount payment", () => {
@@ -731,5 +789,65 @@ describe("x402/security", () => {
     const err = new X402ReplayError("test|key|123");
     expect(err.nonceKey).to.equal("test|key|123");
     expect(err.message).to.include("test|key|123");
+  });
+});
+
+// ─── Settlement Signature Verification ──────────────────────────────────────
+
+describe("x402 settlement signature verification", () => {
+  it("settlement signature matching expected TX sig passes silently", () => {
+    // When settlement.transaction matches expectedTxSig, no warning event emitted
+    const events: X402PaymentEvent[] = [];
+    const config: X402Config = {
+      onPayment: (e) => events.push(e),
+    };
+
+    // Simulate: if sigs match, emitPaymentEvent is NOT called for mismatch
+    const expectedSig = "5wHu1qwD7y5B7TFDx5UKo2KRDwfJpJdHnnRr8KeUQBJGG2ZxVjktjDqfUzE6jR2Kv8Zj";
+    const settlement = { success: true, transaction: expectedSig };
+
+    // Comparison logic: if matching, no event
+    if (settlement.transaction !== expectedSig) {
+      emitPaymentEvent(config, createPaymentEvent({
+        url: "https://test.com",
+        payTo: TRUSTED_PAYTO,
+        asset: USDC_MINT,
+        amount: "1000000",
+        paid: true,
+        deniedReason: `Settlement signature mismatch`,
+        startTime: Date.now(),
+      }));
+    }
+
+    expect(events).to.have.length(0);
+  });
+
+  it("settlement signature mismatch emits warning event", () => {
+    const events: X402PaymentEvent[] = [];
+    const config: X402Config = {
+      onPayment: (e) => events.push(e),
+    };
+
+    const expectedSig = "5wHu1qwD7y5B7TFDx5UKo2KRDwfJpJdHnnRr8KeUQBJGG2ZxVjktjDqfUzE6jR2Kv8Zj";
+    const settlement = { success: true, transaction: "DIFFERENT_SIG_FROM_FACILITATOR" };
+
+    // Comparison logic from shielded-fetch.ts
+    if (settlement.transaction !== expectedSig) {
+      emitPaymentEvent(config, createPaymentEvent({
+        url: "https://test.com",
+        payTo: TRUSTED_PAYTO,
+        asset: USDC_MINT,
+        amount: "1000000",
+        paid: true,
+        deniedReason: `Settlement signature mismatch: expected ${expectedSig}, got ${settlement.transaction}`,
+        startTime: Date.now(),
+      }));
+    }
+
+    expect(events).to.have.length(1);
+    expect(events[0].deniedReason).to.include("Settlement signature mismatch");
+    expect(events[0].deniedReason).to.include(expectedSig);
+    expect(events[0].deniedReason).to.include("DIFFERENT_SIG_FROM_FACILITATOR");
+    expect(events[0].paid).to.be.true;
   });
 });

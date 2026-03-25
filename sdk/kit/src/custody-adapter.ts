@@ -73,6 +73,16 @@ export function custodyAdapterToTransactionSigner(
 
       for (const tx of transactions) {
         const sig = await adapter.sign(tx.messageBytes);
+        if (!(sig instanceof Uint8Array)) {
+          throw new Error(
+            `Custody adapter signature must be Uint8Array, got ${typeof sig}`,
+          );
+        }
+        if (sig.length !== 64) {
+          throw new Error(
+            `Custody adapter returned invalid signature: expected 64 bytes, got ${sig.length}`,
+          );
+        }
         results.push({ [address]: sig });
       }
 

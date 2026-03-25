@@ -286,8 +286,10 @@ describe("VelocityTracker", () => {
           remaining: 1_000_000_000n,
         },
         agentBudget: null,
+        allAgentBudgets: new Map(),
         protocolBudgets: [],
         maxTransactionUsd: 500_000_000n,
+        stablecoinBalances: { usdc: 0n, usdt: 0n },
         resolvedAtTimestamp: BigInt(Math.floor(Date.now() / 1000)),
         ...overrides,
       };

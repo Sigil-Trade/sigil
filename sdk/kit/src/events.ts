@@ -10,6 +10,39 @@
  */
 
 import { EVENT_DISCRIMINATOR_MAP } from "./generated/event-discriminators.js";
+import {
+  getActionAuthorizedDecoder,
+  getSessionFinalizedDecoder,
+  getFeesCollectedDecoder,
+  getFundsDepositedDecoder,
+  getFundsWithdrawnDecoder,
+  getAgentTransferExecutedDecoder,
+  getVaultCreatedDecoder,
+  getVaultFrozenDecoder,
+  getVaultReactivatedDecoder,
+  getVaultClosedDecoder,
+  getAgentRegisteredDecoder,
+  getAgentRevokedDecoder,
+  getAgentPausedEventDecoder,
+  getAgentUnpausedEventDecoder,
+  getAgentPermissionsUpdatedDecoder,
+  getAgentSpendLimitCheckedDecoder,
+  getEscrowCreatedDecoder,
+  getEscrowSettledDecoder,
+  getEscrowRefundedDecoder,
+  getPolicyUpdatedDecoder,
+  getPolicyChangeQueuedDecoder,
+  getPolicyChangeAppliedDecoder,
+  getPolicyChangeCancelledDecoder,
+  getConstraintsChangeQueuedDecoder,
+  getConstraintsChangeAppliedDecoder,
+  getConstraintsChangeCancelledDecoder,
+  getInstructionConstraintsCreatedDecoder,
+  getInstructionConstraintsUpdatedDecoder,
+  getInstructionConstraintsClosedDecoder,
+  getDelegationRevokedDecoder,
+  getPositionsSyncedDecoder,
+} from "./generated/types/index.js";
 
 /** All known Phalnx event names */
 export type PhalnxEventName = (typeof EVENT_DISCRIMINATOR_MAP)[string];
@@ -95,4 +128,98 @@ function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes)
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
+}
+
+// ─── Event Decoder Map ──────────────────────────────────────────────────────
+
+// Decoders cached at module level — avoids re-creating struct decoders on every call
+const EVENT_DECODER_MAP: Record<string, { decode: (data: Uint8Array) => unknown }> = {
+  ActionAuthorized: getActionAuthorizedDecoder(),
+  SessionFinalized: getSessionFinalizedDecoder(),
+  FeesCollected: getFeesCollectedDecoder(),
+  FundsDeposited: getFundsDepositedDecoder(),
+  FundsWithdrawn: getFundsWithdrawnDecoder(),
+  AgentTransferExecuted: getAgentTransferExecutedDecoder(),
+  VaultCreated: getVaultCreatedDecoder(),
+  VaultFrozen: getVaultFrozenDecoder(),
+  VaultReactivated: getVaultReactivatedDecoder(),
+  VaultClosed: getVaultClosedDecoder(),
+  AgentRegistered: getAgentRegisteredDecoder(),
+  AgentRevoked: getAgentRevokedDecoder(),
+  AgentPausedEvent: getAgentPausedEventDecoder(),
+  AgentUnpausedEvent: getAgentUnpausedEventDecoder(),
+  AgentPermissionsUpdated: getAgentPermissionsUpdatedDecoder(),
+  AgentSpendLimitChecked: getAgentSpendLimitCheckedDecoder(),
+  EscrowCreated: getEscrowCreatedDecoder(),
+  EscrowSettled: getEscrowSettledDecoder(),
+  EscrowRefunded: getEscrowRefundedDecoder(),
+  PolicyUpdated: getPolicyUpdatedDecoder(),
+  PolicyChangeQueued: getPolicyChangeQueuedDecoder(),
+  PolicyChangeApplied: getPolicyChangeAppliedDecoder(),
+  PolicyChangeCancelled: getPolicyChangeCancelledDecoder(),
+  ConstraintsChangeQueued: getConstraintsChangeQueuedDecoder(),
+  ConstraintsChangeApplied: getConstraintsChangeAppliedDecoder(),
+  ConstraintsChangeCancelled: getConstraintsChangeCancelledDecoder(),
+  InstructionConstraintsCreated: getInstructionConstraintsCreatedDecoder(),
+  InstructionConstraintsUpdated: getInstructionConstraintsUpdatedDecoder(),
+  InstructionConstraintsClosed: getInstructionConstraintsClosedDecoder(),
+  DelegationRevoked: getDelegationRevokedDecoder(),
+  PositionsSynced: getPositionsSyncedDecoder(),
+};
+
+// Validate decoder map completeness at module init — catches drift when events are added/removed
+const discriminatorEventNames = new Set(Object.values(EVENT_DISCRIMINATOR_MAP));
+const decoderEventNames = new Set(Object.keys(EVENT_DECODER_MAP));
+for (const name of discriminatorEventNames) {
+  if (!decoderEventNames.has(name)) {
+    throw new Error(
+      `EVENT_DECODER_MAP missing entry for "${name}". ` +
+      `Update EVENT_DECODER_MAP in events.ts after adding new events.`,
+    );
+  }
+}
+for (const name of decoderEventNames) {
+  if (!discriminatorEventNames.has(name)) {
+    throw new Error(
+      `EVENT_DECODER_MAP has stale entry "${name}" not in EVENT_DISCRIMINATOR_MAP. ` +
+      `Remove it from EVENT_DECODER_MAP in events.ts.`,
+    );
+  }
+}
+
+// ─── Event Decoding ─────────────────────────────────────────────────────────
+
+/** Decoded event with typed fields */
+export interface DecodedPhalnxEvent {
+  name: PhalnxEventName;
+  /** Raw bytes preserved for debugging */
+  data: Uint8Array;
+  /** Decoded fields, or null if decoding fails */
+  fields: Record<string, unknown> | null;
+}
+
+/**
+ * Decode a parsed Phalnx event's raw bytes into typed fields.
+ *
+ * Returns `fields: null` if the event name is unknown or decoding fails
+ * (e.g. events from older program versions with different layouts).
+ */
+export function decodePhalnxEvent(event: PhalnxEvent): DecodedPhalnxEvent {
+  const decoder = EVENT_DECODER_MAP[event.name];
+  if (!decoder) {
+    return { name: event.name, data: event.data, fields: null };
+  }
+  try {
+    const fields = decoder.decode(event.data) as Record<string, unknown>;
+    return { name: event.name, data: event.data, fields };
+  } catch {
+    return { name: event.name, data: event.data, fields: null };
+  }
+}
+
+/**
+ * Parse and decode Phalnx events from transaction logs in one step.
+ */
+export function parseAndDecodePhalnxEvents(logs: string[]): DecodedPhalnxEvent[] {
+  return parsePhalnxEvents(logs).map(decodePhalnxEvent);
 }
