@@ -2855,10 +2855,20 @@ describe("surfpool-integration", function () {
       return new BN(80_000 + escrowCounter++);
     }
 
-    // Get on-chain unix timestamp in SECONDS. After time travel, Surfnet's
-    // getBlockTime may return milliseconds instead of seconds. We detect
-    // this by checking the magnitude (> 10^12 = milliseconds).
+    // Read the on-chain Clock sysvar directly to get unix_timestamp.
+    // After time travel, getClock()/getBlockTime may return stale or null
+    // values, but the Clock sysvar always reflects the actual on-chain time.
     async function getOnChainTimestamp(): Promise<number> {
+      const SYSVAR_CLOCK = new PublicKey(
+        "SysvarC1ock11111111111111111111111111111111",
+      );
+      const info = await env.connection.getAccountInfo(SYSVAR_CLOCK);
+      if (info && info.data.length >= 40) {
+        // Clock layout: slot(8) + epoch_start_ts(8) + epoch(8) + leader_schedule_epoch(8) + unix_timestamp(8)
+        const unixTs = Number(info.data.readBigInt64LE(32));
+        if (unixTs > 0) return unixTs;
+      }
+      // Fallback: getClock with ms normalization
       const clock = await getClock(env.connection);
       let ts = clock.timestamp;
       if (ts > 1_000_000_000_000) ts = Math.floor(ts / 1000);
@@ -3625,7 +3635,7 @@ describe("surfpool-integration", function () {
         dataConstraints: [
           {
             offset: 8,
-            operator: { gt: {} },
+            operator: { gte: {} },
             value: Buffer.from([0x01, 0x00, 0x00, 0x00]),
           },
         ],
@@ -3643,14 +3653,17 @@ describe("surfpool-integration", function () {
         } as any)
         .rpc();
 
-      // Time travel past 60s timelock — use getClock to get Surfnet's actual
-      // time (may be far ahead after Suite 11's 24h travel), then add buffer
-      const travelClock = await getClock(env.connection);
-      let travelTs = travelClock.timestamp;
-      if (travelTs > 1_000_000_000_000) travelTs = Math.floor(travelTs / 1000);
-      if (travelTs <= 0) travelTs = Math.floor(Date.now() / 1000);
+      // Time travel past 60s timelock — read Clock sysvar for accurate time
+      const SYSVAR_CLOCK = new PublicKey(
+        "SysvarC1ock11111111111111111111111111111111",
+      );
+      const clockInfo = await env.connection.getAccountInfo(SYSVAR_CLOCK);
+      let travelTs = Math.floor(Date.now() / 1000);
+      if (clockInfo && clockInfo.data.length >= 40) {
+        travelTs = Number(clockInfo.data.readBigInt64LE(32));
+      }
       await timeTravel(env.connection, {
-        absoluteTimestamp: (travelTs + 300) * 1000, // 5 min past current Surfnet time
+        absoluteTimestamp: (travelTs + 300) * 1000, // 5 min past current on-chain time
       });
 
       // Apply — build instruction manually to bypass Anchor's client-side
