@@ -48,3 +48,31 @@ Out of scope:
 ## Bug Bounty
 
 No formal bug bounty program at this time. Significant findings may be rewarded at the maintainer's discretion.
+
+## Program Verification
+
+The deployed Phalnx program can be verified against this source repository using [solana-verify](https://github.com/Ellipsis-Labs/solana-verifiable-build) (Ellipsis Labs):
+
+### Prerequisites
+- `cargo install solana-verify`
+- Docker installed and running
+
+### Verify
+
+```bash
+# Quick verification (from repo root)
+npx tsx scripts/verify-program.ts --cluster devnet
+
+# Or directly with solana-verify CLI
+solana-verify verify-from-repo \
+  --program-id 4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL \
+  --library-name phalnx \
+  --mount-path programs/phalnx \
+  --url https://api.devnet.solana.com
+```
+
+### Check Upgrade Authority
+
+```bash
+solana program show 4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL --url devnet
+```
