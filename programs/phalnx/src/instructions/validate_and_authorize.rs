@@ -337,7 +337,7 @@ pub fn handler(
                 &spl_token_id,
                 &compute_budget_id,
                 &finalize_hash,
-                &policy,
+                policy,
                 &loaded_constraints,
             )? {
                 ScanAction::FoundFinalize => {
@@ -397,7 +397,7 @@ pub fn handler(
                 &spl_token_id,
                 &compute_budget_id,
                 &finalize_hash,
-                &policy,
+                policy,
                 &loaded_constraints,
             )? {
                 ScanAction::FoundFinalize => {
