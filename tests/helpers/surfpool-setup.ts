@@ -856,11 +856,21 @@ export async function expectTxError(
   } catch (err: any) {
     if (err.message?.startsWith("Expected error containing")) throw err;
     const errStr = err.message || JSON.stringify(err);
-    if (!errStr.includes(errorSubstring)) {
-      throw new Error(
-        `Expected "${errorSubstring}" but got: ${errStr.slice(0, 200)}`,
-      );
+    if (errStr.includes(errorSubstring)) return; // Direct string match
+
+    // Surfpool returns numeric codes like {"Custom":6000} instead of "VaultNotActive".
+    // Reverse-lookup: if errorSubstring is an error name, check if the numeric code appears.
+    const codeEntry = Object.entries(PHALNX_ERROR_NAMES).find(
+      ([, name]) => name === errorSubstring,
+    );
+    if (codeEntry) {
+      const code = codeEntry[0];
+      if (errStr.includes(code) || errStr.includes(`"Custom":${code}`)) return;
     }
+
+    throw new Error(
+      `Expected "${errorSubstring}" but got: ${errStr.slice(0, 200)}`,
+    );
   }
 }
 
