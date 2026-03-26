@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Read docs/PROJECT.md for full specification. Read docs/INSTRUCTIONS.md for all coding rules and guardrails. Read WRAP-ARCHITECTURE-PLAN.md for the definitive implementation plan and priorities.**
+**Read docs/PROJECT.md for full specification. Read docs/INSTRUCTIONS.md for all coding rules and guardrails.**
 
 ## What This Is
 
@@ -175,7 +175,7 @@ Specs live in `programs/phalnx/src/certora/specs/`:
 
 ## Current State
 
-On-chain program has 29 instructions, 9 PDA types, and is under active development (not frozen). Spending enforcement is **outcome-based**: `finalize_session` measures actual stablecoin balance delta (not declared amounts) for cap checks, with post-finalize instruction scan (error 6070) as defense-in-depth. See `WRAP-ARCHITECTURE-PLAN.md` for the definitive implementation plan and `scripts/test-counts.json` for test counts.
+On-chain program has 29 instructions, 9 PDA types, and is under active development (not frozen). Spending enforcement is **outcome-based**: `finalize_session` measures actual stablecoin balance delta (not declared amounts) for cap checks, with post-finalize instruction scan (error 6070) as defense-in-depth. See `ON-CHAIN-IMPLEMENTATION-PLAN.md` for on-chain findings and `scripts/test-counts.json` for test counts.
 
 ### Wrap Architecture (Definitive Direction)
 
@@ -204,7 +204,7 @@ Phalnx is a **security wrapper**, not a DeFi SDK. The `wrap()` function takes ar
 - `protocol-names.ts` (1): shared protocol name resolution
 - `math-utils.ts` (1): shared Herfindahl computation (bigint-safe)
 
-See `WRAP-ARCHITECTURE-PLAN.md` for full spec and `WRAP-DISCRIMINATOR-TABLES.md` for verified discriminator bytes.
+See `WRAP-DISCRIMINATOR-TABLES.md` for verified discriminator bytes.
 
 ---
 
