@@ -175,34 +175,34 @@ Specs live in `programs/phalnx/src/certora/specs/`:
 
 ## Current State
 
-On-chain program has 29 instructions, 9 PDA types, and is under active development (not frozen). Spending enforcement is **outcome-based**: `finalize_session` measures actual stablecoin balance delta (not declared amounts) for cap checks, with post-finalize instruction scan (error 6070) as defense-in-depth. See `scripts/test-counts.json` for test counts.
+On-chain program has 29 instructions, 9 PDA types, and is under active development (not frozen). Spending enforcement is **outcome-based**: `finalize_session` measures actual stablecoin balance delta (not declared amounts) for cap checks, with post-finalize instruction scan (error 6070) as defense-in-depth. See `ON-CHAIN-IMPLEMENTATION-PLAN.md` for on-chain findings and `scripts/test-counts.json` for test counts.
 
-### Wrap Architecture
+### Wrap Architecture (Definitive Direction)
 
 Phalnx is a **security wrapper**, not a DeFi SDK. The `wrap()` function takes arbitrary DeFi instructions from any source (Jupiter API, Solana Agent Kit, MCP servers) and sandwiches them with `validate_and_authorize` + `finalize_session`. `PhalnxClient` is the primary API — holds vault/agent/network context, delegates to `wrap()` with instance-level caches.
 
-### SDK (`sdk/kit/src/`)
-- `PhalnxClient`: stateful client with `wrap()`, `executeAndConfirm()`, `getPnL()`, `getVaultState()`, `getTokenBalances()`, `getAgentBudget()`, static `createVault()`
-- `@phalnx/kit/testing`: `createMockRpc()`, `createMockVaultState()`, devnet helpers
-- `formatting.ts` (11 functions): USD/percent/time/address/token display
-- `presets.ts`: Jupiter/perps/lending/full-access vault templates
-- `owner-transaction.ts`: `buildOwnerTransaction()` for owner-side operations
-- `state-resolver.ts`: `getSpendingHistory()` — 144-epoch circular buffer to chart-ready time series
+**Phase 5 (SDK additions) — COMPLETE (all 10 steps):**
+- `PhalnxClient` promoted (5.3): stateful client with `wrap()`, `executeAndConfirm()`, `getPnL()`, `getVaultState()`, `getTokenBalances()`, `getAgentBudget()`, static `createVault()`
+- Test utilities (5.4): `@phalnx/kit/testing` subpath with `createMockRpc()`, `createMockVaultState()`, devnet helpers
+- Formatting (5.5): 11 functions in `formatting.ts` with full-precision defaults (6 decimals USD, full token decimals)
+- Vault presets (5.6): `presets.ts` with Jupiter/perps/lending/full-access templates
+- Owner transactions (5.7): `buildOwnerTransaction()` in `owner-transaction.ts`
+- Spending history (5.8): `getSpendingHistory()` in `state-resolver.ts` — 144-epoch circular buffer to chart-ready time series
+- Post-finalize scan (5.9): defense-in-depth instruction check after finalize, error 6070
+- SAK plugin (5.10): `packages/plugin-solana-agent-kit/` — thin adapter with swap/transfer/status actions via `PhalnxClient.executeAndConfirm()`
 
-### Analytics (`sdk/kit/src/` — 42 functions across 11 modules)
-- `spending-analytics.ts`: velocity, breakdown, per-agent history
-- `vault-analytics.ts`: health assessment, one-call summary
-- `event-analytics.ts`: categorize, describe, build activity items, fetch feed
-- `agent-analytics.ts`: profiles, leaderboard, comparison, error breakdown
-- `security-analytics.ts`: 13-point posture, alert conditions, audit trail
-- `portfolio-analytics.ts`: cross-vault aggregation, agent ranking, time series
-- `protocol-analytics.ts`: per-protocol breakdown, cross-vault usage
-- `advanced-analytics.ts`: slippage, cap velocity, deviation, idle capital, escalation latency, coverage ratio, permission utilization
-
-### Verification Tooling
-- `scripts/verify-program.ts`: solana-verify wrapper for bytecode verification + upgrade authority check
-- `.github/workflows/deploy-devnet.yml`: automated verification after every devnet deployment
-- `SECURITY.md`: program verification docs + upgrade authority governance plan
+**Phase 6 (Analytics Data Layer) — COMPLETE (42 functions across 11 modules):**
+- `formatting.ts` (11): USD/percent/time/address/token display with full-precision defaults
+- `spending-analytics.ts` (3): velocity, breakdown, per-agent history
+- `vault-analytics.ts` (2): health assessment, one-call summary
+- `event-analytics.ts` (4): categorize, describe, build activity items, fetch feed
+- `agent-analytics.ts` (4): profiles, leaderboard, comparison, error breakdown
+- `security-analytics.ts` (3): 13-point posture, alert conditions, audit trail
+- `portfolio-analytics.ts` (4): cross-vault aggregation, agent ranking, time series
+- `protocol-analytics.ts` (2): per-protocol breakdown, cross-vault usage
+- `advanced-analytics.ts` (7): slippage, cap velocity, deviation, idle capital, escalation latency, coverage ratio, permission utilization
+- `protocol-names.ts` (1): shared protocol name resolution
+- `math-utils.ts` (1): shared Herfindahl computation (bigint-safe)
 
 See `WRAP-DISCRIMINATOR-TABLES.md` for verified discriminator bytes.
 
