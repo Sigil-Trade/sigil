@@ -197,7 +197,13 @@ describe("analytics-counters", () => {
 
   async function buildValidateIx(amount: BN) {
     return program.methods
-      .validateAndAuthorize({ swap: {} }, usdcMint, amount, jupiterProgramId, null)
+      .validateAndAuthorize(
+        { swap: {} },
+        usdcMint,
+        amount,
+        jupiterProgramId,
+        null,
+      )
       .accountsPartial({
         agent: agent.publicKey,
         vault: vaultPda,
@@ -281,7 +287,9 @@ describe("analytics-counters", () => {
   // when finalize is not in the same TX. Expired session testing is covered
   // by Surfpool integration tests (tests/surfpool-integration.ts) which support
   // time travel between separate transactions.
-  it.skip("4: expired session increments total_failed_transactions (requires Surfpool)");
+  it.skip(
+    "4: expired session increments total_failed_transactions (requires Surfpool)",
+  );
 
   it("5: multiple sessions accumulate correctly", async () => {
     const before = await program.account.agentVault.fetch(vaultPda);
@@ -314,8 +322,8 @@ describe("analytics-counters", () => {
     // Fetch overlay and find agent slot
     const overlay = await program.account.agentSpendOverlay.fetch(overlayPda);
     const agentBytes = agent.publicKey.toBuffer();
-    const slotIdx = overlay.entries.findIndex(
-      (e: any) => Buffer.from(e.agent).equals(agentBytes),
+    const slotIdx = overlay.entries.findIndex((e: any) =>
+      Buffer.from(e.agent).equals(agentBytes),
     );
     expect(slotIdx).to.be.greaterThanOrEqual(0);
 
@@ -323,19 +331,15 @@ describe("analytics-counters", () => {
 
     await executeSession();
 
-    const overlayAfter = await program.account.agentSpendOverlay.fetch(overlayPda);
+    const overlayAfter =
+      await program.account.agentSpendOverlay.fetch(overlayPda);
     const txCountAfter = overlayAfter.lifetimeTxCount[slotIdx].toNumber();
 
-    // P1 #17: Mock DeFi is no-op (actual_spend=0), so lifetime_tx_count does NOT increment.
-    // This is correct behavior — counter only counts sessions with real balance movement.
-    // However, protocol fees ARE deducted, creating a non-zero balance delta.
-    // With stablecoin input, finalize_session checks stablecoin_balance_before vs after.
-    // Protocol fee deduction creates actual_spend > 0, which SHOULD increment the counter.
-    // If it doesn't, that's a real finding (protocol fee creates balance delta but counter
-    // doesn't count it). Either way, we assert the counter is at least stable.
-    expect(txCountAfter).to.be.greaterThanOrEqual(txCountBefore);
-    // NOTE: To truly test increment, we'd need a mock DeFi instruction that moves tokens.
-    // This is tracked as a known limitation (TEST-AUDIT-REPORT.md #29: mock DeFi is no-op).
+    // Mock DeFi is no-op → actual_spend = 0 (on-chain subtracts fees before
+    // computing actual_spend — finalize_session.rs:236). lifetime_tx_count only
+    // increments when actual_spend > 0 (finalize_session.rs:239).
+    // To truly test increment, need a mock DeFi that moves tokens (#29).
+    expect(txCountAfter).to.equal(txCountBefore);
   });
 
   it("8: lifetime_tx_count zeroed on agent revoke (release_slot)", async () => {
@@ -355,8 +359,8 @@ describe("analytics-counters", () => {
     // Find agent2's slot
     let overlay = await program.account.agentSpendOverlay.fetch(overlayPda);
     const agent2Bytes = agent2.publicKey.toBuffer();
-    const slotIdx = overlay.entries.findIndex(
-      (e: any) => Buffer.from(e.agent).equals(agent2Bytes),
+    const slotIdx = overlay.entries.findIndex((e: any) =>
+      Buffer.from(e.agent).equals(agent2Bytes),
     );
     expect(slotIdx).to.be.greaterThanOrEqual(0);
 

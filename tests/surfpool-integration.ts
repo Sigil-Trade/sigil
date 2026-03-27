@@ -265,7 +265,8 @@ describe("surfpool-integration", function () {
       // Verify vault stats updated
       const vault = await program.account.agentVault.fetch(vaultPda);
       expect(vault.totalTransactions.toNumber()).to.equal(1);
-      // totalVolume uses actual_spend_tracked; mock DeFi is no-op → 0
+      // totalVolume = 0: mock DeFi is no-op (no real token movement).
+      // Real volume tracking verified in Surfpool integration tests with forked mainnet (#29).
       expect(vault.totalVolume.toNumber()).to.equal(0);
     });
   });
@@ -469,7 +470,13 @@ describe("surfpool-integration", function () {
         expect.fail("Should have rejected — no finalize instruction");
       } catch (err: any) {
         const errStr = err.message || JSON.stringify(err);
-        expect(errStr.includes("MissingFinalizeInstruction") || errStr.includes("6035")).to.equal(true, `Expected MissingFinalizeInstruction (6035) but got: ${errStr.slice(0, 200)}`);
+        expect(
+          errStr.includes("MissingFinalizeInstruction") ||
+            errStr.includes("6035"),
+        ).to.equal(
+          true,
+          `Expected MissingFinalizeInstruction (6035) but got: ${errStr.slice(0, 200)}`,
+        );
       }
     });
 
@@ -686,7 +693,7 @@ describe("surfpool-integration", function () {
 
       const vault = await program.account.agentVault.fetch(vaultPda);
       expect(vault.totalTransactions.toNumber()).to.equal(1);
-      // totalVolume uses actual_spend_tracked; no DeFi ix → 0
+      // totalVolume = 0: no DeFi ix in TX (mock is no-op). Real volume tested with forked mainnet (#29).
       expect(vault.totalVolume.toNumber()).to.equal(0);
     });
 
@@ -758,7 +765,12 @@ describe("surfpool-integration", function () {
       } catch (err: any) {
         if (err.name === "AssertionError") throw err;
         const errStr = err.message || JSON.stringify(err);
-        expect(errStr.includes("UnauthorizedAgent") || errStr.includes("6001")).to.equal(true, `Expected UnauthorizedAgent (6001) but got: ${errStr.slice(0, 200)}`);
+        expect(
+          errStr.includes("UnauthorizedAgent") || errStr.includes("6001"),
+        ).to.equal(
+          true,
+          `Expected UnauthorizedAgent (6001) but got: ${errStr.slice(0, 200)}`,
+        );
       }
 
       // Verify no state changes occurred (atomic revert)
@@ -823,7 +835,7 @@ describe("surfpool-integration", function () {
 
       const vault = await program.account.agentVault.fetch(vaultPda);
       expect(vault.totalTransactions.toNumber()).to.equal(2);
-      // totalVolume uses actual_spend_tracked; no DeFi ix → cumulative 0
+      // totalVolume = 0: cumulative no-op (mock DeFi doesn't move tokens). Real volume tested with forked mainnet (#29).
       expect(vault.totalVolume.toNumber()).to.equal(0);
     });
   });
@@ -1590,7 +1602,12 @@ describe("surfpool-integration", function () {
         expect.fail("Should have thrown TimelockNotExpired");
       } catch (err: any) {
         const errStr = err.message || JSON.stringify(err);
-        expect(errStr.includes("TimelockNotExpired") || errStr.includes("6026")).to.equal(true, `Expected TimelockNotExpired (6026) but got: ${errStr.slice(0, 200)}`);
+        expect(
+          errStr.includes("TimelockNotExpired") || errStr.includes("6026"),
+        ).to.equal(
+          true,
+          `Expected TimelockNotExpired (6026) but got: ${errStr.slice(0, 200)}`,
+        );
       }
     });
   });
@@ -1598,6 +1615,8 @@ describe("surfpool-integration", function () {
   // ═══════════════════════════════════════════════════════════════════════════
   // Suite 8: Balance flows (deposit, withdraw, agent_transfer)
   // ═══════════════════════════════════════════════════════════════════════════
+  // NOTE: Intentional cascading state — tests verify P&L accumulation across
+  // deposit/withdraw/transfer operations. Order-dependent by design.
   describe("8. balance flows", () => {
     let setup: VaultSetupResult;
     let ownerUsdcAta: PublicKey;
@@ -1704,11 +1723,7 @@ describe("surfpool-integration", function () {
         } as any)
         .instruction();
 
-      await sendVersionedTx(
-        env.connection,
-        [transferIx],
-        transferSetup.agent,
-      );
+      await sendVersionedTx(env.connection, [transferIx], transferSetup.agent);
 
       const destBalance =
         await env.connection.getTokenAccountBalance(destUsdcAta);
@@ -1965,8 +1980,7 @@ describe("surfpool-integration", function () {
 
       const vault = await program.account.agentVault.fetch(setup.vaultPda);
       const agentEntry = vault.agents.find(
-        (a: any) =>
-          a.pubkey.toString() === setup.agent.publicKey.toString(),
+        (a: any) => a.pubkey.toString() === setup.agent.publicKey.toString(),
       );
       expect(agentEntry.paused).to.equal(true);
 
@@ -2101,8 +2115,7 @@ describe("surfpool-integration", function () {
 
       const vault = await program.account.agentVault.fetch(setup.vaultPda);
       const agentEntry = vault.agents.find(
-        (a: any) =>
-          a.pubkey.toString() === setup.agent.publicKey.toString(),
+        (a: any) => a.pubkey.toString() === setup.agent.publicKey.toString(),
       );
       expect(agentEntry.paused).to.equal(false);
 
@@ -3232,7 +3245,15 @@ describe("surfpool-integration", function () {
         // Either EscrowNotActive (6046) or Anchor constraint (3012) if ATA closed
         const errStr = err.message || JSON.stringify(err);
         // P1 #19: Was matching on generic "failed" — now checks specific error codes
-        expect(errStr.includes("EscrowNotActive") || errStr.includes("6046") || errStr.includes("3012") || errStr.includes("failed")).to.equal(true, `Expected EscrowNotActive (6046) or constraint (3012) but got: ${errStr.slice(0, 200)}`);
+        expect(
+          errStr.includes("EscrowNotActive") ||
+            errStr.includes("6046") ||
+            errStr.includes("3012") ||
+            errStr.includes("failed"),
+        ).to.equal(
+          true,
+          `Expected EscrowNotActive (6046) or constraint (3012) but got: ${errStr.slice(0, 200)}`,
+        );
       }
     });
 
@@ -3563,8 +3584,7 @@ describe("surfpool-integration", function () {
         } as any)
         .rpc();
 
-      constraints =
-        await program.account.instructionConstraints.fetch(cPda);
+      constraints = await program.account.instructionConstraints.fetch(cPda);
       expect(constraints.strictMode).to.equal(true);
     });
 
@@ -3671,7 +3691,9 @@ describe("surfpool-integration", function () {
       // account pre-fetching which fails after time travel on Surfnet
       // (Anchor tries to deserialize pending_constraints and hits Union
       // encode error on ConstraintOperator enum in the stored entries).
-      const applyDiscriminator = Buffer.from([175, 103, 90, 155, 134, 91, 135, 242]);
+      const applyDiscriminator = Buffer.from([
+        175, 103, 90, 155, 134, 91, 135, 242,
+      ]);
       const applyIx = new anchor.web3.TransactionInstruction({
         programId: program.programId,
         keys: [

@@ -1015,7 +1015,11 @@ describe("phalnx", () => {
         await program.account.sessionAuthority.fetch(sessionPda);
         expect.fail("Session should have been closed");
       } catch (err: any) {
-        expectPhalnxError(err.toString(), "Account does not exist", "Could not find");
+        expectPhalnxError(
+          err.toString(),
+          "Account does not exist",
+          "Could not find",
+        );
       }
 
       // Verify vault stats updated
@@ -1134,11 +1138,7 @@ describe("phalnx", () => {
         data: Buffer.from([3, 0, 0, 0, 0, 0, 0, 0, 0]), // Transfer disc + 0 amount
       };
       try {
-        sendVersionedTx(
-          svm,
-          [validateIx, finalizeIx, splTransferIx],
-          agent,
-        );
+        sendVersionedTx(svm, [validateIx, finalizeIx, splTransferIx], agent);
         expect.fail("Should have thrown");
       } catch (err: any) {
         // Error 6070 = UnauthorizedPostFinalizeInstruction
@@ -2336,7 +2336,11 @@ describe("phalnx", () => {
         await program.account.sessionAuthority.fetch(lifecycleSessionPda);
         expect.fail("Session should have been closed");
       } catch (err: any) {
-        expectPhalnxError(err.toString(), "Account does not exist", "Could not find");
+        expectPhalnxError(
+          err.toString(),
+          "Account does not exist",
+          "Could not find",
+        );
       }
 
       // Vault stats should be updated
@@ -2799,7 +2803,12 @@ describe("phalnx", () => {
         // Vault PDA was closed — Anchor can't deserialize a zeroed/missing account.
         // LiteSVM proxy returns "Account does not exist"; Anchor provider
         // returns "Could not find" or "AccountNotInitialized".
-        expectPhalnxError(err.toString(), "AccountNotInitialized", "does not exist", "Could not find");
+        expectPhalnxError(
+          err.toString(),
+          "AccountNotInitialized",
+          "does not exist",
+          "Could not find",
+        );
       }
     });
 
@@ -2918,7 +2927,12 @@ describe("phalnx", () => {
         // Vault PDA was closed — Anchor can't deserialize it.
         // LiteSVM returns "does not exist"; Anchor returns "Could not find"
         // or "AccountNotInitialized".
-        expectPhalnxError(err.toString(), "AccountNotInitialized", "does not exist", "Could not find");
+        expectPhalnxError(
+          err.toString(),
+          "AccountNotInitialized",
+          "does not exist",
+          "Could not find",
+        );
       }
     });
   });
@@ -3546,7 +3560,11 @@ describe("phalnx", () => {
         await program.account.pendingPolicyUpdate.fetch(tlPendingPda);
         expect.fail("PendingPolicyUpdate should have been closed");
       } catch (err: any) {
-        expectPhalnxError(err.toString(), "Account does not exist", "Could not find");
+        expectPhalnxError(
+          err.toString(),
+          "Account does not exist",
+          "Could not find",
+        );
       }
     });
 
@@ -4413,6 +4431,7 @@ describe("phalnx", () => {
       }
 
       const destBalBefore = getTokenBalance(svm, allowedDestAta);
+      const feeDestBalBefore = getTokenBalance(svm, feeDestUsdcAta);
 
       // Transfer 10 USDC with fees
       // protocol_fee = 10_000_000 * 200 / 1_000_000 = 2_000
@@ -4442,6 +4461,10 @@ describe("phalnx", () => {
       // Check vault fees (developer fee only)
       const vault = await program.account.agentVault.fetch(fv);
       expect(vault.totalFeesCollected.toNumber()).to.equal(5_000);
+
+      // #26: Verify fee destination ATA actually received the developer fee (not just tracked in vault)
+      const feeDestBalAfter = getTokenBalance(svm, feeDestUsdcAta);
+      expect(feeDestBalAfter - feeDestBalBefore).to.equal(5_000n);
     });
   });
 
