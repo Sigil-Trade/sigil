@@ -14,7 +14,7 @@
     "solana-agent-kit": ">=2.0.0"
   },
   "dependencies": {
-    "zod": "^3.22.0"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@phalnx/kit": "workspace:*",

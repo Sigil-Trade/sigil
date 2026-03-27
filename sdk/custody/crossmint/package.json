@@ -24,7 +24,7 @@
     "test": "NODE_OPTIONS='--no-experimental-strip-types' TS_NODE_PROJECT=tsconfig.test.json mocha --require ts-node/register tests/**/*.test.ts --timeout 30000"
   },
   "dependencies": {
-    "@crossmint/wallets-sdk": "^0.19.0",
+    "@crossmint/wallets-sdk": "^1.0.4",
     "@solana/web3.js": "^1.95.0"
   },
   "devDependencies": {
