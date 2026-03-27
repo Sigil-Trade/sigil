@@ -217,13 +217,13 @@ jobs:
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: node scripts/update-test-counts.js
 
-      - name: Commit updated README
+      - name: Commit updated test counts
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
           git config user.name "phalnx-ci-bot[bot]"
           git config user.email "${{ vars.CI_APP_ID }}+phalnx-ci-bot[bot]@users.noreply.github.com"
-          git diff --quiet README.md || \
-            (git add README.md && \
+          git diff --quiet README.md .github/workflows/ci.yml .github/workflows/release.yml .github/workflows/devnet-test.yml CLAUDE.md || \
+            (git add README.md .github/workflows/ci.yml .github/workflows/release.yml .github/workflows/devnet-test.yml CLAUDE.md && \
              git commit -m "chore: update test counts [skip ci]" && \
              git push)
 
