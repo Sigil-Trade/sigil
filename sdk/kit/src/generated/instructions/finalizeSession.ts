@@ -11,8 +11,6 @@ import {
   fixDecoderSize,
   fixEncoderSize,
   getAddressEncoder,
-  getBooleanDecoder,
-  getBooleanEncoder,
   getBytesDecoder,
   getBytesEncoder,
   getProgramDerivedAddress,
@@ -118,17 +116,13 @@ export type FinalizeSessionInstruction<
 
 export type FinalizeSessionInstructionData = {
   discriminator: ReadonlyUint8Array;
-  success: boolean;
 };
 
-export type FinalizeSessionInstructionDataArgs = { success: boolean };
+export type FinalizeSessionInstructionDataArgs = {};
 
 export function getFinalizeSessionInstructionDataEncoder(): FixedSizeEncoder<FinalizeSessionInstructionDataArgs> {
   return transformEncoder(
-    getStructEncoder([
-      ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
-      ["success", getBooleanEncoder()],
-    ]),
+    getStructEncoder([["discriminator", fixEncoderSize(getBytesEncoder(), 8)]]),
     (value) => ({ ...value, discriminator: FINALIZE_SESSION_DISCRIMINATOR }),
   );
 }
@@ -136,7 +130,6 @@ export function getFinalizeSessionInstructionDataEncoder(): FixedSizeEncoder<Fin
 export function getFinalizeSessionInstructionDataDecoder(): FixedSizeDecoder<FinalizeSessionInstructionData> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
-    ["success", getBooleanDecoder()],
   ]);
 }
 
@@ -189,7 +182,6 @@ export type FinalizeSessionAsyncInput<
   systemProgram?: Address<TAccountSystemProgram>;
   /** Instructions sysvar for post-finalize instruction verification. */
   instructionsSysvar?: Address<TAccountInstructionsSysvar>;
-  success: FinalizeSessionInstructionDataArgs["success"];
 };
 
 export async function getFinalizeSessionInstructionAsync<
@@ -277,9 +269,6 @@ export async function getFinalizeSessionInstructionAsync<
     ResolvedInstructionAccount
   >;
 
-  // Original args.
-  const args = { ...input };
-
   // Resolve default values.
   if (!accounts.policy.value) {
     accounts.policy.value = await getProgramDerivedAddress({
@@ -343,9 +332,7 @@ export async function getFinalizeSessionInstructionAsync<
       getAccountMeta("systemProgram", accounts.systemProgram),
       getAccountMeta("instructionsSysvar", accounts.instructionsSysvar),
     ],
-    data: getFinalizeSessionInstructionDataEncoder().encode(
-      args as FinalizeSessionInstructionDataArgs,
-    ),
+    data: getFinalizeSessionInstructionDataEncoder().encode({}),
     programAddress,
   } as FinalizeSessionInstruction<
     TProgramAddress,
@@ -403,7 +390,6 @@ export type FinalizeSessionInput<
   systemProgram?: Address<TAccountSystemProgram>;
   /** Instructions sysvar for post-finalize instruction verification. */
   instructionsSysvar?: Address<TAccountInstructionsSysvar>;
-  success: FinalizeSessionInstructionDataArgs["success"];
 };
 
 export function getFinalizeSessionInstruction<
@@ -489,9 +475,6 @@ export function getFinalizeSessionInstruction<
     ResolvedInstructionAccount
   >;
 
-  // Original args.
-  const args = { ...input };
-
   // Resolve default values.
   if (!accounts.tokenProgram.value) {
     accounts.tokenProgram.value =
@@ -525,9 +508,7 @@ export function getFinalizeSessionInstruction<
       getAccountMeta("systemProgram", accounts.systemProgram),
       getAccountMeta("instructionsSysvar", accounts.instructionsSysvar),
     ],
-    data: getFinalizeSessionInstructionDataEncoder().encode(
-      args as FinalizeSessionInstructionDataArgs,
-    ),
+    data: getFinalizeSessionInstructionDataEncoder().encode({}),
     programAddress,
   } as FinalizeSessionInstruction<
     TProgramAddress,
