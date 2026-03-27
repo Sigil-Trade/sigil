@@ -5,9 +5,9 @@
 #   0. changes                — Detect which file groups changed (package-level path filtering)
 #   1. build-lint-test        — TypeScript builds, Prettier, 920 TS tests (conditional: any-ts or push)
 #   2. rust-checks            — cargo fmt + cargo clippy (conditional: rust changes or push)
-#   3. on-chain-tests         — Anchor build + LiteSVM 432 tests (conditional: rust changes or push)
+#   3. on-chain-tests         — Anchor build + LiteSVM 436 tests (conditional: rust changes or push)
 #  3b. build-verification     — Feature flag safety net (conditional: rust changes or push)
-#  3c. surfpool-integration   — Surfpool integration tests, 20 tests (conditional: rust changes or push)
+#  3c. surfpool-integration   — Surfpool integration tests, 59 tests (conditional: rust changes or push)
 #   4. security-scan          — Sec3 X-Ray static analysis (always, BLOCKING)
 #   5. formal-verification    — Certora Solana Prover (conditional: certora changes, BLOCKING)
 #   6. fuzz-test              — Trident fuzz 1K iterations (conditional: rust changes or push, BLOCKING)
@@ -23,7 +23,7 @@
 #   apps/ → Actions server tests
 #   sdk/kit → Kit SDK tests
 #
-# Total: ~1,450 tests across 17 suites (920 TS + 432 on-chain + 20 Surfpool + 78 devnet)
+# Total: ~1,493 tests across 17 suites (920 TS + 436 on-chain + 59 Surfpool + 78 devnet)
 # All security checks are BLOCKING — zero tolerance for known issues.
 
 name: CI

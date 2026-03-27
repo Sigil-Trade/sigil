@@ -20,19 +20,19 @@
     },
     {
       "name": "Flash Trade integration (leveraged perps)",
-      "count": 29,
+      "count": 30,
       "onChain": true,
       "claudePattern": "tests/flash-trade-integration.ts` (%d tests)"
     },
     {
       "name": "Security exploit scenarios",
-      "count": 150,
+      "count": 151,
       "onChain": true,
       "claudePattern": "tests/security-exploits.ts` (ts-mocha + LiteSVM, %d tests)"
     },
     {
       "name": "Instruction constraints (generic enforcement)",
-      "count": 39,
+      "count": 41,
       "onChain": true,
       "claudePattern": "tests/instruction-constraints.ts` (ts-mocha + LiteSVM, %d tests)"
     },
