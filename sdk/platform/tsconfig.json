@@ -11,7 +11,7 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "resolveJsonModule": true,
-    "moduleResolution": "node"
+    "moduleResolution": "node10"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "tests"]
