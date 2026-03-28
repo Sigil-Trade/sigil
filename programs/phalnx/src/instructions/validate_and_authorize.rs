@@ -273,23 +273,28 @@ pub fn handler(
             return Ok(ScanAction::FoundFinalize);
         }
 
-        // Block ALL top-level SPL Token Transfer/TransferChecked/Approve
+        // Block dangerous top-level SPL Token instructions.
+        // Approve(4), ApproveChecked(13): delegate could drain vault.
+        // Transfer(3), TransferChecked(12): direct token theft.
+        // SetAuthority(6), CloseAccount(9): defense-in-depth (require vault PDA sig,
+        //   but CPI from compromised whitelisted DeFi program could exploit).
+        // Burn(8), BurnChecked(15): delegate can burn (SPL delegation grants burn).
         if ix.program_id == *spl_token_id && !ix.data.is_empty() {
-            if ix.data[0] == 4 {
-                return Err(error!(PhalnxError::UnauthorizedTokenApproval));
-            }
-            if ix.data[0] == 3 || ix.data[0] == 12 {
-                return Err(error!(PhalnxError::UnauthorizedTokenTransfer));
+            match ix.data[0] {
+                4 | 13 => return Err(error!(PhalnxError::UnauthorizedTokenApproval)),
+                3 | 12 => return Err(error!(PhalnxError::UnauthorizedTokenTransfer)),
+                6 | 8 | 9 | 15 => return Err(error!(PhalnxError::UnauthorizedTokenTransfer)),
+                _ => {}
             }
         }
 
-        // Block Token-2022 Transfer/Approve/TransferChecked/TransferCheckedWithFee
+        // Token-2022: same blocked set + disc 26 (TransferCheckedWithFee)
         if ix.program_id == TOKEN_2022_PROGRAM_ID && !ix.data.is_empty() {
-            if ix.data[0] == 4 {
-                return Err(error!(PhalnxError::UnauthorizedTokenApproval));
-            }
-            if ix.data[0] == 3 || ix.data[0] == 12 || ix.data[0] == 26 {
-                return Err(error!(PhalnxError::UnauthorizedTokenTransfer));
+            match ix.data[0] {
+                4 | 13 => return Err(error!(PhalnxError::UnauthorizedTokenApproval)),
+                3 | 12 | 26 => return Err(error!(PhalnxError::UnauthorizedTokenTransfer)),
+                6 | 8 | 9 | 15 => return Err(error!(PhalnxError::UnauthorizedTokenTransfer)),
+                _ => {}
             }
         }
 

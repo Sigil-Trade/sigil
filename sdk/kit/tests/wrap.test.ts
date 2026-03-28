@@ -1,12 +1,22 @@
 import { expect } from "chai";
 import type { Address, Instruction } from "@solana/kit";
 import { AccountRole } from "@solana/kit";
-import { wrap, replaceAgentAtas, PhalnxClient, type WrapParams, type PhalnxClientConfig } from "../src/wrap.js";
+import {
+  wrap,
+  replaceAgentAtas,
+  PhalnxClient,
+  type WrapParams,
+  type PhalnxClientConfig,
+} from "../src/wrap.js";
 import { createVault, type CreateVaultOptions } from "../src/create-vault.js";
 import { ActionType } from "../src/generated/types/actionType.js";
 import { VaultStatus } from "../src/generated/types/vaultStatus.js";
 import type { ResolvedVaultState } from "../src/state-resolver.js";
-import { FULL_PERMISSIONS, PROTOCOL_TREASURY, USDC_MINT_DEVNET } from "../src/types.js";
+import {
+  FULL_PERMISSIONS,
+  PROTOCOL_TREASURY,
+  USDC_MINT_DEVNET,
+} from "../src/types.js";
 import { createMockAgent, createMockVaultState } from "../src/testing/index.js";
 
 // ─── Test Addresses ─────────────────────────────────────────────────────────
@@ -19,8 +29,7 @@ const USDC_DEVNET = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU" as Address;
 const JUPITER = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" as Address;
 const UNKNOWN_PROTOCOL =
   "FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn" as Address;
-const COMPUTE_BUDGET =
-  "ComputeBudget111111111111111111111111111111" as Address;
+const COMPUTE_BUDGET = "ComputeBudget111111111111111111111111111111" as Address;
 
 // ─── Mock Helpers ───────────────────────────────────────────────────────────
 
@@ -38,14 +47,14 @@ function mockOwner() {
 function makeInstruction(programAddress: Address): Instruction {
   return {
     programAddress,
-    accounts: [
-      { address: VAULT, role: AccountRole.WRITABLE },
-    ],
+    accounts: [{ address: VAULT, role: AccountRole.WRITABLE }],
     data: new Uint8Array([1, 2, 3]),
   };
 }
 
-function makeCachedState(overrides?: Parameters<typeof createMockVaultState>[0]): ResolvedVaultState {
+function makeCachedState(
+  overrides?: Parameters<typeof createMockVaultState>[0],
+): ResolvedVaultState {
   return createMockVaultState({
     vault: VAULT,
     agent: AGENT_ADDR,
@@ -383,7 +392,9 @@ function mockRpc() {
   } as any;
 }
 
-function clientConfig(overrides?: Partial<PhalnxClientConfig>): PhalnxClientConfig {
+function clientConfig(
+  overrides?: Partial<PhalnxClientConfig>,
+): PhalnxClientConfig {
   return {
     rpc: mockRpc(),
     vault: VAULT,
@@ -413,15 +424,12 @@ describe("PhalnxClient", () => {
 
   it("client.wrap() produces WrapResult via delegation to standalone wrap()", async () => {
     const client = new PhalnxClient(clientConfig());
-    const result = await client.wrap(
-      [makeInstruction(JUPITER)],
-      {
-        tokenMint: USDC_DEVNET,
-        amount: 100_000_000n,
-        cachedState: makeCachedState(),
-        addressLookupTables: {},
-      },
-    );
+    const result = await client.wrap([makeInstruction(JUPITER)], {
+      tokenMint: USDC_DEVNET,
+      amount: 100_000_000n,
+      cachedState: makeCachedState(),
+      addressLookupTables: {},
+    });
 
     expect(result.ok).to.equal(true);
     expect(result.transaction).to.exist;
@@ -437,25 +445,24 @@ describe("PhalnxClient", () => {
     };
 
     // Use ClosePosition (non-spending, amount=0) to avoid RPC calls for fee ATAs
-    const directResult = await wrap(baseWrapParams({
-      cachedState: state,
-      blockhash,
-      actionType: ActionType.ClosePosition,
-      amount: 0n,
-    }));
+    const directResult = await wrap(
+      baseWrapParams({
+        cachedState: state,
+        blockhash,
+        actionType: ActionType.ClosePosition,
+        amount: 0n,
+      }),
+    );
 
     const client = new PhalnxClient(clientConfig());
-    const clientResult = await client.wrap(
-      [makeInstruction(JUPITER)],
-      {
-        tokenMint: USDC_DEVNET,
-        amount: 0n,
-        actionType: ActionType.ClosePosition,
-        cachedState: state,
-        // Pre-supply ALTs to avoid RPC call for ALT resolution
-        addressLookupTables: {},
-      },
-    );
+    const clientResult = await client.wrap([makeInstruction(JUPITER)], {
+      tokenMint: USDC_DEVNET,
+      amount: 0n,
+      actionType: ActionType.ClosePosition,
+      cachedState: state,
+      // Pre-supply ALTs to avoid RPC call for ALT resolution
+      addressLookupTables: {},
+    });
 
     expect(clientResult.actionType).to.equal(directResult.actionType);
     expect(clientResult.ok).to.equal(directResult.ok);
@@ -466,15 +473,12 @@ describe("PhalnxClient", () => {
     const client = new PhalnxClient(clientConfig({ agent: brokenAgent }));
 
     try {
-      await client.executeAndConfirm(
-        [makeInstruction(JUPITER)],
-        {
-          tokenMint: USDC_DEVNET,
-          amount: 100_000_000n,
-          cachedState: makeCachedState(),
-          addressLookupTables: {},
-        },
-      );
+      await client.executeAndConfirm([makeInstruction(JUPITER)], {
+        tokenMint: USDC_DEVNET,
+        amount: 100_000_000n,
+        cachedState: makeCachedState(),
+        addressLookupTables: {},
+      });
       expect.fail("should throw");
     } catch (e: any) {
       expect(e.message).to.include("signTransactions");
@@ -483,7 +487,12 @@ describe("PhalnxClient", () => {
 
   it("constructor throws if rpc is missing", () => {
     try {
-      new PhalnxClient({ rpc: undefined as any, vault: VAULT, agent: mockAgent(), network: "devnet" });
+      new PhalnxClient({
+        rpc: undefined as any,
+        vault: VAULT,
+        agent: mockAgent(),
+        network: "devnet",
+      });
       expect.fail("should throw");
     } catch (e: any) {
       expect(e.message).to.include("rpc is required");
@@ -492,7 +501,12 @@ describe("PhalnxClient", () => {
 
   it("constructor throws if vault is missing", () => {
     try {
-      new PhalnxClient({ rpc: {} as any, vault: undefined as any, agent: mockAgent(), network: "devnet" });
+      new PhalnxClient({
+        rpc: {} as any,
+        vault: undefined as any,
+        agent: mockAgent(),
+        network: "devnet",
+      });
       expect.fail("should throw");
     } catch (e: any) {
       expect(e.message).to.include("vault is required");
@@ -501,7 +515,12 @@ describe("PhalnxClient", () => {
 
   it("constructor throws if agent is missing", () => {
     try {
-      new PhalnxClient({ rpc: {} as any, vault: VAULT, agent: undefined as any, network: "devnet" });
+      new PhalnxClient({
+        rpc: {} as any,
+        vault: VAULT,
+        agent: undefined as any,
+        network: "devnet",
+      });
       expect.fail("should throw");
     } catch (e: any) {
       expect(e.message).to.include("agent is required");
@@ -510,7 +529,12 @@ describe("PhalnxClient", () => {
 
   it("constructor throws if network is missing", () => {
     try {
-      new PhalnxClient({ rpc: {} as any, vault: VAULT, agent: mockAgent(), network: undefined as any });
+      new PhalnxClient({
+        rpc: {} as any,
+        vault: VAULT,
+        agent: mockAgent(),
+        network: undefined as any,
+      });
       expect.fail("should throw");
     } catch (e: any) {
       expect(e.message).to.include("network is required");
@@ -536,8 +560,10 @@ describe("PhalnxClient", () => {
 
 // ─── Pre-flight checks (Steps 23, 24) ────────────────────────────────────────
 
-const TOKEN_PROGRAM_ADDR = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address;
-const TOKEN_2022_ADDR = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" as Address;
+const TOKEN_PROGRAM_ADDR =
+  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address;
+const TOKEN_2022_ADDR =
+  "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" as Address;
 
 describe("wrap() pre-flight checks", () => {
   it("throws on top-level SPL Transfer in instructions", async () => {
@@ -565,6 +591,76 @@ describe("wrap() pre-flight checks", () => {
       expect.fail("should throw");
     } catch (e: any) {
       expect(e.message).to.include("SPL Token Approve not allowed");
+    }
+  });
+
+  it("throws on top-level SPL ApproveChecked in instructions", async () => {
+    const ix: Instruction = {
+      programAddress: TOKEN_PROGRAM_ADDR,
+      accounts: [],
+      data: new Uint8Array([13, 0, 0, 0, 0, 0, 0, 0, 0, 6]),
+    };
+    try {
+      await wrap(baseWrapParams({ instructions: [ix] }));
+      expect.fail("should throw");
+    } catch (e: any) {
+      expect(e.message).to.include("ApproveChecked not allowed");
+    }
+  });
+
+  it("throws on top-level SPL Burn in instructions", async () => {
+    const ix: Instruction = {
+      programAddress: TOKEN_PROGRAM_ADDR,
+      accounts: [],
+      data: new Uint8Array([8, 0, 0, 0, 0, 0, 0, 0, 0]),
+    };
+    try {
+      await wrap(baseWrapParams({ instructions: [ix] }));
+      expect.fail("should throw");
+    } catch (e: any) {
+      expect(e.message).to.include("Burn");
+    }
+  });
+
+  it("throws on top-level SPL BurnChecked in instructions", async () => {
+    const ix: Instruction = {
+      programAddress: TOKEN_PROGRAM_ADDR,
+      accounts: [],
+      data: new Uint8Array([15, 0, 0, 0, 0, 0, 0, 0, 0, 6]),
+    };
+    try {
+      await wrap(baseWrapParams({ instructions: [ix] }));
+      expect.fail("should throw");
+    } catch (e: any) {
+      expect(e.message).to.include("Burn");
+    }
+  });
+
+  it("throws on top-level SPL SetAuthority in instructions", async () => {
+    const ix: Instruction = {
+      programAddress: TOKEN_PROGRAM_ADDR,
+      accounts: [],
+      data: new Uint8Array([6, 1, 1, ...new Array(32).fill(0)]),
+    };
+    try {
+      await wrap(baseWrapParams({ instructions: [ix] }));
+      expect.fail("should throw");
+    } catch (e: any) {
+      expect(e.message).to.include("SetAuthority");
+    }
+  });
+
+  it("throws on top-level SPL CloseAccount in instructions", async () => {
+    const ix: Instruction = {
+      programAddress: TOKEN_PROGRAM_ADDR,
+      accounts: [],
+      data: new Uint8Array([9]),
+    };
+    try {
+      await wrap(baseWrapParams({ instructions: [ix] }));
+      expect.fail("should throw");
+    } catch (e: any) {
+      expect(e.message).to.include("CloseAccount");
     }
   });
 
@@ -647,7 +743,9 @@ describe("wrap() pre-flight checks", () => {
     try {
       await wrap(baseWrapParams({ instructions: [ix] }));
     } catch (e: any) {
-      expect(e.message).to.not.match(/SPL Token (Transfer|Approve) not allowed/);
+      expect(e.message).to.not.match(
+        /SPL Token (Transfer|Approve) not allowed/,
+      );
     }
   });
 
