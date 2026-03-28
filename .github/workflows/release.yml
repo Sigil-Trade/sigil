@@ -128,7 +128,7 @@ jobs:
         working-directory: sdk/custody/crossmint
         run: pnpm test
 
-      - name: Run Kit SDK tests (802 tests)
+      - name: Run Kit SDK tests (880 tests)
         working-directory: sdk/kit
         run: pnpm test
 

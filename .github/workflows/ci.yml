@@ -3,9 +3,9 @@
 # Runs on every push to main and on pull requests.
 # Eight jobs (1 detection + 6 parallel + 1 gate):
 #   0. changes                — Detect which file groups changed (package-level path filtering)
-#   1. build-lint-test        — TypeScript builds, Prettier, 920 TS tests (conditional: any-ts or push)
+#   1. build-lint-test        — TypeScript builds, Prettier, 998 TS tests (conditional: any-ts or push)
 #   2. rust-checks            — cargo fmt + cargo clippy (conditional: rust changes or push)
-#   3. on-chain-tests         — Anchor build + LiteSVM 436 tests (conditional: rust changes or push)
+#   3. on-chain-tests         — Anchor build + LiteSVM 445 tests (conditional: rust changes or push)
 #  3b. build-verification     — Feature flag safety net (conditional: rust changes or push)
 #  3c. surfpool-integration   — Surfpool integration tests, 59 tests (conditional: rust changes or push)
 #   4. security-scan          — Sec3 X-Ray static analysis (always, BLOCKING)
@@ -23,7 +23,7 @@
 #   apps/ → Actions server tests
 #   sdk/kit → Kit SDK tests
 #
-# Total: ~1,493 tests across 17 suites (920 TS + 436 on-chain + 59 Surfpool + 78 devnet)
+# Total: ~1,580 tests across 17 suites (998 TS + 445 on-chain + 59 Surfpool + 78 devnet)
 # All security checks are BLOCKING — zero tolerance for known issues.
 
 name: CI
@@ -93,7 +93,7 @@ jobs:
               - 'tsconfig*.json'
 
   # ──────────────────────────────────────────────────────────────
-  # Job 1: TypeScript build, lint, and tests (5 suites, 920 tests)
+  # Job 1: TypeScript build, lint, and tests (5 suites, 998 tests)
   # ──────────────────────────────────────────────────────────────
   build-lint-test:
     name: Build, Lint & TS Tests
@@ -168,7 +168,7 @@ jobs:
         working-directory: sdk/custody/crossmint
         run: pnpm test
 
-      - name: Kit SDK tests (802 tests)
+      - name: Kit SDK tests (880 tests)
         if: >-
           needs.changes.outputs.sdk-kit == 'true' ||
           github.event_name == 'push'

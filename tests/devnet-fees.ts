@@ -214,9 +214,9 @@ describe("devnet-fees", () => {
     console.log(`    Combined fees deducted: ${totalFees}`);
   });
 
-  it("4. success=false: fees collected upfront, but stats preserved", async () => {
+  it("4. fees collected upfront, stats always increment (success param removed)", async () => {
     // Fees are collected during validate_and_authorize (upfront), not finalize.
-    // success=false only prevents vault stats increment (totalTransactions, totalVolume).
+    // With success param removed (PR #143), every finalize increments stats.
     const amount = 50_000_000;
     const { protocolFee, developerFee } = calculateFees(amount, 500);
 
@@ -266,11 +266,11 @@ describe("devnet-fees", () => {
     expect(treasuryAfter - treasuryBefore).to.equal(protocolFee);
     expect(feeDestAfter - feeDestBefore).to.equal(developerFee);
 
-    // But stats NOT incremented
+    // Stats incremented (success param removed — every finalize counts)
     const vaultAfter = await program.account.agentVault.fetch(vaultA.vaultPda);
-    expect(vaultAfter.totalTransactions.toNumber()).to.equal(txCountBefore);
+    expect(vaultAfter.totalTransactions.toNumber()).to.equal(txCountBefore + 1);
     console.log(
-      `    success=false: fees collected (proto=${protocolFee}, dev=${developerFee}), stats preserved`,
+      `    fees collected (proto=${protocolFee}, dev=${developerFee}), stats incremented`,
     );
   });
 

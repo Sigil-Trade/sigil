@@ -1,7 +1,7 @@
 # Phalnx
 
 [![CI](https://github.com/Kaleb-Rupe/phalnx/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Kaleb-Rupe/phalnx/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-1493-brightgreen)
+![Tests](https://img.shields.io/badge/tests-1580-brightgreen)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 
 On-chain guardrails for AI agents on Solana. Your policies are enforced by Solana validators, not software promises.
@@ -140,7 +140,7 @@ anchor build --no-idl
 # Generate IDL separately (requires nightly Rust — anchor-syn 0.32.1 bug)
 RUSTUP_TOOLCHAIN=nightly anchor idl build -o target/idl/phalnx.json
 
-# Run on-chain tests (436 LiteSVM tests — no validator needed)
+# Run on-chain tests (445 LiteSVM tests — no validator needed)
 npx ts-mocha -p ./tsconfig.json -t 300000 \
   tests/phalnx.ts tests/jupiter-integration.ts \
   tests/flash-trade-integration.ts tests/security-exploits.ts \
@@ -162,20 +162,20 @@ cargo fmt --check --manifest-path programs/phalnx/Cargo.toml
 | Jupiter integration (composed swaps)                 |       8 |
 | Jupiter Lend integration (deposit/withdraw)          |       6 |
 | Flash Trade integration (leveraged perps)            |      30 |
-| Security exploit scenarios                           |     151 |
+| Security exploit scenarios                           |     159 |
 | Instruction constraints (generic enforcement)        |      41 |
-| Escrow integration (deposit/settle/refund)           |      14 |
+| Escrow integration (deposit/settle/refund)           |      15 |
 | Analytics counters (failed TX + per-agent TX count)  |       7 |
 | Devnet integration tests (real network)              |      69 |
 | Surfpool integration tests (local Surfnet)           |      59 |
 | Core policy engine (`@phalnx/core`)                  |      66 |
 | Platform client tests (`@phalnx/platform`)           |      17 |
 | Crossmint custody adapter                            |      29 |
-| Kit-native SDK (`@phalnx/kit`)                       |     802 |
+| Kit-native SDK (`@phalnx/kit`)                       |     880 |
 | Kit SDK devnet tests (`@phalnx/kit` devnet)          |       9 |
 | SAK plugin (`@phalnx/plugin-solana-agent-kit`)       |       6 |
 | Rust unit tests (cargo test)                         |      71 |
-| **Total**                                            | **1493** |
+| **Total**                                            | **1580** |
 
 ## Security
 

@@ -537,7 +537,7 @@ describe("🔥 PHALNX DEVNET STRESS TEST — Real Tokens, Real Limits", function
       console.log(`    Total TXs: ${vault.totalTransactions.toNumber()}`);
     });
 
-    it("composed TX: validate + DeFi + finalize (success=false) — no stats change", async () => {
+    it("composed TX: validate + DeFi + finalize — stats increment (success param removed)", async () => {
       const before = await program.account.agentVault.fetch(v.vault);
       await doComposedTx(
         agentA,
@@ -547,13 +547,12 @@ describe("🔥 PHALNX DEVNET STRESS TEST — Real Tokens, Real Limits", function
         v.overlay,
         v.vaultAta,
         new BN(50_000_000),
-        false,
       );
       const after = await program.account.agentVault.fetch(v.vault);
       expect(after.totalTransactions.toNumber()).to.equal(
-        before.totalTransactions.toNumber(),
+        before.totalTransactions.toNumber() + 1,
       );
-      console.log("    ✓ Failed DeFi: vault stats unchanged");
+      console.log("    ✓ Composed TX: totalTransactions incremented");
     });
 
     it("rapid fire: 5 composed TXs in sequence", async () => {

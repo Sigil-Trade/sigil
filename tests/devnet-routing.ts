@@ -929,8 +929,8 @@ describe("devnet-routing", () => {
       } as any)
       .rpc();
 
-    // Non-stablecoin input with finalize success=false
-    // The composed TX will fail because finalize checks balance increase
+    // Non-stablecoin input — composed TX may fail if stablecoin delta <= 0
+    // (outcome-based: finalize checks for stablecoin balance increase)
     const sessionPda = deriveSessionPda(
       vault.vaultPda,
       agent.publicKey,
@@ -960,10 +960,10 @@ describe("devnet-routing", () => {
         protocolTreasuryAta: vault.protocolTreasuryAta,
         outputStablecoinAccount: vault.vaultTokenAta, // USDC output
       });
-      // success=false with non-stablecoin input: session closed, no fees
+      // Non-stablecoin with no actual swap: no stablecoin increase → may fail
     } catch (err: any) {
-      // This may also throw if the program rejects -- that's also valid
-      // Non-stablecoin path with success=false still proves no fees collected
+      // Expected: NonTrackedSwapMustReturnStablecoin or similar rejection
+      // No fees collected because entire TX reverts atomically
     }
 
     const treasuryAfter = await getTokenBalance(

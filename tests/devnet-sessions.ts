@@ -179,7 +179,7 @@ describe("devnet-sessions", () => {
     );
   });
 
-  it("2. composed TX with success=false preserves vault stats", async () => {
+  it("2. composed TX increments totalTransactions (success param removed)", async () => {
     const vaultBefore = await program.account.agentVault.fetch(vault.vaultPda);
     const txCountBefore = vaultBefore.totalTransactions.toNumber();
 
@@ -210,10 +210,10 @@ describe("devnet-sessions", () => {
     const sessionInfo = await connection.getAccountInfo(sessionPda);
     expect(sessionInfo).to.be.null;
 
-    // Stats NOT incremented
+    // Stats incremented (success param removed — every finalize counts)
     const vaultAfter = await program.account.agentVault.fetch(vault.vaultPda);
-    expect(vaultAfter.totalTransactions.toNumber()).to.equal(txCountBefore);
-    console.log("    success=false: session closed, stats preserved");
+    expect(vaultAfter.totalTransactions.toNumber()).to.equal(txCountBefore + 1);
+    console.log("    composed TX: session closed, totalTransactions incremented");
   });
 
   it("3. non-agent signer rejected in composed TX", async () => {

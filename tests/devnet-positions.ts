@@ -228,13 +228,13 @@ describe("devnet-positions", () => {
     console.log("    close_vault blocked with open positions");
   });
 
-  it("5. failed openPosition (success=false) does not increment counter", async () => {
+  it("5. openPosition with zero actual spend does not increment counter", async () => {
     const vault = await createPositionVault();
 
     const vBefore = await program.account.agentVault.fetch(vault.vaultPda);
     expect(vBefore.openPositions).to.equal(0);
 
-    // Open with success=false
+    // Open with mock DeFi (no actual token movement → actual_spend=0 → no position update)
     await openPosition(vault);
 
     const vAfter = await program.account.agentVault.fetch(vault.vaultPda);
