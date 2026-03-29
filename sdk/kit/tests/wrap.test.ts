@@ -9,6 +9,7 @@ import {
   type PhalnxClientConfig,
 } from "../src/wrap.js";
 import { createVault, type CreateVaultOptions } from "../src/create-vault.js";
+import { deriveAta } from "../src/x402/transfer-builder.js";
 import { ActionType } from "../src/generated/types/actionType.js";
 import { VaultStatus } from "../src/generated/types/vaultStatus.js";
 import type { ResolvedVaultState } from "../src/state-resolver.js";
@@ -663,6 +664,78 @@ describe("wrap() pre-flight checks", () => {
     } catch (e: any) {
       expect(e.message).to.include("CloseAccount");
     }
+  });
+
+  // --- ADV-6: Negative amount ---
+  it("throws clean error on negative amount", async () => {
+    try {
+      await wrap(baseWrapParams({ amount: -1n }));
+      expect.fail("should throw");
+    } catch (e: any) {
+      expect(e.message).to.include("non-negative");
+    }
+  });
+
+  // --- ADV-1: ATA replacement collision ---
+  it("throws when additionalAtaReplacements conflicts with canonical ATA", async () => {
+    const canonicalAta = await deriveAta(AGENT_ADDR, USDC_DEVNET);
+    try {
+      await wrap(
+        baseWrapParams({
+          additionalAtaReplacements: new Map([
+            [
+              canonicalAta,
+              "Malicious1111111111111111111111111111111111" as Address,
+            ],
+          ]),
+        }),
+      );
+      expect.fail("should throw");
+    } catch (e: any) {
+      expect(e.message).to.include("conflicts with canonical");
+    }
+  });
+
+  // --- ADV-3: Role-based ATA replacement ---
+  it("replaceAgentAtas preserves READONLY accounts", () => {
+    const agentAta = "AgentAta111111111111111111111111111111111111" as Address;
+    const vaultAta = "VaultAta111111111111111111111111111111111111" as Address;
+    const map = new Map<Address, Address>([[agentAta, vaultAta]]);
+    const ix: Instruction = {
+      programAddress: "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" as Address,
+      accounts: [
+        { address: agentAta, role: AccountRole.WRITABLE },
+        { address: agentAta, role: AccountRole.READONLY },
+      ],
+      data: new Uint8Array([1]),
+    };
+    const [result] = replaceAgentAtas([ix], map);
+    expect(result.accounts![0].address).to.equal(vaultAta); // WRITABLE → replaced
+    expect(result.accounts![1].address).to.equal(agentAta); // READONLY → preserved
+  });
+
+  // --- ADV-2: Non-stablecoin token balance ---
+  it("fetches non-stablecoin token balance for vaultContext drain detection", async () => {
+    const amount = 500_000_000n;
+    const data = new Uint8Array(72);
+    for (let i = 0; i < 8; i++)
+      data[64 + i] = Number((amount >> BigInt(i * 8)) & 0xffn);
+    const base64 = btoa(String.fromCharCode(...data));
+    const NON_STABLE = "NonStab1e1111111111111111111111111111111111" as Address;
+    const rpcWithBalance = {
+      ...mockRpc(),
+      getAccountInfo: () => ({
+        send: async () => ({ value: { data: [base64, "base64"] } }),
+      }),
+    };
+    const result = await wrap(
+      baseWrapParams({
+        rpc: rpcWithBalance as any,
+        tokenMint: NON_STABLE,
+        addressLookupTables: {},
+      }),
+    );
+    expect(result.vaultContext!.tokenBalance).to.equal(amount);
   });
 
   it("throws on 2+ DeFi instructions for stablecoin input", async () => {
