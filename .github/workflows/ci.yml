@@ -696,6 +696,10 @@ jobs:
         env:
           CERTORAKEY: ${{ secrets.CERTORAKEY }}
         run: |
+          if [ -z "$CERTORAKEY" ]; then
+            echo "::warning::CERTORAKEY not available (Dependabot PR). Skipping formal verification."
+            exit 0
+          fi
           source .certora-venv/bin/activate
           certoraSolanaProver certora/conf/phalnx.conf
 
