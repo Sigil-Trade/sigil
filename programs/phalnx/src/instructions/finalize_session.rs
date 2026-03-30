@@ -230,8 +230,7 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
         // fees are collected, so the maximum legitimate decrease is the full
         // authorized_amount (fees + delegation combined).
         if is_stablecoin_input && session_delegated && stablecoin_current < session_balance_before {
-            let actual_decrease = session_balance_before
-                .saturating_sub(stablecoin_current);
+            let actual_decrease = session_balance_before.saturating_sub(stablecoin_current);
             require!(
                 actual_decrease <= session_authorized_amount,
                 PhalnxError::UnexpectedBalanceDecrease

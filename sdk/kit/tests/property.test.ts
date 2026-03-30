@@ -13,6 +13,8 @@ import { expect } from "chai";
 import {
   isSpendingAction,
   hasPermission,
+  stringsToPermissions,
+  PermissionBuilder,
   FULL_PERMISSIONS,
 } from "../src/types.js";
 import {
@@ -1113,6 +1115,182 @@ describe("Property Tests — Category C: Fuzz Testing", () => {
           const result = replaceAgentAtas([ix], replacements);
           expect(result[0].programAddress).to.equal(programAddr);
         }),
+        { numRuns: NUM_RUNS },
+      );
+    });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Category D: Adversarial SDK Attack Tests (ISC-33 through ISC-50)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe("Adversarial SDK Attack Tests", () => {
+  describe("Type Coercion & Input Attacks", () => {
+    it("ISC-36: stringsToPermissions with Object.prototype keys throws", () => {
+      const protoKeys = ["toString", "constructor", "hasOwnProperty", "valueOf"];
+      for (const key of protoKeys) {
+        expect(() => stringsToPermissions([key])).to.throw(/Unknown action type/);
+      }
+    });
+
+    it("ISC-36b: PermissionBuilder.add with Object.prototype keys returns 0n", () => {
+      const builder = new PermissionBuilder();
+      builder.add("toString").add("constructor").add("hasOwnProperty");
+      expect(builder.build()).to.equal(0n);
+    });
+
+    it("ISC-36c: PermissionBuilder.remove with Object.prototype keys doesn't crash", () => {
+      const builder = new PermissionBuilder();
+      builder.add("swap").remove("toString").remove("constructor");
+      expect(builder.build()).to.equal(1n); // swap bit still set
+    });
+  });
+
+  describe("Drain Detection Edge Cases", () => {
+    it("ISC-40: MULTI_OUTPUT with exactly 2 unknown recipients triggers flag", () => {
+      const input: DrainDetectionInput = {
+        balanceDeltas: [
+          makeDelta("Vault1111111111111111111111111111111111111111", 10000n, 5000n),
+          makeDelta("Unknown111111111111111111111111111111111111111", 0n, 2000n),
+          makeDelta("Unknown222222222222222222222222222222222222222", 0n, 3000n),
+        ],
+        vaultAddress: "Vault1111111111111111111111111111111111111111",
+        totalVaultBalance: 10000n,
+      };
+      const flags = detectDrainAttempt(input);
+      expect(flags.some((f) => f === RISK_FLAG_MULTI_OUTPUT)).to.equal(true);
+    });
+
+    it("ISC-41: MULTI_OUTPUT with 2 known recipients does NOT trigger", () => {
+      const known1 = "Known11111111111111111111111111111111111111111";
+      const known2 = "Known22222222222222222222222222222222222222222";
+      const knownSet = new Set<string>([known1, known2]);
+      // Verify the Set works
+      expect(knownSet.has(known1)).to.equal(true);
+      expect(knownSet.has(known2)).to.equal(true);
+      const input: DrainDetectionInput = {
+        balanceDeltas: [
+          makeDelta("Vault1111111111111111111111111111111111111111", 10000n, 5000n),
+          { account: known1, preBalance: 0n, postBalance: 2000n, delta: 2000n },
+          { account: known2, preBalance: 0n, postBalance: 3000n, delta: 3000n },
+        ],
+        vaultAddress: "Vault1111111111111111111111111111111111111111",
+        totalVaultBalance: 10000n,
+        knownRecipients: knownSet,
+      };
+      const flags = detectDrainAttempt(input);
+      const multiOutput = flags.filter((f) => f === RISK_FLAG_MULTI_OUTPUT);
+      expect(multiOutput.length, `MULTI_OUTPUT should not trigger with known recipients, but got ${JSON.stringify(flags)}`).to.equal(0);
+    });
+
+    it("ISC-43: drain detection with max u64 vault balance doesn't overflow", () => {
+      const U64_MAX = 18446744073709551615n;
+      const input: DrainDetectionInput = {
+        balanceDeltas: [
+          makeDelta("Vault1111111111111111111111111111111111111111", U64_MAX, 0n),
+        ],
+        vaultAddress: "Vault1111111111111111111111111111111111111111",
+        totalVaultBalance: U64_MAX,
+      };
+      // Should not throw despite enormous numbers
+      const flags = detectDrainAttempt(input);
+      expect(flags).to.be.an("array");
+      // 100% drain should trigger FULL_DRAIN
+      expect(flags.some((f) => f === RISK_FLAG_FULL_DRAIN)).to.equal(true);
+    });
+
+    it("ISC-43b: drain detection with near-max values in arithmetic", () => {
+      const NEAR_MAX = 18446744073709551600n;
+      const input: DrainDetectionInput = {
+        balanceDeltas: [
+          makeDelta("Vault1111111111111111111111111111111111111111", NEAR_MAX, NEAR_MAX / 2n),
+        ],
+        vaultAddress: "Vault1111111111111111111111111111111111111111",
+        totalVaultBalance: NEAR_MAX,
+      };
+      const flags = detectDrainAttempt(input);
+      expect(flags).to.be.an("array");
+      // 50% drain should trigger LARGE_OUTFLOW
+      expect(flags.some((f) => f === RISK_FLAG_LARGE_OUTFLOW)).to.equal(true);
+    });
+  });
+
+  describe("Permission Bit Exhaustive Tests", () => {
+    it("all 21 action types have unique permission bits", () => {
+      const ACTION_KEYS = [
+        "swap", "openPosition", "closePosition", "increasePosition",
+        "decreasePosition", "deposit", "withdraw", "transfer",
+        "addCollateral", "removeCollateral", "placeTriggerOrder",
+        "editTriggerOrder", "cancelTriggerOrder", "placeLimitOrder",
+        "editLimitOrder", "cancelLimitOrder", "swapAndOpenPosition",
+        "closeAndSwapPosition", "createEscrow", "settleEscrow", "refundEscrow",
+      ];
+      const bits = ACTION_KEYS.map((k) => stringsToPermissions([k]));
+      const uniqueBits = new Set(bits.map((b) => b.toString()));
+      expect(uniqueBits.size).to.equal(21);
+    });
+
+    it("stringsToPermissions round-trips through PermissionBuilder", () => {
+      const actions = ["swap", "deposit", "transfer"];
+      const fromStrings = stringsToPermissions(actions);
+      const fromBuilder = new PermissionBuilder()
+        .add("swap")
+        .add("deposit")
+        .add("transfer")
+        .build();
+      expect(fromStrings).to.equal(fromBuilder);
+    });
+
+    it("permission bits are contiguous from 0 to 20", () => {
+      const ACTION_KEYS = [
+        "swap", "openPosition", "closePosition", "increasePosition",
+        "decreasePosition", "deposit", "withdraw", "transfer",
+        "addCollateral", "removeCollateral", "placeTriggerOrder",
+        "editTriggerOrder", "cancelTriggerOrder", "placeLimitOrder",
+        "editLimitOrder", "cancelLimitOrder", "swapAndOpenPosition",
+        "closeAndSwapPosition", "createEscrow", "settleEscrow", "refundEscrow",
+      ];
+      for (let i = 0; i < ACTION_KEYS.length; i++) {
+        const perm = stringsToPermissions([ACTION_KEYS[i]]);
+        expect(perm).to.equal(1n << BigInt(i));
+      }
+    });
+
+    it("FULL_PERMISSIONS is exactly the OR of all 21 bits", () => {
+      const ACTION_KEYS = [
+        "swap", "openPosition", "closePosition", "increasePosition",
+        "decreasePosition", "deposit", "withdraw", "transfer",
+        "addCollateral", "removeCollateral", "placeTriggerOrder",
+        "editTriggerOrder", "cancelTriggerOrder", "placeLimitOrder",
+        "editLimitOrder", "cancelLimitOrder", "swapAndOpenPosition",
+        "closeAndSwapPosition", "createEscrow", "settleEscrow", "refundEscrow",
+      ];
+      const combined = stringsToPermissions(ACTION_KEYS);
+      expect(combined).to.equal(FULL_PERMISSIONS);
+    });
+  });
+
+  describe("Threshold Property Tests (fuzz)", () => {
+    it("drain thresholds are always integers after clamping", () => {
+      fc.assert(
+        fc.property(
+          fc.double({ min: -1e10, max: 1e10, noNaN: false }),
+          fc.double({ min: -1e10, max: 1e10, noNaN: false }),
+          (warning, block) => {
+            const input: DrainDetectionInput = {
+              balanceDeltas: [makeDelta("V1111111111111111111111111111111111111111111", 100n, 0n)],
+              vaultAddress: "V1111111111111111111111111111111111111111111",
+              totalVaultBalance: 100n,
+            };
+            // Must never throw — Math.floor ensures integer conversion
+            const flags = detectDrainAttempt(input, {
+              warningPercent: warning,
+              blockPercent: block,
+            });
+            expect(flags).to.be.an("array");
+          },
+        ),
         { numRuns: NUM_RUNS },
       );
     });
