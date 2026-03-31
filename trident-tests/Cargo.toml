@@ -3,11 +3,11 @@
 [package]
 name = "fuzz_tests"
 version = "0.1.0"
-description = "Phalnx fuzz tests (Trident)"
+description = "Sigil fuzz tests (Trident)"
 edition = "2021"
 
 [dependencies]
-phalnx = { path = "../programs/phalnx" }
+sigil = { path = "../programs/sigil" }
 trident-fuzz = { version = "0.12.0", features = ["all"] }
 borsh = "1.5.3"
 solana-sdk = "2.3"

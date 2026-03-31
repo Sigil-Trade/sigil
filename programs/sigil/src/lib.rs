@@ -16,7 +16,7 @@ declare_id!("4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL");
 
 #[allow(clippy::too_many_arguments)]
 #[program]
-pub mod phalnx {
+pub mod sigil {
     use super::*;
 
     /// Initialize a new agent vault with policy configuration.

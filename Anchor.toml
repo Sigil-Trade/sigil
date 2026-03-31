@@ -6,10 +6,10 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-phalnx = "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL"
+sigil = "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL"
 
 [programs.localnet]
-phalnx = "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL"
+sigil = "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL"
 
 [registry]
 url = "https://api.apr.dev"
@@ -19,4 +19,4 @@ cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
-test = "npx ts-mocha -p ./tsconfig.json -t 300000 tests/phalnx.ts tests/jupiter-integration.ts tests/flash-trade-integration.ts"
+test = "npx ts-mocha -p ./tsconfig.json -t 300000 tests/sigil.ts tests/jupiter-integration.ts tests/flash-trade-integration.ts"

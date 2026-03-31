@@ -1,4 +1,4 @@
-// Trident fuzz test for Phalnx
+// Trident fuzz test for Sigil
 //
 // V3: Stablecoin-only architecture — oracles removed.
 // Uses the trident 0.12.0 API (#[FuzzTestMethods] + #[flow_executor]).
@@ -26,7 +26,7 @@ mod fuzz_accounts;
 
 use anchor_lang::prelude::Pubkey;
 use anchor_lang::{AccountDeserialize, InstructionData, ToAccountMetas};
-use phalnx::state::{
+use sigil::state::{
     ActionType, AgentVault, PolicyConfig, SessionAuthority, SpendTracker, VaultStatus,
 };
 
@@ -117,7 +117,7 @@ impl FuzzTest {
 
         // ── Step 1: InitializeVault (V3: 11 args, includes maxSlippageBps) ──
 
-        let data = phalnx::instruction::InitializeVault {
+        let data = sigil::instruction::InitializeVault {
             vault_id,
             daily_spending_cap_usd: cap,
             max_transaction_size_usd: cap,
@@ -134,7 +134,7 @@ impl FuzzTest {
 
         let (agent_spend_overlay, _) =
             Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
-        let accounts = phalnx::accounts::InitializeVault {
+        let accounts = sigil::accounts::InitializeVault {
             owner,
             vault,
             policy,
@@ -242,14 +242,14 @@ impl FuzzTest {
         let agent = self.fuzz_accounts.agent.insert(&mut self.trident, None);
         self.trident.airdrop(&agent, 5 * LAMPORTS_PER_SOL);
 
-        let reg_data = phalnx::instruction::RegisterAgent {
+        let reg_data = sigil::instruction::RegisterAgent {
             agent,
-            permissions: phalnx::state::FULL_PERMISSIONS,
+            permissions: sigil::state::FULL_PERMISSIONS,
             spending_limit_usd: 0,
         };
         let (reg_agent_spend_overlay, _) =
             Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
-        let reg_accounts = phalnx::accounts::RegisterAgent {
+        let reg_accounts = sigil::accounts::RegisterAgent {
             owner,
             vault,
             agent_spend_overlay: reg_agent_spend_overlay,
@@ -266,7 +266,7 @@ impl FuzzTest {
 
         // ── Step 6: UpdatePolicy with allowed_destinations ──
 
-        let policy_data = phalnx::instruction::UpdatePolicy {
+        let policy_data = sigil::instruction::UpdatePolicy {
             daily_spending_cap_usd: None,
             max_transaction_size_usd: None,
             protocol_mode: None,
@@ -283,7 +283,7 @@ impl FuzzTest {
             protocol_caps: None,
         };
 
-        let policy_accounts = phalnx::accounts::UpdatePolicy {
+        let policy_accounts = sigil::accounts::UpdatePolicy {
             owner,
             vault,
             policy,
@@ -463,8 +463,8 @@ impl FuzzTest {
         vault_ata: &Pubkey,
         amount: u64,
     ) {
-        let dep_data = phalnx::instruction::DepositFunds { amount };
-        let dep_accounts = phalnx::accounts::DepositFunds {
+        let dep_data = sigil::instruction::DepositFunds { amount };
+        let dep_accounts = sigil::accounts::DepositFunds {
             owner: *owner,
             vault: *vault,
             mint: *mint,
@@ -565,14 +565,14 @@ impl FuzzTest {
 
         let pre = self.snapshot_vault(&vault);
 
-        let data = phalnx::instruction::RegisterAgent {
+        let data = sigil::instruction::RegisterAgent {
             agent,
-            permissions: phalnx::state::FULL_PERMISSIONS,
+            permissions: sigil::state::FULL_PERMISSIONS,
             spending_limit_usd: 0,
         };
         let (agent_spend_overlay, _) =
             Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
-        let accounts = phalnx::accounts::RegisterAgent {
+        let accounts = sigil::accounts::RegisterAgent {
             owner,
             vault,
             agent_spend_overlay,
@@ -607,7 +607,7 @@ impl FuzzTest {
         let pre_vault = self.snapshot_vault(&vault);
         let pre_policy = self.snapshot_policy(&policy);
 
-        let data = phalnx::instruction::UpdatePolicy {
+        let data = sigil::instruction::UpdatePolicy {
             daily_spending_cap_usd: Some(new_cap),
             max_transaction_size_usd: Some(new_cap),
             protocol_mode: None,
@@ -624,7 +624,7 @@ impl FuzzTest {
             protocol_caps: None,
         };
 
-        let accounts = phalnx::accounts::UpdatePolicy {
+        let accounts = sigil::accounts::UpdatePolicy {
             owner,
             vault,
             policy,
@@ -663,8 +663,8 @@ impl FuzzTest {
 
         let pre = self.snapshot_vault(&vault);
 
-        let data = phalnx::instruction::DepositFunds { amount };
-        let accounts = phalnx::accounts::DepositFunds {
+        let data = sigil::instruction::DepositFunds { amount };
+        let accounts = sigil::accounts::DepositFunds {
             owner,
             vault,
             mint,
@@ -725,7 +725,7 @@ impl FuzzTest {
         let pre_vault = self.snapshot_vault(&vault);
         let pre_policy = self.snapshot_policy(&policy_addr);
 
-        let data = phalnx::instruction::ValidateAndAuthorize {
+        let data = sigil::instruction::ValidateAndAuthorize {
             action_type: ActionType::Swap,
             token_mint: mint,
             amount,
@@ -735,7 +735,7 @@ impl FuzzTest {
 
         let (agent_spend_overlay, _) =
             Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
-        let accounts = phalnx::accounts::ValidateAndAuthorize {
+        let accounts = sigil::accounts::ValidateAndAuthorize {
             agent,
             vault,
             policy: policy_addr,
@@ -815,10 +815,10 @@ impl FuzzTest {
         // INV-3: Check session before finalization
         check_inv3_session_expiry(&Some(session_data), self.current_slot);
 
-        let data = phalnx::instruction::FinalizeSession {};
+        let data = sigil::instruction::FinalizeSession {};
         let (agent_spend_overlay, _) =
             Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
-        let accounts = phalnx::accounts::FinalizeSession {
+        let accounts = sigil::accounts::FinalizeSession {
             payer: agent,
             vault,
             session,
@@ -875,8 +875,8 @@ impl FuzzTest {
 
         let pre = self.snapshot_vault(&vault);
 
-        let data = phalnx::instruction::WithdrawFunds { amount };
-        let accounts = phalnx::accounts::WithdrawFunds {
+        let data = sigil::instruction::WithdrawFunds { amount };
+        let accounts = sigil::accounts::WithdrawFunds {
             owner,
             vault,
             mint,
@@ -928,10 +928,10 @@ impl FuzzTest {
         let pre_vault = self.snapshot_vault(&vault);
         let pre_policy = self.snapshot_policy(&policy_addr);
 
-        let data = phalnx::instruction::AgentTransfer { amount };
+        let data = sigil::instruction::AgentTransfer { amount };
         let (agent_spend_overlay, _) =
             Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
-        let accounts = phalnx::accounts::AgentTransfer {
+        let accounts = sigil::accounts::AgentTransfer {
             agent,
             vault,
             policy: policy_addr,
@@ -978,12 +978,12 @@ impl FuzzTest {
 
         let agent = unwrap_or_ret!(self.fuzz_accounts.agent.get(&mut self.trident));
 
-        let data = phalnx::instruction::RevokeAgent {
+        let data = sigil::instruction::RevokeAgent {
             agent_to_remove: agent,
         };
         let (agent_spend_overlay, _) =
             Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
-        let accounts = phalnx::accounts::RevokeAgent {
+        let accounts = sigil::accounts::RevokeAgent {
             owner,
             vault,
             agent_spend_overlay,
@@ -1013,11 +1013,11 @@ impl FuzzTest {
 
         let pre = self.snapshot_vault(&vault);
 
-        let data = phalnx::instruction::ReactivateVault {
+        let data = sigil::instruction::ReactivateVault {
             new_agent: None,
             new_agent_permissions: None,
         };
-        let accounts = phalnx::accounts::ReactivateVault { owner, vault };
+        let accounts = sigil::accounts::ReactivateVault { owner, vault };
 
         let ix = Instruction::new_with_bytes(
             program_id(),
@@ -1056,7 +1056,7 @@ impl FuzzTest {
 
         let pre = self.snapshot_vault(&vault);
 
-        let data = phalnx::instruction::QueuePolicyUpdate {
+        let data = sigil::instruction::QueuePolicyUpdate {
             daily_spending_cap_usd: Some(new_cap),
             max_transaction_amount_usd: None,
             protocol_mode: None,
@@ -1073,7 +1073,7 @@ impl FuzzTest {
             protocol_caps: None,
         };
 
-        let accounts = phalnx::accounts::QueuePolicyUpdate {
+        let accounts = sigil::accounts::QueuePolicyUpdate {
             owner,
             vault,
             policy,
@@ -1108,8 +1108,8 @@ impl FuzzTest {
 
         let pre = self.snapshot_vault(&vault);
 
-        let data = phalnx::instruction::ApplyPendingPolicy {};
-        let accounts = phalnx::accounts::ApplyPendingPolicy {
+        let data = sigil::instruction::ApplyPendingPolicy {};
+        let accounts = sigil::accounts::ApplyPendingPolicy {
             owner,
             vault,
             policy,
@@ -1142,10 +1142,10 @@ impl FuzzTest {
 
         let pre = self.snapshot_vault(&vault);
 
-        let data = phalnx::instruction::CancelPendingPolicy {};
+        let data = sigil::instruction::CancelPendingPolicy {};
         let policy = unwrap_or_ret!(self.fuzz_accounts.policy.get(&mut self.trident));
 
-        let accounts = phalnx::accounts::CancelPendingPolicy {
+        let accounts = sigil::accounts::CancelPendingPolicy {
             owner,
             vault,
             policy,
@@ -1179,10 +1179,10 @@ impl FuzzTest {
 
         let pre = self.snapshot_vault(&vault);
 
-        let data = phalnx::instruction::CloseVault {};
+        let data = sigil::instruction::CloseVault {};
         let (agent_spend_overlay, _) =
             Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
-        let accounts = phalnx::accounts::CloseVault {
+        let accounts = sigil::accounts::CloseVault {
             owner,
             vault,
             policy,
@@ -1241,10 +1241,10 @@ impl FuzzTest {
         let policy_addr = unwrap_or_ret!(self.fuzz_accounts.policy.get(&mut self.trident));
         let tracker_addr = unwrap_or_ret!(self.fuzz_accounts.tracker.get(&mut self.trident));
 
-        let data = phalnx::instruction::FinalizeSession {};
+        let data = sigil::instruction::FinalizeSession {};
         let (agent_spend_overlay, _) =
             Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
-        let accounts = phalnx::accounts::FinalizeSession {
+        let accounts = sigil::accounts::FinalizeSession {
             payer: agent,
             vault,
             session: session_addr,
@@ -1300,10 +1300,10 @@ impl FuzzTest {
         let policy_addr = unwrap_or_ret!(self.fuzz_accounts.policy.get(&mut self.trident));
         let tracker_addr = unwrap_or_ret!(self.fuzz_accounts.tracker.get(&mut self.trident));
 
-        let data = phalnx::instruction::FinalizeSession {};
+        let data = sigil::instruction::FinalizeSession {};
         let (agent_spend_overlay, _) =
             Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
-        let accounts = phalnx::accounts::FinalizeSession {
+        let accounts = sigil::accounts::FinalizeSession {
             payer: agent,
             vault,
             session: session_addr,
