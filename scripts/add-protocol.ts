@@ -3,7 +3,7 @@
  * Automated Protocol Onboarding Pipeline
  *
  * Generates the boilerplate files needed to add a new DeFi protocol to the
- * Phalnx Kit SDK, from an Anchor IDL + human-authored YAML annotation.
+ * Sigil Kit SDK, from an Anchor IDL + human-authored YAML annotation.
  *
  * Usage:
  *   npx tsx scripts/add-protocol.ts --yaml sdk/kit/idls/orca.annotation.yaml

@@ -1,11 +1,11 @@
 /**
- * Jupiter V6 Swap via Phalnx — Complete Integration Example
+ * Jupiter V6 Swap via Sigil — Complete Integration Example
  *
  * Demonstrates the #1 integration path: wrapping a Jupiter swap with
- * Phalnx on-chain spending limits and permission policies.
+ * Sigil on-chain spending limits and permission policies.
  *
  * Prerequisites:
- *   - A deployed Phalnx vault on devnet (owner-created)
+ *   - A deployed Sigil vault on devnet (owner-created)
  *   - The vault funded with USDC
  *   - An agent keypair registered in the vault
  *
@@ -15,13 +15,13 @@
  */
 
 import {
-  PhalnxClient,
+  SigilClient,
   ActionType,
   toAgentError,
   formatUsd,
   formatPercent,
   USDC_MINT_DEVNET,
-} from "@phalnx/kit";
+} from "@usesigil/kit";
 import {
   address,
   createSolanaRpc,
@@ -46,14 +46,14 @@ const OUTPUT_MINT = address("So11111111111111111111111111111111111111112"); // S
  * Load your agent's TransactionSigner.
  *
  * Replace this stub with your actual key loading:
- *   - Turnkey:  use @phalnx/custody-turnkey
+ *   - Turnkey:  use @usesigil/custody-turnkey
  *   - Local:    use createKeyPairSignerFromBytes() from @solana/kit
- *   - Privy:    use @phalnx/custody-privy
+ *   - Privy:    use @usesigil/custody-privy
  */
 function loadAgentSigner(): TransactionSigner {
   throw new Error(
     "Replace loadAgentSigner() with your agent key. " +
-      "See @phalnx/custody-turnkey for production use.",
+      "See @usesigil/custody-turnkey for production use.",
   );
 }
 
@@ -75,9 +75,9 @@ async function main() {
   // Step 2: Get swap instructions
   //
   // CRITICAL: Use /swap-instructions, NOT /swap.
-  //   /swap returns a single serialized transaction — unusable with wrap().
+  //   /swap returns a single serialized transaction — unusable with seal().
   //   /swap-instructions returns individual instructions we can compose
-  //   into a Phalnx-wrapped atomic transaction.
+  //   into a Sigil-wrapped atomic transaction.
   const swapIxRes = await fetch("https://quote-api.jup.ag/v6/swap-instructions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -85,7 +85,7 @@ async function main() {
       quoteResponse,
       userPublicKey: agent.address,
       // wrapAndUnwrapSol defaults to true — Jupiter handles SOL wrapping.
-      // Phalnx will rewrite ATAs to point at the vault's token accounts.
+      // Sigil will rewrite ATAs to point at the vault's token accounts.
     }),
   });
   if (!swapIxRes.ok) throw new Error(`Jupiter swap-instructions failed: ${swapIxRes.status}`);
@@ -94,7 +94,7 @@ async function main() {
   // Step 3: Parse Jupiter response into Kit Instruction[]
   //
   // Jupiter returns 6 fields. We collect setup + swap + cleanup + other
-  // (excluding computeBudget — wrap() adds its own compute budget).
+  // (excluding computeBudget — seal() adds its own compute budget).
   const jupiterInstructions = parseJupiterResponse(swapData);
   if (jupiterInstructions.length === 0) {
     throw new Error("Jupiter returned zero instructions");
@@ -110,9 +110,9 @@ async function main() {
 
   // Step 5: Wrap and execute
   //
-  // PhalnxClient holds vault/agent/network context and manages caches.
-  // executeAndConfirm() does: wrap() → sign → send → confirm in one call.
-  const client = new PhalnxClient({
+  // SigilClient holds vault/agent/network context and manages caches.
+  // executeAndConfirm() does: seal() → sign → send → confirm in one call.
+  const client = new SigilClient({
     rpc,
     vault: VAULT_ADDRESS,
     agent,
@@ -157,7 +157,7 @@ main().catch(console.error);
 
 // ─── Jupiter Types & Helpers ─────────────────────────────────────────────────
 //
-// These mirror the production implementation in @phalnx/plugin-solana-agent-kit.
+// These mirror the production implementation in @usesigil/plugin-solana-agent-kit.
 // For production code, use the plugin's parseJupiterSwapResponse() instead
 // of these standalone helpers.
 
@@ -178,7 +178,7 @@ interface JupiterIx {
 
 /**
  * Collect Jupiter DeFi instructions in execution order.
- * Excludes computeBudgetInstructions — wrap() adds its own.
+ * Excludes computeBudgetInstructions — seal() adds its own.
  */
 function parseJupiterResponse(res: JupiterSwapInstructionsResponse): Instruction[] {
   const all = [

@@ -102,7 +102,7 @@ export function generateRegistryPatches(config: AnnotationConfig): string {
       `  Add intent-to-action mappings for each category above that maps`,
     );
     sections.push(
-      `  to a Phalnx ActionType (e.g., Swap, OpenPosition, Deposit, etc.).`,
+      `  to a Sigil ActionType (e.g., Swap, OpenPosition, Deposit, etc.).`,
     );
   } else {
     sections.push(

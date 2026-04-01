@@ -164,7 +164,7 @@ console.log(
 if (totalFailed > 0) {
   console.error(
     `\n❌ Discriminator mismatches detected!\n` +
-      `Re-generate Codama types: pnpm --filter @phalnx/kit codama:all`,
+      `Re-generate Codama types: pnpm --filter @usesigil/kit codama:all`,
   );
   process.exit(1);
 } else {

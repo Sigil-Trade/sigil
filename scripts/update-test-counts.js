@@ -248,15 +248,15 @@ updateFile("CLAUDE.md", "CLAUDE.md", (content) => {
   const packagePatterns = [
     {
       match: /`sdk\/core\/`[^)]*?(\d+) tests\)/,
-      suite: "Core policy engine (`@phalnx/core`)",
+      suite: "Core policy engine (`@usesigil/core`)",
     },
     {
       match: /`sdk\/typescript\/`[^)]*?(\d+) tests\)/,
-      suite: "SDK tests (`@phalnx/sdk`)",
+      suite: "SDK tests (`@usesigil/sdk`)",
     },
     {
       match: /`sdk\/platform\/`[^)]*?(\d+) tests\)/,
-      suite: "Platform client tests (`@phalnx/platform`)",
+      suite: "Platform client tests (`@usesigil/platform`)",
     },
     {
       match: /`sdk\/custody\/crossmint\/`[^)]*?(\d+) tests\)/,
@@ -264,11 +264,11 @@ updateFile("CLAUDE.md", "CLAUDE.md", (content) => {
     },
     {
       match: /`packages\/mcp\/`[^)]*?(\d+) tests\)/,
-      suite: "MCP server (`@phalnx/mcp`)",
+      suite: "MCP server (`@usesigil/mcp`)",
     },
     {
       match: /`apps\/actions-server\/`[^)]*?(\d+) tests\)/,
-      suite: "Actions server (`@phalnx/actions-server`)",
+      suite: "Actions server (`@usesigil/actions-server`)",
     },
   ];
 

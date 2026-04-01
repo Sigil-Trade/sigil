@@ -134,7 +134,7 @@ export function runVerification(
   // ── Check 7: tsc --noEmit ──────────────────────────────────────────────
   // NOTE: Full tsc check requires files to be in their final location with
   // proper tsconfig context. This is best run as a post-generation step
-  // (e.g., `pnpm --filter @phalnx/kit exec tsc --noEmit`).
+  // (e.g., `pnpm --filter @usesigil/kit exec tsc --noEmit`).
   // Here we do a structural sanity check instead.
   console.log("  Check 7: Structural syntax check...");
   for (const ix of parsed) {

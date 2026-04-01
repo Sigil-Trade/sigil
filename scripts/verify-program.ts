@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 /**
- * Verify deployed Phalnx program matches source code.
+ * Verify deployed Sigil program matches source code.
  *
  * Uses solana-verify CLI for deterministic build comparison.
  * Also checks upgrade authority and warns if single-key.
@@ -37,7 +37,7 @@ function run(
 }
 
 // 1. Check solana-verify is installed
-console.log("=== Phalnx Program Verification ===\n");
+console.log("=== Sigil Program Verification ===\n");
 const ver = run("solana-verify", ["--version"]);
 if (!ver.ok) {
   console.error(
@@ -56,9 +56,9 @@ const verify = run("solana-verify", [
   "--program-id",
   PROGRAM_ID,
   "--library-name",
-  "phalnx",
+  "sigil",
   "--mount-path",
-  "programs/phalnx",
+  "programs/sigil",
   "--url",
   rpcUrl,
 ]);

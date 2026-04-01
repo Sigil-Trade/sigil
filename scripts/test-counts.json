@@ -4,7 +4,7 @@
       "name": "Core vault management & permission engine",
       "count": 108,
       "onChain": true,
-      "claudePattern": "tests/phalnx.ts` (ts-mocha + LiteSVM, no validator needed, %d tests)"
+      "claudePattern": "tests/sigil.ts` (ts-mocha + LiteSVM, no validator needed, %d tests)"
     },
     {
       "name": "Jupiter integration (composed swaps)",
@@ -60,13 +60,13 @@
       "claudePattern": "tests/surfpool-integration.ts` (ts-mocha + Surfnet, %d tests)"
     },
     {
-      "name": "Core policy engine (`@phalnx/core`)",
+      "name": "Core policy engine (`@usesigil/core`)",
       "count": 66,
       "ciStepName": "Core policy engine tests",
       "claudePattern": "sdk/core/tests/` (mocha, %d tests)"
     },
     {
-      "name": "Platform client tests (`@phalnx/platform`)",
+      "name": "Platform client tests (`@usesigil/platform`)",
       "count": 17,
       "ciStepName": "Platform client tests",
       "claudePattern": "sdk/platform/tests/` (mocha, %d tests)"
@@ -78,19 +78,19 @@
       "claudePattern": "sdk/custody/crossmint/tests/` (mocha, %d tests)"
     },
     {
-      "name": "Kit-native SDK (`@phalnx/kit`)",
+      "name": "Kit-native SDK (`@usesigil/kit`)",
       "count": 880,
       "ciStepName": "Kit SDK tests",
       "claudePattern": "sdk/kit/tests/` (mocha + tsx, %d tests — types, resolve-accounts, composer, events, priority-fees, simulation, tokens, policies, tee-attestation, rpc-helpers, transaction-executor, x402, velocity-tracker, agent-errors, tee, alt-loader, alt-integration, wrap, create-vault, harden, protocol-resolver, shield-presign, custody-adapter, inspector, shield, state-resolver, formatting, presets, owner-transaction, testing)"
     },
     {
-      "name": "Kit SDK devnet tests (`@phalnx/kit` devnet)",
+      "name": "Kit SDK devnet tests (`@usesigil/kit` devnet)",
       "count": 9,
       "devnet": true,
       "claudePattern": "sdk/kit/tests/devnet/` (mocha + tsx, %d tests — lifecycle, composed-tx)"
     },
     {
-      "name": "SAK plugin (`@phalnx/plugin-solana-agent-kit`)",
+      "name": "SAK plugin (`@usesigil/plugin-solana-agent-kit`)",
       "count": 6,
       "ciStepName": "SAK plugin tests",
       "claudePattern": "packages/plugin-solana-agent-kit/tests/` (mocha + tsx, %d tests)"
@@ -99,7 +99,7 @@
       "name": "Rust unit tests (cargo test)",
       "count": 71,
       "onChain": true,
-      "claudePattern": "cargo test --manifest-path programs/phalnx/Cargo.toml` (%d tests)"
+      "claudePattern": "cargo test --manifest-path programs/sigil/Cargo.toml` (%d tests)"
     }
   ]
 }
