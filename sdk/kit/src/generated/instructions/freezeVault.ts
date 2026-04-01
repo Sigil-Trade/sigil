@@ -35,7 +35,7 @@ import {
   getAccountMetaFactory,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { PHALNX_PROGRAM_ADDRESS } from "../programs";
+import { SIGIL_PROGRAM_ADDRESS } from "../programs";
 
 export const FREEZE_VAULT_DISCRIMINATOR = new Uint8Array([
   144, 211, 63, 236, 97, 31, 170, 175,
@@ -48,7 +48,7 @@ export function getFreezeVaultDiscriminatorBytes() {
 }
 
 export type FreezeVaultInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountOwner extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
@@ -105,13 +105,13 @@ export type FreezeVaultInput<
 export function getFreezeVaultInstruction<
   TAccountOwner extends string,
   TAccountVault extends string,
-  TProgramAddress extends Address = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: FreezeVaultInput<TAccountOwner, TAccountVault>,
   config?: { programAddress?: TProgramAddress },
 ): FreezeVaultInstruction<TProgramAddress, TAccountOwner, TAccountVault> {
   // Program address.
-  const programAddress = config?.programAddress ?? PHALNX_PROGRAM_ADDRESS;
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
 
   // Original accounts.
   const originalAccounts = {
@@ -135,7 +135,7 @@ export function getFreezeVaultInstruction<
 }
 
 export type ParsedFreezeVaultInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
   programAddress: Address<TProgram>;

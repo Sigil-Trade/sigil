@@ -41,7 +41,7 @@ import {
   getAddressFromResolvedInstructionAccount,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { PHALNX_PROGRAM_ADDRESS } from "../programs";
+import { SIGIL_PROGRAM_ADDRESS } from "../programs";
 
 export const WITHDRAW_FUNDS_DISCRIMINATOR = new Uint8Array([
   241, 36, 29, 111, 208, 31, 104, 217,
@@ -54,7 +54,7 @@ export function getWithdrawFundsDiscriminatorBytes() {
 }
 
 export type WithdrawFundsInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountOwner extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
   TAccountMint extends string | AccountMeta<string> = string,
@@ -150,7 +150,7 @@ export async function getWithdrawFundsInstructionAsync<
   TAccountVaultTokenAccount extends string,
   TAccountOwnerTokenAccount extends string,
   TAccountTokenProgram extends string,
-  TProgramAddress extends Address = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: WithdrawFundsAsyncInput<
     TAccountOwner,
@@ -173,7 +173,7 @@ export async function getWithdrawFundsInstructionAsync<
   >
 > {
   // Program address.
-  const programAddress = config?.programAddress ?? PHALNX_PROGRAM_ADDRESS;
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
 
   // Original accounts.
   const originalAccounts = {
@@ -303,7 +303,7 @@ export function getWithdrawFundsInstruction<
   TAccountVaultTokenAccount extends string,
   TAccountOwnerTokenAccount extends string,
   TAccountTokenProgram extends string,
-  TProgramAddress extends Address = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: WithdrawFundsInput<
     TAccountOwner,
@@ -324,7 +324,7 @@ export function getWithdrawFundsInstruction<
   TAccountTokenProgram
 > {
   // Program address.
-  const programAddress = config?.programAddress ?? PHALNX_PROGRAM_ADDRESS;
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
 
   // Original accounts.
   const originalAccounts = {
@@ -381,7 +381,7 @@ export function getWithdrawFundsInstruction<
 }
 
 export type ParsedWithdrawFundsInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
   programAddress: Address<TProgram>;

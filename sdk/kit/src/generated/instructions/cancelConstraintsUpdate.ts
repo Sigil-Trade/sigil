@@ -39,7 +39,7 @@ import {
   getAddressFromResolvedInstructionAccount,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { PHALNX_PROGRAM_ADDRESS } from "../programs";
+import { SIGIL_PROGRAM_ADDRESS } from "../programs";
 
 export const CANCEL_CONSTRAINTS_UPDATE_DISCRIMINATOR = new Uint8Array([
   169, 121, 85, 230, 154, 2, 78, 61,
@@ -52,7 +52,7 @@ export function getCancelConstraintsUpdateDiscriminatorBytes() {
 }
 
 export type CancelConstraintsUpdateInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountOwner extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
   TAccountPendingConstraints extends string | AccountMeta<string> = string,
@@ -121,7 +121,7 @@ export async function getCancelConstraintsUpdateInstructionAsync<
   TAccountOwner extends string,
   TAccountVault extends string,
   TAccountPendingConstraints extends string,
-  TProgramAddress extends Address = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: CancelConstraintsUpdateAsyncInput<
     TAccountOwner,
@@ -138,7 +138,7 @@ export async function getCancelConstraintsUpdateInstructionAsync<
   >
 > {
   // Program address.
-  const programAddress = config?.programAddress ?? PHALNX_PROGRAM_ADDRESS;
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
 
   // Original accounts.
   const originalAccounts = {
@@ -206,7 +206,7 @@ export function getCancelConstraintsUpdateInstruction<
   TAccountOwner extends string,
   TAccountVault extends string,
   TAccountPendingConstraints extends string,
-  TProgramAddress extends Address = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: CancelConstraintsUpdateInput<
     TAccountOwner,
@@ -221,7 +221,7 @@ export function getCancelConstraintsUpdateInstruction<
   TAccountPendingConstraints
 > {
   // Program address.
-  const programAddress = config?.programAddress ?? PHALNX_PROGRAM_ADDRESS;
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
 
   // Original accounts.
   const originalAccounts = {
@@ -255,7 +255,7 @@ export function getCancelConstraintsUpdateInstruction<
 }
 
 export type ParsedCancelConstraintsUpdateInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
   programAddress: Address<TProgram>;

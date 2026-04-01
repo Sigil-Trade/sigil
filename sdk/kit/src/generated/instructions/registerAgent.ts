@@ -39,7 +39,7 @@ import {
   getAccountMetaFactory,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { PHALNX_PROGRAM_ADDRESS } from "../programs";
+import { SIGIL_PROGRAM_ADDRESS } from "../programs";
 
 export const REGISTER_AGENT_DISCRIMINATOR = new Uint8Array([
   135, 157, 66, 195, 2, 113, 175, 30,
@@ -52,7 +52,7 @@ export function getRegisterAgentDiscriminatorBytes() {
 }
 
 export type RegisterAgentInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountOwner extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
   TAccountAgentSpendOverlay extends string | AccountMeta<string> = string,
@@ -137,7 +137,7 @@ export function getRegisterAgentInstruction<
   TAccountOwner extends string,
   TAccountVault extends string,
   TAccountAgentSpendOverlay extends string,
-  TProgramAddress extends Address = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: RegisterAgentInput<
     TAccountOwner,
@@ -152,7 +152,7 @@ export function getRegisterAgentInstruction<
   TAccountAgentSpendOverlay
 > {
   // Program address.
-  const programAddress = config?.programAddress ?? PHALNX_PROGRAM_ADDRESS;
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
 
   // Original accounts.
   const originalAccounts = {
@@ -191,7 +191,7 @@ export function getRegisterAgentInstruction<
 }
 
 export type ParsedRegisterAgentInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
   programAddress: Address<TProgram>;

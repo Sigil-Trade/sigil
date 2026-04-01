@@ -39,7 +39,7 @@ import {
   getAddressFromResolvedInstructionAccount,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { PHALNX_PROGRAM_ADDRESS } from "../programs";
+import { SIGIL_PROGRAM_ADDRESS } from "../programs";
 
 export const FINALIZE_SESSION_DISCRIMINATOR = new Uint8Array([
   34, 148, 144, 47, 37, 130, 206, 161,
@@ -52,7 +52,7 @@ export function getFinalizeSessionDiscriminatorBytes() {
 }
 
 export type FinalizeSessionInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountPayer extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
   TAccountSession extends string | AccountMeta<string> = string,
@@ -197,7 +197,7 @@ export async function getFinalizeSessionInstructionAsync<
   TAccountTokenProgram extends string,
   TAccountSystemProgram extends string,
   TAccountInstructionsSysvar extends string,
-  TProgramAddress extends Address = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: FinalizeSessionAsyncInput<
     TAccountPayer,
@@ -232,7 +232,7 @@ export async function getFinalizeSessionInstructionAsync<
   >
 > {
   // Program address.
-  const programAddress = config?.programAddress ?? PHALNX_PROGRAM_ADDRESS;
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
 
   // Original accounts.
   const originalAccounts = {
@@ -405,7 +405,7 @@ export function getFinalizeSessionInstruction<
   TAccountTokenProgram extends string,
   TAccountSystemProgram extends string,
   TAccountInstructionsSysvar extends string,
-  TProgramAddress extends Address = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: FinalizeSessionInput<
     TAccountPayer,
@@ -438,7 +438,7 @@ export function getFinalizeSessionInstruction<
   TAccountInstructionsSysvar
 > {
   // Program address.
-  const programAddress = config?.programAddress ?? PHALNX_PROGRAM_ADDRESS;
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
 
   // Original accounts.
   const originalAccounts = {
@@ -528,7 +528,7 @@ export function getFinalizeSessionInstruction<
 }
 
 export type ParsedFinalizeSessionInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
   programAddress: Address<TProgram>;
@@ -587,7 +587,7 @@ export function parseFinalizeSessionInstruction<
   };
   const getNextOptionalAccount = () => {
     const accountMeta = getNextAccount();
-    return accountMeta.address === PHALNX_PROGRAM_ADDRESS
+    return accountMeta.address === SIGIL_PROGRAM_ADDRESS
       ? undefined
       : accountMeta;
   };

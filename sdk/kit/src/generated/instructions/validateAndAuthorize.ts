@@ -49,7 +49,7 @@ import {
   getNonNullResolvedInstructionInput,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { PHALNX_PROGRAM_ADDRESS } from "../programs";
+import { SIGIL_PROGRAM_ADDRESS } from "../programs";
 import {
   getActionTypeDecoder,
   getActionTypeEncoder,
@@ -68,7 +68,7 @@ export function getValidateAndAuthorizeDiscriminatorBytes() {
 }
 
 export type ValidateAndAuthorizeInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountAgent extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
   TAccountPolicy extends string | AccountMeta<string> = string,
@@ -265,7 +265,7 @@ export async function getValidateAndAuthorizeInstructionAsync<
   TAccountTokenProgram extends string,
   TAccountSystemProgram extends string,
   TAccountInstructionsSysvar extends string,
-  TProgramAddress extends Address = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: ValidateAndAuthorizeAsyncInput<
     TAccountAgent,
@@ -304,7 +304,7 @@ export async function getValidateAndAuthorizeInstructionAsync<
   >
 > {
   // Program address.
-  const programAddress = config?.programAddress ?? PHALNX_PROGRAM_ADDRESS;
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
 
   // Original accounts.
   const originalAccounts = {
@@ -541,7 +541,7 @@ export function getValidateAndAuthorizeInstruction<
   TAccountTokenProgram extends string,
   TAccountSystemProgram extends string,
   TAccountInstructionsSysvar extends string,
-  TProgramAddress extends Address = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: ValidateAndAuthorizeInput<
     TAccountAgent,
@@ -578,7 +578,7 @@ export function getValidateAndAuthorizeInstruction<
   TAccountInstructionsSysvar
 > {
   // Program address.
-  const programAddress = config?.programAddress ?? PHALNX_PROGRAM_ADDRESS;
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
 
   // Original accounts.
   const originalAccounts = {
@@ -691,7 +691,7 @@ export function getValidateAndAuthorizeInstruction<
 }
 
 export type ParsedValidateAndAuthorizeInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
   programAddress: Address<TProgram>;
@@ -757,7 +757,7 @@ export function parseValidateAndAuthorizeInstruction<
   };
   const getNextOptionalAccount = () => {
     const accountMeta = getNextAccount();
-    return accountMeta.address === PHALNX_PROGRAM_ADDRESS
+    return accountMeta.address === SIGIL_PROGRAM_ADDRESS
       ? undefined
       : accountMeta;
   };

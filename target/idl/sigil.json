@@ -1,7 +1,7 @@
 {
   "address": "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL",
   "metadata": {
-    "name": "phalnx",
+    "name": "sigil",
     "version": "0.1.0",
     "spec": "0.1.0",
     "description": "On-chain guardrails for AI agents on Solana - Permission controls, spending limits, and audit infrastructure for autonomous agents (Phalnx)"
@@ -1817,12 +1817,7 @@
           "address": "Sysvar1nstructions1111111111111111111111111"
         }
       ],
-      "args": [
-        {
-          "name": "success",
-          "type": "bool"
-        }
-      ]
+      "args": []
     },
     {
       "name": "freeze_vault",

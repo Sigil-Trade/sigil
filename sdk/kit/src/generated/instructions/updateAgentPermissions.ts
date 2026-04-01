@@ -42,7 +42,7 @@ import {
   getAddressFromResolvedInstructionAccount,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { PHALNX_PROGRAM_ADDRESS } from "../programs";
+import { SIGIL_PROGRAM_ADDRESS } from "../programs";
 
 export const UPDATE_AGENT_PERMISSIONS_DISCRIMINATOR = new Uint8Array([
   56, 163, 109, 133, 69, 188, 163, 184,
@@ -55,7 +55,7 @@ export function getUpdateAgentPermissionsDiscriminatorBytes() {
 }
 
 export type UpdateAgentPermissionsInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountOwner extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
   TAccountPolicy extends string | AccountMeta<string> = string,
@@ -149,7 +149,7 @@ export async function getUpdateAgentPermissionsInstructionAsync<
   TAccountVault extends string,
   TAccountPolicy extends string,
   TAccountAgentSpendOverlay extends string,
-  TProgramAddress extends Address = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: UpdateAgentPermissionsAsyncInput<
     TAccountOwner,
@@ -168,7 +168,7 @@ export async function getUpdateAgentPermissionsInstructionAsync<
   >
 > {
   // Program address.
-  const programAddress = config?.programAddress ?? PHALNX_PROGRAM_ADDRESS;
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
 
   // Original accounts.
   const originalAccounts = {
@@ -262,7 +262,7 @@ export function getUpdateAgentPermissionsInstruction<
   TAccountVault extends string,
   TAccountPolicy extends string,
   TAccountAgentSpendOverlay extends string,
-  TProgramAddress extends Address = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: UpdateAgentPermissionsInput<
     TAccountOwner,
@@ -279,7 +279,7 @@ export function getUpdateAgentPermissionsInstruction<
   TAccountAgentSpendOverlay
 > {
   // Program address.
-  const programAddress = config?.programAddress ?? PHALNX_PROGRAM_ADDRESS;
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
 
   // Original accounts.
   const originalAccounts = {
@@ -321,7 +321,7 @@ export function getUpdateAgentPermissionsInstruction<
 }
 
 export type ParsedUpdateAgentPermissionsInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
   programAddress: Address<TProgram>;

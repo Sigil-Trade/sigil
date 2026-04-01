@@ -39,7 +39,7 @@ import {
   getAddressFromResolvedInstructionAccount,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { PHALNX_PROGRAM_ADDRESS } from "../programs";
+import { SIGIL_PROGRAM_ADDRESS } from "../programs";
 
 export const CANCEL_PENDING_POLICY_DISCRIMINATOR = new Uint8Array([
   153, 36, 104, 200, 50, 94, 207, 33,
@@ -52,7 +52,7 @@ export function getCancelPendingPolicyDiscriminatorBytes() {
 }
 
 export type CancelPendingPolicyInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountOwner extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
   TAccountPolicy extends string | AccountMeta<string> = string,
@@ -128,7 +128,7 @@ export async function getCancelPendingPolicyInstructionAsync<
   TAccountVault extends string,
   TAccountPolicy extends string,
   TAccountPendingPolicy extends string,
-  TProgramAddress extends Address = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: CancelPendingPolicyAsyncInput<
     TAccountOwner,
@@ -147,7 +147,7 @@ export async function getCancelPendingPolicyInstructionAsync<
   >
 > {
   // Program address.
-  const programAddress = config?.programAddress ?? PHALNX_PROGRAM_ADDRESS;
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
 
   // Original accounts.
   const originalAccounts = {
@@ -231,7 +231,7 @@ export function getCancelPendingPolicyInstruction<
   TAccountVault extends string,
   TAccountPolicy extends string,
   TAccountPendingPolicy extends string,
-  TProgramAddress extends Address = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: CancelPendingPolicyInput<
     TAccountOwner,
@@ -248,7 +248,7 @@ export function getCancelPendingPolicyInstruction<
   TAccountPendingPolicy
 > {
   // Program address.
-  const programAddress = config?.programAddress ?? PHALNX_PROGRAM_ADDRESS;
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
 
   // Original accounts.
   const originalAccounts = {
@@ -282,7 +282,7 @@ export function getCancelPendingPolicyInstruction<
 }
 
 export type ParsedCancelPendingPolicyInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
   programAddress: Address<TProgram>;

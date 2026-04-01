@@ -37,7 +37,7 @@ import {
   getAccountMetaFactory,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { PHALNX_PROGRAM_ADDRESS } from "../programs";
+import { SIGIL_PROGRAM_ADDRESS } from "../programs";
 
 export const UNPAUSE_AGENT_DISCRIMINATOR = new Uint8Array([
   46, 125, 165, 212, 241, 143, 190, 95,
@@ -50,7 +50,7 @@ export function getUnpauseAgentDiscriminatorBytes() {
 }
 
 export type UnpauseAgentInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountOwner extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
@@ -115,13 +115,13 @@ export type UnpauseAgentInput<
 export function getUnpauseAgentInstruction<
   TAccountOwner extends string,
   TAccountVault extends string,
-  TProgramAddress extends Address = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: UnpauseAgentInput<TAccountOwner, TAccountVault>,
   config?: { programAddress?: TProgramAddress },
 ): UnpauseAgentInstruction<TProgramAddress, TAccountOwner, TAccountVault> {
   // Program address.
-  const programAddress = config?.programAddress ?? PHALNX_PROGRAM_ADDRESS;
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
 
   // Original accounts.
   const originalAccounts = {
@@ -150,7 +150,7 @@ export function getUnpauseAgentInstruction<
 }
 
 export type ParsedUnpauseAgentInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
   programAddress: Address<TProgram>;

@@ -180,10 +180,10 @@ import {
   type WithdrawFundsAsyncInput,
 } from "../instructions";
 
-export const PHALNX_PROGRAM_ADDRESS =
+export const SIGIL_PROGRAM_ADDRESS =
   "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL" as Address<"4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL">;
 
-export enum PhalnxAccount {
+export enum SigilAccount {
   AgentSpendOverlay,
   AgentVault,
   EscrowDeposit,
@@ -195,9 +195,9 @@ export enum PhalnxAccount {
   SpendTracker,
 }
 
-export function identifyPhalnxAccount(
+export function identifySigilAccount(
   account: { data: ReadonlyUint8Array } | ReadonlyUint8Array,
-): PhalnxAccount {
+): SigilAccount {
   const data = "data" in account ? account.data : account;
   if (
     containsBytes(
@@ -208,7 +208,7 @@ export function identifyPhalnxAccount(
       0,
     )
   ) {
-    return PhalnxAccount.AgentSpendOverlay;
+    return SigilAccount.AgentSpendOverlay;
   }
   if (
     containsBytes(
@@ -219,7 +219,7 @@ export function identifyPhalnxAccount(
       0,
     )
   ) {
-    return PhalnxAccount.AgentVault;
+    return SigilAccount.AgentVault;
   }
   if (
     containsBytes(
@@ -230,7 +230,7 @@ export function identifyPhalnxAccount(
       0,
     )
   ) {
-    return PhalnxAccount.EscrowDeposit;
+    return SigilAccount.EscrowDeposit;
   }
   if (
     containsBytes(
@@ -241,7 +241,7 @@ export function identifyPhalnxAccount(
       0,
     )
   ) {
-    return PhalnxAccount.InstructionConstraints;
+    return SigilAccount.InstructionConstraints;
   }
   if (
     containsBytes(
@@ -252,7 +252,7 @@ export function identifyPhalnxAccount(
       0,
     )
   ) {
-    return PhalnxAccount.PendingConstraintsUpdate;
+    return SigilAccount.PendingConstraintsUpdate;
   }
   if (
     containsBytes(
@@ -263,7 +263,7 @@ export function identifyPhalnxAccount(
       0,
     )
   ) {
-    return PhalnxAccount.PendingPolicyUpdate;
+    return SigilAccount.PendingPolicyUpdate;
   }
   if (
     containsBytes(
@@ -274,7 +274,7 @@ export function identifyPhalnxAccount(
       0,
     )
   ) {
-    return PhalnxAccount.PolicyConfig;
+    return SigilAccount.PolicyConfig;
   }
   if (
     containsBytes(
@@ -285,7 +285,7 @@ export function identifyPhalnxAccount(
       0,
     )
   ) {
-    return PhalnxAccount.SessionAuthority;
+    return SigilAccount.SessionAuthority;
   }
   if (
     containsBytes(
@@ -296,15 +296,15 @@ export function identifyPhalnxAccount(
       0,
     )
   ) {
-    return PhalnxAccount.SpendTracker;
+    return SigilAccount.SpendTracker;
   }
   throw new SolanaError(
     SOLANA_ERROR__PROGRAM_CLIENTS__FAILED_TO_IDENTIFY_ACCOUNT,
-    { accountData: data, programName: "phalnx" },
+    { accountData: data, programName: "sigil" },
   );
 }
 
-export enum PhalnxInstruction {
+export enum SigilInstruction {
   AgentTransfer,
   ApplyConstraintsUpdate,
   ApplyPendingPolicy,
@@ -336,9 +336,9 @@ export enum PhalnxInstruction {
   WithdrawFunds,
 }
 
-export function identifyPhalnxInstruction(
+export function identifySigilInstruction(
   instruction: { data: ReadonlyUint8Array } | ReadonlyUint8Array,
-): PhalnxInstruction {
+): SigilInstruction {
   const data = "data" in instruction ? instruction.data : instruction;
   if (
     containsBytes(
@@ -349,7 +349,7 @@ export function identifyPhalnxInstruction(
       0,
     )
   ) {
-    return PhalnxInstruction.AgentTransfer;
+    return SigilInstruction.AgentTransfer;
   }
   if (
     containsBytes(
@@ -360,7 +360,7 @@ export function identifyPhalnxInstruction(
       0,
     )
   ) {
-    return PhalnxInstruction.ApplyConstraintsUpdate;
+    return SigilInstruction.ApplyConstraintsUpdate;
   }
   if (
     containsBytes(
@@ -371,7 +371,7 @@ export function identifyPhalnxInstruction(
       0,
     )
   ) {
-    return PhalnxInstruction.ApplyPendingPolicy;
+    return SigilInstruction.ApplyPendingPolicy;
   }
   if (
     containsBytes(
@@ -382,7 +382,7 @@ export function identifyPhalnxInstruction(
       0,
     )
   ) {
-    return PhalnxInstruction.CancelConstraintsUpdate;
+    return SigilInstruction.CancelConstraintsUpdate;
   }
   if (
     containsBytes(
@@ -393,7 +393,7 @@ export function identifyPhalnxInstruction(
       0,
     )
   ) {
-    return PhalnxInstruction.CancelPendingPolicy;
+    return SigilInstruction.CancelPendingPolicy;
   }
   if (
     containsBytes(
@@ -404,7 +404,7 @@ export function identifyPhalnxInstruction(
       0,
     )
   ) {
-    return PhalnxInstruction.CloseInstructionConstraints;
+    return SigilInstruction.CloseInstructionConstraints;
   }
   if (
     containsBytes(
@@ -415,7 +415,7 @@ export function identifyPhalnxInstruction(
       0,
     )
   ) {
-    return PhalnxInstruction.CloseSettledEscrow;
+    return SigilInstruction.CloseSettledEscrow;
   }
   if (
     containsBytes(
@@ -426,7 +426,7 @@ export function identifyPhalnxInstruction(
       0,
     )
   ) {
-    return PhalnxInstruction.CloseVault;
+    return SigilInstruction.CloseVault;
   }
   if (
     containsBytes(
@@ -437,7 +437,7 @@ export function identifyPhalnxInstruction(
       0,
     )
   ) {
-    return PhalnxInstruction.CreateEscrow;
+    return SigilInstruction.CreateEscrow;
   }
   if (
     containsBytes(
@@ -448,7 +448,7 @@ export function identifyPhalnxInstruction(
       0,
     )
   ) {
-    return PhalnxInstruction.CreateInstructionConstraints;
+    return SigilInstruction.CreateInstructionConstraints;
   }
   if (
     containsBytes(
@@ -459,7 +459,7 @@ export function identifyPhalnxInstruction(
       0,
     )
   ) {
-    return PhalnxInstruction.DepositFunds;
+    return SigilInstruction.DepositFunds;
   }
   if (
     containsBytes(
@@ -470,7 +470,7 @@ export function identifyPhalnxInstruction(
       0,
     )
   ) {
-    return PhalnxInstruction.FinalizeSession;
+    return SigilInstruction.FinalizeSession;
   }
   if (
     containsBytes(
@@ -481,7 +481,7 @@ export function identifyPhalnxInstruction(
       0,
     )
   ) {
-    return PhalnxInstruction.FreezeVault;
+    return SigilInstruction.FreezeVault;
   }
   if (
     containsBytes(
@@ -492,7 +492,7 @@ export function identifyPhalnxInstruction(
       0,
     )
   ) {
-    return PhalnxInstruction.InitializeVault;
+    return SigilInstruction.InitializeVault;
   }
   if (
     containsBytes(
@@ -503,7 +503,7 @@ export function identifyPhalnxInstruction(
       0,
     )
   ) {
-    return PhalnxInstruction.PauseAgent;
+    return SigilInstruction.PauseAgent;
   }
   if (
     containsBytes(
@@ -514,7 +514,7 @@ export function identifyPhalnxInstruction(
       0,
     )
   ) {
-    return PhalnxInstruction.QueueConstraintsUpdate;
+    return SigilInstruction.QueueConstraintsUpdate;
   }
   if (
     containsBytes(
@@ -525,7 +525,7 @@ export function identifyPhalnxInstruction(
       0,
     )
   ) {
-    return PhalnxInstruction.QueuePolicyUpdate;
+    return SigilInstruction.QueuePolicyUpdate;
   }
   if (
     containsBytes(
@@ -536,7 +536,7 @@ export function identifyPhalnxInstruction(
       0,
     )
   ) {
-    return PhalnxInstruction.ReactivateVault;
+    return SigilInstruction.ReactivateVault;
   }
   if (
     containsBytes(
@@ -547,7 +547,7 @@ export function identifyPhalnxInstruction(
       0,
     )
   ) {
-    return PhalnxInstruction.RefundEscrow;
+    return SigilInstruction.RefundEscrow;
   }
   if (
     containsBytes(
@@ -558,7 +558,7 @@ export function identifyPhalnxInstruction(
       0,
     )
   ) {
-    return PhalnxInstruction.RegisterAgent;
+    return SigilInstruction.RegisterAgent;
   }
   if (
     containsBytes(
@@ -569,7 +569,7 @@ export function identifyPhalnxInstruction(
       0,
     )
   ) {
-    return PhalnxInstruction.RevokeAgent;
+    return SigilInstruction.RevokeAgent;
   }
   if (
     containsBytes(
@@ -580,7 +580,7 @@ export function identifyPhalnxInstruction(
       0,
     )
   ) {
-    return PhalnxInstruction.SettleEscrow;
+    return SigilInstruction.SettleEscrow;
   }
   if (
     containsBytes(
@@ -591,7 +591,7 @@ export function identifyPhalnxInstruction(
       0,
     )
   ) {
-    return PhalnxInstruction.SyncPositions;
+    return SigilInstruction.SyncPositions;
   }
   if (
     containsBytes(
@@ -602,7 +602,7 @@ export function identifyPhalnxInstruction(
       0,
     )
   ) {
-    return PhalnxInstruction.UnpauseAgent;
+    return SigilInstruction.UnpauseAgent;
   }
   if (
     containsBytes(
@@ -613,7 +613,7 @@ export function identifyPhalnxInstruction(
       0,
     )
   ) {
-    return PhalnxInstruction.UpdateAgentPermissions;
+    return SigilInstruction.UpdateAgentPermissions;
   }
   if (
     containsBytes(
@@ -624,7 +624,7 @@ export function identifyPhalnxInstruction(
       0,
     )
   ) {
-    return PhalnxInstruction.UpdateInstructionConstraints;
+    return SigilInstruction.UpdateInstructionConstraints;
   }
   if (
     containsBytes(
@@ -635,7 +635,7 @@ export function identifyPhalnxInstruction(
       0,
     )
   ) {
-    return PhalnxInstruction.UpdatePolicy;
+    return SigilInstruction.UpdatePolicy;
   }
   if (
     containsBytes(
@@ -646,7 +646,7 @@ export function identifyPhalnxInstruction(
       0,
     )
   ) {
-    return PhalnxInstruction.ValidateAndAuthorize;
+    return SigilInstruction.ValidateAndAuthorize;
   }
   if (
     containsBytes(
@@ -657,327 +657,327 @@ export function identifyPhalnxInstruction(
       0,
     )
   ) {
-    return PhalnxInstruction.WithdrawFunds;
+    return SigilInstruction.WithdrawFunds;
   }
   throw new SolanaError(
     SOLANA_ERROR__PROGRAM_CLIENTS__FAILED_TO_IDENTIFY_INSTRUCTION,
-    { instructionData: data, programName: "phalnx" },
+    { instructionData: data, programName: "sigil" },
   );
 }
 
-export type ParsedPhalnxInstruction<
+export type ParsedSigilInstruction<
   TProgram extends string = "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL",
 > =
   | ({
-      instructionType: PhalnxInstruction.AgentTransfer;
+      instructionType: SigilInstruction.AgentTransfer;
     } & ParsedAgentTransferInstruction<TProgram>)
   | ({
-      instructionType: PhalnxInstruction.ApplyConstraintsUpdate;
+      instructionType: SigilInstruction.ApplyConstraintsUpdate;
     } & ParsedApplyConstraintsUpdateInstruction<TProgram>)
   | ({
-      instructionType: PhalnxInstruction.ApplyPendingPolicy;
+      instructionType: SigilInstruction.ApplyPendingPolicy;
     } & ParsedApplyPendingPolicyInstruction<TProgram>)
   | ({
-      instructionType: PhalnxInstruction.CancelConstraintsUpdate;
+      instructionType: SigilInstruction.CancelConstraintsUpdate;
     } & ParsedCancelConstraintsUpdateInstruction<TProgram>)
   | ({
-      instructionType: PhalnxInstruction.CancelPendingPolicy;
+      instructionType: SigilInstruction.CancelPendingPolicy;
     } & ParsedCancelPendingPolicyInstruction<TProgram>)
   | ({
-      instructionType: PhalnxInstruction.CloseInstructionConstraints;
+      instructionType: SigilInstruction.CloseInstructionConstraints;
     } & ParsedCloseInstructionConstraintsInstruction<TProgram>)
   | ({
-      instructionType: PhalnxInstruction.CloseSettledEscrow;
+      instructionType: SigilInstruction.CloseSettledEscrow;
     } & ParsedCloseSettledEscrowInstruction<TProgram>)
   | ({
-      instructionType: PhalnxInstruction.CloseVault;
+      instructionType: SigilInstruction.CloseVault;
     } & ParsedCloseVaultInstruction<TProgram>)
   | ({
-      instructionType: PhalnxInstruction.CreateEscrow;
+      instructionType: SigilInstruction.CreateEscrow;
     } & ParsedCreateEscrowInstruction<TProgram>)
   | ({
-      instructionType: PhalnxInstruction.CreateInstructionConstraints;
+      instructionType: SigilInstruction.CreateInstructionConstraints;
     } & ParsedCreateInstructionConstraintsInstruction<TProgram>)
   | ({
-      instructionType: PhalnxInstruction.DepositFunds;
+      instructionType: SigilInstruction.DepositFunds;
     } & ParsedDepositFundsInstruction<TProgram>)
   | ({
-      instructionType: PhalnxInstruction.FinalizeSession;
+      instructionType: SigilInstruction.FinalizeSession;
     } & ParsedFinalizeSessionInstruction<TProgram>)
   | ({
-      instructionType: PhalnxInstruction.FreezeVault;
+      instructionType: SigilInstruction.FreezeVault;
     } & ParsedFreezeVaultInstruction<TProgram>)
   | ({
-      instructionType: PhalnxInstruction.InitializeVault;
+      instructionType: SigilInstruction.InitializeVault;
     } & ParsedInitializeVaultInstruction<TProgram>)
   | ({
-      instructionType: PhalnxInstruction.PauseAgent;
+      instructionType: SigilInstruction.PauseAgent;
     } & ParsedPauseAgentInstruction<TProgram>)
   | ({
-      instructionType: PhalnxInstruction.QueueConstraintsUpdate;
+      instructionType: SigilInstruction.QueueConstraintsUpdate;
     } & ParsedQueueConstraintsUpdateInstruction<TProgram>)
   | ({
-      instructionType: PhalnxInstruction.QueuePolicyUpdate;
+      instructionType: SigilInstruction.QueuePolicyUpdate;
     } & ParsedQueuePolicyUpdateInstruction<TProgram>)
   | ({
-      instructionType: PhalnxInstruction.ReactivateVault;
+      instructionType: SigilInstruction.ReactivateVault;
     } & ParsedReactivateVaultInstruction<TProgram>)
   | ({
-      instructionType: PhalnxInstruction.RefundEscrow;
+      instructionType: SigilInstruction.RefundEscrow;
     } & ParsedRefundEscrowInstruction<TProgram>)
   | ({
-      instructionType: PhalnxInstruction.RegisterAgent;
+      instructionType: SigilInstruction.RegisterAgent;
     } & ParsedRegisterAgentInstruction<TProgram>)
   | ({
-      instructionType: PhalnxInstruction.RevokeAgent;
+      instructionType: SigilInstruction.RevokeAgent;
     } & ParsedRevokeAgentInstruction<TProgram>)
   | ({
-      instructionType: PhalnxInstruction.SettleEscrow;
+      instructionType: SigilInstruction.SettleEscrow;
     } & ParsedSettleEscrowInstruction<TProgram>)
   | ({
-      instructionType: PhalnxInstruction.SyncPositions;
+      instructionType: SigilInstruction.SyncPositions;
     } & ParsedSyncPositionsInstruction<TProgram>)
   | ({
-      instructionType: PhalnxInstruction.UnpauseAgent;
+      instructionType: SigilInstruction.UnpauseAgent;
     } & ParsedUnpauseAgentInstruction<TProgram>)
   | ({
-      instructionType: PhalnxInstruction.UpdateAgentPermissions;
+      instructionType: SigilInstruction.UpdateAgentPermissions;
     } & ParsedUpdateAgentPermissionsInstruction<TProgram>)
   | ({
-      instructionType: PhalnxInstruction.UpdateInstructionConstraints;
+      instructionType: SigilInstruction.UpdateInstructionConstraints;
     } & ParsedUpdateInstructionConstraintsInstruction<TProgram>)
   | ({
-      instructionType: PhalnxInstruction.UpdatePolicy;
+      instructionType: SigilInstruction.UpdatePolicy;
     } & ParsedUpdatePolicyInstruction<TProgram>)
   | ({
-      instructionType: PhalnxInstruction.ValidateAndAuthorize;
+      instructionType: SigilInstruction.ValidateAndAuthorize;
     } & ParsedValidateAndAuthorizeInstruction<TProgram>)
   | ({
-      instructionType: PhalnxInstruction.WithdrawFunds;
+      instructionType: SigilInstruction.WithdrawFunds;
     } & ParsedWithdrawFundsInstruction<TProgram>);
 
-export function parsePhalnxInstruction<TProgram extends string>(
+export function parseSigilInstruction<TProgram extends string>(
   instruction: Instruction<TProgram> & InstructionWithData<ReadonlyUint8Array>,
-): ParsedPhalnxInstruction<TProgram> {
-  const instructionType = identifyPhalnxInstruction(instruction);
+): ParsedSigilInstruction<TProgram> {
+  const instructionType = identifySigilInstruction(instruction);
   switch (instructionType) {
-    case PhalnxInstruction.AgentTransfer: {
+    case SigilInstruction.AgentTransfer: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: PhalnxInstruction.AgentTransfer,
+        instructionType: SigilInstruction.AgentTransfer,
         ...parseAgentTransferInstruction(instruction),
       };
     }
-    case PhalnxInstruction.ApplyConstraintsUpdate: {
+    case SigilInstruction.ApplyConstraintsUpdate: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: PhalnxInstruction.ApplyConstraintsUpdate,
+        instructionType: SigilInstruction.ApplyConstraintsUpdate,
         ...parseApplyConstraintsUpdateInstruction(instruction),
       };
     }
-    case PhalnxInstruction.ApplyPendingPolicy: {
+    case SigilInstruction.ApplyPendingPolicy: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: PhalnxInstruction.ApplyPendingPolicy,
+        instructionType: SigilInstruction.ApplyPendingPolicy,
         ...parseApplyPendingPolicyInstruction(instruction),
       };
     }
-    case PhalnxInstruction.CancelConstraintsUpdate: {
+    case SigilInstruction.CancelConstraintsUpdate: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: PhalnxInstruction.CancelConstraintsUpdate,
+        instructionType: SigilInstruction.CancelConstraintsUpdate,
         ...parseCancelConstraintsUpdateInstruction(instruction),
       };
     }
-    case PhalnxInstruction.CancelPendingPolicy: {
+    case SigilInstruction.CancelPendingPolicy: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: PhalnxInstruction.CancelPendingPolicy,
+        instructionType: SigilInstruction.CancelPendingPolicy,
         ...parseCancelPendingPolicyInstruction(instruction),
       };
     }
-    case PhalnxInstruction.CloseInstructionConstraints: {
+    case SigilInstruction.CloseInstructionConstraints: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: PhalnxInstruction.CloseInstructionConstraints,
+        instructionType: SigilInstruction.CloseInstructionConstraints,
         ...parseCloseInstructionConstraintsInstruction(instruction),
       };
     }
-    case PhalnxInstruction.CloseSettledEscrow: {
+    case SigilInstruction.CloseSettledEscrow: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: PhalnxInstruction.CloseSettledEscrow,
+        instructionType: SigilInstruction.CloseSettledEscrow,
         ...parseCloseSettledEscrowInstruction(instruction),
       };
     }
-    case PhalnxInstruction.CloseVault: {
+    case SigilInstruction.CloseVault: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: PhalnxInstruction.CloseVault,
+        instructionType: SigilInstruction.CloseVault,
         ...parseCloseVaultInstruction(instruction),
       };
     }
-    case PhalnxInstruction.CreateEscrow: {
+    case SigilInstruction.CreateEscrow: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: PhalnxInstruction.CreateEscrow,
+        instructionType: SigilInstruction.CreateEscrow,
         ...parseCreateEscrowInstruction(instruction),
       };
     }
-    case PhalnxInstruction.CreateInstructionConstraints: {
+    case SigilInstruction.CreateInstructionConstraints: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: PhalnxInstruction.CreateInstructionConstraints,
+        instructionType: SigilInstruction.CreateInstructionConstraints,
         ...parseCreateInstructionConstraintsInstruction(instruction),
       };
     }
-    case PhalnxInstruction.DepositFunds: {
+    case SigilInstruction.DepositFunds: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: PhalnxInstruction.DepositFunds,
+        instructionType: SigilInstruction.DepositFunds,
         ...parseDepositFundsInstruction(instruction),
       };
     }
-    case PhalnxInstruction.FinalizeSession: {
+    case SigilInstruction.FinalizeSession: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: PhalnxInstruction.FinalizeSession,
+        instructionType: SigilInstruction.FinalizeSession,
         ...parseFinalizeSessionInstruction(instruction),
       };
     }
-    case PhalnxInstruction.FreezeVault: {
+    case SigilInstruction.FreezeVault: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: PhalnxInstruction.FreezeVault,
+        instructionType: SigilInstruction.FreezeVault,
         ...parseFreezeVaultInstruction(instruction),
       };
     }
-    case PhalnxInstruction.InitializeVault: {
+    case SigilInstruction.InitializeVault: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: PhalnxInstruction.InitializeVault,
+        instructionType: SigilInstruction.InitializeVault,
         ...parseInitializeVaultInstruction(instruction),
       };
     }
-    case PhalnxInstruction.PauseAgent: {
+    case SigilInstruction.PauseAgent: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: PhalnxInstruction.PauseAgent,
+        instructionType: SigilInstruction.PauseAgent,
         ...parsePauseAgentInstruction(instruction),
       };
     }
-    case PhalnxInstruction.QueueConstraintsUpdate: {
+    case SigilInstruction.QueueConstraintsUpdate: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: PhalnxInstruction.QueueConstraintsUpdate,
+        instructionType: SigilInstruction.QueueConstraintsUpdate,
         ...parseQueueConstraintsUpdateInstruction(instruction),
       };
     }
-    case PhalnxInstruction.QueuePolicyUpdate: {
+    case SigilInstruction.QueuePolicyUpdate: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: PhalnxInstruction.QueuePolicyUpdate,
+        instructionType: SigilInstruction.QueuePolicyUpdate,
         ...parseQueuePolicyUpdateInstruction(instruction),
       };
     }
-    case PhalnxInstruction.ReactivateVault: {
+    case SigilInstruction.ReactivateVault: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: PhalnxInstruction.ReactivateVault,
+        instructionType: SigilInstruction.ReactivateVault,
         ...parseReactivateVaultInstruction(instruction),
       };
     }
-    case PhalnxInstruction.RefundEscrow: {
+    case SigilInstruction.RefundEscrow: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: PhalnxInstruction.RefundEscrow,
+        instructionType: SigilInstruction.RefundEscrow,
         ...parseRefundEscrowInstruction(instruction),
       };
     }
-    case PhalnxInstruction.RegisterAgent: {
+    case SigilInstruction.RegisterAgent: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: PhalnxInstruction.RegisterAgent,
+        instructionType: SigilInstruction.RegisterAgent,
         ...parseRegisterAgentInstruction(instruction),
       };
     }
-    case PhalnxInstruction.RevokeAgent: {
+    case SigilInstruction.RevokeAgent: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: PhalnxInstruction.RevokeAgent,
+        instructionType: SigilInstruction.RevokeAgent,
         ...parseRevokeAgentInstruction(instruction),
       };
     }
-    case PhalnxInstruction.SettleEscrow: {
+    case SigilInstruction.SettleEscrow: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: PhalnxInstruction.SettleEscrow,
+        instructionType: SigilInstruction.SettleEscrow,
         ...parseSettleEscrowInstruction(instruction),
       };
     }
-    case PhalnxInstruction.SyncPositions: {
+    case SigilInstruction.SyncPositions: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: PhalnxInstruction.SyncPositions,
+        instructionType: SigilInstruction.SyncPositions,
         ...parseSyncPositionsInstruction(instruction),
       };
     }
-    case PhalnxInstruction.UnpauseAgent: {
+    case SigilInstruction.UnpauseAgent: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: PhalnxInstruction.UnpauseAgent,
+        instructionType: SigilInstruction.UnpauseAgent,
         ...parseUnpauseAgentInstruction(instruction),
       };
     }
-    case PhalnxInstruction.UpdateAgentPermissions: {
+    case SigilInstruction.UpdateAgentPermissions: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: PhalnxInstruction.UpdateAgentPermissions,
+        instructionType: SigilInstruction.UpdateAgentPermissions,
         ...parseUpdateAgentPermissionsInstruction(instruction),
       };
     }
-    case PhalnxInstruction.UpdateInstructionConstraints: {
+    case SigilInstruction.UpdateInstructionConstraints: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: PhalnxInstruction.UpdateInstructionConstraints,
+        instructionType: SigilInstruction.UpdateInstructionConstraints,
         ...parseUpdateInstructionConstraintsInstruction(instruction),
       };
     }
-    case PhalnxInstruction.UpdatePolicy: {
+    case SigilInstruction.UpdatePolicy: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: PhalnxInstruction.UpdatePolicy,
+        instructionType: SigilInstruction.UpdatePolicy,
         ...parseUpdatePolicyInstruction(instruction),
       };
     }
-    case PhalnxInstruction.ValidateAndAuthorize: {
+    case SigilInstruction.ValidateAndAuthorize: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: PhalnxInstruction.ValidateAndAuthorize,
+        instructionType: SigilInstruction.ValidateAndAuthorize,
         ...parseValidateAndAuthorizeInstruction(instruction),
       };
     }
-    case PhalnxInstruction.WithdrawFunds: {
+    case SigilInstruction.WithdrawFunds: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: PhalnxInstruction.WithdrawFunds,
+        instructionType: SigilInstruction.WithdrawFunds,
         ...parseWithdrawFundsInstruction(instruction),
       };
     }
     default:
       throw new SolanaError(
         SOLANA_ERROR__PROGRAM_CLIENTS__UNRECOGNIZED_INSTRUCTION_TYPE,
-        { instructionType: instructionType as string, programName: "phalnx" },
+        { instructionType: instructionType as string, programName: "sigil" },
       );
   }
 }
 
-export type PhalnxPlugin = {
-  accounts: PhalnxPluginAccounts;
-  instructions: PhalnxPluginInstructions;
+export type SigilPlugin = {
+  accounts: SigilPluginAccounts;
+  instructions: SigilPluginInstructions;
 };
 
-export type PhalnxPluginAccounts = {
+export type SigilPluginAccounts = {
   agentSpendOverlay: ReturnType<typeof getAgentSpendOverlayCodec> &
     SelfFetchFunctions<AgentSpendOverlayArgs, AgentSpendOverlay>;
   agentVault: ReturnType<typeof getAgentVaultCodec> &
@@ -1000,7 +1000,7 @@ export type PhalnxPluginAccounts = {
     SelfFetchFunctions<SpendTrackerArgs, SpendTracker>;
 };
 
-export type PhalnxPluginInstructions = {
+export type SigilPluginInstructions = {
   agentTransfer: (
     input: AgentTransferAsyncInput,
   ) => ReturnType<typeof getAgentTransferInstructionAsync> &
@@ -1115,18 +1115,18 @@ export type PhalnxPluginInstructions = {
     SelfPlanAndSendFunctions;
 };
 
-export type PhalnxPluginRequirements = ClientWithRpc<
+export type SigilPluginRequirements = ClientWithRpc<
   GetAccountInfoApi & GetMultipleAccountsApi
 > &
   ClientWithPayer &
   ClientWithTransactionPlanning &
   ClientWithTransactionSending;
 
-export function phalnxProgram() {
-  return <T extends PhalnxPluginRequirements>(client: T) => {
+export function sigilProgram() {
+  return <T extends SigilPluginRequirements>(client: T) => {
     return {
       ...client,
-      phalnx: <PhalnxPlugin>{
+      sigil: <SigilPlugin>{
         accounts: {
           agentSpendOverlay: addSelfFetchFunctions(
             client,

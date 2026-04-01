@@ -44,7 +44,7 @@ import {
   getNonNullResolvedInstructionInput,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { PHALNX_PROGRAM_ADDRESS } from "../programs";
+import { SIGIL_PROGRAM_ADDRESS } from "../programs";
 
 export const CREATE_ESCROW_DISCRIMINATOR = new Uint8Array([
   253, 215, 165, 116, 36, 108, 68, 80,
@@ -57,7 +57,7 @@ export function getCreateEscrowDiscriminatorBytes() {
 }
 
 export type CreateEscrowInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountAgent extends string | AccountMeta<string> = string,
   TAccountSourceVault extends string | AccountMeta<string> = string,
   TAccountPolicy extends string | AccountMeta<string> = string,
@@ -238,7 +238,7 @@ export async function getCreateEscrowInstructionAsync<
   TAccountTokenProgram extends string,
   TAccountSystemProgram extends string,
   TAccountAssociatedTokenProgram extends string,
-  TProgramAddress extends Address = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: CreateEscrowAsyncInput<
     TAccountAgent,
@@ -279,7 +279,7 @@ export async function getCreateEscrowInstructionAsync<
   >
 > {
   // Program address.
-  const programAddress = config?.programAddress ?? PHALNX_PROGRAM_ADDRESS;
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
 
   // Original accounts.
   const originalAccounts = {
@@ -518,7 +518,7 @@ export function getCreateEscrowInstruction<
   TAccountTokenProgram extends string,
   TAccountSystemProgram extends string,
   TAccountAssociatedTokenProgram extends string,
-  TProgramAddress extends Address = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: CreateEscrowInput<
     TAccountAgent,
@@ -557,7 +557,7 @@ export function getCreateEscrowInstruction<
   TAccountAssociatedTokenProgram
 > {
   // Program address.
-  const programAddress = config?.programAddress ?? PHALNX_PROGRAM_ADDRESS;
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
 
   // Original accounts.
   const originalAccounts = {
@@ -658,7 +658,7 @@ export function getCreateEscrowInstruction<
 }
 
 export type ParsedCreateEscrowInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
   programAddress: Address<TProgram>;
@@ -712,7 +712,7 @@ export function parseCreateEscrowInstruction<
   };
   const getNextOptionalAccount = () => {
     const accountMeta = getNextAccount();
-    return accountMeta.address === PHALNX_PROGRAM_ADDRESS
+    return accountMeta.address === SIGIL_PROGRAM_ADDRESS
       ? undefined
       : accountMeta;
   };

@@ -41,7 +41,7 @@ import {
   getAddressFromResolvedInstructionAccount,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { PHALNX_PROGRAM_ADDRESS } from "../programs";
+import { SIGIL_PROGRAM_ADDRESS } from "../programs";
 
 export const AGENT_TRANSFER_DISCRIMINATOR = new Uint8Array([
   199, 111, 151, 49, 124, 13, 150, 44,
@@ -54,7 +54,7 @@ export function getAgentTransferDiscriminatorBytes() {
 }
 
 export type AgentTransferInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountAgent extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
   TAccountPolicy extends string | AccountMeta<string> = string,
@@ -192,7 +192,7 @@ export async function getAgentTransferInstructionAsync<
   TAccountFeeDestinationTokenAccount extends string,
   TAccountProtocolTreasuryTokenAccount extends string,
   TAccountTokenProgram extends string,
-  TProgramAddress extends Address = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: AgentTransferAsyncInput<
     TAccountAgent,
@@ -225,7 +225,7 @@ export async function getAgentTransferInstructionAsync<
   >
 > {
   // Program address.
-  const programAddress = config?.programAddress ?? PHALNX_PROGRAM_ADDRESS;
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
 
   // Original accounts.
   const originalAccounts = {
@@ -393,7 +393,7 @@ export function getAgentTransferInstruction<
   TAccountFeeDestinationTokenAccount extends string,
   TAccountProtocolTreasuryTokenAccount extends string,
   TAccountTokenProgram extends string,
-  TProgramAddress extends Address = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: AgentTransferInput<
     TAccountAgent,
@@ -424,7 +424,7 @@ export function getAgentTransferInstruction<
   TAccountTokenProgram
 > {
   // Program address.
-  const programAddress = config?.programAddress ?? PHALNX_PROGRAM_ADDRESS;
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
 
   // Original accounts.
   const originalAccounts = {
@@ -517,7 +517,7 @@ export function getAgentTransferInstruction<
 }
 
 export type ParsedAgentTransferInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
   programAddress: Address<TProgram>;
@@ -569,7 +569,7 @@ export function parseAgentTransferInstruction<
   };
   const getNextOptionalAccount = () => {
     const accountMeta = getNextAccount();
-    return accountMeta.address === PHALNX_PROGRAM_ADDRESS
+    return accountMeta.address === SIGIL_PROGRAM_ADDRESS
       ? undefined
       : accountMeta;
   };

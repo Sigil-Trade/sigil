@@ -49,7 +49,7 @@ import {
   getNonNullResolvedInstructionInput,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { PHALNX_PROGRAM_ADDRESS } from "../programs";
+import { SIGIL_PROGRAM_ADDRESS } from "../programs";
 
 export const INITIALIZE_VAULT_DISCRIMINATOR = new Uint8Array([
   48, 191, 163, 44, 71, 129, 63, 164,
@@ -62,7 +62,7 @@ export function getInitializeVaultDiscriminatorBytes() {
 }
 
 export type InitializeVaultInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountOwner extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
   TAccountPolicy extends string | AccountMeta<string> = string,
@@ -222,7 +222,7 @@ export async function getInitializeVaultInstructionAsync<
   TAccountAgentSpendOverlay extends string,
   TAccountFeeDestination extends string,
   TAccountSystemProgram extends string,
-  TProgramAddress extends Address = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: InitializeVaultAsyncInput<
     TAccountOwner,
@@ -247,7 +247,7 @@ export async function getInitializeVaultInstructionAsync<
   >
 > {
   // Program address.
-  const programAddress = config?.programAddress ?? PHALNX_PROGRAM_ADDRESS;
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
 
   // Original accounts.
   const originalAccounts = {
@@ -390,7 +390,7 @@ export function getInitializeVaultInstruction<
   TAccountAgentSpendOverlay extends string,
   TAccountFeeDestination extends string,
   TAccountSystemProgram extends string,
-  TProgramAddress extends Address = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: InitializeVaultInput<
     TAccountOwner,
@@ -413,7 +413,7 @@ export function getInitializeVaultInstruction<
   TAccountSystemProgram
 > {
   // Program address.
-  const programAddress = config?.programAddress ?? PHALNX_PROGRAM_ADDRESS;
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
 
   // Original accounts.
   const originalAccounts = {
@@ -470,7 +470,7 @@ export function getInitializeVaultInstruction<
 }
 
 export type ParsedInitializeVaultInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
   programAddress: Address<TProgram>;

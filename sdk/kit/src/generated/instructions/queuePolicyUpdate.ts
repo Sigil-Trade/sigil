@@ -54,7 +54,7 @@ import {
   getAddressFromResolvedInstructionAccount,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { PHALNX_PROGRAM_ADDRESS } from "../programs";
+import { SIGIL_PROGRAM_ADDRESS } from "../programs";
 
 export const QUEUE_POLICY_UPDATE_DISCRIMINATOR = new Uint8Array([
   149, 18, 76, 197, 179, 193, 91, 77,
@@ -67,7 +67,7 @@ export function getQueuePolicyUpdateDiscriminatorBytes() {
 }
 
 export type QueuePolicyUpdateInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountOwner extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
   TAccountPolicy extends string | AccountMeta<string> = string,
@@ -227,7 +227,7 @@ export async function getQueuePolicyUpdateInstructionAsync<
   TAccountPolicy extends string,
   TAccountPendingPolicy extends string,
   TAccountSystemProgram extends string,
-  TProgramAddress extends Address = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: QueuePolicyUpdateAsyncInput<
     TAccountOwner,
@@ -248,7 +248,7 @@ export async function getQueuePolicyUpdateInstructionAsync<
   >
 > {
   // Program address.
-  const programAddress = config?.programAddress ?? PHALNX_PROGRAM_ADDRESS;
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
 
   // Original accounts.
   const originalAccounts = {
@@ -361,7 +361,7 @@ export function getQueuePolicyUpdateInstruction<
   TAccountPolicy extends string,
   TAccountPendingPolicy extends string,
   TAccountSystemProgram extends string,
-  TProgramAddress extends Address = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: QueuePolicyUpdateInput<
     TAccountOwner,
@@ -380,7 +380,7 @@ export function getQueuePolicyUpdateInstruction<
   TAccountSystemProgram
 > {
   // Program address.
-  const programAddress = config?.programAddress ?? PHALNX_PROGRAM_ADDRESS;
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
 
   // Original accounts.
   const originalAccounts = {
@@ -428,7 +428,7 @@ export function getQueuePolicyUpdateInstruction<
 }
 
 export type ParsedQueuePolicyUpdateInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
   programAddress: Address<TProgram>;

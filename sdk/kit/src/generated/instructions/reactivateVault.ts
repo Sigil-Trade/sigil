@@ -43,7 +43,7 @@ import {
   getAccountMetaFactory,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { PHALNX_PROGRAM_ADDRESS } from "../programs";
+import { SIGIL_PROGRAM_ADDRESS } from "../programs";
 
 export const REACTIVATE_VAULT_DISCRIMINATOR = new Uint8Array([
   245, 50, 143, 70, 114, 220, 25, 251,
@@ -56,7 +56,7 @@ export function getReactivateVaultDiscriminatorBytes() {
 }
 
 export type ReactivateVaultInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountOwner extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
@@ -128,13 +128,13 @@ export type ReactivateVaultInput<
 export function getReactivateVaultInstruction<
   TAccountOwner extends string,
   TAccountVault extends string,
-  TProgramAddress extends Address = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: ReactivateVaultInput<TAccountOwner, TAccountVault>,
   config?: { programAddress?: TProgramAddress },
 ): ReactivateVaultInstruction<TProgramAddress, TAccountOwner, TAccountVault> {
   // Program address.
-  const programAddress = config?.programAddress ?? PHALNX_PROGRAM_ADDRESS;
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
 
   // Original accounts.
   const originalAccounts = {
@@ -167,7 +167,7 @@ export function getReactivateVaultInstruction<
 }
 
 export type ParsedReactivateVaultInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
   programAddress: Address<TProgram>;

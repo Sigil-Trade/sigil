@@ -54,7 +54,7 @@ import {
   getAddressFromResolvedInstructionAccount,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { PHALNX_PROGRAM_ADDRESS } from "../programs";
+import { SIGIL_PROGRAM_ADDRESS } from "../programs";
 
 export const UPDATE_POLICY_DISCRIMINATOR = new Uint8Array([
   212, 245, 246, 7, 163, 151, 18, 57,
@@ -67,7 +67,7 @@ export function getUpdatePolicyDiscriminatorBytes() {
 }
 
 export type UpdatePolicyInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountOwner extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
   TAccountPolicy extends string | AccountMeta<string> = string,
@@ -212,7 +212,7 @@ export async function getUpdatePolicyInstructionAsync<
   TAccountOwner extends string,
   TAccountVault extends string,
   TAccountPolicy extends string,
-  TProgramAddress extends Address = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: UpdatePolicyAsyncInput<TAccountOwner, TAccountVault, TAccountPolicy>,
   config?: { programAddress?: TProgramAddress },
@@ -225,7 +225,7 @@ export async function getUpdatePolicyInstructionAsync<
   >
 > {
   // Program address.
-  const programAddress = config?.programAddress ?? PHALNX_PROGRAM_ADDRESS;
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
 
   // Original accounts.
   const originalAccounts = {
@@ -304,7 +304,7 @@ export function getUpdatePolicyInstruction<
   TAccountOwner extends string,
   TAccountVault extends string,
   TAccountPolicy extends string,
-  TProgramAddress extends Address = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: UpdatePolicyInput<TAccountOwner, TAccountVault, TAccountPolicy>,
   config?: { programAddress?: TProgramAddress },
@@ -315,7 +315,7 @@ export function getUpdatePolicyInstruction<
   TAccountPolicy
 > {
   // Program address.
-  const programAddress = config?.programAddress ?? PHALNX_PROGRAM_ADDRESS;
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
 
   // Original accounts.
   const originalAccounts = {
@@ -351,7 +351,7 @@ export function getUpdatePolicyInstruction<
 }
 
 export type ParsedUpdatePolicyInstruction<
-  TProgram extends string = typeof PHALNX_PROGRAM_ADDRESS,
+  TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
   programAddress: Address<TProgram>;

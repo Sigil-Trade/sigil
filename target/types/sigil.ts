@@ -2,15 +2,15 @@
  * Program IDL in camelCase format in order to be used in JS/TS.
  *
  * Note that this is only a type helper and is not the actual IDL. The original
- * IDL can be found at `target/idl/phalnx.json`.
+ * IDL can be found at `target/idl/sigil.json`.
  */
-export type Phalnx = {
+export type Sigil = {
   address: "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL";
   metadata: {
-    name: "phalnx";
+    name: "sigil";
     version: "0.1.0";
     spec: "0.1.0";
-    description: "On-chain guardrails for AI agents on Solana - Permission controls, spending limits, and audit infrastructure for autonomous agents (Phalnx)";
+    description: "On-chain guardrails for AI agents on Solana - Permission controls, spending limits, and audit infrastructure for autonomous agents (Sigil)";
   };
   instructions: [
     {
