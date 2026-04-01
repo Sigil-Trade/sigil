@@ -451,19 +451,19 @@ export type {
   OwnerTransactionResult,
 } from "./owner-transaction.js";
 
-// ─── Harden / withVault ─────────────────────────────────────────────────────
+// ─── Inscribe / withVault ─────────────────────────────────────────────────────
 export {
   mapPoliciesToVaultParams,
   findNextVaultId,
-  harden,
+  inscribe,
   withVault,
-} from "./harden.js";
+} from "./inscribe.js";
 export type {
-  HardenOptions,
-  HardenResult,
+  InscribeOptions,
+  InscribeResult,
   WithVaultOptions,
   WithVaultResult,
-} from "./harden.js";
+} from "./inscribe.js";
 
 // ─── Transaction Executor ──────────────────────────────────────────────────
 export { TransactionExecutor } from "./transaction-executor.js";

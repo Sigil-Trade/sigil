@@ -20,7 +20,7 @@ import {
   getPolicyPDA,
   getAgentOverlayPDA,
 } from "./resolve-accounts.js";
-import { findNextVaultId } from "./harden.js";
+import { findNextVaultId } from "./inscribe.js";
 import { FULL_PERMISSIONS, toInstruction } from "./types.js";
 import { buildOwnerTransaction } from "./owner-transaction.js";
 import { signAndEncode, sendAndConfirmTransaction } from "./rpc-helpers.js";

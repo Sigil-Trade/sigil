@@ -1,8 +1,8 @@
 /**
- * Kit-native harden() + withVault() — Vault Provisioning
+ * Kit-native inscribe() + withVault() — Vault Provisioning
  *
- * harden(): Creates on-chain vault + registers agent
- * withVault(): Convenience — shield + harden in one call
+ * inscribe(): Creates on-chain vault + registers agent
+ * withVault(): Convenience — shield + inscribe in one call
  *
  * Uses Codama-generated instruction builders directly.
  * No Anchor, no web3.js.
@@ -30,8 +30,8 @@ import { validateNetwork, type Network } from "./types.js";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-/** Configuration for hardening a wallet to on-chain enforcement. */
-export interface HardenOptions {
+/** Configuration for inscribing a wallet to on-chain enforcement. */
+export interface InscribeOptions {
   /** Solana RPC connection */
   rpc: Rpc<SolanaRpcApi>;
   /** Network for token resolution */
@@ -64,8 +64,8 @@ export interface HardenOptions {
   unsafeSkipTeeCheck?: boolean;
 }
 
-/** Result of hardening a wallet. */
-export interface HardenResult {
+/** Result of inscribing a wallet. */
+export interface InscribeResult {
   /** Vault PDA address */
   vaultAddress: Address;
   /** Vault ID used */
@@ -83,7 +83,7 @@ export interface HardenResult {
 /** Configuration for withVault() convenience wrapper. */
 export interface WithVaultOptions {
   /** On-chain vault provisioning configuration. */
-  harden: HardenOptions;
+  inscribe: InscribeOptions;
   /** Shield policies (client-side enforcement). */
   policies?: ShieldPolicies;
   /** Shield event callbacks. */
@@ -95,7 +95,7 @@ export interface WithVaultResult {
   /** Client-side shield context */
   shield: ShieldedContext;
   /** On-chain vault info */
-  harden: HardenResult;
+  inscribe: InscribeResult;
 }
 
 // ─── Policy Mapping ─────────────────────────────────────────────────────────
@@ -204,7 +204,7 @@ export async function findNextVaultId(
   return nextId;
 }
 
-// ─── Harden ─────────────────────────────────────────────────────────────────
+// ─── Inscribe ─────────────────────────────────────────────────────────────────
 
 /**
  * Create an on-chain vault and register an agent.
@@ -219,7 +219,7 @@ export async function findNextVaultId(
  * - getRegisterAgentInstructionAsync()
  * - getUpdatePolicyInstructionAsync()
  */
-export async function harden(options: HardenOptions): Promise<HardenResult> {
+export async function inscribe(options: InscribeOptions): Promise<InscribeResult> {
   const { rpc, network, owner, agent } = options;
   validateNetwork(network);
 
@@ -253,7 +253,7 @@ export async function harden(options: HardenOptions): Promise<HardenResult> {
 // ─── withVault ──────────────────────────────────────────────────────────────
 
 /**
- * Convenience: shield + harden in one call.
+ * Convenience: shield + inscribe in one call.
  *
  * Creates both client-side (shield) and on-chain (vault) enforcement.
  * Auto-configures shield's on-chain sync using the derived vault address.
@@ -263,16 +263,16 @@ export async function withVault(
   options: WithVaultOptions,
 ): Promise<WithVaultResult> {
   // Provision on-chain vault first (derives vault address)
-  const hardenResult = await harden(options.harden);
+  const inscribeResult = await inscribe(options.inscribe);
 
   // Auto-configure shield's on-chain sync using the derived vault address
   const shieldOpts: ShieldOptions = {
     ...options.shieldCallbacks,
     onChainSync: {
-      rpc: options.harden.rpc,
-      vaultAddress: hardenResult.vaultAddress,
-      agentAddress: options.harden.agent.address,
-      network: options.harden.network,
+      rpc: options.inscribe.rpc,
+      vaultAddress: inscribeResult.vaultAddress,
+      agentAddress: options.inscribe.agent.address,
+      network: options.inscribe.network,
     },
   };
 
@@ -280,6 +280,6 @@ export async function withVault(
 
   return {
     shield: shieldCtx,
-    harden: hardenResult,
+    inscribe: inscribeResult,
   };
 }

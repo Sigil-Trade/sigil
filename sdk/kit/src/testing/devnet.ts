@@ -43,8 +43,8 @@ import {
   getDepositFundsInstructionAsync,
 } from "../generated/instructions/depositFunds.js";
 import {
-  harden,
-} from "../harden.js";
+  inscribe,
+} from "../inscribe.js";
 import {
   getAgentOverlayPDA,
   getTrackerPDA,
@@ -237,7 +237,7 @@ export interface ProvisionVaultResult {
 /**
  * Provision a vault using Kit-native Codama builders.
  *
- * 1. Call harden() for PDA derivation + vault ID probing
+ * 1. Call inscribe() for PDA derivation + vault ID probing
  * 2. Build + send initializeVault IX via Codama
  * 3. Build + send registerAgent IX via Codama
  * 4. Build + send depositFunds IX via Codama (optional)
@@ -255,8 +255,8 @@ export async function provisionVault(
   const permissions = opts.permissions ?? FULL_PERMISSIONS;
   const spendingLimitUsd = opts.spendingLimitUsd ?? 0n;
 
-  // 1. Derive PDAs via harden()
-  const hardenResult = await harden({
+  // 1. Derive PDAs via inscribe()
+  const inscribeResult = await inscribe({
     rpc,
     network: "devnet",
     owner,
@@ -264,7 +264,7 @@ export async function provisionVault(
     unsafeSkipTeeCheck: true,
   });
 
-  const { vaultAddress, vaultId, policyAddress } = hardenResult;
+  const { vaultAddress, vaultId, policyAddress } = inscribeResult;
   const [overlayPDA] = await getAgentOverlayPDA(vaultAddress, 0);
 
   // 2. Build and send initializeVault
