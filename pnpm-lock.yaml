@@ -97,15 +97,15 @@ importers:
         specifier: ^4.3.6
         version: 4.3.6
     devDependencies:
-      '@phalnx/kit':
-        specifier: workspace:*
-        version: link:../../sdk/kit
       '@types/chai':
         specifier: ^5.2.3
         version: 5.2.3
       '@types/mocha':
         specifier: ^10.0.6
         version: 10.0.10
+      '@usesigil/kit':
+        specifier: workspace:*
+        version: link:../../sdk/kit
       chai:
         specifier: ^6.2.2
         version: 6.2.2
@@ -234,15 +234,15 @@ importers:
 
   sdk/kit:
     dependencies:
-      '@phalnx/core':
-        specifier: workspace:*
-        version: link:../core
       '@solana-program/compute-budget':
         specifier: ^0.15.0
         version: 0.15.0(@solana/kit@6.2.0(bufferutil@4.1.0)(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.9.3)(utf-8-validate@5.0.10))
       '@solana/kit':
         specifier: ^6.2.0
         version: 6.2.0(bufferutil@4.1.0)(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.9.3)(utf-8-validate@5.0.10)
+      '@usesigil/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       '@codama/nodes-from-anchor':
         specifier: 1.3.9

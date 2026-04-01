@@ -5,7 +5,7 @@ import {
   RISK_FLAG_FULL_DRAIN,
   RISK_FLAG_MULTI_OUTPUT,
   detectDrainAttempt,
-  detectDrainFromWrapContext,
+  detectDrainFromSealContext,
   adjustCU,
   parseTokenBalance,
   DEFAULT_WARNING_PERCENT,
@@ -162,7 +162,7 @@ describe("simulation", () => {
     });
   });
 
-  describe("detectDrainFromWrapContext", () => {
+  describe("detectDrainFromSealContext", () => {
     const VAULT = "vault111111111111111111111111111111111111111";
 
     it("wires vaultContext fields to detectDrainAttempt", () => {
@@ -175,7 +175,7 @@ describe("simulation", () => {
         tokenBalance: 1000n,
         knownRecipients: new Set<string>(),
       };
-      const flags = detectDrainFromWrapContext(deltas, vaultContext);
+      const flags = detectDrainFromSealContext(deltas, vaultContext);
       expect(flags).to.include(RISK_FLAG_LARGE_OUTFLOW); // 60% >= 50%
       expect(flags).to.include(RISK_FLAG_UNKNOWN_RECIPIENT);
     });
@@ -190,7 +190,7 @@ describe("simulation", () => {
         tokenBalance: 1000n,
         knownRecipients: new Set(["treasury"]),
       };
-      const flags = detectDrainFromWrapContext(deltas, vaultContext);
+      const flags = detectDrainFromSealContext(deltas, vaultContext);
       expect(flags).to.not.include(RISK_FLAG_UNKNOWN_RECIPIENT);
     });
   });
