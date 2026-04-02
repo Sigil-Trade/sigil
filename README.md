@@ -140,7 +140,7 @@ anchor build --no-idl
 # Generate IDL separately (requires nightly Rust — anchor-syn 0.32.1 bug)
 RUSTUP_TOOLCHAIN=nightly anchor idl build -o target/idl/sigil.json
 
-# Run on-chain tests (374 LiteSVM tests — no validator needed)
+# Run on-chain tests (445 LiteSVM tests — no validator needed)
 npx ts-mocha -p ./tsconfig.json -t 300000 \
   tests/sigil.ts tests/jupiter-integration.ts \
   tests/flash-trade-integration.ts tests/security-exploits.ts \
