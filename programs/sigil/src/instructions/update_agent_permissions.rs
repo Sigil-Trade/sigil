@@ -29,7 +29,7 @@ pub struct UpdateAgentPermissions<'info> {
     #[account(
         mut,
         seeds = [b"agent_spend", vault.key().as_ref(), &[0u8]],
-        bump,
+        bump = agent_spend_overlay.load()?.bump,
     )]
     pub agent_spend_overlay: AccountLoader<'info, AgentSpendOverlay>,
 }

@@ -36,7 +36,7 @@ pub struct ValidateAndAuthorize<'info> {
     #[account(
         mut,
         seeds = [b"tracker", vault.key().as_ref()],
-        bump,
+        bump = tracker.load()?.bump,
     )]
     pub tracker: AccountLoader<'info, SpendTracker>,
 
@@ -44,7 +44,7 @@ pub struct ValidateAndAuthorize<'info> {
     #[account(
         mut,
         seeds = [b"agent_spend", vault.key().as_ref(), &[0u8]],
-        bump,
+        bump = agent_spend_overlay.load()?.bump,
     )]
     pub agent_spend_overlay: AccountLoader<'info, AgentSpendOverlay>,
 

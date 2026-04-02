@@ -31,7 +31,7 @@ pub struct CloseVault<'info> {
     #[account(
         mut,
         seeds = [b"tracker", vault.key().as_ref()],
-        bump,
+        bump = tracker.load()?.bump,
         close = owner,
     )]
     pub tracker: AccountLoader<'info, SpendTracker>,
@@ -40,7 +40,7 @@ pub struct CloseVault<'info> {
     #[account(
         mut,
         seeds = [b"agent_spend", vault.key().as_ref(), &[0u8]],
-        bump,
+        bump = agent_spend_overlay.load()?.bump,
         close = owner,
     )]
     pub agent_spend_overlay: AccountLoader<'info, AgentSpendOverlay>,
