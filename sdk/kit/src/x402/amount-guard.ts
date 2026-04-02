@@ -29,7 +29,12 @@ export function validatePaymentAmount(
   amount: string,
   config?: X402Config,
 ): bigint {
-  // 1. Parse and validate
+  // 1. Parse and validate — enforce string type at runtime (JS callers may bypass TS types)
+  if (typeof amount !== "string") {
+    throw new X402PaymentError(
+      `Invalid payment amount: expected string, got ${typeof amount}`,
+    );
+  }
   let parsed: bigint;
   try {
     parsed = BigInt(amount);

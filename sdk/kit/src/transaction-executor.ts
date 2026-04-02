@@ -89,10 +89,18 @@ export interface TransactionExecutorOptions {
   /** Send+confirm options */
   confirmOptions?: SendAndConfirmOptions;
   /**
-   * Skip simulation (default: false — simulation is fail-closed).
-   * WARNING: This bypasses the pre-sign safety gate. Only use in test environments.
-   * Moved from per-call params to constructor-only to prevent accidental bypass.
+   * Dangerously skip simulation and drain detection (default: false).
+   * Council mandate (4-0 verdict, Decision 6): requires string literal confirmation
+   * to prevent accidental production bypass. Only use in test environments.
+   *
+   * @example
+   * // Correct: explicit acknowledgment
+   * { dangerouslySkipSimulation: "I_UNDERSTAND_DRAIN_DETECTION_IS_DISABLED" }
+   * // Wrong: boolean (type error)
+   * { dangerouslySkipSimulation: true }
    */
+  dangerouslySkipSimulation?: "I_UNDERSTAND_DRAIN_DETECTION_IS_DISABLED";
+  /** @deprecated Use dangerouslySkipSimulation instead. Will be removed in next major. */
   skipSimulation?: boolean;
   /** Configurable drain detection thresholds (defaults: 50% warning, 95% block) */
   drainThresholds?: DrainThresholds;
@@ -118,7 +126,25 @@ export class TransactionExecutor {
     this.agent = agent;
     this.blockhashCache = new BlockhashCache(options?.blockhashCacheTtlMs);
     this.confirmOptions = options?.confirmOptions ?? {};
-    this._skipSimulation = options?.skipSimulation ?? false;
+    this._skipSimulation =
+      options?.dangerouslySkipSimulation ===
+        "I_UNDERSTAND_DRAIN_DETECTION_IS_DISABLED" ||
+      options?.skipSimulation === true;
+    if (this._skipSimulation) {
+      if (
+        options?.skipSimulation === true &&
+        !options?.dangerouslySkipSimulation
+      ) {
+        console.warn(
+          "[Phalnx] DEPRECATION: skipSimulation is deprecated. " +
+            'Use dangerouslySkipSimulation: "I_UNDERSTAND_DRAIN_DETECTION_IS_DISABLED" instead.',
+        );
+      }
+      console.warn(
+        "[Phalnx] WARNING: Simulation and drain detection are DISABLED. " +
+          "This should only be used in testing environments, never in production.",
+      );
+    }
     this._drainThresholds = options?.drainThresholds;
   }
 
@@ -195,17 +221,22 @@ export class TransactionExecutor {
     const wireBase64 = getBase64EncodedWireTransaction(compiledTx);
 
     // Build simulation options from vault monitoring context + drain thresholds
-    const simOptions: SimulationOptions | undefined =
-      params.vaultMonitoring ? {
-        monitorAccounts: params.vaultMonitoring.monitorAccounts,
-        preBalances: params.vaultMonitoring.preBalances,
-        vaultAddress: params.vaultMonitoring.vaultAddress,
-        totalVaultBalance: params.vaultMonitoring.totalVaultBalance,
-        knownRecipients: params.vaultMonitoring.knownRecipients,
-        drainThresholds: this._drainThresholds,
-      } : undefined;
+    const simOptions: SimulationOptions | undefined = params.vaultMonitoring
+      ? {
+          monitorAccounts: params.vaultMonitoring.monitorAccounts,
+          preBalances: params.vaultMonitoring.preBalances,
+          vaultAddress: params.vaultMonitoring.vaultAddress,
+          totalVaultBalance: params.vaultMonitoring.totalVaultBalance,
+          knownRecipients: params.vaultMonitoring.knownRecipients,
+          drainThresholds: this._drainThresholds,
+        }
+      : undefined;
 
-    const simulation = await simulateBeforeSend(this.rpc, wireBase64, simOptions);
+    const simulation = await simulateBeforeSend(
+      this.rpc,
+      wireBase64,
+      simOptions,
+    );
 
     if (!simulation.success) {
       return { simulation, finalCU: estimatedCU };

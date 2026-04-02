@@ -53,7 +53,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@efa25f7f19611383d5b0ccf2d1c8914531636bf9 # stable
+        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # stable
         with:
           toolchain: stable
 
@@ -239,7 +239,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@efa25f7f19611383d5b0ccf2d1c8914531636bf9
+        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9
         with:
           toolchain: stable
 
@@ -250,13 +250,16 @@ jobs:
         run: cargo install solana-verify --locked
 
       - name: Verify deployed program matches source
+        env:
+          VERIFY_RPC: ${{ secrets.DEVNET_RPC_URL }}
         run: |
           set -e
           solana-verify verify-from-repo \
+            https://github.com/Kaleb-Rupe/phalnx \
             --program-id 4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL \
             --library-name sigil \
             --mount-path programs/sigil \
-            --url https://api.devnet.solana.com
+            --url "${VERIFY_RPC:-https://api.devnet.solana.com}"
 
   # ────────────────────────────────────────────────────────────────
   # Job 3: Run devnet tests against freshly deployed program

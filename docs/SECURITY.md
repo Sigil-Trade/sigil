@@ -284,3 +284,177 @@ The SDK trusts RPC account data for client-side precheck. A malicious RPC can su
 - `tests/surfpool-integration.ts` — Surfnet integration tests
 
 All LiteSVM tests use in-process Solana VM (no network calls). Additional devnet test suites in `tests/devnet-*.ts`.
+
+---
+
+## 10. Delegation Window Trust Model
+
+This section documents the security properties of the session delegation lifecycle — the window during which an agent holds SPL Token delegation (approval) on a vault's token account.
+
+### 10.1 SessionAuthority PDA Lifecycle
+
+| Phase | Instruction | What Happens |
+|-------|------------|--------------|
+| **Create** | `validate_and_authorize` | SessionAuthority PDA initialized via Anchor `init` constraint. Seeds: `[b"session", vault.key(), agent.key(), token_mint]`. Fields set: `authorized=true`, `expires_at_slot`, `delegated`, `authorized_amount`, balance snapshot. |
+| **Active** | _(DeFi instruction)_ | Agent holds SPL delegation on vault token account. DeFi program spends via delegation. Session valid while `clock.slot <= expires_at_slot`. |
+| **Close** | `finalize_session` | Delegation revoked via SPL `Revoke` CPI. Outcome-based spending verification. Session PDA closed (rent returned to agent). |
+
+**Key property:** The `init` constraint prevents double-authorization — only one session can exist per vault+agent+token_mint triple at a time.
+
+Source: `validate_and_authorize.rs:51-64` (seeds), `validate_and_authorize.rs:577-594` (init), `finalize_session.rs:164-183` (revoke+close).
+
+### 10.2 Delegation Amount (Bounded, Not Full Vault)
+
+The agent receives delegation for exactly the authorized transaction amount minus fees:
+
+```
+delegation_amount = authorized_amount - protocol_fee - developer_fee
+```
+
+**Example:** For a 100 USDC transaction with 2 BPS protocol fee + 5 BPS developer fee:
+- Protocol fee: `ceil(100_000_000 * 200 / 1_000_000)` = 20,000 (0.02 USDC)
+- Developer fee: `ceil(100_000_000 * 500 / 1_000_000)` = 50,000 (0.05 USDC)
+- **Delegation amount: 99,930,000** (99.93 USDC — strictly bounded)
+
+Fees are collected **before** delegation via SPL `Transfer` CPI (vault PDA signs). The agent never has access to the fee portion.
+
+Source: `validate_and_authorize.rs:483-574`.
+
+### 10.3 Session Expiry (Timeout Guard)
+
+| Parameter | Value |
+|-----------|-------|
+| `SESSION_EXPIRY_SLOTS` (default) | 20 (~8 seconds) |
+| Configurable range | 10–450 slots (4–180 seconds), or 0 for default |
+| Calculation | `expires_at_slot = current_slot + policy.effective_session_expiry_slots()` |
+| Expiry check | `is_expired = current_slot > expires_at_slot` (inclusive: valid while `<=`) |
+
+**The 20-slot window is NOT for transaction atomicity** — Solana guarantees all instructions in a transaction execute in the same slot. The window is a **timeout guard** that:
+
+1. Prevents indefinite delegation holding if an agent constructs but never submits finalize
+2. Enables permissionless cleanup — anyone can call `finalize_session` on expired sessions
+3. Forces prompt finalization within a deterministic window
+
+**Expired session behavior:** Treated as failed. No caps updated, no stats recorded. Delegation revoked. Rent returned to original agent. Callable by any signer (permissionless crank).
+
+Source: `state/mod.rs:34` (constant), `state/policy.rs:148-153` (effective), `update_policy.rs:110-116` (validation, error 6060 `InvalidSessionExpiry`), `state/session.rs:63-65` (expiry check), `finalize_session.rs:100-114` (permissionless crank logic).
+
+### 10.4 Five Defense Layers
+
+The delegation window is protected by five interlocking defense layers:
+
+| Layer | Mechanism | Location | What It Catches |
+|-------|-----------|----------|----------------|
+| **1. Instruction Scan** | Pre-execution scan of all TX instructions. Blocks SPL Token disc 3,4,6,8,9,12,13,15 + Token-2022 disc 26. Requires finalize_session present. Protocol allowlist enforced. | `validate_and_authorize.rs:276-424` | Direct token theft, unauthorized approvals, protocol switching |
+| **2. Bounded Delegation** | SPL `Approve` for exactly `amount - fees`. SPL Token program cryptographically enforces the limit. | `validate_and_authorize.rs:563-574` | Over-spending via DeFi instruction |
+| **3. Outcome Verification** | `finalize_session` measures actual stablecoin balance delta. Spending caps enforced on measured reality, not declared intent. | `finalize_session.rs:190-330` | Under-declaring amounts to bypass caps |
+| **4. CPI Balance Audit** | Verifies `actual_decrease <= session_authorized_amount`. Catches compromised DeFi programs that CPI burn/transfer via agent delegation. | `finalize_session.rs:227-239` (error 6071 `UnexpectedBalanceDecrease`) | Compromised whitelisted DeFi programs |
+| **5. Post-Finalize Lock** | After delegation revocation, unbounded scan requires all remaining instructions to be ComputeBudget or System only. | `finalize_session.rs:516-543` (error 6070 `UnauthorizedPostFinalizeInstruction`) | Future regressions in revocation ordering |
+
+Additionally, both `validate_and_authorize` and `finalize_session` enforce a **CPI guard** via `get_stack_height() == TRANSACTION_LEVEL_STACK_HEIGHT` (error 6034 `CpiCallNotAllowed`). This ensures neither instruction can be invoked via CPI from another program.
+
+### 10.5 Attack Surface Analysis
+
+| Attack Vector | Defense | Result |
+|--------------|---------|--------|
+| Agent inserts SPL Transfer instruction | Layer 1: disc 3/12 blocked | **Blocked** |
+| Agent approves another delegate | Layer 1: disc 4/13 blocked | **Blocked** |
+| Agent burns vault tokens | Layer 1: disc 8/15 blocked | **Blocked** |
+| Agent over-spends via DeFi | Layer 2: SPL enforces delegation limit | **Blocked** |
+| Agent under-declares amount | Layer 3: outcome verification measures reality | **Blocked** |
+| Compromised DeFi CPIs to burn vault tokens | Layer 4: CPI balance audit (actual_decrease <= authorized_amount) | **Blocked** |
+| Instructions after finalize | Layer 5: post-finalize lock (ComputeBudget/System only) | **Blocked** |
+| Agent skips finalize | Timeout: session expires after 20 slots, permissionless cleanup | **Mitigated** |
+| CPI invocation of validate/finalize | CPI guard: stack height check | **Blocked** |
+
+### 10.6 Residual Risks
+
+1. **Whitelisted protocol risk:** A whitelisted DeFi program (e.g., Jupiter, Flash Trade) is trusted to behave correctly. If the program itself is compromised or malicious, it could execute arbitrary inner CPIs. **Mitigation:** Layer 4 (CPI balance audit) limits damage to the authorized amount; Layer 2 (bounded delegation) caps the maximum loss.
+
+2. **Stablecoin depeg:** If USDC or USDT depegs, the 1:1 USD assumption breaks and caps may over- or under-count real USD value. **Mitigation:** None — this is an accepted trust assumption (see §8.2).
+
+3. **MEV/sandwich attacks:** An attacker could sandwich the DeFi instruction to extract value via adverse pricing. **Mitigation:** Jupiter slippage verification (on-chain check, spending-only), but this is specific to Jupiter and does not cover all protocols. Generic constraint validation can enforce custom slippage limits for other protocols.
+
+---
+
+## 11. Token-2022 Defense-in-Depth
+
+This section documents how the program handles SPL Token-2022 instructions and the defense-in-depth strategy for the CPI blind spot.
+
+### 11.1 Token-2022 Program Reference
+
+`TOKEN_2022_PROGRAM_ID` is defined as a constant in `state/mod.rs:205-208`. The program uses it exclusively for instruction discriminator checking in the pre-execution instruction scan.
+
+### 11.2 Blocked Discriminator Table
+
+| Disc | SPL Token Name | Token-2022 Name | Risk | Blocked? |
+|------|---------------|-----------------|------|----------|
+| 3 | `Transfer` | `Transfer` | Direct token theft from vault | Yes (both) |
+| 4 | `Approve` | `Approve` | Grant delegate authority to attacker | Yes (both) |
+| 6 | `SetAuthority` | `SetAuthority` | Change token account owner/close authority | Yes (both) |
+| 8 | `Burn` | `Burn` | Destroy vault tokens via delegate burn authority | Yes (both) |
+| 9 | `CloseAccount` | `CloseAccount` | Destroy vault token account, reclaim rent | Yes (both) |
+| 12 | `TransferChecked` | `TransferChecked` | Token theft with mint validation | Yes (both) |
+| 13 | `ApproveChecked` | `ApproveChecked` | Grant delegate with amount verification | Yes (both) |
+| 15 | `BurnChecked` | `BurnChecked` | Destroy tokens with decimal verification | Yes (both) |
+| 26 | _(N/A)_ | `TransferCheckedWithFee` | Token-2022 transfer with fee extension | Yes (Token-2022 only) |
+
+**Error codes:** Disc 4, 13 → `UnauthorizedTokenApproval` (6059). All others → `UnauthorizedTokenTransfer` (6039).
+
+Source: `validate_and_authorize.rs:276-299`.
+
+### 11.3 The CPI Blind Spot
+
+The instruction scan in `validate_and_authorize` uses `load_instruction_at_checked()` from the Instructions sysvar. This **only sees top-level instructions** in the transaction — it cannot inspect inner CPI calls made by whitelisted DeFi programs.
+
+**Consequence:** If a whitelisted DeFi program (e.g., Jupiter) is compromised, it could make inner CPI calls to the SPL Token program to transfer or burn vault tokens using the agent's delegation. The instruction scan would not detect this.
+
+### 11.4 Three-Layer CPI Mitigation
+
+| Layer | Mechanism | What It Catches |
+|-------|-----------|----------------|
+| **Instruction Scan** (validate_and_authorize) | Blocks top-level SPL Token/Token-2022 instructions with dangerous discriminators | Agent-injected token operations |
+| **CPI Balance Audit** (finalize_session) | Measures actual vault balance decrease. Requires `actual_decrease <= session_authorized_amount`. | Compromised DeFi inner CPI that transfers/burns beyond authorized amount (error 6071) |
+| **Delegation Revocation** (finalize_session) | SPL `Revoke` CPI removes all delegation. Executed in same atomic transaction. | Prevents any post-finalize exploitation of remaining delegation |
+
+**Combined guarantee:** Even if a compromised DeFi program makes inner CPI calls to the SPL Token program, the maximum damage is bounded by the delegation amount (Layer 2 from §10.4), and the CPI balance audit (this section, Layer 2) will catch any decrease beyond the authorized amount.
+
+### 11.5 Token-2022 Extension Risks
+
+| Extension | Disc | Risk Level | Status |
+|-----------|------|-----------|--------|
+| **TransferFee** | 26 | High — fee-on-transfer could cause balance accounting mismatches | **Blocked** (disc 26 in Token-2022 scan) |
+| **ConfidentialTransfer** | 27 | Medium — masked amounts could hide actual transfer sizes | Not blocked, but CPI balance audit catches balance decreases regardless of instruction details |
+| **PermanentDelegate** | N/A | Low — only affects mint-level authority, not individual token accounts | Not applicable (Phalnx vaults use standard USDC/USDT mints) |
+| **TransferHook** | N/A | Low — hook programs execute during transfers but cannot modify amounts | CPI balance audit verifies final balance regardless |
+| **GroupPointer / GroupMember** | N/A | Informational — metadata extensions, no fund-flow impact | No mitigation needed |
+
+### 11.6 Blocklist vs. Allowlist Trade-off
+
+The program uses a **blocklist** approach (block known-dangerous discriminators) rather than an **allowlist** (only permit known-safe discriminators).
+
+**Rationale — DeFi composability:**
+- DeFi programs issue many different instruction types (Jupiter alone has 10+ discriminators for different route types)
+- An allowlist would need to enumerate every legitimate DeFi instruction discriminator and update with each protocol upgrade
+- The blocklist approach only needs to enumerate SPL Token program operations, which are stable and well-defined
+
+**Risk acceptance:**
+- Unknown or future SPL Token discriminators are not blocked
+- Token-2022 may add new transfer-like discriminators in future versions
+- **Mitigation:** The CPI balance audit (§11.4, Layer 2) provides protocol-agnostic protection — regardless of which instruction is used, the balance delta is verified
+
+### 11.7 Stablecoin Mint Handling
+
+`is_stablecoin_mint()` (`state/mod.rs:157-164`) checks only the mint pubkey against hardcoded USDC/USDT addresses. It does **not** check whether the mint is owned by the SPL Token program or the Token-2022 program. This is acceptable because:
+
+1. USDC and USDT on Solana use the original SPL Token program, not Token-2022
+2. The pubkey check is sufficient — a Token-2022 mint at a different address would not match
+3. If Circle/Tether migrated to Token-2022 with the same mint address (impossible on Solana — different program = different account), the program would need updating
+
+### 11.8 Residual Risks and Recommendations
+
+1. **Future Token-2022 discriminators:** New transfer-like instructions added to Token-2022 would bypass the blocklist. **Recommendation:** Monitor Token-2022 releases and update the blocklist. The CPI balance audit provides defense-in-depth.
+
+2. **ConfidentialTransfer (disc 27):** Not blocked because it's not currently used with USDC/USDT. If stablecoin issuers adopt confidential transfers, the instruction scan should add disc 27 to the blocklist. The CPI balance audit already catches balance decreases.
+
+3. **Token-2022 mint spoofing:** An attacker cannot create a Token-2022 mint at the same address as USDC/USDT (pubkey collision is computationally infeasible). The hardcoded mint check is cryptographically secure.

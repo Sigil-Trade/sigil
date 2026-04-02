@@ -5,7 +5,7 @@
  * Every error includes a category, retryability flag, and
  * recovery actions that tell the agent exactly what to do next.
  *
- * Maps all 71 on-chain error codes (6000-6070) plus 34 SDK
+ * Maps all 72 on-chain error codes (6000-6071) plus 34 SDK
  * error codes (7000-7033) to AgentError with machine-readable metadata.
  *
  * Zero dependency on @solana/web3.js or @coral-xyz/anchor.
@@ -122,8 +122,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   },
   6003: {
     name: "UnsupportedToken",
-    message:
-      "Token is not a supported stablecoin (only USDC and USDT)",
+    message: "Token is not a supported stablecoin (only USDC and USDT)",
     category: "INPUT_VALIDATION",
     retryable: false,
     recovery_actions: [
@@ -1103,6 +1102,28 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
+  6071: {
+    name: "UnexpectedBalanceDecrease",
+    message:
+      "Vault stablecoin balance decreased more than the session authorized amount. " +
+      "This indicates a compromised DeFi program attempted to drain vault tokens via CPI.",
+    category: "FATAL",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "investigate_defi_program",
+        description:
+          "The whitelisted DeFi program may be compromised. The actual vault balance decrease " +
+          "exceeded the authorized delegation amount (fees + DeFi spend). Freeze the vault, " +
+          "investigate the DeFi program, and consider removing it from the protocol allowlist.",
+      },
+      {
+        action: "freeze_vault",
+        description:
+          "Immediately freeze the vault to prevent further transactions until the cause is identified.",
+      },
+    ],
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -2055,8 +2076,15 @@ const SDK_ERROR_PATTERNS: SdkErrorPattern[] = [
     category: "RESOURCE_NOT_FOUND",
     retryable: false,
     recovery_actions: [
-      { action: "check_vault_status", description: "Verify vault status. It may be frozen or closed." },
-      { action: "reactivate_vault", description: "If frozen, ask the vault owner to reactivate.", tool: "reactivateVault" },
+      {
+        action: "check_vault_status",
+        description: "Verify vault status. It may be frozen or closed.",
+      },
+      {
+        action: "reactivate_vault",
+        description: "If frozen, ask the vault owner to reactivate.",
+        tool: "reactivateVault",
+      },
     ],
   },
   {
@@ -2064,7 +2092,11 @@ const SDK_ERROR_PATTERNS: SdkErrorPattern[] = [
     category: "PERMISSION",
     retryable: false,
     recovery_actions: [
-      { action: "register_agent", description: "Register this agent in the vault.", tool: "registerAgent" },
+      {
+        action: "register_agent",
+        description: "Register this agent in the vault.",
+        tool: "registerAgent",
+      },
     ],
   },
   {
@@ -2072,7 +2104,11 @@ const SDK_ERROR_PATTERNS: SdkErrorPattern[] = [
     category: "PERMISSION",
     retryable: false,
     recovery_actions: [
-      { action: "unpause_agent", description: "Ask the vault owner to unpause this agent.", tool: "unpauseAgent" },
+      {
+        action: "unpause_agent",
+        description: "Ask the vault owner to unpause this agent.",
+        tool: "unpauseAgent",
+      },
     ],
   },
   {
@@ -2080,7 +2116,11 @@ const SDK_ERROR_PATTERNS: SdkErrorPattern[] = [
     category: "PERMISSION",
     retryable: false,
     recovery_actions: [
-      { action: "update_permissions", description: "Request permission for this action type from the vault owner." },
+      {
+        action: "update_permissions",
+        description:
+          "Request permission for this action type from the vault owner.",
+      },
     ],
   },
   {
@@ -2088,7 +2128,10 @@ const SDK_ERROR_PATTERNS: SdkErrorPattern[] = [
     category: "PROTOCOL_NOT_SUPPORTED",
     retryable: false,
     recovery_actions: [
-      { action: "add_protocol", description: "Add this protocol to the vault's allowlist." },
+      {
+        action: "add_protocol",
+        description: "Add this protocol to the vault's allowlist.",
+      },
     ],
   },
   {
@@ -2096,8 +2139,15 @@ const SDK_ERROR_PATTERNS: SdkErrorPattern[] = [
     category: "INPUT_VALIDATION",
     retryable: false,
     recovery_actions: [
-      { action: "add_alts", description: "Pass protocolAltAddresses from your DeFi API response." },
-      { action: "reduce_instructions", description: "Reduce instruction count or split across multiple transactions." },
+      {
+        action: "add_alts",
+        description: "Pass protocolAltAddresses from your DeFi API response.",
+      },
+      {
+        action: "reduce_instructions",
+        description:
+          "Reduce instruction count or split across multiple transactions.",
+      },
     ],
   },
   {
@@ -2105,7 +2155,10 @@ const SDK_ERROR_PATTERNS: SdkErrorPattern[] = [
     category: "POLICY_VIOLATION",
     retryable: true,
     recovery_actions: [
-      { action: "close_position", description: "Close an existing position before opening a new one." },
+      {
+        action: "close_position",
+        description: "Close an existing position before opening a new one.",
+      },
     ],
   },
   {
@@ -2113,7 +2166,10 @@ const SDK_ERROR_PATTERNS: SdkErrorPattern[] = [
     category: "INPUT_VALIDATION",
     retryable: false,
     recovery_actions: [
-      { action: "fix_amount", description: "Set amount to the transaction value in token base units." },
+      {
+        action: "fix_amount",
+        description: "Set amount to the transaction value in token base units.",
+      },
     ],
   },
   {
@@ -2121,7 +2177,11 @@ const SDK_ERROR_PATTERNS: SdkErrorPattern[] = [
     category: "INPUT_VALIDATION",
     retryable: false,
     recovery_actions: [
-      { action: "set_zero_amount", description: "Non-spending actions (close, withdraw, etc.) require amount = 0n." },
+      {
+        action: "set_zero_amount",
+        description:
+          "Non-spending actions (close, withdraw, etc.) require amount = 0n.",
+      },
     ],
   },
   {
@@ -2129,7 +2189,11 @@ const SDK_ERROR_PATTERNS: SdkErrorPattern[] = [
     category: "INPUT_VALIDATION",
     retryable: false,
     recovery_actions: [
-      { action: "add_instructions", description: "Include DeFi instructions in the wrap call, or set targetProtocol explicitly." },
+      {
+        action: "add_instructions",
+        description:
+          "Include DeFi instructions in the wrap call, or set targetProtocol explicitly.",
+      },
     ],
   },
   {
@@ -2137,7 +2201,11 @@ const SDK_ERROR_PATTERNS: SdkErrorPattern[] = [
     category: "INPUT_VALIDATION",
     retryable: false,
     recovery_actions: [
-      { action: "use_escrow_api", description: "Use createEscrow/settleEscrow/refundEscrow instead of wrap()." },
+      {
+        action: "use_escrow_api",
+        description:
+          "Use createEscrow/settleEscrow/refundEscrow instead of wrap().",
+      },
     ],
   },
 ];
@@ -2164,7 +2232,8 @@ export class SigilSdkError extends Error implements AgentError {
     this.retryable = agentError.retryable;
     this.recovery_actions = agentError.recovery_actions;
     this.context = agentError.context ?? {};
-    if (agentError.retry_after_ms) this.retry_after_ms = agentError.retry_after_ms;
+    if (agentError.retry_after_ms)
+      this.retry_after_ms = agentError.retry_after_ms;
   }
 }
 
@@ -2175,7 +2244,7 @@ export class SigilSdkError extends Error implements AgentError {
  * Returns a SigilSdkError (extends Error) so instanceof Error checks still work.
  *
  * Processing order:
- * 1. Try on-chain error extraction via toAgentError() (numeric codes 6000-6070)
+ * 1. Try on-chain error extraction via toAgentError() (numeric codes 6000-6071)
  * 2. Pattern-match SDK error messages (11 patterns from seal.ts throw sites)
  * 3. Fallback to UNKNOWN/FATAL
  */

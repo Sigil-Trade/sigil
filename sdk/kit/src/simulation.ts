@@ -501,20 +501,22 @@ export async function simulateBeforeSend(
 /**
  * Parse SPL Token account balance from base64-encoded account data.
  * Reads u64 LE at byte offset 64 (SPL Token layout: 32 mint + 32 owner + 8 amount).
- * Returns 0n for data shorter than 72 bytes.
+ *
+ * SECURITY: Fail-closed by council mandate (4-0 verdict, Decision 3a).
+ * Returning 0n on error was dangerous because: if both pre-balance AND post-balance
+ * parse to 0n (dual RPC failure), delta = 0n - 0n = 0n, making drain detection
+ * see no outflow. This silently disables all percentage-based drain checks.
+ * Now throws on malformed data so callers must handle the error explicitly.
+ * Returns 0n ONLY for valid but short data (account exists but has no balance).
  */
 export function parseTokenBalance(base64Data: string): bigint {
-  try {
-    const binary = atob(base64Data);
-    if (binary.length < 72) return 0n;
-    let result = 0n;
-    for (let i = 0; i < 8; i++) {
-      result |= BigInt(binary.charCodeAt(64 + i)) << BigInt(i * 8);
-    }
-    return result;
-  } catch {
-    return 0n; // Malformed base64 → graceful degradation
+  const binary = atob(base64Data); // Throws on malformed base64 (fail-closed)
+  if (binary.length < 72) return 0n; // Valid but short → genuinely empty/uninitialized
+  let result = 0n;
+  for (let i = 0; i < 8; i++) {
+    result |= BigInt(binary.charCodeAt(64 + i)) << BigInt(i * 8);
   }
+  return result;
 }
 
 // ─── Drain Detection ─────────────────────────────────────────────────────────
@@ -542,16 +544,23 @@ export function detectDrainAttempt(
   const rawBlock = drainThresholds?.blockPercent ?? DEFAULT_BLOCK_PERCENT;
   // Clamp to [0, 100] — prevents NaN/Infinity crashes (BigInt throws on non-finite)
   // and negative values which would invert the threshold logic
-  const warningPct = Math.max(
-    0,
-    Math.min(
-      100,
-      Number.isFinite(rawWarning) ? rawWarning : DEFAULT_WARNING_PERCENT,
+  const warningPct = Math.floor(
+    Math.max(
+      0,
+      Math.min(
+        100,
+        Number.isFinite(rawWarning) ? rawWarning : DEFAULT_WARNING_PERCENT,
+      ),
     ),
   );
-  const blockPct = Math.max(
-    0,
-    Math.min(100, Number.isFinite(rawBlock) ? rawBlock : DEFAULT_BLOCK_PERCENT),
+  const blockPct = Math.floor(
+    Math.max(
+      0,
+      Math.min(
+        100,
+        Number.isFinite(rawBlock) ? rawBlock : DEFAULT_BLOCK_PERCENT,
+      ),
+    ),
   );
 
   const vaultDelta = input.balanceDeltas.find(

@@ -349,8 +349,14 @@ describe("simulation", () => {
   });
 
   describe("parseTokenBalance edge cases", () => {
-    it("returns 0n for malformed base64", () => {
-      expect(parseTokenBalance("!!!not-base64!!!")).to.equal(0n);
+    it("throws on malformed base64 (fail-closed per council Decision 3a)", () => {
+      expect(() => parseTokenBalance("!!!not-base64!!!")).to.throw();
+    });
+
+    it("returns 0n for valid but short data (uninitialized account)", () => {
+      // Valid base64 but only 32 bytes (< 72 required for SPL Token layout)
+      const shortData = btoa(String.fromCharCode(...new Array(32).fill(0)));
+      expect(parseTokenBalance(shortData)).to.equal(0n);
     });
   });
 

@@ -738,6 +738,29 @@ describe("seal() pre-flight checks", () => {
     expect(result.vaultContext!.tokenBalance).to.equal(amount);
   });
 
+  it("uses conservative 1n sentinel when non-stablecoin RPC fetch fails", async () => {
+    const NON_STABLE = "NonStab1e1111111111111111111111111111111111" as Address;
+    const rpcThatFails = {
+      ...mockRpc(),
+      getAccountInfo: () => ({
+        send: async () => {
+          throw new Error("RPC timeout");
+        },
+      }),
+    };
+    const result = await wrap(
+      baseWrapParams({
+        rpc: rpcThatFails as any,
+        tokenMint: NON_STABLE,
+        addressLookupTables: {},
+      }),
+    );
+    // Sentinel makes any outflow trigger drain detection (conservative)
+    expect(result.vaultContext!.tokenBalance).to.equal(1n); // DRAIN_DETECTION_MIN_BALANCE
+    expect(result.warnings.some((w) => w.includes("conservative fallback"))).to
+      .be.true;
+  });
+
   it("throws on 2+ DeFi instructions for stablecoin input", async () => {
     const jupIx1 = makeInstruction(JUPITER);
     const jupIx2 = makeInstruction(JUPITER);

@@ -16,15 +16,15 @@ describe("agent-errors", () => {
   // ─── On-chain error map completeness ──────────────────────────────────────
 
   describe("ON_CHAIN_ERROR_MAP completeness", () => {
-    it("maps all 71 error codes (6000-6070)", () => {
+    it("maps all 72 error codes (6000-6071)", () => {
       const codes = getAllOnChainErrorCodes();
-      expect(codes).to.have.lengthOf(71);
+      expect(codes).to.have.lengthOf(72);
       expect(codes[0]).to.equal(6000);
-      expect(codes[codes.length - 1]).to.equal(6070);
+      expect(codes[codes.length - 1]).to.equal(6071);
     });
 
-    it("every code from 6000-6070 is present with no gaps", () => {
-      for (let code = 6000; code <= 6070; code++) {
+    it("every code from 6000-6071 is present with no gaps", () => {
+      for (let code = 6000; code <= 6071; code++) {
         const entry = ON_CHAIN_ERROR_MAP[code];
         expect(entry, `Missing error code ${code}`).to.exist;
         expect(entry.name).to.be.a("string").and.not.be.empty;

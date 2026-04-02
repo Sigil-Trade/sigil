@@ -93,6 +93,10 @@ const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address;
 const TOKEN_2022_PROGRAM =
   "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" as Address;
 
+/** Sentinel balance for drain detection when RPC fails to fetch actual balance.
+ *  1n makes any outflow trigger percentage-based flags (conservative). */
+const DRAIN_DETECTION_MIN_BALANCE = 1n;
+
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export interface SealParams {
@@ -334,10 +338,17 @@ export async function seal(params: SealParams): Promise<SealResult> {
   }
 
   const spending = isSpendingAction(actionKey);
+  const U64_MAX = 18446744073709551615n;
   if (params.amount < 0n) {
     throw new Error(
       `Amount must be non-negative, got ${params.amount}. ` +
-        `Sigil amounts are unsigned 64-bit integers (0 to 18446744073709551615).`,
+        `Sigil amounts are unsigned 64-bit integers (0 to ${U64_MAX}).`,
+    );
+  }
+  if (params.amount > U64_MAX) {
+    throw new Error(
+      `Amount exceeds u64 maximum, got ${params.amount}. ` +
+        `Sigil amounts are unsigned 64-bit integers (0 to ${U64_MAX}).`,
     );
   }
   if (spending && params.amount === 0n) {
@@ -682,16 +693,15 @@ export async function seal(params: SealParams): Promise<SealResult> {
         // This is a legitimate state (vault created but not yet funded for this token).
         tokenBalance = 0n;
       }
-    } catch {
-      // RPC failed — we cannot verify the vault balance.
-      // Rather than silently disabling drain detection by setting 0n,
-      // use a sentinel value that makes percentage checks MORE sensitive.
-      // u64::MAX means any outflow triggers LARGE_OUTFLOW + FULL_DRAIN.
-      tokenBalance = 18446744073709551615n; // u64::MAX — assume worst case
+    } catch (err) {
+      // RPC unavailable: use sentinel so any token outflow triggers drain detection.
+      // Conservative (intentional false positives) rather than disabling checks.
+      tokenBalance = DRAIN_DETECTION_MIN_BALANCE;
+      const errMsg = err instanceof Error ? err.message : String(err);
       warnings.push(
         "Failed to fetch non-stablecoin token balance via RPC. " +
-          "Drain detection assumes maximum balance (all outflows will be flagged). " +
-          "This is a conservative fallback — verify RPC connectivity.",
+          "Drain detection uses minimum balance sentinel (all outflows will be flagged). " +
+          `This is a conservative fallback — verify RPC connectivity. Error: ${errMsg}`,
       );
     }
   }
