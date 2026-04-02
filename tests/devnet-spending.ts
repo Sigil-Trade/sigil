@@ -431,9 +431,9 @@ describe("devnet-spending", () => {
       protocolTreasuryAta: vault.protocolTreasuryAta,
     });
 
-    // Update daily cap higher (14 args — includes sessionExpirySlots)
+    // Update daily cap higher via queue/apply (mandatory timelock)
     await program.methods
-      .updatePolicy(
+      .queuePolicyUpdate(
         new BN(500_000_000), // new daily cap
         null,
         null,
@@ -453,12 +453,27 @@ describe("devnet-spending", () => {
         owner: owner.publicKey,
         vault: vault.vaultPda,
         policy: vault.policyPda,
+        pendingPolicy: vault.pendingPolicyPda,
+        systemProgram: SystemProgram.programId,
       } as any)
       .rpc();
 
-    // Verify policy changed
-    const policy = await program.account.policyConfig.fetch(vault.policyPda);
-    expect(policy.dailySpendingCapUsd.toNumber()).to.equal(500_000_000);
+    // Wait for timelock to expire (devnet: sleep 1800s is impractical —
+    // this test must be run with a short-lived devnet or modified timelock.
+    // For CI, skip the apply and verify the queue succeeded instead.)
+    const pendingAccount = await program.account.pendingPolicyUpdate.fetch(pdas.pendingPolicyPda);
+    expect(pendingAccount.dailySpendingCapUsd.toNumber()).to.equal(500_000_000);
+
+    // Cancel the pending update (cleanup — can't wait 30min on devnet)
+    await program.methods
+      .cancelPendingPolicy()
+      .accounts({
+        owner: owner.publicKey,
+        vault: vault.vaultPda,
+        policy: vault.policyPda,
+        pendingPolicy: vault.pendingPolicyPda,
+      } as any)
+      .rpc();
 
     // Can spend more with increased cap
     const sessionB = deriveSessionPda(
