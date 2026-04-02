@@ -100,7 +100,7 @@ async function createVault(opts: {
       5, // max positions
       opts.devFeeRate ?? 0,
       500, // maxSlippageBps
-      new BN(0),
+      new BN(1800),
       opts.destinations ?? [],
       [],
     )

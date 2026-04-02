@@ -70,6 +70,12 @@ describe("sigil", () => {
   let vaultUsdcAta: PublicKey;
   let feeDestUsdcAta: PublicKey;
 
+  // Helper: read current policy version for TOCTOU check
+  async function pv(): Promise<BN> {
+    const pol = await program.account.policyConfig.fetch(policyPda);
+    return (pol as any).policyVersion ?? new BN(0);
+  }
+
   // Allowed protocol (fake Jupiter program ID for testing)
   const jupiterProgramId = Keypair.generate().publicKey;
 
@@ -990,7 +996,7 @@ describe("sigil", () => {
           amount,
           jupiterProgramId,
           null, // no leverage
-          new BN(0), // expectedPolicyVersion
+          await pv(), // expectedPolicyVersion
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -1086,7 +1092,7 @@ describe("sigil", () => {
           amount,
           jupiterProgramId,
           null,
-          new BN(0),
+          await pv(),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -1226,7 +1232,7 @@ describe("sigil", () => {
             new BN(1_000_000),
             jupiterProgramId,
             null,
-            new BN(0),
+            await pv(),
           )
           .accounts({
             agent: agent.publicKey,
@@ -1263,7 +1269,7 @@ describe("sigil", () => {
             new BN(1_000_000),
             fakeProtocol, // not in protocols
             null,
-            new BN(0),
+            await pv(),
           )
           .accounts({
             agent: agent.publicKey,
@@ -1300,7 +1306,7 @@ describe("sigil", () => {
             new BN(200_000_000), // would exceed max_transaction_size — but checked in finalize now
             jupiterProgramId,
             null,
-            new BN(0),
+            await pv(),
           )
           .accounts({
             agent: agent.publicKey,
@@ -1338,7 +1344,7 @@ describe("sigil", () => {
             new BN(100_000_000),
             jupiterProgramId,
             null,
-            new BN(0),
+            await pv(),
           )
           .accounts({
             agent: agent.publicKey,
@@ -1386,7 +1392,7 @@ describe("sigil", () => {
             new BN(1_000_000),
             jupiterProgramId,
             null,
-            new BN(0),
+            await pv(),
           )
           .accounts({
             agent: fakeAgent.publicKey,
@@ -1467,7 +1473,7 @@ describe("sigil", () => {
             new BN(1_000_000),
             jupiterProgramId,
             null,
-            new BN(0),
+            await pv(),
           )
           .accounts({
             agent: agent.publicKey,
@@ -2001,7 +2007,7 @@ describe("sigil", () => {
           new BN(10_000_000),
           jupiterProgramId,
           null,
-          new BN(0),
+          await pv(),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -2129,7 +2135,7 @@ describe("sigil", () => {
           new BN(10_000_000),
           jupiterProgramId,
           null,
-          new BN(0),
+          await pv(),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -2198,7 +2204,7 @@ describe("sigil", () => {
           new BN(10_000_000),
           jupiterProgramId,
           null,
-          new BN(0),
+          await pv(),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -2414,7 +2420,7 @@ describe("sigil", () => {
           new BN(10_000_000),
           jupiterProgramId,
           null,
-          new BN(0),
+          await pv(),
         )
         .accountsPartial({
           agent: lifecycleAgent.publicKey,
@@ -2480,7 +2486,7 @@ describe("sigil", () => {
           new BN(5_000_000),
           jupiterProgramId,
           null,
-          new BN(0),
+          await pv(),
         )
         .accountsPartial({
           agent: lifecycleAgent.publicKey,
@@ -2536,7 +2542,7 @@ describe("sigil", () => {
             new BN(5_000_000),
             jupiterProgramId,
             null,
-            new BN(0),
+            await pv(),
           )
           .accountsPartial({
             agent: lifecycleAgent.publicKey,
@@ -2717,7 +2723,7 @@ describe("sigil", () => {
             new BN(1_000_000),
             jupiterProgramId,
             null,
-            new BN(0),
+            await pv(),
           )
           .accounts({
             agent: agent.publicKey,
@@ -3026,7 +3032,7 @@ describe("sigil", () => {
             new BN(1_000_000),
             jupiterProgramId,
             null,
-            new BN(0),
+            await pv(),
           )
           .accounts({
             agent: agent.publicKey,
@@ -3176,7 +3182,7 @@ describe("sigil", () => {
             new BN(1_000_000), // 1 USDC each
             jupiterProgramId,
             null,
-            new BN(0),
+            await pv(),
           )
           .accountsPartial({
             agent: ringAgent.publicKey,
@@ -3342,7 +3348,7 @@ describe("sigil", () => {
           new BN(1), // 1 lamport
           jupiterProgramId,
           null,
-          new BN(0),
+          await pv(),
         )
         .accountsPartial({
           agent: feeEdgeAgent.publicKey,
@@ -3409,7 +3415,7 @@ describe("sigil", () => {
           new BN(4_999),
           jupiterProgramId,
           null,
-          new BN(0),
+          await pv(),
         )
         .accountsPartial({
           agent: feeEdgeAgent.publicKey,
@@ -3460,7 +3466,7 @@ describe("sigil", () => {
           new BN(5_000),
           jupiterProgramId,
           null,
-          new BN(0),
+          await pv(),
         )
         .accountsPartial({
           agent: feeEdgeAgent.publicKey,
@@ -4666,7 +4672,7 @@ describe("sigil", () => {
           new BN(1_000_000),
           jupiterProgramId,
           null,
-          new BN(0),
+          await pv(),
         )
         .accounts({
           agent: agent.publicKey,
@@ -4728,7 +4734,7 @@ describe("sigil", () => {
           new BN(1_000_000),
           jupiterProgramId,
           null,
-          new BN(0),
+          await pv(),
         )
         .accounts({
           agent: agent.publicKey,
@@ -5322,7 +5328,7 @@ describe("sigil", () => {
           new BN(500_000_000), // 500 USDC max tx
           1, // ALLOWLIST mode
           [protocolA, protocolB],
-          new BN(0) as any,
+          new BN(1800) as any,
           3,
           0, // no dev fee
           100, // maxSlippageBps
@@ -5367,7 +5373,7 @@ describe("sigil", () => {
       );
 
       const validateIx = await program.methods
-        .validateAndAuthorize({ swap: {} }, usdcMint, amount, protocol, null, new BN(0))
+        .validateAndAuthorize({ swap: {} }, usdcMint, amount, protocol, null, await pv())
         .accountsPartial({
           agent: protoCapAgent.publicKey,
           vault: pcVault,

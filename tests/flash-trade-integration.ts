@@ -608,7 +608,7 @@ describe("flash-trade-integration", () => {
           3,
           0, // developer fee rate
           100, // maxSlippageBps
-          new BN(0),
+          new BN(1800),
           [],
           [], // protocolCaps
         )

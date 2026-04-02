@@ -319,7 +319,7 @@ describe("surfpool-integration", function () {
           3,
           0,
           100,
-          new BN(0),
+          new BN(1800),
           [],
           [], // protocolCaps
         )
@@ -592,7 +592,7 @@ describe("surfpool-integration", function () {
           3,
           0,
           100,
-          new BN(0),
+          new BN(1800),
           [],
           [], // protocolCaps
         )
@@ -893,7 +893,7 @@ describe("surfpool-integration", function () {
           3,
           0,
           100,
-          new BN(0),
+          new BN(1800),
           [],
           [], // protocolCaps
         )
@@ -1075,7 +1075,7 @@ describe("surfpool-integration", function () {
           3,
           0,
           100,
-          new BN(0),
+          new BN(1800),
           [],
           [], // protocolCaps
         )
@@ -1226,7 +1226,7 @@ describe("surfpool-integration", function () {
           3,
           0,
           100,
-          new BN(0),
+          new BN(1800),
           [],
           [], // protocolCaps
         )
@@ -1306,7 +1306,7 @@ describe("surfpool-integration", function () {
           3,
           0,
           100,
-          new BN(0),
+          new BN(1800),
           [],
           [], // protocolCaps
         )
@@ -1361,7 +1361,7 @@ describe("surfpool-integration", function () {
           3,
           0,
           100,
-          new BN(0),
+          new BN(1800),
           [],
           [], // protocolCaps
         )
@@ -1431,7 +1431,7 @@ describe("surfpool-integration", function () {
           3,
           0,
           100,
-          new BN(0),
+          new BN(1800),
           [],
           [], // protocolCaps
         )
