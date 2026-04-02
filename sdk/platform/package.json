@@ -1,6 +1,6 @@
 {
   "name": "@usesigil/platform",
-  "version": "0.1.4",
+  "version": "0.1.0",
   "author": "Kaleb Rupe (https://x.com/MightieMags)",
   "homepage": "https://github.com/Kaleb-Rupe/sigil#readme",
   "bugs": {
@@ -18,8 +18,9 @@
     "test": "NODE_OPTIONS='--no-experimental-strip-types' mocha --require ts-node/register tests/**/*.test.ts --timeout 30000"
   },
   "files": [
-    "dist/**/*",
-    "README.md"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=18.0.0"
@@ -43,6 +44,10 @@
     "tee",
     "provisioning"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

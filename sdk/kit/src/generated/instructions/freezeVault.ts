@@ -35,7 +35,7 @@ import {
   getAccountMetaFactory,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { SIGIL_PROGRAM_ADDRESS } from "../programs";
+import { SIGIL_PROGRAM_ADDRESS } from "../programs/index.js";
 
 export const FREEZE_VAULT_DISCRIMINATOR = new Uint8Array([
   144, 211, 63, 236, 97, 31, 170, 175,

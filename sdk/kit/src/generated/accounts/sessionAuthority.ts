@@ -45,7 +45,7 @@ import {
   getActionTypeEncoder,
   type ActionType,
   type ActionTypeArgs,
-} from "../types";
+} from "../types/index.js";
 
 export const SESSION_AUTHORITY_DISCRIMINATOR = new Uint8Array([
   48, 9, 30, 120, 134, 35, 172, 170,

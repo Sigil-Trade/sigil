@@ -2,7 +2,46 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Read docs/PROJECT.md for full specification. Read docs/INSTRUCTIONS.md for all coding rules and guardrails.**
+**Read docs/PROJECT.md for full specification. Read docs/INSTRUCTIONS.md for all coding rules and guardrails. Read docs/TASKS.md for build progress.**
+
+## Working Methodology
+
+### Thinking Order
+1. **Big picture first.** Before touching any file, before writing any code, before making any recommendation — understand the full system. What does this codebase do? What are the architectural boundaries? What are the constraints? What are the goals? Map the territory before you move through it.
+2. **Then drill down.** Only after you have a clear macro-level understanding should you examine specific files, functions, or implementations. Never invert this order. If you find yourself diving into details without understanding the surrounding system, stop and zoom out.
+
+### Core Rules
+
+**Never assume.** If anything is unclear, ambiguous, or underspecified — STOP and ask before proceeding. Do not guess at intent, architecture decisions, or expected behavior. Do not infer requirements from naming conventions or patterns alone. Verify. Your confidence must be 100% before you commit to a direction. If it is not, ask questions until it is.
+
+**Use subagents aggressively.** Spin up subagents for every distinct investigation, analysis, or verification task. There is no upper limit — use 5, 20, 100, whatever the problem demands. Run them in the background so the main agent context stays clean and focused. Each subagent should have a clearly scoped task: one question, one investigation, one file analysis per subagent. The main agent's job is to orchestrate, synthesize, and verify — not to do all the work itself.
+
+**Adversarial verification is essential.** Treat every finding — yours or a subagent's — as a hypothesis, not a conclusion. Actively attempt to disprove each finding before accepting it. Ask: "What would make this wrong? What edge case breaks this? What am I not seeing?" Stress-test assumptions. Look for counterexamples. Challenge the reasoning chain. If you cannot disprove a finding after rigorous scrutiny, then and only then accept it as correct.
+
+**Label confidence on every finding.** Use: CONFIRMED (could not disprove), LIKELY (strong evidence but not fully stress-tested), or UNCERTAIN (needs more investigation).
+
+### Output Mode: Report Only (Default)
+Unless explicitly told to implement, your output is a verified report only. Do NOT modify, create, or delete any files. Structure reports as:
+1. **System Understanding** — Big-picture assessment of the relevant system/context.
+2. **Findings** — Each finding with: what you found, the evidence, what you did to try to disprove it, and your confidence level.
+3. **Recommendations** — What should be done about each finding, ordered by severity/impact.
+4. **Open Questions** — Anything you could not resolve to 100% confidence that needs human input.
+
+No filler. Every sentence should carry information.
+
+### Output Mode: Implementation (When Told to Implement)
+- Before implementing anything, state what you are about to change and why. Wait for confirmation if the change is non-trivial.
+- Implement one finding at a time. After each change, verify it works before moving to the next.
+- Use subagents to validate your own changes — do not self-certify.
+- Do not batch multiple unrelated changes into one commit.
+
+### What Never To Do
+- Do not skip the big-picture step. Ever.
+- Do not accept the first answer you find. Verify it.
+- Do not waste main agent context on work a subagent could do.
+- Do not present uncertain findings as confirmed. Be honest about confidence levels.
+
+---
 
 ## What This Is
 
@@ -39,7 +78,7 @@ Load a skill only when you need specific API specs, integration patterns, or sec
 pnpm workspace with changesets for versioning. All packages publish to npm with OIDC provenance.
 
 ```
-pnpm-workspace.yaml → sdk/*, sdk/custody/*, packages/*, apps/*
+pnpm-workspace.yaml → sdk/*, packages/*, apps/*
 ```
 
 ### Release Workflow
@@ -189,7 +228,7 @@ Sigil is a **security wrapper**, not a DeFi SDK. The `seal()` function takes arb
 - Owner transactions (5.7): `buildOwnerTransaction()` in `owner-transaction.ts`
 - Spending history (5.8): `getSpendingHistory()` in `state-resolver.ts` — 144-epoch circular buffer to chart-ready time series
 - Post-finalize scan (5.9): defense-in-depth instruction check after finalize, error 6070
-- SAK plugin (5.10): `packages/plugin-solana-agent-kit/` — thin adapter with swap/transfer/status actions via `SigilClient.executeAndConfirm()`
+- SAK plugin (5.10): `packages/plugins/` — thin adapter with swap/transfer/status actions via `SigilClient.executeAndConfirm()`
 
 **Phase 6 (Analytics Data Layer) — COMPLETE (42 functions across 11 modules):**
 - `formatting.ts` (11): USD/percent/time/address/token display with full-precision defaults

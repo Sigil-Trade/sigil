@@ -11,7 +11,7 @@ import { rootNodeFromAnchor } from "@codama/nodes-from-anchor";
 import { renderVisitor } from "@codama/renderers-js";
 import { createFromRoot } from "codama";
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync, mkdtempSync, cpSync, rmSync, existsSync, mkdirSync, renameSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync, cpSync, rmSync, existsSync, mkdirSync, renameSync, readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
@@ -151,6 +151,12 @@ for (const protocolName of protocolsToGenerate) {
     try {
       // Phase 2: copy new
       cpSync(generatedSrc, config.outputDir, { recursive: true });
+
+      // Phase 3: fix bare directory imports for Node ESM compatibility
+      // Codama emits `from "../accounts"` which bundlers resolve but Node ESM rejects.
+      // Rewrite to `from "../accounts/index.js"` in all generated .ts files.
+      fixBareDirectoryImports(config.outputDir);
+
       // Success — remove backup
       if (existsSync(backupDir)) {
         rmSync(backupDir, { recursive: true, force: true });
@@ -199,6 +205,66 @@ ${entries.join("\n")}
       writeFileSync(eventMapPath, content, "utf-8");
       console.log(`  Event discriminator map: ${events.length} events`);
     }
+  }
+}
+
+// ─── ESM Import Fixup ─────────────────────────────────────────────────────────
+//
+// Codama's renderers-js emits bare directory imports (e.g., from "../accounts")
+// which work with bundlers but fail under Node's ESM loader. This rewrites them
+// to explicit index.js paths (e.g., from "../accounts/index.js").
+
+function fixBareDirectoryImports(dir) {
+  // Codama emits bare imports that break under Node's ESM loader:
+  //   from "."                  → from "./index.js"       (current dir index)
+  //   from ".."                 → from "../index.js"      (parent dir index)
+  //   from "./agentVault"       → from "./agentVault.js"  (sibling file)
+  //   from "../accounts"        → from "../accounts/index.js"  (directory)
+  //   from "../accounts/index.js" → unchanged (already has .js)
+  const KNOWN_DIRS = new Set(["accounts", "errors", "instructions", "programs", "types"]);
+  let fixedFiles = 0;
+  let fixedImports = 0;
+
+  function fixFile(filePath) {
+    const src = readFileSync(filePath, "utf-8");
+    let replaced = src;
+
+    // Fix `from "."` → `from "./index.js"`
+    replaced = replaced.replace(/((?:from|import)\s+)(["'])\.(\2)/g, '$1$2./index.js$3');
+
+    // Fix `from ".."` → `from "../index.js"`
+    replaced = replaced.replace(/((?:from|import)\s+)(["'])\.\.(\2)/g, '$1$2../index.js$3');
+
+    // Fix relative path imports without .js extension
+    replaced = replaced.replace(/((?:from|import)\s+["'])(\.\.?\/[^"']+)(["'])/g, (match, prefix, path, suffix) => {
+      if (path.endsWith(".js") || path.endsWith(".json")) return match;
+      const lastSegment = path.split("/").pop();
+      if (KNOWN_DIRS.has(lastSegment)) {
+        return `${prefix}${path}/index.js${suffix}`;
+      }
+      return `${prefix}${path}.js${suffix}`;
+    });
+
+    if (replaced !== src) {
+      writeFileSync(filePath, replaced, "utf-8");
+      const newJs = (replaced.match(/\.js["']/g) || []).length;
+      const oldJs = (src.match(/\.js["']/g) || []).length;
+      fixedFiles++;
+      fixedImports += newJs - oldJs;
+    }
+  }
+
+  function walk(d) {
+    for (const entry of readdirSync(d)) {
+      const full = join(d, entry);
+      if (statSync(full).isDirectory()) walk(full);
+      else if (entry.endsWith(".ts")) fixFile(full);
+    }
+  }
+
+  walk(dir);
+  if (fixedImports > 0) {
+    console.log(`  ESM fix: ${fixedImports} bare imports → .js extensions in ${fixedFiles} files`);
   }
 }
 

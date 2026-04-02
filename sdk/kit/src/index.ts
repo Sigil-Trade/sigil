@@ -481,61 +481,32 @@ export {
 } from "./rpc-helpers.js";
 export type { Blockhash, SendAndConfirmOptions } from "./rpc-helpers.js";
 
-// ─── x402 HTTP 402 Payment Required ───────────────────────────────────────
-export {
-  // Core
-  shieldedFetch,
-  createShieldedFetch,
-  // Codec
-  decodePaymentRequiredHeader,
-  encodePaymentSignatureHeader,
-  decodePaymentResponseHeader,
-  // Selector
-  selectPaymentOption,
-  // Transfer Builder
-  buildX402TransferInstruction,
-  deriveAta,
-  transferToInspectable,
-  X402_TOKEN_PROGRAM_ID,
-  X402_ATA_PROGRAM_ID,
-  // Nonce Tracker
-  NonceTracker,
-  // Amount Guard
-  validatePaymentAmount,
-  recordPaymentAmount,
-  resetPaymentHistory,
-  // Policy Bridge
-  evaluateX402Payment,
-  recordX402Spend,
-  // Facilitator
-  validateSettlement,
-  // Audit
-  emitPaymentEvent,
-  createPaymentEvent,
-  // Errors
-  X402ParseError,
-  X402PaymentError,
-  X402UnsupportedError,
-  X402DestinationBlockedError,
-  X402ReplayError,
-} from "./x402/index.js";
-export type {
-  PaymentRequired,
-  PaymentRequirements,
-  ResourceInfo,
-  PaymentPayload,
-  SettleResponse,
-  X402Config,
-  ShieldedFetchOptions,
-  ShieldedFetchResponse,
-  X402PaymentResult,
-  X402PaymentEvent,
-  FacilitatorVerifyResult,
-} from "./x402/index.js";
-
 // ─── VelocityTracker ──────────────────────────────────────────────────────
 export { VelocityTracker } from "./velocity-tracker.js";
 export type { VelocityConfig, SpendStatus } from "./velocity-tracker.js";
+
+// ─── Core Policy Engine ──────────────────────────────────────────────────────
+// Non-conflicting core exports only. Kit's shield.ts defines its own
+// ShieldState, ShieldDeniedError, PolicyViolation. Kit's policies.ts defines
+// its own ShieldPolicies, SpendLimit, TransactionAnalysis, TokenTransfer,
+// ResolvedPolicies, resolvePolicies. DEFAULT_POLICIES, parseSpendLimit,
+// RateLimitConfig, PolicyCheckResult already flow through policies.ts.
+export { ShieldConfigError } from "./core/index.js";
+export {
+  evaluatePolicy,
+  enforcePolicy,
+  recordTransaction,
+} from "./core/index.js";
+export {
+  KNOWN_PROTOCOLS,
+  KNOWN_TOKENS,
+  SYSTEM_PROGRAMS,
+  getTokenInfo,
+  getProtocolName,
+  isKnownProtocol,
+  isSystemProgram,
+} from "./core/index.js";
+export type { ShieldStorage, SpendEntry, TxEntry } from "./core/index.js";
 
 // ─── Balance Tracker / P&L ──────────────────────────────────────────────────
 export {

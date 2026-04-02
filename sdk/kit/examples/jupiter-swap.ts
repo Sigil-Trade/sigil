@@ -46,14 +46,14 @@ const OUTPUT_MINT = address("So11111111111111111111111111111111111111112"); // S
  * Load your agent's TransactionSigner.
  *
  * Replace this stub with your actual key loading:
- *   - Turnkey:  use @usesigil/custody-turnkey
+ *   - Turnkey:  use @usesigil/custody/turnkey
  *   - Local:    use createKeyPairSignerFromBytes() from @solana/kit
- *   - Privy:    use @usesigil/custody-privy
+ *   - Privy:    use @usesigil/custody/privy
  */
 function loadAgentSigner(): TransactionSigner {
   throw new Error(
     "Replace loadAgentSigner() with your agent key. " +
-      "See @usesigil/custody-turnkey for production use.",
+      "See @usesigil/custody/turnkey for production use.",
   );
 }
 
@@ -157,7 +157,7 @@ main().catch(console.error);
 
 // ─── Jupiter Types & Helpers ─────────────────────────────────────────────────
 //
-// These mirror the production implementation in @usesigil/plugin-solana-agent-kit.
+// These mirror the production implementation in @usesigil/plugins/sak.
 // For production code, use the plugin's parseJupiterSwapResponse() instead
 // of these standalone helpers.
 

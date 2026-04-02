@@ -1,13 +1,13 @@
-# @phalnx/kit
+# @usesigil/kit
 
-Kit-native TypeScript SDK for Phalnx — on-chain spending limits and permission policies for AI agent wallets on Solana.
+Kit-native TypeScript SDK for Sigil — on-chain spending limits and permission policies for AI agent wallets on Solana.
 
-Phalnx wraps arbitrary DeFi instructions with security guardrails. Your agents trade through Jupiter, Flash Trade, Drift, or any Solana protocol while vault policies enforce spending caps, permission bitmasks, and protocol allowlists.
+Sigil wraps arbitrary DeFi instructions with security guardrails. Your agents trade through Jupiter, Flash Trade, Drift, or any Solana protocol while vault policies enforce spending caps, permission bitmasks, and protocol allowlists.
 
 ## Install
 
 ```bash
-npm install @phalnx/kit @solana/kit
+npm install @usesigil/kit @solana/kit
 ```
 
 `@solana/kit ^6.2.0` is a peer dependency. Node >= 18.
@@ -16,13 +16,13 @@ npm install @phalnx/kit @solana/kit
 
 ```typescript
 import {
-  PhalnxClient,
+  SigilClient,
   createAndSendVault,
   ActionType,
   toAgentError,
   formatUsd,
   USDC_MINT_DEVNET,
-} from "@phalnx/kit";
+} from "@usesigil/kit";
 import { address, createSolanaRpc } from "@solana/kit";
 
 // 1. Create a vault (owner operation — run once)
@@ -37,7 +37,7 @@ const vault = await createAndSendVault({
 console.log(`Vault created: ${vault.vaultAddress}`);
 
 // 2. Wrap a Jupiter swap (agent operation — per trade)
-const client = new PhalnxClient({
+const client = new SigilClient({
   rpc,
   vault: vault.vaultAddress,
   agent,
@@ -65,7 +65,7 @@ See [`examples/jupiter-swap.ts`](./examples/jupiter-swap.ts) for a complete, run
 Transaction = [validate_and_authorize, ...defiInstructions, finalize_session]
 ```
 
-Phalnx wraps arbitrary DeFi instructions from any source (Jupiter API, Solana Agent Kit, MCP servers) and sandwiches them with on-chain security checks. All instructions succeed or all revert atomically. The SDK handles instruction composition, ATA rewriting, ALT compression, and pre-flight validation.
+Sigil wraps arbitrary DeFi instructions from any source (Jupiter API, Solana Agent Kit, MCP servers) and sandwiches them with on-chain security checks. All instructions succeed or all revert atomically. The SDK handles instruction composition, ATA rewriting, ALT compression, and pre-flight validation.
 
 ## API Overview
 
@@ -73,7 +73,7 @@ Phalnx wraps arbitrary DeFi instructions from any source (Jupiter API, Solana Ag
 
 | Export | Description |
 |--------|-------------|
-| `PhalnxClient` | Stateful client — holds vault/agent/network, manages caches. Recommended for production. |
+| `SigilClient` | Stateful client — holds vault/agent/network, manages caches. Recommended for production. |
 | `wrap()` | Stateless wrapping function — takes DeFi instructions, returns a composed transaction. |
 | `createVault()` | Build vault creation instructions (caller signs and sends). |
 | `createAndSendVault()` | One-call vault creation — build, sign, send, confirm. |
@@ -138,7 +138,7 @@ Plus: `formatUsdSigned`, `formatPercentSigned`, `formatRelativeTime`, `formatTim
 | `full-access` | All 21 actions | $10,000 | 5% |
 
 ```typescript
-import { getPreset, presetToCreateVaultFields } from "@phalnx/kit";
+import { getPreset, presetToCreateVaultFields } from "@usesigil/kit";
 
 const preset = getPreset("jupiter-swap-bot");
 const fields = presetToCreateVaultFields(preset);
@@ -149,7 +149,7 @@ const fields = presetToCreateVaultFields(preset);
 All errors from `wrap()` and `executeAndConfirm()` convert to structured `AgentError`:
 
 ```typescript
-import { toAgentError } from "@phalnx/kit";
+import { toAgentError } from "@usesigil/kit";
 
 try {
   await client.executeAndConfirm(instructions, opts);
@@ -167,23 +167,23 @@ try {
 
 ```typescript
 // Browser-safe mocks (no node:fs, no @solana/web3.js)
-import { createMockRpc, createMockVaultState } from "@phalnx/kit/testing";
+import { createMockRpc, createMockVaultState } from "@usesigil/kit/testing";
 
 // Real devnet helpers (Node-only)
-import { provisionVault, createDevnetRpc } from "@phalnx/kit/testing/devnet";
+import { provisionVault, createDevnetRpc } from "@usesigil/kit/testing/devnet";
 ```
 
-`@phalnx/kit/testing` provides mock factories for unit tests. `@phalnx/kit/testing/devnet` provides real devnet helpers (vault provisioning, funded agents, USDC airdrops). The devnet subpath imports `node:fs` and `@solana/web3.js` — keep it out of browser bundles.
+`@usesigil/kit/testing` provides mock factories for unit tests. `@usesigil/kit/testing/devnet` provides real devnet helpers (vault provisioning, funded agents, USDC airdrops). The devnet subpath imports `node:fs` and `@solana/web3.js` — keep it out of browser bundles.
 
 ## Examples
 
-- [`examples/jupiter-swap.ts`](./examples/jupiter-swap.ts) — Complete Jupiter V6 swap via Phalnx with error handling and P&L tracking
+- [`examples/jupiter-swap.ts`](./examples/jupiter-swap.ts) — Complete Jupiter V6 swap via Sigil with error handling and P&L tracking
 
 ## Links
 
-- [GitHub](https://github.com/Kaleb-Rupe/phalnx)
-- [npm](https://www.npmjs.com/package/@phalnx/kit)
-- [Issues](https://github.com/Kaleb-Rupe/phalnx/issues)
+- [GitHub](https://github.com/Kaleb-Rupe/sigil)
+- [npm](https://www.npmjs.com/package/@usesigil/kit)
+- [Issues](https://github.com/Kaleb-Rupe/sigil/issues)
 
 ## License
 

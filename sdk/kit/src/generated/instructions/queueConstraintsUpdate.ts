@@ -43,13 +43,13 @@ import {
   getAddressFromResolvedInstructionAccount,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { SIGIL_PROGRAM_ADDRESS } from "../programs";
+import { SIGIL_PROGRAM_ADDRESS } from "../programs/index.js";
 import {
   getConstraintEntryDecoder,
   getConstraintEntryEncoder,
   type ConstraintEntry,
   type ConstraintEntryArgs,
-} from "../types";
+} from "../types/index.js";
 
 export const QUEUE_CONSTRAINTS_UPDATE_DISCRIMINATOR = new Uint8Array([
   247, 253, 233, 93, 233, 54, 53, 131,

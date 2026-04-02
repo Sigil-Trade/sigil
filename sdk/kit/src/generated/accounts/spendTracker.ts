@@ -49,7 +49,7 @@ import {
   type EpochBucketArgs,
   type ProtocolSpendCounter,
   type ProtocolSpendCounterArgs,
-} from "../types";
+} from "../types/index.js";
 
 export const SPEND_TRACKER_DISCRIMINATOR = new Uint8Array([
   180, 17, 195, 180, 162, 207, 239, 205,

@@ -46,9 +46,7 @@ certora/output/
 .agents
 /MEMORY
 /Plans
-sdk/core/Plans
-sdk/custody/crossmint/Plans
-sdk/custody/turnkey/Plans
+sdk/custody/Plans
 programs/sigil/Plans
 programs/sigil/archived-oracle
 

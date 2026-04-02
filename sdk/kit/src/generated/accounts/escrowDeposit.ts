@@ -45,7 +45,7 @@ import {
   getEscrowStatusEncoder,
   type EscrowStatus,
   type EscrowStatusArgs,
-} from "../types";
+} from "../types/index.js";
 
 export const ESCROW_DEPOSIT_DISCRIMINATOR = new Uint8Array([
   56, 152, 208, 160, 159, 83, 6, 17,

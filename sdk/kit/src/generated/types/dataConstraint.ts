@@ -28,7 +28,7 @@ import {
   getConstraintOperatorEncoder,
   type ConstraintOperator,
   type ConstraintOperatorArgs,
-} from ".";
+} from "./index.js";
 
 export type DataConstraint = {
   offset: number;

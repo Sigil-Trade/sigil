@@ -12,7 +12,7 @@ import {
   type SOLANA_ERROR__INSTRUCTION_ERROR__CUSTOM,
   type SolanaError,
 } from "@solana/kit";
-import { SIGIL_PROGRAM_ADDRESS } from "../programs";
+import { SIGIL_PROGRAM_ADDRESS } from "../programs/index.js";
 
 /** VaultNotActive: Vault is not active */
 export const SIGIL_ERROR__VAULT_NOT_ACTIVE = 0x1770; // 6000

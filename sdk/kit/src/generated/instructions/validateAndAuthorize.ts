@@ -49,13 +49,13 @@ import {
   getNonNullResolvedInstructionInput,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { SIGIL_PROGRAM_ADDRESS } from "../programs";
+import { SIGIL_PROGRAM_ADDRESS } from "../programs/index.js";
 import {
   getActionTypeDecoder,
   getActionTypeEncoder,
   type ActionType,
   type ActionTypeArgs,
-} from "../types";
+} from "../types/index.js";
 
 export const VALIDATE_AND_AUTHORIZE_DISCRIMINATOR = new Uint8Array([
   22, 183, 48, 222, 218, 11, 197, 152,

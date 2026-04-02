@@ -1,0 +1,61 @@
+{
+  "name": "@usesigil/plugins",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Agent framework adapters for Sigil",
+  "exports": {
+    "./sak": {
+      "import": "./dist/sak/index.js",
+      "types": "./dist/sak/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "test": "mocha --require tsx tests/*.test.ts --timeout 30000"
+  },
+  "peerDependencies": {
+    "@usesigil/kit": "workspace:*",
+    "solana-agent-kit": ">=2.0.0"
+  },
+  "peerDependenciesMeta": {
+    "solana-agent-kit": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@usesigil/kit": "workspace:*",
+    "@types/chai": "^5.2.3",
+    "@types/mocha": "^10.0.6",
+    "chai": "^6.2.2",
+    "mocha": "^11.7.5",
+    "tsx": "^4.21.0",
+    "typescript": "^5.6.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Kaleb-Rupe/sigil",
+    "directory": "packages/plugins"
+  },
+  "homepage": "https://github.com/Kaleb-Rupe/sigil#readme",
+  "bugs": {
+    "url": "https://github.com/Kaleb-Rupe/sigil/issues"
+  }
+}

@@ -60,28 +60,22 @@
       "claudePattern": "tests/surfpool-integration.ts` (ts-mocha + Surfnet, %d tests)"
     },
     {
-      "name": "Core policy engine (`@usesigil/core`)",
-      "count": 66,
-      "ciStepName": "Core policy engine tests",
-      "claudePattern": "sdk/core/tests/` (mocha, %d tests)"
-    },
-    {
       "name": "Platform client tests (`@usesigil/platform`)",
       "count": 17,
-      "ciStepName": "Platform client tests",
+      "ciStepName": "Platform tests",
       "claudePattern": "sdk/platform/tests/` (mocha, %d tests)"
     },
     {
-      "name": "Crossmint custody adapter",
-      "count": 29,
-      "ciStepName": "Crossmint custody adapter tests",
-      "claudePattern": "sdk/custody/crossmint/tests/` (mocha, %d tests)"
+      "name": "Custody adapters (`@usesigil/custody`)",
+      "count": 96,
+      "ciStepName": "Custody adapter tests",
+      "claudePattern": "sdk/custody/tests/` (mocha + tsx, %d tests — crossmint, privy, turnkey)"
     },
     {
-      "name": "Kit-native SDK (`@usesigil/kit`)",
-      "count": 880,
+      "name": "Kit-native SDK (`@usesigil/kit` — includes merged core)",
+      "count": 950,
       "ciStepName": "Kit SDK tests",
-      "claudePattern": "sdk/kit/tests/` (mocha + tsx, %d tests — types, resolve-accounts, composer, events, priority-fees, simulation, tokens, policies, tee-attestation, rpc-helpers, transaction-executor, x402, velocity-tracker, agent-errors, tee, alt-loader, alt-integration, wrap, create-vault, harden, protocol-resolver, shield-presign, custody-adapter, inspector, shield, state-resolver, formatting, presets, owner-transaction, testing)"
+      "claudePattern": "sdk/kit/tests/` (mocha + tsx, %d tests — includes 66 merged core tests)"
     },
     {
       "name": "Kit SDK devnet tests (`@usesigil/kit` devnet)",
@@ -90,10 +84,10 @@
       "claudePattern": "sdk/kit/tests/devnet/` (mocha + tsx, %d tests — lifecycle, composed-tx)"
     },
     {
-      "name": "SAK plugin (`@usesigil/plugin-solana-agent-kit`)",
+      "name": "Plugins (`@usesigil/plugins`)",
       "count": 6,
-      "ciStepName": "SAK plugin tests",
-      "claudePattern": "packages/plugin-solana-agent-kit/tests/` (mocha + tsx, %d tests)"
+      "ciStepName": "Plugin tests",
+      "claudePattern": "packages/plugins/tests/` (mocha + tsx, %d tests)"
     },
     {
       "name": "Rust unit tests (cargo test)",

@@ -54,7 +54,7 @@ import {
   getAddressFromResolvedInstructionAccount,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { SIGIL_PROGRAM_ADDRESS } from "../programs";
+import { SIGIL_PROGRAM_ADDRESS } from "../programs/index.js";
 
 export const UPDATE_POLICY_DISCRIMINATOR = new Uint8Array([
   212, 245, 246, 7, 163, 151, 18, 57,

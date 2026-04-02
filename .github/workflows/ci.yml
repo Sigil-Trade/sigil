@@ -18,10 +18,10 @@
 #   Push — Always run everything (safety net on main)
 #
 # Individual TS test steps also filter by package:
-#   sdk/core → core tests + SDK tests that depend on it
-#   packages/ → MCP tests
-#   apps/ → Actions server tests
-#   sdk/kit → Kit SDK tests
+#   sdk/kit → Kit SDK tests (950 tests, includes merged core)
+#   sdk/platform → Platform tests (17 tests)
+#   sdk/custody → Custody adapter tests (96 tests)
+#   packages/plugins → Plugin tests (6 tests)
 #
 # Total: ~1,580 tests across 17 suites (998 TS + 445 on-chain + 59 Surfpool + 78 devnet)
 # All security checks are BLOCKING — zero tolerance for known issues.
@@ -58,10 +58,10 @@ jobs:
     outputs:
       rust: ${{ steps.filter.outputs.rust }}
       certora: ${{ steps.filter.outputs.certora }}
-      sdk-core: ${{ steps.filter.outputs.sdk-core }}
       sdk-platform: ${{ steps.filter.outputs.sdk-platform }}
-      sdk-crossmint: ${{ steps.filter.outputs.sdk-crossmint }}
+      sdk-custody: ${{ steps.filter.outputs.sdk-custody }}
       sdk-kit: ${{ steps.filter.outputs.sdk-kit }}
+      plugins: ${{ steps.filter.outputs.plugins }}
       any-ts: ${{ steps.filter.outputs.any-ts }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -77,14 +77,14 @@ jobs:
             certora:
               - 'programs/**'
               - 'certora/**'
-            sdk-core:
-              - 'sdk/core/**'
             sdk-platform:
               - 'sdk/platform/**'
-            sdk-crossmint:
-              - 'sdk/custody/crossmint/**'
+            sdk-custody:
+              - 'sdk/custody/**'
             sdk-kit:
               - 'sdk/kit/**'
+            plugins:
+              - 'packages/plugins/**'
             any-ts:
               - 'sdk/**'
               - 'tests/**'
@@ -143,36 +143,36 @@ jobs:
       - name: Lint (Prettier — 3 packages)
         run: |
           npx prettier --check \
-            "sdk/core/src/**/*.ts" \
+            "sdk/kit/src/**/*.ts" \
             "sdk/platform/src/**/*.ts" \
-            "sdk/custody/crossmint/src/**/*.ts"
+            "sdk/custody/src/**/*.ts"
 
-      - name: Core policy engine tests (66 tests)
+      - name: Kit SDK tests (950 tests)
         if: >-
-          needs.changes.outputs.sdk-core == 'true' ||
+          needs.changes.outputs.sdk-kit == 'true' ||
           github.event_name == 'push'
-        working-directory: sdk/core
+        working-directory: sdk/kit
         run: pnpm test
 
-      - name: Platform client tests (17 tests)
+      - name: Platform tests (17 tests)
         if: >-
           needs.changes.outputs.sdk-platform == 'true' ||
           github.event_name == 'push'
         working-directory: sdk/platform
         run: pnpm test
 
-      - name: Crossmint custody adapter tests (29 tests)
+      - name: Custody adapter tests (96 tests)
         if: >-
-          needs.changes.outputs.sdk-crossmint == 'true' ||
+          needs.changes.outputs.sdk-custody == 'true' ||
           github.event_name == 'push'
-        working-directory: sdk/custody/crossmint
+        working-directory: sdk/custody
         run: pnpm test
 
-      - name: Kit SDK tests (880 tests)
+      - name: Plugin tests
         if: >-
-          needs.changes.outputs.sdk-kit == 'true' ||
+          needs.changes.outputs.plugins == 'true' ||
           github.event_name == 'push'
-        working-directory: sdk/kit
+        working-directory: packages/plugins
         run: pnpm test
 
       - name: Verify Codama staleness (all discriminators)

@@ -6,12 +6,12 @@
  * @see https://github.com/codama-idl/codama
  */
 
-export * from "./agentSpendOverlay";
-export * from "./agentVault";
-export * from "./escrowDeposit";
-export * from "./instructionConstraints";
-export * from "./pendingConstraintsUpdate";
-export * from "./pendingPolicyUpdate";
-export * from "./policyConfig";
-export * from "./sessionAuthority";
-export * from "./spendTracker";
+export * from "./agentSpendOverlay.js";
+export * from "./agentVault.js";
+export * from "./escrowDeposit.js";
+export * from "./instructionConstraints.js";
+export * from "./pendingConstraintsUpdate.js";
+export * from "./pendingPolicyUpdate.js";
+export * from "./policyConfig.js";
+export * from "./sessionAuthority.js";
+export * from "./spendTracker.js";

@@ -37,7 +37,7 @@ import {
   getAccountMetaFactory,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { SIGIL_PROGRAM_ADDRESS } from "../programs";
+import { SIGIL_PROGRAM_ADDRESS } from "../programs/index.js";
 
 export const SYNC_POSITIONS_DISCRIMINATOR = new Uint8Array([
   255, 102, 161, 80, 185, 74, 140, 60,

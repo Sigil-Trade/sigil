@@ -1,14 +1,14 @@
 {
-  "name": "@phalnx/kit",
+  "name": "@usesigil/kit",
   "version": "0.1.0",
   "type": "module",
   "author": "Kaleb Rupe (https://x.com/MightieMags)",
-  "homepage": "https://github.com/Kaleb-Rupe/phalnx#readme",
+  "homepage": "https://github.com/Kaleb-Rupe/sigil#readme",
   "bugs": {
-    "url": "https://github.com/Kaleb-Rupe/phalnx/issues",
+    "url": "https://github.com/Kaleb-Rupe/sigil/issues",
     "email": "https://t.me/MightyMags"
   },
-  "description": "Kit-native TypeScript SDK for Phalnx — zero web3.js dependency, ESM-only",
+  "description": "Kit-native TypeScript SDK for Sigil — zero web3.js dependency, ESM-only",
   "main": "dist/index.js",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -24,11 +24,16 @@
     "./testing/devnet": {
       "import": "./dist/testing/devnet.js",
       "types": "./dist/testing/devnet.d.ts"
+    },
+    "./x402": {
+      "import": "./dist/x402/index.js",
+      "types": "./dist/x402/index.d.ts"
     }
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "sideEffects": false,
   "engines": {
@@ -42,22 +47,18 @@
     "codama:kamino": "node codama.mjs --protocol=kamino",
     "codama:all": "node codama.mjs --all",
     "pretest": "tsc -p tsconfig.test.json --noEmit",
-    "test": "mocha --require tsx tests/*.test.ts --timeout 30000",
+    "test": "mocha --require tsx 'tests/*.test.ts' 'tests/core/*.test.ts' --timeout 30000",
     "test:devnet": "mocha --require tsx tests/devnet/**/*.test.ts --timeout 300000",
     "test:experimental": "mocha --require tsx tests/experimental/**/*.test.ts --timeout 30000",
     "check:examples": "tsc -p tsconfig.examples.json"
   },
   "dependencies": {
-    "@phalnx/core": "workspace:*",
     "@solana-program/compute-budget": "^0.15.0"
   },
   "peerDependencies": {
     "@solana/kit": "^6.2.0"
   },
   "optionalDependencies": {
-    "@coral-xyz/anchor": "^0.32.1",
-    "@drift-labs/sdk": "^2.100.0",
-    "@solana/web3.js": "^1.95.0",
     "cbor-x": "^1.6.0"
   },
   "devDependencies": {
@@ -70,7 +71,9 @@
     "mocha": "^11.7.5",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "@solana/web3.js": "^1.95.0",
+    "@solana/spl-token": "^0.4.0"
   },
   "keywords": [
     "solana",
@@ -82,10 +85,14 @@
     "policy-engine",
     "esm"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Kaleb-Rupe/phalnx",
+    "url": "https://github.com/Kaleb-Rupe/sigil",
     "directory": "sdk/kit"
   }
 }

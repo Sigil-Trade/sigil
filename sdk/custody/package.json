@@ -1,0 +1,71 @@
+{
+  "name": "@usesigil/custody",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "TEE wallet custody adapters for Sigil",
+  "exports": {
+    "./crossmint": {
+      "import": "./dist/crossmint/index.js",
+      "types": "./dist/crossmint/index.d.ts"
+    },
+    "./privy": {
+      "import": "./dist/privy/index.js",
+      "types": "./dist/privy/index.d.ts"
+    },
+    "./turnkey": {
+      "import": "./dist/turnkey/index.js",
+      "types": "./dist/turnkey/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "peerDependencies": {
+    "@solana/web3.js": "^1.95.0",
+    "@crossmint/wallets-sdk": "^1.0.4"
+  },
+  "peerDependenciesMeta": {
+    "@crossmint/wallets-sdk": {
+      "optional": true
+    },
+    "@solana/web3.js": {
+      "optional": true
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "test": "mocha --require tsx tests/*.test.ts --timeout 30000"
+  },
+  "devDependencies": {
+    "@types/chai": "^5.2.3",
+    "@types/mocha": "^10.0.6",
+    "@types/sinon": "^21.0.0",
+    "chai": "^6.2.2",
+    "mocha": "^11.7.5",
+    "sinon": "^21.0.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.3.3",
+    "@coral-xyz/anchor": "^0.32.1"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Kaleb-Rupe/sigil",
+    "directory": "sdk/custody"
+  },
+  "homepage": "https://github.com/Kaleb-Rupe/sigil#readme",
+  "bugs": {
+    "url": "https://github.com/Kaleb-Rupe/sigil/issues"
+  }
+}

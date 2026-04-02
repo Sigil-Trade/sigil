@@ -105,10 +105,10 @@ All instructions succeed or all revert atomically. The agent's signing key is va
 
 | Package                                                         | Description                                                          | npm                                                                                                                                   |
 | --------------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| [`@usesigil/core`](./sdk/core)                                    | Pure TypeScript policy engine — zero blockchain dependencies         | [![npm](https://img.shields.io/npm/v/@usesigil/core)](https://www.npmjs.com/package/@usesigil/core)                                       |
-| [`@usesigil/kit`](./sdk/kit)                                      | Kit-native SDK — `seal()` API, TEE custody, protocol-agnostic        | [![npm](https://img.shields.io/npm/v/@usesigil/kit)](https://www.npmjs.com/package/@usesigil/kit)                                         |
+| [`@usesigil/kit`](./sdk/kit)                                      | Full SDK — policy engine, `seal()` API, TEE custody, analytics       | [![npm](https://img.shields.io/npm/v/@usesigil/kit)](https://www.npmjs.com/package/@usesigil/kit)                                         |
 | [`@usesigil/platform`](./sdk/platform)                            | Platform client — request TEE wallet provisioning via Solana Actions | [![npm](https://img.shields.io/npm/v/@usesigil/platform)](https://www.npmjs.com/package/@usesigil/platform)                               |
-| [`@usesigil/custody-crossmint`](./sdk/custody/crossmint)          | Crossmint TEE custody adapter — hardware-enclave signing             | [![npm](https://img.shields.io/npm/v/@usesigil/custody-crossmint)](https://www.npmjs.com/package/@usesigil/custody-crossmint)             |
+| [`@usesigil/custody`](./sdk/custody)                              | TEE wallet custody adapters — Crossmint, Privy, Turnkey             | [![npm](https://img.shields.io/npm/v/@usesigil/custody)](https://www.npmjs.com/package/@usesigil/custody)                                 |
+| [`@usesigil/plugins`](./packages/plugins)                         | Agent framework adapters — Solana Agent Kit                          | [![npm](https://img.shields.io/npm/v/@usesigil/plugins)](https://www.npmjs.com/package/@usesigil/plugins)                                 |
 
 ## Quick Start
 
@@ -168,12 +168,11 @@ cargo fmt --check --manifest-path programs/sigil/Cargo.toml
 | Analytics counters (failed TX + per-agent TX count)  |       7 |
 | Devnet integration tests (real network)              |      69 |
 | Surfpool integration tests (local Surfnet)           |      59 |
-| Core policy engine (`@usesigil/core`)                  |      66 |
 | Platform client tests (`@usesigil/platform`)           |      17 |
-| Crossmint custody adapter                            |      29 |
-| Kit-native SDK (`@usesigil/kit`)                       |     880 |
+| Custody adapter tests (`@usesigil/custody`)            |      96 |
+| Kit SDK tests (`@usesigil/kit`, includes core)         |     950 |
 | Kit SDK devnet tests (`@usesigil/kit` devnet)          |       9 |
-| SAK plugin (`@usesigil/plugin-solana-agent-kit`)       |       6 |
+| Plugins (`@usesigil/plugins`)                          |       6 |
 | Rust unit tests (cargo test)                         |      71 |
 | **Total**                                            | **1580** |
 

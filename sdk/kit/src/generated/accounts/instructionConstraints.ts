@@ -45,7 +45,7 @@ import {
   getConstraintEntryEncoder,
   type ConstraintEntry,
   type ConstraintEntryArgs,
-} from "../types";
+} from "../types/index.js";
 
 export const INSTRUCTION_CONSTRAINTS_DISCRIMINATOR = new Uint8Array([
   183, 235, 149, 166, 174, 58, 98, 218,

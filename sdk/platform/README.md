@@ -145,8 +145,9 @@ interface ActionMetadata {
 
 | Package                                                      | Description                                     |
 | ------------------------------------------------------------ | ----------------------------------------------- |
-| [`@usesigil/kit`](https://www.npmjs.com/package/@usesigil/kit)   | On-chain guardrails — `withVault()` primary API |
-| [`@usesigil/core`](https://www.npmjs.com/package/@usesigil/core) | Pure TypeScript policy engine                   |
+| [`@usesigil/kit`](https://www.npmjs.com/package/@usesigil/kit)         | On-chain guardrails — SDK + policy engine |
+| [`@usesigil/custody`](https://www.npmjs.com/package/@usesigil/custody) | TEE wallet custody adapters               |
+| [`@usesigil/plugins`](https://www.npmjs.com/package/@usesigil/plugins) | Agent framework adapters (SAK)            |
 
 
 ## Support

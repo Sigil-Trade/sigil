@@ -41,7 +41,7 @@ import {
   getAddressFromResolvedInstructionAccount,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { SIGIL_PROGRAM_ADDRESS } from "../programs";
+import { SIGIL_PROGRAM_ADDRESS } from "../programs/index.js";
 
 export const WITHDRAW_FUNDS_DISCRIMINATOR = new Uint8Array([
   241, 36, 29, 111, 208, 31, 104, 217,

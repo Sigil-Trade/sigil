@@ -44,7 +44,7 @@ import {
   getNonNullResolvedInstructionInput,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { SIGIL_PROGRAM_ADDRESS } from "../programs";
+import { SIGIL_PROGRAM_ADDRESS } from "../programs/index.js";
 
 export const CREATE_ESCROW_DISCRIMINATOR = new Uint8Array([
   253, 215, 165, 116, 36, 108, 68, 80,

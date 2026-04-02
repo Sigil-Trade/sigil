@@ -49,7 +49,7 @@ import {
   getNonNullResolvedInstructionInput,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { SIGIL_PROGRAM_ADDRESS } from "../programs";
+import { SIGIL_PROGRAM_ADDRESS } from "../programs/index.js";
 
 export const INITIALIZE_VAULT_DISCRIMINATOR = new Uint8Array([
   48, 191, 163, 44, 71, 129, 63, 164,

@@ -60,7 +60,7 @@ import {
   type SessionAuthorityArgs,
   type SpendTracker,
   type SpendTrackerArgs,
-} from "../accounts";
+} from "../accounts/index.js";
 import {
   getAgentTransferInstructionAsync,
   getApplyConstraintsUpdateInstructionAsync,
@@ -178,7 +178,7 @@ import {
   type UpdatePolicyAsyncInput,
   type ValidateAndAuthorizeAsyncInput,
   type WithdrawFundsAsyncInput,
-} from "../instructions";
+} from "../instructions/index.js";
 
 export const SIGIL_PROGRAM_ADDRESS =
   "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL" as Address<"4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL">;

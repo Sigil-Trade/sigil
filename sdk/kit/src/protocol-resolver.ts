@@ -8,7 +8,7 @@
  */
 
 import type { Address } from "@solana/kit";
-import * as Core from "@usesigil/core";
+import * as Core from "./core/index.js";
 
 // ---------------------------------------------------------------------------
 // Types

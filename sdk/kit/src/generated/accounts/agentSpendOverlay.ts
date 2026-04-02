@@ -45,7 +45,7 @@ import {
   getAgentContributionEntryEncoder,
   type AgentContributionEntry,
   type AgentContributionEntryArgs,
-} from "../types";
+} from "../types/index.js";
 
 export const AGENT_SPEND_OVERLAY_DISCRIMINATOR = new Uint8Array([
   126, 248, 13, 218, 101, 148, 135, 44,

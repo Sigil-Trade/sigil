@@ -39,7 +39,7 @@ import {
   getAddressFromResolvedInstructionAccount,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { SIGIL_PROGRAM_ADDRESS } from "../programs";
+import { SIGIL_PROGRAM_ADDRESS } from "../programs/index.js";
 
 export const APPLY_PENDING_POLICY_DISCRIMINATOR = new Uint8Array([
   114, 212, 19, 227, 89, 199, 74, 62,

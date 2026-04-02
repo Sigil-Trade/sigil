@@ -51,7 +51,7 @@ import {
   type AgentEntryArgs,
   type VaultStatus,
   type VaultStatusArgs,
-} from "../types";
+} from "../types/index.js";
 
 export const AGENT_VAULT_DISCRIMINATOR = new Uint8Array([
   232, 220, 237, 164, 157, 9, 215, 194,

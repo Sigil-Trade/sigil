@@ -43,7 +43,7 @@ import {
   getAccountMetaFactory,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { SIGIL_PROGRAM_ADDRESS } from "../programs";
+import { SIGIL_PROGRAM_ADDRESS } from "../programs/index.js";
 
 export const REACTIVATE_VAULT_DISCRIMINATOR = new Uint8Array([
   245, 50, 143, 70, 114, 220, 25, 251,

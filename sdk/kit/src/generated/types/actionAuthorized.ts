@@ -28,7 +28,7 @@ import {
   getActionTypeEncoder,
   type ActionType,
   type ActionTypeArgs,
-} from ".";
+} from "./index.js";
 
 export type ActionAuthorized = {
   vault: Address;

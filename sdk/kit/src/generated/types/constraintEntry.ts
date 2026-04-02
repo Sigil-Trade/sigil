@@ -28,7 +28,7 @@ import {
   type AccountConstraintArgs,
   type DataConstraint,
   type DataConstraintArgs,
-} from ".";
+} from "./index.js";
 
 export type ConstraintEntry = {
   programId: Address;

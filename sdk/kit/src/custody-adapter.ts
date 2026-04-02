@@ -18,9 +18,9 @@ import type { AttestationResult } from "./tee/types.js";
  * Standardized interface for custody providers.
  *
  * Implementors:
- * - `@usesigil/custody-turnkey` (Phase 8.4a) — TEE + Ed25519
- * - `@usesigil/custody-crossmint` (Phase 8.4b) — API-verified TEE
- * - `@usesigil/custody-privy` (Phase 8.4c) — Embedded wallets
+ * - `@usesigil/custody/turnkey` — TEE + Ed25519
+ * - `@usesigil/custody/crossmint` — API-verified TEE
+ * - `@usesigil/custody/privy` — Embedded wallets
  *
  * 3-method contract:
  * - getPublicKey(): Address of the custody-managed signing key

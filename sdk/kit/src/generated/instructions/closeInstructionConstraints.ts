@@ -39,7 +39,7 @@ import {
   getAddressFromResolvedInstructionAccount,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { SIGIL_PROGRAM_ADDRESS } from "../programs";
+import { SIGIL_PROGRAM_ADDRESS } from "../programs/index.js";
 
 export const CLOSE_INSTRUCTION_CONSTRAINTS_DISCRIMINATOR = new Uint8Array([
   145, 240, 233, 37, 11, 78, 195, 145,

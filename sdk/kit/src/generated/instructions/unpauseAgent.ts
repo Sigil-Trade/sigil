@@ -37,7 +37,7 @@ import {
   getAccountMetaFactory,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { SIGIL_PROGRAM_ADDRESS } from "../programs";
+import { SIGIL_PROGRAM_ADDRESS } from "../programs/index.js";
 
 export const UNPAUSE_AGENT_DISCRIMINATOR = new Uint8Array([
   46, 125, 165, 212, 241, 143, 190, 95,

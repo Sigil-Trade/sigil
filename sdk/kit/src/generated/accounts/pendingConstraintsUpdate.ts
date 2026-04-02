@@ -47,7 +47,7 @@ import {
   getConstraintEntryEncoder,
   type ConstraintEntry,
   type ConstraintEntryArgs,
-} from "../types";
+} from "../types/index.js";
 
 export const PENDING_CONSTRAINTS_UPDATE_DISCRIMINATOR = new Uint8Array([
   22, 206, 77, 208, 147, 121, 53, 174,

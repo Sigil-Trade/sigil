@@ -54,7 +54,7 @@ import {
   getAddressFromResolvedInstructionAccount,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { SIGIL_PROGRAM_ADDRESS } from "../programs";
+import { SIGIL_PROGRAM_ADDRESS } from "../programs/index.js";
 
 export const QUEUE_POLICY_UPDATE_DISCRIMINATOR = new Uint8Array([
   149, 18, 76, 197, 179, 193, 91, 77,

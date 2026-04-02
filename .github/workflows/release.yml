@@ -56,7 +56,7 @@ jobs:
           # Check if any local package version is ahead of npm (unpublished).
           # This catches version packages merges regardless of commit depth.
           UNPUBLISHED=false
-          for pkg_json in packages/*/package.json sdk/*/package.json sdk/custody/*/package.json; do
+          for pkg_json in packages/*/package.json sdk/*/package.json; do
             [ -f "$pkg_json" ] || continue
             PKG_NAME=$(node -p "require('./$pkg_json').name" 2>/dev/null) || continue
             LOCAL_VER=$(node -p "require('./$pkg_json').version" 2>/dev/null) || continue
@@ -116,20 +116,20 @@ jobs:
       - name: Build all packages
         run: pnpm -r run build
 
-      - name: Run core policy engine tests (66 tests)
-        working-directory: sdk/core
+      - name: Run Kit SDK tests (950 tests)
+        working-directory: sdk/kit
         run: pnpm test
 
-      - name: Run platform client tests (17 tests)
+      - name: Run Platform tests (17 tests)
         working-directory: sdk/platform
         run: pnpm test
 
-      - name: Run Crossmint custody adapter tests (29 tests)
-        working-directory: sdk/custody/crossmint
+      - name: Run Custody adapter tests (96 tests)
+        working-directory: sdk/custody
         run: pnpm test
 
-      - name: Run Kit SDK tests (880 tests)
-        working-directory: sdk/kit
+      - name: Run Plugin tests
+        working-directory: packages/plugins
         run: pnpm test
 
       - name: Create Release Pull Request or Publish
