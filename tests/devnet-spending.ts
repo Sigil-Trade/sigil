@@ -45,6 +45,8 @@ describe("devnet-spending", () => {
 
   let mintA: PublicKey; // 6 decimals (test USDC)
   let mintB: PublicKey; // 6 decimals (test USDT)
+  let agentMintAAta: PublicKey; // agent ATA for mock DeFi spend destination
+  let agentMintBAta: PublicKey;
 
   before(async () => {
     await fundKeypair(provider, agent.publicKey);
@@ -62,6 +64,23 @@ describe("devnet-spending", () => {
       owner.publicKey,
       6,
     );
+
+    // Create agent ATAs as mock DeFi spend destinations
+    const agentMintAAccount = await getOrCreateAssociatedTokenAccount(
+      connection,
+      payer,
+      mintA,
+      agent.publicKey,
+    );
+    agentMintAAta = agentMintAAccount.address;
+    const agentMintBAccount = await getOrCreateAssociatedTokenAccount(
+      connection,
+      payer,
+      mintB,
+      agent.publicKey,
+    );
+    agentMintBAta = agentMintBAccount.address;
+
     console.log("  MintA (USDC):", mintA.toString());
     console.log("  MintB (USDT):", mintB.toString());
   });
@@ -161,6 +180,7 @@ describe("devnet-spending", () => {
       protocol: jupiterProgramId,
       feeDestinationAta: null,
       protocolTreasuryAta: vault.protocolTreasuryAta,
+      mockSpendDestination: agentMintAAta,
     });
 
     // Spend 100 USDT (6 dec stablecoin -> 1:1 USD)
@@ -184,6 +204,7 @@ describe("devnet-spending", () => {
       protocol: jupiterProgramId,
       feeDestinationAta: null,
       protocolTreasuryAta: vault.mintBTreasuryAta,
+      mockSpendDestination: agentMintBAta,
     });
 
     // Now at 200 USD cap — 1 more of either should fail
@@ -206,6 +227,8 @@ describe("devnet-spending", () => {
         mint: mintA,
         amount: new BN(1_000_000), // 1 USDC more
         protocol: jupiterProgramId,
+        protocolTreasuryAta: vault.protocolTreasuryAta,
+        mockSpendDestination: agentMintAAta,
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
@@ -270,6 +293,8 @@ describe("devnet-spending", () => {
         mint: mintA,
         amount: new BN(51_000_000), // 51 > maxTx=50
         protocol: jupiterProgramId,
+        protocolTreasuryAta: vault.protocolTreasuryAta,
+        mockSpendDestination: agentMintAAta,
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
@@ -344,6 +369,7 @@ describe("devnet-spending", () => {
       protocol: jupiterProgramId,
       feeDestinationAta: null,
       protocolTreasuryAta: vault.protocolTreasuryAta,
+      mockSpendDestination: agentMintAAta,
     });
 
     // agent_transfer 50
@@ -394,6 +420,8 @@ describe("devnet-spending", () => {
         mint: mintA,
         amount: new BN(1_000_000),
         protocol: jupiterProgramId,
+        protocolTreasuryAta: vault.protocolTreasuryAta,
+        mockSpendDestination: agentMintAAta,
       });
       expect.fail("Should have thrown");
     } catch (err: any) {

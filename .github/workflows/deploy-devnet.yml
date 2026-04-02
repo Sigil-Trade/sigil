@@ -255,10 +255,10 @@ jobs:
         run: |
           set -e
           solana-verify verify-from-repo \
-            https://github.com/Kaleb-Rupe/phalnx \
+            https://github.com/Kaleb-Rupe/sigil \
             --program-id 4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL \
             --library-name sigil \
-            --mount-path programs/sigil \
+            --mount-path . \
             --url "${VERIFY_RPC:-https://api.devnet.solana.com}"
 
   # ────────────────────────────────────────────────────────────────

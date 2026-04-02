@@ -50,6 +50,7 @@ describe("devnet-security", () => {
   let unregisteredMint: PublicKey; // non-stablecoin mint
   let vault: FullVaultResult;
   let vaultId: BN;
+  let agentMintAta: PublicKey; // agent ATA for mock DeFi spend destination
 
   before(async () => {
     await fundKeypair(provider, agent.publicKey);
@@ -68,6 +69,15 @@ describe("devnet-security", () => {
       owner.publicKey,
       6,
     );
+
+    // Agent ATA for mock DeFi spend destination
+    const agentMintAccount = await getOrCreateAssociatedTokenAccount(
+      connection,
+      payer,
+      mint,
+      agent.publicKey,
+    );
+    agentMintAta = agentMintAccount.address;
 
     vaultId = nextVaultId(4);
 
@@ -290,6 +300,7 @@ describe("devnet-security", () => {
       amount: new BN(40_000_000), // 40 USDC
       protocol: jupiterProgramId,
       protocolTreasuryAta: vault.protocolTreasuryAta,
+      mockSpendDestination: agentMintAta,
     });
 
     const sessionPda2 = deriveSessionPda(
@@ -311,6 +322,7 @@ describe("devnet-security", () => {
       amount: new BN(40_000_000),
       protocol: jupiterProgramId,
       protocolTreasuryAta: vault.protocolTreasuryAta,
+      mockSpendDestination: agentMintAta,
     });
 
     // Now at 80 USDC of 100 cap — try 21 more to exceed
@@ -334,6 +346,7 @@ describe("devnet-security", () => {
         amount: new BN(21_000_000), // 21 USDC — exceeds remaining 20
         protocol: jupiterProgramId,
         protocolTreasuryAta: vault.protocolTreasuryAta,
+        mockSpendDestination: agentMintAta,
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
@@ -363,6 +376,14 @@ describe("devnet-security", () => {
       depositAmount: new BN(500_000_000),
     });
 
+    // Mock spend destination for freshAgent
+    const freshAgentAta = await getOrCreateAssociatedTokenAccount(
+      connection,
+      payer,
+      mint,
+      freshAgent.publicKey,
+    );
+
     const sessionPda = deriveSessionPda(
       freshVault.vaultPda,
       freshAgent.publicKey,
@@ -383,6 +404,8 @@ describe("devnet-security", () => {
         mint,
         amount: new BN(51_000_000), // 51 > maxTx=50
         protocol: jupiterProgramId,
+        protocolTreasuryAta: freshVault.protocolTreasuryAta,
+        mockSpendDestination: freshAgentAta.address,
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
@@ -768,6 +791,14 @@ describe("devnet-security", () => {
       depositAmount: new BN(1_000_000_000),
     });
 
+    // Mock spend destination for freshAgent
+    const freshAgentAta = await getOrCreateAssociatedTokenAccount(
+      connection,
+      payer,
+      mint,
+      freshAgent.publicKey,
+    );
+
     const sessionPda = deriveSessionPda(
       freshVault.vaultPda,
       freshAgent.publicKey,
@@ -787,6 +818,8 @@ describe("devnet-security", () => {
         mint,
         amount: new BN(51_000_000), // 51 > maxTx=50
         protocol: jupiterProgramId,
+        protocolTreasuryAta: freshVault.protocolTreasuryAta,
+        mockSpendDestination: freshAgentAta.address,
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
