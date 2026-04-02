@@ -25,6 +25,7 @@ import {
   getOrCreateAssociatedTokenAccount,
   mintTo,
   getAccount,
+  createTransferInstruction,
 } from "@solana/spl-token";
 import { expect } from "chai";
 import BN from "bn.js";
@@ -560,11 +561,37 @@ export async function authorizeAndFinalize(
     outputStablecoinAccount: opts.outputStablecoinAccount ?? null,
   });
 
+  // Build instruction list: validate → [mock DeFi spend] → finalize
+  const instructions = [validateIx];
+
+  // When mockSpendDestination is provided and amount > 0, insert a mock SPL
+  // token transfer between validate and finalize. This simulates what a real
+  // DeFi instruction would do (move tokens from the vault using the agent's
+  // delegate authority set by validate_and_authorize). Without this, finalize
+  // measures actual_spend_tracked = 0 and spending caps / position counters
+  // are never updated.
+  if (opts.mockSpendDestination && opts.amount.toNumber() > 0) {
+    const { netAmount } = calculateFees(
+      opts.amount.toNumber(),
+      opts.mockSpendDevFeeRate ?? 0,
+    );
+    instructions.push(
+      createTransferInstruction(
+        opts.vaultTokenAta,
+        opts.mockSpendDestination,
+        opts.agent.publicKey, // delegate authority (set by validate_and_authorize)
+        netAmount,
+      ),
+    );
+  }
+
+  instructions.push(finalizeIx);
+
   const { blockhash } = await opts.connection.getLatestBlockhash();
   const messageV0 = new TransactionMessage({
     payerKey: opts.agent.publicKey,
     recentBlockhash: blockhash,
-    instructions: [validateIx, finalizeIx],
+    instructions,
   }).compileToV0Message();
 
   const tx = new VersionedTransaction(messageV0);

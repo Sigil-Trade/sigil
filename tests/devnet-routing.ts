@@ -57,6 +57,8 @@ describe("devnet-routing", () => {
   let usdtMint: PublicKey;
   let testSolMint: PublicKey; // non-stablecoin (random address)
   let testWifMint: PublicKey; // non-stablecoin (random address)
+  let agentUsdcAta: PublicKey; // agent ATA for mock DeFi spend destination
+  let agentUsdtAta: PublicKey;
 
   before(async () => {
     await fundKeypair(provider, agent.publicKey);
@@ -90,6 +92,22 @@ describe("devnet-routing", () => {
       owner.publicKey,
       6,
     );
+
+    // Agent ATAs for mock DeFi spend destinations
+    const agentUsdcAccount = await getOrCreateAssociatedTokenAccount(
+      connection,
+      payer,
+      usdcMint,
+      agent.publicKey,
+    );
+    agentUsdcAta = agentUsdcAccount.address;
+    const agentUsdtAccount = await getOrCreateAssociatedTokenAccount(
+      connection,
+      payer,
+      usdtMint,
+      agent.publicKey,
+    );
+    agentUsdtAta = agentUsdtAccount.address;
 
     console.log("  USDC mint:", usdcMint.toString());
     console.log("  USDT mint:", usdtMint.toString());
@@ -286,6 +304,7 @@ describe("devnet-routing", () => {
       protocol: jupiterProgramId,
       feeDestinationAta: null,
       protocolTreasuryAta: vault.protocolTreasuryAta,
+      mockSpendDestination: agentUsdcAta,
     });
 
     // Spend 50 USDT
@@ -309,6 +328,7 @@ describe("devnet-routing", () => {
       protocol: jupiterProgramId,
       feeDestinationAta: null,
       protocolTreasuryAta: vault.usdtTreasuryAta,
+      mockSpendDestination: agentUsdtAta,
     });
 
     // Now at 100 USD cap -- 1 more USDC should fail
@@ -331,6 +351,8 @@ describe("devnet-routing", () => {
         mint: usdcMint,
         amount: new BN(1_000_000), // 1 USDC over cap
         protocol: jupiterProgramId,
+        protocolTreasuryAta: vault.protocolTreasuryAta,
+        mockSpendDestination: agentUsdcAta,
       });
       expect.fail("Should have thrown SpendingCapExceeded");
     } catch (err: any) {
@@ -754,6 +776,7 @@ describe("devnet-routing", () => {
       protocol: jupiterProgramId,
       feeDestinationAta: null,
       protocolTreasuryAta: vault.protocolTreasuryAta,
+      mockSpendDestination: agentUsdcAta,
     });
 
     // Swap 100 USDT
@@ -777,6 +800,7 @@ describe("devnet-routing", () => {
       protocol: jupiterProgramId,
       feeDestinationAta: null,
       protocolTreasuryAta: vault.usdtTreasuryAta,
+      mockSpendDestination: agentUsdtAta,
     });
 
     // At 200 USD cap -- 1 more USDC should fail
@@ -799,6 +823,8 @@ describe("devnet-routing", () => {
         mint: usdcMint,
         amount: new BN(1_000_000), // 1 USDC over cap
         protocol: jupiterProgramId,
+        protocolTreasuryAta: vault.protocolTreasuryAta,
+        mockSpendDestination: agentUsdcAta,
       });
       expect.fail("Should have thrown SpendingCapExceeded");
     } catch (err: any) {
