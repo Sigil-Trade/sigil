@@ -19,6 +19,7 @@ pub struct ValidateAndAuthorize<'info> {
     pub agent: Signer<'info>,
 
     #[account(
+        mut,
         constraint = vault.is_agent(&agent.key()) @ SigilError::UnauthorizedAgent,
         seeds = [b"vault", vault.owner.as_ref(), vault.vault_id.to_le_bytes().as_ref()],
         bump = vault.bump,
@@ -614,6 +615,15 @@ pub fn handler(
         delegated: is_spending,
         timestamp: clock.unix_timestamp,
     });
+
+    // H-1: Track active sessions for close_vault guard
+    {
+        let vault = &mut ctx.accounts.vault;
+        vault.active_sessions = vault
+            .active_sessions
+            .checked_add(1)
+            .ok_or(SigilError::Overflow)?;
+    }
 
     Ok(())
 }

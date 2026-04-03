@@ -2,7 +2,7 @@
   "suites": [
     {
       "name": "Core vault management & permission engine",
-      "count": 108,
+      "count": 107,
       "onChain": true,
       "claudePattern": "tests/sigil.ts` (ts-mocha + LiteSVM, no validator needed, %d tests)"
     },
@@ -26,13 +26,13 @@
     },
     {
       "name": "Security exploit scenarios",
-      "count": 159,
+      "count": 163,
       "onChain": true,
       "claudePattern": "tests/security-exploits.ts` (ts-mocha + LiteSVM, %d tests)"
     },
     {
       "name": "Instruction constraints (generic enforcement)",
-      "count": 41,
+      "count": 39,
       "onChain": true,
       "claudePattern": "tests/instruction-constraints.ts` (ts-mocha + LiteSVM, %d tests)"
     },
@@ -43,8 +43,14 @@
       "claudePattern": "tests/escrow-integration.ts` (ts-mocha + LiteSVM, %d tests)"
     },
     {
-      "name": "Analytics counters (failed TX + per-agent TX count)",
+      "name": "TOCTOU security (policy version + timelock)",
       "count": 7,
+      "onChain": true,
+      "claudePattern": "tests/toctou-security.ts` (ts-mocha + LiteSVM, %d tests)"
+    },
+    {
+      "name": "Analytics counters (failed TX + per-agent TX count)",
+      "count": 8,
       "onChain": true,
       "claudePattern": "tests/analytics-counters.ts` (ts-mocha + LiteSVM, %d tests)"
     },

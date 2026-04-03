@@ -75,7 +75,11 @@ pub struct AgentTransfer<'info> {
     pub token_program: Program<'info, Token>,
 }
 
-pub fn handler(ctx: Context<AgentTransfer>, amount: u64) -> Result<()> {
+pub fn handler(
+    ctx: Context<AgentTransfer>,
+    amount: u64,
+    expected_policy_version: u64,
+) -> Result<()> {
     // 0. Reject CPI calls — only top-level transaction instructions allowed.
     require!(
         get_stack_height()
@@ -86,6 +90,12 @@ pub fn handler(ctx: Context<AgentTransfer>, amount: u64) -> Result<()> {
     let vault = &ctx.accounts.vault;
     let policy = &ctx.accounts.policy;
     let clock = Clock::get()?;
+
+    // TOCTOU fix: reject if policy changed since agent's off-chain RPC read.
+    require!(
+        policy.policy_version == expected_policy_version,
+        SigilError::PolicyVersionMismatch
+    );
 
     // 1. Vault must be active
     require!(vault.is_active(), SigilError::VaultNotActive);

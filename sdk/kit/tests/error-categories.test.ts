@@ -45,7 +45,9 @@ describe("SigilErrorCategory", () => {
     const cat = categorizeError(err);
     expect(cat.type).to.equal("protocol");
     if (cat.type === "protocol") {
-      expect(cat.protocol).to.equal("UnknownProtocol111111111111111111111111111");
+      expect(cat.protocol).to.equal(
+        "UnknownProtocol111111111111111111111111111",
+      );
     }
   });
 

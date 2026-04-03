@@ -358,11 +358,15 @@ describe("types", () => {
 
     it("round-trips with permissionsToStrings", () => {
       const original = FULL_PERMISSIONS;
-      expect(stringsToPermissions(permissionsToStrings(original))).to.equal(original);
+      expect(stringsToPermissions(permissionsToStrings(original))).to.equal(
+        original,
+      );
     });
 
     it("throws on unknown action type", () => {
-      expect(() => stringsToPermissions(["nonexistent"])).to.throw(/Unknown action type/);
+      expect(() => stringsToPermissions(["nonexistent"])).to.throw(
+        /Unknown action type/,
+      );
     });
 
     it("returns 0n for empty array", () => {

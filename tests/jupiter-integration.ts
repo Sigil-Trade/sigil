@@ -21,7 +21,9 @@ import {
 import { expect } from "chai";
 import BN from "bn.js";
 // Inlined constants — sdk/typescript was deleted in Phase 0 nuclear cleanup
-const JUPITER_PROGRAM_ID = new PublicKey("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4");
+const JUPITER_PROGRAM_ID = new PublicKey(
+  "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+);
 const CU_JUPITER_SWAP = 600_000;
 
 interface JupiterSerializedInstruction {
@@ -30,7 +32,9 @@ interface JupiterSerializedInstruction {
   data: string;
 }
 
-function deserializeInstruction(ix: JupiterSerializedInstruction): TransactionInstruction {
+function deserializeInstruction(
+  ix: JupiterSerializedInstruction,
+): TransactionInstruction {
   return new TransactionInstruction({
     programId: new PublicKey(ix.programId),
     keys: ix.accounts.map((acc) => ({
@@ -474,8 +478,7 @@ describe("jupiter-integration", () => {
         // Non-stablecoin token without output_stablecoin_account → InvalidTokenAccount
         expect(err.message || err.toString()).to.satisfy(
           (s: string) =>
-            s.includes("InvalidTokenAccount") ||
-            s.includes("UnsupportedToken"),
+            s.includes("InvalidTokenAccount") || s.includes("UnsupportedToken"),
         );
       }
     });

@@ -241,9 +241,8 @@ describe("devnet-smoke-test", () => {
       .rpc();
 
     // Verify pending policy PDA was created with the expected values
-    const pending = await program.account.pendingPolicyUpdate.fetch(
-      pendingPolicyPda,
-    );
+    const pending =
+      await program.account.pendingPolicyUpdate.fetch(pendingPolicyPda);
     expect(pending.maxLeverageBps).to.equal(5000);
     console.log(
       `    Policy update queued (executes at ${pending.executesAt.toNumber()})`,

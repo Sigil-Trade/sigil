@@ -217,7 +217,15 @@ describe("Validation: requireValidAddress", () => {
 describe("Validation: requireValidPermissions", () => {
   it("rejects 0n (no permissions)", async () => {
     try {
-      await addAgent(rpc, VAULT, owner, "devnet", VALID_AGENT, 0n, 500_000_000n);
+      await addAgent(
+        rpc,
+        VAULT,
+        owner,
+        "devnet",
+        VALID_AGENT,
+        0n,
+        500_000_000n,
+      );
       expect.fail("Should have thrown");
     } catch (err: any) {
       expect(err.message).to.include("no permissions");
@@ -226,7 +234,15 @@ describe("Validation: requireValidPermissions", () => {
 
   it("rejects negative bitmask", async () => {
     try {
-      await addAgent(rpc, VAULT, owner, "devnet", VALID_AGENT, -1n, 500_000_000n);
+      await addAgent(
+        rpc,
+        VAULT,
+        owner,
+        "devnet",
+        VALID_AGENT,
+        -1n,
+        500_000_000n,
+      );
       expect.fail("Should have thrown");
     } catch (err: any) {
       expect(err.message).to.include("negative");
@@ -235,7 +251,15 @@ describe("Validation: requireValidPermissions", () => {
 
   it("rejects bitmask exceeding MAX_PERMISSIONS (2^21)", async () => {
     try {
-      await addAgent(rpc, VAULT, owner, "devnet", VALID_AGENT, MAX_PERMISSIONS + 1n, 500_000_000n);
+      await addAgent(
+        rpc,
+        VAULT,
+        owner,
+        "devnet",
+        VALID_AGENT,
+        MAX_PERMISSIONS + 1n,
+        500_000_000n,
+      );
       expect.fail("Should have thrown");
     } catch (err: any) {
       expect(err.message).to.include("exceeds maximum");
@@ -244,7 +268,15 @@ describe("Validation: requireValidPermissions", () => {
 
   it("accepts MAX_PERMISSIONS exactly", async () => {
     try {
-      await addAgent(rpc, VAULT, owner, "devnet", VALID_AGENT, MAX_PERMISSIONS, 500_000_000n);
+      await addAgent(
+        rpc,
+        VAULT,
+        owner,
+        "devnet",
+        VALID_AGENT,
+        MAX_PERMISSIONS,
+        500_000_000n,
+      );
     } catch (err: any) {
       expect(err.message).to.not.include("exceeds maximum");
       expect(err.message).to.not.include("no permissions");
@@ -253,7 +285,15 @@ describe("Validation: requireValidPermissions", () => {
 
   it("accepts 1n (single permission)", async () => {
     try {
-      await addAgent(rpc, VAULT, owner, "devnet", VALID_AGENT, 1n, 500_000_000n);
+      await addAgent(
+        rpc,
+        VAULT,
+        owner,
+        "devnet",
+        VALID_AGENT,
+        1n,
+        500_000_000n,
+      );
     } catch (err: any) {
       expect(err.message).to.not.include("no permissions");
     }
@@ -283,7 +323,9 @@ describe("Validation: queuePolicyUpdate", () => {
 
   it("rejects developer fee rate > 500", async () => {
     try {
-      await queuePolicyUpdate(rpc, VAULT, owner, "devnet", { developerFeeRate: 501 });
+      await queuePolicyUpdate(rpc, VAULT, owner, "devnet", {
+        developerFeeRate: 501,
+      });
       expect.fail("Should have thrown");
     } catch (err: any) {
       expect(err.message).to.include("500");

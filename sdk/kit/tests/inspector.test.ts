@@ -239,7 +239,11 @@ describe("inspectConstraints", () => {
       {
         programId: "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" as Address,
         dataConstraints: [
-          { offset: 0, operator: 0 /* == */, value: new Uint8Array([0xe5, 0x17, 0xcb, 0x98]) },
+          {
+            offset: 0,
+            operator: 0 /* == */,
+            value: new Uint8Array([0xe5, 0x17, 0xcb, 0x98]),
+          },
         ],
         accountConstraints: [],
       },
@@ -258,7 +262,10 @@ describe("inspectConstraints", () => {
         programId: "SomeProgram1111111111111111111111111111111" as Address,
         dataConstraints: [],
         accountConstraints: [
-          { index: 2, expected: "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" as Address },
+          {
+            index: 2,
+            expected: "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" as Address,
+          },
         ],
       },
     ] as any[];
@@ -287,7 +294,11 @@ describe("inspectConstraints", () => {
       {
         programId: "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" as Address,
         dataConstraints: [
-          { offset: 8, operator: 1 /* != */, value: new Uint8Array([0x00, 0x00]) },
+          {
+            offset: 8,
+            operator: 1 /* != */,
+            value: new Uint8Array([0x00, 0x00]),
+          },
         ],
         accountConstraints: [],
       },

@@ -31,16 +31,24 @@ import { getAssociatedTokenAddress } from "@solana/spl-token";
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
-const SIGIL_ALT_DEVNET = new PublicKey("BtRLCMVamw9c3R8UDwgYBCFur5YVkqACmakVh9xi2aTw");
+const SIGIL_ALT_DEVNET = new PublicKey(
+  "BtRLCMVamw9c3R8UDwgYBCFur5YVkqACmakVh9xi2aTw",
+);
 
 // Protocol treasury (devnet): ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT
-const PROTOCOL_TREASURY = new PublicKey("ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT");
+const PROTOCOL_TREASURY = new PublicKey(
+  "ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT",
+);
 
 // USDC devnet (test-controlled): DMFEQFCRsvGrYzoL2gfwTEd9J8eVBQEjg7HjbJHd6oGH
-const USDC_MINT_DEVNET = new PublicKey("DMFEQFCRsvGrYzoL2gfwTEd9J8eVBQEjg7HjbJHd6oGH");
+const USDC_MINT_DEVNET = new PublicKey(
+  "DMFEQFCRsvGrYzoL2gfwTEd9J8eVBQEjg7HjbJHd6oGH",
+);
 
 // USDT devnet (test-controlled): 43cd9ma7P968BssTtAKNs5qu6zgsErupwxwdjkiuMHze
-const USDT_MINT_DEVNET = new PublicKey("43cd9ma7P968BssTtAKNs5qu6zgsErupwxwdjkiuMHze");
+const USDT_MINT_DEVNET = new PublicKey(
+  "43cd9ma7P968BssTtAKNs5qu6zgsErupwxwdjkiuMHze",
+);
 
 const RPC_URL = process.env.SOLANA_RPC_URL ?? "https://api.devnet.solana.com";
 
@@ -48,10 +56,20 @@ const RPC_URL = process.env.SOLANA_RPC_URL ?? "https://api.devnet.solana.com";
 
 async function main() {
   // Load authority keypair — tries alt-authority.json first, falls back to id.json
-  const altAuthorityPath = join(homedir(), ".config", "solana", "alt-authority.json");
+  const altAuthorityPath = join(
+    homedir(),
+    ".config",
+    "solana",
+    "alt-authority.json",
+  );
   const defaultIdPath = join(homedir(), ".config", "solana", "id.json");
   const authorityPath = (() => {
-    try { readFileSync(altAuthorityPath); return altAuthorityPath; } catch { return defaultIdPath; }
+    try {
+      readFileSync(altAuthorityPath);
+      return altAuthorityPath;
+    } catch {
+      return defaultIdPath;
+    }
   })();
   let authority: Keypair;
   try {
@@ -59,7 +77,9 @@ async function main() {
     authority = Keypair.fromSecretKey(Uint8Array.from(raw));
   } catch {
     console.error(`Failed to load ALT authority keypair from ${authorityPath}`);
-    console.error("Generate with: solana-keygen new --outfile ~/.config/solana/id.json");
+    console.error(
+      "Generate with: solana-keygen new --outfile ~/.config/solana/id.json",
+    );
     process.exit(1);
   }
 
@@ -73,7 +93,9 @@ async function main() {
   const DEVNET_GENESIS = "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG";
   const genesisHash = await connection.getGenesisHash();
   if (genesisHash !== DEVNET_GENESIS) {
-    console.error("SAFETY: This script is devnet-only. Connected cluster has genesis:");
+    console.error(
+      "SAFETY: This script is devnet-only. Connected cluster has genesis:",
+    );
     console.error(`  ${genesisHash}`);
     console.error("Expected devnet genesis:");
     console.error(`  ${DEVNET_GENESIS}`);
@@ -83,8 +105,16 @@ async function main() {
   console.log();
 
   // Derive treasury ATAs (allowOwnerOffCurve: treasury is a PDA, not an ed25519 key)
-  const treasuryUsdcAta = await getAssociatedTokenAddress(USDC_MINT_DEVNET, PROTOCOL_TREASURY, true);
-  const treasuryUsdtAta = await getAssociatedTokenAddress(USDT_MINT_DEVNET, PROTOCOL_TREASURY, true);
+  const treasuryUsdcAta = await getAssociatedTokenAddress(
+    USDC_MINT_DEVNET,
+    PROTOCOL_TREASURY,
+    true,
+  );
+  const treasuryUsdtAta = await getAssociatedTokenAddress(
+    USDT_MINT_DEVNET,
+    PROTOCOL_TREASURY,
+    true,
+  );
 
   console.log("New addresses to add:");
   console.log(`  Treasury USDC ATA: ${treasuryUsdcAta.toBase58()}`);
@@ -98,7 +128,9 @@ async function main() {
     process.exit(1);
   }
 
-  const currentAddresses = altAccount.value.state.addresses.map((a) => a.toBase58());
+  const currentAddresses = altAccount.value.state.addresses.map((a) =>
+    a.toBase58(),
+  );
   console.log(`Current ALT entries (${currentAddresses.length}):`);
   for (const addr of currentAddresses) {
     console.log(`  ${addr}`);
@@ -140,7 +172,9 @@ async function main() {
   // Verify
   const updated = await connection.getAddressLookupTable(SIGIL_ALT_DEVNET);
   if (updated.value) {
-    console.log(`Updated ALT entries (${updated.value.state.addresses.length}):`);
+    console.log(
+      `Updated ALT entries (${updated.value.state.addresses.length}):`,
+    );
     for (const addr of updated.value.state.addresses) {
       console.log(`  ${addr.toBase58()}`);
     }
@@ -148,18 +182,28 @@ async function main() {
 
   console.log();
   console.log("═══ NEXT STEPS ═══");
-  console.log("1. Update EXPECTED_ALT_CONTENTS_DEVNET in sdk/kit/src/alt-config.ts");
+  console.log(
+    "1. Update EXPECTED_ALT_CONTENTS_DEVNET in sdk/kit/src/alt-config.ts",
+  );
   console.log("   with the treasury ATA addresses printed above.");
   console.log();
   console.log("2. ALT entries are usable after the next slot (~400ms).");
   console.log("   Wait 1-2 seconds before using in transactions.");
   console.log();
   console.log("3. SDK AltCache serves stale data for up to 5 minutes.");
-  console.log("   If using SigilClient, call client.invalidateCaches() to force refresh.");
-  console.log("   If using standalone wrap(), the module-level altCache will expire on its own.");
+  console.log(
+    "   If using SigilClient, call client.invalidateCaches() to force refresh.",
+  );
+  console.log(
+    "   If using standalone wrap(), the module-level altCache will expire on its own.",
+  );
   console.log();
-  console.log("⚠️  ALT AUTHORITY: This ALT is controlled by a single EOA keypair.");
-  console.log("   For mainnet, migrate authority to a Squads V4 multisig (2-of-3).");
+  console.log(
+    "⚠️  ALT AUTHORITY: This ALT is controlled by a single EOA keypair.",
+  );
+  console.log(
+    "   For mainnet, migrate authority to a Squads V4 multisig (2-of-3).",
+  );
   console.log("   See: memory/alt-authority-migration.md");
 }
 

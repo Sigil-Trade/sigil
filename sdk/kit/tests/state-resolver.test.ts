@@ -11,7 +11,10 @@ import {
   resolveVaultStateForOwner,
   findVaultsByOwner,
 } from "../src/state-resolver.js";
-import type { ResolvedVaultStateForOwner, SpendingEpoch } from "../src/state-resolver.js";
+import type {
+  ResolvedVaultStateForOwner,
+  SpendingEpoch,
+} from "../src/state-resolver.js";
 import { getVaultPDA } from "../src/resolve-accounts.js";
 import { formatUsd } from "../src/formatting.js";
 import type { EffectiveBudget, ProtocolBudget } from "../src/state-resolver.js";
@@ -852,13 +855,15 @@ describe("findVaultsByOwner", () => {
     // getProgramAccounts throws "method not found" → fallback to probing
     const rpc = {
       getProgramAccounts: () => ({
-        send: async () => { throw new Error("Method not found"); },
+        send: async () => {
+          throw new Error("Method not found");
+        },
       }),
       getMultipleAccounts: () => ({
         send: async () => ({
           value: [
             { data: ["", "base64"] }, // vault 0 exists
-            null,                      // vault 1 doesn't exist
+            null, // vault 1 doesn't exist
             { data: ["", "base64"] }, // vault 2 exists
             // rest are null (up to maxProbe)
             ...Array(17).fill(null),
@@ -876,7 +881,9 @@ describe("findVaultsByOwner", () => {
   it("propagates network errors instead of silently falling back", async () => {
     const rpc = {
       getProgramAccounts: () => ({
-        send: async () => { throw new Error("Network request failed: ECONNREFUSED"); },
+        send: async () => {
+          throw new Error("Network request failed: ECONNREFUSED");
+        },
       }),
     } as any;
 
@@ -892,7 +899,9 @@ describe("findVaultsByOwner", () => {
   it("propagates rate limit errors instead of silently falling back", async () => {
     const rpc = {
       getProgramAccounts: () => ({
-        send: async () => { throw new Error("429 Too Many Requests"); },
+        send: async () => {
+          throw new Error("429 Too Many Requests");
+        },
       }),
     } as any;
 
@@ -930,15 +939,20 @@ describe("findVaultsByOwner", () => {
     // Vaults exist at IDs 0, 3, 7 — gaps at 1,2,4,5,6
     const rpc = {
       getProgramAccounts: () => ({
-        send: async () => { throw new Error("Method not found"); },
+        send: async () => {
+          throw new Error("Method not found");
+        },
       }),
       getMultipleAccounts: () => ({
         send: async () => ({
           value: [
             { data: ["", "base64"] }, // 0 exists
-            null, null, // 1, 2 don't exist
+            null,
+            null, // 1, 2 don't exist
             { data: ["", "base64"] }, // 3 exists
-            null, null, null, // 4, 5, 6 don't exist
+            null,
+            null,
+            null, // 4, 5, 6 don't exist
             { data: ["", "base64"] }, // 7 exists
             ...Array(12).fill(null), // 8-19 don't exist
           ],

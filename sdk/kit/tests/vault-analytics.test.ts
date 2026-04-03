@@ -11,7 +11,12 @@ function mockState(overrides: any = {}) {
   return {
     vault: {
       agents: [
-        { pubkey: "agent1", permissions: 1n, spendingLimitUsd: 500_000_000n, paused: false },
+        {
+          pubkey: "agent1",
+          permissions: 1n,
+          spendingLimitUsd: 500_000_000n,
+          paused: false,
+        },
       ],
       status: VaultStatus.Active,
       openPositions: 0,
@@ -56,7 +61,21 @@ describe("getVaultHealth", () => {
 
   it("reports unhealthy when frozen", () => {
     const health = getVaultHealth(
-      mockState({ vault: { status: VaultStatus.Frozen, agents: [{ pubkey: "a", permissions: 1n, spendingLimitUsd: 500_000_000n, paused: false }], openPositions: 0, activeEscrowCount: 0 } }),
+      mockState({
+        vault: {
+          status: VaultStatus.Frozen,
+          agents: [
+            {
+              pubkey: "a",
+              permissions: 1n,
+              spendingLimitUsd: 500_000_000n,
+              paused: false,
+            },
+          ],
+          openPositions: 0,
+          activeEscrowCount: 0,
+        },
+      }),
       1700000000n,
     );
     expect(health.isHealthy).to.equal(false);
@@ -67,7 +86,14 @@ describe("getVaultHealth", () => {
     const health = getVaultHealth(
       mockState({
         vault: {
-          agents: [{ pubkey: "agent1", permissions: FULL_PERMISSIONS, spendingLimitUsd: 0n, paused: false }],
+          agents: [
+            {
+              pubkey: "agent1",
+              permissions: FULL_PERMISSIONS,
+              spendingLimitUsd: 0n,
+              paused: false,
+            },
+          ],
           status: VaultStatus.Active,
           openPositions: 0,
           activeEscrowCount: 0,
@@ -76,14 +102,20 @@ describe("getVaultHealth", () => {
       1700000000n,
     );
     expect(health.isHealthy).to.equal(false);
-    const fullPermsCheck = health.securityChecks.find((c: any) => c.id === "no-full-perms");
+    const fullPermsCheck = health.securityChecks.find(
+      (c: any) => c.id === "no-full-perms",
+    );
     expect(fullPermsCheck!.passed).to.equal(false);
   });
 
   it("reports unhealthy when cap > 95%", () => {
     const health = getVaultHealth(
       mockState({
-        globalBudget: { spent24h: 960_000_000n, cap: 1_000_000_000n, remaining: 40_000_000n },
+        globalBudget: {
+          spent24h: 960_000_000n,
+          cap: 1_000_000_000n,
+          remaining: 40_000_000n,
+        },
       }),
       1700000000n,
     );
@@ -93,7 +125,14 @@ describe("getVaultHealth", () => {
 
   it("reports no-agent vault as unhealthy", () => {
     const health = getVaultHealth(
-      mockState({ vault: { agents: [], status: VaultStatus.Active, openPositions: 0, activeEscrowCount: 0 } }),
+      mockState({
+        vault: {
+          agents: [],
+          status: VaultStatus.Active,
+          openPositions: 0,
+          activeEscrowCount: 0,
+        },
+      }),
       1700000000n,
     );
     expect(health.isHealthy).to.equal(false);
@@ -105,8 +144,18 @@ describe("getVaultHealth", () => {
       mockState({
         vault: {
           agents: [
-            { pubkey: "a1", permissions: 1n, spendingLimitUsd: 100n, paused: true },
-            { pubkey: "a2", permissions: 1n, spendingLimitUsd: 100n, paused: false },
+            {
+              pubkey: "a1",
+              permissions: 1n,
+              spendingLimitUsd: 100n,
+              paused: true,
+            },
+            {
+              pubkey: "a2",
+              permissions: 1n,
+              spendingLimitUsd: 100n,
+              paused: false,
+            },
           ],
           status: VaultStatus.Active,
           openPositions: 0,

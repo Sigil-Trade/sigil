@@ -383,7 +383,7 @@ describe("devnet-spending", () => {
       dest.publicKey,
     );
     await program.methods
-      .agentTransfer(new BN(50_000_000))
+      .agentTransfer(new BN(50_000_000), new BN(0))
       .accounts({
         agent: agent.publicKey,
         vault: vault.vaultPda,
@@ -491,8 +491,12 @@ describe("devnet-spending", () => {
       .rpc();
 
     // Verify the pending update was created with correct values
-    const pendingAccount = await program.account.pendingPolicyUpdate.fetch(vault.pendingPolicyPda);
-    expect(pendingAccount.dailySpendingCapUsd.toNumber()).to.equal(1_000_000_000);
+    const pendingAccount = await program.account.pendingPolicyUpdate.fetch(
+      vault.pendingPolicyPda,
+    );
+    expect(pendingAccount.dailySpendingCapUsd.toNumber()).to.equal(
+      1_000_000_000,
+    );
     console.log("    Queue policy update succeeded, pending cap = 1B");
 
     // Cancel the pending update (can't wait 30min on devnet)
@@ -533,6 +537,8 @@ describe("devnet-spending", () => {
       feeDestinationAta: null,
       protocolTreasuryAta: vault.protocolTreasuryAta,
     });
-    console.log("    Second spend succeeded under original 500M cap (300M total)");
+    console.log(
+      "    Second spend succeeded under original 500M cap (300M total)",
+    );
   });
 });

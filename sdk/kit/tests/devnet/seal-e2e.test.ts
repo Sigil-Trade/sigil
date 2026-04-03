@@ -124,11 +124,7 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
       };
 
       // Resolve state (proves RPC fetch works for new vault)
-      const state = await resolveVaultState(
-        rpc,
-        vaultAddress,
-        agent.address,
-      );
+      const state = await resolveVaultState(rpc, vaultAddress, agent.address);
 
       // Call seal() with cachedState
       const result = await seal({
@@ -179,14 +175,19 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
 
     it("sends composed TX to devnet and succeeds", async function () {
       // Memo program — exists on all clusters, no-op, passes protocolMode=0
-      const MEMO_PROGRAM = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr" as Address;
+      const MEMO_PROGRAM =
+        "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr" as Address;
       const memoIx: Instruction = {
         programAddress: MEMO_PROGRAM,
         accounts: [],
         data: new TextEncoder().encode("sigil-e2e-test"),
       };
 
-      const state = await resolveVaultState(rpc, vault.vaultAddress, agent.address);
+      const state = await resolveVaultState(
+        rpc,
+        vault.vaultAddress,
+        agent.address,
+      );
 
       const result = await seal({
         vault: vault.vaultAddress,
@@ -216,7 +217,11 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
 
     it("vault USDC balance unchanged after zero-spend TX", async function () {
       // Re-resolve state — balance should still be the deposit amount
-      const state = await resolveVaultState(rpc, vault.vaultAddress, agent.address);
+      const state = await resolveVaultState(
+        rpc,
+        vault.vaultAddress,
+        agent.address,
+      );
       expect(state.vault.status).to.equal(VaultStatus.Active);
       // SpendTracker may or may not exist (created on first spend > 0)
     });
@@ -238,7 +243,8 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
     });
 
     it("seal() with 2 DeFi instructions is rejected on-chain", async function () {
-      const MEMO_PROGRAM = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr" as Address;
+      const MEMO_PROGRAM =
+        "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr" as Address;
       const memoIx1: Instruction = {
         programAddress: MEMO_PROGRAM,
         accounts: [],
@@ -250,7 +256,11 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
         data: new TextEncoder().encode("ix-2"),
       };
 
-      const state = await resolveVaultState(rpc, vault.vaultAddress, agent.address);
+      const state = await resolveVaultState(
+        rpc,
+        vault.vaultAddress,
+        agent.address,
+      );
 
       // seal() builds the TX — it doesn't enforce defi_ix_count at SDK level
       const result = await seal({
@@ -288,7 +298,11 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
       }
 
       // Verify vault balance unchanged
-      const postState = await resolveVaultState(rpc, vault.vaultAddress, agent.address);
+      const postState = await resolveVaultState(
+        rpc,
+        vault.vaultAddress,
+        agent.address,
+      );
       expect(postState.vault.status).to.equal(VaultStatus.Active);
     });
   });
@@ -310,14 +324,19 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
     });
 
     it("TX exceeding daily cap is rejected on-chain", async function () {
-      const MEMO_PROGRAM = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr" as Address;
+      const MEMO_PROGRAM =
+        "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr" as Address;
       const memoIx: Instruction = {
         programAddress: MEMO_PROGRAM,
         accounts: [],
         data: new TextEncoder().encode("cap-test"),
       };
 
-      const state = await resolveVaultState(rpc, vault.vaultAddress, agent.address);
+      const state = await resolveVaultState(
+        rpc,
+        vault.vaultAddress,
+        agent.address,
+      );
 
       // seal() with $20 amount (exceeds $10 cap) — SDK warns but builds TX
       const result = await seal({
@@ -335,7 +354,9 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
 
       expect(result.transaction).to.exist;
       // Should have cap headroom warning
-      const capWarning = result.warnings.find((w) => w.includes("cap headroom") || w.includes("exceeds"));
+      const capWarning = result.warnings.find(
+        (w) => w.includes("cap headroom") || w.includes("exceeds"),
+      );
       expect(capWarning).to.exist;
 
       // Send to devnet — on-chain validate_and_authorize rejects (SpendingCapExceeded)
@@ -344,7 +365,9 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
       });
       try {
         await executor.signSendConfirm(result.transaction);
-        expect.fail("TX should have been rejected on-chain (SpendingCapExceeded)");
+        expect.fail(
+          "TX should have been rejected on-chain (SpendingCapExceeded)",
+        );
       } catch (e: any) {
         expect(e.message).to.satisfy(
           (msg: string) =>
@@ -357,7 +380,11 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
     });
 
     it("vault balance unchanged after rejected TX (atomic revert)", async function () {
-      const postState = await resolveVaultState(rpc, vault.vaultAddress, agent.address);
+      const postState = await resolveVaultState(
+        rpc,
+        vault.vaultAddress,
+        agent.address,
+      );
       expect(postState.vault.status).to.equal(VaultStatus.Active);
       // globalBudget spent should be 0 — no successful spend recorded
       if (postState.globalBudget) {
@@ -375,16 +402,23 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
   describe("3.3d — protocol not in allowlist is rejected", function () {
     it("seal() rejects instruction targeting non-allowed protocol", async function () {
       // Provision vault with protocolMode=1 (allowlist) containing only Jupiter
-      const restrictedVault = await provisionVault(rpc, owner, agent, USDC_MINT_DEVNET, {
-        dailySpendingCapUsd: 500_000_000n,
-        depositAmount: 10_000_000n,
-      });
+      const restrictedVault = await provisionVault(
+        rpc,
+        owner,
+        agent,
+        USDC_MINT_DEVNET,
+        {
+          dailySpendingCapUsd: 500_000_000n,
+          depositAmount: 10_000_000n,
+        },
+      );
 
       // Re-create vault with restrictive policy
       // Since provisionVault uses protocolMode=0, we need to test the SDK check
       // by using seal() against a vault that has protocolMode=1
       // For now, test the SDK-level rejection by checking isProtocolAllowed
-      const MEMO_PROGRAM = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr" as Address;
+      const MEMO_PROGRAM =
+        "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr" as Address;
       const memoIx: Instruction = {
         programAddress: MEMO_PROGRAM,
         accounts: [],
@@ -392,7 +426,11 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
       };
 
       // Manually override the cached state to simulate allowlist mode
-      const state = await resolveVaultState(rpc, restrictedVault.vaultAddress, agent.address);
+      const state = await resolveVaultState(
+        rpc,
+        restrictedVault.vaultAddress,
+        agent.address,
+      );
       // Override policy to allowlist-only with Jupiter
       const restrictedState = {
         ...state,

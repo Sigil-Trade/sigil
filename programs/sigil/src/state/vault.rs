@@ -70,6 +70,11 @@ pub struct AgentVault {
     /// Used for success rate: total_transactions / (total_transactions + total_failed_transactions).
     /// Informational only — never used in authorization decisions.
     pub total_failed_transactions: u64,
+
+    /// Number of active (not yet finalized) sessions for this vault.
+    /// Incremented in validate_and_authorize, decremented in finalize_session.
+    /// close_vault requires this to be 0.
+    pub active_sessions: u8,
 }
 
 // ARCHITECTURE DECISION: No on-chain viewer/delegate role
@@ -90,7 +95,8 @@ impl AgentVault {
     /// fee_destination (32) + status (1) + bump (1) +
     /// created_at (8) + total_transactions (8) + total_volume (8) +
     /// open_positions (1) + active_escrow_count (1) + total_fees_collected (8) +
-    /// total_deposited_usd (8) + total_withdrawn_usd (8) + total_failed_transactions (8)
+    /// total_deposited_usd (8) + total_withdrawn_usd (8) + total_failed_transactions (8) +
+    /// active_sessions (1)
     pub const SIZE: usize = 8
         + 32
         + 8
@@ -107,8 +113,9 @@ impl AgentVault {
         + 8
         + 8
         + 8
-        + 8;
-    // = 634
+        + 8
+        + 1;
+    // = 635
 
     pub fn is_active(&self) -> bool {
         self.status == VaultStatus::Active

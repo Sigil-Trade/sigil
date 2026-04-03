@@ -22,11 +22,7 @@ import {
   formatPercent,
   USDC_MINT_DEVNET,
 } from "@usesigil/kit";
-import {
-  address,
-  createSolanaRpc,
-  AccountRole,
-} from "@solana/kit";
+import { address, createSolanaRpc, AccountRole } from "@solana/kit";
 import type { Address, Instruction, TransactionSigner } from "@solana/kit";
 
 // ─── Configuration (change these three) ──────────────────────────────────────
@@ -78,17 +74,21 @@ async function main() {
   //   /swap returns a single serialized transaction — unusable with seal().
   //   /swap-instructions returns individual instructions we can compose
   //   into a Sigil-wrapped atomic transaction.
-  const swapIxRes = await fetch("https://quote-api.jup.ag/v6/swap-instructions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      quoteResponse,
-      userPublicKey: agent.address,
-      // wrapAndUnwrapSol defaults to true — Jupiter handles SOL wrapping.
-      // Sigil will rewrite ATAs to point at the vault's token accounts.
-    }),
-  });
-  if (!swapIxRes.ok) throw new Error(`Jupiter swap-instructions failed: ${swapIxRes.status}`);
+  const swapIxRes = await fetch(
+    "https://quote-api.jup.ag/v6/swap-instructions",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        quoteResponse,
+        userPublicKey: agent.address,
+        // wrapAndUnwrapSol defaults to true — Jupiter handles SOL wrapping.
+        // Sigil will rewrite ATAs to point at the vault's token accounts.
+      }),
+    },
+  );
+  if (!swapIxRes.ok)
+    throw new Error(`Jupiter swap-instructions failed: ${swapIxRes.status}`);
   const swapData = (await swapIxRes.json()) as JupiterSwapInstructionsResponse;
 
   // Step 3: Parse Jupiter response into Kit Instruction[]
@@ -139,7 +139,9 @@ async function main() {
     }
 
     const pnl = await client.getPnL();
-    console.log(`Vault P&L: ${formatUsd(pnl.pnl)} (${formatPercent(pnl.pnlPercent)})`);
+    console.log(
+      `Vault P&L: ${formatUsd(pnl.pnl)} (${formatPercent(pnl.pnlPercent)})`,
+    );
   } catch (err) {
     // Structured error for AI agent consumption.
     // toAgentError() converts on-chain error codes (6000-6070) AND SDK errors
@@ -180,7 +182,9 @@ interface JupiterIx {
  * Collect Jupiter DeFi instructions in execution order.
  * Excludes computeBudgetInstructions — seal() adds its own.
  */
-function parseJupiterResponse(res: JupiterSwapInstructionsResponse): Instruction[] {
+function parseJupiterResponse(
+  res: JupiterSwapInstructionsResponse,
+): Instruction[] {
   const all = [
     ...(res.setupInstructions ?? []),
     res.swapInstruction,

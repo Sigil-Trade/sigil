@@ -70,7 +70,10 @@ async function buildSwapInstructions(
     vaultTokenAccount: vaultTokenAta,
   });
 
-  return { validateIx: validateIx as Instruction, finalizeIx: finalizeIx as Instruction };
+  return {
+    validateIx: validateIx as Instruction,
+    finalizeIx: finalizeIx as Instruction,
+  };
 }
 
 describe("Kit SDK Devnet — Composed Transaction", function () {
@@ -110,7 +113,11 @@ describe("Kit SDK Devnet — Composed Transaction", function () {
   it("TransactionExecutor composes and simulates", async function () {
     const executor = new TransactionExecutor(rpc, agent);
     const { validateIx, finalizeIx } = await buildSwapInstructions(
-      agent, vault, vaultTokenAta, protocolTreasuryAta, 1_000_000n,
+      agent,
+      vault,
+      vaultTokenAta,
+      protocolTreasuryAta,
+      1_000_000n,
     );
 
     const { compiledTx, computeUnits } = await executor.composeTransaction({
@@ -126,9 +133,15 @@ describe("Kit SDK Devnet — Composed Transaction", function () {
   });
 
   it("TransactionExecutor.executeTransaction() succeeds", async function () {
-    const executor = new TransactionExecutor(rpc, agent, { skipSimulation: true });
+    const executor = new TransactionExecutor(rpc, agent, {
+      skipSimulation: true,
+    });
     const { validateIx, finalizeIx } = await buildSwapInstructions(
-      agent, vault, vaultTokenAta, protocolTreasuryAta, 1_000_000n,
+      agent,
+      vault,
+      vaultTokenAta,
+      protocolTreasuryAta,
+      1_000_000n,
     );
 
     const result = await executor.executeTransaction({

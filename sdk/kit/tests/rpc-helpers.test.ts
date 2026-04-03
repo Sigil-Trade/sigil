@@ -3,7 +3,11 @@ import {
   BlockhashCache,
   sendAndConfirmTransaction,
 } from "../src/rpc-helpers.js";
-import type { Rpc, SolanaRpcApi, Base64EncodedWireTransaction } from "@solana/kit";
+import type {
+  Rpc,
+  SolanaRpcApi,
+  Base64EncodedWireTransaction,
+} from "@solana/kit";
 
 // ─── Mock RPC Factory ───────────────────────────────────────────────────────
 
@@ -117,7 +121,10 @@ describe("rpc-helpers", () => {
   describe("sendAndConfirmTransaction", () => {
     it("returns signature on successful confirmation", async () => {
       const rpc = createMockRpc();
-      const sig = await sendAndConfirmTransaction(rpc, "base64encodedtx" as Base64EncodedWireTransaction);
+      const sig = await sendAndConfirmTransaction(
+        rpc,
+        "base64encodedtx" as Base64EncodedWireTransaction,
+      );
       expect(sig).to.be.a("string");
       expect(sig.length).to.be.greaterThan(0);
     });
@@ -135,9 +142,13 @@ describe("rpc-helpers", () => {
       });
 
       try {
-        await sendAndConfirmTransaction(rpc, "base64encodedtx" as Base64EncodedWireTransaction, {
-          timeoutMs: 2_000,
-        });
+        await sendAndConfirmTransaction(
+          rpc,
+          "base64encodedtx" as Base64EncodedWireTransaction,
+          {
+            timeoutMs: 2_000,
+          },
+        );
         expect.fail("Should have thrown");
       } catch (e: any) {
         expect(e.message).to.include("failed");
@@ -152,10 +163,14 @@ describe("rpc-helpers", () => {
       });
 
       try {
-        await sendAndConfirmTransaction(rpc, "base64encodedtx" as Base64EncodedWireTransaction, {
-          timeoutMs: 100,
-          pollIntervalMs: 20,
-        });
+        await sendAndConfirmTransaction(
+          rpc,
+          "base64encodedtx" as Base64EncodedWireTransaction,
+          {
+            timeoutMs: 100,
+            pollIntervalMs: 20,
+          },
+        );
         expect.fail("Should have thrown");
       } catch (e: any) {
         expect(e.message).to.include("timed out");
@@ -169,7 +184,10 @@ describe("rpc-helpers", () => {
         }),
       });
 
-      const sig = await sendAndConfirmTransaction(rpc, "base64encodedtx" as Base64EncodedWireTransaction);
+      const sig = await sendAndConfirmTransaction(
+        rpc,
+        "base64encodedtx" as Base64EncodedWireTransaction,
+      );
       expect(sig).to.be.a("string");
     });
   });

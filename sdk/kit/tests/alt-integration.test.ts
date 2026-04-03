@@ -105,7 +105,9 @@ describe("ALT integration", () => {
     });
 
     it("getSigilAltAddress throws for mainnet while ALT is placeholder", () => {
-      expect(() => getSigilAltAddress("mainnet-beta")).to.throw(/not yet deployed/);
+      expect(() => getSigilAltAddress("mainnet-beta")).to.throw(
+        /not yet deployed/,
+      );
     });
 
     it("expected ALT contents have correct entry count per network", () => {

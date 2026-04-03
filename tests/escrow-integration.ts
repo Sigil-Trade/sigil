@@ -594,9 +594,8 @@ describe("escrow-integration", () => {
     // P0 Finding 6: Verify cap NOT reversed on refund (prevents cap-washing).
     // Spec says: "Cap NOT reversed on refund (prevents cap-washing)."
     // The spending tracked by the escrow creation should remain charged.
-    const trackerAfterRefund = await program.account.spendTracker.fetch(
-      sourceTrackerPda,
-    );
+    const trackerAfterRefund =
+      await program.account.spendTracker.fetch(sourceTrackerPda);
     // The tracker's rolling 24h spend should still include the escrow amount
     // (it was charged at creation time and must NOT be reversed on refund).
     const rolling24h = trackerAfterRefund.get_rolling_24h_usd

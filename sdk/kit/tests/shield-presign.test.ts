@@ -319,7 +319,6 @@ describe("createShieldedSigner", () => {
       await shielded.modifyAndSignTransactions([tx]);
       expect(signCalls).to.have.length(1);
     });
-
   });
 
   // ─── Property 2: Velocity Ceiling (HARD) ────────────────────────────

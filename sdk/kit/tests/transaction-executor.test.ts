@@ -269,10 +269,10 @@ describe("TransactionExecutor", () => {
           value: { err: "error", logs: [], unitsConsumed: 0 },
         },
       });
-      const executor = new TransactionExecutor(rpc, mockAgent(), { skipSimulation: true });
-      const result = await executor.executeTransaction(
-        baseParams(),
-      );
+      const executor = new TransactionExecutor(rpc, mockAgent(), {
+        skipSimulation: true,
+      });
+      const result = await executor.executeTransaction(baseParams());
       expect(result.signature).to.equal(MOCK_SIGNATURE);
     });
 
@@ -308,7 +308,8 @@ describe("TransactionExecutor", () => {
       const view = new DataView(bytes.buffer);
       view.setBigUint64(64, balance, true);
       let binary = "";
-      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      for (let i = 0; i < bytes.length; i++)
+        binary += String.fromCharCode(bytes[i]);
       return btoa(binary);
     }
 

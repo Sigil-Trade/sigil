@@ -1,6 +1,10 @@
 import { expect } from "chai";
 import type { Address, AddressesByLookupTableAddress } from "@solana/kit";
-import { AltCache, mergeAltAddresses, verifySigilAlt } from "../src/alt-loader.js";
+import {
+  AltCache,
+  mergeAltAddresses,
+  verifySigilAlt,
+} from "../src/alt-loader.js";
 
 const ALT_A = "ALTaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as Address;
 const ALT_B = "ALTbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" as Address;
@@ -143,9 +147,9 @@ describe("alt-loader", () => {
       const resolved: AddressesByLookupTableAddress = {
         [ALT_A]: [ADDR_1], // missing ADDR_2
       };
-      expect(() =>
-        verifySigilAlt(resolved, ALT_A, [ADDR_1, ADDR_2]),
-      ).to.throw(/missing 1 expected address/);
+      expect(() => verifySigilAlt(resolved, ALT_A, [ADDR_1, ADDR_2])).to.throw(
+        /missing 1 expected address/,
+      );
     });
 
     it("throws with address details when multiple addresses missing", () => {
@@ -184,7 +188,9 @@ describe("alt-loader", () => {
       const expected = [ADDR_1, ADDR_2, ADDR_3];
 
       // First attempt throws (stale)
-      expect(() => verifySigilAlt(staleResolved, ALT_A, expected)).to.throw(/missing 1/);
+      expect(() => verifySigilAlt(staleResolved, ALT_A, expected)).to.throw(
+        /missing 1/,
+      );
 
       // Second attempt passes (fresh) — simulates the retry in seal.ts
       verifySigilAlt(freshResolved, ALT_A, expected);

@@ -164,9 +164,12 @@ export const SIGIL_ERROR__POLICY_VERSION_MISMATCH = 0x17b8; // 6072
 export const SIGIL_ERROR__PENDING_AGENT_PERMS_EXISTS = 0x17b9; // 6073
 /** PendingCloseConstraintsExists: A pending close constraints operation already exists for this vault */
 export const SIGIL_ERROR__PENDING_CLOSE_CONSTRAINTS_EXISTS = 0x17ba; // 6074
+/** ActiveSessionsExist: Cannot close vault with active sessions (finalize pending sessions first) */
+export const SIGIL_ERROR__ACTIVE_SESSIONS_EXIST = 0x17bb; // 6075
 
 export type SigilError =
   | typeof SIGIL_ERROR__ACTIVE_ESCROWS_EXIST
+  | typeof SIGIL_ERROR__ACTIVE_SESSIONS_EXIST
   | typeof SIGIL_ERROR__AGENT_ALREADY_PAUSED
   | typeof SIGIL_ERROR__AGENT_ALREADY_REGISTERED
   | typeof SIGIL_ERROR__AGENT_IS_OWNER
@@ -246,6 +249,7 @@ let sigilErrorMessages: Record<SigilError, string> | undefined;
 if (process.env.NODE_ENV !== "production") {
   sigilErrorMessages = {
     [SIGIL_ERROR__ACTIVE_ESCROWS_EXIST]: `Cannot close vault with active escrow deposits`,
+    [SIGIL_ERROR__ACTIVE_SESSIONS_EXIST]: `Cannot close vault with active sessions (finalize pending sessions first)`,
     [SIGIL_ERROR__AGENT_ALREADY_PAUSED]: `Agent is already paused`,
     [SIGIL_ERROR__AGENT_ALREADY_REGISTERED]: `Agent already registered for this vault`,
     [SIGIL_ERROR__AGENT_IS_OWNER]: `Invalid agent: agent cannot be the vault owner`,

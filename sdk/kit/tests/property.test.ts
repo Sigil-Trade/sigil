@@ -151,11 +151,7 @@ function makeTracker(
 }
 
 /** Build a BalanceDelta. */
-function makeDelta(
-  account: string,
-  pre: bigint,
-  post: bigint,
-): BalanceDelta {
+function makeDelta(account: string, pre: bigint, post: bigint): BalanceDelta {
   return { account, preBalance: pre, postBalance: post, delta: post - pre };
 }
 
@@ -163,9 +159,7 @@ function makeDelta(
 const arbAddress: fc.Arbitrary<Address> = fc
   .stringOf(
     fc.constantFrom(
-      ..."ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz123456789".split(
-        "",
-      ),
+      ..."ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz123456789".split(""),
     ),
     { minLength: 32, maxLength: 44 },
   )
@@ -218,9 +212,9 @@ describe("Property Tests — Category A: Exported Function Properties", () => {
     it("random unknown strings always return false", () => {
       fc.assert(
         fc.property(
-          fc.string({ minLength: 1, maxLength: 50 }).filter(
-            (s) => !(ALL_ACTIONS as readonly string[]).includes(s),
-          ),
+          fc
+            .string({ minLength: 1, maxLength: 50 })
+            .filter((s) => !(ALL_ACTIONS as readonly string[]).includes(s)),
           (unknownAction) => {
             expect(isSpendingAction(unknownAction)).to.equal(false);
           },
@@ -305,9 +299,9 @@ describe("Property Tests — Category A: Exported Function Properties", () => {
       fc.assert(
         fc.property(
           fc.bigUintN(21),
-          fc.string({ minLength: 1, maxLength: 30 }).filter(
-            (s) => !ACTION_KEYS.includes(s),
-          ),
+          fc
+            .string({ minLength: 1, maxLength: 30 })
+            .filter((s) => !ACTION_KEYS.includes(s)),
           (permissions, unknownKey) => {
             expect(hasPermission(permissions, unknownKey)).to.equal(false);
           },
@@ -317,8 +311,16 @@ describe("Property Tests — Category A: Exported Function Properties", () => {
     });
 
     it("Object.prototype keys return false, not throw (regression: P2 bug #2)", () => {
-      const protoKeys = ["toString", "constructor", "hasOwnProperty", "valueOf",
-        "isPrototypeOf", "propertyIsEnumerable", "__defineGetter__", "__lookupGetter__"];
+      const protoKeys = [
+        "toString",
+        "constructor",
+        "hasOwnProperty",
+        "valueOf",
+        "isPrototypeOf",
+        "propertyIsEnumerable",
+        "__defineGetter__",
+        "__lookupGetter__",
+      ];
       for (const key of protoKeys) {
         expect(hasPermission(FULL_PERMISSIONS, key)).to.equal(false);
         expect(hasPermission(0n, key)).to.equal(false);
@@ -421,10 +423,7 @@ describe("Property Tests — Category A: Exported Function Properties", () => {
     });
 
     it("nowUnix <= 0 always returns 0", () => {
-      const tracker = makeTracker(
-        [{ epochId: 1n, usdAmount: 1_000_000n }],
-        1n,
-      );
+      const tracker = makeTracker([{ epochId: 1n, usdAmount: 1_000_000n }], 1n);
       expect(getRolling24hUsd(tracker, 0n)).to.equal(0n);
       expect(getRolling24hUsd(tracker, -1n)).to.equal(0n);
     });
@@ -596,7 +595,9 @@ describe("Property Tests — Category B: Cross-Validation (ceilFee)", () => {
           const small = r1 < r2 ? r1 : r2;
           const large = r1 < r2 ? r2 : r1;
           if (small === large) return;
-          expect(ceilFee(amount, large) >= ceilFee(amount, small)).to.equal(true);
+          expect(ceilFee(amount, large) >= ceilFee(amount, small)).to.equal(
+            true,
+          );
         },
       ),
       { numRuns: NUM_RUNS },
@@ -673,7 +674,18 @@ describe("Property Tests — Category C: Fuzz Testing", () => {
       const arbThreshold = fc.oneof(
         fc.integer({ min: -1000, max: 1000 }),
         fc.double({ min: -1000, max: 1000, noNaN: false }),
-        fc.constantFrom(NaN, Infinity, -Infinity, 0, 100, -1, 101, 5e-324, 99.999, 0.1),
+        fc.constantFrom(
+          NaN,
+          Infinity,
+          -Infinity,
+          0,
+          100,
+          -1,
+          101,
+          5e-324,
+          99.999,
+          0.1,
+        ),
       );
       fc.assert(
         fc.property(
@@ -700,13 +712,17 @@ describe("Property Tests — Category C: Fuzz Testing", () => {
 
     it("non-integer float thresholds do not throw (regression: P2 bug #1)", () => {
       const input: DrainDetectionInput = {
-        balanceDeltas: [makeDelta("Vault1111111111111111111111111111111111111111", 1000n, 0n)],
+        balanceDeltas: [
+          makeDelta("Vault1111111111111111111111111111111111111111", 1000n, 0n),
+        ],
         vaultAddress: "Vault1111111111111111111111111111111111111111",
         totalVaultBalance: 1000n,
       };
       const edgeCases = [5e-324, Number.MIN_VALUE, 0.1, 49.99, 99.999, Math.PI];
       for (const t of edgeCases) {
-        expect(() => detectDrainAttempt(input, { warningPercent: t, blockPercent: t })).to.not.throw();
+        expect(() =>
+          detectDrainAttempt(input, { warningPercent: t, blockPercent: t }),
+        ).to.not.throw();
       }
     });
 
@@ -749,13 +765,10 @@ describe("Property Tests — Category C: Fuzz Testing", () => {
           (vaultBalance, outflowRaw) => {
             const outflow =
               outflowRaw > vaultBalance ? vaultBalance : outflowRaw;
-            const vaultAddr =
-              "VaultXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
+            const vaultAddr = "VaultXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
             const postBalance = vaultBalance - outflow;
             const input: DrainDetectionInput = {
-              balanceDeltas: [
-                makeDelta(vaultAddr, vaultBalance, postBalance),
-              ],
+              balanceDeltas: [makeDelta(vaultAddr, vaultBalance, postBalance)],
               vaultAddress: vaultAddr,
               totalVaultBalance: vaultBalance,
             };
@@ -782,8 +795,7 @@ describe("Property Tests — Category C: Fuzz Testing", () => {
           ),
           fc.bigUintN(64),
           (rawDeltas, vaultBalance) => {
-            const vaultAddr =
-              "UNIQUEVAULT_NOT_IN_DELTAS_XXXXXXXXXXXXXXXXXX";
+            const vaultAddr = "UNIQUEVAULT_NOT_IN_DELTAS_XXXXXXXXXXXXXXXXXX";
             const balanceDeltas: BalanceDelta[] = rawDeltas
               .filter((d) => d.account !== vaultAddr)
               .map((d) => ({
@@ -806,23 +818,17 @@ describe("Property Tests — Category C: Fuzz Testing", () => {
 
     it("UNKNOWN_RECIPIENT requires knownRecipients to be provided", () => {
       fc.assert(
-        fc.property(
-          fc.bigUintN(64),
-          fc.bigUintN(64),
-          (pre, post) => {
-            const vaultAddr =
-              "VaultXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
-            const recipientAddr =
-              "RecipXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
-            const input: DrainDetectionInput = {
-              balanceDeltas: [makeDelta(recipientAddr, pre, pre + 100n)],
-              vaultAddress: vaultAddr,
-              totalVaultBalance: 1000n,
-            };
-            const flags = detectDrainAttempt(input);
-            expect(flags).to.not.include(RISK_FLAG_UNKNOWN_RECIPIENT);
-          },
-        ),
+        fc.property(fc.bigUintN(64), fc.bigUintN(64), (pre, post) => {
+          const vaultAddr = "VaultXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
+          const recipientAddr = "RecipXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
+          const input: DrainDetectionInput = {
+            balanceDeltas: [makeDelta(recipientAddr, pre, pre + 100n)],
+            vaultAddress: vaultAddr,
+            totalVaultBalance: 1000n,
+          };
+          const flags = detectDrainAttempt(input);
+          expect(flags).to.not.include(RISK_FLAG_UNKNOWN_RECIPIENT);
+        }),
         { numRuns: Math.min(NUM_RUNS, 1000) },
       );
     });
@@ -855,8 +861,7 @@ describe("Property Tests — Category C: Fuzz Testing", () => {
     it("known recipients are excluded from MULTI_OUTPUT count", () => {
       const vaultAddr = "VaultXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
       const knownAddr = "KnownXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
-      const unknownAddr =
-        "UnknownXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
+      const unknownAddr = "UnknownXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
 
       const input: DrainDetectionInput = {
         balanceDeltas: [
@@ -1067,9 +1072,7 @@ describe("Property Tests — Category C: Fuzz Testing", () => {
             const ix = makeInstruction(accounts);
             const replacements = new Map<Address, Address>(rawReplacements);
             const result = replaceAgentAtas([ix], replacements);
-            expect(result[0].accounts!.length).to.equal(
-              ix.accounts!.length,
-            );
+            expect(result[0].accounts!.length).to.equal(ix.accounts!.length);
           },
         ),
         { numRuns: NUM_RUNS },
@@ -1128,9 +1131,16 @@ describe("Property Tests — Category C: Fuzz Testing", () => {
 describe("Adversarial SDK Attack Tests", () => {
   describe("Type Coercion & Input Attacks", () => {
     it("ISC-36: stringsToPermissions with Object.prototype keys throws", () => {
-      const protoKeys = ["toString", "constructor", "hasOwnProperty", "valueOf"];
+      const protoKeys = [
+        "toString",
+        "constructor",
+        "hasOwnProperty",
+        "valueOf",
+      ];
       for (const key of protoKeys) {
-        expect(() => stringsToPermissions([key])).to.throw(/Unknown action type/);
+        expect(() => stringsToPermissions([key])).to.throw(
+          /Unknown action type/,
+        );
       }
     });
 
@@ -1151,9 +1161,21 @@ describe("Adversarial SDK Attack Tests", () => {
     it("ISC-40: MULTI_OUTPUT with exactly 2 unknown recipients triggers flag", () => {
       const input: DrainDetectionInput = {
         balanceDeltas: [
-          makeDelta("Vault1111111111111111111111111111111111111111", 10000n, 5000n),
-          makeDelta("Unknown111111111111111111111111111111111111111", 0n, 2000n),
-          makeDelta("Unknown222222222222222222222222222222222222222", 0n, 3000n),
+          makeDelta(
+            "Vault1111111111111111111111111111111111111111",
+            10000n,
+            5000n,
+          ),
+          makeDelta(
+            "Unknown111111111111111111111111111111111111111",
+            0n,
+            2000n,
+          ),
+          makeDelta(
+            "Unknown222222222222222222222222222222222222222",
+            0n,
+            3000n,
+          ),
         ],
         vaultAddress: "Vault1111111111111111111111111111111111111111",
         totalVaultBalance: 10000n,
@@ -1171,7 +1193,11 @@ describe("Adversarial SDK Attack Tests", () => {
       expect(knownSet.has(known2)).to.equal(true);
       const input: DrainDetectionInput = {
         balanceDeltas: [
-          makeDelta("Vault1111111111111111111111111111111111111111", 10000n, 5000n),
+          makeDelta(
+            "Vault1111111111111111111111111111111111111111",
+            10000n,
+            5000n,
+          ),
           { account: known1, preBalance: 0n, postBalance: 2000n, delta: 2000n },
           { account: known2, preBalance: 0n, postBalance: 3000n, delta: 3000n },
         ],
@@ -1181,14 +1207,21 @@ describe("Adversarial SDK Attack Tests", () => {
       };
       const flags = detectDrainAttempt(input);
       const multiOutput = flags.filter((f) => f === RISK_FLAG_MULTI_OUTPUT);
-      expect(multiOutput.length, `MULTI_OUTPUT should not trigger with known recipients, but got ${JSON.stringify(flags)}`).to.equal(0);
+      expect(
+        multiOutput.length,
+        `MULTI_OUTPUT should not trigger with known recipients, but got ${JSON.stringify(flags)}`,
+      ).to.equal(0);
     });
 
     it("ISC-43: drain detection with max u64 vault balance doesn't overflow", () => {
       const U64_MAX = 18446744073709551615n;
       const input: DrainDetectionInput = {
         balanceDeltas: [
-          makeDelta("Vault1111111111111111111111111111111111111111", U64_MAX, 0n),
+          makeDelta(
+            "Vault1111111111111111111111111111111111111111",
+            U64_MAX,
+            0n,
+          ),
         ],
         vaultAddress: "Vault1111111111111111111111111111111111111111",
         totalVaultBalance: U64_MAX,
@@ -1204,7 +1237,11 @@ describe("Adversarial SDK Attack Tests", () => {
       const NEAR_MAX = 18446744073709551600n;
       const input: DrainDetectionInput = {
         balanceDeltas: [
-          makeDelta("Vault1111111111111111111111111111111111111111", NEAR_MAX, NEAR_MAX / 2n),
+          makeDelta(
+            "Vault1111111111111111111111111111111111111111",
+            NEAR_MAX,
+            NEAR_MAX / 2n,
+          ),
         ],
         vaultAddress: "Vault1111111111111111111111111111111111111111",
         totalVaultBalance: NEAR_MAX,
@@ -1219,12 +1256,27 @@ describe("Adversarial SDK Attack Tests", () => {
   describe("Permission Bit Exhaustive Tests", () => {
     it("all 21 action types have unique permission bits", () => {
       const ACTION_KEYS = [
-        "swap", "openPosition", "closePosition", "increasePosition",
-        "decreasePosition", "deposit", "withdraw", "transfer",
-        "addCollateral", "removeCollateral", "placeTriggerOrder",
-        "editTriggerOrder", "cancelTriggerOrder", "placeLimitOrder",
-        "editLimitOrder", "cancelLimitOrder", "swapAndOpenPosition",
-        "closeAndSwapPosition", "createEscrow", "settleEscrow", "refundEscrow",
+        "swap",
+        "openPosition",
+        "closePosition",
+        "increasePosition",
+        "decreasePosition",
+        "deposit",
+        "withdraw",
+        "transfer",
+        "addCollateral",
+        "removeCollateral",
+        "placeTriggerOrder",
+        "editTriggerOrder",
+        "cancelTriggerOrder",
+        "placeLimitOrder",
+        "editLimitOrder",
+        "cancelLimitOrder",
+        "swapAndOpenPosition",
+        "closeAndSwapPosition",
+        "createEscrow",
+        "settleEscrow",
+        "refundEscrow",
       ];
       const bits = ACTION_KEYS.map((k) => stringsToPermissions([k]));
       const uniqueBits = new Set(bits.map((b) => b.toString()));
@@ -1244,12 +1296,27 @@ describe("Adversarial SDK Attack Tests", () => {
 
     it("permission bits are contiguous from 0 to 20", () => {
       const ACTION_KEYS = [
-        "swap", "openPosition", "closePosition", "increasePosition",
-        "decreasePosition", "deposit", "withdraw", "transfer",
-        "addCollateral", "removeCollateral", "placeTriggerOrder",
-        "editTriggerOrder", "cancelTriggerOrder", "placeLimitOrder",
-        "editLimitOrder", "cancelLimitOrder", "swapAndOpenPosition",
-        "closeAndSwapPosition", "createEscrow", "settleEscrow", "refundEscrow",
+        "swap",
+        "openPosition",
+        "closePosition",
+        "increasePosition",
+        "decreasePosition",
+        "deposit",
+        "withdraw",
+        "transfer",
+        "addCollateral",
+        "removeCollateral",
+        "placeTriggerOrder",
+        "editTriggerOrder",
+        "cancelTriggerOrder",
+        "placeLimitOrder",
+        "editLimitOrder",
+        "cancelLimitOrder",
+        "swapAndOpenPosition",
+        "closeAndSwapPosition",
+        "createEscrow",
+        "settleEscrow",
+        "refundEscrow",
       ];
       for (let i = 0; i < ACTION_KEYS.length; i++) {
         const perm = stringsToPermissions([ACTION_KEYS[i]]);
@@ -1259,12 +1326,27 @@ describe("Adversarial SDK Attack Tests", () => {
 
     it("FULL_PERMISSIONS is exactly the OR of all 21 bits", () => {
       const ACTION_KEYS = [
-        "swap", "openPosition", "closePosition", "increasePosition",
-        "decreasePosition", "deposit", "withdraw", "transfer",
-        "addCollateral", "removeCollateral", "placeTriggerOrder",
-        "editTriggerOrder", "cancelTriggerOrder", "placeLimitOrder",
-        "editLimitOrder", "cancelLimitOrder", "swapAndOpenPosition",
-        "closeAndSwapPosition", "createEscrow", "settleEscrow", "refundEscrow",
+        "swap",
+        "openPosition",
+        "closePosition",
+        "increasePosition",
+        "decreasePosition",
+        "deposit",
+        "withdraw",
+        "transfer",
+        "addCollateral",
+        "removeCollateral",
+        "placeTriggerOrder",
+        "editTriggerOrder",
+        "cancelTriggerOrder",
+        "placeLimitOrder",
+        "editLimitOrder",
+        "cancelLimitOrder",
+        "swapAndOpenPosition",
+        "closeAndSwapPosition",
+        "createEscrow",
+        "settleEscrow",
+        "refundEscrow",
       ];
       const combined = stringsToPermissions(ACTION_KEYS);
       expect(combined).to.equal(FULL_PERMISSIONS);
@@ -1279,7 +1361,13 @@ describe("Adversarial SDK Attack Tests", () => {
           fc.double({ min: -1e10, max: 1e10, noNaN: false }),
           (warning, block) => {
             const input: DrainDetectionInput = {
-              balanceDeltas: [makeDelta("V1111111111111111111111111111111111111111111", 100n, 0n)],
+              balanceDeltas: [
+                makeDelta(
+                  "V1111111111111111111111111111111111111111111",
+                  100n,
+                  0n,
+                ),
+              ],
               vaultAddress: "V1111111111111111111111111111111111111111111",
               totalVaultBalance: 100n,
             };

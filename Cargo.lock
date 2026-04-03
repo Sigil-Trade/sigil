@@ -620,30 +620,46 @@ dependencies = [
 
 [[package]]
 name = "cvlr"
-version = "0.5.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "595c104271a35681edfc3c069fda275f8008089c861204a744f2641b77e766da"
+checksum = "6015272082ebd798f562b7a72f3a13c8dc501c0ba27ea240b4c7cdf32bb3e892"
 dependencies = [
  "cvlr-asserts",
+ "cvlr-decimal",
+ "cvlr-derive",
  "cvlr-early-panic",
+ "cvlr-fixed",
  "cvlr-hook",
  "cvlr-log",
  "cvlr-macros",
  "cvlr-mathint",
  "cvlr-nondet",
+ "cvlr-spec",
 ]
 
 [[package]]
 name = "cvlr-asserts"
-version = "0.5.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a9ac461cb05190d556f71501514f2bcdc4e13a5c9bcc428eec8bb78a1351aaa2"
+checksum = "0096bd5c925bd81ad127b648e980b468b7b0720d2810574a1bb429615d4ba0f8"
 
 [[package]]
-name = "cvlr-early-panic"
-version = "0.5.0"
+name = "cvlr-decimal"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b74feede0e605e1423ccd56fd14bf951e46536dd7f2e3590fe6b27dbd714de72"
+checksum = "727fd61eb25fac13c6fe1556932ab2008143a8d7f921fd5549919ff550891a3e"
+dependencies = [
+ "cvlr-asserts",
+ "cvlr-log",
+ "cvlr-mathint",
+ "cvlr-nondet",
+]
+
+[[package]]
+name = "cvlr-derive"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cdf7e216d478ea2f283501e120eb9f9d57debcb0a63c492fbf0352df509333d7"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -651,10 +667,33 @@ dependencies = [
 ]
 
 [[package]]
-name = "cvlr-hook"
-version = "0.5.0"
+name = "cvlr-early-panic"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d18ecb6e1d56f76c44e2a15fe2011fbc8097196adbee11326cf1b95e150a6ef9"
+checksum = "e32d46bc14367046ce1746ba864bf175620e337bf4584f026adf613181d73ffc"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.114",
+]
+
+[[package]]
+name = "cvlr-fixed"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1856f2f6ea98a03f160c3f68d9aac094f510c9ee067fb9290e0fd43dfab336b8"
+dependencies = [
+ "cvlr-asserts",
+ "cvlr-log",
+ "cvlr-mathint",
+ "cvlr-nondet",
+]
+
+[[package]]
+name = "cvlr-hook"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd5237f52583521859304d0bd301d9f1428350e4615591602149bc9308528a27"
 dependencies = [
  "quote",
  "syn 2.0.114",
@@ -662,18 +701,18 @@ dependencies = [
 
 [[package]]
 name = "cvlr-log"
-version = "0.5.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9172bf1bd9fb6838c8bc144ce7e92da49613820601aef07ec569b6214b97b402"
+checksum = "95cb4edf07d36e895f558727f655a4dce7ccdb836fb8e03a1b040baf39db4968"
 dependencies = [
  "cvlr-mathint",
 ]
 
 [[package]]
 name = "cvlr-macros"
-version = "0.5.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1456feedb27fff5239100464261374991d1bcd006a54dc809a2fd5275a343e8b"
+checksum = "95eedd975cc0b7f9bdff15436d8550221c7476a719d33eff1134a6234dfcc284"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -683,9 +722,9 @@ dependencies = [
 
 [[package]]
 name = "cvlr-mathint"
-version = "0.5.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c102cea92a07b9a8fa998d60fa183e19d57ff377c359ef27043b65022d5e6ff0"
+checksum = "95ac331829e886d9f74c684f33f1db09f49e9f497de107d0f2581e2b4a150f9b"
 dependencies = [
  "cvlr-asserts",
  "cvlr-nondet",
@@ -693,11 +732,24 @@ dependencies = [
 
 [[package]]
 name = "cvlr-nondet"
-version = "0.5.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "905b3608c4ca712050c4af8fd07de985669dbdc4ad1d9d71741fefa443131224"
+checksum = "02f329573a49e2807e63ef82572c0b5f37a7c3791b8a3ca6af394ac9caeba1f6"
 dependencies = [
  "cvlr-asserts",
+]
+
+[[package]]
+name = "cvlr-spec"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9dedbeff92d4eac75c26acea3994644b74ff6734b39e942f6d9a7e1d88cf2525"
+dependencies = [
+ "cvlr-asserts",
+ "cvlr-log",
+ "cvlr-macros",
+ "cvlr-mathint",
+ "cvlr-nondet",
 ]
 
 [[package]]

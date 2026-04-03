@@ -9,7 +9,7 @@
 Your policies are enforced by Solana validators, not software promises.
 
 [![CI](https://github.com/Kaleb-Rupe/sigil/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Kaleb-Rupe/sigil/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-1817-brightgreen)
+![Tests](https://img.shields.io/badge/tests-1826-brightgreen)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 
 </div>
@@ -150,7 +150,7 @@ anchor build --no-idl
 # Generate IDL separately (requires nightly Rust — anchor-syn 0.32.1 bug)
 RUSTUP_TOOLCHAIN=nightly anchor idl build -o target/idl/sigil.json
 
-# Run on-chain tests (445 LiteSVM tests — no validator needed)
+# Run on-chain tests (454 LiteSVM tests — no validator needed)
 npx ts-mocha -p ./tsconfig.json -t 300000 \
   tests/sigil.ts tests/jupiter-integration.ts \
   tests/flash-trade-integration.ts tests/security-exploits.ts \
@@ -168,23 +168,24 @@ cargo fmt --check --manifest-path programs/sigil/Cargo.toml
 
 | Suite                                                | Tests   |
 | ---------------------------------------------------- | ------- |
-| Core vault management & permission engine            |     108 |
+| Core vault management & permission engine            |     107 |
 | Jupiter integration (composed swaps)                 |       8 |
 | Jupiter Lend integration (deposit/withdraw)          |       6 |
 | Flash Trade integration (leveraged perps)            |      30 |
-| Security exploit scenarios                           |     159 |
-| Instruction constraints (generic enforcement)        |      41 |
+| Security exploit scenarios                           |     163 |
+| Instruction constraints (generic enforcement)        |      39 |
 | Escrow integration (deposit/settle/refund)           |      15 |
-| Analytics counters (failed TX + per-agent TX count)  |       7 |
+| TOCTOU security (policy version + timelock)          |       7 |
+| Analytics counters (failed TX + per-agent TX count)  |       8 |
 | Devnet integration tests (real network)              |      69 |
 | Surfpool integration tests (local Surfnet)           |      59 |
 | Platform client tests (`@usesigil/platform`)         |      17 |
 | Custody adapters (`@usesigil/custody`)               |      96 |
-| Kit-native SDK (`@usesigil/kit` — includes core + dashboard) |    1099 |
+| Kit-native SDK (`@usesigil/kit` — includes merged core + dashboard) |    1099 |
 | Kit SDK devnet tests (`@usesigil/kit` devnet)        |      26 |
 | Plugins (`@usesigil/plugins`)                        |       6 |
 | Rust unit tests (cargo test)                         |      71 |
-| **Total**                                            | **1817** |
+| **Total**                                            | **1826** |
 
 ## Security
 

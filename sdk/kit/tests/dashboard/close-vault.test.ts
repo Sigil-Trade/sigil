@@ -16,7 +16,12 @@
  */
 
 import { expect } from "chai";
-import type { Address, Rpc, SolanaRpcApi, TransactionSigner } from "@solana/kit";
+import type {
+  Address,
+  Rpc,
+  SolanaRpcApi,
+  TransactionSigner,
+} from "@solana/kit";
 import { AccountRole } from "@solana/kit";
 
 // ─── Test Constants ─────────────────────────────────────────────────────────
@@ -53,20 +58,29 @@ describe("closeVault remaining_accounts logic", () => {
 
     // 1. pending_policy (existenceResults[0])
     if (existenceResults[0]) {
-      remainingAccounts.push({ address: existenceResults[0], role: AccountRole.WRITABLE });
+      remainingAccounts.push({
+        address: existenceResults[0],
+        role: AccountRole.WRITABLE,
+      });
     }
 
     // 2. pending_agent_perms (existenceResults[1..N])
     for (let i = 0; i < agents.length; i++) {
       if (existenceResults[1 + i]) {
-        remainingAccounts.push({ address: existenceResults[1 + i]!, role: AccountRole.WRITABLE });
+        remainingAccounts.push({
+          address: existenceResults[1 + i]!,
+          role: AccountRole.WRITABLE,
+        });
       }
     }
 
     // 3. pending_close_constraints (existenceResults[last])
     const constraintsIdx = 1 + agents.length;
     if (existenceResults[constraintsIdx]) {
-      remainingAccounts.push({ address: existenceResults[constraintsIdx]!, role: AccountRole.WRITABLE });
+      remainingAccounts.push({
+        address: existenceResults[constraintsIdx]!,
+        role: AccountRole.WRITABLE,
+      });
     }
 
     return remainingAccounts;
@@ -110,7 +124,8 @@ describe("closeVault remaining_accounts logic", () => {
   // ─── Pending Agent Perms ───────────────────────────────────────────────
 
   it("includes one agent's pending perms PDA", () => {
-    const agentPermsPda = "AgentPerms1111111111111111111111111111111" as Address;
+    const agentPermsPda =
+      "AgentPerms1111111111111111111111111111111" as Address;
     const result = buildRemainingAccounts(
       { hasPendingPolicy: false },
       [{ pubkey: AGENT_1 }],
@@ -151,7 +166,8 @@ describe("closeVault remaining_accounts logic", () => {
   // ─── Pending Close Constraints ─────────────────────────────────────────
 
   it("includes pending close constraints PDA", () => {
-    const constraintsPda = "Constraints11111111111111111111111111111" as Address;
+    const constraintsPda =
+      "Constraints11111111111111111111111111111" as Address;
     const result = buildRemainingAccounts(
       { hasPendingPolicy: false },
       [],
@@ -169,7 +185,8 @@ describe("closeVault remaining_accounts logic", () => {
     const policyPda = "PolicyPDA111111111111111111111111111111111" as Address;
     const perms1 = "AgentPerms1111111111111111111111111111111" as Address;
     const perms2 = "AgentPerms2222222222222222222222222222222" as Address;
-    const constraintsPda = "Constraints11111111111111111111111111111" as Address;
+    const constraintsPda =
+      "Constraints11111111111111111111111111111" as Address;
 
     const result = buildRemainingAccounts(
       { hasPendingPolicy: true },
@@ -193,7 +210,8 @@ describe("closeVault remaining_accounts logic", () => {
 
   it("handles partial: policy + constraints but no agent perms", () => {
     const policyPda = "PolicyPDA111111111111111111111111111111111" as Address;
-    const constraintsPda = "Constraints11111111111111111111111111111" as Address;
+    const constraintsPda =
+      "Constraints11111111111111111111111111111" as Address;
 
     const result = buildRemainingAccounts(
       { hasPendingPolicy: true },
@@ -252,10 +270,13 @@ describe("closeVault PDA seeds", () => {
   const VALID_VAULT = "11111111111111111111111111111112" as Address;
 
   it("pending_close_constraints uses correct seed (not pending_constraints)", async () => {
-    const { getPendingCloseConstraintsPDA } = await import("../../src/resolve-accounts.js");
-    const { getPendingConstraintsPDA } = await import("../../src/resolve-accounts.js");
+    const { getPendingCloseConstraintsPDA } =
+      await import("../../src/resolve-accounts.js");
+    const { getPendingConstraintsPDA } =
+      await import("../../src/resolve-accounts.js");
 
-    const [closeConstraintsPda] = await getPendingCloseConstraintsPDA(VALID_VAULT);
+    const [closeConstraintsPda] =
+      await getPendingCloseConstraintsPDA(VALID_VAULT);
     const [updateConstraintsPda] = await getPendingConstraintsPDA(VALID_VAULT);
 
     // These MUST be different — they use different seeds
@@ -264,7 +285,8 @@ describe("closeVault PDA seeds", () => {
   });
 
   it("getPendingCloseConstraintsPDA returns deterministic result", async () => {
-    const { getPendingCloseConstraintsPDA } = await import("../../src/resolve-accounts.js");
+    const { getPendingCloseConstraintsPDA } =
+      await import("../../src/resolve-accounts.js");
 
     const [pda1] = await getPendingCloseConstraintsPDA(VALID_VAULT);
     const [pda2] = await getPendingCloseConstraintsPDA(VALID_VAULT);

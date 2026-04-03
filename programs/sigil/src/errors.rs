@@ -243,4 +243,7 @@ pub enum SigilError {
 
     #[msg("A pending close constraints operation already exists for this vault")]
     PendingCloseConstraintsExists,
+
+    #[msg("Cannot close vault with active sessions (finalize pending sessions first)")]
+    ActiveSessionsExist,
 }

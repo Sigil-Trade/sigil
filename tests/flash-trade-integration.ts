@@ -21,7 +21,9 @@ import {
 import { expect } from "chai";
 import BN from "bn.js";
 // Inlined constants — sdk/typescript was deleted in Phase 0 nuclear cleanup
-const FLASH_TRADE_PROGRAM_ID = new PublicKey("FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn");
+const FLASH_TRADE_PROGRAM_ID = new PublicKey(
+  "FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn",
+);
 const CU_FLASH_TRADE = 800_000;
 import {
   createTestEnv,
@@ -217,7 +219,11 @@ describe("flash-trade-integration", () => {
     const syncIx = new TransactionInstruction({
       programId: program.programId,
       keys: [
-        { pubkey: (owner as any).payer.publicKey, isSigner: true, isWritable: false },
+        {
+          pubkey: (owner as any).payer.publicKey,
+          isSigner: true,
+          isWritable: false,
+        },
         { pubkey: vault, isSigner: false, isWritable: true },
       ],
       data: Buffer.concat([
@@ -411,8 +417,13 @@ describe("flash-trade-integration", () => {
   describe("leverage boundary", () => {
     it("accepts leverage at exactly the policy limit (100x = 10000 bps)", async () => {
       await sendComposedAction(
-        vaultPda, policyPda, trackerPda, agent, usdcMint,
-        new BN(10_000_000), flashProtocol,
+        vaultPda,
+        policyPda,
+        trackerPda,
+        agent,
+        usdcMint,
+        new BN(10_000_000),
+        flashProtocol,
         { openPosition: {} },
         10000, // exactly 100x — at the limit, should succeed
       );
@@ -421,8 +432,13 @@ describe("flash-trade-integration", () => {
 
       // Close position to clean up
       await sendComposedAction(
-        vaultPda, policyPda, trackerPda, agent, usdcMint,
-        new BN(0), flashProtocol,
+        vaultPda,
+        policyPda,
+        trackerPda,
+        agent,
+        usdcMint,
+        new BN(0),
+        flashProtocol,
         { closePosition: {} },
         0,
       );
@@ -539,7 +555,9 @@ describe("flash-trade-integration", () => {
       expect(sig.signature).to.be.a("string");
       // Verify transaction was actually recorded
       const vaultAfter = await program.account.agentVault.fetch(vaultPda);
-      expect(vaultAfter.totalTransactions.toNumber()).to.equal(txCountBefore + 1);
+      expect(vaultAfter.totalTransactions.toNumber()).to.equal(
+        txCountBefore + 1,
+      );
     });
   });
 
@@ -565,7 +583,9 @@ describe("flash-trade-integration", () => {
 
       expect(sig.signature).to.be.a("string");
       const vaultAfter = await program.account.agentVault.fetch(vaultPda);
-      expect(vaultAfter.totalTransactions.toNumber()).to.equal(txCountBefore + 1);
+      expect(vaultAfter.totalTransactions.toNumber()).to.equal(
+        txCountBefore + 1,
+      );
     });
   });
 
@@ -877,7 +897,8 @@ describe("flash-trade-integration", () => {
       // record protocol fees (ceil_fee). So buckets may be non-zero.
       // The key invariant: total tracked is only fees, not DeFi spend.
       const totalTracked = tracker.buckets.reduce(
-        (sum: number, b: any) => sum + b.usdAmount.toNumber(), 0
+        (sum: number, b: any) => sum + b.usdAmount.toNumber(),
+        0,
       );
       // totalVolume = 0 (no actual DeFi spend) — this is the real invariant
       const vault2 = await program.account.agentVault.fetch(vaultPda);

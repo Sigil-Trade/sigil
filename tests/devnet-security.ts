@@ -749,7 +749,7 @@ describe("devnet-security", () => {
 
     try {
       await program.methods
-        .agentTransfer(new BN(10_000_000))
+        .agentTransfer(new BN(10_000_000), new BN(0))
         .accounts({
           agent: freshAgent.publicKey,
           vault: freshVault.vaultPda,

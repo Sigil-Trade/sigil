@@ -10,12 +10,17 @@ import {
   getSpendingHistory,
 } from "../src/spending-analytics.js";
 import type { SpendTracker, EpochBucket } from "../src/generated/index.js";
-import type { AgentSpendOverlay, AgentContributionEntry } from "../src/generated/index.js";
+import type {
+  AgentSpendOverlay,
+  AgentContributionEntry,
+} from "../src/generated/index.js";
 import type { Address } from "@solana/kit";
 
 // ─── Mock Helpers ────────────────────────────────────────────────────────────
 
-function mockTracker(entries: Array<{ epochId: bigint; usdAmount: bigint }>): SpendTracker {
+function mockTracker(
+  entries: Array<{ epochId: bigint; usdAmount: bigint }>,
+): SpendTracker {
   const buckets: EpochBucket[] = Array.from({ length: 144 }, () => ({
     epochId: 0n,
     usdAmount: 0n,
@@ -31,7 +36,8 @@ function mockTracker(entries: Array<{ epochId: bigint; usdAmount: bigint }>): Sp
     vault: new Uint8Array(32),
     buckets,
     protocolCounters: [],
-    lastWriteEpoch: entries.length > 0 ? entries[entries.length - 1].epochId : 0n,
+    lastWriteEpoch:
+      entries.length > 0 ? entries[entries.length - 1].epochId : 0n,
     bump: 0,
     padding: new Uint8Array(7),
   } as unknown as SpendTracker;
@@ -101,14 +107,24 @@ describe("getSpendingVelocity", () => {
     // Most epochs: 10 USDC each. Last 3: 100 USDC each.
     const entries = [];
     for (let i = 0; i < 10; i++) {
-      entries.push({ epochId: currentEpoch - BigInt(i + 3), usdAmount: 10_000_000n });
+      entries.push({
+        epochId: currentEpoch - BigInt(i + 3),
+        usdAmount: 10_000_000n,
+      });
     }
     for (let i = 0; i < 3; i++) {
-      entries.push({ epochId: currentEpoch - BigInt(i), usdAmount: 100_000_000n });
+      entries.push({
+        epochId: currentEpoch - BigInt(i),
+        usdAmount: 100_000_000n,
+      });
     }
 
     const tracker = mockTracker(entries);
-    const budget = { spent24h: 400_000_000n, cap: 1_000_000_000n, remaining: 600_000_000n };
+    const budget = {
+      spent24h: 400_000_000n,
+      cap: 1_000_000_000n,
+      remaining: 600_000_000n,
+    };
 
     const result = getSpendingVelocity(tracker, now, budget);
     expect(result.isAccelerating).to.equal(true);
@@ -125,7 +141,11 @@ describe("getSpendingVelocity", () => {
       { epochId: currentEpoch - 1n, usdAmount: 100_000_000n },
       { epochId: currentEpoch, usdAmount: 100_000_000n },
     ]);
-    const budget = { spent24h: 300_000_000n, cap: 1_000_000_000n, remaining: 700_000_000n };
+    const budget = {
+      spent24h: 300_000_000n,
+      cap: 1_000_000_000n,
+      remaining: 700_000_000n,
+    };
 
     const result = getSpendingVelocity(tracker, now, budget);
     expect(result.timeToCapSeconds).to.not.be.null;
@@ -143,7 +163,11 @@ describe("getSpendingVelocity", () => {
       { epochId: currentEpoch - 1n, usdAmount: 500_000_000n }, // peak
       { epochId: currentEpoch, usdAmount: 100_000_000n },
     ]);
-    const budget = { spent24h: 650_000_000n, cap: 1_000_000_000n, remaining: 350_000_000n };
+    const budget = {
+      spent24h: 650_000_000n,
+      cap: 1_000_000_000n,
+      remaining: 350_000_000n,
+    };
 
     const result = getSpendingVelocity(tracker, now, budget);
     expect(result.peakRate).to.equal(500_000_000n);
@@ -155,7 +179,11 @@ describe("getSpendingVelocity", () => {
 describe("getSpendingBreakdown", () => {
   it("computes correct global utilization", () => {
     const state = {
-      globalBudget: { spent24h: 400_000_000n, cap: 1_000_000_000n, remaining: 600_000_000n },
+      globalBudget: {
+        spent24h: 400_000_000n,
+        cap: 1_000_000_000n,
+        remaining: 600_000_000n,
+      },
       allAgentBudgets: new Map(),
       protocolBudgets: [],
       overlay: null,
@@ -168,10 +196,28 @@ describe("getSpendingBreakdown", () => {
 
   it("computes Herfindahl for equal agents (H=0.5)", () => {
     const state = {
-      globalBudget: { spent24h: 200_000_000n, cap: 1_000_000_000n, remaining: 800_000_000n },
+      globalBudget: {
+        spent24h: 200_000_000n,
+        cap: 1_000_000_000n,
+        remaining: 800_000_000n,
+      },
       allAgentBudgets: new Map([
-        ["agent1" as Address, { spent24h: 100_000_000n, cap: 500_000_000n, remaining: 400_000_000n }],
-        ["agent2" as Address, { spent24h: 100_000_000n, cap: 500_000_000n, remaining: 400_000_000n }],
+        [
+          "agent1" as Address,
+          {
+            spent24h: 100_000_000n,
+            cap: 500_000_000n,
+            remaining: 400_000_000n,
+          },
+        ],
+        [
+          "agent2" as Address,
+          {
+            spent24h: 100_000_000n,
+            cap: 500_000_000n,
+            remaining: 400_000_000n,
+          },
+        ],
       ]),
       protocolBudgets: [],
       overlay: null,
@@ -185,10 +231,24 @@ describe("getSpendingBreakdown", () => {
 
   it("returns H=1.0 when single agent dominates", () => {
     const state = {
-      globalBudget: { spent24h: 100_000_000n, cap: 1_000_000_000n, remaining: 900_000_000n },
+      globalBudget: {
+        spent24h: 100_000_000n,
+        cap: 1_000_000_000n,
+        remaining: 900_000_000n,
+      },
       allAgentBudgets: new Map([
-        ["agent1" as Address, { spent24h: 100_000_000n, cap: 500_000_000n, remaining: 400_000_000n }],
-        ["agent2" as Address, { spent24h: 0n, cap: 500_000_000n, remaining: 500_000_000n }],
+        [
+          "agent1" as Address,
+          {
+            spent24h: 100_000_000n,
+            cap: 500_000_000n,
+            remaining: 400_000_000n,
+          },
+        ],
+        [
+          "agent2" as Address,
+          { spent24h: 0n, cap: 500_000_000n, remaining: 500_000_000n },
+        ],
       ]),
       protocolBudgets: [],
       overlay: null,
@@ -222,12 +282,18 @@ describe("getAgentSpendingHistory", () => {
   });
 
   it("returns empty for out-of-range slot", () => {
-    const overlay = { entries: [], lifetimeSpend: [] } as unknown as AgentSpendOverlay;
+    const overlay = {
+      entries: [],
+      lifetimeSpend: [],
+    } as unknown as AgentSpendOverlay;
     expect(getAgentSpendingHistory(overlay, 15, 1700000000n)).to.deep.equal([]);
   });
 
   it("returns empty for zero timestamp", () => {
-    const overlay = { entries: [], lifetimeSpend: [] } as unknown as AgentSpendOverlay;
+    const overlay = {
+      entries: [],
+      lifetimeSpend: [],
+    } as unknown as AgentSpendOverlay;
     expect(getAgentSpendingHistory(overlay, 0, 0n)).to.deep.equal([]);
   });
 

@@ -70,7 +70,10 @@ describe("getSecurityPosture", () => {
     expect(ids).to.include("mode-all-unguarded");
     // Every single check should pass — assert individually to prevent cancellation trap
     for (const check of posture.checks) {
-      expect(check.passed, `check "${check.id}" should pass but failed: ${check.detail}`).to.equal(true);
+      expect(
+        check.passed,
+        `check "${check.id}" should pass but failed: ${check.detail}`,
+      ).to.equal(true);
     }
   });
 
@@ -110,7 +113,14 @@ describe("getSecurityPosture", () => {
   it("warns about system program fee destination", () => {
     const state = mockSecurityState({
       vault: {
-        agents: [{ pubkey: "a1" as Address, permissions: 1n, spendingLimitUsd: 500_000_000n, paused: false }],
+        agents: [
+          {
+            pubkey: "a1" as Address,
+            permissions: 1n,
+            spendingLimitUsd: 500_000_000n,
+            paused: false,
+          },
+        ],
         status: VaultStatus.Active,
         feeDestination: "11111111111111111111111111111111" as Address,
         openPositions: 0,
@@ -140,7 +150,11 @@ describe("getSecurityPosture", () => {
 describe("evaluateAlertConditions", () => {
   it("returns cap warning at 80%+", () => {
     const state = mockSecurityState({
-      globalBudget: { spent24h: 850_000_000n, cap: 1_000_000_000n, remaining: 150_000_000n },
+      globalBudget: {
+        spent24h: 850_000_000n,
+        cap: 1_000_000_000n,
+        remaining: 150_000_000n,
+      },
     });
     const alerts = evaluateAlertConditions(state, "vault1" as Address);
     expect(alerts.some((a) => a.id.includes("cap-warning"))).to.equal(true);
@@ -148,10 +162,18 @@ describe("evaluateAlertConditions", () => {
 
   it("returns cap critical at 95%+", () => {
     const state = mockSecurityState({
-      globalBudget: { spent24h: 960_000_000n, cap: 1_000_000_000n, remaining: 40_000_000n },
+      globalBudget: {
+        spent24h: 960_000_000n,
+        cap: 1_000_000_000n,
+        remaining: 40_000_000n,
+      },
     });
     const alerts = evaluateAlertConditions(state, "vault1" as Address);
-    expect(alerts.some((a) => a.severity === "critical" && a.id.includes("cap-critical"))).to.equal(true);
+    expect(
+      alerts.some(
+        (a) => a.severity === "critical" && a.id.includes("cap-critical"),
+      ),
+    ).to.equal(true);
   });
 
   it("returns frozen alert", () => {
@@ -185,13 +207,24 @@ describe("evaluateAlertConditions", () => {
   it("sorts critical before warning before info", () => {
     const state = mockSecurityState({
       vault: {
-        agents: [{ pubkey: "a1" as Address, permissions: 1n, spendingLimitUsd: 0n, paused: true }],
+        agents: [
+          {
+            pubkey: "a1" as Address,
+            permissions: 1n,
+            spendingLimitUsd: 0n,
+            paused: true,
+          },
+        ],
         status: VaultStatus.Frozen,
         feeDestination: "f" as Address,
         openPositions: 0,
         activeEscrowCount: 0,
       },
-      globalBudget: { spent24h: 960_000_000n, cap: 1_000_000_000n, remaining: 40_000_000n },
+      globalBudget: {
+        spent24h: 960_000_000n,
+        cap: 1_000_000_000n,
+        remaining: 40_000_000n,
+      },
     });
     const alerts = evaluateAlertConditions(state, "vault1" as Address);
     expect(alerts.length).to.be.greaterThan(1);
@@ -220,8 +253,18 @@ describe("evaluateAlertConditions", () => {
     const state = mockSecurityState({
       vault: {
         agents: [
-          { pubkey: "a1" as Address, permissions: 1n, spendingLimitUsd: 100n, paused: true },
-          { pubkey: "a2" as Address, permissions: 1n, spendingLimitUsd: 100n, paused: true },
+          {
+            pubkey: "a1" as Address,
+            permissions: 1n,
+            spendingLimitUsd: 100n,
+            paused: true,
+          },
+          {
+            pubkey: "a2" as Address,
+            permissions: 1n,
+            spendingLimitUsd: 100n,
+            paused: true,
+          },
         ],
         status: VaultStatus.Active,
         feeDestination: "f" as Address,
@@ -235,7 +278,10 @@ describe("evaluateAlertConditions", () => {
 
   it("detects high velocity (>2x average) via tracker data", () => {
     // Build a tracker where recent 3 epochs have 10x the average
-    const buckets = Array.from({ length: 144 }, () => ({ epochId: 0n, usdAmount: 0n }));
+    const buckets = Array.from({ length: 144 }, () => ({
+      epochId: 0n,
+      usdAmount: 0n,
+    }));
     const now = 1700000000n;
     const epochDuration = 600n;
     const currentEpoch = now / epochDuration;
@@ -258,7 +304,11 @@ describe("evaluateAlertConditions", () => {
 
     const state = mockSecurityState({
       tracker,
-      globalBudget: { spent24h: 700_000_000n, cap: 2_000_000_000n, remaining: 1_300_000_000n },
+      globalBudget: {
+        spent24h: 700_000_000n,
+        cap: 2_000_000_000n,
+        remaining: 1_300_000_000n,
+      },
     });
 
     const alerts = evaluateAlertConditions(state, "vault1" as Address);
@@ -266,7 +316,10 @@ describe("evaluateAlertConditions", () => {
   });
 
   it("detects potential drain (rate > 50% of cap per hour)", () => {
-    const buckets = Array.from({ length: 144 }, () => ({ epochId: 0n, usdAmount: 0n }));
+    const buckets = Array.from({ length: 144 }, () => ({
+      epochId: 0n,
+      usdAmount: 0n,
+    }));
     const now = 1700000000n;
     const epochDuration = 600n;
     const currentEpoch = now / epochDuration;
@@ -282,7 +335,11 @@ describe("evaluateAlertConditions", () => {
 
     const state = mockSecurityState({
       tracker,
-      globalBudget: { spent24h: 1_500_000_000n, cap: 2_000_000_000n, remaining: 500_000_000n },
+      globalBudget: {
+        spent24h: 1_500_000_000n,
+        cap: 2_000_000_000n,
+        remaining: 500_000_000n,
+      },
     });
 
     const alerts = evaluateAlertConditions(state, "vault1" as Address);
@@ -334,12 +391,24 @@ describe("Step 8 security checks", () => {
     const fifteenBits = (1n << 15n) - 1n;
     const state = mockSecurityState({
       vault: {
-        agents: [{ pubkey: "a1" as Address, permissions: fifteenBits, spendingLimitUsd: 500_000_000n, paused: false }],
-        status: 0, feeDestination: "fee" as Address, openPositions: 0, activeEscrowCount: 0,
+        agents: [
+          {
+            pubkey: "a1" as Address,
+            permissions: fifteenBits,
+            spendingLimitUsd: 500_000_000n,
+            paused: false,
+          },
+        ],
+        status: 0,
+        feeDestination: "fee" as Address,
+        openPositions: 0,
+        activeEscrowCount: 0,
       },
     });
     const posture = getSecurityPosture(state);
-    const check = posture.checks.find((c) => c.id === "no-permission-concentration");
+    const check = posture.checks.find(
+      (c) => c.id === "no-permission-concentration",
+    );
     expect(check!.passed).to.equal(true);
   });
 
@@ -348,7 +417,14 @@ describe("Step 8 security checks", () => {
     const highPerms = (1n << 16n) - 1n;
     const state = mockSecurityState({
       vault: {
-        agents: [{ pubkey: "a1" as Address, permissions: highPerms, spendingLimitUsd: 500_000_000n, paused: false }],
+        agents: [
+          {
+            pubkey: "a1" as Address,
+            permissions: highPerms,
+            spendingLimitUsd: 500_000_000n,
+            paused: false,
+          },
+        ],
         status: 0,
         feeDestination: "fee" as Address,
         openPositions: 0,
@@ -356,7 +432,9 @@ describe("Step 8 security checks", () => {
       },
     });
     const posture = getSecurityPosture(state);
-    const check = posture.checks.find((c) => c.id === "no-permission-concentration");
+    const check = posture.checks.find(
+      (c) => c.id === "no-permission-concentration",
+    );
     expect(check!.passed).to.equal(false);
   });
 
@@ -376,9 +454,21 @@ describe("Step 8 security checks", () => {
 
 describe("getAuditTrail", () => {
   const mockEvents = [
-    { name: "PolicyUpdated", data: new Uint8Array(), fields: { owner: "owner1", timestamp: 1000n } },
-    { name: "AgentRegistered", data: new Uint8Array(), fields: { owner: "owner1", agent: "agent1", timestamp: 2000n } },
-    { name: "VaultFrozen", data: new Uint8Array(), fields: { owner: "owner1", timestamp: 3000n } },
+    {
+      name: "PolicyUpdated",
+      data: new Uint8Array(),
+      fields: { owner: "owner1", timestamp: 1000n },
+    },
+    {
+      name: "AgentRegistered",
+      data: new Uint8Array(),
+      fields: { owner: "owner1", agent: "agent1", timestamp: 2000n },
+    },
+    {
+      name: "VaultFrozen",
+      data: new Uint8Array(),
+      fields: { owner: "owner1", timestamp: 3000n },
+    },
     { name: "SessionFinalized", data: new Uint8Array(), fields: {} }, // Not in AUDIT_EVENTS — should be filtered out
   ] as any[];
 
@@ -412,9 +502,21 @@ describe("getAuditTrail", () => {
 describe("getAuditTrailSummary", () => {
   it("returns per-category counts", () => {
     const trail = getAuditTrail([
-      { name: "PolicyUpdated", data: new Uint8Array(), fields: { owner: "o1", timestamp: 1n } },
-      { name: "VaultFrozen", data: new Uint8Array(), fields: { owner: "o1", timestamp: 2n } },
-      { name: "VaultClosed", data: new Uint8Array(), fields: { owner: "o1", timestamp: 3n } },
+      {
+        name: "PolicyUpdated",
+        data: new Uint8Array(),
+        fields: { owner: "o1", timestamp: 1n },
+      },
+      {
+        name: "VaultFrozen",
+        data: new Uint8Array(),
+        fields: { owner: "o1", timestamp: 2n },
+      },
+      {
+        name: "VaultClosed",
+        data: new Uint8Array(),
+        fields: { owner: "o1", timestamp: 3n },
+      },
     ] as any[]);
     const summary = getAuditTrailSummary(trail);
     expect(summary.totalEntries).to.equal(3);

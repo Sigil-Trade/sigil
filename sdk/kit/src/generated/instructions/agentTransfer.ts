@@ -115,15 +115,20 @@ export type AgentTransferInstruction<
 export type AgentTransferInstructionData = {
   discriminator: ReadonlyUint8Array;
   amount: bigint;
+  expectedPolicyVersion: bigint;
 };
 
-export type AgentTransferInstructionDataArgs = { amount: number | bigint };
+export type AgentTransferInstructionDataArgs = {
+  amount: number | bigint;
+  expectedPolicyVersion: number | bigint;
+};
 
 export function getAgentTransferInstructionDataEncoder(): FixedSizeEncoder<AgentTransferInstructionDataArgs> {
   return transformEncoder(
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
       ["amount", getU64Encoder()],
+      ["expectedPolicyVersion", getU64Encoder()],
     ]),
     (value) => ({ ...value, discriminator: AGENT_TRANSFER_DISCRIMINATOR }),
   );
@@ -133,6 +138,7 @@ export function getAgentTransferInstructionDataDecoder(): FixedSizeDecoder<Agent
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
     ["amount", getU64Decoder()],
+    ["expectedPolicyVersion", getU64Decoder()],
   ]);
 }
 
@@ -178,6 +184,7 @@ export type AgentTransferAsyncInput<
   protocolTreasuryTokenAccount?: Address<TAccountProtocolTreasuryTokenAccount>;
   tokenProgram?: Address<TAccountTokenProgram>;
   amount: AgentTransferInstructionDataArgs["amount"];
+  expectedPolicyVersion: AgentTransferInstructionDataArgs["expectedPolicyVersion"];
 };
 
 export async function getAgentTransferInstructionAsync<
@@ -379,6 +386,7 @@ export type AgentTransferInput<
   protocolTreasuryTokenAccount?: Address<TAccountProtocolTreasuryTokenAccount>;
   tokenProgram?: Address<TAccountTokenProgram>;
   amount: AgentTransferInstructionDataArgs["amount"];
+  expectedPolicyVersion: AgentTransferInstructionDataArgs["expectedPolicyVersion"];
 };
 
 export function getAgentTransferInstruction<

@@ -18,17 +18,14 @@ import { spawnSync } from "node:child_process";
 
 const PROGRAM_ID = "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL";
 const cluster = process.argv.includes("--cluster")
-  ? process.argv[process.argv.indexOf("--cluster") + 1] ?? "devnet"
+  ? (process.argv[process.argv.indexOf("--cluster") + 1] ?? "devnet")
   : "devnet";
 const rpcUrl =
   cluster === "mainnet"
     ? "https://api.mainnet-beta.solana.com"
     : "https://api.devnet.solana.com";
 
-function run(
-  cmd: string,
-  args: string[],
-): { stdout: string; ok: boolean } {
+function run(cmd: string, args: string[]): { stdout: string; ok: boolean } {
   const result = spawnSync(cmd, args, {
     encoding: "utf-8",
     timeout: 600_000,
@@ -92,9 +89,7 @@ if (show.ok) {
     console.log(`Authority: ${authority}`);
     if (authority !== "none") {
       console.log("⚠️  WARNING: Program is upgradeable.");
-      console.log(
-        "   Verify this is a multisig before trusting on mainnet.",
-      );
+      console.log("   Verify this is a multisig before trusting on mainnet.");
     } else {
       console.log("✅ Program is immutable (authority renounced).");
     }
@@ -103,7 +98,5 @@ if (show.ok) {
     console.log(`  solana program show ${PROGRAM_ID} --url ${rpcUrl}`);
   }
 } else {
-  console.log(
-    "Could not query program info (is solana CLI configured?)",
-  );
+  console.log("Could not query program info (is solana CLI configured?)");
 }

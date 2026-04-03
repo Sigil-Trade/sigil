@@ -106,13 +106,39 @@ describe("Dashboard types — toJSON serialization", () => {
 
   it("SpendingData.toJSON() converts global + protocolBreakdown bigints", () => {
     const spending: SpendingData = {
-      global: { today: 3_720_000_000n, cap: 5_000_000_000n, remaining: 1_280_000_000n, percent: 74, rundownMs: 86400000 },
+      global: {
+        today: 3_720_000_000n,
+        cap: 5_000_000_000n,
+        remaining: 1_280_000_000n,
+        percent: 74,
+        rundownMs: 86400000,
+      },
       chart: [{ time: "2026-04-02T00:00:00Z", amount: 3720 }],
-      protocolBreakdown: [{ name: "Jupiter", programId: "JUP6", amount: 1_525_000_000n, percent: 41 }],
+      protocolBreakdown: [
+        {
+          name: "Jupiter",
+          programId: "JUP6",
+          amount: 1_525_000_000n,
+          percent: 41,
+        },
+      ],
       toJSON: () => ({
-        global: { today: "3720000000", cap: "5000000000", remaining: "1280000000", percent: 74, rundownMs: 86400000 },
+        global: {
+          today: "3720000000",
+          cap: "5000000000",
+          remaining: "1280000000",
+          percent: 74,
+          rundownMs: 86400000,
+        },
         chart: [{ time: "2026-04-02T00:00:00Z", amount: 3720 }],
-        protocolBreakdown: [{ name: "Jupiter", programId: "JUP6", amount: "1525000000", percent: 41 }],
+        protocolBreakdown: [
+          {
+            name: "Jupiter",
+            programId: "JUP6",
+            amount: "1525000000",
+            percent: 41,
+          },
+        ],
       }),
     };
 
@@ -124,24 +150,42 @@ describe("Dashboard types — toJSON serialization", () => {
 
   it("ActivityData.toJSON() converts row amounts + volume", () => {
     const activity: ActivityData = {
-      rows: [{
-        id: "tx1",
-        timestamp: 1234567890,
-        type: "swap",
-        protocol: "Jupiter",
-        protocolId: "JUP6",
-        agent: "agent1",
-        amount: 342_100_000n,
-        status: "approved",
-        toJSON: () => ({
-          id: "tx1", timestamp: 1234567890, type: "swap",
-          protocol: "Jupiter", protocolId: "JUP6", agent: "agent1",
-          amount: "342100000", status: "approved",
-        }),
-      }],
+      rows: [
+        {
+          id: "tx1",
+          timestamp: 1234567890,
+          type: "swap",
+          protocol: "Jupiter",
+          protocolId: "JUP6",
+          agent: "agent1",
+          amount: 342_100_000n,
+          status: "approved",
+          toJSON: () => ({
+            id: "tx1",
+            timestamp: 1234567890,
+            type: "swap",
+            protocol: "Jupiter",
+            protocolId: "JUP6",
+            agent: "agent1",
+            amount: "342100000",
+            status: "approved",
+          }),
+        },
+      ],
       summary: { total: 1, approved: 1, blocked: 0, volume: 342_100_000n },
       toJSON: () => ({
-        rows: [{ id: "tx1", timestamp: 1234567890, type: "swap", protocol: "Jupiter", protocolId: "JUP6", agent: "agent1", amount: "342100000", status: "approved" }],
+        rows: [
+          {
+            id: "tx1",
+            timestamp: 1234567890,
+            type: "swap",
+            protocol: "Jupiter",
+            protocolId: "JUP6",
+            agent: "agent1",
+            amount: "342100000",
+            status: "approved",
+          },
+        ],
         summary: { total: 1, approved: 1, blocked: 0, volume: "342100000" },
       }),
     };
@@ -156,12 +200,22 @@ describe("Dashboard types — toJSON serialization", () => {
       level: "elevated",
       blockedCount24h: 1,
       checks: [{ name: "policy_configured", passed: true }],
-      lastBlock: { agent: "agent1", reason: "SpendingCapExceeded", amount: 1_200_000_000n, timestamp: 1234567890 },
+      lastBlock: {
+        agent: "agent1",
+        reason: "SpendingCapExceeded",
+        amount: 1_200_000_000n,
+        timestamp: 1234567890,
+      },
       toJSON: () => ({
         level: "elevated",
         blockedCount24h: 1,
         checks: [{ name: "policy_configured", passed: true }],
-        lastBlock: { agent: "agent1", reason: "SpendingCapExceeded", amount: "1200000000", timestamp: 1234567890 },
+        lastBlock: {
+          agent: "agent1",
+          reason: "SpendingCapExceeded",
+          amount: "1200000000",
+          timestamp: 1234567890,
+        },
       }),
     };
 
@@ -251,7 +305,11 @@ describe("Dashboard types — type shapes (compile-time)", () => {
   });
 
   it("DxError has code, message, recovery[]", () => {
-    const err: DxError = { code: 6006, message: "Cap exceeded", recovery: ["Wait for cap reset"] };
+    const err: DxError = {
+      code: 6006,
+      message: "Cap exceeded",
+      recovery: ["Wait for cap reset"],
+    };
     expect(err.recovery).to.be.an("array");
   });
 
@@ -259,11 +317,20 @@ describe("Dashboard types — type shapes (compile-time)", () => {
     const empty: PolicyChanges = {};
     const partial: PolicyChanges = { dailyCap: 10_000_000_000n };
     const full: PolicyChanges = {
-      dailyCap: 10n, maxPerTrade: 5n, approvedApps: [],
-      protocolMode: "whitelist", hasProtocolCaps: true, protocolCaps: [],
-      canOpenPositions: true, maxConcurrentPositions: 3, maxSlippageBps: 50,
-      leverageLimit: 500, allowedDestinations: [], developerFeeRate: 200,
-      sessionExpirySlots: 20n, timelock: 1800,
+      dailyCap: 10n,
+      maxPerTrade: 5n,
+      approvedApps: [],
+      protocolMode: "whitelist",
+      hasProtocolCaps: true,
+      protocolCaps: [],
+      canOpenPositions: true,
+      maxConcurrentPositions: 3,
+      maxSlippageBps: 50,
+      leverageLimit: 500,
+      allowedDestinations: [],
+      developerFeeRate: 200,
+      sessionExpirySlots: 20n,
+      timelock: 1800,
     };
     expect(empty).to.deep.equal({});
     expect(partial.dailyCap).to.equal(10_000_000_000n);
@@ -273,7 +340,10 @@ describe("Dashboard types — type shapes (compile-time)", () => {
   it("ActivityFilters all fields are optional", () => {
     const empty: ActivityFilters = {};
     const full: ActivityFilters = {
-      agent: "addr", protocol: "JUP6", status: "blocked", timeRange: "24h",
+      agent: "addr",
+      protocol: "JUP6",
+      status: "blocked",
+      timeRange: "24h",
     };
     expect(empty).to.deep.equal({});
     expect(full.timeRange).to.equal("24h");

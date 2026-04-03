@@ -55,7 +55,8 @@ describe("VAULT_PRESETS", () => {
       it("has positive spending caps", () => {
         expect(preset.dailySpendingCapUsd > 0n).to.be.true;
         expect(preset.maxTransactionSizeUsd > 0n).to.be.true;
-        expect(preset.maxTransactionSizeUsd <= preset.dailySpendingCapUsd).to.be.true;
+        expect(preset.maxTransactionSizeUsd <= preset.dailySpendingCapUsd).to.be
+          .true;
       });
 
       it("has valid slippage (within MAX_SLIPPAGE_BPS)", () => {

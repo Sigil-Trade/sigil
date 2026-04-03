@@ -139,7 +139,9 @@ describe("x402/codec", () => {
     const overflowAmount = "99999999999999999999"; // > u64::MAX
     const pr = makePaymentRequired({ amount: overflowAmount });
     const encoded = encodeHeader(pr);
-    expect(() => decodePaymentRequiredHeader(encoded)).to.throw("exceeds u64 max");
+    expect(() => decodePaymentRequiredHeader(encoded)).to.throw(
+      "exceeds u64 max",
+    );
   });
 
   it("validates required fields in accepts entries", () => {
@@ -522,7 +524,11 @@ describe("x402/nonce-tracker", () => {
       await tracker.isDuplicate("https://api.com/data/", TRUSTED_PAYTO, "1000"),
     ).to.equal(true);
     expect(
-      await tracker.isDuplicate("https://api.com/data?ts=456", TRUSTED_PAYTO, "1000"),
+      await tracker.isDuplicate(
+        "https://api.com/data?ts=456",
+        TRUSTED_PAYTO,
+        "1000",
+      ),
     ).to.equal(true);
   });
 });
@@ -803,20 +809,24 @@ describe("x402 settlement signature verification", () => {
     };
 
     // Simulate: if sigs match, emitPaymentEvent is NOT called for mismatch
-    const expectedSig = "5wHu1qwD7y5B7TFDx5UKo2KRDwfJpJdHnnRr8KeUQBJGG2ZxVjktjDqfUzE6jR2Kv8Zj";
+    const expectedSig =
+      "5wHu1qwD7y5B7TFDx5UKo2KRDwfJpJdHnnRr8KeUQBJGG2ZxVjktjDqfUzE6jR2Kv8Zj";
     const settlement = { success: true, transaction: expectedSig };
 
     // Comparison logic: if matching, no event
     if (settlement.transaction !== expectedSig) {
-      emitPaymentEvent(config, createPaymentEvent({
-        url: "https://test.com",
-        payTo: TRUSTED_PAYTO,
-        asset: USDC_MINT,
-        amount: "1000000",
-        paid: true,
-        deniedReason: `Settlement signature mismatch`,
-        startTime: Date.now(),
-      }));
+      emitPaymentEvent(
+        config,
+        createPaymentEvent({
+          url: "https://test.com",
+          payTo: TRUSTED_PAYTO,
+          asset: USDC_MINT,
+          amount: "1000000",
+          paid: true,
+          deniedReason: `Settlement signature mismatch`,
+          startTime: Date.now(),
+        }),
+      );
     }
 
     expect(events).to.have.length(0);
@@ -828,20 +838,27 @@ describe("x402 settlement signature verification", () => {
       onPayment: (e) => events.push(e),
     };
 
-    const expectedSig = "5wHu1qwD7y5B7TFDx5UKo2KRDwfJpJdHnnRr8KeUQBJGG2ZxVjktjDqfUzE6jR2Kv8Zj";
-    const settlement = { success: true, transaction: "DIFFERENT_SIG_FROM_FACILITATOR" };
+    const expectedSig =
+      "5wHu1qwD7y5B7TFDx5UKo2KRDwfJpJdHnnRr8KeUQBJGG2ZxVjktjDqfUzE6jR2Kv8Zj";
+    const settlement = {
+      success: true,
+      transaction: "DIFFERENT_SIG_FROM_FACILITATOR",
+    };
 
     // Comparison logic from shielded-fetch.ts
     if (settlement.transaction !== expectedSig) {
-      emitPaymentEvent(config, createPaymentEvent({
-        url: "https://test.com",
-        payTo: TRUSTED_PAYTO,
-        asset: USDC_MINT,
-        amount: "1000000",
-        paid: true,
-        deniedReason: `Settlement signature mismatch: expected ${expectedSig}, got ${settlement.transaction}`,
-        startTime: Date.now(),
-      }));
+      emitPaymentEvent(
+        config,
+        createPaymentEvent({
+          url: "https://test.com",
+          payTo: TRUSTED_PAYTO,
+          asset: USDC_MINT,
+          amount: "1000000",
+          paid: true,
+          deniedReason: `Settlement signature mismatch: expected ${expectedSig}, got ${settlement.transaction}`,
+          startTime: Date.now(),
+        }),
+      );
     }
 
     expect(events).to.have.length(1);

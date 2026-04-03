@@ -117,6 +117,12 @@ export type AgentVault = {
    * Informational only — never used in authorization decisions.
    */
   totalFailedTransactions: bigint;
+  /**
+   * Number of active (not yet finalized) sessions for this vault.
+   * Incremented in validate_and_authorize, decremented in finalize_session.
+   * close_vault requires this to be 0.
+   */
+  activeSessions: number;
 };
 
 export type AgentVaultArgs = {
@@ -174,6 +180,12 @@ export type AgentVaultArgs = {
    * Informational only — never used in authorization decisions.
    */
   totalFailedTransactions: number | bigint;
+  /**
+   * Number of active (not yet finalized) sessions for this vault.
+   * Incremented in validate_and_authorize, decremented in finalize_session.
+   * close_vault requires this to be 0.
+   */
+  activeSessions: number;
 };
 
 /** Gets the encoder for {@link AgentVaultArgs} account data. */
@@ -196,6 +208,7 @@ export function getAgentVaultEncoder(): Encoder<AgentVaultArgs> {
       ["totalDepositedUsd", getU64Encoder()],
       ["totalWithdrawnUsd", getU64Encoder()],
       ["totalFailedTransactions", getU64Encoder()],
+      ["activeSessions", getU8Encoder()],
     ]),
     (value) => ({ ...value, discriminator: AGENT_VAULT_DISCRIMINATOR }),
   );
@@ -220,6 +233,7 @@ export function getAgentVaultDecoder(): Decoder<AgentVault> {
     ["totalDepositedUsd", getU64Decoder()],
     ["totalWithdrawnUsd", getU64Decoder()],
     ["totalFailedTransactions", getU64Decoder()],
+    ["activeSessions", getU8Decoder()],
   ]);
 }
 

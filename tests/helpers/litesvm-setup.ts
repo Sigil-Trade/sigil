@@ -49,10 +49,7 @@ import {
 const PROGRAM_ID = new PublicKey(
   "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL",
 );
-const PROGRAM_SO_PATH = path.resolve(
-  __dirname,
-  "../../target/deploy/sigil.so",
-);
+const PROGRAM_SO_PATH = path.resolve(__dirname, "../../target/deploy/sigil.so");
 
 // ─── Connection proxy ────────────────────────────────────────────────────────
 class LiteSVMConnectionProxy {

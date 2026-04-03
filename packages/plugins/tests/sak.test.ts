@@ -64,9 +64,7 @@ describe("@usesigil/plugins/sak", () => {
         sign: async (bytes: Uint8Array) => new Uint8Array(64),
       };
 
-      const plugin = createSigilPlugin(
-        mockConfig({ agent: custodyAdapter }),
-      );
+      const plugin = createSigilPlugin(mockConfig({ agent: custodyAdapter }));
       expect(plugin.name).to.equal("sigil");
       expect(plugin.methods).to.have.property("sigil_swap");
     });

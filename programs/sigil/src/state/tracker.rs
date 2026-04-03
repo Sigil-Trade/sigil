@@ -152,6 +152,13 @@ impl SpendTracker {
 
     /// Get per-protocol spend within the current simple 24h window.
     /// Returns 0 if no counter exists or window has expired (>= 144 epochs old).
+    ///
+    /// KNOWN LIMITATION: Uses a simple 24h window (resets entirely on expiry),
+    /// not the proportional boundary correction used by the global rolling cap.
+    /// At the window boundary, accumulated per-protocol spend resets to 0,
+    /// allowing brief overspend relative to the per-protocol cap. The global
+    /// rolling cap (get_rolling_24h_usd) provides the primary enforcement and
+    /// is NOT subject to this reset behavior.
     pub fn get_protocol_spend(&self, clock: &Clock, protocol_id: &Pubkey) -> u64 {
         if clock.unix_timestamp <= 0 {
             return 0;
@@ -173,6 +180,9 @@ impl SpendTracker {
 
     /// Record per-protocol spend. Finds or allocates a counter slot by protocol ID.
     /// Uses simple 24h window — resets entirely when window expires.
+    ///
+    /// KNOWN LIMITATION: Same simple-window behavior as get_protocol_spend().
+    /// See that function's doc comment for details on the boundary reset behavior.
     pub fn record_protocol_spend(
         &mut self,
         clock: &Clock,

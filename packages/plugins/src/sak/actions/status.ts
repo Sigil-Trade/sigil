@@ -2,7 +2,9 @@ import { z } from "zod";
 import type { SigilClient } from "@usesigil/kit";
 import { formatUsd, toAgentError } from "@usesigil/kit";
 
-const schema = z.object({}).describe("No input required — queries the configured vault.");
+const schema = z
+  .object({})
+  .describe("No input required — queries the configured vault.");
 
 export function statusAction(client: SigilClient) {
   return {

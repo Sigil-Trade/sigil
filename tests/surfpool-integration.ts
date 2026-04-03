@@ -62,11 +62,16 @@ import {
 const FULL_PERMISSIONS = new BN((1n << 21n) - 1n);
 
 // Helper: read current policy version for any vault's policy PDA
-async function readPolicyVersion(prog: Program<Sigil>, policyPda: PublicKey): Promise<BN> {
+async function readPolicyVersion(
+  prog: Program<Sigil>,
+  policyPda: PublicKey,
+): Promise<BN> {
   try {
     const pol = await prog.account.policyConfig.fetch(policyPda);
     return (pol as any).policyVersion ?? new BN(0);
-  } catch { return new BN(0); }
+  } catch {
+    return new BN(0);
+  }
 }
 
 // ─── Shared state ───────────────────────────────────────────────────────────
@@ -1724,7 +1729,7 @@ describe("surfpool-integration", function () {
       );
 
       const transferIx = await program.methods
-        .agentTransfer(transferAmount)
+        .agentTransfer(transferAmount, new BN(0))
         .accounts({
           agent: transferSetup.agent.publicKey,
           vault: transferSetup.vaultPda,
@@ -2221,7 +2226,7 @@ describe("surfpool-integration", function () {
 
       // agent_transfer should also fail
       const transferIx = await program.methods
-        .agentTransfer(new BN(5_000_000))
+        .agentTransfer(new BN(5_000_000), new BN(0))
         .accounts({
           agent: setup.agent.publicKey,
           vault: setup.vaultPda,
@@ -2350,7 +2355,9 @@ describe("surfpool-integration", function () {
       );
 
       // Read current policy version dynamically
-      const pol = await program.account.policyConfig.fetch(noSwapSetup.policyPda);
+      const pol = await program.account.policyConfig.fetch(
+        noSwapSetup.policyPda,
+      );
       const currentVersion = (pol as any).policyVersion ?? new BN(0);
 
       const validateIx = await program.methods
@@ -2559,7 +2566,7 @@ describe("surfpool-integration", function () {
       });
 
       const transferIx = await program.methods
-        .agentTransfer(new BN(5_000_000))
+        .agentTransfer(new BN(5_000_000), new BN(0))
         .accounts({
           agent: transferSetup.agent.publicKey,
           vault: transferSetup.vaultPda,
@@ -2680,7 +2687,7 @@ describe("surfpool-integration", function () {
 
     it("agent_transfer within daily cap succeeds", async () => {
       const transferIx = await program.methods
-        .agentTransfer(new BN(50_000_000)) // 50 USDC
+        .agentTransfer(new BN(50_000_000), new BN(0)) // 50 USDC
         .accounts({
           agent: capSetup.agent.publicKey,
           vault: capSetup.vaultPda,
@@ -2707,7 +2714,7 @@ describe("surfpool-integration", function () {
     it("agent_transfer exceeding daily cap fails", async () => {
       // Already spent 50, cap is 100, try 60 (total 110 > 100)
       const transferIx = await program.methods
-        .agentTransfer(new BN(60_000_000)) // 60 USDC
+        .agentTransfer(new BN(60_000_000), new BN(0)) // 60 USDC
         .accounts({
           agent: capSetup.agent.publicKey,
           vault: capSetup.vaultPda,
@@ -2740,7 +2747,7 @@ describe("surfpool-integration", function () {
 
       // After 24h, the rolling window resets — 50 USDC should succeed again
       const transferIx = await program.methods
-        .agentTransfer(new BN(50_000_000))
+        .agentTransfer(new BN(50_000_000), new BN(0))
         .accounts({
           agent: capSetup.agent.publicKey,
           vault: capSetup.vaultPda,
@@ -2783,7 +2790,7 @@ describe("surfpool-integration", function () {
       // Transfer 30 + 30 + 30 = 90 (under 100 cap)
       for (let i = 0; i < 3; i++) {
         const ix = await program.methods
-          .agentTransfer(new BN(30_000_000))
+          .agentTransfer(new BN(30_000_000), new BN(0))
           .accounts({
             agent: seqSetup.agent.publicKey,
             vault: seqSetup.vaultPda,
@@ -2804,7 +2811,7 @@ describe("surfpool-integration", function () {
 
       // 4th transfer of 15 would be 105 > 100 — should fail
       const overIx = await program.methods
-        .agentTransfer(new BN(15_000_000))
+        .agentTransfer(new BN(15_000_000), new BN(0))
         .accounts({
           agent: seqSetup.agent.publicKey,
           vault: seqSetup.vaultPda,
@@ -2845,7 +2852,7 @@ describe("surfpool-integration", function () {
 
       // Transfer 40 USDC — under per-agent limit
       const okIx = await program.methods
-        .agentTransfer(new BN(40_000_000))
+        .agentTransfer(new BN(40_000_000), new BN(0))
         .accounts({
           agent: limitSetup.agent.publicKey,
           vault: limitSetup.vaultPda,
@@ -2864,7 +2871,7 @@ describe("surfpool-integration", function () {
 
       // Transfer 20 USDC — total 60 > 50 per-agent limit
       const overIx = await program.methods
-        .agentTransfer(new BN(20_000_000))
+        .agentTransfer(new BN(20_000_000), new BN(0))
         .accounts({
           agent: limitSetup.agent.publicKey,
           vault: limitSetup.vaultPda,
@@ -3707,7 +3714,10 @@ describe("surfpool-integration", function () {
         program.programId,
       );
       const [pendingClosePda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("pending_close_constraints"), closeSetup.vaultPda.toBuffer()],
+        [
+          Buffer.from("pending_close_constraints"),
+          closeSetup.vaultPda.toBuffer(),
+        ],
         program.programId,
       );
 

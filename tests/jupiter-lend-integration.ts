@@ -18,7 +18,9 @@ import {
 import { expect } from "chai";
 import BN from "bn.js";
 // Inlined constants — sdk/typescript was deleted in Phase 0 nuclear cleanup
-const JUPITER_LEND_PROGRAM_ID = new PublicKey("JLend2fEim9xUFcaHsyGePEoBzFLvkjMi3MnPcSuCdu");
+const JUPITER_LEND_PROGRAM_ID = new PublicKey(
+  "JLend2fEim9xUFcaHsyGePEoBzFLvkjMi3MnPcSuCdu",
+);
 const CU_DEFAULT_COMPOSED = 800_000;
 import {
   createTestEnv,

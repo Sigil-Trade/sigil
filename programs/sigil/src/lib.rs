@@ -226,8 +226,12 @@ pub mod sigil {
 
     /// Transfer tokens from the vault to an allowed destination.
     /// Only the agent can call this. Stablecoin-only.
-    pub fn agent_transfer(ctx: Context<AgentTransfer>, amount: u64) -> Result<()> {
-        instructions::agent_transfer::handler(ctx, amount)
+    pub fn agent_transfer(
+        ctx: Context<AgentTransfer>,
+        amount: u64,
+        expected_policy_version: u64,
+    ) -> Result<()> {
+        instructions::agent_transfer::handler(ctx, amount, expected_policy_version)
     }
 
     // update_agent_permissions DELETED — use queue_agent_permissions_update → apply_agent_permissions_update.

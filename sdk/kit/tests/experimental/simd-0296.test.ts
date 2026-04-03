@@ -91,7 +91,8 @@ describe("SIMD-0296: Larger Transactions (4,096 bytes)", () => {
     // Uses large data payloads rather than many unique accounts to push over the limit.
     const bigDefiIx = makeBulkInstruction(JUPITER, 5, 600); // 600 bytes of data
 
-    const SIGIL_PROGRAM = "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL" as Address;
+    const SIGIL_PROGRAM =
+      "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL" as Address;
 
     const validateIx: Instruction = {
       programAddress: SIGIL_PROGRAM,
@@ -144,7 +145,8 @@ describe("SIMD-0296: Larger Transactions (4,096 bytes)", () => {
     // Stress test: build a transaction that is well above 1,232 bytes
     // but within the SIMD-0296 4,096-byte limit. This validates the composer
     // handles mid-range transactions correctly (not just marginal overflow).
-    const SIGIL_PROGRAM = "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL" as Address;
+    const SIGIL_PROGRAM =
+      "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL" as Address;
 
     // Three large DeFi instructions (simulating a 3-hop swap)
     const hop1 = makeBulkInstruction(JUPITER, 5, 500);
@@ -190,5 +192,4 @@ describe("SIMD-0296: Larger Transactions (4,096 bytes)", () => {
     // Current limit correctly rejects it
     expect(withinLimit).to.equal(false);
   });
-
 });

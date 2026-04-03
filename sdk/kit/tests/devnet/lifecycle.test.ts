@@ -22,10 +22,7 @@ import { resolveVaultState } from "../../src/state-resolver.js";
 import { fetchMaybeAgentVault } from "../../src/generated/accounts/agentVault.js";
 import { getQueuePolicyUpdateInstructionAsync } from "../../src/generated/instructions/queuePolicyUpdate.js";
 import { getCancelPendingPolicyInstructionAsync } from "../../src/generated/instructions/cancelPendingPolicy.js";
-import {
-  USDC_MINT_DEVNET,
-  FULL_PERMISSIONS,
-} from "../../src/types.js";
+import { USDC_MINT_DEVNET, FULL_PERMISSIONS } from "../../src/types.js";
 import type { Instruction } from "@solana/kit";
 
 // Skip entire file if no devnet env
@@ -49,7 +46,12 @@ describe("Kit SDK Devnet — Vault Lifecycle", function () {
     owner = signer;
 
     agent = await createFundedAgent(rpc, owner);
-    await ensureStablecoinBalance(rpcUrl, bytes, USDC_MINT_DEVNET, 2_000_000_000);
+    await ensureStablecoinBalance(
+      rpcUrl,
+      bytes,
+      USDC_MINT_DEVNET,
+      2_000_000_000,
+    );
   });
 
   it("provisions vault via Codama instruction builders", async function () {
@@ -155,6 +157,8 @@ describe("Kit SDK Devnet — Vault Lifecycle", function () {
       agent.address,
     );
     // Cap should be unchanged (queue was cancelled, not applied)
-    expect(Number(state.policy.dailySpendingCapUsd)).to.not.equal(Number(newCap));
+    expect(Number(state.policy.dailySpendingCapUsd)).to.not.equal(
+      Number(newCap),
+    );
   });
 });

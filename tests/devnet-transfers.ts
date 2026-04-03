@@ -119,7 +119,7 @@ describe("devnet-transfers", () => {
     const destBefore = await getTokenBalance(connection, destAAta);
 
     await program.methods
-      .agentTransfer(new BN(amount))
+      .agentTransfer(new BN(amount), new BN(0))
       .accounts({
         agent: agent.publicKey,
         vault: vaultAllowlist.vaultPda,
@@ -145,7 +145,7 @@ describe("devnet-transfers", () => {
   it("2. agent_transfer to non-allowed destination fails", async () => {
     try {
       await program.methods
-        .agentTransfer(new BN(10_000_000))
+        .agentTransfer(new BN(10_000_000), new BN(0))
         .accounts({
           agent: agent.publicKey,
           vault: vaultAllowlist.vaultPda,
@@ -178,7 +178,7 @@ describe("devnet-transfers", () => {
     );
 
     await program.methods
-      .agentTransfer(new BN(10_000_000))
+      .agentTransfer(new BN(10_000_000), new BN(0))
       .accounts({
         agent: agent.publicKey,
         vault: vaultAnyDest.vaultPda,
@@ -215,7 +215,7 @@ describe("devnet-transfers", () => {
     const destBefore = await getTokenBalance(connection, destAAta);
 
     await program.methods
-      .agentTransfer(new BN(amount))
+      .agentTransfer(new BN(amount), new BN(0))
       .accounts({
         agent: agent.publicKey,
         vault: vaultAllowlist.vaultPda,
@@ -253,7 +253,7 @@ describe("devnet-transfers", () => {
   it("5. non-agent cannot call agent_transfer", async () => {
     try {
       await program.methods
-        .agentTransfer(new BN(10_000_000))
+        .agentTransfer(new BN(10_000_000), new BN(0))
         .accounts({
           agent: attacker.publicKey,
           vault: vaultAllowlist.vaultPda,
@@ -295,7 +295,7 @@ describe("devnet-transfers", () => {
 
     // Transfer 200 USDC (at cap)
     await program.methods
-      .agentTransfer(new BN(200_000_000))
+      .agentTransfer(new BN(200_000_000), new BN(0))
       .accounts({
         agent: agent.publicKey,
         vault: smallCapVault.vaultPda,
@@ -315,7 +315,7 @@ describe("devnet-transfers", () => {
     // 1 more should fail
     try {
       await program.methods
-        .agentTransfer(new BN(1_000_000))
+        .agentTransfer(new BN(1_000_000), new BN(0))
         .accounts({
           agent: agent.publicKey,
           vault: smallCapVault.vaultPda,

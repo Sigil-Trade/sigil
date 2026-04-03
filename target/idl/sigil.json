@@ -161,6 +161,10 @@
         {
           "name": "amount",
           "type": "u64"
+        },
+        {
+          "name": "expected_policy_version",
+          "type": "u64"
         }
       ]
     },
@@ -3906,6 +3910,7 @@
         },
         {
           "name": "vault",
+          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -5318,6 +5323,11 @@
       "code": 6074,
       "name": "PendingCloseConstraintsExists",
       "msg": "A pending close constraints operation already exists for this vault"
+    },
+    {
+      "code": 6075,
+      "name": "ActiveSessionsExist",
+      "msg": "Cannot close vault with active sessions (finalize pending sessions first)"
     }
   ],
   "types": [
@@ -5986,6 +5996,15 @@
               "Informational only — never used in authorization decisions."
             ],
             "type": "u64"
+          },
+          {
+            "name": "active_sessions",
+            "docs": [
+              "Number of active (not yet finalized) sessions for this vault.",
+              "Incremented in validate_and_authorize, decremented in finalize_session.",
+              "close_vault requires this to be 0."
+            ],
+            "type": "u8"
           }
         ]
       }

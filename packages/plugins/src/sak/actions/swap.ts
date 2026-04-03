@@ -1,6 +1,11 @@
 import { z } from "zod";
 import type { SigilClient } from "@usesigil/kit";
-import { ActionType, resolveToken, toAgentError, toBaseUnits } from "@usesigil/kit";
+import {
+  ActionType,
+  resolveToken,
+  toAgentError,
+  toBaseUnits,
+} from "@usesigil/kit";
 import { AccountRole, type Address, type Instruction } from "@solana/kit";
 import { toResolvedNetwork } from "../types.js";
 
@@ -10,9 +15,7 @@ const schema = z.object({
     .describe(
       "Input token mint address or symbol (e.g. 'USDC' or full address)",
     ),
-  outputMint: z
-    .string()
-    .describe("Output token mint address or symbol"),
+  outputMint: z.string().describe("Output token mint address or symbol"),
   amount: z
     .number()
     .positive()
@@ -129,7 +132,9 @@ interface ParsedJupiterSwap {
  * - otherInstructions: Jito tips, etc. — included
  * - addressLookupTableAddresses: ALTs for tx compression — returned separately
  */
-function parseJupiterSwapResponse(ixData: Record<string, unknown>): ParsedJupiterSwap {
+function parseJupiterSwapResponse(
+  ixData: Record<string, unknown>,
+): ParsedJupiterSwap {
   const raw = ixData as JupiterSwapResponse;
 
   // Collect all DeFi instructions in execution order.
@@ -143,7 +148,8 @@ function parseJupiterSwapResponse(ixData: Record<string, unknown>): ParsedJupite
 
   const instructions = all.map(toKitInstruction);
 
-  const addressLookupTableAddresses = (raw.addressLookupTableAddresses ?? []) as Address[];
+  const addressLookupTableAddresses = (raw.addressLookupTableAddresses ??
+    []) as Address[];
 
   return { instructions, addressLookupTableAddresses };
 }

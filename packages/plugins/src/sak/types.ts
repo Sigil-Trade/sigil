@@ -1,4 +1,9 @@
-import type { Address, Rpc, SolanaRpcApi, TransactionSigner } from "@solana/kit";
+import type {
+  Address,
+  Rpc,
+  SolanaRpcApi,
+  TransactionSigner,
+} from "@solana/kit";
 import type { CustodyAdapter, Network } from "@usesigil/kit";
 
 /** Convert plugin's "mainnet" to kit's "mainnet-beta" network string. */

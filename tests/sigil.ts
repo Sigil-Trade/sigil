@@ -4119,7 +4119,7 @@ describe("sigil", () => {
       const balBefore = getTokenBalance(svm, allowedDestAta);
 
       await program.methods
-        .agentTransfer(new BN(10_000_000)) // 10 USDC
+        .agentTransfer(new BN(10_000_000), new BN(0)) // 10 USDC
         .accounts({
           agent: destAgent.publicKey,
           vault: destVaultPda,
@@ -4145,7 +4145,7 @@ describe("sigil", () => {
     it("agent_transfer to non-allowed destination fails", async () => {
       try {
         await program.methods
-          .agentTransfer(new BN(10_000_000))
+          .agentTransfer(new BN(10_000_000), new BN(0))
           .accounts({
             agent: destAgent.publicKey,
             vault: destVaultPda,
@@ -4246,7 +4246,7 @@ describe("sigil", () => {
 
       // Transfer to any destination should work
       await program.methods
-        .agentTransfer(new BN(5_000_000))
+        .agentTransfer(new BN(5_000_000), new BN(0))
         .accounts({
           agent: destAgent.publicKey,
           vault: anyVault,
@@ -4332,7 +4332,7 @@ describe("sigil", () => {
       // push total to 510 USDC (exceeding 500 cap).
       for (let i = 0; i < 4; i++) {
         await program.methods
-          .agentTransfer(new BN(100_000_000)) // 100 USDC each
+          .agentTransfer(new BN(100_000_000), new BN(0)) // 100 USDC each
           .accounts({
             agent: destAgent.publicKey,
             vault: destVaultPda,
@@ -4353,7 +4353,7 @@ describe("sigil", () => {
       // Try 100 USDC → total would be 510 > 500 cap
       try {
         await program.methods
-          .agentTransfer(new BN(100_000_000)) // 100 USDC (would push past cap)
+          .agentTransfer(new BN(100_000_000), new BN(0)) // 100 USDC (would push past cap)
           .accounts({
             agent: destAgent.publicKey,
             vault: destVaultPda,
@@ -4379,7 +4379,7 @@ describe("sigil", () => {
       // Max tx size is 100 USDC
       try {
         await program.methods
-          .agentTransfer(new BN(101_000_000)) // 101 USDC (exceeds max tx)
+          .agentTransfer(new BN(101_000_000), new BN(0)) // 101 USDC (exceeds max tx)
           .accounts({
             agent: destAgent.publicKey,
             vault: destVaultPda,
@@ -4506,7 +4506,7 @@ describe("sigil", () => {
       // developer_fee = 10_000_000 * 500 / 1_000_000 = 5_000
       // net = 10_000_000 - 2_000 - 5_000 = 9_993_000
       await program.methods
-        .agentTransfer(new BN(10_000_000))
+        .agentTransfer(new BN(10_000_000), new BN(0))
         .accounts({
           agent: destAgent.publicKey,
           vault: fv,
@@ -4916,7 +4916,11 @@ describe("sigil", () => {
 
       // Queue permissions update
       await program.methods
-        .queueAgentPermissionsUpdate(updAgent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .queueAgentPermissionsUpdate(
+          updAgent.publicKey,
+          FULL_PERMISSIONS,
+          new BN(0),
+        )
         .accounts({
           owner: owner.publicKey,
           vault: maVault,
@@ -5094,7 +5098,7 @@ describe("sigil", () => {
     it("accumulates spend across multiple epochs (catches old bug)", async () => {
       // Epoch 0: spend $500
       await program.methods
-        .agentTransfer(new BN(500_000_000))
+        .agentTransfer(new BN(500_000_000), new BN(0))
         .accounts({
           agent: epochAgent.publicKey,
           vault: epochVault,
@@ -5117,7 +5121,7 @@ describe("sigil", () => {
 
       // Epoch 1: spend $300
       await program.methods
-        .agentTransfer(new BN(300_000_000))
+        .agentTransfer(new BN(300_000_000), new BN(0))
         .accounts({
           agent: epochAgent.publicKey,
           vault: epochVault,
@@ -5142,7 +5146,7 @@ describe("sigil", () => {
       // exceeds the $1000 per-agent limit.
       try {
         await program.methods
-          .agentTransfer(new BN(250_000_000))
+          .agentTransfer(new BN(250_000_000), new BN(0))
           .accounts({
             agent: epochAgent.publicKey,
             vault: epochVault,
@@ -5166,7 +5170,7 @@ describe("sigil", () => {
 
       // But spending $150 (total = $950 < $1000) should succeed
       await program.methods
-        .agentTransfer(new BN(150_000_000))
+        .agentTransfer(new BN(150_000_000), new BN(0))
         .accounts({
           agent: epochAgent.publicKey,
           vault: epochVault,
@@ -5195,7 +5199,7 @@ describe("sigil", () => {
       // Total rolling: $450 (300 + 150 from ~23h ago).
       // Spending $500 more (total ~$950) should succeed since $500 expired.
       await program.methods
-        .agentTransfer(new BN(100_000_000)) // $100 — safe amount to verify window works
+        .agentTransfer(new BN(100_000_000), new BN(0)) // $100 — safe amount to verify window works
         .accounts({
           agent: epochAgent.publicKey,
           vault: epochVault,
@@ -5219,7 +5223,7 @@ describe("sigil", () => {
       // Now everything should be expired. Spending $999 (under $1000 limit) should succeed
       // even though we've spent $1050 total historically.
       await program.methods
-        .agentTransfer(new BN(100_000_000)) // $100
+        .agentTransfer(new BN(100_000_000), new BN(0)) // $100
         .accounts({
           agent: epochAgent.publicKey,
           vault: epochVault,
@@ -5375,7 +5379,14 @@ describe("sigil", () => {
       );
 
       const validateIx = await program.methods
-        .validateAndAuthorize({ swap: {} }, usdcMint, amount, protocol, null, await pv(protoCapPolicyPda))
+        .validateAndAuthorize(
+          { swap: {} },
+          usdcMint,
+          amount,
+          protocol,
+          null,
+          await pv(protoCapPolicyPda),
+        )
         .accountsPartial({
           agent: protoCapAgent.publicKey,
           vault: pcVault,
@@ -6161,7 +6172,7 @@ describe("sigil", () => {
 
       try {
         await program.methods
-          .agentTransfer(new BN(100_000))
+          .agentTransfer(new BN(100_000), new BN(0))
           .accounts({
             agent: pauseAgent.publicKey,
             vault: pauseVaultPda,

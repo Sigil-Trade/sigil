@@ -607,7 +607,7 @@ describe("devnet-routing", () => {
     );
 
     await program.methods
-      .agentTransfer(new BN(10_000_000)) // 10 USDC
+      .agentTransfer(new BN(10_000_000), new BN(0)) // 10 USDC
       .accounts({
         agent: agent.publicKey,
         vault: vault.vaultPda,
@@ -648,7 +648,7 @@ describe("devnet-routing", () => {
     );
 
     await program.methods
-      .agentTransfer(new BN(10_000_000)) // 10 USDT
+      .agentTransfer(new BN(10_000_000), new BN(0)) // 10 USDT
       .accounts({
         agent: agent.publicKey,
         vault: vault.vaultPda,
@@ -722,7 +722,7 @@ describe("devnet-routing", () => {
 
     try {
       await program.methods
-        .agentTransfer(new BN(1_000_000_000)) // 1 testSOL
+        .agentTransfer(new BN(1_000_000_000), new BN(0)) // 1 testSOL
         .accounts({
           agent: agent.publicKey,
           vault: vault.vaultPda,

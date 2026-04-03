@@ -82,7 +82,9 @@ describe("describeEvent", () => {
       data: new Uint8Array(0),
       fields: { vault: "v", owner: "o", agentsPreserved: 2, timestamp: 0n },
     };
-    expect(describeEvent(decoded)).to.equal("Vault paused — all agent activity stopped");
+    expect(describeEvent(decoded)).to.equal(
+      "Vault paused — all agent activity stopped",
+    );
   });
 
   it("handles null fields gracefully", () => {
@@ -98,14 +100,26 @@ describe("describeEvent", () => {
     const expired: DecodedSigilEvent = {
       name: "SessionFinalized",
       data: new Uint8Array(0),
-      fields: { vault: "v", agent: "a123456789abcdef", success: false, isExpired: true, timestamp: 0n },
+      fields: {
+        vault: "v",
+        agent: "a123456789abcdef",
+        success: false,
+        isExpired: true,
+        timestamp: 0n,
+      },
     };
     expect(describeEvent(expired)).to.include("expired");
 
     const failed: DecodedSigilEvent = {
       name: "SessionFinalized",
       data: new Uint8Array(0),
-      fields: { vault: "v", agent: "a123456789abcdef", success: false, isExpired: false, timestamp: 0n },
+      fields: {
+        vault: "v",
+        agent: "a123456789abcdef",
+        success: false,
+        isExpired: false,
+        timestamp: 0n,
+      },
     };
     expect(describeEvent(failed)).to.include("failed");
   });
@@ -135,7 +149,12 @@ describe("buildActivityItem", () => {
       },
     };
 
-    const item = buildActivityItem(decoded, "tx123abc", 1700000000, "mainnet-beta");
+    const item = buildActivityItem(
+      decoded,
+      "tx123abc",
+      1700000000,
+      "mainnet-beta",
+    );
     expect(item.category).to.equal("deposit");
     expect(item.amount).to.equal(500_000_000n);
     expect(item.success).to.equal(true);

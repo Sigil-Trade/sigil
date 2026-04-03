@@ -213,7 +213,9 @@ describe("devnet-sessions", () => {
     // Stats incremented (success param removed — every finalize counts)
     const vaultAfter = await program.account.agentVault.fetch(vault.vaultPda);
     expect(vaultAfter.totalTransactions.toNumber()).to.equal(txCountBefore + 1);
-    console.log("    composed TX: session closed, totalTransactions incremented");
+    console.log(
+      "    composed TX: session closed, totalTransactions incremented",
+    );
   });
 
   it("3. non-agent signer rejected in composed TX", async () => {

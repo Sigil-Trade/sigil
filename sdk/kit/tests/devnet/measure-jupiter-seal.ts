@@ -69,7 +69,14 @@ function mockState(): ResolvedVaultState {
       discriminator: new Uint8Array(8),
       owner: OWNER,
       vaultId: 0n,
-      agents: [{ pubkey: AGENT, permissions: FULL_PERMISSIONS, spendingLimitUsd: 0n, paused: false }],
+      agents: [
+        {
+          pubkey: AGENT,
+          permissions: FULL_PERMISSIONS,
+          spendingLimitUsd: 0n,
+          paused: false,
+        },
+      ],
       feeDestination: FEE_DEST,
       status: VaultStatus.Active,
       bump: 255,
@@ -108,7 +115,11 @@ function mockState(): ResolvedVaultState {
     tracker: null,
     overlay: null,
     constraints: null,
-    globalBudget: { spent24h: 0n, cap: 10_000_000_000n, remaining: 10_000_000_000n },
+    globalBudget: {
+      spent24h: 0n,
+      cap: 10_000_000_000n,
+      remaining: 10_000_000_000n,
+    },
     agentBudget: null,
     allAgentBudgets: new Map(),
     protocolBudgets: [],
@@ -127,20 +138,31 @@ async function main() {
     readFileSync(dataPath);
   } catch {
     console.error(`Missing: ${dataPath}`);
-    console.error(`Fetch it first: curl -s "https://api.jup.ag/swap/v1/swap-instructions" \\`);
-    console.error(`  -H "Content-Type: application/json" -d '{"..."}' > ${dataPath}`);
+    console.error(
+      `Fetch it first: curl -s "https://api.jup.ag/swap/v1/swap-instructions" \\`,
+    );
+    console.error(
+      `  -H "Content-Type: application/json" -d '{"..."}' > ${dataPath}`,
+    );
     process.exit(1);
   }
   const raw = JSON.parse(readFileSync(dataPath, "utf-8"));
 
   // Convert Jupiter instructions
   const swapIx = toKitInstruction(raw.swapInstruction);
-  const setupIxs: Instruction[] = (raw.setupInstructions || []).map(toKitInstruction);
-  const cleanupIx = raw.cleanupInstruction ? toKitInstruction(raw.cleanupInstruction) : null;
-  const computeIxs: Instruction[] = (raw.computeBudgetInstructions || []).map(toKitInstruction);
+  const setupIxs: Instruction[] = (raw.setupInstructions || []).map(
+    toKitInstruction,
+  );
+  const cleanupIx = raw.cleanupInstruction
+    ? toKitInstruction(raw.cleanupInstruction)
+    : null;
+  const computeIxs: Instruction[] = (raw.computeBudgetInstructions || []).map(
+    toKitInstruction,
+  );
 
   // Jupiter ALTs
-  const jupiterAlts: Address[] = (raw.addressLookupTableAddresses || []) as Address[];
+  const jupiterAlts: Address[] = (raw.addressLookupTableAddresses ||
+    []) as Address[];
 
   console.log("═══ Jupiter Swap Instruction Analysis ═══");
   console.log(`  Swap IX accounts: ${swapIx.accounts?.length ?? 0}`);
@@ -171,7 +193,10 @@ async function main() {
     amount: 100_000_000n,
     actionType: ActionType.Swap,
     cachedState: mockState(),
-    blockhash: { blockhash: "GHtXQBpokCiBP6spMNfMW9qLBjfQJhmR4GWzCiQ2ATQA", lastValidBlockHeight: 99999n },
+    blockhash: {
+      blockhash: "GHtXQBpokCiBP6spMNfMW9qLBjfQJhmR4GWzCiQ2ATQA",
+      lastValidBlockHeight: 99999n,
+    },
     addressLookupTables: {}, // empty — no ALT compression
   });
 
@@ -179,8 +204,12 @@ async function main() {
   console.log(`  TX size:    ${resultNoAlt.txSizeBytes} bytes`);
   console.log(`  Limit:      1232 bytes`);
   console.log(`  Headroom:   ${1232 - resultNoAlt.txSizeBytes} bytes`);
-  console.log(`  Within limit: ${resultNoAlt.txSizeBytes <= 1232 ? "YES" : "NO — WOULD FAIL"}`);
-  console.log(`  Warnings:   ${resultNoAlt.warnings.length > 0 ? resultNoAlt.warnings.join("; ") : "none"}`);
+  console.log(
+    `  Within limit: ${resultNoAlt.txSizeBytes <= 1232 ? "YES" : "NO — WOULD FAIL"}`,
+  );
+  console.log(
+    `  Warnings:   ${resultNoAlt.warnings.length > 0 ? resultNoAlt.warnings.join("; ") : "none"}`,
+  );
   console.log();
 
   // Now try to measure with Jupiter's ALTs
@@ -202,7 +231,10 @@ async function main() {
     amount: 100_000_000n,
     actionType: ActionType.Swap,
     cachedState: mockState(),
-    blockhash: { blockhash: "GHtXQBpokCiBP6spMNfMW9qLBjfQJhmR4GWzCiQ2ATQA", lastValidBlockHeight: 99999n },
+    blockhash: {
+      blockhash: "GHtXQBpokCiBP6spMNfMW9qLBjfQJhmR4GWzCiQ2ATQA",
+      lastValidBlockHeight: 99999n,
+    },
     addressLookupTables: {},
   });
 
@@ -210,22 +242,36 @@ async function main() {
   console.log(`  TX size:    ${resultSwapOnly.txSizeBytes} bytes`);
   console.log(`  Limit:      1232 bytes`);
   console.log(`  Headroom:   ${1232 - resultSwapOnly.txSizeBytes} bytes`);
-  console.log(`  Within limit: ${resultSwapOnly.txSizeBytes <= 1232 ? "YES" : "NO — WOULD FAIL"}`);
+  console.log(
+    `  Within limit: ${resultSwapOnly.txSizeBytes <= 1232 ? "YES" : "NO — WOULD FAIL"}`,
+  );
   console.log();
 
   // Summary
   console.log("═══ SUMMARY ═══");
-  console.log(`  Sigil adds ~${resultSwapOnly.txSizeBytes - (swapIx.accounts?.length ?? 0) * 32} bytes overhead`);
+  console.log(
+    `  Sigil adds ~${resultSwapOnly.txSizeBytes - (swapIx.accounts?.length ?? 0) * 32} bytes overhead`,
+  );
   console.log(`  (validate_and_authorize + finalize_session + compute budget)`);
-  console.log(`  Jupiter swap alone: ${swapIx.accounts?.length ?? 0} accounts × 32 bytes = ~${(swapIx.accounts?.length ?? 0) * 32} bytes for accounts`);
+  console.log(
+    `  Jupiter swap alone: ${swapIx.accounts?.length ?? 0} accounts × 32 bytes = ~${(swapIx.accounts?.length ?? 0) * 32} bytes for accounts`,
+  );
   console.log();
 
   if (resultNoAlt.txSizeBytes > 1232) {
-    console.log("  ⚠️  Full Jupiter swap (with setup+cleanup) exceeds 1232 bytes WITHOUT ALTs.");
-    console.log("  ✅ ALTs are REQUIRED for production. Jupiter provides them in the API response.");
-    console.log("  The Sigil ALT + Jupiter ALTs combined should bring it under limit.");
+    console.log(
+      "  ⚠️  Full Jupiter swap (with setup+cleanup) exceeds 1232 bytes WITHOUT ALTs.",
+    );
+    console.log(
+      "  ✅ ALTs are REQUIRED for production. Jupiter provides them in the API response.",
+    );
+    console.log(
+      "  The Sigil ALT + Jupiter ALTs combined should bring it under limit.",
+    );
   } else {
-    console.log("  ✅ Full Jupiter swap fits within 1232 bytes even WITHOUT ALTs.");
+    console.log(
+      "  ✅ Full Jupiter swap fits within 1232 bytes even WITHOUT ALTs.",
+    );
   }
 
   // ─── WITH ALTs mode: resolve via RPC and measure compressed size ───────
@@ -233,7 +279,8 @@ async function main() {
     console.log();
     console.log("═══ ALT Compression Mode (--with-alts) ═══");
 
-    const rpcUrl = process.env.SOLANA_RPC_URL ?? "https://api.devnet.solana.com";
+    const rpcUrl =
+      process.env.SOLANA_RPC_URL ?? "https://api.devnet.solana.com";
     console.log(`  RPC: ${rpcUrl}`);
 
     const rpc = createSolanaRpc(rpcUrl);
@@ -241,7 +288,9 @@ async function main() {
 
     // Merge Sigil ALT + Jupiter ALTs
     const allAlts = mergeAltAddresses(SIGIL_ALT_DEVNET, jupiterAlts);
-    console.log(`  ALTs to resolve: ${allAlts.length} (1 Sigil + ${jupiterAlts.length} Jupiter)`);
+    console.log(
+      `  ALTs to resolve: ${allAlts.length} (1 Sigil + ${jupiterAlts.length} Jupiter)`,
+    );
 
     const resolvedAlts = await altCache.resolve(rpc, allAlts);
     const resolvedCount = Object.keys(resolvedAlts).length;
@@ -249,13 +298,18 @@ async function main() {
     for (const entries of Object.values(resolvedAlts)) {
       totalEntries += entries.length;
     }
-    console.log(`  Resolved: ${resolvedCount} ALT(s) with ${totalEntries} total entries`);
+    console.log(
+      `  Resolved: ${resolvedCount} ALT(s) with ${totalEntries} total entries`,
+    );
     console.log();
 
     try {
       const resultWithAlts = await seal({
         vault: VAULT,
-        agent: { address: AGENT, signTransactions: async (txs: any) => txs } as any,
+        agent: {
+          address: AGENT,
+          signTransactions: async (txs: any) => txs,
+        } as any,
         instructions: allDeFiIxs,
         rpc: rpc as any,
         network: "mainnet",
@@ -263,7 +317,10 @@ async function main() {
         amount: 100_000_000n,
         actionType: ActionType.Swap,
         cachedState: mockState(),
-        blockhash: { blockhash: "GHtXQBpokCiBP6spMNfMW9qLBjfQJhmR4GWzCiQ2ATQA", lastValidBlockHeight: 99999n },
+        blockhash: {
+          blockhash: "GHtXQBpokCiBP6spMNfMW9qLBjfQJhmR4GWzCiQ2ATQA",
+          lastValidBlockHeight: 99999n,
+        },
         addressLookupTables: resolvedAlts,
       });
 
@@ -271,14 +328,22 @@ async function main() {
       console.log(`  TX size:      ${resultWithAlts.txSizeBytes} bytes`);
       console.log(`  Limit:        1232 bytes`);
       console.log(`  Headroom:     ${1232 - resultWithAlts.txSizeBytes} bytes`);
-      console.log(`  Within limit: ${resultWithAlts.txSizeBytes <= 1232 ? "YES ✅" : "NO ❌"}`);
+      console.log(
+        `  Within limit: ${resultWithAlts.txSizeBytes <= 1232 ? "YES ✅" : "NO ❌"}`,
+      );
       console.log();
 
       const saved = resultNoAlt.txSizeBytes - resultWithAlts.txSizeBytes;
-      console.log(`  ALTs saved: ${saved} bytes (${((saved / resultNoAlt.txSizeBytes) * 100).toFixed(1)}%)`);
+      console.log(
+        `  ALTs saved: ${saved} bytes (${((saved / resultNoAlt.txSizeBytes) * 100).toFixed(1)}%)`,
+      );
     } catch (e) {
-      console.log(`  ❌ Failed to compose with ALTs: ${e instanceof Error ? e.message : e}`);
-      console.log("  This may mean the ALTs could not be resolved (wrong network, stale data, etc.)");
+      console.log(
+        `  ❌ Failed to compose with ALTs: ${e instanceof Error ? e.message : e}`,
+      );
+      console.log(
+        "  This may mean the ALTs could not be resolved (wrong network, stale data, etc.)",
+      );
     }
   }
 }

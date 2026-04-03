@@ -29,7 +29,11 @@ function mockStateWithProtocols(
 describe("getProtocolBreakdown", () => {
   it("computes utilization for known protocol", () => {
     const state = mockStateWithProtocols([
-      { protocol: "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4", spent: 400_000_000n, cap: 500_000_000n },
+      {
+        protocol: "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+        spent: 400_000_000n,
+        cap: 500_000_000n,
+      },
     ]);
     const result = getProtocolBreakdown(state);
     expect(result).to.have.length(1);
@@ -40,8 +44,16 @@ describe("getProtocolBreakdown", () => {
 
   it("computes share-of-total across multiple protocols", () => {
     const state = mockStateWithProtocols([
-      { protocol: "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4", spent: 300_000_000n, cap: 500_000_000n },
-      { protocol: "FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn", spent: 100_000_000n, cap: 500_000_000n },
+      {
+        protocol: "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+        spent: 300_000_000n,
+        cap: 500_000_000n,
+      },
+      {
+        protocol: "FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn",
+        spent: 100_000_000n,
+        cap: 500_000_000n,
+      },
     ]);
     const result = getProtocolBreakdown(state);
     expect(result).to.have.length(2);
@@ -53,7 +65,11 @@ describe("getProtocolBreakdown", () => {
 
   it("handles zero cap (no per-protocol limit)", () => {
     const state = mockStateWithProtocols([
-      { protocol: "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4", spent: 100_000_000n, cap: 0n },
+      {
+        protocol: "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+        spent: 100_000_000n,
+        cap: 0n,
+      },
     ]);
     const result = getProtocolBreakdown(state);
     expect(result[0].cap).to.be.null;
@@ -67,7 +83,13 @@ describe("getProtocolBreakdown", () => {
 
   it("handles zero total spend", () => {
     const state = mockStateWithProtocols(
-      [{ protocol: "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4", spent: 0n, cap: 500_000_000n }],
+      [
+        {
+          protocol: "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+          spent: 0n,
+          cap: 500_000_000n,
+        },
+      ],
       0n,
     );
     const result = getProtocolBreakdown(state);

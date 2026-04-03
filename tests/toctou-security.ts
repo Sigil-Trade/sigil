@@ -112,7 +112,14 @@ describe("TOCTOU Security Fix", () => {
       program.programId,
     );
 
-    return { vaultId, vaultPda, policyPda, trackerPda, overlayPda, pendingPolicyPda };
+    return {
+      vaultId,
+      vaultPda,
+      policyPda,
+      trackerPda,
+      overlayPda,
+      pendingPolicyPda,
+    };
   }
 
   /** Initialize a vault, register agent, deposit funds. Returns PDAs. */
@@ -194,7 +201,11 @@ describe("TOCTOU Security Fix", () => {
 
   /** Queue a policy update, advance time, and apply it. Returns the new policy version. */
   async function queueAndApplyPolicy(
-    v: { vaultPda: PublicKey; policyPda: PublicKey; pendingPolicyPda: PublicKey },
+    v: {
+      vaultPda: PublicKey;
+      policyPda: PublicKey;
+      pendingPolicyPda: PublicKey;
+    },
     timelockSeconds: number,
     dailyCap?: BN,
   ) {
@@ -466,7 +477,9 @@ describe("TOCTOU Security Fix", () => {
           {
             offset: 0,
             operator: { eq: {} },
-            value: Buffer.from([0xe5, 0x17, 0xcb, 0x97, 0x7a, 0xe3, 0xad, 0x2a]),
+            value: Buffer.from([
+              0xe5, 0x17, 0xcb, 0x97, 0x7a, 0xe3, 0xad, 0x2a,
+            ]),
           },
         ],
         accountConstraints: [],

@@ -106,7 +106,10 @@ describe("aggregatePortfolio", () => {
   it("counts active vaults correctly", () => {
     const vaults = [
       mockVaultSummary({ address: "active1" }),
-      mockVaultSummary({ address: "frozen1", health: { status: "Frozen", agentCount: 0 } }),
+      mockVaultSummary({
+        address: "frozen1",
+        health: { status: "Frozen", agentCount: 0 },
+      }),
     ];
     const result = aggregatePortfolio(vaults);
     expect(result.totals.activeVaultCount).to.equal(1);
@@ -122,11 +125,23 @@ describe("aggregatePortfolio", () => {
     const vaults = [
       mockVaultSummary({
         address: "low",
-        state: { globalBudget: { spent24h: 100_000_000n, cap: 1_000_000_000n, remaining: 900_000_000n } },
+        state: {
+          globalBudget: {
+            spent24h: 100_000_000n,
+            cap: 1_000_000_000n,
+            remaining: 900_000_000n,
+          },
+        },
       }),
       mockVaultSummary({
         address: "high",
-        state: { globalBudget: { spent24h: 500_000_000n, cap: 1_000_000_000n, remaining: 500_000_000n } },
+        state: {
+          globalBudget: {
+            spent24h: 500_000_000n,
+            cap: 1_000_000_000n,
+            remaining: 500_000_000n,
+          },
+        },
       }),
     ];
     const result = aggregatePortfolio(vaults);
@@ -144,9 +159,18 @@ describe("getAgentLeaderboardAcrossVaults", () => {
         state: {
           vault: {
             vaultId: 1n,
-            agents: [{ pubkey: "a1" as any, permissions: 1n, spendingLimitUsd: 0n, paused: false }],
+            agents: [
+              {
+                pubkey: "a1" as any,
+                permissions: 1n,
+                spendingLimitUsd: 0n,
+                paused: false,
+              },
+            ],
           },
-          allAgentBudgets: new Map([["a1", { spent24h: 200n, cap: 1000n, remaining: 800n }]]),
+          allAgentBudgets: new Map([
+            ["a1", { spent24h: 200n, cap: 1000n, remaining: 800n }],
+          ]),
           overlay: null,
         } as any,
       },
@@ -155,9 +179,18 @@ describe("getAgentLeaderboardAcrossVaults", () => {
         state: {
           vault: {
             vaultId: 2n,
-            agents: [{ pubkey: "a2" as any, permissions: 1n, spendingLimitUsd: 0n, paused: false }],
+            agents: [
+              {
+                pubkey: "a2" as any,
+                permissions: 1n,
+                spendingLimitUsd: 0n,
+                paused: false,
+              },
+            ],
           },
-          allAgentBudgets: new Map([["a2", { spent24h: 500n, cap: 1000n, remaining: 500n }]]),
+          allAgentBudgets: new Map([
+            ["a2", { spent24h: 500n, cap: 1000n, remaining: 500n }],
+          ]),
           overlay: null,
         } as any,
       },
@@ -198,16 +231,40 @@ describe("getAgentLeaderboardAcrossVaults", () => {
       {
         address: "v1" as any,
         state: {
-          vault: { vaultId: 1n, agents: [{ pubkey: "shared" as any, permissions: 1n, spendingLimitUsd: 0n, paused: false }] },
-          allAgentBudgets: new Map([["shared", { spent24h: 100n, cap: 1000n, remaining: 900n }]]),
+          vault: {
+            vaultId: 1n,
+            agents: [
+              {
+                pubkey: "shared" as any,
+                permissions: 1n,
+                spendingLimitUsd: 0n,
+                paused: false,
+              },
+            ],
+          },
+          allAgentBudgets: new Map([
+            ["shared", { spent24h: 100n, cap: 1000n, remaining: 900n }],
+          ]),
           overlay: null,
         } as any,
       },
       {
         address: "v2" as any,
         state: {
-          vault: { vaultId: 2n, agents: [{ pubkey: "shared" as any, permissions: 1n, spendingLimitUsd: 0n, paused: false }] },
-          allAgentBudgets: new Map([["shared", { spent24h: 300n, cap: 1000n, remaining: 700n }]]),
+          vault: {
+            vaultId: 2n,
+            agents: [
+              {
+                pubkey: "shared" as any,
+                permissions: 1n,
+                spendingLimitUsd: 0n,
+                paused: false,
+              },
+            ],
+          },
+          allAgentBudgets: new Map([
+            ["shared", { spent24h: 300n, cap: 1000n, remaining: 700n }],
+          ]),
           overlay: null,
         } as any,
       },

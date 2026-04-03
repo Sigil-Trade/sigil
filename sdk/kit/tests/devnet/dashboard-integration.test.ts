@@ -10,10 +10,7 @@
 import { expect } from "chai";
 import type { Address, Rpc, SolanaRpcApi, KeyPairSigner } from "@solana/kit";
 
-import {
-  createDevnetRpc,
-  loadOwnerSigner,
-} from "../../src/testing/devnet.js";
+import { createDevnetRpc, loadOwnerSigner } from "../../src/testing/devnet.js";
 
 import { OwnerClient } from "../../src/dashboard/index.js";
 import { USDC_MINT_DEVNET } from "../../src/types.js";
@@ -42,7 +39,11 @@ describe("OwnerClient Devnet Integration", function () {
     owner = signer;
 
     // Discover an existing active vault instead of provisioning
-    const vaults = await OwnerClient.discoverVaults(rpc, owner.address, "devnet");
+    const vaults = await OwnerClient.discoverVaults(
+      rpc,
+      owner.address,
+      "devnet",
+    );
     const activeVault = vaults.find((v) => v.status === "active");
     if (!activeVault) {
       console.log("No active vault found — skipping mutation tests");
@@ -50,7 +51,12 @@ describe("OwnerClient Devnet Integration", function () {
     }
 
     vaultAddress = activeVault.address as Address;
-    client = new OwnerClient({ rpc, vault: vaultAddress, owner, network: "devnet" });
+    client = new OwnerClient({
+      rpc,
+      vault: vaultAddress,
+      owner,
+      network: "devnet",
+    });
   });
 
   // ─── Static Methods ─────────────────────────────────────────────────────────
@@ -58,7 +64,11 @@ describe("OwnerClient Devnet Integration", function () {
   describe("discoverVaults", function () {
     afterEach(cooldown);
     it("finds vaults owned by this keypair", async function () {
-      const vaults = await OwnerClient.discoverVaults(rpc, owner.address, "devnet");
+      const vaults = await OwnerClient.discoverVaults(
+        rpc,
+        owner.address,
+        "devnet",
+      );
 
       expect(vaults).to.be.an("array");
       expect(vaults.length).to.be.greaterThan(0);
@@ -72,7 +82,11 @@ describe("OwnerClient Devnet Integration", function () {
     });
 
     it("toJSON() serializes vaultId bigint to string", async function () {
-      const vaults = await OwnerClient.discoverVaults(rpc, owner.address, "devnet");
+      const vaults = await OwnerClient.discoverVaults(
+        rpc,
+        owner.address,
+        "devnet",
+      );
       if (vaults.length === 0) return this.skip();
 
       const json = JSON.parse(JSON.stringify(vaults[0]));
@@ -97,7 +111,11 @@ describe("OwnerClient Devnet Integration", function () {
       expect(typeof state.vault.totalVolume).to.equal("bigint");
       expect(typeof state.vault.totalFees).to.equal("bigint");
       expect(typeof state.balance.total).to.equal("bigint");
-      expect(state.health.level).to.be.oneOf(["healthy", "elevated", "critical"]);
+      expect(state.health.level).to.be.oneOf([
+        "healthy",
+        "elevated",
+        "critical",
+      ]);
       expect(typeof state.pnl.percent).to.equal("number");
       expect(typeof state.pnl.absolute).to.equal("bigint");
     });
@@ -145,7 +163,10 @@ describe("OwnerClient Devnet Integration", function () {
     });
 
     it("getActivity() respects status filter", async function () {
-      const filtered = await client.getActivity({ status: "blocked", timeRange: "24h" });
+      const filtered = await client.getActivity({
+        status: "blocked",
+        timeRange: "24h",
+      });
 
       expect(filtered.rows).to.be.an("array");
       for (const row of filtered.rows) {
@@ -171,7 +192,11 @@ describe("OwnerClient Devnet Integration", function () {
       expect(typeof policy.dailyCap).to.equal("bigint");
       expect(typeof policy.maxPerTrade).to.equal("bigint");
       expect(policy.approvedApps).to.be.an("array");
-      expect(policy.protocolMode).to.be.oneOf(["whitelist", "blacklist", "unrestricted"]);
+      expect(policy.protocolMode).to.be.oneOf([
+        "whitelist",
+        "blacklist",
+        "unrestricted",
+      ]);
       expect(typeof policy.hasProtocolCaps).to.equal("boolean");
       expect(typeof policy.canOpenPositions).to.equal("boolean");
       expect(typeof policy.sessionExpirySlots).to.equal("bigint");
@@ -255,7 +280,11 @@ describe("OwnerClient Devnet Integration", function () {
 
     it("rejects permissions bitmask of 0", async function () {
       try {
-        await client.addAgent("11111111111111111111111111111113" as Address, 0n, 500_000_000n);
+        await client.addAgent(
+          "11111111111111111111111111111113" as Address,
+          0n,
+          500_000_000n,
+        );
         expect.fail("Should have thrown");
       } catch (err: any) {
         expect(err.message).to.include("no permissions");

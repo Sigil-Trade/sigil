@@ -113,7 +113,9 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
     console.log(`  Owner Flash USDC balance: ${balance.toFixed(2)} USDC`);
 
     if (balance < 2) {
-      console.log("  ⚠️  Insufficient Flash USDC. Get tokens from devnet.flash.trade faucet.");
+      console.log(
+        "  ⚠️  Insufficient Flash USDC. Get tokens from devnet.flash.trade faucet.",
+      );
       this.skip();
       return;
     }
@@ -146,7 +148,9 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
     await flashClient.loadAddressLookupTable(poolConfig);
 
     console.log(`  Pool: ${poolConfig.poolAddress.toString()}`);
-    console.log(`  Treasury ATA (Flash USDC): ${protocolTreasuryFlashUsdcAta.toString()}`);
+    console.log(
+      `  Treasury ATA (Flash USDC): ${protocolTreasuryFlashUsdcAta.toString()}`,
+    );
     console.log();
   });
 
@@ -295,7 +299,9 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
           ix.programId.equals(FLASH_COMPOSABILITY_DEVNET),
       );
 
-      console.log(`    Flash Trade IXs: ${deFiIxs.length} (of ${flashIxs.length} total)`);
+      console.log(
+        `    Flash Trade IXs: ${deFiIxs.length} (of ${flashIxs.length} total)`,
+      );
 
       // Build Sigil sandwich
       const sessionPda = deriveSessionPda(
@@ -386,8 +392,12 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
       // Flash Trade IXs are structurally valid. The account remapping is
       // the composability bridge work needed for production.
       console.log("    ✅ Composed TX structure validated (896 bytes)");
-      console.log("    Note: Execution requires account remapping (vault PDA + agent delegation)");
-      console.log("    Flash Trade expects wallet signer → needs composability bridge");
+      console.log(
+        "    Note: Execution requires account remapping (vault PDA + agent delegation)",
+      );
+      console.log(
+        "    Flash Trade expects wallet signer → needs composability bridge",
+      );
     });
   });
 
@@ -398,8 +408,15 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
   describe("Instruction building — all Flash Trade action types", () => {
     it("swap: SOL → USDC (reverse direction)", async function () {
       const { instructions } = await flashClient.swap(
-        "SOL", "USDC", new BN(100_000_000), new BN(1),
-        poolConfig, false, true, false, true,
+        "SOL",
+        "USDC",
+        new BN(100_000_000),
+        new BN(1),
+        poolConfig,
+        false,
+        true,
+        false,
+        true,
       );
       expect(instructions.length).to.be.greaterThan(0);
       console.log(`    SOL→USDC swap: ${instructions.length} IXs`);
@@ -407,8 +424,15 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
 
     it("swap: USDC → ETH", async function () {
       const { instructions } = await flashClient.swap(
-        "USDC", "ETH", new BN(5_000_000), new BN(1),
-        poolConfig, false, true, false, true,
+        "USDC",
+        "ETH",
+        new BN(5_000_000),
+        new BN(1),
+        poolConfig,
+        false,
+        true,
+        false,
+        true,
       );
       expect(instructions.length).to.be.greaterThan(0);
       console.log(`    USDC→ETH swap: ${instructions.length} IXs`);
@@ -416,8 +440,15 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
 
     it("swap: USDC → BTC", async function () {
       const { instructions } = await flashClient.swap(
-        "USDC", "BTC", new BN(5_000_000), new BN(1),
-        poolConfig, false, true, false, true,
+        "USDC",
+        "BTC",
+        new BN(5_000_000),
+        new BN(1),
+        poolConfig,
+        false,
+        true,
+        false,
+        true,
       );
       expect(instructions.length).to.be.greaterThan(0);
       console.log(`    USDC→BTC swap: ${instructions.length} IXs`);
@@ -425,8 +456,11 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
 
     it("addLiquidity: USDC LP deposit", async function () {
       const { instructions } = await flashClient.addLiquidity(
-        "USDC", new BN(5_000_000), new BN(1),
-        poolConfig, true,
+        "USDC",
+        new BN(5_000_000),
+        new BN(1),
+        poolConfig,
+        true,
       );
       expect(instructions.length).to.be.greaterThan(0);
       console.log(`    addLiquidity USDC: ${instructions.length} IXs`);
@@ -449,41 +483,76 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
       vaultAta: PublicKey,
       actionType: any = { swap: {} },
       amount: BN = new BN(5_000_000),
-    ): Promise<{ totalSize: number; flashIxCount: number; signerCount: number }> {
+    ): Promise<{
+      totalSize: number;
+      flashIxCount: number;
+      signerCount: number;
+    }> {
       const deFiIxs = flashIxs.filter(
         (ix: TransactionInstruction) =>
           ix.programId.equals(FLASH_TRADE_DEVNET) ||
           ix.programId.equals(FLASH_COMPOSABILITY_DEVNET),
       );
 
-      const session = deriveSessionPda(vault, agent.publicKey, FLASH_USDC_DEVNET, program.programId);
-      const computeIx = ComputeBudgetProgram.setComputeUnitLimit({ units: 1_400_000 });
+      const session = deriveSessionPda(
+        vault,
+        agent.publicKey,
+        FLASH_USDC_DEVNET,
+        program.programId,
+      );
+      const computeIx = ComputeBudgetProgram.setComputeUnitLimit({
+        units: 1_400_000,
+      });
       const validateIx = await program.methods
-        .validateAndAuthorize(actionType, FLASH_USDC_DEVNET, amount, FLASH_TRADE_DEVNET, null, new BN(0))
+        .validateAndAuthorize(
+          actionType,
+          FLASH_USDC_DEVNET,
+          amount,
+          FLASH_TRADE_DEVNET,
+          null,
+          new BN(0),
+        )
         .accounts({
-          agent: agent.publicKey, vault, policy, tracker, session,
-          agentSpendOverlay: overlay, vaultTokenAccount: vaultAta,
+          agent: agent.publicKey,
+          vault,
+          policy,
+          tracker,
+          session,
+          agentSpendOverlay: overlay,
+          vaultTokenAccount: vaultAta,
           tokenMintAccount: FLASH_USDC_DEVNET,
           protocolTreasuryTokenAccount: protocolTreasuryFlashUsdcAta,
-          feeDestinationTokenAccount: null, outputStablecoinAccount: null,
-          tokenProgram: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
+          feeDestinationTokenAccount: null,
+          outputStablecoinAccount: null,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
-        } as any).instruction();
+        } as any)
+        .instruction();
 
       const finalizeIx = await program.methods
         .finalizeSession()
         .accounts({
-          payer: agent.publicKey, vault, session,
-          sessionRentRecipient: agent.publicKey, policy, tracker,
-          agentSpendOverlay: overlay, vaultTokenAccount: vaultAta,
-          outputStablecoinAccount: null, tokenProgram: TOKEN_PROGRAM_ID,
+          payer: agent.publicKey,
+          vault,
+          session,
+          sessionRentRecipient: agent.publicKey,
+          policy,
+          tracker,
+          agentSpendOverlay: overlay,
+          vaultTokenAccount: vaultAta,
+          outputStablecoinAccount: null,
+          tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
-        } as any).instruction();
+        } as any)
+        .instruction();
 
-      const { addressLookupTables } = await flashClient.getOrLoadAddressLookupTable(poolConfig);
+      const { addressLookupTables } =
+        await flashClient.getOrLoadAddressLookupTable(poolConfig);
       const { blockhash } = await connection.getLatestBlockhash();
       const msgV0 = new TransactionMessage({
-        payerKey: agent.publicKey, recentBlockhash: blockhash,
+        payerKey: agent.publicKey,
+        recentBlockhash: blockhash,
         instructions: [computeIx, validateIx, ...deFiIxs, finalizeIx],
       }).compileToV0Message(addressLookupTables);
       const tx = new VersionedTransaction(msgV0);
@@ -498,7 +567,11 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
         }
       }
 
-      return { totalSize, flashIxCount: deFiIxs.length, signerCount: flashSigners.size };
+      return {
+        totalSize,
+        flashIxCount: deFiIxs.length,
+        signerCount: flashSigners.size,
+      };
     }
 
     // Reuse vault from Section 2
@@ -521,74 +594,162 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
 
       await program.methods
         .initializeVault(
-          vaultId, new BN(500_000_000), new BN(100_000_000), 1,
+          vaultId,
+          new BN(500_000_000),
+          new BN(100_000_000),
+          1,
           [FLASH_TRADE_DEVNET, FLASH_COMPOSABILITY_DEVNET],
-          new BN(50000) as any, 5, 0, 5000, new BN(0), [], [],
+          new BN(50000) as any,
+          5,
+          0,
+          5000,
+          new BN(0),
+          [],
+          [],
         )
         .accounts({
-          owner: owner.publicKey, vault: vaultPda, policy: policyPda,
-          tracker: trackerPda, agentSpendOverlay: overlayPda,
-          feeDestination: feeDestination.publicKey, systemProgram: SystemProgram.programId,
-        } as any).rpc();
+          owner: owner.publicKey,
+          vault: vaultPda,
+          policy: policyPda,
+          tracker: trackerPda,
+          agentSpendOverlay: overlayPda,
+          feeDestination: feeDestination.publicKey,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .rpc();
 
       await program.methods
         .registerAgent(agent.publicKey, FULL_PERMISSIONS, new BN(0))
-        .accounts({ owner: owner.publicKey, vault: vaultPda, agentSpendOverlay: overlayPda } as any)
+        .accounts({
+          owner: owner.publicKey,
+          vault: vaultPda,
+          agentSpendOverlay: overlayPda,
+        } as any)
         .rpc();
 
-      vaultFlashUsdcAta = anchor.utils.token.associatedAddress({ mint: FLASH_USDC_DEVNET, owner: vaultPda });
-      await program.methods.depositFunds(new BN(500_000)) // $0.50 — conserve Flash USDC
+      vaultFlashUsdcAta = anchor.utils.token.associatedAddress({
+        mint: FLASH_USDC_DEVNET,
+        owner: vaultPda,
+      });
+      await program.methods
+        .depositFunds(new BN(500_000)) // $0.50 — conserve Flash USDC
         .accounts({
-          owner: owner.publicKey, vault: vaultPda, mint: FLASH_USDC_DEVNET,
-          ownerTokenAccount: ownerFlashUsdcAta, vaultTokenAccount: vaultFlashUsdcAta,
-          tokenProgram: TOKEN_PROGRAM_ID, associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          owner: owner.publicKey,
+          vault: vaultPda,
+          mint: FLASH_USDC_DEVNET,
+          ownerTokenAccount: ownerFlashUsdcAta,
+          vaultTokenAccount: vaultFlashUsdcAta,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
-        } as any).rpc();
+        } as any)
+        .rpc();
     });
 
     it("USDC→SOL swap sandwich: size + account analysis", async function () {
       const { instructions } = await flashClient.swap(
-        "USDC", "SOL", new BN(5_000_000), new BN(1), poolConfig, false, true, false, true,
+        "USDC",
+        "SOL",
+        new BN(5_000_000),
+        new BN(1),
+        poolConfig,
+        false,
+        true,
+        false,
+        true,
       );
-      const { totalSize, flashIxCount, signerCount } = await measureComposedSize(
-        "swap", instructions, vaultPda, policyPda, trackerPda, overlayPda, vaultFlashUsdcAta,
-      );
+      const { totalSize, flashIxCount, signerCount } =
+        await measureComposedSize(
+          "swap",
+          instructions,
+          vaultPda,
+          policyPda,
+          trackerPda,
+          overlayPda,
+          vaultFlashUsdcAta,
+        );
       expect(totalSize).to.be.lessThanOrEqual(1232);
-      console.log(`    USDC→SOL: ${totalSize} bytes | ${flashIxCount} Flash IXs | ${signerCount} Flash signers`);
+      console.log(
+        `    USDC→SOL: ${totalSize} bytes | ${flashIxCount} Flash IXs | ${signerCount} Flash signers`,
+      );
     });
 
     it("USDC→ETH swap sandwich: fits in 1232", async function () {
       const { instructions } = await flashClient.swap(
-        "USDC", "ETH", new BN(5_000_000), new BN(1), poolConfig, false, true, false, true,
+        "USDC",
+        "ETH",
+        new BN(5_000_000),
+        new BN(1),
+        poolConfig,
+        false,
+        true,
+        false,
+        true,
       );
       const { totalSize, flashIxCount } = await measureComposedSize(
-        "swap-eth", instructions, vaultPda, policyPda, trackerPda, overlayPda, vaultFlashUsdcAta,
+        "swap-eth",
+        instructions,
+        vaultPda,
+        policyPda,
+        trackerPda,
+        overlayPda,
+        vaultFlashUsdcAta,
       );
       expect(totalSize).to.be.lessThanOrEqual(1232);
-      console.log(`    USDC→ETH: ${totalSize} bytes | ${flashIxCount} Flash IXs`);
+      console.log(
+        `    USDC→ETH: ${totalSize} bytes | ${flashIxCount} Flash IXs`,
+      );
     });
 
     it("USDC→BTC swap sandwich: fits in 1232", async function () {
       const { instructions } = await flashClient.swap(
-        "USDC", "BTC", new BN(5_000_000), new BN(1), poolConfig, false, true, false, true,
+        "USDC",
+        "BTC",
+        new BN(5_000_000),
+        new BN(1),
+        poolConfig,
+        false,
+        true,
+        false,
+        true,
       );
       const { totalSize, flashIxCount } = await measureComposedSize(
-        "swap-btc", instructions, vaultPda, policyPda, trackerPda, overlayPda, vaultFlashUsdcAta,
+        "swap-btc",
+        instructions,
+        vaultPda,
+        policyPda,
+        trackerPda,
+        overlayPda,
+        vaultFlashUsdcAta,
       );
       expect(totalSize).to.be.lessThanOrEqual(1232);
-      console.log(`    USDC→BTC: ${totalSize} bytes | ${flashIxCount} Flash IXs`);
+      console.log(
+        `    USDC→BTC: ${totalSize} bytes | ${flashIxCount} Flash IXs`,
+      );
     });
 
     it("addLiquidity sandwich: fits in 1232", async function () {
       const { instructions } = await flashClient.addLiquidity(
-        "USDC", new BN(5_000_000), new BN(1), poolConfig, true,
+        "USDC",
+        new BN(5_000_000),
+        new BN(1),
+        poolConfig,
+        true,
       );
       const { totalSize, flashIxCount } = await measureComposedSize(
-        "addLiquidity", instructions, vaultPda, policyPda, trackerPda, overlayPda, vaultFlashUsdcAta,
+        "addLiquidity",
+        instructions,
+        vaultPda,
+        policyPda,
+        trackerPda,
+        overlayPda,
+        vaultFlashUsdcAta,
         { deposit: {} },
       );
       expect(totalSize).to.be.lessThanOrEqual(1232);
-      console.log(`    addLiquidity: ${totalSize} bytes | ${flashIxCount} Flash IXs`);
+      console.log(
+        `    addLiquidity: ${totalSize} bytes | ${flashIxCount} Flash IXs`,
+      );
     });
   });
 
@@ -601,7 +762,9 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
       const pool = await flashClient.getPool("devnet.1");
       expect(pool).to.exist;
       console.log(`    Pool: devnet.1`);
-      console.log(`    AUM USD: ${pool.aumUsd ? pool.aumUsd.toString() : "N/A"}`);
+      console.log(
+        `    AUM USD: ${pool.aumUsd ? pool.aumUsd.toString() : "N/A"}`,
+      );
       console.log(`    Pool name: ${pool.name || "devnet.1"}`);
     });
 
@@ -610,15 +773,21 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
       expect(custodies.length).to.be.greaterThanOrEqual(4);
       console.log(`    Custodies: ${custodies.length}`);
       for (const c of custodies.slice(0, 5)) {
-        console.log(`      ${c.symbol}: ${c.mintKey.toString().slice(0, 15)}...`);
+        console.log(
+          `      ${c.symbol}: ${c.mintKey.toString().slice(0, 15)}...`,
+        );
       }
     });
 
     it("queries oracle prices for SOL custody", async function () {
       // Read the custody account to check oracle state
-      const solCustody = poolConfig.custodies.find((c: any) => c.symbol === "SOL");
+      const solCustody = poolConfig.custodies.find(
+        (c: any) => c.symbol === "SOL",
+      );
       expect(solCustody, "SOL custody should exist").to.exist;
-      console.log(`    SOL custody: ${solCustody.custodyAccount.toString().slice(0, 20)}...`);
+      console.log(
+        `    SOL custody: ${solCustody.custodyAccount.toString().slice(0, 20)}...`,
+      );
       console.log(`    SOL mint: ${solCustody.mintKey.toString()}`);
     });
   });
@@ -633,72 +802,133 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
       const vaultId = nextVaultId(1);
       const pdas = derivePDAs(owner.publicKey, vaultId, program.programId);
       const [overlay] = PublicKey.findProgramAddressSync(
-        [Buffer.from("agent_spend"), pdas.vaultPda.toBuffer(), Buffer.from([0])],
+        [
+          Buffer.from("agent_spend"),
+          pdas.vaultPda.toBuffer(),
+          Buffer.from([0]),
+        ],
         program.programId,
       );
 
       await program.methods
         .initializeVault(
-          vaultId, new BN(500_000_000), new BN(100_000_000), 1,
+          vaultId,
+          new BN(500_000_000),
+          new BN(100_000_000),
+          1,
           [FLASH_TRADE_DEVNET], // Only Flash Trade main program
-          new BN(0) as any, 5, 0, 5000, new BN(0), [], [],
+          new BN(0) as any,
+          5,
+          0,
+          5000,
+          new BN(0),
+          [],
+          [],
         )
         .accounts({
-          owner: owner.publicKey, vault: pdas.vaultPda, policy: pdas.policyPda,
-          tracker: pdas.trackerPda, agentSpendOverlay: overlay,
-          feeDestination: feeDestination.publicKey, systemProgram: SystemProgram.programId,
-        } as any).rpc();
+          owner: owner.publicKey,
+          vault: pdas.vaultPda,
+          policy: pdas.policyPda,
+          tracker: pdas.trackerPda,
+          agentSpendOverlay: overlay,
+          feeDestination: feeDestination.publicKey,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .rpc();
 
       await program.methods
         .registerAgent(agent.publicKey, FULL_PERMISSIONS, new BN(0))
-        .accounts({ owner: owner.publicKey, vault: pdas.vaultPda, agentSpendOverlay: overlay } as any)
+        .accounts({
+          owner: owner.publicKey,
+          vault: pdas.vaultPda,
+          agentSpendOverlay: overlay,
+        } as any)
         .rpc();
 
-      const vaultAta = anchor.utils.token.associatedAddress({ mint: FLASH_USDC_DEVNET, owner: pdas.vaultPda });
-      await program.methods.depositFunds(new BN(500_000)) // $0.50 — conserve Flash USDC
+      const vaultAta = anchor.utils.token.associatedAddress({
+        mint: FLASH_USDC_DEVNET,
+        owner: pdas.vaultPda,
+      });
+      await program.methods
+        .depositFunds(new BN(500_000)) // $0.50 — conserve Flash USDC
         .accounts({
-          owner: owner.publicKey, vault: pdas.vaultPda, mint: FLASH_USDC_DEVNET,
-          ownerTokenAccount: ownerFlashUsdcAta, vaultTokenAccount: vaultAta,
-          tokenProgram: TOKEN_PROGRAM_ID, associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          owner: owner.publicKey,
+          vault: pdas.vaultPda,
+          mint: FLASH_USDC_DEVNET,
+          ownerTokenAccount: ownerFlashUsdcAta,
+          vaultTokenAccount: vaultAta,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
-        } as any).rpc();
+        } as any)
+        .rpc();
 
       // Build composed TX with a mock Flash Trade-addressed instruction
       // (SystemProgram won't be checked since it's whitelisted, but a non-Flash
       // non-whitelisted program WOULD be rejected)
-      const session = deriveSessionPda(pdas.vaultPda, agent.publicKey, FLASH_USDC_DEVNET, program.programId);
-      const computeIx = ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 });
+      const session = deriveSessionPda(
+        pdas.vaultPda,
+        agent.publicKey,
+        FLASH_USDC_DEVNET,
+        program.programId,
+      );
+      const computeIx = ComputeBudgetProgram.setComputeUnitLimit({
+        units: 400_000,
+      });
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} }, FLASH_USDC_DEVNET, new BN(100_000),
-          FLASH_TRADE_DEVNET, null, new BN(0),
+          { swap: {} },
+          FLASH_USDC_DEVNET,
+          new BN(100_000),
+          FLASH_TRADE_DEVNET,
+          null,
+          new BN(0),
         )
         .accounts({
-          agent: agent.publicKey, vault: pdas.vaultPda, policy: pdas.policyPda,
-          tracker: pdas.trackerPda, session, agentSpendOverlay: overlay,
-          vaultTokenAccount: vaultAta, tokenMintAccount: FLASH_USDC_DEVNET,
+          agent: agent.publicKey,
+          vault: pdas.vaultPda,
+          policy: pdas.policyPda,
+          tracker: pdas.trackerPda,
+          session,
+          agentSpendOverlay: overlay,
+          vaultTokenAccount: vaultAta,
+          tokenMintAccount: FLASH_USDC_DEVNET,
           protocolTreasuryTokenAccount: protocolTreasuryFlashUsdcAta,
-          feeDestinationTokenAccount: null, outputStablecoinAccount: null,
-          tokenProgram: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
+          feeDestinationTokenAccount: null,
+          outputStablecoinAccount: null,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
-        } as any).instruction();
+        } as any)
+        .instruction();
 
       // Use a whitelisted no-op as the "DeFi" instruction (SystemProgram is whitelisted)
       const mockIx = SystemProgram.transfer({
-        fromPubkey: agent.publicKey, toPubkey: agent.publicKey, lamports: 0,
+        fromPubkey: agent.publicKey,
+        toPubkey: agent.publicKey,
+        lamports: 0,
       });
-      const finalizeIx = await program.methods.finalizeSession()
+      const finalizeIx = await program.methods
+        .finalizeSession()
         .accounts({
-          payer: agent.publicKey, vault: pdas.vaultPda, session,
-          sessionRentRecipient: agent.publicKey, policy: pdas.policyPda,
-          tracker: pdas.trackerPda, agentSpendOverlay: overlay,
-          vaultTokenAccount: vaultAta, outputStablecoinAccount: null,
-          tokenProgram: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
-        } as any).instruction();
+          payer: agent.publicKey,
+          vault: pdas.vaultPda,
+          session,
+          sessionRentRecipient: agent.publicKey,
+          policy: pdas.policyPda,
+          tracker: pdas.trackerPda,
+          agentSpendOverlay: overlay,
+          vaultTokenAccount: vaultAta,
+          outputStablecoinAccount: null,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .instruction();
 
       const { blockhash } = await connection.getLatestBlockhash();
       const msgV0 = new TransactionMessage({
-        payerKey: agent.publicKey, recentBlockhash: blockhash,
+        payerKey: agent.publicKey,
+        recentBlockhash: blockhash,
         instructions: [computeIx, validateIx, mockIx, finalizeIx],
       }).compileToV0Message();
       const tx = new VersionedTransaction(msgV0);
@@ -714,71 +944,131 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
       const vaultId = nextVaultId(1);
       const pdas = derivePDAs(owner.publicKey, vaultId, program.programId);
       const [overlay] = PublicKey.findProgramAddressSync(
-        [Buffer.from("agent_spend"), pdas.vaultPda.toBuffer(), Buffer.from([0])],
+        [
+          Buffer.from("agent_spend"),
+          pdas.vaultPda.toBuffer(),
+          Buffer.from([0]),
+        ],
         program.programId,
       );
 
       await program.methods
         .initializeVault(
-          vaultId, new BN(500_000_000), new BN(100_000_000), 1,
+          vaultId,
+          new BN(500_000_000),
+          new BN(100_000_000),
+          1,
           [FLASH_TRADE_DEVNET], // Only Flash Trade allowed
-          new BN(0) as any, 5, 0, 5000, new BN(0), [], [],
+          new BN(0) as any,
+          5,
+          0,
+          5000,
+          new BN(0),
+          [],
+          [],
         )
         .accounts({
-          owner: owner.publicKey, vault: pdas.vaultPda, policy: pdas.policyPda,
-          tracker: pdas.trackerPda, agentSpendOverlay: overlay,
-          feeDestination: feeDestination.publicKey, systemProgram: SystemProgram.programId,
-        } as any).rpc();
+          owner: owner.publicKey,
+          vault: pdas.vaultPda,
+          policy: pdas.policyPda,
+          tracker: pdas.trackerPda,
+          agentSpendOverlay: overlay,
+          feeDestination: feeDestination.publicKey,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .rpc();
 
       await program.methods
         .registerAgent(agent.publicKey, FULL_PERMISSIONS, new BN(0))
-        .accounts({ owner: owner.publicKey, vault: pdas.vaultPda, agentSpendOverlay: overlay } as any)
+        .accounts({
+          owner: owner.publicKey,
+          vault: pdas.vaultPda,
+          agentSpendOverlay: overlay,
+        } as any)
         .rpc();
 
-      const vaultAta = anchor.utils.token.associatedAddress({ mint: FLASH_USDC_DEVNET, owner: pdas.vaultPda });
-      await program.methods.depositFunds(new BN(500_000)) // $0.50 — conserve Flash USDC
+      const vaultAta = anchor.utils.token.associatedAddress({
+        mint: FLASH_USDC_DEVNET,
+        owner: pdas.vaultPda,
+      });
+      await program.methods
+        .depositFunds(new BN(500_000)) // $0.50 — conserve Flash USDC
         .accounts({
-          owner: owner.publicKey, vault: pdas.vaultPda, mint: FLASH_USDC_DEVNET,
-          ownerTokenAccount: ownerFlashUsdcAta, vaultTokenAccount: vaultAta,
-          tokenProgram: TOKEN_PROGRAM_ID, associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          owner: owner.publicKey,
+          vault: pdas.vaultPda,
+          mint: FLASH_USDC_DEVNET,
+          ownerTokenAccount: ownerFlashUsdcAta,
+          vaultTokenAccount: vaultAta,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
-        } as any).rpc();
+        } as any)
+        .rpc();
 
       // Try to validate with a RANDOM protocol (not Flash Trade)
       try {
-        const session = deriveSessionPda(pdas.vaultPda, agent.publicKey, FLASH_USDC_DEVNET, program.programId);
-        const computeIx = ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 });
+        const session = deriveSessionPda(
+          pdas.vaultPda,
+          agent.publicKey,
+          FLASH_USDC_DEVNET,
+          program.programId,
+        );
+        const computeIx = ComputeBudgetProgram.setComputeUnitLimit({
+          units: 400_000,
+        });
         const validateIx = await program.methods
           .validateAndAuthorize(
-            { swap: {} }, FLASH_USDC_DEVNET, new BN(100_000),
+            { swap: {} },
+            FLASH_USDC_DEVNET,
+            new BN(100_000),
             randomProgram, // NOT in allowlist
-            null, new BN(0),
+            null,
+            new BN(0),
           )
           .accounts({
-            agent: agent.publicKey, vault: pdas.vaultPda, policy: pdas.policyPda,
-            tracker: pdas.trackerPda, session, agentSpendOverlay: overlay,
-            vaultTokenAccount: vaultAta, tokenMintAccount: FLASH_USDC_DEVNET,
+            agent: agent.publicKey,
+            vault: pdas.vaultPda,
+            policy: pdas.policyPda,
+            tracker: pdas.trackerPda,
+            session,
+            agentSpendOverlay: overlay,
+            vaultTokenAccount: vaultAta,
+            tokenMintAccount: FLASH_USDC_DEVNET,
             protocolTreasuryTokenAccount: protocolTreasuryFlashUsdcAta,
-            feeDestinationTokenAccount: null, outputStablecoinAccount: null,
-            tokenProgram: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
+            feeDestinationTokenAccount: null,
+            outputStablecoinAccount: null,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
             instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
-          } as any).instruction();
+          } as any)
+          .instruction();
 
         const mockIx = SystemProgram.transfer({
-          fromPubkey: agent.publicKey, toPubkey: agent.publicKey, lamports: 0,
+          fromPubkey: agent.publicKey,
+          toPubkey: agent.publicKey,
+          lamports: 0,
         });
-        const finalizeIx = await program.methods.finalizeSession()
+        const finalizeIx = await program.methods
+          .finalizeSession()
           .accounts({
-            payer: agent.publicKey, vault: pdas.vaultPda, session,
-            sessionRentRecipient: agent.publicKey, policy: pdas.policyPda,
-            tracker: pdas.trackerPda, agentSpendOverlay: overlay,
-            vaultTokenAccount: vaultAta, outputStablecoinAccount: null,
-            tokenProgram: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
-          } as any).instruction();
+            payer: agent.publicKey,
+            vault: pdas.vaultPda,
+            session,
+            sessionRentRecipient: agent.publicKey,
+            policy: pdas.policyPda,
+            tracker: pdas.trackerPda,
+            agentSpendOverlay: overlay,
+            vaultTokenAccount: vaultAta,
+            outputStablecoinAccount: null,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          } as any)
+          .instruction();
 
         const { blockhash } = await connection.getLatestBlockhash();
         const msgV0 = new TransactionMessage({
-          payerKey: agent.publicKey, recentBlockhash: blockhash,
+          payerKey: agent.publicKey,
+          recentBlockhash: blockhash,
           instructions: [computeIx, validateIx, mockIx, finalizeIx],
         }).compileToV0Message();
         const tx = new VersionedTransaction(msgV0);
@@ -801,19 +1091,50 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
     it("documents signer requirements per Flash Trade action", async function () {
       const ownerPk = owner.publicKey.toString();
       const actions = [
-        { name: "swap USDC→SOL", fn: () => flashClient.swap("USDC", "SOL", new BN(5_000_000), new BN(1), poolConfig, false, true, false, true) },
-        { name: "addLiquidity", fn: () => flashClient.addLiquidity("USDC", new BN(5_000_000), new BN(1), poolConfig, true) },
+        {
+          name: "swap USDC→SOL",
+          fn: () =>
+            flashClient.swap(
+              "USDC",
+              "SOL",
+              new BN(5_000_000),
+              new BN(1),
+              poolConfig,
+              false,
+              true,
+              false,
+              true,
+            ),
+        },
+        {
+          name: "addLiquidity",
+          fn: () =>
+            flashClient.addLiquidity(
+              "USDC",
+              new BN(5_000_000),
+              new BN(1),
+              poolConfig,
+              true,
+            ),
+        },
       ];
 
-      console.log("    ┌──────────────────────┬──────────┬─────────┬────────────┐");
-      console.log("    │ Action               │ Flash IX │ Signers │ Owner Sigs │");
-      console.log("    ├──────────────────────┼──────────┼─────────┼────────────┤");
+      console.log(
+        "    ┌──────────────────────┬──────────┬─────────┬────────────┐",
+      );
+      console.log(
+        "    │ Action               │ Flash IX │ Signers │ Owner Sigs │",
+      );
+      console.log(
+        "    ├──────────────────────┼──────────┼─────────┼────────────┤",
+      );
 
       for (const action of actions) {
         const { instructions } = await action.fn();
         const flashIxs = instructions.filter(
           (ix: TransactionInstruction) =>
-            ix.programId.equals(FLASH_TRADE_DEVNET) || ix.programId.equals(FLASH_COMPOSABILITY_DEVNET),
+            ix.programId.equals(FLASH_TRADE_DEVNET) ||
+            ix.programId.equals(FLASH_COMPOSABILITY_DEVNET),
         );
 
         let totalSigners = 0;
@@ -828,25 +1149,48 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
         }
 
         const name = action.name.padEnd(20);
-        console.log(`    │ ${name} │ ${String(flashIxs.length).padStart(8)} │ ${String(totalSigners).padStart(7)} │ ${String(ownerSigners).padStart(10)} │`);
+        console.log(
+          `    │ ${name} │ ${String(flashIxs.length).padStart(8)} │ ${String(totalSigners).padStart(7)} │ ${String(ownerSigners).padStart(10)} │`,
+        );
       }
 
-      console.log("    └──────────────────────┴──────────┴─────────┴────────────┘");
-      console.log("    Note: Owner signer accounts need remapping to agent+delegation for Sigil");
+      console.log(
+        "    └──────────────────────┴──────────┴─────────┴────────────┘",
+      );
+      console.log(
+        "    Note: Owner signer accounts need remapping to agent+delegation for Sigil",
+      );
     });
 
     it("identifies all unique programs in Flash Trade swap", async function () {
       const { instructions } = await flashClient.swap(
-        "USDC", "SOL", new BN(5_000_000), new BN(1), poolConfig, false, true, false, true,
+        "USDC",
+        "SOL",
+        new BN(5_000_000),
+        new BN(1),
+        poolConfig,
+        false,
+        true,
+        false,
+        true,
       );
-      const programs = [...new Set(instructions.map((ix: TransactionInstruction) => ix.programId.toString()))];
+      const programs = [
+        ...new Set(
+          instructions.map((ix: TransactionInstruction) =>
+            ix.programId.toString(),
+          ),
+        ),
+      ];
       console.log(`    Unique programs in USDC→SOL swap: ${programs.length}`);
       for (const p of programs) {
         const label =
-          p === FLASH_TRADE_DEVNET.toString() ? " (Flash Trade)" :
-          p === "11111111111111111111111111111111" ? " (System)" :
-          p === TOKEN_PROGRAM_ID.toString() ? " (SPL Token)" :
-          "";
+          p === FLASH_TRADE_DEVNET.toString()
+            ? " (Flash Trade)"
+            : p === "11111111111111111111111111111111"
+              ? " (System)"
+              : p === TOKEN_PROGRAM_ID.toString()
+                ? " (SPL Token)"
+                : "";
         console.log(`      ${p.slice(0, 25)}...${label}`);
       }
       expect(programs.length).to.be.greaterThanOrEqual(2);

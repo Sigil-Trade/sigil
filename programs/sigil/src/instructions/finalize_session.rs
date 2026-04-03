@@ -501,6 +501,9 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
             .ok_or(SigilError::Overflow)?;
     }
 
+    // H-1: Decrement active session counter (unconditional — both success and expired)
+    vault.active_sessions = vault.active_sessions.saturating_sub(1);
+
     emit!(SessionFinalized {
         vault: vault_key,
         agent: session_agent,

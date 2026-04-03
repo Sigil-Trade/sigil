@@ -170,7 +170,7 @@ async function doAgentTransfer(
   amount: BN,
 ): Promise<void> {
   await program.methods
-    .agentTransfer(amount)
+    .agentTransfer(amount, new BN(0))
     .accounts({
       agent: agent.publicKey,
       vault,
@@ -204,7 +204,9 @@ async function doComposedTx(
     program.programId,
   );
 
-  const computeIx = ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 });
+  const computeIx = ComputeBudgetProgram.setComputeUnitLimit({
+    units: 400_000,
+  });
 
   const validateIx = await program.methods
     .validateAndAuthorize(
@@ -310,7 +312,14 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
     ownerUsdcAta = ownerAtaAccount.address;
 
     // Mint plenty of test USDC
-    await mintTo(connection, payer, usdcMint, ownerUsdcAta, owner.publicKey, 10_000_000_000);
+    await mintTo(
+      connection,
+      payer,
+      usdcMint,
+      ownerUsdcAta,
+      owner.publicKey,
+      10_000_000_000,
+    );
 
     // Treasury ATA
     const treasuryAta = await getOrCreateAssociatedTokenAccount(
@@ -381,9 +390,13 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
       const fees = calculateFees(50_000_000, 200, 0);
       expect(after).to.be.lessThan(before);
       expect(destBal).to.be.greaterThan(0);
-      console.log(`    Vault: ${(before / 1e6).toFixed(2)} → ${(after / 1e6).toFixed(2)} USDC`);
+      console.log(
+        `    Vault: ${(before / 1e6).toFixed(2)} → ${(after / 1e6).toFixed(2)} USDC`,
+      );
       console.log(`    Dest received: ${(destBal / 1e6).toFixed(6)} USDC`);
-      console.log(`    Protocol fee: ${(fees.protocolFee / 1e6).toFixed(6)} USDC`);
+      console.log(
+        `    Protocol fee: ${(fees.protocolFee / 1e6).toFixed(6)} USDC`,
+      );
     });
 
     it("vault stats updated after real transfer", async () => {
@@ -391,12 +404,16 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
       expect(vault.totalTransactions.toNumber()).to.be.greaterThanOrEqual(1);
       expect(vault.totalVolume.toNumber()).to.be.greaterThan(0);
       console.log(`    Total TXs: ${vault.totalTransactions.toNumber()}`);
-      console.log(`    Total Volume: $${(vault.totalVolume.toNumber() / 1e6).toFixed(2)}`);
+      console.log(
+        `    Total Volume: $${(vault.totalVolume.toNumber() / 1e6).toFixed(2)}`,
+      );
     });
 
     it("SpendTracker records real spending", async () => {
       const tracker = await program.account.spendTracker.fetch(v.tracker);
-      const nonZero = tracker.buckets.filter((b: any) => b.usdAmount.toNumber() > 0);
+      const nonZero = tracker.buckets.filter(
+        (b: any) => b.usdAmount.toNumber() > 0,
+      );
       expect(nonZero.length).to.be.greaterThan(0);
       const totalSpend = nonZero.reduce(
         (acc: number, b: any) => acc + b.usdAmount.toNumber(),
@@ -481,7 +498,9 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
       const rolling = tracker.buckets
         .filter((b: any) => b.usdAmount.toNumber() > 0)
         .reduce((acc: number, b: any) => acc + b.usdAmount.toNumber(), 0);
-      console.log(`    ✓ $49 transfer succeeded, rolling spend: $${(rolling / 1e6).toFixed(2)}`);
+      console.log(
+        `    ✓ $49 transfer succeeded, rolling spend: $${(rolling / 1e6).toFixed(2)}`,
+      );
     });
 
     it("$10 transfer FAILS — SpendingCapExceeded (total would be $108 > $100)", async () => {
@@ -500,7 +519,9 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
       } catch (err: any) {
         if (err.message === "Should have thrown") throw err;
         expect(err.toString()).to.include("SpendingCapExceeded");
-        console.log("    ✓ $10 rejected: SpendingCapExceeded (rolling > $100 cap)");
+        console.log(
+          "    ✓ $10 rejected: SpendingCapExceeded (rolling > $100 cap)",
+        );
       }
     });
   });
@@ -572,7 +593,9 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
       const vault = await program.account.agentVault.fetch(v.vault);
       // 1 from first test + 5 from rapid fire
       expect(vault.totalTransactions.toNumber()).to.be.greaterThanOrEqual(6);
-      console.log(`    ✓ 5 rapid-fire composed TXs, total: ${vault.totalTransactions.toNumber()}`);
+      console.log(
+        `    ✓ 5 rapid-fire composed TXs, total: ${vault.totalTransactions.toNumber()}`,
+      );
     });
   });
 
@@ -616,8 +639,7 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
       } catch (err: any) {
         if (err.message === "Should have thrown") throw err;
         expect(err.toString()).to.satisfy(
-          (s: string) =>
-            s.includes("UnauthorizedAgent") || s.includes("2003"),
+          (s: string) => s.includes("UnauthorizedAgent") || s.includes("2003"),
         );
         console.log("    ✓ Unregistered agent blocked");
       }
@@ -749,7 +771,9 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
       } catch (err: any) {
         if (err.message === "Should have thrown") throw err;
         expect(err.toString()).to.include("AgentSpendLimitExceeded");
-        console.log("    ✓ $60 rejected: AgentSpendLimitExceeded ($110 > $100 limit)");
+        console.log(
+          "    ✓ $60 rejected: AgentSpendLimitExceeded ($110 > $100 limit)",
+        );
       }
     });
   });
@@ -786,9 +810,17 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
 
       // Destination vault (different agent)
       const destVaultId = nextVaultId(1);
-      const destPdas = derivePDAs(owner.publicKey, destVaultId, program.programId);
+      const destPdas = derivePDAs(
+        owner.publicKey,
+        destVaultId,
+        program.programId,
+      );
       const [destOverlay] = PublicKey.findProgramAddressSync(
-        [Buffer.from("agent_spend"), destPdas.vaultPda.toBuffer(), Buffer.from([0])],
+        [
+          Buffer.from("agent_spend"),
+          destPdas.vaultPda.toBuffer(),
+          Buffer.from([0]),
+        ],
         program.programId,
       );
 
@@ -797,7 +829,15 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
           destVaultId,
           new BN(500_000_000),
           new BN(200_000_000),
-          0, [], new BN(0) as any, 5, 0, 500, new BN(0), [], [],
+          0,
+          [],
+          new BN(0) as any,
+          5,
+          0,
+          500,
+          new BN(0),
+          [],
+          [],
         )
         .accounts({
           owner: owner.publicKey,
@@ -826,7 +866,11 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
 
       // Create dest vault ATA (needed for escrow settlement)
       await getOrCreateAssociatedTokenAccount(
-        connection, payer, usdcMint, destPdas.vaultPda, true,
+        connection,
+        payer,
+        usdcMint,
+        destPdas.vaultPda,
+        true,
       );
 
       destV = {
@@ -890,7 +934,9 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
 
       expect(afterBal).to.be.lessThan(beforeBal);
       expect(escrowBal).to.be.greaterThan(0);
-      console.log(`    Source vault: ${(beforeBal / 1e6).toFixed(2)} → ${(afterBal / 1e6).toFixed(2)} USDC`);
+      console.log(
+        `    Source vault: ${(beforeBal / 1e6).toFixed(2)} → ${(afterBal / 1e6).toFixed(2)} USDC`,
+      );
       console.log(`    Escrow locked: ${(escrowBal / 1e6).toFixed(6)} USDC`);
     });
 
@@ -915,7 +961,9 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
 
       const destBal = await getTokenBalance(connection, destV.vaultAta);
       expect(destBal).to.be.greaterThan(0);
-      console.log(`    Dest vault received: ${(destBal / 1e6).toFixed(6)} USDC`);
+      console.log(
+        `    Dest vault received: ${(destBal / 1e6).toFixed(6)} USDC`,
+      );
 
       // Verify escrow status changed to Settled
       const escrow = await program.account.escrowDeposit.fetch(escrowPda);
@@ -963,23 +1011,38 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
         .rpc();
 
       const dest = await getOrCreateAssociatedTokenAccount(
-        connection, payer, usdcMint, Keypair.generate().publicKey,
+        connection,
+        payer,
+        usdcMint,
+        Keypair.generate().publicKey,
       );
       destAta = dest.address;
     });
 
     it("agent1 transfers $40 (within $50 limit)", async () => {
       await doAgentTransfer(
-        multiAgent1, v.vault, v.policy, v.tracker, v.overlay,
-        v.vaultAta, destAta, new BN(40_000_000),
+        multiAgent1,
+        v.vault,
+        v.policy,
+        v.tracker,
+        v.overlay,
+        v.vaultAta,
+        destAta,
+        new BN(40_000_000),
       );
       console.log("    ✓ Agent1: $40 transferred (within $50 limit)");
     });
 
     it("agent2 transfers $70 (within $75 limit)", async () => {
       await doAgentTransfer(
-        multiAgent2, v.vault, v.policy, v.tracker, v.overlay,
-        v.vaultAta, destAta, new BN(70_000_000),
+        multiAgent2,
+        v.vault,
+        v.policy,
+        v.tracker,
+        v.overlay,
+        v.vaultAta,
+        destAta,
+        new BN(70_000_000),
       );
       console.log("    ✓ Agent2: $70 transferred (within $75 limit)");
     });
@@ -987,8 +1050,14 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
     it("agent1 $20 more FAILS — exceeds $50 per-agent limit", async () => {
       try {
         await doAgentTransfer(
-          multiAgent1, v.vault, v.policy, v.tracker, v.overlay,
-          v.vaultAta, destAta, new BN(20_000_000),
+          multiAgent1,
+          v.vault,
+          v.policy,
+          v.tracker,
+          v.overlay,
+          v.vaultAta,
+          destAta,
+          new BN(20_000_000),
         );
         expect.fail("Should have thrown");
       } catch (err: any) {
@@ -1000,8 +1069,14 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
 
     it("agent2 still has headroom — $4 succeeds", async () => {
       await doAgentTransfer(
-        multiAgent2, v.vault, v.policy, v.tracker, v.overlay,
-        v.vaultAta, destAta, new BN(4_000_000),
+        multiAgent2,
+        v.vault,
+        v.policy,
+        v.tracker,
+        v.overlay,
+        v.vaultAta,
+        destAta,
+        new BN(4_000_000),
       );
       console.log("    ✓ Agent2: $4 more transferred ($74 / $75 limit)");
     });
@@ -1011,7 +1086,9 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
       expect(vault.agents.length).to.equal(2);
       console.log(`    Agents: ${vault.agents.length}`);
       console.log(`    Total TXs: ${vault.totalTransactions.toNumber()}`);
-      console.log(`    Total Volume: $${(vault.totalVolume.toNumber() / 1e6).toFixed(2)}`);
+      console.log(
+        `    Total Volume: $${(vault.totalVolume.toNumber() / 1e6).toFixed(2)}`,
+      );
     });
   });
 
@@ -1028,20 +1105,35 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
         agent: agentA,
       });
       const dest = await getOrCreateAssociatedTokenAccount(
-        connection, payer, usdcMint, Keypair.generate().publicKey,
+        connection,
+        payer,
+        usdcMint,
+        Keypair.generate().publicKey,
       );
       // Spend exactly $100 — should succeed (cap check is <=, not <)
       await doAgentTransfer(
-        agentA, edgeV.vault, edgeV.policy, edgeV.tracker, edgeV.overlay,
-        edgeV.vaultAta, dest.address, new BN(100_000_000),
+        agentA,
+        edgeV.vault,
+        edgeV.policy,
+        edgeV.tracker,
+        edgeV.overlay,
+        edgeV.vaultAta,
+        dest.address,
+        new BN(100_000_000),
       );
       console.log("    ✓ Exact $100 on $100 cap succeeds (<=, not <)");
 
       // Any more spending should now fail
       try {
         await doAgentTransfer(
-          agentA, edgeV.vault, edgeV.policy, edgeV.tracker, edgeV.overlay,
-          edgeV.vaultAta, dest.address, new BN(1_000_000), // $1
+          agentA,
+          edgeV.vault,
+          edgeV.policy,
+          edgeV.tracker,
+          edgeV.overlay,
+          edgeV.vaultAta,
+          dest.address,
+          new BN(1_000_000), // $1
         );
         expect.fail("Should have thrown");
       } catch (err: any) {
@@ -1059,13 +1151,22 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
         agent: agentA,
       });
       const dest = await getOrCreateAssociatedTokenAccount(
-        connection, payer, usdcMint, Keypair.generate().publicKey,
+        connection,
+        payer,
+        usdcMint,
+        Keypair.generate().publicKey,
       );
 
       // Exhaust cap
       await doAgentTransfer(
-        agentA, capV.vault, capV.policy, capV.tracker, capV.overlay,
-        capV.vaultAta, dest.address, new BN(10_000_000),
+        agentA,
+        capV.vault,
+        capV.policy,
+        capV.tracker,
+        capV.overlay,
+        capV.vaultAta,
+        dest.address,
+        new BN(10_000_000),
       );
 
       // Owner can still deposit (not blocked by spending cap)
@@ -1085,7 +1186,9 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
 
       const bal = await getTokenBalance(connection, capV.vaultAta);
       expect(bal).to.be.greaterThan(100_000_000);
-      console.log(`    ✓ Deposit after cap exhaustion: vault has $${(bal / 1e6).toFixed(2)}`);
+      console.log(
+        `    ✓ Deposit after cap exhaustion: vault has $${(bal / 1e6).toFixed(2)}`,
+      );
     });
 
     it("non-spending composed TX: amount=0, no delegation", async () => {
@@ -1098,9 +1201,14 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
 
       // Non-spending action (withdraw type, amount=0)
       const session = deriveSessionPda(
-        nsV.vault, agentA.publicKey, usdcMint, program.programId,
+        nsV.vault,
+        agentA.publicKey,
+        usdcMint,
+        program.programId,
       );
-      const computeIx = ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 });
+      const computeIx = ComputeBudgetProgram.setComputeUnitLimit({
+        units: 400_000,
+      });
       const validateIx = await program.methods
         .validateAndAuthorize(
           { withdraw: {} }, // non-spending
@@ -1170,7 +1278,10 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
 
     it("developer fee collection (5 BPS)", async () => {
       const feeDestAta = await getOrCreateAssociatedTokenAccount(
-        connection, payer, usdcMint, feeDestination.publicKey,
+        connection,
+        payer,
+        usdcMint,
+        feeDestination.publicKey,
       );
       const feeV = await createVault({
         dailyCap: new BN(500_000_000),
@@ -1180,13 +1291,16 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
         devFeeRate: 500, // 5 BPS = 0.05%
       });
       const dest = await getOrCreateAssociatedTokenAccount(
-        connection, payer, usdcMint, Keypair.generate().publicKey,
+        connection,
+        payer,
+        usdcMint,
+        Keypair.generate().publicKey,
       );
 
       const beforeFee = await getTokenBalance(connection, feeDestAta.address);
 
       await program.methods
-        .agentTransfer(new BN(100_000_000)) // $100
+        .agentTransfer(new BN(100_000_000), new BN(0)) // $100
         .accounts({
           agent: agentA.publicKey,
           vault: feeV.vault,
@@ -1207,7 +1321,9 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
       const devFee = afterFee - beforeFee;
       // 100 USDC * 500/1_000_000 = 0.05 USDC = 50_000 base units
       expect(devFee).to.equal(50_000);
-      console.log(`    ✓ Developer fee: ${(devFee / 1e6).toFixed(6)} USDC (5 BPS on $100)`);
+      console.log(
+        `    ✓ Developer fee: ${(devFee / 1e6).toFixed(6)} USDC (5 BPS on $100)`,
+      );
     });
   });
 

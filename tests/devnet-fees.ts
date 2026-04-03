@@ -343,7 +343,7 @@ describe("devnet-fees", () => {
     );
 
     await program.methods
-      .agentTransfer(new BN(amount))
+      .agentTransfer(new BN(amount), new BN(0))
       .accounts({
         agent: agentA.publicKey,
         vault: vaultA.vaultPda,

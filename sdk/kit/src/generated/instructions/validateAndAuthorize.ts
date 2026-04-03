@@ -98,7 +98,7 @@ export type ValidateAndAuthorizeInstruction<
             AccountSignerMeta<TAccountAgent>
         : TAccountAgent,
       TAccountVault extends string
-        ? ReadonlyAccount<TAccountVault>
+        ? WritableAccount<TAccountVault>
         : TAccountVault,
       TAccountPolicy extends string
         ? ReadonlyAccount<TAccountPolicy>
@@ -314,7 +314,7 @@ export async function getValidateAndAuthorizeInstructionAsync<
   // Original accounts.
   const originalAccounts = {
     agent: { value: input.agent ?? null, isWritable: true },
-    vault: { value: input.vault ?? null, isWritable: false },
+    vault: { value: input.vault ?? null, isWritable: true },
     policy: { value: input.policy ?? null, isWritable: false },
     tracker: { value: input.tracker ?? null, isWritable: true },
     agentSpendOverlay: {
@@ -589,7 +589,7 @@ export function getValidateAndAuthorizeInstruction<
   // Original accounts.
   const originalAccounts = {
     agent: { value: input.agent ?? null, isWritable: true },
-    vault: { value: input.vault ?? null, isWritable: false },
+    vault: { value: input.vault ?? null, isWritable: true },
     policy: { value: input.policy ?? null, isWritable: false },
     tracker: { value: input.tracker ?? null, isWritable: true },
     agentSpendOverlay: {

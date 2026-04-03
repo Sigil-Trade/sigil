@@ -64,7 +64,9 @@ describe("instruction-constraints", () => {
     try {
       const pol = await program.account.policyConfig.fetch(addr ?? policyPda);
       return (pol as any).policyVersion ?? new BN(0);
-    } catch { return new BN(0); }
+    } catch {
+      return new BN(0);
+    }
   }
 
   const jupiterProgramId = Keypair.generate().publicKey;
@@ -252,7 +254,14 @@ describe("instruction-constraints", () => {
       program.programId,
     );
     let builder = program.methods
-      .validateAndAuthorize(actionType, usdcMint, amount, targetProtocol, null, await pv())
+      .validateAndAuthorize(
+        actionType,
+        usdcMint,
+        amount,
+        targetProtocol,
+        null,
+        await pv(),
+      )
       .accounts({
         agent: agent.publicKey,
         vault: vaultPda,
@@ -814,8 +823,11 @@ describe("instruction-constraints", () => {
         } as any)
         .rpc();
 
-      const acct = await program.account.instructionConstraints.fetch(constraintsPda);
-      expect(Buffer.from(acct.entries[0].dataConstraints[0].value).length).to.equal(32);
+      const acct =
+        await program.account.instructionConstraints.fetch(constraintsPda);
+      expect(
+        Buffer.from(acct.entries[0].dataConstraints[0].value).length,
+      ).to.equal(32);
 
       // Clean up for subsequent tests
       await queueAndApplyCloseConstraints(
@@ -1077,7 +1089,11 @@ describe("instruction-constraints", () => {
       // This replaces the old "queue fails when timelock = 0" test.
       const noTlVaultId = new BN(403);
       const [noTlVault] = PublicKey.findProgramAddressSync(
-        [Buffer.from("vault"), owner.publicKey.toBuffer(), noTlVaultId.toArrayLike(Buffer, "le", 8)],
+        [
+          Buffer.from("vault"),
+          owner.publicKey.toBuffer(),
+          noTlVaultId.toArrayLike(Buffer, "le", 8),
+        ],
         program.programId,
       );
       const [noTlPolicy] = PublicKey.findProgramAddressSync(
@@ -1096,15 +1112,27 @@ describe("instruction-constraints", () => {
       try {
         await program.methods
           .initializeVault(
-            noTlVaultId, new BN(500_000_000), new BN(100_000_000),
-            0, [], new BN(0) as any, 3, 0, 100,
+            noTlVaultId,
+            new BN(500_000_000),
+            new BN(100_000_000),
+            0,
+            [],
+            new BN(0) as any,
+            3,
+            0,
+            100,
             new BN(0), // timelockDuration: 0 — NEGATIVE TEST (should fail)
-            [], [],
+            [],
+            [],
           )
           .accounts({
-            owner: owner.publicKey, vault: noTlVault, policy: noTlPolicy,
-            tracker: noTlTracker, agentSpendOverlay: noTlOverlay,
-            feeDestination: feeDestination.publicKey, systemProgram: SystemProgram.programId,
+            owner: owner.publicKey,
+            vault: noTlVault,
+            policy: noTlPolicy,
+            tracker: noTlTracker,
+            agentSpendOverlay: noTlOverlay,
+            feeDestination: feeDestination.publicKey,
+            systemProgram: SystemProgram.programId,
           } as any)
           .rpc();
         expect.fail("Should have thrown");

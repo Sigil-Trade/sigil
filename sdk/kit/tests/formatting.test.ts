@@ -259,9 +259,7 @@ describe("formatTokenAmount", () => {
   });
 
   it("formats with explicit truncation for UI (4 decimals)", () => {
-    expect(formatTokenAmount(123_456_789n, 9, "SOL", 4)).to.equal(
-      "0.1234 SOL",
-    );
+    expect(formatTokenAmount(123_456_789n, 9, "SOL", 4)).to.equal("0.1234 SOL");
   });
 });
 

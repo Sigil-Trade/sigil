@@ -180,7 +180,8 @@ describe("events", () => {
     const VAULT_ADDR = "11111111111111111111111111111111" as Address;
     const AGENT_ADDR = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address;
     const MINT_ADDR = "So11111111111111111111111111111111111111112" as Address;
-    const PROTOCOL_ADDR = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" as Address;
+    const PROTOCOL_ADDR =
+      "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" as Address;
 
     it("decodes ActionAuthorized event fields correctly", () => {
       const encoder = getActionAuthorizedEncoder();
@@ -255,7 +256,9 @@ describe("events", () => {
       const decoded = decodeSigilEvent(event);
       expect(decoded.name).to.equal("ActionAuthorized");
       expect(decoded.fields).to.be.null;
-      expect(decoded.data).to.deep.equal(new Uint8Array([0xde, 0xad, 0xbe, 0xef]));
+      expect(decoded.data).to.deep.equal(
+        new Uint8Array([0xde, 0xad, 0xbe, 0xef]),
+      );
     });
 
     it("parseAndDecodeSigilEvents decodes from raw log strings", () => {
@@ -285,7 +288,10 @@ describe("events", () => {
       for (let i = 0; i < discHex.length; i += 2) {
         discBytes.push(parseInt(discHex.slice(i, i + 2), 16));
       }
-      const allBytes = new Uint8Array([...discBytes, ...new Uint8Array(payload)]);
+      const allBytes = new Uint8Array([
+        ...discBytes,
+        ...new Uint8Array(payload),
+      ]);
       const log = `Program data: ${Buffer.from(allBytes).toString("base64")}`;
 
       const decoded = parseAndDecodeSigilEvents([log]);
@@ -303,7 +309,7 @@ describe("events", () => {
       const encodedSome = encoder.encode({
         vault: VAULT_ADDR,
         newAgent: AGENT_ADDR,
-        newAgentPermissions: 0x1FFFFFn, // FULL_PERMISSIONS
+        newAgentPermissions: 0x1fffffn, // FULL_PERMISSIONS
         timestamp: 1700000300n,
       });
 
@@ -354,7 +360,10 @@ describe("events", () => {
         balanceAfterUsd: 0n,
         actionType: 0,
       });
-      const validBytes = new Uint8Array([...discBytes, ...new Uint8Array(payload)]);
+      const validBytes = new Uint8Array([
+        ...discBytes,
+        ...new Uint8Array(payload),
+      ]);
       const validLog = `Program data: ${Buffer.from(validBytes).toString("base64")}`;
 
       // Mix with non-event log lines
@@ -375,7 +384,9 @@ describe("events", () => {
 
   describe("EVENT_DECODER_MAP completeness", () => {
     it("has a decoder entry for every event in EVENT_DISCRIMINATOR_MAP", () => {
-      const discriminatorNames = new Set(Object.values(EVENT_DISCRIMINATOR_MAP));
+      const discriminatorNames = new Set(
+        Object.values(EVENT_DISCRIMINATOR_MAP),
+      );
       // decodeSigilEvent returns non-null fields for known events,
       // null for unknown. If the decoder map is missing an entry,
       // we'd get null for a known discriminator name.
@@ -386,7 +397,9 @@ describe("events", () => {
         // fields may be null due to empty data, but the name should match
         // The key test: decodeSigilEvent should attempt decoding (not skip with "unknown")
         // We verify by checking that the raw data is preserved and name is correct
-        expect(decoded.name, `Missing decoder for ${eventName}`).to.equal(eventName);
+        expect(decoded.name, `Missing decoder for ${eventName}`).to.equal(
+          eventName,
+        );
       }
       // The runtime sync assertion in events.ts would have thrown at import time
       // if any entry was missing, so reaching this point proves completeness
