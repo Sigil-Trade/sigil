@@ -89,6 +89,7 @@ function mockState(): ResolvedVaultState {
       totalDepositedUsd: 0n,
       totalWithdrawnUsd: 0n,
       totalFailedTransactions: 0n,
+      activeSessions: 0,
     },
     policy: {
       discriminator: new Uint8Array(8),
