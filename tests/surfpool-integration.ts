@@ -2341,6 +2341,10 @@ describe("surfpool-integration", function () {
         program.programId,
       );
 
+      // Read current policy version dynamically
+      const pol = await program.account.policyConfig.fetch(noSwapSetup.policyPda);
+      const currentVersion = (pol as any).policyVersion ?? new BN(0);
+
       const validateIx = await program.methods
         .validateAndAuthorize(
           { swap: {} },
@@ -2348,7 +2352,7 @@ describe("surfpool-integration", function () {
           new BN(5_000_000),
           program.programId,
           null,
-          new BN(0),
+          currentVersion,
         )
         .accountsPartial({
           agent: noSwapSetup.agent.publicKey,
