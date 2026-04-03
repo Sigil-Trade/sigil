@@ -92,10 +92,16 @@ export async function getVaultState(
     ...(bal.usdt > 0n ? [{ mint: "USDT", amount: bal.usdt, decimals: 6 }] : []),
   ];
 
-  const checks = posture.checks.map((c: any) => ({ name: c.id, passed: c.passed }));
-  const level = posture.criticalFailures.length > 0
-    ? "critical" as const
-    : posture.failCount > 0 ? "elevated" as const : "healthy" as const;
+  const checks = posture.checks.map((c: any) => ({
+    name: c.id,
+    passed: c.passed,
+  }));
+  const level =
+    posture.criticalFailures.length > 0
+      ? ("critical" as const)
+      : posture.failCount > 0
+        ? ("elevated" as const)
+        : ("healthy" as const);
 
   return {
     vault: {
@@ -108,12 +114,19 @@ export async function getVaultState(
       totalFees: v.totalFeesCollected,
     },
     balance: { total, tokens },
-    pnl: { percent: Number.isFinite(pnl.pnlPercent) ? pnl.pnlPercent : 0, absolute: pnl.pnl },
+    pnl: {
+      percent: Number.isFinite(pnl.pnlPercent) ? pnl.pnlPercent : 0,
+      absolute: pnl.pnl,
+    },
     health: { level, alertCount: posture.failCount, checks },
     toJSON: () => ({
       vault: {
         address: vault,
-        status: (v.status === 0 ? "active" : v.status === 1 ? "frozen" : "closed") as VaultState["vault"]["status"],
+        status: (v.status === 0
+          ? "active"
+          : v.status === 1
+            ? "frozen"
+            : "closed") as VaultState["vault"]["status"],
         owner: v.owner as string,
         agentCount: v.agents?.length ?? 0,
         openPositions: v.openPositions,
@@ -124,7 +137,10 @@ export async function getVaultState(
         total: bs(total),
         tokens: tokens.map((t) => ({ ...t, amount: bs(t.amount) })),
       },
-      pnl: { percent: Number.isFinite(pnl.pnlPercent) ? pnl.pnlPercent : 0, absolute: bs(pnl.pnl) },
+      pnl: {
+        percent: Number.isFinite(pnl.pnlPercent) ? pnl.pnlPercent : 0,
+        absolute: bs(pnl.pnl),
+      },
       health: { level, alertCount: posture.failCount, checks },
     }),
   };
@@ -137,7 +153,12 @@ export async function getAgents(
   vault: Address,
   network: "devnet" | "mainnet",
 ): Promise<AgentData[]> {
-  const state = await resolveVaultStateForOwner(rpc, vault, undefined, toNet(network));
+  const state = await resolveVaultStateForOwner(
+    rpc,
+    vault,
+    undefined,
+    toNet(network),
+  );
   const vaultAgents = (state.vault as AgentVault).agents;
   if (!vaultAgents || vaultAgents.length === 0) return [];
 
@@ -148,7 +169,7 @@ export async function getAgents(
 
     const spentAmt = budget?.spent24h ?? 0n;
     const capAmt = budget?.cap ?? 0n;
-    const pct = capAmt > 0n ? Number(spentAmt * 10000n / capAmt) / 100 : 0;
+    const pct = capAmt > 0n ? Number((spentAmt * 10000n) / capAmt) / 100 : 0;
 
     return {
       address: addr,
@@ -182,7 +203,12 @@ export async function getSpending(
   vault: Address,
   network: "devnet" | "mainnet",
 ): Promise<SpendingData> {
-  const state = await resolveVaultStateForOwner(rpc, vault, undefined, toNet(network));
+  const state = await resolveVaultStateForOwner(
+    rpc,
+    vault,
+    undefined,
+    toNet(network),
+  );
   const breakdown = getSpendingBreakdown(asVaultState(state));
   const nowUnix = BigInt(Math.floor(Date.now() / 1000));
   const epochs = getSpendingHistory(state.tracker, nowUnix);
@@ -193,9 +219,12 @@ export async function getSpending(
   }));
 
   const { spent24h: spent, cap, remaining } = state.globalBudget;
-  const percent = cap > 0n ? Number(spent * 10000n / cap) / 100 : 0;
+  const percent = cap > 0n ? Number((spent * 10000n) / cap) / 100 : 0;
   const velocityPerMs = spent > 0n ? Number(spent) / (24 * 3600 * 1000) : 0;
-  const rundown = velocityPerMs > 0 && remaining > 0n ? Math.floor(Number(remaining) / velocityPerMs) : 0;
+  const rundown =
+    velocityPerMs > 0 && remaining > 0n
+      ? Math.floor(Number(remaining) / velocityPerMs)
+      : 0;
 
   const protoBreak = breakdown.byProtocol.map((p: any) => ({
     name: resolveProtocolName(p.protocol),
@@ -209,9 +238,18 @@ export async function getSpending(
     chart,
     protocolBreakdown: protoBreak,
     toJSON: () => ({
-      global: { today: bs(spent), cap: bs(cap), remaining: bs(remaining), percent, rundownMs: rundown },
+      global: {
+        today: bs(spent),
+        cap: bs(cap),
+        remaining: bs(remaining),
+        percent,
+        rundownMs: rundown,
+      },
       chart,
-      protocolBreakdown: protoBreak.map((p) => ({ ...p, amount: bs(p.amount) })),
+      protocolBreakdown: protoBreak.map((p) => ({
+        ...p,
+        amount: bs(p.amount),
+      })),
     }),
   };
 }
@@ -243,7 +281,7 @@ export async function getActivity(
       protocolId: (item.protocol as string) || "",
       agent: (item.agent as string) || "",
       amount: amt,
-      status: item.success ? "approved" as const : "blocked" as const,
+      status: item.success ? ("approved" as const) : ("blocked" as const),
       reason: item.success ? undefined : item.description,
       txSignature: item.txSignature,
       toJSON: () => ({
@@ -262,7 +300,11 @@ export async function getActivity(
   });
 
   if (filters?.agent) rows = rows.filter((r) => r.agent === filters.agent);
-  if (filters?.protocol) rows = rows.filter((r) => r.protocolId === filters.protocol || r.protocol === filters.protocol);
+  if (filters?.protocol)
+    rows = rows.filter(
+      (r) =>
+        r.protocolId === filters.protocol || r.protocol === filters.protocol,
+    );
   if (filters?.status) rows = rows.filter((r) => r.status === filters.status);
   if (filters?.timeRange) {
     const cutoff = Date.now() - rangeToMs(filters.timeRange);
@@ -283,14 +325,29 @@ export async function getActivity(
   };
 }
 
-function mapCategory(cat: string, evt: string, actionType?: string): ActivityType {
+function mapCategory(
+  cat: string,
+  evt: string,
+  actionType?: string,
+): ActivityType {
   if (cat === "trade") {
     // ActionAuthorized carries actionType to distinguish swap vs lend vs perps
     if (actionType) {
       const at = actionType.toLowerCase();
-      if (at.includes("lend") || at.includes("deposit") || at.includes("withdraw")) return "lend";
-      if (at.includes("open") || at === "openposition" || at === "swapandopenposition") return "open_position";
-      if (at.includes("close") || at === "closeposition") return "close_position";
+      if (
+        at.includes("lend") ||
+        at.includes("deposit") ||
+        at.includes("withdraw")
+      )
+        return "lend";
+      if (
+        at.includes("open") ||
+        at === "openposition" ||
+        at === "swapandopenposition"
+      )
+        return "open_position";
+      if (at.includes("close") || at === "closeposition")
+        return "close_position";
     }
     if (evt.includes("Open")) return "open_position";
     if (evt.includes("Close")) return "close_position";
@@ -304,8 +361,11 @@ function mapCategory(cat: string, evt: string, actionType?: string): ActivityTyp
 
 function rangeToMs(r: string): number {
   const map: Record<string, number> = {
-    "1h": 3600000, "6h": 21600000, "24h": 86400000,
-    "7d": 604800000, "30d": 2592000000,
+    "1h": 3600000,
+    "6h": 21600000,
+    "24h": 86400000,
+    "7d": 604800000,
+    "30d": 2592000000,
   };
   return map[r] ?? 86400000;
 }
@@ -317,25 +377,37 @@ export async function getHealth(
   vault: Address,
   network: "devnet" | "mainnet",
 ): Promise<HealthData> {
-  const state = await resolveVaultStateForOwner(rpc, vault, undefined, toNet(network));
+  const state = await resolveVaultStateForOwner(
+    rpc,
+    vault,
+    undefined,
+    toNet(network),
+  );
   const posture = getSecurityPosture(asVaultState(state));
   const alerts = evaluateAlertConditions(state, vault);
 
-  const level = posture.criticalFailures.length > 0
-    ? "critical" as const
-    : posture.failCount > 0 ? "elevated" as const : "healthy" as const;
+  const level =
+    posture.criticalFailures.length > 0
+      ? ("critical" as const)
+      : posture.failCount > 0
+        ? ("elevated" as const)
+        : ("healthy" as const);
 
   const critAlerts = alerts.filter((a: any) => a.severity === "critical");
-  const lastBlock = critAlerts.length > 0
-    ? {
-        agent: (critAlerts[0].agentAddress as string) || "",
-        reason: critAlerts[0].title as string,
-        amount: 0n,
-        timestamp: Date.now(),
-      }
-    : undefined;
+  const lastBlock =
+    critAlerts.length > 0
+      ? {
+          agent: (critAlerts[0].agentAddress as string) || "",
+          reason: critAlerts[0].title as string,
+          amount: 0n,
+          timestamp: Date.now(),
+        }
+      : undefined;
 
-  const checks = posture.checks.map((c: any) => ({ name: c.id, passed: c.passed }));
+  const checks = posture.checks.map((c: any) => ({
+    name: c.id,
+    passed: c.passed,
+  }));
 
   return {
     level,
@@ -365,7 +437,10 @@ export async function getPolicy(
     getPendingPolicyForVault(rpc, vault).catch((err: any) => {
       // Account-not-found is expected (no pending update) — return null.
       // Re-throw RPC errors so they're not silently swallowed.
-      if (err?.message?.includes("could not find") || err?.message?.includes("Account does not exist")) {
+      if (
+        err?.message?.includes("could not find") ||
+        err?.message?.includes("Account does not exist")
+      ) {
         return null;
       }
       throw err;
@@ -381,7 +456,9 @@ export async function getPolicy(
   }));
 
   const modeMap: Record<number, PolicyData["protocolMode"]> = {
-    0: "unrestricted", 1: "whitelist", 2: "blacklist",
+    0: "unrestricted",
+    1: "whitelist",
+    2: "blacklist",
   };
 
   const dailyCap = p.dailySpendingCapUsd as bigint;
@@ -440,7 +517,10 @@ export async function getPolicy(
       policyVersion: bs(policyVer),
       pendingUpdate: pendingUpdate
         ? {
-            changes: serializeBigints(pendingUpdate.changes) as Record<string, unknown>,
+            changes: serializeBigints(pendingUpdate.changes) as Record<
+              string,
+              unknown
+            >,
             appliesAt: pendingUpdate.appliesAt,
             canApply: pendingUpdate.canApply,
             canCancel: pendingUpdate.canCancel,

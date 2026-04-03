@@ -1,10 +1,20 @@
+<div align="center">
+
+<img src=".github/sigil-icon.svg" alt="Sigil" width="80" />
+
 # Sigil
 
+**On-chain guardrails for AI agents on Solana.**
+
+Your policies are enforced by Solana validators, not software promises.
+
 [![CI](https://github.com/Kaleb-Rupe/sigil/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Kaleb-Rupe/sigil/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-1651-brightgreen)
+![Tests](https://img.shields.io/badge/tests-1817-brightgreen)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 
-On-chain guardrails for AI agents on Solana. Your policies are enforced by Solana validators, not software promises.
+</div>
+
+---
 
 ## The Problem
 

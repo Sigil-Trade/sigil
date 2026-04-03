@@ -13,7 +13,12 @@
  * ```
  */
 
-import type { Address, Rpc, SolanaRpcApi, TransactionSigner } from "@solana/kit";
+import type {
+  Address,
+  Rpc,
+  SolanaRpcApi,
+  TransactionSigner,
+} from "@solana/kit";
 
 import type {
   OwnerClientConfig,
@@ -117,14 +122,30 @@ export class OwnerClient {
 
   /** Zero args. Immediate. */
   async freezeVault(opts?: TxOpts): Promise<TxResult> {
-    return mutations.freezeVault(this.rpc, this.vault, this.owner, this.network, opts);
+    return mutations.freezeVault(
+      this.rpc,
+      this.vault,
+      this.owner,
+      this.network,
+      opts,
+    );
   }
 
   /**
    * Reactivates a frozen vault. Optionally adds a new agent during reactivation.
    */
-  async resumeVault(newAgent?: { address: Address; permissions: bigint }, opts?: TxOpts): Promise<TxResult> {
-    return mutations.resumeVault(this.rpc, this.vault, this.owner, this.network, newAgent, opts);
+  async resumeVault(
+    newAgent?: { address: Address; permissions: bigint },
+    opts?: TxOpts,
+  ): Promise<TxResult> {
+    return mutations.resumeVault(
+      this.rpc,
+      this.vault,
+      this.owner,
+      this.network,
+      newAgent,
+      opts,
+    );
   }
 
   /**
@@ -134,27 +155,67 @@ export class OwnerClient {
    * May need computeUnits: 400_000 for complex vaults (default applied).
    */
   async closeVault(opts?: TxOpts): Promise<TxResult> {
-    return mutations.closeVault(this.rpc, this.vault, this.owner, this.network, opts);
+    return mutations.closeVault(
+      this.rpc,
+      this.vault,
+      this.owner,
+      this.network,
+      opts,
+    );
   }
 
   /**
    * Resets position counter when positions drift (e.g., auto-liquidation).
    * @param actualPositions — the real number of open positions (usually 0 after liquidation)
    */
-  async syncPositions(actualPositions: number = 0, opts?: TxOpts): Promise<TxResult> {
-    return mutations.syncPositions(this.rpc, this.vault, this.owner, this.network, actualPositions, opts);
+  async syncPositions(
+    actualPositions: number = 0,
+    opts?: TxOpts,
+  ): Promise<TxResult> {
+    return mutations.syncPositions(
+      this.rpc,
+      this.vault,
+      this.owner,
+      this.network,
+      actualPositions,
+      opts,
+    );
   }
 
   // ─── Fund Management ────────────────────────────────────────────────────────
 
   /** Token-2022 mints blocked by on-chain program. Standard SPL only (USDC, USDT). */
-  async deposit(mint: Address, amount: bigint, opts?: TxOpts): Promise<TxResult> {
-    return mutations.deposit(this.rpc, this.vault, this.owner, this.network, mint, amount, opts);
+  async deposit(
+    mint: Address,
+    amount: bigint,
+    opts?: TxOpts,
+  ): Promise<TxResult> {
+    return mutations.deposit(
+      this.rpc,
+      this.vault,
+      this.owner,
+      this.network,
+      mint,
+      amount,
+      opts,
+    );
   }
 
   /** Token-2022 mints blocked by on-chain program. Standard SPL only (USDC, USDT). */
-  async withdraw(mint: Address, amount: bigint, opts?: TxOpts): Promise<TxResult> {
-    return mutations.withdraw(this.rpc, this.vault, this.owner, this.network, mint, amount, opts);
+  async withdraw(
+    mint: Address,
+    amount: bigint,
+    opts?: TxOpts,
+  ): Promise<TxResult> {
+    return mutations.withdraw(
+      this.rpc,
+      this.vault,
+      this.owner,
+      this.network,
+      mint,
+      amount,
+      opts,
+    );
   }
 
   // ─── Agent Management ───────────────────────────────────────────────────────
@@ -163,23 +224,58 @@ export class OwnerClient {
    * Immediate — additive, no timelock required.
    * @param spendingLimit — per-agent 24h cap in 6-decimal USD. Pass 0n for unlimited (NOT recommended).
    */
-  async addAgent(agent: Address, permissions: bigint, spendingLimit: bigint, opts?: TxOpts): Promise<TxResult> {
-    return mutations.addAgent(this.rpc, this.vault, this.owner, this.network, agent, permissions, spendingLimit, opts);
+  async addAgent(
+    agent: Address,
+    permissions: bigint,
+    spendingLimit: bigint,
+    opts?: TxOpts,
+  ): Promise<TxResult> {
+    return mutations.addAgent(
+      this.rpc,
+      this.vault,
+      this.owner,
+      this.network,
+      agent,
+      permissions,
+      spendingLimit,
+      opts,
+    );
   }
 
   /** Immediate — protective action, no timelock required. */
   async pauseAgent(agent: Address, opts?: TxOpts): Promise<TxResult> {
-    return mutations.pauseAgent(this.rpc, this.vault, this.owner, this.network, agent, opts);
+    return mutations.pauseAgent(
+      this.rpc,
+      this.vault,
+      this.owner,
+      this.network,
+      agent,
+      opts,
+    );
   }
 
   /** Immediate — protective action, no timelock required. */
   async unpauseAgent(agent: Address, opts?: TxOpts): Promise<TxResult> {
-    return mutations.unpauseAgent(this.rpc, this.vault, this.owner, this.network, agent, opts);
+    return mutations.unpauseAgent(
+      this.rpc,
+      this.vault,
+      this.owner,
+      this.network,
+      agent,
+      opts,
+    );
   }
 
   /** Immediate — protective action, no timelock required. */
   async revokeAgent(agent: Address, opts?: TxOpts): Promise<TxResult> {
-    return mutations.revokeAgent(this.rpc, this.vault, this.owner, this.network, agent, opts);
+    return mutations.revokeAgent(
+      this.rpc,
+      this.vault,
+      this.owner,
+      this.network,
+      agent,
+      opts,
+    );
   }
 
   /**
@@ -189,16 +285,50 @@ export class OwnerClient {
   /**
    * @param spendingLimit — per-agent 24h cap in 6-decimal USD. Pass 0n for unlimited (NOT recommended).
    */
-  async queueAgentPermissions(agent: Address, permissions: bigint, spendingLimit: bigint, opts?: TxOpts): Promise<TxResult> {
-    return mutations.queueAgentPermissions(this.rpc, this.vault, this.owner, this.network, agent, permissions, spendingLimit, opts);
+  async queueAgentPermissions(
+    agent: Address,
+    permissions: bigint,
+    spendingLimit: bigint,
+    opts?: TxOpts,
+  ): Promise<TxResult> {
+    return mutations.queueAgentPermissions(
+      this.rpc,
+      this.vault,
+      this.owner,
+      this.network,
+      agent,
+      permissions,
+      spendingLimit,
+      opts,
+    );
   }
 
-  async applyAgentPermissions(agent: Address, opts?: TxOpts): Promise<TxResult> {
-    return mutations.applyAgentPermissions(this.rpc, this.vault, this.owner, this.network, agent, opts);
+  async applyAgentPermissions(
+    agent: Address,
+    opts?: TxOpts,
+  ): Promise<TxResult> {
+    return mutations.applyAgentPermissions(
+      this.rpc,
+      this.vault,
+      this.owner,
+      this.network,
+      agent,
+      opts,
+    );
   }
 
-  async cancelAgentPermissions(agent: Address, opts?: TxOpts): Promise<TxResult> {
-    return mutations.cancelAgentPermissions(this.rpc, this.vault, this.owner, this.network, agent, opts);
+  async cancelAgentPermissions(
+    agent: Address,
+    opts?: TxOpts,
+  ): Promise<TxResult> {
+    return mutations.cancelAgentPermissions(
+      this.rpc,
+      this.vault,
+      this.owner,
+      this.network,
+      agent,
+      opts,
+    );
   }
 
   // ─── Policy (all timelocked — MIN_TIMELOCK_DURATION = 1800s) ────────────────
@@ -208,49 +338,121 @@ export class OwnerClient {
    * All policy changes go through queue/apply with mandatory timelock.
    * Note: timelock values < 1800 are rejected on-chain (TimelockTooShort).
    */
-  async queuePolicyUpdate(changes: PolicyChanges, opts?: TxOpts): Promise<TxResult> {
-    return mutations.queuePolicyUpdate(this.rpc, this.vault, this.owner, this.network, changes, opts);
+  async queuePolicyUpdate(
+    changes: PolicyChanges,
+    opts?: TxOpts,
+  ): Promise<TxResult> {
+    return mutations.queuePolicyUpdate(
+      this.rpc,
+      this.vault,
+      this.owner,
+      this.network,
+      changes,
+      opts,
+    );
   }
 
   async applyPendingPolicy(opts?: TxOpts): Promise<TxResult> {
-    return mutations.applyPendingPolicy(this.rpc, this.vault, this.owner, this.network, opts);
+    return mutations.applyPendingPolicy(
+      this.rpc,
+      this.vault,
+      this.owner,
+      this.network,
+      opts,
+    );
   }
 
   async cancelPendingPolicy(opts?: TxOpts): Promise<TxResult> {
-    return mutations.cancelPendingPolicy(this.rpc, this.vault, this.owner, this.network, opts);
+    return mutations.cancelPendingPolicy(
+      this.rpc,
+      this.vault,
+      this.owner,
+      this.network,
+      opts,
+    );
   }
 
   // ─── Constraints (timelocked for modifications/deletion) ────────────────────
 
   /** Immediate — additive, creates constraints that didn't exist. */
-  async createConstraints(entries: ConstraintEntry[], opts?: TxOpts): Promise<TxResult> {
-    return mutations.createConstraints(this.rpc, this.vault, this.owner, this.network, entries, opts);
+  async createConstraints(
+    entries: ConstraintEntry[],
+    opts?: TxOpts,
+  ): Promise<TxResult> {
+    return mutations.createConstraints(
+      this.rpc,
+      this.vault,
+      this.owner,
+      this.network,
+      entries,
+      opts,
+    );
   }
 
   /** Timelocked — existing queue/apply pattern. */
-  async queueConstraintsUpdate(entries: ConstraintEntry[], opts?: TxOpts): Promise<TxResult> {
-    return mutations.queueConstraintsUpdate(this.rpc, this.vault, this.owner, this.network, entries, opts);
+  async queueConstraintsUpdate(
+    entries: ConstraintEntry[],
+    opts?: TxOpts,
+  ): Promise<TxResult> {
+    return mutations.queueConstraintsUpdate(
+      this.rpc,
+      this.vault,
+      this.owner,
+      this.network,
+      entries,
+      opts,
+    );
   }
 
   async applyConstraintsUpdate(opts?: TxOpts): Promise<TxResult> {
-    return mutations.applyConstraintsUpdate(this.rpc, this.vault, this.owner, this.network, opts);
+    return mutations.applyConstraintsUpdate(
+      this.rpc,
+      this.vault,
+      this.owner,
+      this.network,
+      opts,
+    );
   }
 
   async cancelConstraintsUpdate(opts?: TxOpts): Promise<TxResult> {
-    return mutations.cancelConstraintsUpdate(this.rpc, this.vault, this.owner, this.network, opts);
+    return mutations.cancelConstraintsUpdate(
+      this.rpc,
+      this.vault,
+      this.owner,
+      this.network,
+      opts,
+    );
   }
 
   /** Timelocked — direct close_instruction_constraints deleted (TOCTOU fix). */
   async queueCloseConstraints(opts?: TxOpts): Promise<TxResult> {
-    return mutations.queueCloseConstraints(this.rpc, this.vault, this.owner, this.network, opts);
+    return mutations.queueCloseConstraints(
+      this.rpc,
+      this.vault,
+      this.owner,
+      this.network,
+      opts,
+    );
   }
 
   async applyCloseConstraints(opts?: TxOpts): Promise<TxResult> {
-    return mutations.applyCloseConstraints(this.rpc, this.vault, this.owner, this.network, opts);
+    return mutations.applyCloseConstraints(
+      this.rpc,
+      this.vault,
+      this.owner,
+      this.network,
+      opts,
+    );
   }
 
   async cancelCloseConstraints(opts?: TxOpts): Promise<TxResult> {
-    return mutations.cancelCloseConstraints(this.rpc, this.vault, this.owner, this.network, opts);
+    return mutations.cancelCloseConstraints(
+      this.rpc,
+      this.vault,
+      this.owner,
+      this.network,
+      opts,
+    );
   }
 
   // ─── Static (pre-client) ────────────────────────────────────────────────────

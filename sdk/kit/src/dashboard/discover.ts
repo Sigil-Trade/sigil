@@ -29,17 +29,31 @@ export async function discoverVaults(
         if (!account.exists) return null;
 
         const data = account.data;
-        const statusNum = typeof data.status === "number" ? data.status : (data.status as any)?.__kind === "Active" ? 0 : 1;
+        const statusNum =
+          typeof data.status === "number"
+            ? data.status
+            : (data.status as any)?.__kind === "Active"
+              ? 0
+              : 1;
 
         return {
           address: v.vaultAddress as string,
           vaultId: v.vaultId,
-          status: (statusNum === 0 ? "active" : statusNum === 1 ? "frozen" : "closed") as DiscoveredVault["status"],
+          status: (statusNum === 0
+            ? "active"
+            : statusNum === 1
+              ? "frozen"
+              : "closed") as DiscoveredVault["status"],
           agentCount: data.agents?.length ?? 0,
           toJSON: () => ({
             address: v.vaultAddress as string,
             vaultId: v.vaultId.toString(),
-            status: statusNum === 0 ? "active" : statusNum === 1 ? "frozen" : "closed",
+            status:
+              statusNum === 0
+                ? "active"
+                : statusNum === 1
+                  ? "frozen"
+                  : "closed",
             agentCount: data.agents?.length ?? 0,
           }),
         } satisfies DiscoveredVault;

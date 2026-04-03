@@ -339,7 +339,10 @@ export interface SerializedVaultState {
     totalVolume: string;
     totalFees: string;
   };
-  balance: { total: string; tokens: { mint: string; amount: string; decimals: number }[] };
+  balance: {
+    total: string;
+    tokens: { mint: string; amount: string; decimals: number }[];
+  };
   pnl: { percent: number; absolute: string };
   health: { level: string; alertCount: number; checks: HealthCheck[] };
 }
@@ -359,9 +362,20 @@ export interface SerializedAgentData {
 
 /** @internal */
 export interface SerializedSpendingData {
-  global: { today: string; cap: string; remaining: string; percent: number; rundownMs: number };
+  global: {
+    today: string;
+    cap: string;
+    remaining: string;
+    percent: number;
+    rundownMs: number;
+  };
   chart: ChartPoint[];
-  protocolBreakdown: { name: string; programId: string; amount: string; percent: number }[];
+  protocolBreakdown: {
+    name: string;
+    programId: string;
+    amount: string;
+    percent: number;
+  }[];
 }
 
 /** @internal */
@@ -389,7 +403,12 @@ export interface SerializedHealthData {
   level: string;
   blockedCount24h: number;
   checks: HealthCheck[];
-  lastBlock?: { agent: string; reason: string; amount: string; timestamp: number };
+  lastBlock?: {
+    agent: string;
+    reason: string;
+    amount: string;
+    timestamp: number;
+  };
 }
 
 /** @internal */

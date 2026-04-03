@@ -5,7 +5,13 @@
  * Stateless — no caching, no optimistic updates (v0.2).
  */
 
-import type { Address, Instruction, Rpc, SolanaRpcApi, TransactionSigner } from "@solana/kit";
+import type {
+  Address,
+  Instruction,
+  Rpc,
+  SolanaRpcApi,
+  TransactionSigner,
+} from "@solana/kit";
 import { getProgramDerivedAddress, getAddressEncoder } from "@solana/kit";
 import {
   pipe,
@@ -18,10 +24,17 @@ import {
   getBase64EncodedWireTransaction,
   type Instruction as KitInstruction,
 } from "@solana/kit";
-import { getSetComputeUnitLimitInstruction, getSetComputeUnitPriceInstruction } from "@solana-program/compute-budget";
+import {
+  getSetComputeUnitLimitInstruction,
+  getSetComputeUnitPriceInstruction,
+} from "@solana-program/compute-budget";
 import { sendAndConfirmTransaction, BlockhashCache } from "../rpc-helpers.js";
 import { AccountRole } from "@solana/kit";
-import { getAgentOverlayPDA, getPendingPolicyPDA, getPendingCloseConstraintsPDA } from "../resolve-accounts.js";
+import {
+  getAgentOverlayPDA,
+  getPendingPolicyPDA,
+  getPendingCloseConstraintsPDA,
+} from "../resolve-accounts.js";
 import { resolveVaultStateForOwner } from "../state-resolver.js";
 import { SIGIL_PROGRAM_ADDRESS } from "../types.js";
 import type { Network } from "../types.js";
@@ -54,7 +67,13 @@ import { getQueueCloseConstraintsInstructionAsync } from "../generated/instructi
 import { getApplyCloseConstraintsInstructionAsync } from "../generated/instructions/applyCloseConstraints.js";
 import { getCancelCloseConstraintsInstructionAsync } from "../generated/instructions/cancelCloseConstraints.js";
 
-import type { TxResult, TxOpts, PolicyChanges, ConstraintEntry, DxError } from "./types.js";
+import type {
+  TxResult,
+  TxOpts,
+  PolicyChanges,
+  ConstraintEntry,
+  DxError,
+} from "./types.js";
 import { toAgentError } from "../agent-errors.js";
 
 // ─── Shared Helper ───────────────────────────────────────────────────────────
@@ -72,9 +91,15 @@ async function run(
   try {
     const cu = opts.computeUnits ?? CU_OWNER_ACTION;
     const allIx: KitInstruction[] = [
-      getSetComputeUnitLimitInstruction({ units: cu }) as unknown as KitInstruction,
+      getSetComputeUnitLimitInstruction({
+        units: cu,
+      }) as unknown as KitInstruction,
       ...(opts.priorityFeeMicroLamports
-        ? [getSetComputeUnitPriceInstruction({ microLamports: BigInt(opts.priorityFeeMicroLamports) }) as unknown as KitInstruction]
+        ? [
+            getSetComputeUnitPriceInstruction({
+              microLamports: BigInt(opts.priorityFeeMicroLamports),
+            }) as unknown as KitInstruction,
+          ]
         : []),
       ...(instructions as unknown as KitInstruction[]),
     ];
@@ -87,8 +112,13 @@ async function run(
       (tx) => appendTransactionMessageInstructions(allIx, tx),
     );
 
-    const txWithSigners = addSignersToTransactionMessage([owner], txMessage as any);
-    const signedTx = await signTransactionMessageWithSigners(txWithSigners as any);
+    const txWithSigners = addSignersToTransactionMessage(
+      [owner],
+      txMessage as any,
+    );
+    const signedTx = await signTransactionMessageWithSigners(
+      txWithSigners as any,
+    );
     const wire = getBase64EncodedWireTransaction(signedTx as any);
     const signature = await sendAndConfirmTransaction(rpc, wire);
 
@@ -103,14 +133,23 @@ function toDxError(err: unknown): DxError {
   try {
     const agentErr = toAgentError(err);
     return {
-      code: (() => { const n = Number(agentErr.code); return Number.isFinite(n) ? n : 7000; })(),
+      code: (() => {
+        const n = Number(agentErr.code);
+        return Number.isFinite(n) ? n : 7000;
+      })(),
       message: agentErr.message,
-      recovery: agentErr.recovery_actions?.map((a: any) => a.description ?? a.action) ?? [],
+      recovery:
+        agentErr.recovery_actions?.map((a: any) => a.description ?? a.action) ??
+        [],
     };
   } catch {
     // toAgentError itself failed — wrap the original error
     const msg = err instanceof Error ? err.message : String(err);
-    return { code: 7999, message: msg, recovery: ["Check transaction logs for details"] };
+    return {
+      code: 7999,
+      message: msg,
+      recovery: ["Check transaction logs for details"],
+    };
   }
 }
 
@@ -120,36 +159,68 @@ function toDxError(err: unknown): DxError {
 const U64_MAX = (1n << 64n) - 1n;
 
 function requirePositiveAmount(amount: bigint, field: string): void {
-  if (amount <= 0n) throw toDxError(new Error(`${field} must be positive, got ${amount}`));
-  if (amount > U64_MAX) throw toDxError(new Error(`${field} exceeds u64 maximum (${U64_MAX})`));
+  if (amount <= 0n)
+    throw toDxError(new Error(`${field} must be positive, got ${amount}`));
+  if (amount > U64_MAX)
+    throw toDxError(new Error(`${field} exceeds u64 maximum (${U64_MAX})`));
 }
 
 function requireValidAddress(addr: string, field: string): void {
-  if (!addr || addr.length < 32 || addr.length > 44) throw toDxError(new Error(`${field} is not a valid Solana address (got ${addr?.length ?? 0} chars)`));
+  if (!addr || addr.length < 32 || addr.length > 44)
+    throw toDxError(
+      new Error(
+        `${field} is not a valid Solana address (got ${addr?.length ?? 0} chars)`,
+      ),
+    );
 }
 
 const MAX_PERMISSIONS = (1n << 21n) - 1n; // 21 action types
 
 function requireValidPermissions(perms: bigint): void {
-  if (perms < 0n) throw toDxError(new Error(`Permissions bitmask cannot be negative`));
-  if (perms === 0n) throw toDxError(new Error(`Permissions bitmask is 0 — agent would have no permissions. Use at least one permission bit.`));
-  if (perms > MAX_PERMISSIONS) throw toDxError(new Error(`Permissions bitmask exceeds maximum (${MAX_PERMISSIONS}). Only bits 0-20 are valid.`));
+  if (perms < 0n)
+    throw toDxError(new Error(`Permissions bitmask cannot be negative`));
+  if (perms === 0n)
+    throw toDxError(
+      new Error(
+        `Permissions bitmask is 0 — agent would have no permissions. Use at least one permission bit.`,
+      ),
+    );
+  if (perms > MAX_PERMISSIONS)
+    throw toDxError(
+      new Error(
+        `Permissions bitmask exceeds maximum (${MAX_PERMISSIONS}). Only bits 0-20 are valid.`,
+      ),
+    );
 }
 
 function requireU8(value: number, field: string): void {
   if (!Number.isInteger(value) || value < 0 || value > 255) {
-    throw toDxError(new Error(`${field} must be an integer 0-255, got ${value}`));
+    throw toDxError(
+      new Error(`${field} must be an integer 0-255, got ${value}`),
+    );
   }
 }
 
 function mapProtocolMode(mode: string): number {
-  const map: Record<string, number> = { unrestricted: 0, whitelist: 1, blacklist: 2 };
-  if (!(mode in map)) throw toDxError(new Error(`Invalid protocolMode: "${mode}". Must be "unrestricted", "whitelist", or "blacklist".`));
+  const map: Record<string, number> = {
+    unrestricted: 0,
+    whitelist: 1,
+    blacklist: 2,
+  };
+  if (!(mode in map))
+    throw toDxError(
+      new Error(
+        `Invalid protocolMode: "${mode}". Must be "unrestricted", "whitelist", or "blacklist".`,
+      ),
+    );
   return map[mode];
 }
 
 /** Derive pendingAgentPerms PDA: seeds = ["pending_agent_perms", vault, agent] */
-async function derivePendingAgentPermsPDA(vault: Address, agent: Address): Promise<Address> {
+async function derivePendingAgentPermsPDA(
+  vault: Address,
+  agent: Address,
+): Promise<Address> {
   const encoder = getAddressEncoder();
   const [pda] = await getProgramDerivedAddress({
     programAddress: SIGIL_PROGRAM_ADDRESS,
@@ -167,21 +238,27 @@ async function derivePendingAgentPermsPDA(vault: Address, agent: Address): Promi
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export async function freezeVault(
-  rpc: Rpc<SolanaRpcApi>, vault: Address, owner: TransactionSigner,
-  network: "devnet" | "mainnet", opts?: TxOpts,
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  opts?: TxOpts,
 ): Promise<TxResult> {
   const ix = getFreezeVaultInstruction({ owner, vault });
   return run(rpc, owner, network, [ix], opts);
 }
 
 export async function resumeVault(
-  rpc: Rpc<SolanaRpcApi>, vault: Address, owner: TransactionSigner,
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
   network: "devnet" | "mainnet",
   newAgent?: { address: Address; permissions: bigint },
   opts?: TxOpts,
 ): Promise<TxResult> {
   const ix = getReactivateVaultInstruction({
-    owner, vault,
+    owner,
+    vault,
     newAgent: newAgent?.address ?? null,
     newAgentPermissions: newAgent?.permissions ?? null,
   });
@@ -196,8 +273,11 @@ export async function resumeVault(
  * will reject the TX. This is a known race window — retry on failure.
  */
 export async function closeVault(
-  rpc: Rpc<SolanaRpcApi>, vault: Address, owner: TransactionSigner,
-  network: "devnet" | "mainnet", opts?: TxOpts,
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  opts?: TxOpts,
 ): Promise<TxResult> {
   const net: Network = network === "mainnet" ? "mainnet-beta" : "devnet";
 
@@ -207,7 +287,11 @@ export async function closeVault(
   const vaultData = state.vault as AgentVault;
 
   const [overlayPda] = await getAgentOverlayPDA(vault, 0);
-  const ix = await getCloseVaultInstructionAsync({ owner, vault, agentSpendOverlay: overlayPda });
+  const ix = await getCloseVaultInstructionAsync({
+    owner,
+    vault,
+    agentSpendOverlay: overlayPda,
+  });
 
   // Build remaining_accounts for pending PDA cleanup (close_vault.rs:68-142)
   // All accounts verified via getAccountInfo before inclusion — no blind trust.
@@ -221,7 +305,8 @@ export async function closeVault(
     agents.map((agent) => derivePendingAgentPermsPDA(vault, agent.pubkey)),
   );
 
-  const [pendingCloseConstraintsPda] = await getPendingCloseConstraintsPDA(vault);
+  const [pendingCloseConstraintsPda] =
+    await getPendingCloseConstraintsPDA(vault);
 
   // Check all PDAs in parallel (E4 fix — batch instead of sequential)
   const allPdas = [
@@ -233,7 +318,9 @@ export async function closeVault(
   const existenceChecks = await Promise.all(
     allPdas.map(async (pda) => {
       try {
-        const info = await rpc.getAccountInfo(pda, { encoding: "base64" }).send();
+        const info = await rpc
+          .getAccountInfo(pda, { encoding: "base64" })
+          .send();
         return info?.value ? pda : null;
       } catch {
         return null;
@@ -244,30 +331,43 @@ export async function closeVault(
   // Add existing PDAs as remaining_accounts in order:
   // 1. pending_policy (if exists) — must be first per close_vault.rs:95-98
   if (existenceChecks[0]) {
-    remainingAccounts.push({ address: existenceChecks[0], role: AccountRole.WRITABLE });
+    remainingAccounts.push({
+      address: existenceChecks[0],
+      role: AccountRole.WRITABLE,
+    });
   }
   // 2. pending_agent_perms (one per agent that has a pending update)
   for (let i = 0; i < agents.length; i++) {
     if (existenceChecks[1 + i]) {
-      remainingAccounts.push({ address: existenceChecks[1 + i]!, role: AccountRole.WRITABLE });
+      remainingAccounts.push({
+        address: existenceChecks[1 + i]!,
+        role: AccountRole.WRITABLE,
+      });
     }
   }
   // 3. pending_close_constraints (if exists) — E1 fix: correct seed "pending_close_constraints"
   const constraintsIdx = 1 + agents.length;
   if (existenceChecks[constraintsIdx]) {
-    remainingAccounts.push({ address: existenceChecks[constraintsIdx]!, role: AccountRole.WRITABLE });
+    remainingAccounts.push({
+      address: existenceChecks[constraintsIdx]!,
+      role: AccountRole.WRITABLE,
+    });
   }
 
   // Append remaining accounts to instruction if any exist
-  const finalIx = remainingAccounts.length > 0
-    ? {
-        ...ix,
-        accounts: [
-          ...(ix as any).accounts,
-          ...remainingAccounts.map((a) => ({ address: a.address, role: a.role })),
-        ],
-      }
-    : ix;
+  const finalIx =
+    remainingAccounts.length > 0
+      ? {
+          ...ix,
+          accounts: [
+            ...(ix as any).accounts,
+            ...remainingAccounts.map((a) => ({
+              address: a.address,
+              role: a.role,
+            })),
+          ],
+        }
+      : ix;
 
   return run(rpc, owner, network, [finalIx], {
     computeUnits: opts?.computeUnits ?? 400_000,
@@ -276,8 +376,12 @@ export async function closeVault(
 }
 
 export async function syncPositions(
-  rpc: Rpc<SolanaRpcApi>, vault: Address, owner: TransactionSigner,
-  network: "devnet" | "mainnet", actualPositions: number, opts?: TxOpts,
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  actualPositions: number,
+  opts?: TxOpts,
 ): Promise<TxResult> {
   requireU8(actualPositions, "actualPositions");
   const ix = getSyncPositionsInstruction({ owner, vault, actualPositions });
@@ -285,8 +389,12 @@ export async function syncPositions(
 }
 
 export async function pauseAgent(
-  rpc: Rpc<SolanaRpcApi>, vault: Address, owner: TransactionSigner,
-  network: "devnet" | "mainnet", agent: Address, opts?: TxOpts,
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  agent: Address,
+  opts?: TxOpts,
 ): Promise<TxResult> {
   requireValidAddress(agent, "Agent address");
   const ix = getPauseAgentInstruction({ owner, vault, agentToPause: agent });
@@ -294,35 +402,60 @@ export async function pauseAgent(
 }
 
 export async function unpauseAgent(
-  rpc: Rpc<SolanaRpcApi>, vault: Address, owner: TransactionSigner,
-  network: "devnet" | "mainnet", agent: Address, opts?: TxOpts,
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  agent: Address,
+  opts?: TxOpts,
 ): Promise<TxResult> {
   requireValidAddress(agent, "Agent address");
-  const ix = getUnpauseAgentInstruction({ owner, vault, agentToUnpause: agent });
+  const ix = getUnpauseAgentInstruction({
+    owner,
+    vault,
+    agentToUnpause: agent,
+  });
   return run(rpc, owner, network, [ix], opts);
 }
 
 export async function revokeAgent(
-  rpc: Rpc<SolanaRpcApi>, vault: Address, owner: TransactionSigner,
-  network: "devnet" | "mainnet", agent: Address, opts?: TxOpts,
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  agent: Address,
+  opts?: TxOpts,
 ): Promise<TxResult> {
   requireValidAddress(agent, "Agent address");
   const [overlayPda] = await getAgentOverlayPDA(vault, 0);
-  const ix = getRevokeAgentInstruction({ owner, vault, agentSpendOverlay: overlayPda, agentToRemove: agent });
+  const ix = getRevokeAgentInstruction({
+    owner,
+    vault,
+    agentSpendOverlay: overlayPda,
+    agentToRemove: agent,
+  });
   return run(rpc, owner, network, [ix], opts);
 }
 
 export async function addAgent(
-  rpc: Rpc<SolanaRpcApi>, vault: Address, owner: TransactionSigner,
-  network: "devnet" | "mainnet", agent: Address, permissions: bigint,
-  spendingLimit: bigint, opts?: TxOpts,
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  agent: Address,
+  permissions: bigint,
+  spendingLimit: bigint,
+  opts?: TxOpts,
 ): Promise<TxResult> {
   requireValidAddress(agent, "Agent address");
   requireValidPermissions(permissions);
   const [overlayPda] = await getAgentOverlayPDA(vault, 0);
   const ix = getRegisterAgentInstruction({
-    owner, vault, agentSpendOverlay: overlayPda,
-    agent, permissions,
+    owner,
+    vault,
+    agentSpendOverlay: overlayPda,
+    agent,
+    permissions,
     spendingLimitUsd: spendingLimit,
   });
   return run(rpc, owner, network, [ix], opts);
@@ -333,42 +466,77 @@ export async function addAgent(
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export async function deposit(
-  rpc: Rpc<SolanaRpcApi>, vault: Address, owner: TransactionSigner,
-  network: "devnet" | "mainnet", mint: Address, amount: bigint, opts?: TxOpts,
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  mint: Address,
+  amount: bigint,
+  opts?: TxOpts,
 ): Promise<TxResult> {
   requirePositiveAmount(amount, "Deposit amount");
   requireValidAddress(mint, "Token mint");
-  const ix = await getDepositFundsInstructionAsync({ owner, vault, mint, amount });
+  const ix = await getDepositFundsInstructionAsync({
+    owner,
+    vault,
+    mint,
+    amount,
+  });
   return run(rpc, owner, network, [ix], opts);
 }
 
 export async function withdraw(
-  rpc: Rpc<SolanaRpcApi>, vault: Address, owner: TransactionSigner,
-  network: "devnet" | "mainnet", mint: Address, amount: bigint, opts?: TxOpts,
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  mint: Address,
+  amount: bigint,
+  opts?: TxOpts,
 ): Promise<TxResult> {
   requirePositiveAmount(amount, "Withdraw amount");
   requireValidAddress(mint, "Token mint");
-  const ix = await getWithdrawFundsInstructionAsync({ owner, vault, mint, amount });
+  const ix = await getWithdrawFundsInstructionAsync({
+    owner,
+    vault,
+    mint,
+    amount,
+  });
   return run(rpc, owner, network, [ix], opts);
 }
 
 export async function queuePolicyUpdate(
-  rpc: Rpc<SolanaRpcApi>, vault: Address, owner: TransactionSigner,
-  network: "devnet" | "mainnet", changes: PolicyChanges, opts?: TxOpts,
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  changes: PolicyChanges,
+  opts?: TxOpts,
 ): Promise<TxResult> {
   if (Object.keys(changes).length === 0) {
     throw toDxError(new Error("At least one policy change is required"));
   }
   if (changes.timelock != null && changes.timelock < 1800) {
-    throw toDxError(new Error(`Timelock must be >= 1800 seconds (30 minutes). Got ${changes.timelock}. On-chain rejects TimelockTooShort.`));
+    throw toDxError(
+      new Error(
+        `Timelock must be >= 1800 seconds (30 minutes). Got ${changes.timelock}. On-chain rejects TimelockTooShort.`,
+      ),
+    );
   }
-  if (changes.dailyCap != null) requirePositiveAmount(changes.dailyCap, "Daily cap");
-  if (changes.maxPerTrade != null) requirePositiveAmount(changes.maxPerTrade, "Max per trade");
+  if (changes.dailyCap != null)
+    requirePositiveAmount(changes.dailyCap, "Daily cap");
+  if (changes.maxPerTrade != null)
+    requirePositiveAmount(changes.maxPerTrade, "Max per trade");
   if (changes.developerFeeRate != null && changes.developerFeeRate > 500) {
-    throw toDxError(new Error(`Developer fee rate cannot exceed 500 BPS (0.05%). Got ${changes.developerFeeRate}.`));
+    throw toDxError(
+      new Error(
+        `Developer fee rate cannot exceed 500 BPS (0.05%). Got ${changes.developerFeeRate}.`,
+      ),
+    );
   }
   const ix = await getQueuePolicyUpdateInstructionAsync({
-    owner, vault,
+    owner,
+    vault,
     dailySpendingCapUsd: changes.dailyCap ?? null,
     maxTransactionAmountUsd: changes.maxPerTrade ?? null,
     protocolMode: changes.protocolMode
@@ -380,7 +548,8 @@ export async function queuePolicyUpdate(
     maxConcurrentPositions: changes.maxConcurrentPositions ?? null,
     developerFeeRate: changes.developerFeeRate ?? null,
     maxSlippageBps: changes.maxSlippageBps ?? null,
-    timelockDuration: changes.timelock != null ? BigInt(changes.timelock) : null,
+    timelockDuration:
+      changes.timelock != null ? BigInt(changes.timelock) : null,
     allowedDestinations: changes.allowedDestinations ?? null,
     sessionExpirySlots: changes.sessionExpirySlots ?? null,
     hasProtocolCaps: changes.hasProtocolCaps ?? null,
@@ -390,30 +559,43 @@ export async function queuePolicyUpdate(
 }
 
 export async function applyPendingPolicy(
-  rpc: Rpc<SolanaRpcApi>, vault: Address, owner: TransactionSigner,
-  network: "devnet" | "mainnet", opts?: TxOpts,
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  opts?: TxOpts,
 ): Promise<TxResult> {
   const ix = await getApplyPendingPolicyInstructionAsync({ owner, vault });
   return run(rpc, owner, network, [ix], opts);
 }
 
 export async function cancelPendingPolicy(
-  rpc: Rpc<SolanaRpcApi>, vault: Address, owner: TransactionSigner,
-  network: "devnet" | "mainnet", opts?: TxOpts,
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  opts?: TxOpts,
 ): Promise<TxResult> {
   const ix = await getCancelPendingPolicyInstructionAsync({ owner, vault });
   return run(rpc, owner, network, [ix], opts);
 }
 
 export async function queueAgentPermissions(
-  rpc: Rpc<SolanaRpcApi>, vault: Address, owner: TransactionSigner,
-  network: "devnet" | "mainnet", agent: Address, permissions: bigint,
-  spendingLimit: bigint, opts?: TxOpts,
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  agent: Address,
+  permissions: bigint,
+  spendingLimit: bigint,
+  opts?: TxOpts,
 ): Promise<TxResult> {
   requireValidAddress(agent, "Agent address");
   requireValidPermissions(permissions);
   const ix = await getQueueAgentPermissionsUpdateInstructionAsync({
-    owner, vault, agent,
+    owner,
+    vault,
+    agent,
     newPermissions: permissions,
     spendingLimitUsd: spendingLimit,
   });
@@ -421,87 +603,131 @@ export async function queueAgentPermissions(
 }
 
 export async function applyAgentPermissions(
-  rpc: Rpc<SolanaRpcApi>, vault: Address, owner: TransactionSigner,
-  network: "devnet" | "mainnet", agent: Address, opts?: TxOpts,
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  agent: Address,
+  opts?: TxOpts,
 ): Promise<TxResult> {
   requireValidAddress(agent, "Agent address");
   const [overlayPda] = await getAgentOverlayPDA(vault, 0);
   const pendingPda = await derivePendingAgentPermsPDA(vault, agent);
   const ix = await getApplyAgentPermissionsUpdateInstructionAsync({
-    owner, vault, agentSpendOverlay: overlayPda, pendingAgentPerms: pendingPda,
+    owner,
+    vault,
+    agentSpendOverlay: overlayPda,
+    pendingAgentPerms: pendingPda,
   });
   return run(rpc, owner, network, [ix], opts);
 }
 
 export async function cancelAgentPermissions(
-  rpc: Rpc<SolanaRpcApi>, vault: Address, owner: TransactionSigner,
-  network: "devnet" | "mainnet", agent: Address, opts?: TxOpts,
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  agent: Address,
+  opts?: TxOpts,
 ): Promise<TxResult> {
   requireValidAddress(agent, "Agent address");
   const pendingPda = await derivePendingAgentPermsPDA(vault, agent);
   const ix = getCancelAgentPermissionsUpdateInstruction({
-    owner, vault, pendingAgentPerms: pendingPda,
+    owner,
+    vault,
+    pendingAgentPerms: pendingPda,
   });
   return run(rpc, owner, network, [ix], opts);
 }
 
 export async function createConstraints(
-  rpc: Rpc<SolanaRpcApi>, vault: Address, owner: TransactionSigner,
-  network: "devnet" | "mainnet", entries: ConstraintEntry[], opts?: TxOpts,
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  entries: ConstraintEntry[],
+  opts?: TxOpts,
 ): Promise<TxResult> {
-  if (!entries || entries.length === 0) throw toDxError(new Error("Constraint entries must be a non-empty array"));
+  if (!entries || entries.length === 0)
+    throw toDxError(new Error("Constraint entries must be a non-empty array"));
   const ix = await getCreateInstructionConstraintsInstructionAsync({
-    owner, vault, entries, strictMode: opts?.strictMode ?? true,
+    owner,
+    vault,
+    entries,
+    strictMode: opts?.strictMode ?? true,
   });
   return run(rpc, owner, network, [ix], opts);
 }
 
 export async function queueConstraintsUpdate(
-  rpc: Rpc<SolanaRpcApi>, vault: Address, owner: TransactionSigner,
-  network: "devnet" | "mainnet", entries: ConstraintEntry[], opts?: TxOpts,
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  entries: ConstraintEntry[],
+  opts?: TxOpts,
 ): Promise<TxResult> {
-  if (!entries || entries.length === 0) throw toDxError(new Error("Constraint entries must be a non-empty array"));
+  if (!entries || entries.length === 0)
+    throw toDxError(new Error("Constraint entries must be a non-empty array"));
   const ix = await getQueueConstraintsUpdateInstructionAsync({
-    owner, vault, entries, strictMode: opts?.strictMode ?? true,
+    owner,
+    vault,
+    entries,
+    strictMode: opts?.strictMode ?? true,
   });
   return run(rpc, owner, network, [ix], opts);
 }
 
 export async function applyConstraintsUpdate(
-  rpc: Rpc<SolanaRpcApi>, vault: Address, owner: TransactionSigner,
-  network: "devnet" | "mainnet", opts?: TxOpts,
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  opts?: TxOpts,
 ): Promise<TxResult> {
   const ix = await getApplyConstraintsUpdateInstructionAsync({ owner, vault });
   return run(rpc, owner, network, [ix], opts);
 }
 
 export async function cancelConstraintsUpdate(
-  rpc: Rpc<SolanaRpcApi>, vault: Address, owner: TransactionSigner,
-  network: "devnet" | "mainnet", opts?: TxOpts,
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  opts?: TxOpts,
 ): Promise<TxResult> {
   const ix = await getCancelConstraintsUpdateInstructionAsync({ owner, vault });
   return run(rpc, owner, network, [ix], opts);
 }
 
 export async function queueCloseConstraints(
-  rpc: Rpc<SolanaRpcApi>, vault: Address, owner: TransactionSigner,
-  network: "devnet" | "mainnet", opts?: TxOpts,
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  opts?: TxOpts,
 ): Promise<TxResult> {
   const ix = await getQueueCloseConstraintsInstructionAsync({ owner, vault });
   return run(rpc, owner, network, [ix], opts);
 }
 
 export async function applyCloseConstraints(
-  rpc: Rpc<SolanaRpcApi>, vault: Address, owner: TransactionSigner,
-  network: "devnet" | "mainnet", opts?: TxOpts,
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  opts?: TxOpts,
 ): Promise<TxResult> {
   const ix = await getApplyCloseConstraintsInstructionAsync({ owner, vault });
   return run(rpc, owner, network, [ix], opts);
 }
 
 export async function cancelCloseConstraints(
-  rpc: Rpc<SolanaRpcApi>, vault: Address, owner: TransactionSigner,
-  network: "devnet" | "mainnet", opts?: TxOpts,
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  opts?: TxOpts,
 ): Promise<TxResult> {
   const ix = await getCancelCloseConstraintsInstructionAsync({ owner, vault });
   return run(rpc, owner, network, [ix], opts);
