@@ -146,7 +146,7 @@ npx ts-mocha -p ./tsconfig.json -t 300000 \
   tests/flash-trade-integration.ts tests/security-exploits.ts \
   tests/instruction-constraints.ts tests/escrow-integration.ts
 
-# Run all SDK tests (1,069 tests across 4 packages)
+# Run all SDK tests (1,218 tests across 4 packages)
 pnpm -r run test
 
 # Lint
@@ -170,11 +170,11 @@ cargo fmt --check --manifest-path programs/sigil/Cargo.toml
 | Surfpool integration tests (local Surfnet)           |      59 |
 | Platform client tests (`@usesigil/platform`)         |      17 |
 | Custody adapters (`@usesigil/custody`)               |      96 |
-| Kit-native SDK (`@usesigil/kit` — includes merged core) |     950 |
-| Kit SDK devnet tests (`@usesigil/kit` devnet)        |       9 |
+| Kit-native SDK (`@usesigil/kit` — includes core + dashboard) |    1099 |
+| Kit SDK devnet tests (`@usesigil/kit` devnet)        |      26 |
 | Plugins (`@usesigil/plugins`)                        |       6 |
 | Rust unit tests (cargo test)                         |      71 |
-| **Total**                                            | **1651** |
+| **Total**                                            | **1817** |
 
 ## Security
 

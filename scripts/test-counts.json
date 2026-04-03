@@ -72,16 +72,16 @@
       "claudePattern": "sdk/custody/tests/` (mocha + tsx, %d tests — crossmint, privy, turnkey)"
     },
     {
-      "name": "Kit-native SDK (`@usesigil/kit` — includes merged core)",
-      "count": 950,
+      "name": "Kit-native SDK (`@usesigil/kit` — includes merged core + dashboard)",
+      "count": 1099,
       "ciStepName": "Kit SDK tests",
-      "claudePattern": "sdk/kit/tests/` (mocha + tsx, %d tests — includes 66 merged core tests)"
+      "claudePattern": "sdk/kit/tests/` (mocha + tsx, %d tests — 948 kit + 66 core + 85 dashboard)"
     },
     {
       "name": "Kit SDK devnet tests (`@usesigil/kit` devnet)",
-      "count": 9,
+      "count": 26,
       "devnet": true,
-      "claudePattern": "sdk/kit/tests/devnet/` (mocha + tsx, %d tests — lifecycle, composed-tx)"
+      "claudePattern": "sdk/kit/tests/devnet/` (mocha + tsx, %d tests — lifecycle, composed-tx, dashboard-integration)"
     },
     {
       "name": "Plugins (`@usesigil/plugins`)",

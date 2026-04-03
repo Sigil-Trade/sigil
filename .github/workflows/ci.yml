@@ -18,7 +18,7 @@
 #   Push — Always run everything (safety net on main)
 #
 # Individual TS test steps also filter by package:
-#   sdk/kit → Kit SDK tests (950 tests, includes merged core)
+#   sdk/kit → Kit SDK tests (1099 tests, includes merged core)
 #   sdk/platform → Platform tests (17 tests)
 #   sdk/custody → Custody adapter tests (96 tests)
 #   packages/plugins → Plugin tests (6 tests)
@@ -147,7 +147,7 @@ jobs:
             "sdk/platform/src/**/*.ts" \
             "sdk/custody/src/**/*.ts"
 
-      - name: Kit SDK tests (950 tests)
+      - name: Kit SDK tests (1099 tests)
         if: >-
           needs.changes.outputs.sdk-kit == 'true' ||
           github.event_name == 'push'
