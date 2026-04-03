@@ -332,7 +332,7 @@ describe("TOCTOU Security Fix", () => {
           3,
           0,
           500,
-          new BN(1800), // timelockDuration: 0 — below minimum
+          new BN(0), // timelockDuration: 0 — below minimum (NEGATIVE TEST)
           [],
           [],
         )
@@ -406,7 +406,7 @@ describe("TOCTOU Security Fix", () => {
           null,
           null,
           null,
-          new BN(1800), // timelockDuration: 0 — removal blocked
+          new BN(0), // timelockDuration: 0 — removal blocked (NEGATIVE TEST)
           null,
           null, // sessionExpirySlots
           null, // hasProtocolCaps

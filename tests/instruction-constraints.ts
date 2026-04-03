@@ -59,6 +59,14 @@ describe("instruction-constraints", () => {
   let ownerUsdcAta: PublicKey;
   let vaultUsdcAta: PublicKey;
 
+  // Read current policy version for TOCTOU check
+  async function pv(addr?: PublicKey): Promise<BN> {
+    try {
+      const pol = await program.account.policyConfig.fetch(addr ?? policyPda);
+      return (pol as any).policyVersion ?? new BN(0);
+    } catch { return new BN(0); }
+  }
+
   const jupiterProgramId = Keypair.generate().publicKey;
   const protocolTreasury = new PublicKey(
     "ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT",
@@ -224,7 +232,7 @@ describe("instruction-constraints", () => {
   }
 
   // Helper: build validate instruction with optional remaining accounts
-  function buildValidateIx(
+  async function buildValidateIx(
     amount: BN,
     actionType: any,
     targetProtocol: PublicKey,
@@ -244,7 +252,7 @@ describe("instruction-constraints", () => {
       program.programId,
     );
     let builder = program.methods
-      .validateAndAuthorize(actionType, usdcMint, amount, targetProtocol, null, new BN(0))
+      .validateAndAuthorize(actionType, usdcMint, amount, targetProtocol, null, await pv())
       .accounts({
         agent: agent.publicKey,
         vault: vaultPda,
@@ -1064,8 +1072,9 @@ describe("instruction-constraints", () => {
       expect(accountExists(svm, tlPendingConstraintsPda)).to.equal(false);
     });
 
-    it("queue fails when timelock = 0 → NoTimelockConfigured", async () => {
-      // Create a separate zero-timelock vault to test this error
+    it("initializeVault rejects timelockDuration: 0 → TimelockTooShort", async () => {
+      // With mandatory MIN_TIMELOCK_DURATION, zero-timelock vaults can't exist.
+      // This replaces the old "queue fails when timelock = 0" test.
       const noTlVaultId = new BN(403);
       const [noTlVault] = PublicKey.findProgramAddressSync(
         [Buffer.from("vault"), owner.publicKey.toBuffer(), noTlVaultId.toArrayLike(Buffer, "le", 8)],
@@ -1083,67 +1092,24 @@ describe("instruction-constraints", () => {
         [Buffer.from("agent_spend"), noTlVault.toBuffer(), Buffer.from([0])],
         program.programId,
       );
-      const [noTlConstraints] = PublicKey.findProgramAddressSync(
-        [Buffer.from("constraints"), noTlVault.toBuffer()],
-        program.programId,
-      );
-      const [noTlPending] = PublicKey.findProgramAddressSync(
-        [Buffer.from("pending_constraints"), noTlVault.toBuffer()],
-        program.programId,
-      );
-
-      await program.methods
-        .initializeVault(
-          noTlVaultId, new BN(500_000_000), new BN(100_000_000),
-          0, [], new BN(1800) as any, 3, 0, 100,
-          new BN(1800), // no timelock
-          [], [],
-        )
-        .accounts({
-          owner: owner.publicKey, vault: noTlVault, policy: noTlPolicy,
-          tracker: noTlTracker, agentSpendOverlay: noTlOverlay,
-          feeDestination: feeDestination.publicKey, systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
-
-      await program.methods
-        .createInstructionConstraints(
-          [{ programId: jupiterProgramId, dataConstraints: [{ offset: 0, operator: { eq: {} }, value: Buffer.from([0x01]) }], accountConstraints: [] }],
-          false,
-        )
-        .accounts({ owner: owner.publicKey, vault: noTlVault, policy: noTlPolicy, constraints: noTlConstraints, systemProgram: SystemProgram.programId } as any)
-        .rpc();
 
       try {
         await program.methods
-          .queueConstraintsUpdate(
-            [
-              {
-                programId: jupiterProgramId,
-                dataConstraints: [
-                  {
-                    offset: 0,
-                    operator: { eq: {} },
-                    value: Buffer.from([0x01]),
-                  },
-                ],
-                accountConstraints: [],
-              },
-            ],
-            false,
+          .initializeVault(
+            noTlVaultId, new BN(500_000_000), new BN(100_000_000),
+            0, [], new BN(0) as any, 3, 0, 100,
+            new BN(0), // timelockDuration: 0 — NEGATIVE TEST (should fail)
+            [], [],
           )
           .accounts({
-            owner: owner.publicKey,
-            vault: noTlVault,
-            policy: noTlPolicy,
-            constraints: noTlConstraints,
-            pendingConstraints: noTlPending,
-            systemProgram: SystemProgram.programId,
+            owner: owner.publicKey, vault: noTlVault, policy: noTlPolicy,
+            tracker: noTlTracker, agentSpendOverlay: noTlOverlay,
+            feeDestination: feeDestination.publicKey, systemProgram: SystemProgram.programId,
           } as any)
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err.toString(), "NoTimelockConfigured");
+        expectSigilError(err.toString(), "TimelockTooShort");
       }
     });
   });
@@ -2192,7 +2158,7 @@ describe("instruction-constraints", () => {
         .rpc();
     });
 
-    function buildCvValidateIx(
+    async function buildCvValidateIx(
       amount: BN,
       actionType: any,
       targetProtocol: PublicKey,
@@ -2218,7 +2184,7 @@ describe("instruction-constraints", () => {
           amount,
           targetProtocol,
           null,
-          new BN(0),
+          await pv(cvPolicy),
         )
         .accounts({
           agent: cvAgent.publicKey,
