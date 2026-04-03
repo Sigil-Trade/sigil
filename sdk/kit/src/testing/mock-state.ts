@@ -78,6 +78,7 @@ export function createMockVaultState(
       totalDepositedUsd: overrides?.totalDepositedUsd ?? 0n,
       totalWithdrawnUsd: overrides?.totalWithdrawnUsd ?? 0n,
       totalFailedTransactions: 0n,
+      activeSessions: 0,
     },
     policy: {
       discriminator: new Uint8Array(8),

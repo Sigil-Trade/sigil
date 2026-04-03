@@ -577,10 +577,8 @@ impl FuzzTest {
         let pre_vault = self.snapshot_vault(&vault);
         let pre_policy = self.snapshot_policy(&policy);
 
-        let (pending_policy, _) = Pubkey::find_program_address(
-            &[b"pending_policy", vault.as_ref()],
-            &program_id(),
-        );
+        let (pending_policy, _) =
+            Pubkey::find_program_address(&[b"pending_policy", vault.as_ref()], &program_id());
 
         // Queue
         let queue_data = sigil::instruction::QueuePolicyUpdate {
@@ -930,7 +928,10 @@ impl FuzzTest {
         let pre_vault = self.snapshot_vault(&vault);
         let pre_policy = self.snapshot_policy(&policy_addr);
 
-        let data = sigil::instruction::AgentTransfer { amount };
+        let data = sigil::instruction::AgentTransfer {
+            amount,
+            expected_policy_version: 0,
+        };
         let (agent_spend_overlay, _) =
             Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
         let accounts = sigil::accounts::AgentTransfer {
