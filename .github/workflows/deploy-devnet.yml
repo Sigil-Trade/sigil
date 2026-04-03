@@ -262,10 +262,22 @@ jobs:
             --url "${VERIFY_RPC:-https://api.devnet.solana.com}"
 
   # ────────────────────────────────────────────────────────────────
-  # Job 3: Run devnet tests against freshly deployed program
+  # Job 3: Devnet tests — DISABLED
+  #
+  # Disabled 2026-04-03: devnet tests use raw SPL Token Transfer
+  # to simulate DeFi spending, which the instruction scan correctly
+  # blocks (UnauthorizedTokenTransfer 6038). Every run since 2026-03-25
+  # has failed for this reason. The mock-spend pattern is structurally
+  # incompatible with the on-chain instruction scan.
+  #
+  # LiteSVM (364 tests) and Surfpool (59 tests) provide equivalent
+  # coverage in controlled environments. Re-enable when devnet tests
+  # are rewritten to use real DeFi program CPIs (e.g., Jupiter devnet).
+  #
+  # To run manually: gh workflow run devnet-test.yml
   # ────────────────────────────────────────────────────────────────
-  test:
-    name: Devnet Tests (post-deploy)
-    needs: deploy
-    uses: ./.github/workflows/devnet-test.yml
-    secrets: inherit
+  # test:
+  #   name: Devnet Tests (post-deploy)
+  #   needs: deploy
+  #   uses: ./.github/workflows/devnet-test.yml
+  #   secrets: inherit

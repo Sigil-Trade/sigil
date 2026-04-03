@@ -15,8 +15,8 @@ name: Devnet Tests
 
 on:
   workflow_call: # Called by deploy-devnet.yml after successful deploy
-  schedule:
-    - cron: "0 2 * * *" # 2 AM UTC nightly
+  # schedule:                          # DISABLED 2026-04-03 — see deploy-devnet.yml Job 3 comment
+  #   - cron: "0 2 * * *"             # Nightly runs hit same UnauthorizedTokenTransfer failure
   workflow_dispatch:
     inputs:
       test-filter:
