@@ -61,6 +61,14 @@ import {
 
 const FULL_PERMISSIONS = new BN((1n << 21n) - 1n);
 
+// Helper: read current policy version for any vault's policy PDA
+async function readPolicyVersion(prog: Program<Sigil>, policyPda: PublicKey): Promise<BN> {
+  try {
+    const pol = await prog.account.policyConfig.fetch(policyPda);
+    return (pol as any).policyVersion ?? new BN(0);
+  } catch { return new BN(0); }
+}
+
 // ─── Shared state ───────────────────────────────────────────────────────────
 
 let env: SurfpoolTestEnv;
@@ -137,7 +145,7 @@ describe("surfpool-integration", function () {
           3, // max_concurrent_positions
           0, // developer_fee_rate
           100, // maxSlippageBps (1%)
-          new BN(0), // timelockDuration
+          new BN(1800), // timelockDuration
           [], // allowedDestinations
           [], // protocolCaps
         )
@@ -216,6 +224,7 @@ describe("surfpool-integration", function () {
           new BN(50_000_000), // 50 USDC
           program.programId, // dummy protocol
           null,
+          await readPolicyVersion(program, policyPda),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -318,7 +327,7 @@ describe("surfpool-integration", function () {
           3,
           0,
           100,
-          new BN(0),
+          new BN(1800),
           [],
           [], // protocolCaps
         )
@@ -382,6 +391,7 @@ describe("surfpool-integration", function () {
           new BN(10_000_000), // 10 USDC
           program.programId,
           null,
+          await readPolicyVersion(program, policyPda),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -445,6 +455,7 @@ describe("surfpool-integration", function () {
           new BN(10_000_000),
           program.programId,
           null,
+          await readPolicyVersion(program, policyPda),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -496,6 +507,7 @@ describe("surfpool-integration", function () {
           new BN(5_000_000), // 5 USDC
           program.programId,
           null,
+          await readPolicyVersion(program, policyPda),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -588,7 +600,7 @@ describe("surfpool-integration", function () {
           3,
           0,
           100,
-          new BN(0),
+          new BN(1800),
           [],
           [], // protocolCaps
         )
@@ -652,6 +664,7 @@ describe("surfpool-integration", function () {
           new BN(25_000_000), // 25 USDC
           program.programId,
           null,
+          await readPolicyVersion(program, policyPda),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -718,6 +731,7 @@ describe("surfpool-integration", function () {
           new BN(25_000_000), // 25 USDC (valid amount)
           program.programId,
           null,
+          await readPolicyVersion(program, policyPda),
         )
         .accountsPartial({
           agent: rogueAgent.publicKey,
@@ -794,6 +808,7 @@ describe("surfpool-integration", function () {
           new BN(30_000_000), // 30 USDC
           program.programId,
           null,
+          await readPolicyVersion(program, policyPda),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -886,7 +901,7 @@ describe("surfpool-integration", function () {
           3,
           0,
           100,
-          new BN(0),
+          new BN(1800),
           [],
           [], // protocolCaps
         )
@@ -973,6 +988,7 @@ describe("surfpool-integration", function () {
           new BN(amount),
           program.programId,
           null,
+          await readPolicyVersion(program, policyPda),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -1067,7 +1083,7 @@ describe("surfpool-integration", function () {
           3,
           0,
           100,
-          new BN(0),
+          new BN(1800),
           [],
           [], // protocolCaps
         )
@@ -1131,6 +1147,7 @@ describe("surfpool-integration", function () {
           new BN(20_000_000),
           program.programId,
           null,
+          await readPolicyVersion(program, policyPda),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -1217,7 +1234,7 @@ describe("surfpool-integration", function () {
           3,
           0,
           100,
-          new BN(0),
+          new BN(1800),
           [],
           [], // protocolCaps
         )
@@ -1297,7 +1314,7 @@ describe("surfpool-integration", function () {
           3,
           0,
           100,
-          new BN(0),
+          new BN(1800),
           [],
           [], // protocolCaps
         )
@@ -1352,7 +1369,7 @@ describe("surfpool-integration", function () {
           3,
           0,
           100,
-          new BN(0),
+          new BN(1800),
           [],
           [], // protocolCaps
         )
@@ -1422,7 +1439,7 @@ describe("surfpool-integration", function () {
           3,
           0,
           100,
-          new BN(0),
+          new BN(1800),
           [],
           [], // protocolCaps
         )
@@ -1470,7 +1487,7 @@ describe("surfpool-integration", function () {
         program.programId,
       );
 
-      // Create vault WITH timelock (60 seconds)
+      // Create vault WITH timelock (1800 seconds = MIN_TIMELOCK_DURATION)
       await program.methods
         .initializeVault(
           vaultId,
@@ -1482,7 +1499,7 @@ describe("surfpool-integration", function () {
           3,
           0,
           100,
-          new BN(60), // 60-second timelock
+          new BN(1800), // 1800s timelock (MIN_TIMELOCK_DURATION)
           [],
           [], // protocolCaps
         )
@@ -1531,10 +1548,10 @@ describe("surfpool-integration", function () {
         await program.account.pendingPolicyUpdate.fetch(pendingPolicyPda);
       expect(pending.dailySpendingCapUsd!.toNumber()).to.equal(200_000_000);
 
-      // Time travel past the timelock (60 seconds + buffer)
+      // Time travel past the timelock (1800 seconds + buffer)
       // Surfnet absoluteTimestamp is in milliseconds
       await timeTravel(env.connection, {
-        absoluteTimestamp: Date.now() + 120_000,
+        absoluteTimestamp: Date.now() + 2_000_000,
       });
 
       // Apply should now succeed
@@ -1813,6 +1830,7 @@ describe("surfpool-integration", function () {
           new BN(10_000_000),
           program.programId,
           null,
+          await readPolicyVersion(program, setup.policyPda),
         )
         .accountsPartial({
           agent: setup.agent.publicKey,
@@ -1884,6 +1902,7 @@ describe("surfpool-integration", function () {
           new BN(5_000_000),
           program.programId,
           null,
+          await readPolicyVersion(program, setup.policyPda),
         )
         .accountsPartial({
           agent: setup.agent.publicKey,
@@ -1998,6 +2017,7 @@ describe("surfpool-integration", function () {
           new BN(5_000_000),
           program.programId,
           null,
+          await readPolicyVersion(program, setup.policyPda),
         )
         .accountsPartial({
           agent: setup.agent.publicKey,
@@ -2059,6 +2079,7 @@ describe("surfpool-integration", function () {
           new BN(5_000_000),
           program.programId,
           null,
+          await readPolicyVersion(program, setup.policyPda),
         )
         .accountsPartial({
           agent: agent2.publicKey,
@@ -2133,6 +2154,7 @@ describe("surfpool-integration", function () {
           new BN(5_000_000),
           program.programId,
           null,
+          await readPolicyVersion(program, setup.policyPda),
         )
         .accountsPartial({
           agent: setup.agent.publicKey,
@@ -2247,9 +2269,10 @@ describe("surfpool-integration", function () {
     let noSwapSetup: VaultSetupResult;
 
     before(async () => {
-      // Vault with swap-only agent
+      // Vault with swap-only agent (timelockDuration required for queue/apply)
       swapSetup = await setupVaultWithAgent(env, program, {
         agentPermissions: SWAP_ONLY,
+        timelockDuration: new BN(1800),
       });
       // Vault with no-swap agent
       noSwapSetup = await setupVaultWithAgent(env, program, {
@@ -2272,6 +2295,7 @@ describe("surfpool-integration", function () {
           new BN(5_000_000),
           program.programId,
           null,
+          await readPolicyVersion(program, swapSetup.policyPda),
         )
         .accountsPartial({
           agent: swapSetup.agent.publicKey,
@@ -2325,6 +2349,10 @@ describe("surfpool-integration", function () {
         program.programId,
       );
 
+      // Read current policy version dynamically
+      const pol = await program.account.policyConfig.fetch(noSwapSetup.policyPda);
+      const currentVersion = (pol as any).policyVersion ?? new BN(0);
+
       const validateIx = await program.methods
         .validateAndAuthorize(
           { swap: {} },
@@ -2332,6 +2360,7 @@ describe("surfpool-integration", function () {
           new BN(5_000_000),
           program.programId,
           null,
+          currentVersion,
         )
         .accountsPartial({
           agent: noSwapSetup.agent.publicKey,
@@ -2377,10 +2406,20 @@ describe("surfpool-integration", function () {
       );
     });
 
-    it("update_agent_permissions changes bitmask", async () => {
-      // Give swap-only agent full permissions
+    it("queue+apply agent_permissions_update changes bitmask", async () => {
+      // Give swap-only agent full permissions via queue+apply
+      const [pendingAgentPerms] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("pending_agent_perms"),
+          swapSetup.vaultPda.toBuffer(),
+          swapSetup.agent.publicKey.toBuffer(),
+        ],
+        program.programId,
+      );
+
+      // Queue
       await program.methods
-        .updateAgentPermissions(
+        .queueAgentPermissionsUpdate(
           swapSetup.agent.publicKey,
           FULL_PERMISSIONS,
           new BN(0),
@@ -2389,6 +2428,32 @@ describe("surfpool-integration", function () {
           owner: env.payer.publicKey,
           vault: swapSetup.vaultPda,
           policy: swapSetup.policyPda,
+          pendingAgentPerms: pendingAgentPerms,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .rpc();
+
+      // Time travel past 1800s timelock
+      const SYSVAR_CLOCK = new PublicKey(
+        "SysvarC1ock11111111111111111111111111111111",
+      );
+      const clockInfo = await env.connection.getAccountInfo(SYSVAR_CLOCK);
+      let travelTs = Math.floor(Date.now() / 1000);
+      if (clockInfo && clockInfo.data.length >= 40) {
+        travelTs = Number(clockInfo.data.readBigInt64LE(32));
+      }
+      await timeTravel(env.connection, {
+        absoluteTimestamp: (travelTs + 2000) * 1000,
+      });
+
+      // Apply
+      await program.methods
+        .applyAgentPermissionsUpdate()
+        .accounts({
+          owner: env.payer.publicKey,
+          vault: swapSetup.vaultPda,
+          policy: swapSetup.policyPda,
+          pendingAgentPerms: pendingAgentPerms,
           agentSpendOverlay: swapSetup.overlayPda,
         } as any)
         .rpc();
@@ -2422,6 +2487,9 @@ describe("surfpool-integration", function () {
         DEVNET_USDC_MINT,
         program.programId,
       );
+      // Read current policy version (may have been bumped by earlier queue+apply)
+      const pol = await program.account.policyConfig.fetch(swapSetup.policyPda);
+      const currentVersion = (pol as any).policyVersion ?? new BN(0);
       const validateIx = await program.methods
         .validateAndAuthorize(
           { swap: {} },
@@ -2429,6 +2497,7 @@ describe("surfpool-integration", function () {
           new BN(5_000_000),
           program.programId,
           null,
+          currentVersion,
         )
         .accountsPartial({
           agent: agent2.publicKey,
@@ -2533,6 +2602,7 @@ describe("surfpool-integration", function () {
           new BN(5_000_000),
           program.programId,
           null,
+          await readPolicyVersion(program, zeroSetup.policyPda),
         )
         .accountsPartial({
           agent: zeroSetup.agent.publicKey,
@@ -3337,6 +3407,7 @@ describe("surfpool-integration", function () {
           new BN(5_000_000),
           program.programId,
           null,
+          await readPolicyVersion(program, setup.policyPda),
         )
         .accountsPartial({
           agent: setup.agent.publicKey,
@@ -3404,6 +3475,7 @@ describe("surfpool-integration", function () {
           new BN(5_000_000),
           program.programId,
           null,
+          await readPolicyVersion(program, setup.policyPda),
         )
         .accountsPartial({
           agent: setup.agent.publicKey,
@@ -3539,11 +3611,17 @@ describe("surfpool-integration", function () {
       accountConstraints: [],
     };
 
-    it("create + update constraints (no timelock)", async () => {
-      // No-timelock vault for direct create/update
-      const noTlSetup = await setupVaultWithAgent(env, program);
+    it("create + update constraints via queue+apply", async () => {
+      // Timelocked vault for queue/apply update
+      const tlSetup = await setupVaultWithAgent(env, program, {
+        timelockDuration: new BN(1800),
+      });
       const [cPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("constraints"), noTlSetup.vaultPda.toBuffer()],
+        [Buffer.from("constraints"), tlSetup.vaultPda.toBuffer()],
+        program.programId,
+      );
+      const [pcPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("pending_constraints"), tlSetup.vaultPda.toBuffer()],
         program.programId,
       );
 
@@ -3552,8 +3630,8 @@ describe("surfpool-integration", function () {
         .createInstructionConstraints([sampleEntry], false)
         .accounts({
           owner: env.payer.publicKey,
-          vault: noTlSetup.vaultPda,
-          policy: noTlSetup.policyPda,
+          vault: tlSetup.vaultPda,
+          policy: tlSetup.policyPda,
           constraints: cPda,
           systemProgram: SystemProgram.programId,
         } as any)
@@ -3563,7 +3641,7 @@ describe("surfpool-integration", function () {
         await program.account.instructionConstraints.fetch(cPda);
       expect(constraints.entries.length).to.equal(1);
 
-      // Update (only works without timelock)
+      // Queue update
       const updatedEntry = {
         ...sampleEntry,
         dataConstraints: [
@@ -3575,23 +3653,61 @@ describe("surfpool-integration", function () {
         ],
       };
       await program.methods
-        .updateInstructionConstraints([updatedEntry], true)
+        .queueConstraintsUpdate([updatedEntry], true)
         .accounts({
           owner: env.payer.publicKey,
-          vault: noTlSetup.vaultPda,
-          policy: noTlSetup.policyPda,
+          vault: tlSetup.vaultPda,
+          policy: tlSetup.policyPda,
           constraints: cPda,
+          pendingConstraints: pcPda,
+          systemProgram: SystemProgram.programId,
         } as any)
         .rpc();
+
+      // Time travel past 1800s timelock
+      const SYSVAR_CLOCK = new PublicKey(
+        "SysvarC1ock11111111111111111111111111111111",
+      );
+      const clockInfo = await env.connection.getAccountInfo(SYSVAR_CLOCK);
+      let travelTs = Math.floor(Date.now() / 1000);
+      if (clockInfo && clockInfo.data.length >= 40) {
+        travelTs = Number(clockInfo.data.readBigInt64LE(32));
+      }
+      await timeTravel(env.connection, {
+        absoluteTimestamp: (travelTs + 2000) * 1000,
+      });
+
+      // Apply — build instruction manually to bypass Anchor pre-fetching issues
+      const applyDiscriminator = Buffer.from([
+        175, 103, 90, 155, 134, 91, 135, 242,
+      ]);
+      const applyIx = new anchor.web3.TransactionInstruction({
+        programId: program.programId,
+        keys: [
+          { pubkey: env.payer.publicKey, isSigner: true, isWritable: true },
+          { pubkey: tlSetup.vaultPda, isSigner: false, isWritable: false },
+          { pubkey: tlSetup.policyPda, isSigner: false, isWritable: true },
+          { pubkey: cPda, isSigner: false, isWritable: true },
+          { pubkey: pcPda, isSigner: false, isWritable: true },
+        ],
+        data: applyDiscriminator,
+      });
+      await sendVersionedTx(env.connection, [applyIx], env.payer);
 
       constraints = await program.account.instructionConstraints.fetch(cPda);
       expect(constraints.strictMode).to.equal(true);
     });
 
-    it("close_instruction_constraints reclaims rent", async () => {
-      const closeSetup = await setupVaultWithAgent(env, program);
+    it("queue+apply close_constraints reclaims rent", async () => {
+      const closeSetup = await setupVaultWithAgent(env, program, {
+        timelockDuration: new BN(1800),
+      });
       const [closePda] = PublicKey.findProgramAddressSync(
         [Buffer.from("constraints"), closeSetup.vaultPda.toBuffer()],
+        program.programId,
+      );
+      const [pendingClosePda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("pending_close_constraints"), closeSetup.vaultPda.toBuffer()],
         program.programId,
       );
 
@@ -3606,13 +3722,41 @@ describe("surfpool-integration", function () {
         } as any)
         .rpc();
 
+      // Queue close
       await program.methods
-        .closeInstructionConstraints()
+        .queueCloseConstraints()
         .accounts({
           owner: env.payer.publicKey,
           vault: closeSetup.vaultPda,
           policy: closeSetup.policyPda,
           constraints: closePda,
+          pendingCloseConstraints: pendingClosePda,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .rpc();
+
+      // Time travel past 1800s timelock
+      const SYSVAR_CLOCK = new PublicKey(
+        "SysvarC1ock11111111111111111111111111111111",
+      );
+      const clockInfo = await env.connection.getAccountInfo(SYSVAR_CLOCK);
+      let travelTs = Math.floor(Date.now() / 1000);
+      if (clockInfo && clockInfo.data.length >= 40) {
+        travelTs = Number(clockInfo.data.readBigInt64LE(32));
+      }
+      await timeTravel(env.connection, {
+        absoluteTimestamp: (travelTs + 2000) * 1000,
+      });
+
+      // Apply close
+      await program.methods
+        .applyCloseConstraints()
+        .accounts({
+          owner: env.payer.publicKey,
+          vault: closeSetup.vaultPda,
+          policy: closeSetup.policyPda,
+          constraints: closePda,
+          pendingCloseConstraints: pendingClosePda,
         } as any)
         .rpc();
 
@@ -3627,7 +3771,7 @@ describe("surfpool-integration", function () {
     it("queue + time travel + apply constraints update succeeds", async () => {
       // Timelocked vault for queue/apply
       const tlSetup = await setupVaultWithAgent(env, program, {
-        timelockDuration: new BN(60),
+        timelockDuration: new BN(1800),
       });
       const [cPda] = PublicKey.findProgramAddressSync(
         [Buffer.from("constraints"), tlSetup.vaultPda.toBuffer()],
@@ -3674,7 +3818,7 @@ describe("surfpool-integration", function () {
         } as any)
         .rpc();
 
-      // Time travel past 60s timelock — read Clock sysvar for accurate time
+      // Time travel past 1800s timelock — read Clock sysvar for accurate time
       const SYSVAR_CLOCK = new PublicKey(
         "SysvarC1ock11111111111111111111111111111111",
       );
@@ -3684,7 +3828,7 @@ describe("surfpool-integration", function () {
         travelTs = Number(clockInfo.data.readBigInt64LE(32));
       }
       await timeTravel(env.connection, {
-        absoluteTimestamp: (travelTs + 300) * 1000, // 5 min past current on-chain time
+        absoluteTimestamp: (travelTs + 2000) * 1000, // past 1800s timelock
       });
 
       // Apply — build instruction manually to bypass Anchor's client-side
@@ -3699,6 +3843,7 @@ describe("surfpool-integration", function () {
         keys: [
           { pubkey: env.payer.publicKey, isSigner: true, isWritable: true },
           { pubkey: tlSetup.vaultPda, isSigner: false, isWritable: false },
+          { pubkey: tlSetup.policyPda, isSigner: false, isWritable: true },
           { pubkey: cPda, isSigner: false, isWritable: true },
           { pubkey: pcPda, isSigner: false, isWritable: true },
         ],
@@ -3713,7 +3858,7 @@ describe("surfpool-integration", function () {
 
     it("apply before timelock expires fails", async () => {
       const tlSetup2 = await setupVaultWithAgent(env, program, {
-        timelockDuration: new BN(60),
+        timelockDuration: new BN(1800),
       });
       const [cPda] = PublicKey.findProgramAddressSync(
         [Buffer.from("constraints"), tlSetup2.vaultPda.toBuffer()],
@@ -3754,6 +3899,7 @@ describe("surfpool-integration", function () {
         .accounts({
           owner: env.payer.publicKey,
           vault: tlSetup2.vaultPda,
+          policy: tlSetup2.policyPda,
           constraints: cPda,
           pendingConstraints: pcPda,
         } as any)

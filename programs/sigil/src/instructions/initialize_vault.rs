@@ -95,6 +95,10 @@ pub fn handler(
         allowed_destinations.len() <= MAX_ALLOWED_DESTINATIONS,
         SigilError::TooManyDestinations
     );
+    require!(
+        timelock_duration >= MIN_TIMELOCK_DURATION,
+        SigilError::TimelockTooShort
+    );
 
     // Validate per-protocol caps
     if !protocol_caps.is_empty() {
@@ -146,6 +150,7 @@ pub fn handler(
     policy.protocol_caps = protocol_caps;
     policy.session_expiry_slots = 0;
     policy.bump = ctx.bumps.policy;
+    policy.policy_version = 0;
 
     // Initialize zero-copy tracker (buckets + protocol_counters zero-initialized by allocator)
     let mut tracker = ctx.accounts.tracker.load_init()?;

@@ -5,6 +5,7 @@
 | Package                   | Supported |
 | ------------------------- | --------- |
 | @usesigil/kit >= 0.1.0      | Yes       |
+| @usesigil/platform >= 0.1.0 | Yes       |
 | @usesigil/custody >= 0.1.0  | Yes       |
 | @usesigil/plugins >= 0.1.0  | Yes       |
 | On-chain program (sigil) | Yes       |

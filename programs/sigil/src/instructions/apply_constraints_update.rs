@@ -16,6 +16,16 @@ pub struct ApplyConstraintsUpdate<'info> {
     )]
     pub vault: Account<'info, AgentVault>,
 
+    /// PolicyConfig — needed to bump policy_version on constraint changes.
+    /// IDL BREAKING CHANGE: this account was added in the TOCTOU fix.
+    #[account(
+        mut,
+        has_one = vault,
+        seeds = [b"policy", vault.key().as_ref()],
+        bump = policy.bump,
+    )]
+    pub policy: Account<'info, PolicyConfig>,
+
     #[account(
         mut,
         has_one = vault @ SigilError::InvalidConstraintsPda,
@@ -48,6 +58,13 @@ pub fn handler(ctx: Context<ApplyConstraintsUpdate>) -> Result<()> {
     let constraints = &mut ctx.accounts.constraints;
     constraints.entries = pending.entries.clone();
     constraints.strict_mode = pending.strict_mode;
+
+    // Bump policy version — constraint changes affect security posture
+    let policy = &mut ctx.accounts.policy;
+    policy.policy_version = policy
+        .policy_version
+        .checked_add(1)
+        .ok_or(error!(SigilError::Overflow))?;
 
     emit!(ConstraintsChangeApplied {
         vault: ctx.accounts.vault.key(),

@@ -1,6 +1,8 @@
 pub mod agent_spend_overlay;
 pub mod constraints;
 pub mod escrow;
+pub mod pending_agent_perms;
+pub mod pending_close_constraints;
 pub mod pending_constraints;
 pub mod pending_policy;
 pub mod policy;
@@ -11,6 +13,8 @@ pub mod vault;
 pub use agent_spend_overlay::*;
 pub use constraints::*;
 pub use escrow::*;
+pub use pending_agent_perms::*;
+pub use pending_close_constraints::*;
 pub use pending_constraints::*;
 pub use pending_policy::*;
 pub use policy::*;
@@ -48,6 +52,11 @@ pub const MAX_SLIPPAGE_BPS: u16 = 5000;
 
 /// Maximum escrow duration: 30 days in seconds
 pub const MAX_ESCROW_DURATION: i64 = 2_592_000;
+
+/// Minimum timelock duration: 30 minutes in seconds.
+/// Enforced at vault creation and in all queue/apply paths.
+/// Once a vault has a timelock, it can never be reduced below this floor.
+pub const MIN_TIMELOCK_DURATION: u64 = 1800;
 
 /// sha256("global:finalize_session")[0..8] — used by validate_and_authorize
 /// to identify finalize_session instructions in the transaction.

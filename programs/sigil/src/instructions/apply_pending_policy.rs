@@ -75,6 +75,7 @@ pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
         policy.max_slippage_bps = slippage;
     }
     if let Some(tl) = pending.timelock_duration {
+        require!(tl >= MIN_TIMELOCK_DURATION, SigilError::TimelockTooShort);
         policy.timelock_duration = tl;
     }
     if let Some(ref destinations) = pending.allowed_destinations {
@@ -91,6 +92,12 @@ pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
     }
 
     policy.has_pending_policy = false;
+
+    // Bump policy version — agents will detect this via PolicyVersionMismatch
+    policy.policy_version = policy
+        .policy_version
+        .checked_add(1)
+        .ok_or(error!(SigilError::Overflow))?;
 
     emit!(PolicyChangeApplied {
         vault: ctx.accounts.vault.key(),

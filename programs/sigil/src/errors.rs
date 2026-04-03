@@ -85,9 +85,8 @@ pub enum SigilError {
     #[msg("Timelock period has not expired yet")]
     TimelockNotExpired,
 
-    #[msg("Vault has timelock active — use queue_policy_update instead")]
-    TimelockActive,
-
+    // TimelockActive removed — the 4 direct-mutation instructions that used it are deleted.
+    // All mutations now route through queue/apply with mandatory timelock.
     #[msg("No timelock configured on this vault")]
     NoTimelockConfigured,
 
@@ -231,4 +230,17 @@ pub enum SigilError {
     // --- CPI balance audit ---
     #[msg("Vault balance decreased more than delegated amount — potential CPI attack")]
     UnexpectedBalanceDecrease,
+
+    // --- TOCTOU fix: mandatory timelock + policy versioning ---
+    #[msg("Timelock duration below minimum (1800 seconds / 30 minutes)")]
+    TimelockTooShort,
+
+    #[msg("Policy version mismatch — policy changed since agent's last RPC read")]
+    PolicyVersionMismatch,
+
+    #[msg("A pending agent permissions update already exists for this agent")]
+    PendingAgentPermsExists,
+
+    #[msg("A pending close constraints operation already exists for this vault")]
+    PendingCloseConstraintsExists,
 }

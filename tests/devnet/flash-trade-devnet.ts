@@ -221,7 +221,7 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
           5, // max_concurrent_positions
           0, // developer_fee_rate
           5000, // maxSlippageBps (50%)
-          new BN(0), // timelock
+          new BN(1800), // timelock
           [], // destinations
           [], // protocolCaps
         )
@@ -316,6 +316,7 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
           new BN(500_000), // $0.50
           FLASH_TRADE_DEVNET,
           null, // no leverage
+          new BN(0), // expectedPolicyVersion
         )
         .accounts({
           agent: agent.publicKey,
@@ -458,7 +459,7 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
       const session = deriveSessionPda(vault, agent.publicKey, FLASH_USDC_DEVNET, program.programId);
       const computeIx = ComputeBudgetProgram.setComputeUnitLimit({ units: 1_400_000 });
       const validateIx = await program.methods
-        .validateAndAuthorize(actionType, FLASH_USDC_DEVNET, amount, FLASH_TRADE_DEVNET, null)
+        .validateAndAuthorize(actionType, FLASH_USDC_DEVNET, amount, FLASH_TRADE_DEVNET, null, new BN(0))
         .accounts({
           agent: agent.publicKey, vault, policy, tracker, session,
           agentSpendOverlay: overlay, vaultTokenAccount: vaultAta,
@@ -670,7 +671,7 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
       const validateIx = await program.methods
         .validateAndAuthorize(
           { swap: {} }, FLASH_USDC_DEVNET, new BN(100_000),
-          FLASH_TRADE_DEVNET, null,
+          FLASH_TRADE_DEVNET, null, new BN(0),
         )
         .accounts({
           agent: agent.publicKey, vault: pdas.vaultPda, policy: pdas.policyPda,
@@ -751,7 +752,7 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
           .validateAndAuthorize(
             { swap: {} }, FLASH_USDC_DEVNET, new BN(100_000),
             randomProgram, // NOT in allowlist
-            null,
+            null, new BN(0),
           )
           .accounts({
             agent: agent.publicKey, vault: pdas.vaultPda, policy: pdas.policyPda,

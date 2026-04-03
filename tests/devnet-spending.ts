@@ -45,6 +45,8 @@ describe("devnet-spending", () => {
 
   let mintA: PublicKey; // 6 decimals (test USDC)
   let mintB: PublicKey; // 6 decimals (test USDT)
+  let agentMintAAta: PublicKey; // agent ATA for mock DeFi spend destination
+  let agentMintBAta: PublicKey;
 
   before(async () => {
     await fundKeypair(provider, agent.publicKey);
@@ -62,6 +64,23 @@ describe("devnet-spending", () => {
       owner.publicKey,
       6,
     );
+
+    // Create agent ATAs as mock DeFi spend destinations
+    const agentMintAAccount = await getOrCreateAssociatedTokenAccount(
+      connection,
+      payer,
+      mintA,
+      agent.publicKey,
+    );
+    agentMintAAta = agentMintAAccount.address;
+    const agentMintBAccount = await getOrCreateAssociatedTokenAccount(
+      connection,
+      payer,
+      mintB,
+      agent.publicKey,
+    );
+    agentMintBAta = agentMintBAccount.address;
+
     console.log("  MintA (USDC):", mintA.toString());
     console.log("  MintB (USDT):", mintB.toString());
   });
@@ -161,6 +180,7 @@ describe("devnet-spending", () => {
       protocol: jupiterProgramId,
       feeDestinationAta: null,
       protocolTreasuryAta: vault.protocolTreasuryAta,
+      mockSpendDestination: agentMintAAta,
     });
 
     // Spend 100 USDT (6 dec stablecoin -> 1:1 USD)
@@ -184,6 +204,7 @@ describe("devnet-spending", () => {
       protocol: jupiterProgramId,
       feeDestinationAta: null,
       protocolTreasuryAta: vault.mintBTreasuryAta,
+      mockSpendDestination: agentMintBAta,
     });
 
     // Now at 200 USD cap — 1 more of either should fail
@@ -206,6 +227,8 @@ describe("devnet-spending", () => {
         mint: mintA,
         amount: new BN(1_000_000), // 1 USDC more
         protocol: jupiterProgramId,
+        protocolTreasuryAta: vault.protocolTreasuryAta,
+        mockSpendDestination: agentMintAAta,
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
@@ -270,6 +293,8 @@ describe("devnet-spending", () => {
         mint: mintA,
         amount: new BN(51_000_000), // 51 > maxTx=50
         protocol: jupiterProgramId,
+        protocolTreasuryAta: vault.protocolTreasuryAta,
+        mockSpendDestination: agentMintAAta,
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
@@ -344,6 +369,7 @@ describe("devnet-spending", () => {
       protocol: jupiterProgramId,
       feeDestinationAta: null,
       protocolTreasuryAta: vault.protocolTreasuryAta,
+      mockSpendDestination: agentMintAAta,
     });
 
     // agent_transfer 50
@@ -394,6 +420,8 @@ describe("devnet-spending", () => {
         mint: mintA,
         amount: new BN(1_000_000),
         protocol: jupiterProgramId,
+        protocolTreasuryAta: vault.protocolTreasuryAta,
+        mockSpendDestination: agentMintAAta,
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
@@ -402,13 +430,17 @@ describe("devnet-spending", () => {
     console.log("    Session + agent_transfer spends tracked together at cap");
   });
 
-  it("6. update_policy changes daily cap (V2: no tracker in updatePolicy)", async () => {
+  it("6. queue/cancel policy update + spend within original cap", async () => {
+    // Create vault with 500M cap — high enough for two spends without needing a mid-test change.
+    // With mandatory 30-min timelock, we can't apply policy changes on devnet in a test.
+    // Instead we verify: (a) queue works, (b) pending values correct, (c) cancel works,
+    // (d) spending under the original cap succeeds.
     const vault = await createDualTokenVault({
-      dailyCap: new BN(200_000_000),
-      maxTx: new BN(200_000_000),
+      dailyCap: new BN(500_000_000),
+      maxTx: new BN(300_000_000),
     });
 
-    // Spend some
+    // Spend 100M (first spend)
     const sessionA = deriveSessionPda(
       vault.vaultPda,
       agent.publicKey,
@@ -431,10 +463,10 @@ describe("devnet-spending", () => {
       protocolTreasuryAta: vault.protocolTreasuryAta,
     });
 
-    // Update daily cap higher (14 args — includes sessionExpirySlots)
+    // Queue a policy cap change (verify queue mechanism works on devnet)
     await program.methods
-      .updatePolicy(
-        new BN(500_000_000), // new daily cap
+      .queuePolicyUpdate(
+        new BN(1_000_000_000), // queued cap: 1B
         null,
         null,
         null,
@@ -453,14 +485,33 @@ describe("devnet-spending", () => {
         owner: owner.publicKey,
         vault: vault.vaultPda,
         policy: vault.policyPda,
+        pendingPolicy: vault.pendingPolicyPda,
+        systemProgram: SystemProgram.programId,
       } as any)
       .rpc();
 
-    // Verify policy changed
+    // Verify the pending update was created with correct values
+    const pendingAccount = await program.account.pendingPolicyUpdate.fetch(vault.pendingPolicyPda);
+    expect(pendingAccount.dailySpendingCapUsd.toNumber()).to.equal(1_000_000_000);
+    console.log("    Queue policy update succeeded, pending cap = 1B");
+
+    // Cancel the pending update (can't wait 30min on devnet)
+    await program.methods
+      .cancelPendingPolicy()
+      .accounts({
+        owner: owner.publicKey,
+        vault: vault.vaultPda,
+        policy: vault.policyPda,
+        pendingPolicy: vault.pendingPolicyPda,
+      } as any)
+      .rpc();
+
+    // Verify policy unchanged after cancel
     const policy = await program.account.policyConfig.fetch(vault.policyPda);
     expect(policy.dailySpendingCapUsd.toNumber()).to.equal(500_000_000);
+    console.log("    Cancel succeeded, cap still 500M");
 
-    // Can spend more with increased cap
+    // Spend 200M more (within original 500M cap — total now 300M < 500M)
     const sessionB = deriveSessionPda(
       vault.vaultPda,
       agent.publicKey,
@@ -482,6 +533,6 @@ describe("devnet-spending", () => {
       feeDestinationAta: null,
       protocolTreasuryAta: vault.protocolTreasuryAta,
     });
-    console.log("    Daily cap updated and additional spend succeeded");
+    console.log("    Second spend succeeded under original 500M cap (300M total)");
   });
 });

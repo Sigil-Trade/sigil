@@ -1,11 +1,11 @@
 use anchor_lang::prelude::*;
 
 use crate::errors::SigilError;
-use crate::events::InstructionConstraintsClosed;
+use crate::events::CloseConstraintsApplied;
 use crate::state::*;
 
 #[derive(Accounts)]
-pub struct CloseInstructionConstraints<'info> {
+pub struct ApplyCloseConstraints<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,
 
@@ -26,45 +26,62 @@ pub struct CloseInstructionConstraints<'info> {
 
     #[account(
         mut,
-        has_one = vault,
+        has_one = vault @ SigilError::InvalidConstraintsPda,
         seeds = [b"constraints", vault.key().as_ref()],
         bump = constraints.bump,
         close = owner,
     )]
     pub constraints: Account<'info, InstructionConstraints>,
+
+    #[account(
+        mut,
+        constraint = pending_close_constraints.vault == vault.key(),
+        seeds = [b"pending_close_constraints", vault.key().as_ref()],
+        bump = pending_close_constraints.bump,
+        close = owner,
+    )]
+    pub pending_close_constraints: Account<'info, PendingCloseConstraints>,
 }
 
-pub fn handler(ctx: Context<CloseInstructionConstraints>) -> Result<()> {
-    // Removing constraints loosens security — require no timelock (instant changes only)
+pub fn handler(ctx: Context<ApplyCloseConstraints>) -> Result<()> {
+    let clock = Clock::get()?;
+    let pending = &ctx.accounts.pending_close_constraints;
+
+    // Timelock must have expired
     require!(
-        ctx.accounts.policy.timelock_duration == 0,
-        SigilError::TimelockActive
+        pending.is_ready(clock.unix_timestamp),
+        SigilError::TimelockNotExpired
     );
 
     // Clear the has_constraints flag so validate_and_authorize skips constraint checks
-    ctx.accounts.policy.has_constraints = false;
+    let policy = &mut ctx.accounts.policy;
+    policy.has_constraints = false;
 
-    emit!(InstructionConstraintsClosed {
+    // Bump policy version — removing constraints affects security posture
+    policy.policy_version = policy
+        .policy_version
+        .checked_add(1)
+        .ok_or(error!(SigilError::Overflow))?;
+
+    emit!(CloseConstraintsApplied {
         vault: ctx.accounts.vault.key(),
-        timestamp: Clock::get()?.unix_timestamp,
+        applied_at: clock.unix_timestamp,
     });
 
     // If caller provides PendingConstraintsUpdate in remaining_accounts, close it too
+    // (same pattern as the old close_instruction_constraints.rs:53-70)
     if let Some(pending_info) = ctx.remaining_accounts.first() {
-        // Verify it's the correct PDA
         let (expected_pda, _) = Pubkey::find_program_address(
             &[b"pending_constraints", ctx.accounts.vault.key().as_ref()],
             ctx.program_id,
         );
         if pending_info.key() == expected_pda && pending_info.lamports() > 0 {
-            // Transfer lamports to owner (close the account)
             let owner_info = ctx.accounts.owner.to_account_info();
             let dest_lamports = owner_info.lamports();
             **owner_info.try_borrow_mut_lamports()? = dest_lamports
                 .checked_add(pending_info.lamports())
                 .ok_or(error!(SigilError::Overflow))?;
             **pending_info.try_borrow_mut_lamports()? = 0;
-            // Zero the data to mark account as closed
             pending_info.assign(&anchor_lang::system_program::ID);
             pending_info.resize(0)?;
         }

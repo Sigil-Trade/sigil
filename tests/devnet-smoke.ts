@@ -1,11 +1,13 @@
 /**
- * Devnet Smoke Tests — 9 tests (V2)
+ * Devnet Smoke Tests — 9 tests (V3)
  *
  * Full lifecycle: initialize_vault -> deposit -> register_agent ->
- * update_policy -> validate_and_authorize+finalize_session (composed) ->
+ * queue_policy_update (verify pending) -> validate_and_authorize+finalize_session (composed) ->
  * withdraw -> revoke -> reactivate -> close_vault.
  *
  *     Stablecoin-only architecture. initializeVault takes 11 args.
+ *     V3: updatePolicy deleted; all policy mutations go through queue/apply.
+ *     Mandatory minimum timelockDuration: 1800 (30 min).
  */
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
@@ -52,6 +54,7 @@ describe("devnet-smoke-test", () => {
   let policyPda: PublicKey;
   let trackerPda: PublicKey;
   let overlayPda: PublicKey;
+  let pendingPolicyPda: PublicKey;
   let sessionPda: PublicKey;
   let ownerUsdcAta: PublicKey;
   let vaultUsdcAta: PublicKey;
@@ -99,6 +102,7 @@ describe("devnet-smoke-test", () => {
     vaultPda = pdas.vaultPda;
     policyPda = pdas.policyPda;
     trackerPda = pdas.trackerPda;
+    pendingPolicyPda = pdas.pendingPolicyPda;
     [overlayPda] = PublicKey.findProgramAddressSync(
       [Buffer.from("agent_spend"), vaultPda.toBuffer(), Buffer.from([0])],
       program.programId,
@@ -145,7 +149,7 @@ describe("devnet-smoke-test", () => {
         3, // max_concurrent_positions
         0, // developer_fee_rate: 0 bps
         500, // maxSlippageBps: 5%
-        new BN(0), // timelockDuration
+        new BN(1800), // timelockDuration (mandatory minimum: 30 min)
         [], // allowedDestinations
         [], // protocolCaps
       )
@@ -207,10 +211,11 @@ describe("devnet-smoke-test", () => {
     console.log("    Agent registered:", agent.publicKey.toString());
   });
 
-  it("4. update_policy", async () => {
-    // 14 args (includes sessionExpirySlots)
+  it("4. queue_policy_update (timelock-gated — verify pending PDA)", async () => {
+    // updatePolicy deleted; all mutations go through queue/apply.
+    // With timelockDuration=1800, we can't apply in a test — just verify the queue.
     await program.methods
-      .updatePolicy(
+      .queuePolicyUpdate(
         null, // keep daily cap
         null, // keep max tx
         null, // keep protocolMode
@@ -230,12 +235,31 @@ describe("devnet-smoke-test", () => {
         owner: owner.publicKey,
         vault: vaultPda,
         policy: policyPda,
+        pendingPolicy: pendingPolicyPda,
+        systemProgram: SystemProgram.programId,
       } as any)
       .rpc();
 
-    const policy = await program.account.policyConfig.fetch(policyPda);
-    expect(policy.maxLeverageBps).to.equal(5000);
-    console.log("    Policy updated: max_leverage_bps = 5000");
+    // Verify pending policy PDA was created with the expected values
+    const pending = await program.account.pendingPolicyUpdate.fetch(
+      pendingPolicyPda,
+    );
+    expect(pending.maxLeverageBps).to.equal(5000);
+    console.log(
+      `    Policy update queued (executes at ${pending.executesAt.toNumber()})`,
+    );
+
+    // Cancel the pending update so it doesn't block close_vault later
+    await program.methods
+      .cancelPendingPolicy()
+      .accounts({
+        owner: owner.publicKey,
+        vault: vaultPda,
+        policy: policyPda,
+        pendingPolicy: pendingPolicyPda,
+      } as any)
+      .rpc();
+    console.log("    Pending policy cancelled (cleanup for later steps)");
   });
 
   it("5. validate_and_authorize + finalize_session (composed)", async () => {
@@ -247,6 +271,7 @@ describe("devnet-smoke-test", () => {
         new BN(50_000_000), // 50 tokens
         jupiterProgramId,
         null,
+        new BN(0),
       )
       .accounts({
         agent: agent.publicKey,

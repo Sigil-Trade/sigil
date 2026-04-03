@@ -36,18 +36,7 @@ pub struct AgentSpendLimitChecked {
     pub timestamp: i64,
 }
 
-#[event]
-pub struct PolicyUpdated {
-    pub vault: Pubkey,
-    pub daily_cap_usd: u64,
-    pub max_transaction_size_usd: u64,
-    pub protocol_mode: u8,
-    pub protocols_count: u8,
-    pub max_leverage_bps: u16,
-    pub developer_fee_rate: u16,
-    pub max_slippage_bps: u16,
-    pub timestamp: i64,
-}
+// PolicyUpdated event removed — replaced by PolicyChangeApplied (queue/apply path).
 
 #[event]
 pub struct ActionAuthorized {
@@ -162,13 +151,7 @@ pub struct AgentTransferExecuted {
     pub mint: Pubkey,
 }
 
-#[event]
-pub struct AgentPermissionsUpdated {
-    pub vault: Pubkey,
-    pub agent: Pubkey,
-    pub old_permissions: u64,
-    pub new_permissions: u64,
-}
+// AgentPermissionsUpdated event removed — replaced by AgentPermissionsChangeApplied (queue/apply path).
 
 #[event]
 pub struct PositionsSynced {
@@ -186,19 +169,8 @@ pub struct InstructionConstraintsCreated {
     pub timestamp: i64,
 }
 
-#[event]
-pub struct InstructionConstraintsUpdated {
-    pub vault: Pubkey,
-    pub entries_count: u8,
-    pub strict_mode: bool,
-    pub timestamp: i64,
-}
-
-#[event]
-pub struct InstructionConstraintsClosed {
-    pub vault: Pubkey,
-    pub timestamp: i64,
-}
+// InstructionConstraintsUpdated event removed — replaced by ConstraintsChangeApplied (queue/apply path).
+// InstructionConstraintsClosed event removed — replaced by CloseConstraintsApplied (queue/apply path).
 
 #[event]
 pub struct ConstraintsChangeQueued {
@@ -266,4 +238,43 @@ pub struct AgentUnpausedEvent {
     pub vault: Pubkey,
     pub agent: Pubkey,
     pub timestamp: i64,
+}
+
+// --- TOCTOU fix: queued agent permissions + constraint closure events ---
+
+#[event]
+pub struct AgentPermissionsChangeQueued {
+    pub vault: Pubkey,
+    pub agent: Pubkey,
+    pub executes_at: i64,
+}
+
+#[event]
+pub struct AgentPermissionsChangeApplied {
+    pub vault: Pubkey,
+    pub agent: Pubkey,
+    pub applied_at: i64,
+}
+
+#[event]
+pub struct AgentPermissionsChangeCancelled {
+    pub vault: Pubkey,
+    pub agent: Pubkey,
+}
+
+#[event]
+pub struct CloseConstraintsQueued {
+    pub vault: Pubkey,
+    pub executes_at: i64,
+}
+
+#[event]
+pub struct CloseConstraintsApplied {
+    pub vault: Pubkey,
+    pub applied_at: i64,
+}
+
+#[event]
+pub struct CloseConstraintsCancelled {
+    pub vault: Pubkey,
 }

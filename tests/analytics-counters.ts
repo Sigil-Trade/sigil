@@ -140,7 +140,7 @@ describe("analytics-counters", () => {
         10, // max_concurrent_positions
         0, // developer_fee_rate
         5000, // maxSlippageBps (50%)
-        new BN(0), // timelockDuration
+        new BN(1800), // timelockDuration (mandatory minimum: 30 min)
         [], // allowedDestinations
         [], // protocolCaps
       )
@@ -203,6 +203,7 @@ describe("analytics-counters", () => {
         amount,
         jupiterProgramId,
         null,
+        new BN(0),
       )
       .accountsPartial({
         agent: agent.publicKey,

@@ -15,7 +15,7 @@ use cvlr::prelude::*;
 // Rule 1: Developer fee rate ceiling
 //
 // MAX_DEVELOPER_FEE_RATE must be 500 (5 BPS). This is the hard
-// cap checked by both initialize_vault and update_policy. Any
+// cap checked by both initialize_vault and queue_policy_update. Any
 // accidental change to this constant would break the fee model.
 // ─────────────────────────────────────────────────────────────────
 

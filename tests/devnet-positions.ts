@@ -11,7 +11,10 @@
  */
 import * as anchor from "@coral-xyz/anchor";
 import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
-import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import {
+  TOKEN_PROGRAM_ID,
+  getOrCreateAssociatedTokenAccount,
+} from "@solana/spl-token";
 import { expect } from "chai";
 import BN from "bn.js";
 import {
@@ -36,6 +39,7 @@ describe("devnet-positions", () => {
   const jupiterProgramId = Keypair.generate().publicKey;
 
   let mint: PublicKey;
+  let agentMintAta: PublicKey; // agent ATA for mock DeFi spend destination
 
   before(async () => {
     await fundKeypair(provider, agent.publicKey);
@@ -46,6 +50,15 @@ describe("devnet-positions", () => {
       owner.publicKey,
       6,
     );
+
+    // Agent ATA for mock DeFi spend destination
+    const agentMintAccount = await getOrCreateAssociatedTokenAccount(
+      connection,
+      payer,
+      mint,
+      agent.publicKey,
+    );
+    agentMintAta = agentMintAccount.address;
   });
 
   /** Create a position-enabled vault */
@@ -69,7 +82,10 @@ describe("devnet-positions", () => {
   }
 
   /** Open a position (composed validate + finalize) */
-  async function openPosition(vault: FullVaultResult) {
+  async function openPosition(
+    vault: FullVaultResult,
+    mockSpendDest?: PublicKey,
+  ) {
     const sessionPda = deriveSessionPda(
       vault.vaultPda,
       agent.publicKey,
@@ -92,6 +108,7 @@ describe("devnet-positions", () => {
       leverageBps: 2000,
       protocolTreasuryAta: vault.protocolTreasuryAta,
       feeDestinationAta: null,
+      mockSpendDestination: mockSpendDest ?? null,
     });
   }
 
@@ -123,7 +140,7 @@ describe("devnet-positions", () => {
 
   it("1. openPosition increments counter", async () => {
     const vault = await createPositionVault();
-    await openPosition(vault);
+    await openPosition(vault, agentMintAta);
 
     const v = await program.account.agentVault.fetch(vault.vaultPda);
     expect(v.openPositions).to.equal(1);
@@ -132,7 +149,7 @@ describe("devnet-positions", () => {
 
   it("2. closePosition decrements counter", async () => {
     const vault = await createPositionVault();
-    await openPosition(vault);
+    await openPosition(vault, agentMintAta);
 
     const vBefore = await program.account.agentVault.fetch(vault.vaultPda);
     expect(vBefore.openPositions).to.equal(1);
@@ -149,7 +166,7 @@ describe("devnet-positions", () => {
 
     // Open 3 positions
     for (let i = 0; i < 3; i++) {
-      await openPosition(vault);
+      await openPosition(vault, agentMintAta);
     }
 
     const v = await program.account.agentVault.fetch(vault.vaultPda);
@@ -179,6 +196,7 @@ describe("devnet-positions", () => {
         leverageBps: 2000,
         protocolTreasuryAta: vault.protocolTreasuryAta,
         feeDestinationAta: null,
+        mockSpendDestination: agentMintAta,
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
@@ -189,7 +207,7 @@ describe("devnet-positions", () => {
 
   it("4. close_vault with open positions fails", async () => {
     const vault = await createPositionVault();
-    await openPosition(vault);
+    await openPosition(vault, agentMintAta);
 
     // Try close — should fail due to open positions
     try {

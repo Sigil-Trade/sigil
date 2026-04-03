@@ -25,6 +25,7 @@ import {
   getOrCreateAssociatedTokenAccount,
   mintTo,
   getAccount,
+  createTransferInstruction,
 } from "@solana/spl-token";
 import { expect } from "chai";
 import BN from "bn.js";
@@ -273,7 +274,7 @@ export async function createFullVault(
     maxPositions = 3,
     devFeeRate = 0,
     maxSlippageBps = 500,
-    timelockDuration = new BN(0),
+    timelockDuration = new BN(1800), // mandatory minimum: 30 min
     allowedDestinations = [],
     depositAmount = new BN(1_000_000_000),
     skipDeposit = false,
@@ -419,6 +420,9 @@ export interface AuthorizeOpts {
   protocolTreasuryAta?: PublicKey | null;
   feeDestinationAta?: PublicKey | null;
   outputStablecoinAccount?: PublicKey | null;
+  mockSpendDestination?: PublicKey | null;
+  mockSpendDevFeeRate?: number;
+  expectedPolicyVersion?: BN;
   remainingAccounts?: {
     pubkey: PublicKey;
     isWritable: boolean;
@@ -449,6 +453,19 @@ export async function buildAuthorizeIx(opts: AuthorizeOpts) {
     outputStablecoinAccount = null,
     remainingAccounts = [],
   } = opts;
+
+  // Read current policy version from on-chain if not provided.
+  // Ensures tests that queue+apply policy changes use the correct version.
+  let policyVersion = opts.expectedPolicyVersion;
+  if (policyVersion === undefined) {
+    try {
+      const pol = await program.account.policyConfig.fetch(policyPda);
+      policyVersion = (pol as any).policyVersion ?? new BN(0);
+    } catch {
+      policyVersion = new BN(0); // Fallback for tests where policy may not exist yet
+    }
+  }
+
   const [overlayPda] = PublicKey.findProgramAddressSync(
     [Buffer.from("agent_spend"), vaultPda.toBuffer(), Buffer.from([0])],
     program.programId,
@@ -460,6 +477,7 @@ export async function buildAuthorizeIx(opts: AuthorizeOpts) {
       amount,
       protocol,
       leverageBps !== null ? (new BN(leverageBps) as any) : null,
+      policyVersion,
     )
     .accounts({
       agent: agent.publicKey,
@@ -560,11 +578,37 @@ export async function authorizeAndFinalize(
     outputStablecoinAccount: opts.outputStablecoinAccount ?? null,
   });
 
+  // Build instruction list: validate → [mock DeFi spend] → finalize
+  const instructions = [validateIx];
+
+  // When mockSpendDestination is provided and amount > 0, insert a mock SPL
+  // token transfer between validate and finalize. This simulates what a real
+  // DeFi instruction would do (move tokens from the vault using the agent's
+  // delegate authority set by validate_and_authorize). Without this, finalize
+  // measures actual_spend_tracked = 0 and spending caps / position counters
+  // are never updated.
+  if (opts.mockSpendDestination && opts.amount.toNumber() > 0) {
+    const { netAmount } = calculateFees(
+      opts.amount.toNumber(),
+      opts.mockSpendDevFeeRate ?? 0,
+    );
+    instructions.push(
+      createTransferInstruction(
+        opts.vaultTokenAta,
+        opts.mockSpendDestination,
+        opts.agent.publicKey, // delegate authority (set by validate_and_authorize)
+        netAmount,
+      ),
+    );
+  }
+
+  instructions.push(finalizeIx);
+
   const { blockhash } = await opts.connection.getLatestBlockhash();
   const messageV0 = new TransactionMessage({
     payerKey: opts.agent.publicKey,
     recentBlockhash: blockhash,
-    instructions: [validateIx, finalizeIx],
+    instructions,
   }).compileToV0Message();
 
   const tx = new VersionedTransaction(messageV0);

@@ -71,43 +71,8 @@ pub mod sigil {
         instructions::register_agent::handler(ctx, agent, permissions, spending_limit_usd)
     }
 
-    /// Update the policy configuration for a vault.
-    /// Only the owner can call this. Blocked when timelock > 0.
-    pub fn update_policy(
-        ctx: Context<UpdatePolicy>,
-        daily_spending_cap_usd: Option<u64>,
-        max_transaction_size_usd: Option<u64>,
-        protocol_mode: Option<u8>,
-        protocols: Option<Vec<Pubkey>>,
-        max_leverage_bps: Option<u16>,
-        can_open_positions: Option<bool>,
-        max_concurrent_positions: Option<u8>,
-        developer_fee_rate: Option<u16>,
-        max_slippage_bps: Option<u16>,
-        timelock_duration: Option<u64>,
-        allowed_destinations: Option<Vec<Pubkey>>,
-        session_expiry_slots: Option<u64>,
-        has_protocol_caps: Option<bool>,
-        protocol_caps: Option<Vec<u64>>,
-    ) -> Result<()> {
-        instructions::update_policy::handler(
-            ctx,
-            daily_spending_cap_usd,
-            max_transaction_size_usd,
-            protocol_mode,
-            protocols,
-            max_leverage_bps,
-            can_open_positions,
-            max_concurrent_positions,
-            developer_fee_rate,
-            max_slippage_bps,
-            timelock_duration,
-            allowed_destinations,
-            session_expiry_slots,
-            has_protocol_caps,
-            protocol_caps,
-        )
-    }
+    // update_policy DELETED — all policy changes now route through
+    // queue_policy_update → apply_pending_policy with mandatory timelock.
 
     /// Core permission check. Called by the agent before a DeFi action.
     /// Validates against policy constraints, stablecoin-only enforcement,
@@ -120,6 +85,7 @@ pub mod sigil {
         amount: u64,
         target_protocol: Pubkey,
         leverage_bps: Option<u16>,
+        expected_policy_version: u64,
     ) -> Result<()> {
         instructions::validate_and_authorize::handler(
             ctx,
@@ -128,6 +94,7 @@ pub mod sigil {
             amount,
             target_protocol,
             leverage_bps,
+            expected_policy_version,
         )
     }
 
@@ -219,21 +186,8 @@ pub mod sigil {
         instructions::create_instruction_constraints::handler(ctx, entries, strict_mode)
     }
 
-    /// Close instruction constraints for the vault.
-    /// Only the owner can call this. Blocked when timelock > 0 (removing constraints loosens security).
-    pub fn close_instruction_constraints(ctx: Context<CloseInstructionConstraints>) -> Result<()> {
-        instructions::close_instruction_constraints::handler(ctx)
-    }
-
-    /// Update instruction constraints for the vault.
-    /// Only the owner can call this. Blocked when timelock > 0.
-    pub fn update_instruction_constraints(
-        ctx: Context<UpdateInstructionConstraints>,
-        entries: Vec<state::ConstraintEntry>,
-        strict_mode: bool,
-    ) -> Result<()> {
-        instructions::update_instruction_constraints::handler(ctx, entries, strict_mode)
-    }
+    // close_instruction_constraints DELETED — use queue_close_constraints → apply_close_constraints.
+    // update_instruction_constraints DELETED — use queue_constraints_update → apply_constraints_update.
 
     /// Queue a constraints update when timelock is active.
     pub fn queue_constraints_update(
@@ -254,26 +208,56 @@ pub mod sigil {
         instructions::cancel_constraints_update::handler(ctx)
     }
 
+    /// Queue a constraint closure. Timelock-gated.
+    pub fn queue_close_constraints(ctx: Context<QueueCloseConstraints>) -> Result<()> {
+        instructions::queue_close_constraints::handler(ctx)
+    }
+
+    /// Apply a queued constraint closure after timelock expires.
+    /// Closes the constraints PDA, clears policy.has_constraints, bumps policy_version.
+    pub fn apply_close_constraints(ctx: Context<ApplyCloseConstraints>) -> Result<()> {
+        instructions::apply_close_constraints::handler(ctx)
+    }
+
+    /// Cancel a queued constraint closure.
+    pub fn cancel_close_constraints(ctx: Context<CancelCloseConstraints>) -> Result<()> {
+        instructions::cancel_close_constraints::handler(ctx)
+    }
+
     /// Transfer tokens from the vault to an allowed destination.
     /// Only the agent can call this. Stablecoin-only.
     pub fn agent_transfer(ctx: Context<AgentTransfer>, amount: u64) -> Result<()> {
         instructions::agent_transfer::handler(ctx, amount)
     }
 
-    /// Update an agent's permission bitmask and spending limit.
-    /// Only the owner can call this. Blocked when timelock is active.
-    pub fn update_agent_permissions(
-        ctx: Context<UpdateAgentPermissions>,
+    // update_agent_permissions DELETED — use queue_agent_permissions_update → apply_agent_permissions_update.
+
+    /// Queue an agent permissions update. Timelock-gated.
+    /// Per-agent PDA allows concurrent pending updates for different agents.
+    pub fn queue_agent_permissions_update(
+        ctx: Context<QueueAgentPermissionsUpdate>,
         agent: Pubkey,
         new_permissions: u64,
         spending_limit_usd: u64,
     ) -> Result<()> {
-        instructions::update_agent_permissions::handler(
+        instructions::queue_agent_permissions_update::handler(
             ctx,
             agent,
             new_permissions,
             spending_limit_usd,
         )
+    }
+
+    /// Apply a queued agent permissions update after timelock expires.
+    pub fn apply_agent_permissions_update(ctx: Context<ApplyAgentPermissionsUpdate>) -> Result<()> {
+        instructions::apply_agent_permissions_update::handler(ctx)
+    }
+
+    /// Cancel a queued agent permissions update.
+    pub fn cancel_agent_permissions_update(
+        ctx: Context<CancelAgentPermissionsUpdate>,
+    ) -> Result<()> {
+        instructions::cancel_agent_permissions_update::handler(ctx)
     }
 
     /// Sync the vault's open position counter with the actual state.

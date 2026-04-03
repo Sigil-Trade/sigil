@@ -57,7 +57,7 @@ pub struct PolicyConfig {
     pub allowed_destinations: Vec<Pubkey>,
 
     /// Whether instruction constraints PDA exists for this vault.
-    /// Set true by create_instruction_constraints, false by close_instruction_constraints.
+    /// Set true by create_instruction_constraints, false by apply_close_constraints.
     pub has_constraints: bool,
 
     /// Whether a pending policy update PDA exists for this vault.
@@ -79,6 +79,12 @@ pub struct PolicyConfig {
 
     /// Bump seed for PDA
     pub bump: u8,
+
+    /// Policy version counter for OCC (optimistic concurrency control).
+    /// Incremented on every apply_pending_policy and apply_constraints_update.
+    /// Agents include expected_policy_version in validate_and_authorize;
+    /// program rejects if version changed since the agent's RPC read.
+    pub policy_version: u64,
 }
 
 impl PolicyConfig {
@@ -89,7 +95,8 @@ impl PolicyConfig {
     /// developer_fee_rate (2) + max_slippage_bps (2) + timelock_duration (8) +
     /// allowed_destinations vec (4 + 32 * MAX) + has_constraints (1) +
     /// has_pending_policy (1) + has_protocol_caps (1) +
-    /// protocol_caps vec (4 + 8 * MAX) + session_expiry_slots (8) + bump (1)
+    /// protocol_caps vec (4 + 8 * MAX) + session_expiry_slots (8) + bump (1) +
+    /// policy_version (8)
     pub const SIZE: usize = 8
         + 32
         + 8
@@ -108,7 +115,8 @@ impl PolicyConfig {
         + 1 // has_protocol_caps
         + (4 + 8 * MAX_ALLOWED_PROTOCOLS) // protocol_caps
         + 8 // session_expiry_slots
-        + 1;
+        + 1 // bump
+        + 8; // policy_version
 
     /// Check if a protocol is allowed based on the protocol mode.
     pub fn is_protocol_allowed(&self, program_id: &Pubkey) -> bool {

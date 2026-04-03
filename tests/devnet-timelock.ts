@@ -1,13 +1,13 @@
 /**
- * Devnet Timelock Tests — 4 tests (V2)
+ * Devnet Timelock Tests — 4 tests (V3)
  *
- * Timelock policy governance: queue, apply (after delay), cancel,
- * and early-apply rejection.
+ * Timelock policy governance: queue, verify pending, early-apply rejection, cancel.
  *
- * Uses timelockDuration=5 (5 seconds) for fast testing.
+ * Uses timelockDuration=1800 (30 min minimum, mandatory for all vaults).
  *
- * V2: No makeAllowedToken, no allowedTokens in policy, no tracker in
- *     updatePolicy/applyPendingPolicy accounts. Stablecoin-only architecture.
+ * V3: updatePolicy deleted; all mutations go through queue/apply.
+ *     Mandatory minimum timelockDuration: 1800.
+ *     Test 1 verifies updatePolicy instruction no longer exists.
  */
 import * as anchor from "@coral-xyz/anchor";
 import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
@@ -49,8 +49,8 @@ describe("devnet-timelock", () => {
     );
   });
 
-  /** Create a vault with timelock enabled */
-  async function createTimelockVault(timelockDuration: number = 5) {
+  /** Create a vault with timelock enabled (minimum 1800s) */
+  async function createTimelockVault(timelockDuration: number = 1800) {
     return createFullVault({
       program,
       connection,
@@ -67,42 +67,15 @@ describe("devnet-timelock", () => {
     });
   }
 
-  it("1. update_policy blocked when timelock > 0 (TimelockActive)", async () => {
-    const vault = await createTimelockVault();
-
-    try {
-      await program.methods
-        .updatePolicy(
-          new BN(999_000_000), // try to change daily cap
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null, // sessionExpirySlots
-          null, // hasProtocolCaps
-          null, // protocolCaps
-        )
-        .accounts({
-          owner: owner.publicKey,
-          vault: vault.vaultPda,
-          policy: vault.policyPda,
-        } as any)
-        .rpc();
-      expect.fail("Should have thrown");
-    } catch (err: any) {
-      expectError(err, "TimelockActive", "timelock");
-    }
-    console.log("    Direct update_policy blocked when timelock active");
+  it("1. updatePolicy instruction no longer exists (deleted in TOCTOU fix)", async () => {
+    // The updatePolicy instruction was removed — all policy mutations now go
+    // through queuePolicyUpdate + applyPendingPolicy. Verify at the TypeScript level.
+    expect((program.methods as any).updatePolicy).to.be.undefined;
+    console.log("    updatePolicy correctly absent from program methods");
   });
 
-  it("2. queue + apply after timelock expires", async () => {
-    const vault = await createTimelockVault(5);
+  it("2. queue_policy_update creates pending PDA with correct values", async () => {
+    const vault = await createTimelockVault(1800);
     const newDailyCap = new BN(999_000_000);
 
     // Queue policy change (14 args — includes sessionExpirySlots)
@@ -132,7 +105,7 @@ describe("devnet-timelock", () => {
       } as any)
       .rpc();
 
-    // Verify pending policy exists
+    // Verify pending policy exists with expected values
     const pending = await program.account.pendingPolicyUpdate.fetch(
       vault.pendingPolicyPda,
     );
@@ -141,12 +114,9 @@ describe("devnet-timelock", () => {
     );
     console.log(`    Queued: executes at ${pending.executesAt.toNumber()}`);
 
-    // Wait for timelock to expire (5s + 2s buffer)
-    await sleep(7000);
-
-    // Apply (V2: no tracker in accounts)
+    // Clean up — cancel so the vault can be reused
     await program.methods
-      .applyPendingPolicy()
+      .cancelPendingPolicy()
       .accounts({
         owner: owner.publicKey,
         vault: vault.vaultPda,
@@ -154,21 +124,11 @@ describe("devnet-timelock", () => {
         pendingPolicy: vault.pendingPolicyPda,
       } as any)
       .rpc();
-
-    // Verify policy changed
-    const policy = await program.account.policyConfig.fetch(vault.policyPda);
-    expect(policy.dailySpendingCapUsd.toNumber()).to.equal(
-      newDailyCap.toNumber(),
-    );
-
-    // Pending PDA should be closed
-    const pendingInfo = await connection.getAccountInfo(vault.pendingPolicyPda);
-    expect(pendingInfo).to.be.null;
-    console.log("    Queue + apply succeeded after timelock expiry");
+    console.log("    Queue verified + cancelled");
   });
 
   it("3. apply before timelock expires fails (TimelockNotExpired)", async () => {
-    const vault = await createTimelockVault(60); // 60 seconds — won't expire during test
+    const vault = await createTimelockVault(1800); // 1800 seconds — won't expire during test
 
     // Queue
     await program.methods

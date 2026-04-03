@@ -288,7 +288,7 @@ describe("escrow-integration", () => {
         5, // max_concurrent_positions
         100, // developer_fee_rate (0.01%)
         500, // max_slippage_bps
-        new BN(0), // timelock_duration (0 = no timelock)
+        new BN(1800), // timelock_duration (0 = no timelock)
         [], // allowed_destinations
         [], // protocolCaps
       )
@@ -361,7 +361,7 @@ describe("escrow-integration", () => {
         5, // max_concurrent_positions
         100, // developer_fee_rate (0.01%)
         500, // max_slippage_bps
-        new BN(0), // timelock_duration (0 = no timelock)
+        new BN(1800), // timelock_duration (0 = no timelock)
         [], // allowed_destinations
         [], // protocolCaps
       )
@@ -653,7 +653,7 @@ describe("escrow-integration", () => {
       expect.fail("Should have thrown EscrowExpired at exact expiry");
     } catch (err: any) {
       if (err.message?.includes("Should have thrown")) throw err;
-      expect(err.toString()).to.include("6047"); // EscrowExpired exact code
+      expect(err.toString()).to.include("6046"); // EscrowExpired exact code
     }
   });
 
@@ -858,9 +858,9 @@ describe("escrow-integration", () => {
   });
 
   // =========================================================================
-  // Test 8: Settle after expiry -> EscrowExpired (6047)
+  // Test 8: Settle after expiry -> EscrowExpired (6046)
   // =========================================================================
-  it("rejects settle after expiry — EscrowExpired (6047)", async () => {
+  it("rejects settle after expiry — EscrowExpired (6046)", async () => {
     const escrowId = new BN(9);
     const escrowAmount = new BN(10_000_000); // 10 USDC
 
@@ -895,14 +895,14 @@ describe("escrow-integration", () => {
         .rpc();
       expect.fail("should have failed with EscrowExpired");
     } catch (e: any) {
-      expect(e.toString()).to.include("6047");
+      expect(e.toString()).to.include("6046");
     }
   });
 
   // =========================================================================
-  // Test 9: Refund before expiry -> EscrowNotExpired (6048)
+  // Test 9: Refund before expiry -> EscrowNotExpired (6047)
   // =========================================================================
-  it("rejects refund before expiry — EscrowNotExpired (6048)", async () => {
+  it("rejects refund before expiry — EscrowNotExpired (6047)", async () => {
     const escrowId = new BN(10);
     const escrowAmount = new BN(10_000_000); // 10 USDC
 
@@ -934,14 +934,14 @@ describe("escrow-integration", () => {
         .rpc();
       expect.fail("should have failed with EscrowNotExpired");
     } catch (e: any) {
-      expect(e.toString()).to.include("6048");
+      expect(e.toString()).to.include("6047");
     }
   });
 
   // =========================================================================
-  // Test 10: Wrong condition proof -> EscrowConditionsNotMet (6050)
+  // Test 10: Wrong condition proof -> EscrowConditionsNotMet (6049)
   // =========================================================================
-  it("rejects settle with wrong proof — EscrowConditionsNotMet (6050)", async () => {
+  it("rejects settle with wrong proof — EscrowConditionsNotMet (6049)", async () => {
     const escrowId = new BN(11);
     const escrowAmount = new BN(10_000_000); // 10 USDC
 
@@ -982,7 +982,7 @@ describe("escrow-integration", () => {
         .rpc();
       expect.fail("should have failed with EscrowConditionsNotMet");
     } catch (e: any) {
-      expect(e.toString()).to.include("6050");
+      expect(e.toString()).to.include("6049");
     }
   });
 
@@ -1142,9 +1142,9 @@ describe("escrow-integration", () => {
   });
 
   // =========================================================================
-  // Test 14: Double settle -> EscrowNotActive (6046)
+  // Test 14: Double settle -> EscrowNotActive (6045)
   // =========================================================================
-  it("rejects double settle — EscrowNotActive (6046)", async () => {
+  it("rejects double settle — EscrowNotActive (6045)", async () => {
     const escrowId = new BN(15);
     const escrowAmount = new BN(10_000_000); // 10 USDC
 
@@ -1204,7 +1204,7 @@ describe("escrow-integration", () => {
         .rpc();
       expect.fail("should have failed with EscrowNotActive");
     } catch (e: any) {
-      expect(e.toString()).to.include("6046");
+      expect(e.toString()).to.include("6045");
     }
   });
 });

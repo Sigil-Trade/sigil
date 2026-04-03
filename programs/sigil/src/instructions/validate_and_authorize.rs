@@ -36,7 +36,7 @@ pub struct ValidateAndAuthorize<'info> {
     #[account(
         mut,
         seeds = [b"tracker", vault.key().as_ref()],
-        bump,
+        bump = tracker.load()?.bump,
     )]
     pub tracker: AccountLoader<'info, SpendTracker>,
 
@@ -44,7 +44,7 @@ pub struct ValidateAndAuthorize<'info> {
     #[account(
         mut,
         seeds = [b"agent_spend", vault.key().as_ref(), &[0u8]],
-        bump,
+        bump = agent_spend_overlay.load()?.bump,
     )]
     pub agent_spend_overlay: AccountLoader<'info, AgentSpendOverlay>,
 
@@ -113,6 +113,7 @@ pub fn handler(
     amount: u64,
     target_protocol: Pubkey,
     leverage_bps: Option<u16>,
+    expected_policy_version: u64,
 ) -> Result<()> {
     // 0. Reject CPI calls — only top-level transaction instructions allowed.
     require!(
@@ -124,6 +125,13 @@ pub fn handler(
     let vault = &ctx.accounts.vault;
     let policy = &ctx.accounts.policy;
     let clock = Clock::get()?;
+
+    // TOCTOU fix: reject if policy changed since agent's off-chain RPC read.
+    // This closes the off-chain-read to on-chain-execution race completely.
+    require!(
+        policy.policy_version == expected_policy_version,
+        SigilError::PolicyVersionMismatch
+    );
     let vault_key = vault.key();
     let is_spending = action_type.is_spending();
     let is_stablecoin_input = is_stablecoin_mint(&token_mint);

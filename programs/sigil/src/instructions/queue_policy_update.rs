@@ -99,6 +99,9 @@ pub fn handler(
             SigilError::TooManyDestinations
         );
     }
+    if let Some(ref tl) = timelock_duration {
+        require!(*tl >= MIN_TIMELOCK_DURATION, SigilError::TimelockTooShort);
+    }
     if let Some(ref expiry) = session_expiry_slots {
         if *expiry > 0 {
             require!(

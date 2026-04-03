@@ -35,7 +35,7 @@ pub struct CreateEscrow<'info> {
     #[account(
         mut,
         seeds = [b"tracker", source_vault.key().as_ref()],
-        bump,
+        bump = tracker.load()?.bump,
     )]
     pub tracker: AccountLoader<'info, SpendTracker>,
 
@@ -43,7 +43,7 @@ pub struct CreateEscrow<'info> {
     #[account(
         mut,
         seeds = [b"agent_spend", source_vault.key().as_ref(), &[0u8]],
-        bump,
+        bump = agent_spend_overlay.load()?.bump,
     )]
     pub agent_spend_overlay: AccountLoader<'info, AgentSpendOverlay>,
 

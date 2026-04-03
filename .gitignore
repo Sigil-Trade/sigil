@@ -1,69 +1,63 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
 target/*
 !target/idl/
 !target/types/
+*.so
+*.ll
+*.log
+*.tsbuildinfo
+
+# Anchor / Solana
 .anchor/
 test-ledger/
-*.so
-.DS_Store
 
-# Environment files with secrets
+# Environment files
 .env
 .env.local
 .env.*.local
 
-# Next.js build output (may contain baked-in env vars)
-.next/
+# macOS
+.DS_Store
 
-# Internal development docs (not for public repo)
-docs
-CLAUDE.md
-.vercel
-
-# Trident fuzz testing artifacts
-trident-tests/target/
-trident-tests/fuzz_tests/fuzzing/hfuzz_workspace/
-
-# Certora formal verification artifacts
-.certora-venv/
-.certora_internal/
-certora/output/
-
+# IDE
 .vscode
 
-# Surfpool
+# Next.js
+.next/
+
+# Testing tools
 .surfpool/
+.playwright-cli
+.playwright
 
-# Sec3 X-Ray scan artifacts
+# Security / Formal verification
+.certora-venv/
+.certora_internal/
 .xray/
+trident-tests/target/
 
-# LLVM IR build artifacts
-*.ll
-
-# Claude Code skills (local development tools)
+# Claude Code (local development tools)
 .claude
 .agents
 /MEMORY
 /Plans
-sdk/custody/Plans
-programs/sigil/Plans
+**/Plans
 programs/sigil/archived-oracle
 skills-lock.json
-.playwright-cli
-.playwright
 
-DASHBOARD-DESIGN-GAPS.md
-DASHBOARD-PLAN.md
+# Working documents (not production code)
+AUDIT-READINESS-PLAN.md
+DISCRIMINATOR-TABLES.md
 MAINNET_DEPLOYMENT_CHECKLIST.md
 MCP-REBUILD-PLAN.md
-WRAP-DISCRIMINATOR-TABLES.md
-ADMIN-DASHBOARD-PLAN.md
-ADMIN-DASHBOARD-IMPLEMENTATION-GUIDE.md
 STORAGE-IMPLEMENTATION-PLAN.md
-COMPETITIVE-ANALYSIS.md
-COMPETITIVE-ENTITIES.md
-COMPETITIVE-LANDSCAPE.md
-STRATEGIC-ANALYSIS.md
-SIGIL-DESIGN-SPEC.md
-AUDIT-READINESS-PLAN.md
+
+# Internal development docs
+CLAUDE.md
+docs/archived/
+docs/FUTURE.md
+docs/audits/

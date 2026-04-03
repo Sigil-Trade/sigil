@@ -44,7 +44,7 @@ The Sigil ALT stores 5 non-program accounts shared across composed transactions:
 |---|---------|--------|---------|
 | 0 | USDC Mint | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` |
 | 1 | USDT Mint | `EJwZgeZrdC8TXTQbQBoL6bfuAnFUQYtEnqbJgLeNP2io` | `Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB` |
-| 2 | Protocol Treasury | `Pha1nxTreasury111111111111111111111111111111` | `Pha1nxTreasury111111111111111111111111111111` |
+| 2 | Protocol Treasury | `ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT` | `ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT` |
 | 3 | Instructions Sysvar | `Sysvar1nstructions1111111111111111111111111` | `Sysvar1nstructions1111111111111111111111111` |
 | 4 | Clock Sysvar | `SysvarC1ock11111111111111111111111111111111` | `SysvarC1ock11111111111111111111111111111111` |
 
@@ -146,7 +146,7 @@ ALT deployed and populated with 5 shared accounts (USDC/USDT mints, protocol tre
 ### 5c. Treasury USDC ATA
 Protocol treasury requires a USDC ATA on devnet to receive protocol fees. Created via:
 ```bash
-spl-token create-account <USDC_DEVNET_MINT> --owner Pha1nxTreasury111111111111111111111111111111 --url devnet
+spl-token create-account <USDC_DEVNET_MINT> --owner ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT --url devnet
 ```
 The treasury ATA address is hardcoded in `protocolTreasuryTokenAccount` references in test helpers.
 

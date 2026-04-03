@@ -4,7 +4,7 @@
     "name": "sigil",
     "version": "0.1.0",
     "spec": "0.1.0",
-    "description": "On-chain guardrails for AI agents on Solana - Permission controls, spending limits, and audit infrastructure for autonomous agents (Phalnx)"
+    "description": "On-chain guardrails for AI agents on Solana - Permission controls, spending limits, and audit infrastructure for autonomous agents (Sigil)"
   },
   "instructions": [
     {
@@ -112,7 +112,7 @@
         {
           "name": "agent_spend_overlay",
           "docs": [
-            "Zero-copy AgentSpendOverlay \u2014 per-agent rolling spend"
+            "Zero-copy AgentSpendOverlay — per-agent rolling spend"
           ],
           "writable": true
         },
@@ -165,6 +165,283 @@
       ]
     },
     {
+      "name": "apply_agent_permissions_update",
+      "docs": [
+        "Apply a queued agent permissions update after timelock expires."
+      ],
+      "discriminator": [
+        234,
+        166,
+        205,
+        3,
+        28,
+        166,
+        221,
+        240
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault.owner",
+                "account": "AgentVault"
+              },
+              {
+                "kind": "account",
+                "path": "vault.vault_id",
+                "account": "AgentVault"
+              }
+            ]
+          },
+          "relations": [
+            "policy"
+          ]
+        },
+        {
+          "name": "policy",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pending_agent_perms",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  110,
+                  100,
+                  105,
+                  110,
+                  103,
+                  95,
+                  97,
+                  103,
+                  101,
+                  110,
+                  116,
+                  95,
+                  112,
+                  101,
+                  114,
+                  109,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              },
+              {
+                "kind": "account",
+                "path": "pending_agent_perms.agent",
+                "account": "PendingAgentPermissionsUpdate"
+              }
+            ]
+          }
+        },
+        {
+          "name": "agent_spend_overlay",
+          "docs": [
+            "Agent spend overlay — per-agent tracking slot."
+          ],
+          "writable": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "apply_close_constraints",
+      "docs": [
+        "Apply a queued constraint closure after timelock expires.",
+        "Closes the constraints PDA, clears policy.has_constraints, bumps policy_version."
+      ],
+      "discriminator": [
+        133,
+        184,
+        235,
+        88,
+        53,
+        237,
+        43,
+        145
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "vault"
+          ]
+        },
+        {
+          "name": "vault",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "account",
+                "path": "vault.vault_id",
+                "account": "AgentVault"
+              }
+            ]
+          },
+          "relations": [
+            "policy",
+            "constraints"
+          ]
+        },
+        {
+          "name": "policy",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "constraints",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  115,
+                  116,
+                  114,
+                  97,
+                  105,
+                  110,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pending_close_constraints",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  110,
+                  100,
+                  105,
+                  110,
+                  103,
+                  95,
+                  99,
+                  108,
+                  111,
+                  115,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  115,
+                  116,
+                  114,
+                  97,
+                  105,
+                  110,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "apply_constraints_update",
       "docs": [
         "Apply a queued constraints update after the timelock expires."
@@ -214,9 +491,37 @@
             ]
           },
           "relations": [
+            "policy",
             "constraints",
             "pending_constraints"
           ]
+        },
+        {
+          "name": "policy",
+          "docs": [
+            "PolicyConfig — needed to bump policy_version on constraint changes.",
+            "IDL BREAKING CHANGE: this account was added in the TOCTOU fix."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
         },
         {
           "name": "constraints",
@@ -397,6 +702,195 @@
       "args": []
     },
     {
+      "name": "cancel_agent_permissions_update",
+      "docs": [
+        "Cancel a queued agent permissions update."
+      ],
+      "discriminator": [
+        92,
+        232,
+        92,
+        115,
+        110,
+        238,
+        235,
+        55
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "vault"
+          ]
+        },
+        {
+          "name": "vault",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "account",
+                "path": "vault.vault_id",
+                "account": "AgentVault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pending_agent_perms",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  110,
+                  100,
+                  105,
+                  110,
+                  103,
+                  95,
+                  97,
+                  103,
+                  101,
+                  110,
+                  116,
+                  95,
+                  112,
+                  101,
+                  114,
+                  109,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              },
+              {
+                "kind": "account",
+                "path": "pending_agent_perms.agent",
+                "account": "PendingAgentPermissionsUpdate"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "cancel_close_constraints",
+      "docs": [
+        "Cancel a queued constraint closure."
+      ],
+      "discriminator": [
+        150,
+        125,
+        186,
+        114,
+        40,
+        105,
+        237,
+        184
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "vault"
+          ]
+        },
+        {
+          "name": "vault",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "account",
+                "path": "vault.vault_id",
+                "account": "AgentVault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pending_close_constraints",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  110,
+                  100,
+                  105,
+                  110,
+                  103,
+                  95,
+                  99,
+                  108,
+                  111,
+                  115,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  115,
+                  116,
+                  114,
+                  97,
+                  105,
+                  110,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "cancel_constraints_update",
       "docs": [
         "Cancel a queued constraints update."
@@ -538,6 +1032,7 @@
             ]
           },
           "relations": [
+            "policy",
             "pending_policy"
           ]
         },
@@ -562,10 +1057,7 @@
                 "path": "vault"
               }
             ]
-          },
-          "relations": [
-            "vault"
-          ]
+          }
         },
         {
           "name": "pending_policy",
@@ -602,118 +1094,9 @@
       "args": []
     },
     {
-      "name": "close_instruction_constraints",
-      "docs": [
-        "Close instruction constraints for the vault.",
-        "Only the owner can call this. Blocked when timelock > 0 (removing constraints loosens security)."
-      ],
-      "discriminator": [
-        145,
-        240,
-        233,
-        37,
-        11,
-        78,
-        195,
-        145
-      ],
-      "accounts": [
-        {
-          "name": "owner",
-          "writable": true,
-          "signer": true,
-          "relations": [
-            "vault"
-          ]
-        },
-        {
-          "name": "vault",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  118,
-                  97,
-                  117,
-                  108,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "owner"
-              },
-              {
-                "kind": "account",
-                "path": "vault.vault_id",
-                "account": "AgentVault"
-              }
-            ]
-          },
-          "relations": [
-            "policy",
-            "constraints"
-          ]
-        },
-        {
-          "name": "policy",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  111,
-                  108,
-                  105,
-                  99,
-                  121
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "vault"
-              }
-            ]
-          }
-        },
-        {
-          "name": "constraints",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  99,
-                  111,
-                  110,
-                  115,
-                  116,
-                  114,
-                  97,
-                  105,
-                  110,
-                  116,
-                  115
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "vault"
-              }
-            ]
-          }
-        }
-      ],
-      "args": []
-    },
-    {
       "name": "close_settled_escrow",
       "docs": [
-        "Close a settled/refunded escrow PDA \u2014 owner reclaims rent."
+        "Close a settled/refunded escrow PDA — owner reclaims rent."
       ],
       "discriminator": [
         169,
@@ -887,7 +1270,7 @@
         {
           "name": "tracker",
           "docs": [
-            "Zero-copy SpendTracker \u2014 close returns rent to owner"
+            "Zero-copy SpendTracker — close returns rent to owner"
           ],
           "writable": true,
           "pda": {
@@ -914,7 +1297,7 @@
         {
           "name": "agent_spend_overlay",
           "docs": [
-            "Zero-copy AgentSpendOverlay \u2014 close returns rent to owner"
+            "Zero-copy AgentSpendOverlay — close returns rent to owner"
           ],
           "writable": true
         },
@@ -1024,7 +1407,7 @@
         {
           "name": "agent_spend_overlay",
           "docs": [
-            "Zero-copy AgentSpendOverlay \u2014 per-agent rolling spend"
+            "Zero-copy AgentSpendOverlay — per-agent rolling spend"
           ],
           "writable": true
         },
@@ -1096,7 +1479,7 @@
         {
           "name": "escrow_ata",
           "docs": [
-            "Escrow-owned ATA \u2014 init_if_needed because escrow PDA is created in same ix"
+            "Escrow-owned ATA — init_if_needed because escrow PDA is created in same ix"
           ],
           "writable": true,
           "pda": {
@@ -1634,7 +2017,7 @@
       "name": "finalize_session",
       "docs": [
         "Finalize a session after the DeFi action completes.",
-        "Revokes delegation and closes the SessionAuthority PDA."
+        "Revokes delegation, closes SessionAuthority PDA."
       ],
       "discriminator": [
         34,
@@ -1728,7 +2111,7 @@
         {
           "name": "policy",
           "docs": [
-            "Policy config for cap checking during non-stablecoin swap finalization"
+            "Policy config for outcome-based cap checking during finalization"
           ],
           "pda": {
             "seeds": [
@@ -1780,7 +2163,7 @@
         {
           "name": "agent_spend_overlay",
           "docs": [
-            "Zero-copy AgentSpendOverlay \u2014 per-agent rolling spend"
+            "Zero-copy AgentSpendOverlay — per-agent rolling spend"
           ],
           "writable": true
         },
@@ -1795,8 +2178,8 @@
         {
           "name": "output_stablecoin_account",
           "docs": [
-            "Vault's stablecoin ATA for non-stablecoin\u2192stablecoin swap verification.",
-            "Required when session.output_mint != Pubkey::default()."
+            "Vault's stablecoin ATA for outcome-based spending verification.",
+            "Required when session.output_mint != Pubkey::default() (all spending)."
           ],
           "writable": true,
           "optional": true
@@ -1975,7 +2358,7 @@
         {
           "name": "agent_spend_overlay",
           "docs": [
-            "Agent spend overlay \u2014 per-agent contribution tracking"
+            "Agent spend overlay — per-agent contribution tracking"
           ],
           "writable": true
         },
@@ -2102,6 +2485,297 @@
           "type": "pubkey"
         }
       ]
+    },
+    {
+      "name": "queue_agent_permissions_update",
+      "docs": [
+        "Queue an agent permissions update. Timelock-gated.",
+        "Per-agent PDA allows concurrent pending updates for different agents."
+      ],
+      "discriminator": [
+        182,
+        37,
+        105,
+        181,
+        28,
+        195,
+        223,
+        167
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "vault"
+          ]
+        },
+        {
+          "name": "vault",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "account",
+                "path": "vault.vault_id",
+                "account": "AgentVault"
+              }
+            ]
+          },
+          "relations": [
+            "policy"
+          ]
+        },
+        {
+          "name": "policy",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pending_agent_perms",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  110,
+                  100,
+                  105,
+                  110,
+                  103,
+                  95,
+                  97,
+                  103,
+                  101,
+                  110,
+                  116,
+                  95,
+                  112,
+                  101,
+                  114,
+                  109,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              },
+              {
+                "kind": "arg",
+                "path": "agent"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "agent",
+          "type": "pubkey"
+        },
+        {
+          "name": "new_permissions",
+          "type": "u64"
+        },
+        {
+          "name": "spending_limit_usd",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "queue_close_constraints",
+      "docs": [
+        "Queue a constraint closure. Timelock-gated."
+      ],
+      "discriminator": [
+        248,
+        124,
+        93,
+        115,
+        195,
+        88,
+        11,
+        109
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "vault"
+          ]
+        },
+        {
+          "name": "vault",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "account",
+                "path": "vault.vault_id",
+                "account": "AgentVault"
+              }
+            ]
+          },
+          "relations": [
+            "policy",
+            "constraints"
+          ]
+        },
+        {
+          "name": "policy",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "constraints",
+          "docs": [
+            "Verify constraints PDA exists (proves there's something to close)."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  115,
+                  116,
+                  114,
+                  97,
+                  105,
+                  110,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pending_close_constraints",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  110,
+                  100,
+                  105,
+                  110,
+                  103,
+                  95,
+                  99,
+                  108,
+                  111,
+                  115,
+                  101,
+                  95,
+                  99,
+                  111,
+                  110,
+                  115,
+                  116,
+                  114,
+                  97,
+                  105,
+                  110,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
     },
     {
       "name": "queue_constraints_update",
@@ -2538,7 +3212,7 @@
     {
       "name": "refund_escrow",
       "docs": [
-        "Refund an escrow \u2014 source vault's agent or owner reclaims funds after expiry.",
+        "Refund an escrow — source vault's agent or owner reclaims funds after expiry.",
         "Cap charge is NOT reversed (prevents cap-washing attacks)."
       ],
       "discriminator": [
@@ -2783,7 +3457,7 @@
         {
           "name": "agent_spend_overlay",
           "docs": [
-            "Agent spend overlay \u2014 per-agent tracking slot."
+            "Agent spend overlay — per-agent tracking slot."
           ],
           "writable": true
         }
@@ -2857,7 +3531,7 @@
         {
           "name": "agent_spend_overlay",
           "docs": [
-            "Agent spend overlay \u2014 release slot on revocation."
+            "Agent spend overlay — release slot on revocation."
           ],
           "writable": true
         }
@@ -2872,7 +3546,7 @@
     {
       "name": "settle_escrow",
       "docs": [
-        "Settle an escrow \u2014 destination vault's agent claims funds before expiry.",
+        "Settle an escrow — destination vault's agent claims funds before expiry.",
         "For conditional escrows, proof must match the SHA-256 condition hash."
       ],
       "discriminator": [
@@ -3207,421 +3881,6 @@
       ]
     },
     {
-      "name": "update_agent_permissions",
-      "docs": [
-        "Update an agent's permission bitmask and spending limit.",
-        "Only the owner can call this. Blocked when timelock is active."
-      ],
-      "discriminator": [
-        56,
-        163,
-        109,
-        133,
-        69,
-        188,
-        163,
-        184
-      ],
-      "accounts": [
-        {
-          "name": "owner",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "vault",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  118,
-                  97,
-                  117,
-                  108,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "vault.owner",
-                "account": "AgentVault"
-              },
-              {
-                "kind": "account",
-                "path": "vault.vault_id",
-                "account": "AgentVault"
-              }
-            ]
-          }
-        },
-        {
-          "name": "policy",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  111,
-                  108,
-                  105,
-                  99,
-                  121
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "vault"
-              }
-            ]
-          }
-        },
-        {
-          "name": "agent_spend_overlay",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  97,
-                  103,
-                  101,
-                  110,
-                  116,
-                  95,
-                  115,
-                  112,
-                  101,
-                  110,
-                  100
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "vault"
-              },
-              {
-                "kind": "const",
-                "value": [
-                  0
-                ]
-              }
-            ]
-          }
-        }
-      ],
-      "args": [
-        {
-          "name": "agent",
-          "type": "pubkey"
-        },
-        {
-          "name": "new_permissions",
-          "type": "u64"
-        },
-        {
-          "name": "spending_limit_usd",
-          "type": "u64"
-        }
-      ]
-    },
-    {
-      "name": "update_instruction_constraints",
-      "docs": [
-        "Update instruction constraints for the vault.",
-        "Only the owner can call this. Blocked when timelock > 0."
-      ],
-      "discriminator": [
-        229,
-        117,
-        208,
-        238,
-        102,
-        240,
-        54,
-        74
-      ],
-      "accounts": [
-        {
-          "name": "owner",
-          "writable": true,
-          "signer": true,
-          "relations": [
-            "vault"
-          ]
-        },
-        {
-          "name": "vault",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  118,
-                  97,
-                  117,
-                  108,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "owner"
-              },
-              {
-                "kind": "account",
-                "path": "vault.vault_id",
-                "account": "AgentVault"
-              }
-            ]
-          },
-          "relations": [
-            "policy",
-            "constraints"
-          ]
-        },
-        {
-          "name": "policy",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  111,
-                  108,
-                  105,
-                  99,
-                  121
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "vault"
-              }
-            ]
-          }
-        },
-        {
-          "name": "constraints",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  99,
-                  111,
-                  110,
-                  115,
-                  116,
-                  114,
-                  97,
-                  105,
-                  110,
-                  116,
-                  115
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "vault"
-              }
-            ]
-          }
-        }
-      ],
-      "args": [
-        {
-          "name": "entries",
-          "type": {
-            "vec": {
-              "defined": {
-                "name": "ConstraintEntry"
-              }
-            }
-          }
-        },
-        {
-          "name": "strict_mode",
-          "type": "bool"
-        }
-      ]
-    },
-    {
-      "name": "update_policy",
-      "docs": [
-        "Update the policy configuration for a vault.",
-        "Only the owner can call this. Blocked when timelock > 0."
-      ],
-      "discriminator": [
-        212,
-        245,
-        246,
-        7,
-        163,
-        151,
-        18,
-        57
-      ],
-      "accounts": [
-        {
-          "name": "owner",
-          "signer": true,
-          "relations": [
-            "vault"
-          ]
-        },
-        {
-          "name": "vault",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  118,
-                  97,
-                  117,
-                  108,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "owner"
-              },
-              {
-                "kind": "account",
-                "path": "vault.vault_id",
-                "account": "AgentVault"
-              }
-            ]
-          },
-          "relations": [
-            "policy"
-          ]
-        },
-        {
-          "name": "policy",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  111,
-                  108,
-                  105,
-                  99,
-                  121
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "vault"
-              }
-            ]
-          }
-        }
-      ],
-      "args": [
-        {
-          "name": "daily_spending_cap_usd",
-          "type": {
-            "option": "u64"
-          }
-        },
-        {
-          "name": "max_transaction_size_usd",
-          "type": {
-            "option": "u64"
-          }
-        },
-        {
-          "name": "protocol_mode",
-          "type": {
-            "option": "u8"
-          }
-        },
-        {
-          "name": "protocols",
-          "type": {
-            "option": {
-              "vec": "pubkey"
-            }
-          }
-        },
-        {
-          "name": "max_leverage_bps",
-          "type": {
-            "option": "u16"
-          }
-        },
-        {
-          "name": "can_open_positions",
-          "type": {
-            "option": "bool"
-          }
-        },
-        {
-          "name": "max_concurrent_positions",
-          "type": {
-            "option": "u8"
-          }
-        },
-        {
-          "name": "developer_fee_rate",
-          "type": {
-            "option": "u16"
-          }
-        },
-        {
-          "name": "max_slippage_bps",
-          "type": {
-            "option": "u16"
-          }
-        },
-        {
-          "name": "timelock_duration",
-          "type": {
-            "option": "u64"
-          }
-        },
-        {
-          "name": "allowed_destinations",
-          "type": {
-            "option": {
-              "vec": "pubkey"
-            }
-          }
-        },
-        {
-          "name": "session_expiry_slots",
-          "type": {
-            "option": "u64"
-          }
-        },
-        {
-          "name": "has_protocol_caps",
-          "type": {
-            "option": "bool"
-          }
-        },
-        {
-          "name": "protocol_caps",
-          "type": {
-            "option": {
-              "vec": "u64"
-            }
-          }
-        }
-      ]
-    },
-    {
       "name": "validate_and_authorize",
       "docs": [
         "Core permission check. Called by the agent before a DeFi action.",
@@ -3727,14 +3986,14 @@
         {
           "name": "agent_spend_overlay",
           "docs": [
-            "Zero-copy AgentSpendOverlay \u2014 per-agent rolling spend"
+            "Zero-copy AgentSpendOverlay — per-agent rolling spend"
           ],
           "writable": true
         },
         {
           "name": "session",
           "docs": [
-            "Ephemeral session PDA \u2014 `init` ensures no double-authorization.",
+            "Ephemeral session PDA — `init` ensures no double-authorization.",
             "Seeds include token_mint for per-token concurrent sessions."
           ],
           "writable": true,
@@ -3777,7 +4036,7 @@
         {
           "name": "token_mint_account",
           "docs": [
-            "The token mint being spent \u2014 constrained to match token_mint arg"
+            "The token mint being spent — constrained to match token_mint arg"
           ]
         },
         {
@@ -3799,8 +4058,8 @@
         {
           "name": "output_stablecoin_account",
           "docs": [
-            "Vault's stablecoin ATA to snapshot (for non-stablecoin input swaps).",
-            "Required when input token is NOT a stablecoin."
+            "Vault's stablecoin ATA to snapshot (for non-stablecoin input spending).",
+            "Required when input token is NOT a stablecoin (output verification in finalize)."
           ],
           "writable": true,
           "optional": true
@@ -3848,6 +4107,10 @@
           "type": {
             "option": "u16"
           }
+        },
+        {
+          "name": "expected_policy_version",
+          "type": "u64"
         }
       ]
     },
@@ -4158,6 +4421,32 @@
       ]
     },
     {
+      "name": "PendingAgentPermissionsUpdate",
+      "discriminator": [
+        137,
+        132,
+        60,
+        184,
+        171,
+        184,
+        194,
+        56
+      ]
+    },
+    {
+      "name": "PendingCloseConstraints",
+      "discriminator": [
+        128,
+        154,
+        58,
+        181,
+        85,
+        163,
+        243,
+        233
+      ]
+    },
+    {
       "name": "PendingConstraintsUpdate",
       "discriminator": [
         22,
@@ -4251,16 +4540,42 @@
       ]
     },
     {
-      "name": "AgentPermissionsUpdated",
+      "name": "AgentPermissionsChangeApplied",
       "discriminator": [
-        203,
-        110,
-        249,
-        149,
-        51,
-        17,
-        246,
-        63
+        233,
+        247,
+        103,
+        30,
+        130,
+        173,
+        196,
+        183
+      ]
+    },
+    {
+      "name": "AgentPermissionsChangeCancelled",
+      "discriminator": [
+        107,
+        21,
+        129,
+        77,
+        1,
+        136,
+        68,
+        216
+      ]
+    },
+    {
+      "name": "AgentPermissionsChangeQueued",
+      "discriminator": [
+        211,
+        242,
+        237,
+        217,
+        72,
+        52,
+        150,
+        80
       ]
     },
     {
@@ -4326,6 +4641,45 @@
         192,
         42,
         181
+      ]
+    },
+    {
+      "name": "CloseConstraintsApplied",
+      "discriminator": [
+        186,
+        62,
+        25,
+        109,
+        144,
+        207,
+        83,
+        13
+      ]
+    },
+    {
+      "name": "CloseConstraintsCancelled",
+      "discriminator": [
+        102,
+        226,
+        171,
+        191,
+        99,
+        98,
+        255,
+        134
+      ]
+    },
+    {
+      "name": "CloseConstraintsQueued",
+      "discriminator": [
+        77,
+        23,
+        232,
+        153,
+        108,
+        46,
+        243,
+        53
       ]
     },
     {
@@ -4459,19 +4813,6 @@
       ]
     },
     {
-      "name": "InstructionConstraintsClosed",
-      "discriminator": [
-        107,
-        107,
-        90,
-        8,
-        81,
-        158,
-        130,
-        86
-      ]
-    },
-    {
       "name": "InstructionConstraintsCreated",
       "discriminator": [
         8,
@@ -4482,19 +4823,6 @@
         216,
         57,
         26
-      ]
-    },
-    {
-      "name": "InstructionConstraintsUpdated",
-      "discriminator": [
-        159,
-        63,
-        148,
-        194,
-        150,
-        209,
-        43,
-        129
       ]
     },
     {
@@ -4534,19 +4862,6 @@
         120,
         32,
         79
-      ]
-    },
-    {
-      "name": "PolicyUpdated",
-      "discriminator": [
-        225,
-        112,
-        112,
-        67,
-        95,
-        236,
-        245,
-        161
       ]
     },
     {
@@ -4766,223 +5081,243 @@
     },
     {
       "code": 6027,
-      "name": "TimelockActive",
-      "msg": "Vault has timelock active \u2014 use queue_policy_update instead"
-    },
-    {
-      "code": 6028,
       "name": "NoTimelockConfigured",
       "msg": "No timelock configured on this vault"
     },
     {
-      "code": 6029,
+      "code": 6028,
       "name": "DestinationNotAllowed",
       "msg": "Destination not in allowed list"
     },
     {
-      "code": 6030,
+      "code": 6029,
       "name": "TooManyDestinations",
       "msg": "Too many destinations (max 10)"
     },
     {
-      "code": 6031,
+      "code": 6030,
       "name": "InvalidProtocolMode",
       "msg": "Invalid protocol mode (must be 0, 1, or 2)"
     },
     {
-      "code": 6032,
+      "code": 6031,
       "name": "InvalidNonSpendingAmount",
       "msg": "Non-spending action must have amount = 0"
     },
     {
-      "code": 6033,
+      "code": 6032,
       "name": "NoPositionsToClose",
       "msg": "No open positions to close or cancel"
     },
     {
-      "code": 6034,
+      "code": 6033,
       "name": "CpiCallNotAllowed",
       "msg": "Instruction must be top-level (CPI calls not allowed)"
     },
     {
-      "code": 6035,
+      "code": 6034,
       "name": "MissingFinalizeInstruction",
       "msg": "Transaction must include finalize_session after validate"
     },
     {
-      "code": 6036,
+      "code": 6035,
       "name": "NonTrackedSwapMustReturnStablecoin",
       "msg": "Non-stablecoin swap must return stablecoin (balance did not increase)"
     },
     {
-      "code": 6037,
+      "code": 6036,
       "name": "SwapSlippageExceeded",
       "msg": "Swap slippage exceeds policy max_slippage_bps or quoted output is zero"
     },
     {
-      "code": 6038,
+      "code": 6037,
       "name": "InvalidJupiterInstruction",
       "msg": "Cannot parse Jupiter swap instruction data"
     },
     {
-      "code": 6039,
+      "code": 6038,
       "name": "UnauthorizedTokenTransfer",
       "msg": "Top-level SPL Token transfer not allowed between validate and finalize"
     },
     {
-      "code": 6040,
+      "code": 6039,
       "name": "SlippageBpsTooHigh",
       "msg": "Slippage BPS exceeds maximum (5000 = 50%)"
     },
     {
-      "code": 6041,
+      "code": 6040,
       "name": "ProtocolMismatch",
       "msg": "DeFi instruction program does not match declared target_protocol"
     },
     {
-      "code": 6042,
+      "code": 6041,
       "name": "TooManyDeFiInstructions",
       "msg": "Spending allows at most one DeFi instruction"
     },
     {
-      "code": 6043,
+      "code": 6042,
       "name": "MaxAgentsReached",
       "msg": "Maximum agents per vault reached (limit: 10)"
     },
     {
-      "code": 6044,
+      "code": 6043,
       "name": "InsufficientPermissions",
       "msg": "Agent lacks permission for this action type"
     },
     {
-      "code": 6045,
+      "code": 6044,
       "name": "InvalidPermissions",
       "msg": "Permission bitmask contains invalid bits"
     },
     {
-      "code": 6046,
+      "code": 6045,
       "name": "EscrowNotActive",
       "msg": "Escrow is not in Active status"
     },
     {
-      "code": 6047,
+      "code": 6046,
       "name": "EscrowExpired",
       "msg": "Escrow has expired"
     },
     {
-      "code": 6048,
+      "code": 6047,
       "name": "EscrowNotExpired",
       "msg": "Escrow has not expired yet"
     },
     {
-      "code": 6049,
+      "code": 6048,
       "name": "InvalidEscrowVault",
       "msg": "Invalid escrow vault"
     },
     {
-      "code": 6050,
+      "code": 6049,
       "name": "EscrowConditionsNotMet",
       "msg": "Escrow conditions not met"
     },
     {
-      "code": 6051,
+      "code": 6050,
       "name": "EscrowDurationExceeded",
       "msg": "Escrow duration exceeds maximum (30 days)"
     },
     {
-      "code": 6052,
+      "code": 6051,
       "name": "InvalidConstraintConfig",
       "msg": "Invalid constraint configuration: bounds exceeded"
     },
     {
-      "code": 6053,
+      "code": 6052,
       "name": "ConstraintViolated",
       "msg": "Instruction constraint violated"
     },
     {
-      "code": 6054,
+      "code": 6053,
       "name": "InvalidConstraintsPda",
       "msg": "Invalid constraints PDA: wrong owner or vault"
     },
     {
-      "code": 6055,
+      "code": 6054,
       "name": "InvalidPendingConstraintsPda",
       "msg": "Invalid pending constraints PDA: wrong owner or vault"
     },
     {
-      "code": 6056,
+      "code": 6055,
       "name": "AgentSpendLimitExceeded",
       "msg": "Agent rolling 24h spend exceeds per-agent spending limit"
     },
     {
-      "code": 6057,
+      "code": 6056,
       "name": "OverlaySlotExhausted",
       "msg": "Per-agent overlay is full; cannot register agent with spending limit"
     },
     {
-      "code": 6058,
+      "code": 6057,
       "name": "AgentSlotNotFound",
       "msg": "Agent has per-agent spending limit but no overlay tracking slot"
     },
     {
-      "code": 6059,
+      "code": 6058,
       "name": "UnauthorizedTokenApproval",
       "msg": "Unauthorized SPL Token Approve between validate and finalize"
     },
     {
-      "code": 6060,
+      "code": 6059,
       "name": "InvalidSessionExpiry",
       "msg": "Session expiry slots out of range (10-450)"
     },
     {
-      "code": 6061,
+      "code": 6060,
       "name": "UnconstrainedProgramBlocked",
       "msg": "Program has no constraint entry and strict mode is enabled"
     },
     {
-      "code": 6062,
+      "code": 6061,
       "name": "ProtocolCapExceeded",
       "msg": "Per-protocol rolling 24h spending cap would be exceeded"
     },
     {
-      "code": 6063,
+      "code": 6062,
       "name": "ProtocolCapsMismatch",
       "msg": "protocol_caps length must match protocols length when has_protocol_caps is true"
     },
     {
-      "code": 6064,
+      "code": 6063,
       "name": "ActiveEscrowsExist",
       "msg": "Cannot close vault with active escrow deposits"
     },
     {
-      "code": 6065,
+      "code": 6064,
       "name": "ConstraintsNotClosed",
       "msg": "Instruction constraints must be closed before closing vault"
     },
     {
-      "code": 6066,
+      "code": 6065,
       "name": "PendingPolicyExists",
       "msg": "Pending policy update must be applied or cancelled before closing vault"
     },
     {
-      "code": 6067,
+      "code": 6066,
       "name": "AgentPaused",
       "msg": "Agent is paused and cannot execute actions"
     },
     {
-      "code": 6068,
+      "code": 6067,
       "name": "AgentAlreadyPaused",
       "msg": "Agent is already paused"
     },
     {
-      "code": 6069,
+      "code": 6068,
       "name": "AgentNotPaused",
       "msg": "Agent is not paused"
     },
     {
-      "code": 6070,
+      "code": 6069,
       "name": "UnauthorizedPostFinalizeInstruction",
       "msg": "Instructions after finalize_session must be ComputeBudget or SystemProgram only"
+    },
+    {
+      "code": 6070,
+      "name": "UnexpectedBalanceDecrease",
+      "msg": "Vault balance decreased more than delegated amount — potential CPI attack"
+    },
+    {
+      "code": 6071,
+      "name": "TimelockTooShort",
+      "msg": "Timelock duration below minimum (1800 seconds / 30 minutes)"
+    },
+    {
+      "code": 6072,
+      "name": "PolicyVersionMismatch",
+      "msg": "Policy version mismatch — policy changed since agent's last RPC read"
+    },
+    {
+      "code": 6073,
+      "name": "PendingAgentPermsExists",
+      "msg": "A pending agent permissions update already exists for this agent"
+    },
+    {
+      "code": 6074,
+      "name": "PendingCloseConstraintsExists",
+      "msg": "A pending close constraints operation already exists for this vault"
     }
   ],
   "types": [
@@ -5044,6 +5379,11 @@
           },
           {
             "name": "rolling_spend_usd_after",
+            "docs": [
+              "DEPRECATED (v5): Always 0 since outcome-based spending.",
+              "Actual rolling spend is in SessionFinalized.actual_spend_usd.",
+              "Retained for IDL backward compatibility."
+            ],
             "type": "u64"
           },
           {
@@ -5142,7 +5482,7 @@
         "Tracks each agent's individual spend contributions using a 24-bucket",
         "hourly epoch scheme with per-entry `last_write_epoch` for correct gap-zeroing.",
         "",
-        "Layout: 32 (agent) + 8 (last_write_epoch) + 8 \u00d7 24 (contributions) = 232 bytes"
+        "Layout: 32 (agent) + 8 (last_write_epoch) + 8 × 24 (contributions) = 232 bytes"
       ],
       "serialization": "bytemuck",
       "repr": {
@@ -5233,7 +5573,7 @@
       }
     },
     {
-      "name": "AgentPermissionsUpdated",
+      "name": "AgentPermissionsChangeApplied",
       "type": {
         "kind": "struct",
         "fields": [
@@ -5246,12 +5586,44 @@
             "type": "pubkey"
           },
           {
-            "name": "old_permissions",
-            "type": "u64"
+            "name": "applied_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AgentPermissionsChangeCancelled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
           },
           {
-            "name": "new_permissions",
-            "type": "u64"
+            "name": "agent",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AgentPermissionsChangeQueued",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "agent",
+            "type": "pubkey"
+          },
+          {
+            "name": "executes_at",
+            "type": "i64"
           }
         ]
       }
@@ -5350,7 +5722,7 @@
         "Supports up to 10 agents (matches MAX_AGENTS_PER_VAULT).",
         "",
         "Size calculation:",
-        "8 (discriminator) + 32 (vault) + 232 x 10 (entries) + 1 (bump) + 7 (padding) + 80 (lifetime_spend) + 80 (lifetime_tx_count) = 2,528 bytes"
+        "8 (discriminator) + 32 (vault) + 232 × 10 (entries) + 1 (bump) + 7 (padding) + 80 (lifetime_spend) + 80 (lifetime_tx_count) = 2,528 bytes"
       ],
       "serialization": "bytemuck",
       "repr": {
@@ -5404,7 +5776,14 @@
           {
             "name": "lifetime_spend",
             "docs": [
-              "Per-agent cumulative spend in USD base units"
+              "Per-agent cumulative spend in USD base units. Index matches entries[i].",
+              "DESIGN DECISION: Tracks spend only, NOT profit/loss.",
+              "Per-agent P&L requires oracles (removed by design) and protocol-specific",
+              "position reading (violates protocol-agnostic principle). Realized P&L",
+              "can be derived in the SDK by correlating agent spend events with vault",
+              "balance changes. See agent-analytics.ts for the SDK implementation.",
+              "Found by: Persona test (Treasury Manager \"David\")",
+              "Appended AFTER existing layout to preserve zero-copy byte offsets."
             ],
             "type": {
               "array": [
@@ -5416,7 +5795,9 @@
           {
             "name": "lifetime_tx_count",
             "docs": [
-              "Per-agent cumulative transaction count"
+              "Per-agent cumulative transaction count. Index matches entries[i].",
+              "Incremented in finalize_session for EVERY successful spending session.",
+              "Used for: avg TX size (lifetime_spend / lifetime_tx_count), agent activity ranking."
             ],
             "type": {
               "array": [
@@ -5507,7 +5888,7 @@
           {
             "name": "fee_destination",
             "docs": [
-              "Developer fee destination \u2014 IMMUTABLE after initialization.",
+              "Developer fee destination — IMMUTABLE after initialization.",
               "Prevents a compromised owner from redirecting fees."
             ],
             "type": "pubkey"
@@ -5554,7 +5935,13 @@
           {
             "name": "open_positions",
             "docs": [
-              "Number of currently open positions (for perps tracking)"
+              "Number of currently open positions (for perps tracking).",
+              "DESIGN DECISION: Counter-only. Does not store per-position details",
+              "(entry price, size, liquidation price). Individual position data is",
+              "protocol-specific (Flash Trade vs Drift vs Jupiter perps have different",
+              "layouts). The SDK reads position details via RPC. sync_positions",
+              "corrects counter drift from auto-liquidation.",
+              "Found by: Persona test (Perps Developer \"Jake\")"
             ],
             "type": "u8"
           },
@@ -5575,23 +5962,74 @@
           {
             "name": "total_deposited_usd",
             "docs": [
-              "Cumulative stablecoin deposits in base units (USDC/USDT, 6 decimals)"
+              "Cumulative stablecoin deposits in base units (USDC/USDT, 6 decimals).",
+              "Incremented in deposit_funds for stablecoin mints only.",
+              "Used for P&L: current_balance - total_deposited_usd + total_withdrawn_usd.",
+              "Cumulative gross — never decremented. Informational only, never authorization input."
             ],
             "type": "u64"
           },
           {
             "name": "total_withdrawn_usd",
             "docs": [
-              "Cumulative stablecoin withdrawals in base units (USDC/USDT, 6 decimals)"
+              "Cumulative stablecoin withdrawals in base units (USDC/USDT, 6 decimals).",
+              "Incremented in withdraw_funds for stablecoin mints only."
             ],
             "type": "u64"
           },
           {
             "name": "total_failed_transactions",
             "docs": [
-              "Cumulative failed + expired session count"
+              "Cumulative failed + expired session count.",
+              "Incremented in finalize_session when success=false OR is_expired=true.",
+              "Used for success rate: total_transactions / (total_transactions + total_failed_transactions).",
+              "Informational only — never used in authorization decisions."
             ],
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CloseConstraintsApplied",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "applied_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CloseConstraintsCancelled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CloseConstraintsQueued",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "executes_at",
+            "type": "i64"
           }
         ]
       }
@@ -5749,7 +6187,7 @@
       "name": "EpochBucket",
       "docs": [
         "A single epoch bucket tracking aggregate USD spend.",
-        "16 bytes per bucket. USD-only \u2014 rate limiting stays client-side."
+        "16 bytes per bucket. USD-only — rate limiting stays client-side."
       ],
       "serialization": "bytemuck",
       "repr": {
@@ -6081,22 +6519,6 @@
       }
     },
     {
-      "name": "InstructionConstraintsClosed",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "vault",
-            "type": "pubkey"
-          },
-          {
-            "name": "timestamp",
-            "type": "i64"
-          }
-        ]
-      }
-    },
-    {
       "name": "InstructionConstraintsCreated",
       "type": {
         "kind": "struct",
@@ -6121,7 +6543,12 @@
       }
     },
     {
-      "name": "InstructionConstraintsUpdated",
+      "name": "PendingAgentPermissionsUpdate",
+      "docs": [
+        "Queued agent permissions update. Timelock-gated.",
+        "PDA seeds: [b\"pending_agent_perms\", vault.key().as_ref(), agent.as_ref()]",
+        "Per-agent PDA — allows concurrent pending updates for different agents."
+      ],
       "type": {
         "kind": "struct",
         "fields": [
@@ -6130,16 +6557,56 @@
             "type": "pubkey"
           },
           {
-            "name": "entries_count",
-            "type": "u8"
+            "name": "agent",
+            "type": "pubkey"
           },
           {
-            "name": "strict_mode",
-            "type": "bool"
+            "name": "new_permissions",
+            "type": "u64"
           },
           {
-            "name": "timestamp",
+            "name": "spending_limit_usd",
+            "type": "u64"
+          },
+          {
+            "name": "queued_at",
             "type": "i64"
+          },
+          {
+            "name": "executes_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PendingCloseConstraints",
+      "docs": [
+        "Queued constraint closure. Minimal — just needs the timelock gate.",
+        "PDA seeds: [b\"pending_close_constraints\", vault.key().as_ref()]"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "queued_at",
+            "type": "i64"
+          },
+          {
+            "name": "executes_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
           }
         ]
       }
@@ -6490,7 +6957,7 @@
             "name": "has_constraints",
             "docs": [
               "Whether instruction constraints PDA exists for this vault.",
-              "Set true by create_instruction_constraints, false by close_instruction_constraints."
+              "Set true by create_instruction_constraints, false by apply_close_constraints."
             ],
             "type": "bool"
           },
@@ -6535,50 +7002,16 @@
               "Bump seed for PDA"
             ],
             "type": "u8"
-          }
-        ]
-      }
-    },
-    {
-      "name": "PolicyUpdated",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "vault",
-            "type": "pubkey"
           },
           {
-            "name": "daily_cap_usd",
+            "name": "policy_version",
+            "docs": [
+              "Policy version counter for OCC (optimistic concurrency control).",
+              "Incremented on every apply_pending_policy and apply_constraints_update.",
+              "Agents include expected_policy_version in validate_and_authorize;",
+              "program rejects if version changed since the agent's RPC read."
+            ],
             "type": "u64"
-          },
-          {
-            "name": "max_transaction_size_usd",
-            "type": "u64"
-          },
-          {
-            "name": "protocol_mode",
-            "type": "u8"
-          },
-          {
-            "name": "protocols_count",
-            "type": "u8"
-          },
-          {
-            "name": "max_leverage_bps",
-            "type": "u16"
-          },
-          {
-            "name": "developer_fee_rate",
-            "type": "u16"
-          },
-          {
-            "name": "max_slippage_bps",
-            "type": "u16"
-          },
-          {
-            "name": "timestamp",
-            "type": "i64"
           }
         ]
       }
@@ -6741,16 +7174,20 @@
           {
             "name": "output_mint",
             "docs": [
-              "Expected output stablecoin mint for non-stablecoin\u2192stablecoin swaps.",
-              "Pubkey::default() when input is already a stablecoin (no snapshot needed)."
+              "Stablecoin mint for outcome-based spending detection.",
+              "For stablecoin input: set to authorized_token (the stablecoin being spent).",
+              "For non-stablecoin input: set to the expected stablecoin output mint.",
+              "Pubkey::default() for non-spending actions (no outcome check needed)."
             ],
             "type": "pubkey"
           },
           {
             "name": "stablecoin_balance_before",
             "docs": [
-              "Snapshot of vault's stablecoin ATA balance before swap.",
-              "0 when input is already a stablecoin."
+              "Snapshot of the relevant stablecoin account balance before the swap.",
+              "For stablecoin input: vault_token_account.amount (taken before fee collection).",
+              "For non-stablecoin input: output_stablecoin_account.amount.",
+              "0 for non-spending actions."
             ],
             "type": "u64"
           },
@@ -6791,14 +7228,24 @@
           },
           {
             "name": "actual_spend_usd",
+            "docs": [
+              "Actual stablecoin spend measured by balance delta (0 for non-spending actions).",
+              "For stablecoin-input: outflow minus fees. For non-stablecoin-input: stablecoin gain."
+            ],
             "type": "u64"
           },
           {
             "name": "balance_after_usd",
+            "docs": [
+              "Vault stablecoin balance after this transaction (0 for non-spending)."
+            ],
             "type": "u64"
           },
           {
             "name": "action_type",
+            "docs": [
+              "ActionType as u8 for downstream classification (permission_bit() value, 0-20)."
+            ],
             "type": "u8"
           }
         ]
@@ -6864,7 +7311,7 @@
             "name": "last_write_epoch",
             "docs": [
               "Epoch of most recent record_spend() call. Enables early exit in get_rolling_24h_usd().",
-              "Zero-initialized \u2014 value 0 correctly triggers early exit (current_epoch >> 144)."
+              "Zero-initialized — value 0 correctly triggers early exit (current_epoch >> 144)."
             ],
             "type": "i64"
           },

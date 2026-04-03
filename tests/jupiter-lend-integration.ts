@@ -139,6 +139,7 @@ describe("jupiter-lend-integration", () => {
         amount,
         targetProtocol,
         null, // no leverage for lend
+        new BN(0), // expectedPolicyVersion
       )
       .accountsPartial({
         agent: agentKp.publicKey,
@@ -251,7 +252,7 @@ describe("jupiter-lend-integration", () => {
         1, // max concurrent positions
         0, // developer fee rate
         100, // maxSlippageBps
-        new BN(0), // timelockDuration
+        new BN(1800), // timelockDuration
         [], // allowedDestinations
         [], // protocolCaps
       )
@@ -483,7 +484,7 @@ describe("jupiter-lend-integration", () => {
           1,
           0,
           100,
-          new BN(0),
+          new BN(1800),
           [],
           [], // protocolCaps
         )
@@ -603,7 +604,7 @@ describe("jupiter-lend-integration", () => {
           1,
           0,
           100,
-          new BN(0),
+          new BN(1800),
           [],
           [], // protocolCaps
         )

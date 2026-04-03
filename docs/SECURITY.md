@@ -425,7 +425,7 @@ The instruction scan in `validate_and_authorize` uses `load_instruction_at_check
 |-----------|------|-----------|--------|
 | **TransferFee** | 26 | High — fee-on-transfer could cause balance accounting mismatches | **Blocked** (disc 26 in Token-2022 scan) |
 | **ConfidentialTransfer** | 27 | Medium — masked amounts could hide actual transfer sizes | Not blocked, but CPI balance audit catches balance decreases regardless of instruction details |
-| **PermanentDelegate** | N/A | Low — only affects mint-level authority, not individual token accounts | Not applicable (Phalnx vaults use standard USDC/USDT mints) |
+| **PermanentDelegate** | N/A | Low — only affects mint-level authority, not individual token accounts | Not applicable (Sigil vaults use standard USDC/USDT mints) |
 | **TransferHook** | N/A | Low — hook programs execute during transfers but cannot modify amounts | CPI balance audit verifies final balance regardless |
 | **GroupPointer / GroupMember** | N/A | Informational — metadata extensions, no fund-flow impact | No mitigation needed |
 

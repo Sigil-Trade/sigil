@@ -31,7 +31,7 @@ pub struct CloseVault<'info> {
     #[account(
         mut,
         seeds = [b"tracker", vault.key().as_ref()],
-        bump,
+        bump = tracker.load()?.bump,
         close = owner,
     )]
     pub tracker: AccountLoader<'info, SpendTracker>,
@@ -40,7 +40,7 @@ pub struct CloseVault<'info> {
     #[account(
         mut,
         seeds = [b"agent_spend", vault.key().as_ref(), &[0u8]],
-        bump,
+        bump = agent_spend_overlay.load()?.bump,
         close = owner,
     )]
     pub agent_spend_overlay: AccountLoader<'info, AgentSpendOverlay>,
@@ -87,6 +87,58 @@ pub fn handler(ctx: Context<CloseVault>) -> Result<()> {
         **pending_info.try_borrow_mut_lamports()? = 0;
         pending_info.assign(&anchor_lang::system_program::ID);
         pending_info.resize(0)?;
+    }
+
+    // Clean up pending_agent_perms PDAs (per-agent: [b"pending_agent_perms", vault, agent]).
+    // MUST derive expected PDA and verify — never drain unvalidated accounts.
+    // Skip past pending_policy account if it was consumed above.
+    let start_idx: usize = if ctx.accounts.policy.has_pending_policy {
+        1
+    } else {
+        0
+    };
+    for agent_entry in vault.agents.iter() {
+        let (expected_pda, _) = Pubkey::find_program_address(
+            &[
+                b"pending_agent_perms",
+                vault.key().as_ref(),
+                agent_entry.pubkey.as_ref(),
+            ],
+            ctx.program_id,
+        );
+        // Search remaining_accounts for this PDA
+        for pending_info in ctx.remaining_accounts.iter().skip(start_idx) {
+            if pending_info.key() == expected_pda && pending_info.lamports() > 0 {
+                let owner_info = ctx.accounts.owner.to_account_info();
+                let dest_lamports = owner_info.lamports();
+                **owner_info.try_borrow_mut_lamports()? = dest_lamports
+                    .checked_add(pending_info.lamports())
+                    .ok_or(error!(SigilError::Overflow))?;
+                **pending_info.try_borrow_mut_lamports()? = 0;
+                pending_info.assign(&anchor_lang::system_program::ID);
+                pending_info.resize(0)?;
+                break;
+            }
+        }
+    }
+
+    // Clean up pending_close_constraints PDA: [b"pending_close_constraints", vault].
+    let (expected_close_constraints_pda, _) = Pubkey::find_program_address(
+        &[b"pending_close_constraints", vault.key().as_ref()],
+        ctx.program_id,
+    );
+    for pending_info in ctx.remaining_accounts.iter().skip(start_idx) {
+        if pending_info.key() == expected_close_constraints_pda && pending_info.lamports() > 0 {
+            let owner_info = ctx.accounts.owner.to_account_info();
+            let dest_lamports = owner_info.lamports();
+            **owner_info.try_borrow_mut_lamports()? = dest_lamports
+                .checked_add(pending_info.lamports())
+                .ok_or(error!(SigilError::Overflow))?;
+            **pending_info.try_borrow_mut_lamports()? = 0;
+            pending_info.assign(&anchor_lang::system_program::ID);
+            pending_info.resize(0)?;
+            break;
+        }
     }
 
     let clock = Clock::get()?;
