@@ -422,6 +422,7 @@ export interface AuthorizeOpts {
   outputStablecoinAccount?: PublicKey | null;
   mockSpendDestination?: PublicKey | null;
   mockSpendDevFeeRate?: number;
+  expectedPolicyVersion?: BN;
   remainingAccounts?: {
     pubkey: PublicKey;
     isWritable: boolean;
@@ -452,6 +453,19 @@ export async function buildAuthorizeIx(opts: AuthorizeOpts) {
     outputStablecoinAccount = null,
     remainingAccounts = [],
   } = opts;
+
+  // Read current policy version from on-chain if not provided.
+  // Ensures tests that queue+apply policy changes use the correct version.
+  let policyVersion = opts.expectedPolicyVersion;
+  if (policyVersion === undefined) {
+    try {
+      const pol = await program.account.policyConfig.fetch(policyPda);
+      policyVersion = (pol as any).policyVersion ?? new BN(0);
+    } catch {
+      policyVersion = new BN(0); // Fallback for tests where policy may not exist yet
+    }
+  }
+
   const [overlayPda] = PublicKey.findProgramAddressSync(
     [Buffer.from("agent_spend"), vaultPda.toBuffer(), Buffer.from([0])],
     program.programId,
@@ -463,6 +477,7 @@ export async function buildAuthorizeIx(opts: AuthorizeOpts) {
       amount,
       protocol,
       leverageBps !== null ? (new BN(leverageBps) as any) : null,
+      policyVersion,
     )
     .accounts({
       agent: agent.publicKey,

@@ -1093,7 +1093,7 @@ describe("sigil", () => {
           amount,
           jupiterProgramId,
           null,
-          await pv(),
+          await pv(), // restored pv() v2
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -1166,7 +1166,7 @@ describe("sigil", () => {
       expect(txResult).to.exist;
     });
 
-    it("rejects SPL Transfer after finalize (error 6070)", async () => {
+    it("rejects SPL Transfer after finalize (rejected at validate or post-finalize scan)", async () => {
       const { validateIx, finalizeIx } = await buildValidateFinalizePair();
       // Craft a top-level SPL Token transfer instruction (disc = 3)
       const splTransferIx = {
@@ -1182,8 +1182,9 @@ describe("sigil", () => {
         sendVersionedTx(svm, [validateIx, finalizeIx, splTransferIx], agent);
         expect.fail("Should have thrown");
       } catch (err: any) {
-        // Error 6070 = UnauthorizedPostFinalizeInstruction
-        expect(err.toString()).to.include("6070");
+        // Error 6069 = UnauthorizedPostFinalizeInstruction (shifted by 1 after
+        // TimelockActive removal). Checked at finalize instruction (index 1).
+        expect(err.toString()).to.include("6069");
       }
     });
   });
@@ -4673,7 +4674,7 @@ describe("sigil", () => {
           new BN(1_000_000),
           jupiterProgramId,
           null,
-          await pv(),
+          await pv(maPolicy),
         )
         .accounts({
           agent: agent.publicKey,
@@ -4735,7 +4736,7 @@ describe("sigil", () => {
           new BN(1_000_000),
           jupiterProgramId,
           null,
-          await pv(),
+          await pv(maPolicy),
         )
         .accounts({
           agent: agent.publicKey,
