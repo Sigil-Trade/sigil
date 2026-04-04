@@ -40,6 +40,13 @@ test-ledger/
 .xray/
 trident-tests/target/
 
+# Internal protocol specs and codegen (not for public consumption)
+sdk/kit/idls/
+sdk/kit/generated-protocols/
+scripts/add-protocol
+scripts/add-protocol.ts
+scripts/extend-sigil-alt.ts
+
 # Claude Code (local development tools)
 .claude
 .agents

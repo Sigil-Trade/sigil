@@ -29,13 +29,13 @@ const PROTOCOLS = {
   },
   "flash-trade": {
     idlPath: join(__dirname, "idls", "perpetuals.json"),
-    outputDir: join(__dirname, "src", "generated", "protocols", "flash-trade"),
+    outputDir: join(__dirname, "generated-protocols", "flash-trade"),
     generateEventMap: false,
     expectedHash: "66db991046f4c0029f0027a5a43ee11f58789cbc8276dd3108026ad2b4a24339",
   },
   kamino: {
     idlPath: join(__dirname, "idls", "kamino-lending.json"),
-    outputDir: join(__dirname, "src", "generated", "protocols", "kamino"),
+    outputDir: join(__dirname, "generated-protocols", "kamino"),
     generateEventMap: false,
     expectedHash: "5958e26f571077a32f730382bb481ad2b138ca28a18067bfcb28c46586c3a783",
   },

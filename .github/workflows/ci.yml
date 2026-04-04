@@ -187,9 +187,9 @@ jobs:
           github.event_name == 'push'
         working-directory: sdk/kit
         run: |
-          node codama.mjs --all --skip-hash-check
+          node codama.mjs --protocol=sigil --skip-hash-check
           if [ -n "$(git diff --name-only src/generated/)" ]; then
-            echo "::error::Generated code is stale. Run 'pnpm codama:all' and commit."
+            echo "::error::Generated code is stale. Run 'pnpm codama' and commit."
             git diff --stat src/generated/
             exit 1
           fi
