@@ -2,6 +2,7 @@ use anchor_lang::prelude::*;
 
 use crate::errors::SigilError;
 use crate::events::ConstraintsChangeQueued;
+use crate::state::constraints::pack_entries;
 use crate::state::*;
 
 #[derive(Accounts)]
@@ -23,12 +24,12 @@ pub struct QueueConstraintsUpdate<'info> {
     )]
     pub policy: Account<'info, PolicyConfig>,
 
+    /// Existing constraints — seeds verify PDA, bump verified via load().
     #[account(
-        has_one = vault @ SigilError::InvalidConstraintsPda,
         seeds = [b"constraints", vault.key().as_ref()],
-        bump = constraints.bump,
+        bump = constraints.load()?.bump,
     )]
-    pub constraints: Account<'info, InstructionConstraints>,
+    pub constraints: AccountLoader<'info, InstructionConstraints>,
 
     #[account(
         init,
@@ -37,7 +38,7 @@ pub struct QueueConstraintsUpdate<'info> {
         seeds = [b"pending_constraints", vault.key().as_ref()],
         bump,
     )]
-    pub pending_constraints: Account<'info, PendingConstraintsUpdate>,
+    pub pending_constraints: AccountLoader<'info, PendingConstraintsUpdate>,
 
     pub system_program: Program<'info, System>,
 }
@@ -48,6 +49,15 @@ pub fn handler(
     strict_mode: bool,
 ) -> Result<()> {
     let policy = &ctx.accounts.policy;
+
+    // Verify constraints belongs to this vault (replaces has_one = vault)
+    {
+        let c = ctx.accounts.constraints.load()?;
+        require!(
+            c.vault == ctx.accounts.vault.key().to_bytes(),
+            SigilError::InvalidConstraintsPda
+        );
+    }
 
     // Timelock must be configured to use queue
     require!(
@@ -63,13 +73,18 @@ pub fn handler(
         .checked_add(policy.timelock_duration as i64)
         .ok_or(SigilError::Overflow)?;
 
-    let pending = &mut ctx.accounts.pending_constraints;
-    pending.vault = ctx.accounts.vault.key();
-    pending.entries = entries;
-    pending.strict_mode = strict_mode;
-    pending.queued_at = clock.unix_timestamp;
-    pending.executes_at = executes_at;
-    pending.bump = ctx.bumps.pending_constraints;
+    {
+        let mut pending = ctx.accounts.pending_constraints.load_init()?;
+        pending.vault = ctx.accounts.vault.key().to_bytes();
+        pending.strict_mode = strict_mode as u8;
+        pending.queued_at = clock.unix_timestamp;
+        pending.executes_at = executes_at;
+        pending.bump = ctx.bumps.pending_constraints;
+
+        let mut count = 0u8;
+        pack_entries(&entries, &mut pending.entries, &mut count)?;
+        pending.entry_count = count;
+    }
 
     emit!(ConstraintsChangeQueued {
         vault: ctx.accounts.vault.key(),

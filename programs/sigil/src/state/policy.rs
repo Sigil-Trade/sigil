@@ -85,6 +85,11 @@ pub struct PolicyConfig {
     /// Agents include expected_policy_version in validate_and_authorize;
     /// program rejects if version changed since the agent's RPC read.
     pub policy_version: u64,
+
+    /// Whether native PostExecutionAssertions are configured for this vault.
+    /// When true, finalize_session requires the assertions PDA in remaining_accounts.
+    /// 0 = no assertions, non-zero = assertions required.
+    pub has_post_assertions: u8,
 }
 
 impl PolicyConfig {
@@ -96,7 +101,7 @@ impl PolicyConfig {
     /// allowed_destinations vec (4 + 32 * MAX) + has_constraints (1) +
     /// has_pending_policy (1) + has_protocol_caps (1) +
     /// protocol_caps vec (4 + 8 * MAX) + session_expiry_slots (8) + bump (1) +
-    /// policy_version (8)
+    /// policy_version (8) + has_post_assertions (1)
     pub const SIZE: usize = 8
         + 32
         + 8
@@ -116,7 +121,8 @@ impl PolicyConfig {
         + (4 + 8 * MAX_ALLOWED_PROTOCOLS) // protocol_caps
         + 8 // session_expiry_slots
         + 1 // bump
-        + 8; // policy_version
+        + 8 // policy_version
+        + 1; // has_post_assertions
 
     /// Check if a protocol is allowed based on the protocol mode.
     pub fn is_protocol_allowed(&self, program_id: &Pubkey) -> bool {

@@ -21,8 +21,8 @@ export interface VerificationResult {
   warnings: string[];
 }
 
-const MAX_ENTRIES = 16;
-const WARN_ENTRIES = 12;
+const MAX_ENTRIES = 64;
+const WARN_ENTRIES = 48;
 
 /**
  * Run all verification checks against generated output.

@@ -26,11 +26,10 @@ pub struct QueueCloseConstraints<'info> {
 
     /// Verify constraints PDA exists (proves there's something to close).
     #[account(
-        has_one = vault @ SigilError::InvalidConstraintsPda,
         seeds = [b"constraints", vault.key().as_ref()],
-        bump = constraints.bump,
+        bump = constraints.load()?.bump,
     )]
-    pub constraints: Account<'info, InstructionConstraints>,
+    pub constraints: AccountLoader<'info, InstructionConstraints>,
 
     #[account(
         init,
@@ -47,6 +46,15 @@ pub struct QueueCloseConstraints<'info> {
 pub fn handler(ctx: Context<QueueCloseConstraints>) -> Result<()> {
     let vault = &ctx.accounts.vault;
     let policy = &ctx.accounts.policy;
+
+    // Verify constraints belongs to this vault (replaces has_one = vault)
+    {
+        let c = ctx.accounts.constraints.load()?;
+        require!(
+            c.vault == vault.key().to_bytes(),
+            SigilError::InvalidConstraintsPda
+        );
+    }
 
     require!(
         vault.status != VaultStatus::Closed,

@@ -137,34 +137,51 @@ pub fn handler(
     let is_spending = action_type.is_spending();
     let is_stablecoin_input = is_stablecoin_mint(&token_mint);
 
-    // Load constraints PDA deterministically — agent CANNOT omit this
-    let loaded_constraints: Option<InstructionConstraints> = if !ctx.remaining_accounts.is_empty() {
-        let info = &ctx.remaining_accounts[0];
-        require!(info.owner == &crate::ID, SigilError::InvalidConstraintsPda);
-        let data = info.try_borrow_data()?;
-        let constraints = InstructionConstraints::try_deserialize(&mut &data[..])?;
-        // Use stored bump for O(1) PDA verification instead of find_program_address (~1,500 CU)
-        let constraints_pda = Pubkey::create_program_address(
-            &[b"constraints", vault_key.as_ref(), &[constraints.bump]],
-            &crate::ID,
-        )
-        .map_err(|_| error!(SigilError::InvalidConstraintsPda))?;
-        require_keys_eq!(
-            info.key(),
-            constraints_pda,
-            SigilError::InvalidConstraintsPda
-        );
-        require_keys_eq!(
-            constraints.vault,
-            vault_key,
-            SigilError::InvalidConstraintsPda
-        );
-        Some(constraints)
-    } else {
-        // No constraints PDA passed — verify none are configured
-        require!(!policy.has_constraints, SigilError::InvalidConstraintsPda);
-        None
-    };
+    // Load zero-copy constraints PDA from remaining_accounts.
+    // We hold the borrowed account data alive for the scan duration so we can
+    // reference the zero-copy struct without copying 35KB onto the stack.
+    let _constraints_data_borrow;
+    let loaded_constraints: Option<&InstructionConstraints> =
+        if !ctx.remaining_accounts.is_empty() {
+            let info = &ctx.remaining_accounts[0];
+            require!(
+                info.owner == &crate::ID,
+                SigilError::InvalidConstraintsPda
+            );
+            _constraints_data_borrow = info.try_borrow_data()?;
+            let data = &*_constraints_data_borrow;
+            // Verify account data is large enough for the zero-copy struct
+            let struct_size = core::mem::size_of::<InstructionConstraints>();
+            require!(
+                data.len() >= 8 + struct_size,
+                SigilError::InvalidConstraintsPda
+            );
+            // SAFETY: InstructionConstraints is #[account(zero_copy)] = #[repr(C)] + Pod.
+            // The 8-byte Anchor discriminator precedes the struct data.
+            let constraints: &InstructionConstraints =
+                bytemuck::from_bytes(&data[8..8 + struct_size]);
+
+            // Use stored bump for O(1) PDA verification
+            let constraints_pda = Pubkey::create_program_address(
+                &[b"constraints", vault_key.as_ref(), &[constraints.bump]],
+                &crate::ID,
+            )
+            .map_err(|_| error!(SigilError::InvalidConstraintsPda))?;
+            require_keys_eq!(
+                info.key(),
+                constraints_pda,
+                SigilError::InvalidConstraintsPda
+            );
+            require!(
+                constraints.vault == vault_key.to_bytes(),
+                SigilError::InvalidConstraintsPda
+            );
+            Some(constraints)
+        } else {
+            // No constraints PDA passed — verify none are configured
+            require!(!policy.has_constraints, SigilError::InvalidConstraintsPda);
+            None
+        };
 
     // 1. Vault must be active
     require!(vault.is_active(), SigilError::VaultNotActive);
@@ -275,7 +292,7 @@ pub fn handler(
         compute_budget_id: &Pubkey,
         finalize_hash: &[u8; 8],
         policy: &PolicyConfig,
-        loaded_constraints: &Option<InstructionConstraints>,
+        loaded_constraints: &Option<&InstructionConstraints>,
     ) -> anchor_lang::Result<ScanAction> {
         // Stop at finalize_session
         if ix.program_id == crate::ID && ix.data.len() >= 8 && ix.data[..8] == *finalize_hash {
@@ -320,15 +337,15 @@ pub fn handler(
             SigilError::ProtocolNotAllowed
         );
 
-        // Generic instruction constraints (OR across entries)
-        if let Some(ref constraints) = loaded_constraints {
-            let matched = generic_constraints::verify_against_entries(
-                &constraints.entries,
+        // Generic instruction constraints (OR across entries, zero-copy)
+        if let Some(constraints) = loaded_constraints {
+            let matched = generic_constraints::verify_against_entries_zc(
+                constraints,
                 &ix.program_id,
                 &ix.data,
                 &ix.accounts,
             )?;
-            if !matched && constraints.strict_mode {
+            if !matched && constraints.strict_mode != 0 {
                 return Err(error!(SigilError::UnconstrainedProgramBlocked));
             }
         }

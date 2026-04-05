@@ -2,6 +2,7 @@ use anchor_lang::prelude::*;
 
 use crate::errors::SigilError;
 use crate::events::InstructionConstraintsCreated;
+use crate::state::constraints::pack_entries;
 use crate::state::*;
 
 #[derive(Accounts)]
@@ -31,7 +32,7 @@ pub struct CreateInstructionConstraints<'info> {
         seeds = [b"constraints", vault.key().as_ref()],
         bump,
     )]
-    pub constraints: Account<'info, InstructionConstraints>,
+    pub constraints: AccountLoader<'info, InstructionConstraints>,
 
     pub system_program: Program<'info, System>,
 }
@@ -43,18 +44,25 @@ pub fn handler(
 ) -> Result<()> {
     InstructionConstraints::validate_entries(&entries)?;
 
-    let constraints = &mut ctx.accounts.constraints;
-    constraints.vault = ctx.accounts.vault.key();
-    constraints.entries = entries;
-    constraints.strict_mode = strict_mode;
-    constraints.bump = ctx.bumps.constraints;
+    let entry_count = entries.len() as u8;
 
-    // Set has_constraints flag on policy
+    {
+        let mut constraints = ctx.accounts.constraints.load_init()?;
+        constraints.vault = ctx.accounts.vault.key().to_bytes();
+        constraints.strict_mode = strict_mode as u8;
+        constraints.bump = ctx.bumps.constraints;
+
+        let mut count = 0u8;
+        pack_entries(&entries, &mut constraints.entries, &mut count)?;
+        constraints.entry_count = count;
+    }
+
+    // Set has_constraints flag on policy (borrow dropped above)
     ctx.accounts.policy.has_constraints = true;
 
     emit!(InstructionConstraintsCreated {
         vault: ctx.accounts.vault.key(),
-        entries_count: constraints.entries.len() as u8,
+        entries_count: entry_count,
         strict_mode,
         timestamp: Clock::get()?.unix_timestamp,
     });

@@ -807,7 +807,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       {
         action: "fix_constraints",
         description:
-          "Ensure constraint entries are within bounds (max 16 entries, 8 data constraints each)",
+          "Ensure constraint entries are within bounds (max 64 entries, 8 data constraints each)",
       },
     ],
   },
@@ -1180,6 +1180,83 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
         action: "finalize_sessions",
         description:
           "Wait for active sessions to finalize or expire, then retry close_vault.",
+      },
+    ],
+  },
+
+  // --- Post-execution assertions (Phase B scaffolding) ---
+  6076: {
+    name: "PostAssertionFailed",
+    message: "Post-execution assertion failed: account state did not satisfy constraint.",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "review_assertions",
+        description:
+          "Review the vault's post-execution assertions. The trade's resulting account state violated a configured assertion.",
+      },
+    ],
+  },
+  6077: {
+    name: "InvalidPostAssertionIndex",
+    message: "Post-assertion references an invalid instruction index.",
+    category: "INPUT_VALIDATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "fix_assertions",
+        description: "Review and update the vault's post-assertion configuration.",
+      },
+    ],
+  },
+  6078: {
+    name: "ConstraintIndexOutOfBounds",
+    message: "Constraint entry index out of bounds for zero-copy array.",
+    category: "INPUT_VALIDATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "fix_constraints",
+        description:
+          "Ensure constraint entries do not exceed max 64 entries.",
+      },
+    ],
+  },
+  6079: {
+    name: "InvalidConstraintOperator",
+    message: "Constraint operator value is not a valid ConstraintOperator discriminant.",
+    category: "INPUT_VALIDATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "fix_constraints",
+        description: "Ensure constraint operators are valid (0-6).",
+      },
+    ],
+  },
+  6080: {
+    name: "ConstraintsVaultMismatch",
+    message: "Zero-copy constraints account has wrong vault.",
+    category: "INPUT_VALIDATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "verify_pda",
+        description: "The constraints PDA does not belong to this vault.",
+      },
+    ],
+  },
+  6081: {
+    name: "ConstraintEntryCountExceeded",
+    message: "Cannot pack entries: entry count exceeds MAX_CONSTRAINT_ENTRIES (64).",
+    category: "INPUT_VALIDATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "reduce_entries",
+        description:
+          "Reduce the number of constraint entries to 64 or fewer.",
       },
     ],
   },
