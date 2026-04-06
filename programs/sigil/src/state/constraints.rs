@@ -61,41 +61,41 @@ pub struct ConstraintEntry {
 
 #[zero_copy]
 pub struct DataConstraintZC {
-    pub offset: u16,                              // 2
-    pub operator: u8,                             // 1 (ConstraintOperator discriminant 0-6)
-    pub value_len: u8,                            // 1 (actual bytes used in value, 1..=32)
-    pub value: [u8; MAX_CONSTRAINT_VALUE_LEN],    // 32
-    pub _padding: [u8; 4],                        // 4 (align to 8 bytes: 2+1+1+32+4=40)
+    pub offset: u16,                           // 2
+    pub operator: u8,                          // 1 (ConstraintOperator discriminant 0-6)
+    pub value_len: u8,                         // 1 (actual bytes used in value, 1..=32)
+    pub value: [u8; MAX_CONSTRAINT_VALUE_LEN], // 32
+    pub _padding: [u8; 4],                     // 4 (align to 8 bytes: 2+1+1+32+4=40)
 }
 // = 40 bytes
 
 #[zero_copy]
 pub struct AccountConstraintZC {
-    pub expected: [u8; 32],   // 32
-    pub index: u8,            // 1
-    pub _padding: [u8; 7],    // 7 (align to 8 bytes: 32+1+7=40)
+    pub expected: [u8; 32], // 32
+    pub index: u8,          // 1
+    pub _padding: [u8; 7],  // 7 (align to 8 bytes: 32+1+7=40)
 }
 // = 40 bytes
 
 #[zero_copy]
 pub struct ConstraintEntryZC {
-    pub program_id: [u8; 32],                                                           // 32
-    pub data_constraints: [DataConstraintZC; MAX_DATA_CONSTRAINTS_PER_ENTRY],            // 8 * 40 = 320
-    pub account_constraints: [AccountConstraintZC; MAX_ACCOUNT_CONSTRAINTS_PER_ENTRY],   // 5 * 40 = 200
-    pub data_count: u8,       // 1 (active data constraints in this entry)
-    pub account_count: u8,    // 1 (active account constraints in this entry)
-    pub _padding: [u8; 6],    // 6 (align: 32+320+200+1+1+6=560)
+    pub program_id: [u8; 32], // 32
+    pub data_constraints: [DataConstraintZC; MAX_DATA_CONSTRAINTS_PER_ENTRY], // 8 * 40 = 320
+    pub account_constraints: [AccountConstraintZC; MAX_ACCOUNT_CONSTRAINTS_PER_ENTRY], // 5 * 40 = 200
+    pub data_count: u8,    // 1 (active data constraints in this entry)
+    pub account_count: u8, // 1 (active account constraints in this entry)
+    pub _padding: [u8; 6], // 6 (align: 32+320+200+1+1+6=560)
 }
 // = 560 bytes
 
 #[account(zero_copy)]
 pub struct InstructionConstraints {
-    pub vault: [u8; 32],                                                // 32
-    pub entries: [ConstraintEntryZC; MAX_CONSTRAINT_ENTRIES],           // 64 * 560 = 35,840
-    pub entry_count: u8,      // 1 (active entries, 0..=64)
-    pub strict_mode: u8,      // 1 (0 = permissive, non-zero = strict)
-    pub bump: u8,             // 1
-    pub _padding: [u8; 5],    // 5 (align: 32+35840+1+1+1+5=35880)
+    pub vault: [u8; 32],                                      // 32
+    pub entries: [ConstraintEntryZC; MAX_CONSTRAINT_ENTRIES], // 64 * 560 = 35,840
+    pub entry_count: u8,                                      // 1 (active entries, 0..=64)
+    pub strict_mode: u8,   // 1 (0 = permissive, non-zero = strict)
+    pub bump: u8,          // 1
+    pub _padding: [u8; 5], // 5 (align: 32+35840+1+1+1+5=35880)
 }
 
 impl InstructionConstraints {
@@ -152,8 +152,7 @@ pub(crate) fn pack_entries(
             dst[i].data_constraints[j].offset = dc.offset;
             dst[i].data_constraints[j].operator = dc.operator as u8;
             dst[i].data_constraints[j].value_len = dc.value.len() as u8;
-            dst[i].data_constraints[j].value[..dc.value.len()]
-                .copy_from_slice(&dc.value);
+            dst[i].data_constraints[j].value[..dc.value.len()].copy_from_slice(&dc.value);
         }
 
         for (k, ac) in entry.account_constraints.iter().enumerate() {

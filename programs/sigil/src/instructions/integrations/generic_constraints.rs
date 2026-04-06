@@ -191,7 +191,10 @@ pub fn verify_data_constraints_zc(ix_data: &[u8], entry: &ConstraintEntryZC) -> 
         let expected = &dc.value[..len];
         let op = ConstraintOperator::try_from(dc.operator)
             .map_err(|_| error!(SigilError::InvalidConstraintOperator))?;
-        require!(bytes_match(actual, &op, expected), SigilError::ConstraintViolated);
+        require!(
+            bytes_match(actual, &op, expected),
+            SigilError::ConstraintViolated
+        );
     }
     Ok(())
 }

@@ -141,47 +141,43 @@ pub fn handler(
     // We hold the borrowed account data alive for the scan duration so we can
     // reference the zero-copy struct without copying 35KB onto the stack.
     let _constraints_data_borrow;
-    let loaded_constraints: Option<&InstructionConstraints> =
-        if !ctx.remaining_accounts.is_empty() {
-            let info = &ctx.remaining_accounts[0];
-            require!(
-                info.owner == &crate::ID,
-                SigilError::InvalidConstraintsPda
-            );
-            _constraints_data_borrow = info.try_borrow_data()?;
-            let data = &*_constraints_data_borrow;
-            // Verify account data is large enough for the zero-copy struct
-            let struct_size = core::mem::size_of::<InstructionConstraints>();
-            require!(
-                data.len() >= 8 + struct_size,
-                SigilError::InvalidConstraintsPda
-            );
-            // SAFETY: InstructionConstraints is #[account(zero_copy)] = #[repr(C)] + Pod.
-            // The 8-byte Anchor discriminator precedes the struct data.
-            let constraints: &InstructionConstraints =
-                bytemuck::from_bytes(&data[8..8 + struct_size]);
+    let loaded_constraints: Option<&InstructionConstraints> = if !ctx.remaining_accounts.is_empty()
+    {
+        let info = &ctx.remaining_accounts[0];
+        require!(info.owner == &crate::ID, SigilError::InvalidConstraintsPda);
+        _constraints_data_borrow = info.try_borrow_data()?;
+        let data = &*_constraints_data_borrow;
+        // Verify account data is large enough for the zero-copy struct
+        let struct_size = core::mem::size_of::<InstructionConstraints>();
+        require!(
+            data.len() >= 8 + struct_size,
+            SigilError::InvalidConstraintsPda
+        );
+        // SAFETY: InstructionConstraints is #[account(zero_copy)] = #[repr(C)] + Pod.
+        // The 8-byte Anchor discriminator precedes the struct data.
+        let constraints: &InstructionConstraints = bytemuck::from_bytes(&data[8..8 + struct_size]);
 
-            // Use stored bump for O(1) PDA verification
-            let constraints_pda = Pubkey::create_program_address(
-                &[b"constraints", vault_key.as_ref(), &[constraints.bump]],
-                &crate::ID,
-            )
-            .map_err(|_| error!(SigilError::InvalidConstraintsPda))?;
-            require_keys_eq!(
-                info.key(),
-                constraints_pda,
-                SigilError::InvalidConstraintsPda
-            );
-            require!(
-                constraints.vault == vault_key.to_bytes(),
-                SigilError::InvalidConstraintsPda
-            );
-            Some(constraints)
-        } else {
-            // No constraints PDA passed — verify none are configured
-            require!(!policy.has_constraints, SigilError::InvalidConstraintsPda);
-            None
-        };
+        // Use stored bump for O(1) PDA verification
+        let constraints_pda = Pubkey::create_program_address(
+            &[b"constraints", vault_key.as_ref(), &[constraints.bump]],
+            &crate::ID,
+        )
+        .map_err(|_| error!(SigilError::InvalidConstraintsPda))?;
+        require_keys_eq!(
+            info.key(),
+            constraints_pda,
+            SigilError::InvalidConstraintsPda
+        );
+        require!(
+            constraints.vault == vault_key.to_bytes(),
+            SigilError::InvalidConstraintsPda
+        );
+        Some(constraints)
+    } else {
+        // No constraints PDA passed — verify none are configured
+        require!(!policy.has_constraints, SigilError::InvalidConstraintsPda);
+        None
+    };
 
     // 1. Vault must be active
     require!(vault.is_active(), SigilError::VaultNotActive);

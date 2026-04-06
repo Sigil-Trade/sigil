@@ -1187,7 +1187,8 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   // --- Post-execution assertions (Phase B scaffolding) ---
   6076: {
     name: "PostAssertionFailed",
-    message: "Post-execution assertion failed: account state did not satisfy constraint.",
+    message:
+      "Post-execution assertion failed: account state did not satisfy constraint.",
     category: "POLICY_VIOLATION",
     retryable: false,
     recovery_actions: [
@@ -1206,7 +1207,8 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     recovery_actions: [
       {
         action: "fix_assertions",
-        description: "Review and update the vault's post-assertion configuration.",
+        description:
+          "Review and update the vault's post-assertion configuration.",
       },
     ],
   },
@@ -1218,14 +1220,14 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     recovery_actions: [
       {
         action: "fix_constraints",
-        description:
-          "Ensure constraint entries do not exceed max 64 entries.",
+        description: "Ensure constraint entries do not exceed max 64 entries.",
       },
     ],
   },
   6079: {
     name: "InvalidConstraintOperator",
-    message: "Constraint operator value is not a valid ConstraintOperator discriminant.",
+    message:
+      "Constraint operator value is not a valid ConstraintOperator discriminant.",
     category: "INPUT_VALIDATION",
     retryable: false,
     recovery_actions: [
@@ -1249,14 +1251,14 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   },
   6081: {
     name: "ConstraintEntryCountExceeded",
-    message: "Cannot pack entries: entry count exceeds MAX_CONSTRAINT_ENTRIES (64).",
+    message:
+      "Cannot pack entries: entry count exceeds MAX_CONSTRAINT_ENTRIES (64).",
     category: "INPUT_VALIDATION",
     retryable: false,
     recovery_actions: [
       {
         action: "reduce_entries",
-        description:
-          "Reduce the number of constraint entries to 64 or fewer.",
+        description: "Reduce the number of constraint entries to 64 or fewer.",
       },
     ],
   },
