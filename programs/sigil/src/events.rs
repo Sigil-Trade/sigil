@@ -173,6 +173,22 @@ pub struct InstructionConstraintsCreated {
 // InstructionConstraintsClosed event removed — replaced by CloseConstraintsApplied (queue/apply path).
 
 #[event]
+pub struct PdaAllocated {
+    pub vault: Pubkey,
+    pub pda_type: u8, // 0 = constraints, 1 = pending_constraints
+    pub initial_size: u32,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct PdaExtended {
+    pub vault: Pubkey,
+    pub old_size: u32,
+    pub new_size: u32,
+    pub timestamp: i64,
+}
+
+#[event]
 pub struct ConstraintsChangeQueued {
     pub vault: Pubkey,
     pub executes_at: i64,

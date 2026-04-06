@@ -44,6 +44,8 @@ import {
   getCloseConstraintsCancelledDecoder,
   getDelegationRevokedDecoder,
   getPositionsSyncedDecoder,
+  getPdaAllocatedDecoder,
+  getPdaExtendedDecoder,
 } from "./generated/types/index.js";
 
 /** All known Sigil event names */
@@ -172,6 +174,8 @@ const EVENT_DECODER_MAP: Record<
   CloseConstraintsCancelled: getCloseConstraintsCancelledDecoder(),
   DelegationRevoked: getDelegationRevokedDecoder(),
   PositionsSynced: getPositionsSyncedDecoder(),
+  PdaAllocated: getPdaAllocatedDecoder(),
+  PdaExtended: getPdaExtendedDecoder(),
 };
 
 // Validate decoder map completeness at module init — catches drift when events are added/removed

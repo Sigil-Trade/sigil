@@ -5,7 +5,7 @@
  * Every error includes a category, retryability flag, and
  * recovery actions that tell the agent exactly what to do next.
  *
- * Maps all 76 on-chain error codes (6000-6075) plus 34 SDK
+ * Maps all 82 on-chain error codes (6000-6081) plus 34 SDK
  * error codes (7000-7033) to AgentError with machine-readable metadata.
  *
  * Zero dependency on @solana/web3.js or @coral-xyz/anchor.
@@ -57,7 +57,7 @@ export interface AgentError {
 }
 
 // ---------------------------------------------------------------------------
-// On-chain error code mapping (6000-6075)
+// On-chain error code mapping (6000-6081)
 // ---------------------------------------------------------------------------
 
 interface ErrorMapping {
@@ -807,7 +807,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       {
         action: "fix_constraints",
         description:
-          "Ensure constraint entries are within bounds (max 16 entries, 8 data constraints each)",
+          "Ensure constraint entries are within bounds (max 64 entries, 8 data constraints each)",
       },
     ],
   },
@@ -1180,6 +1180,85 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
         action: "finalize_sessions",
         description:
           "Wait for active sessions to finalize or expire, then retry close_vault.",
+      },
+    ],
+  },
+
+  // --- Post-execution assertions (Phase B scaffolding) ---
+  6076: {
+    name: "PostAssertionFailed",
+    message:
+      "Post-execution assertion failed: account state did not satisfy constraint.",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "review_assertions",
+        description:
+          "Review the vault's post-execution assertions. The trade's resulting account state violated a configured assertion.",
+      },
+    ],
+  },
+  6077: {
+    name: "InvalidPostAssertionIndex",
+    message: "Post-assertion references an invalid instruction index.",
+    category: "INPUT_VALIDATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "fix_assertions",
+        description:
+          "Review and update the vault's post-assertion configuration.",
+      },
+    ],
+  },
+  6078: {
+    name: "ConstraintIndexOutOfBounds",
+    message: "Constraint entry index out of bounds for zero-copy array.",
+    category: "INPUT_VALIDATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "fix_constraints",
+        description: "Ensure constraint entries do not exceed max 64 entries.",
+      },
+    ],
+  },
+  6079: {
+    name: "InvalidConstraintOperator",
+    message:
+      "Constraint operator value is not a valid ConstraintOperator discriminant.",
+    category: "INPUT_VALIDATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "fix_constraints",
+        description: "Ensure constraint operators are valid (0-6).",
+      },
+    ],
+  },
+  6080: {
+    name: "ConstraintsVaultMismatch",
+    message: "Zero-copy constraints account has wrong vault.",
+    category: "INPUT_VALIDATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "verify_pda",
+        description: "The constraints PDA does not belong to this vault.",
+      },
+    ],
+  },
+  6081: {
+    name: "ConstraintEntryCountExceeded",
+    message:
+      "Cannot pack entries: entry count exceeds MAX_CONSTRAINT_ENTRIES (64).",
+    category: "INPUT_VALIDATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "reduce_entries",
+        description: "Reduce the number of constraint entries to 64 or fewer.",
       },
     ],
   },
@@ -1701,7 +1780,7 @@ const SDK_ERRORS: Record<string, ErrorMapping> = {
  * Convert any error into a structured AgentError.
  *
  * Handles:
- * - On-chain Anchor errors (code 6000-6075)
+ * - On-chain Anchor errors (code 6000-6081)
  * - SDK errors (code 7000-7033)
  * - Network/RPC errors (from message patterns)
  * - Unknown errors (wrapped as FATAL)
@@ -2054,7 +2133,7 @@ function extractErrorCode(error: unknown): number | null {
   const e = error as Record<string, unknown>;
 
   // Direct code property
-  if (typeof e.code === "number" && e.code >= 6000 && e.code <= 6075)
+  if (typeof e.code === "number" && e.code >= 6000 && e.code <= 6081)
     return e.code;
 
   // Anchor error structure
@@ -2071,7 +2150,7 @@ function extractErrorCode(error: unknown): number | null {
     const match = e.message.match(/custom program error: 0x([0-9a-fA-F]+)/);
     if (match) {
       const code = parseInt(match[1], 16);
-      if (code >= 6000 && code <= 6075) return code;
+      if (code >= 6000 && code <= 6081) return code;
     }
   }
 
@@ -2303,7 +2382,7 @@ export class SigilSdkError extends Error implements AgentError {
  * Returns a SigilSdkError (extends Error) so instanceof Error checks still work.
  *
  * Processing order:
- * 1. Try on-chain error extraction via toAgentError() (numeric codes 6000-6075)
+ * 1. Try on-chain error extraction via toAgentError() (numeric codes 6000-6081)
  * 2. Pattern-match SDK error messages (11 patterns from seal.ts throw sites)
  * 3. Fallback to UNKNOWN/FATAL
  */

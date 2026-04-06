@@ -176,8 +176,30 @@ pub mod sigil {
         instructions::cancel_pending_policy::handler(ctx)
     }
 
-    /// Create instruction constraints for the vault.
-    /// Only the owner can call this. No timelock check (additive change).
+    /// Allocate the InstructionConstraints PDA at 10,240 bytes (CPI limit).
+    /// Must be followed by extend_pda calls + create_instruction_constraints
+    /// in the same atomic transaction to reach full SIZE.
+    pub fn allocate_constraints_pda(ctx: Context<AllocateConstraintsPda>) -> Result<()> {
+        instructions::allocate_constraints_pda::handler(ctx)
+    }
+
+    /// Allocate the PendingConstraintsUpdate PDA at 10,240 bytes (CPI limit).
+    /// Must be followed by extend_pda calls + queue_constraints_update
+    /// in the same atomic transaction.
+    pub fn allocate_pending_constraints_pda(
+        ctx: Context<AllocatePendingConstraintsPda>,
+    ) -> Result<()> {
+        instructions::allocate_pending_constraints_pda::handler(ctx)
+    }
+
+    /// Grow a program-owned PDA by up to 10,240 bytes per call.
+    /// Used to extend constraints/pending PDAs to full SIZE before population.
+    pub fn extend_pda(ctx: Context<ExtendPda>, target_size: u32) -> Result<()> {
+        instructions::extend_pda::handler(ctx, target_size)
+    }
+
+    /// Populate a pre-allocated InstructionConstraints PDA with entries.
+    /// Only the owner can call this. PDA must be at full SIZE.
     pub fn create_instruction_constraints(
         ctx: Context<CreateInstructionConstraints>,
         entries: Vec<state::ConstraintEntry>,

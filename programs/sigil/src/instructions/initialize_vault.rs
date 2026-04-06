@@ -153,6 +153,7 @@ pub fn handler(
     policy.session_expiry_slots = 0;
     policy.bump = ctx.bumps.policy;
     policy.policy_version = 0;
+    policy.has_post_assertions = 0;
 
     // Initialize zero-copy tracker (buckets + protocol_counters zero-initialized by allocator)
     let mut tracker = ctx.accounts.tracker.load_init()?;

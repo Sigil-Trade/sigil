@@ -15,12 +15,8 @@ import {
   fetchEncodedAccounts,
   fixDecoderSize,
   fixEncoderSize,
-  getAddressDecoder,
-  getAddressEncoder,
   getArrayDecoder,
   getArrayEncoder,
-  getBooleanDecoder,
-  getBooleanEncoder,
   getBytesDecoder,
   getBytesEncoder,
   getStructDecoder,
@@ -30,21 +26,21 @@ import {
   transformEncoder,
   type Account,
   type Address,
-  type Codec,
-  type Decoder,
   type EncodedAccount,
-  type Encoder,
   type FetchAccountConfig,
   type FetchAccountsConfig,
+  type FixedSizeCodec,
+  type FixedSizeDecoder,
+  type FixedSizeEncoder,
   type MaybeAccount,
   type MaybeEncodedAccount,
   type ReadonlyUint8Array,
 } from "@solana/kit";
 import {
-  getConstraintEntryDecoder,
-  getConstraintEntryEncoder,
-  type ConstraintEntry,
-  type ConstraintEntryArgs,
+  getConstraintEntryZCDecoder,
+  getConstraintEntryZCEncoder,
+  type ConstraintEntryZC,
+  type ConstraintEntryZCArgs,
 } from "../types/index.js";
 
 export const INSTRUCTION_CONSTRAINTS_DISCRIMINATOR = new Uint8Array([
@@ -59,28 +55,34 @@ export function getInstructionConstraintsDiscriminatorBytes() {
 
 export type InstructionConstraints = {
   discriminator: ReadonlyUint8Array;
-  vault: Address;
-  entries: Array<ConstraintEntry>;
-  strictMode: boolean;
+  vault: ReadonlyUint8Array;
+  entries: Array<ConstraintEntryZC>;
+  entryCount: number;
+  strictMode: number;
   bump: number;
+  padding: ReadonlyUint8Array;
 };
 
 export type InstructionConstraintsArgs = {
-  vault: Address;
-  entries: Array<ConstraintEntryArgs>;
-  strictMode: boolean;
+  vault: ReadonlyUint8Array;
+  entries: Array<ConstraintEntryZCArgs>;
+  entryCount: number;
+  strictMode: number;
   bump: number;
+  padding: ReadonlyUint8Array;
 };
 
 /** Gets the encoder for {@link InstructionConstraintsArgs} account data. */
-export function getInstructionConstraintsEncoder(): Encoder<InstructionConstraintsArgs> {
+export function getInstructionConstraintsEncoder(): FixedSizeEncoder<InstructionConstraintsArgs> {
   return transformEncoder(
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
-      ["vault", getAddressEncoder()],
-      ["entries", getArrayEncoder(getConstraintEntryEncoder())],
-      ["strictMode", getBooleanEncoder()],
+      ["vault", fixEncoderSize(getBytesEncoder(), 32)],
+      ["entries", getArrayEncoder(getConstraintEntryZCEncoder(), { size: 64 })],
+      ["entryCount", getU8Encoder()],
+      ["strictMode", getU8Encoder()],
       ["bump", getU8Encoder()],
+      ["padding", fixEncoderSize(getBytesEncoder(), 5)],
     ]),
     (value) => ({
       ...value,
@@ -90,18 +92,20 @@ export function getInstructionConstraintsEncoder(): Encoder<InstructionConstrain
 }
 
 /** Gets the decoder for {@link InstructionConstraints} account data. */
-export function getInstructionConstraintsDecoder(): Decoder<InstructionConstraints> {
+export function getInstructionConstraintsDecoder(): FixedSizeDecoder<InstructionConstraints> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
-    ["vault", getAddressDecoder()],
-    ["entries", getArrayDecoder(getConstraintEntryDecoder())],
-    ["strictMode", getBooleanDecoder()],
+    ["vault", fixDecoderSize(getBytesDecoder(), 32)],
+    ["entries", getArrayDecoder(getConstraintEntryZCDecoder(), { size: 64 })],
+    ["entryCount", getU8Decoder()],
+    ["strictMode", getU8Decoder()],
     ["bump", getU8Decoder()],
+    ["padding", fixDecoderSize(getBytesDecoder(), 5)],
   ]);
 }
 
 /** Gets the codec for {@link InstructionConstraints} account data. */
-export function getInstructionConstraintsCodec(): Codec<
+export function getInstructionConstraintsCodec(): FixedSizeCodec<
   InstructionConstraintsArgs,
   InstructionConstraints
 > {
@@ -178,4 +182,8 @@ export async function fetchAllMaybeInstructionConstraints(
   return maybeAccounts.map((maybeAccount) =>
     decodeInstructionConstraints(maybeAccount),
   );
+}
+
+export function getInstructionConstraintsSize(): number {
+  return 35888;
 }

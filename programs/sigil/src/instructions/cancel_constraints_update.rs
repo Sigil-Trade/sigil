@@ -18,15 +18,23 @@ pub struct CancelConstraintsUpdate<'info> {
 
     #[account(
         mut,
-        has_one = vault @ SigilError::InvalidPendingConstraintsPda,
         seeds = [b"pending_constraints", vault.key().as_ref()],
-        bump = pending_constraints.bump,
+        bump = pending_constraints.load()?.bump,
         close = owner,
     )]
-    pub pending_constraints: Account<'info, PendingConstraintsUpdate>,
+    pub pending_constraints: AccountLoader<'info, PendingConstraintsUpdate>,
 }
 
 pub fn handler(ctx: Context<CancelConstraintsUpdate>) -> Result<()> {
+    // Verify vault matches (replaces has_one = vault)
+    {
+        let pending = ctx.accounts.pending_constraints.load()?;
+        require!(
+            pending.vault == ctx.accounts.vault.key().to_bytes(),
+            SigilError::InvalidPendingConstraintsPda
+        );
+    }
+
     emit!(ConstraintsChangeCancelled {
         vault: ctx.accounts.vault.key(),
     });

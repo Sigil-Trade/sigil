@@ -762,5 +762,274 @@ export function expectSigilError(
   );
 }
 
+// ─── Multi-instruction PDA creation helpers ─────────────────────────────────
+// InstructionConstraints (35,888 bytes) and PendingConstraintsUpdate (35,904
+// bytes) exceed the 10,240-byte CPI limit. These helpers compose allocate +
+// extend + populate into a single atomic VersionedTransaction.
+
+import { createHash } from "crypto";
+import { Program } from "@coral-xyz/anchor";
+import { Sigil } from "../../target/types/sigil";
+
+const CONSTRAINTS_SIZE = 35_888;
+const PENDING_CONSTRAINTS_SIZE = 35_904;
+const MAX_CPI_SIZE = 10_240;
+
+function anchorDisc(name: string): Buffer {
+  return createHash("sha256")
+    .update(`global:${name}`)
+    .digest()
+    .subarray(0, 8);
+}
+
+const ALLOC_CONSTRAINTS_DISC = anchorDisc("allocate_constraints_pda");
+const ALLOC_PENDING_DISC = anchorDisc("allocate_pending_constraints_pda");
+const EXTEND_PDA_DISC = anchorDisc("extend_pda");
+
+function buildExtendPdaIx(
+  programId: PublicKey,
+  owner: PublicKey,
+  vault: PublicKey,
+  pda: PublicKey,
+  targetSize: number,
+): TransactionInstruction {
+  const data = Buffer.alloc(12);
+  EXTEND_PDA_DISC.copy(data, 0);
+  data.writeUInt32LE(targetSize, 8);
+  return new TransactionInstruction({
+    programId,
+    keys: [
+      { pubkey: owner, isSigner: true, isWritable: true },
+      { pubkey: vault, isSigner: false, isWritable: false },
+      { pubkey: pda, isSigner: false, isWritable: true },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    ],
+    data,
+  });
+}
+
+function extendSteps(fullSize: number): number[] {
+  const steps: number[] = [];
+  let current = MAX_CPI_SIZE;
+  while (current < fullSize) {
+    current = Math.min(current + MAX_CPI_SIZE, fullSize);
+    steps.push(current);
+  }
+  return steps;
+}
+
+/**
+ * Build allocate + extend + populate instructions for InstructionConstraints.
+ * All 5 instructions are sent in one atomic VersionedTransaction.
+ */
+export function buildCreateConstraintsIxs(
+  program: Program<Sigil>,
+  owner: PublicKey,
+  vault: PublicKey,
+  policy: PublicKey,
+  entries: any[],
+  strictMode: boolean,
+): TransactionInstruction[] {
+  const [constraintsPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("constraints"), vault.toBuffer()],
+    program.programId,
+  );
+
+  // Step 1: Allocate PDA at MAX_CPI_SIZE
+  const allocateIx = new TransactionInstruction({
+    programId: program.programId,
+    keys: [
+      { pubkey: owner, isSigner: true, isWritable: true },
+      { pubkey: vault, isSigner: false, isWritable: false },
+      { pubkey: policy, isSigner: false, isWritable: false },
+      { pubkey: constraintsPda, isSigner: false, isWritable: true },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    ],
+    data: ALLOC_CONSTRAINTS_DISC,
+  });
+
+  // Steps 2-4: Extend to full size
+  const extendIxs = extendSteps(CONSTRAINTS_SIZE).map((target) =>
+    buildExtendPdaIx(program.programId, owner, vault, constraintsPda, target),
+  );
+
+  // Step 5: Populate via existing createInstructionConstraints (Anchor-encoded data)
+  const populateData = (program.coder.instruction as any).encode(
+    "createInstructionConstraints",
+    { entries, strictMode },
+  );
+  const populateIx = new TransactionInstruction({
+    programId: program.programId,
+    keys: [
+      { pubkey: owner, isSigner: true, isWritable: true },
+      { pubkey: vault, isSigner: false, isWritable: false },
+      { pubkey: policy, isSigner: false, isWritable: true },
+      { pubkey: constraintsPda, isSigner: false, isWritable: true },
+    ],
+    data: populateData,
+  });
+
+  return [allocateIx, ...extendIxs, populateIx];
+}
+
+/**
+ * Create InstructionConstraints account via multi-instruction TX.
+ * Convenience wrapper: builds IXs + sends via sendVersionedTx.
+ */
+export function createConstraintsAccount(
+  program: Program<Sigil>,
+  svm: LiteSVM,
+  owner: Keypair,
+  vault: PublicKey,
+  policy: PublicKey,
+  entries: any[],
+  strictMode: boolean,
+): void {
+  const ixs = buildCreateConstraintsIxs(
+    program,
+    owner.publicKey,
+    vault,
+    policy,
+    entries,
+    strictMode,
+  );
+  sendVersionedTx(svm, ixs, owner);
+}
+
+/**
+ * Build allocate + extend + queue instructions for PendingConstraintsUpdate.
+ */
+export function buildQueueConstraintsUpdateIxs(
+  program: Program<Sigil>,
+  owner: PublicKey,
+  vault: PublicKey,
+  policy: PublicKey,
+  constraints: PublicKey,
+  entries: any[],
+  strictMode: boolean,
+): TransactionInstruction[] {
+  const [pendingPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("pending_constraints"), vault.toBuffer()],
+    program.programId,
+  );
+
+  // Step 1: Allocate pending PDA
+  const allocateIx = new TransactionInstruction({
+    programId: program.programId,
+    keys: [
+      { pubkey: owner, isSigner: true, isWritable: true },
+      { pubkey: vault, isSigner: false, isWritable: false },
+      { pubkey: policy, isSigner: false, isWritable: false },
+      { pubkey: constraints, isSigner: false, isWritable: false },
+      { pubkey: pendingPda, isSigner: false, isWritable: true },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    ],
+    data: ALLOC_PENDING_DISC,
+  });
+
+  // Steps 2-4: Extend to full size
+  const extendIxs = extendSteps(PENDING_CONSTRAINTS_SIZE).map((target) =>
+    buildExtendPdaIx(program.programId, owner, vault, pendingPda, target),
+  );
+
+  // Step 5: Queue via existing queueConstraintsUpdate (Anchor-encoded data)
+  const queueData = (program.coder.instruction as any).encode(
+    "queueConstraintsUpdate",
+    { entries, strictMode },
+  );
+  const queueIx = new TransactionInstruction({
+    programId: program.programId,
+    keys: [
+      { pubkey: owner, isSigner: true, isWritable: true },
+      { pubkey: vault, isSigner: false, isWritable: false },
+      { pubkey: policy, isSigner: false, isWritable: false },
+      { pubkey: constraints, isSigner: false, isWritable: false },
+      { pubkey: pendingPda, isSigner: false, isWritable: true },
+    ],
+    data: queueData,
+  });
+
+  return [allocateIx, ...extendIxs, queueIx];
+}
+
+/**
+ * Queue constraints update via multi-instruction TX.
+ */
+export function queueConstraintsUpdateMultiIx(
+  program: Program<Sigil>,
+  svm: LiteSVM,
+  owner: Keypair,
+  vault: PublicKey,
+  policy: PublicKey,
+  constraints: PublicKey,
+  entries: any[],
+  strictMode: boolean,
+): void {
+  const ixs = buildQueueConstraintsUpdateIxs(
+    program,
+    owner.publicKey,
+    vault,
+    policy,
+    constraints,
+    entries,
+    strictMode,
+  );
+  sendVersionedTx(svm, ixs, owner);
+}
+
+// ─── Zero-copy → test-friendly fetch adapter ────────────────────────────────
+// Converts the raw ZC account data into the same shape tests were written for.
+
+const OPERATOR_NAMES = ["eq", "ne", "gte", "lte", "gteSigned", "lteSigned", "bitmask"];
+
+/**
+ * Fetch and convert InstructionConstraints from zero-copy layout to
+ * test-friendly format. Handles: vault as PublicKey, active entries only,
+ * active data/account constraints only, value trimmed to valueLen.
+ */
+export async function fetchConstraints(
+  program: Program<Sigil>,
+  constraintsPda: PublicKey,
+): Promise<{
+  vault: PublicKey;
+  entries: any[];
+  strictMode: boolean;
+  entryCount: number;
+  bump: number;
+}> {
+  const raw = await program.account.instructionConstraints.fetch(constraintsPda);
+  const entryCount = (raw as any).entryCount;
+  return {
+    vault: new PublicKey((raw as any).vault),
+    entryCount,
+    strictMode: (raw as any).strictMode !== 0,
+    bump: (raw as any).bump,
+    entries: Array.from({ length: entryCount }, (_, i) => {
+      const e = (raw as any).entries[i];
+      const dataCount = e.dataCount;
+      const accountCount = e.accountCount;
+      return {
+        programId: new PublicKey(e.programId),
+        dataConstraints: Array.from({ length: dataCount }, (_, j) => {
+          const dc = e.dataConstraints[j];
+          const opName = OPERATOR_NAMES[dc.operator] || `unknown(${dc.operator})`;
+          return {
+            offset: dc.offset,
+            operator: { [opName]: {} },
+            value: Buffer.from(Array.from(dc.value).slice(0, dc.valueLen)),
+          };
+        }),
+        accountConstraints: Array.from({ length: accountCount }, (_, k) => {
+          const ac = e.accountConstraints[k];
+          return {
+            index: ac.index,
+            expected: new PublicKey(ac.expected),
+          };
+        }),
+      };
+    }),
+  };
+}
+
 // Re-export types
 export { LiteSVM, Clock, FailedTransactionMetadata, TransactionMetadata };

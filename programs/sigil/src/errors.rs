@@ -246,4 +246,23 @@ pub enum SigilError {
 
     #[msg("Cannot close vault with active sessions (finalize pending sessions first)")]
     ActiveSessionsExist,
+
+    // --- Post-execution assertions (Phase B scaffolding) ---
+    #[msg("Post-execution assertion failed: account state did not satisfy constraint")]
+    PostAssertionFailed,
+
+    #[msg("Post-assertion constraint references invalid instruction index")]
+    InvalidPostAssertionIndex,
+
+    #[msg("Constraint entry index out of bounds for zero-copy array")]
+    ConstraintIndexOutOfBounds,
+
+    #[msg("Constraint operator value is not a valid ConstraintOperator discriminant")]
+    InvalidConstraintOperator,
+
+    #[msg("Zero-copy constraints account has wrong vault")]
+    ConstraintsVaultMismatch,
+
+    #[msg("Cannot pack entries: entry count exceeds MAX_CONSTRAINT_ENTRIES")]
+    ConstraintEntryCountExceeded,
 }

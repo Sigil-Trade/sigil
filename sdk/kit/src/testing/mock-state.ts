@@ -101,6 +101,7 @@ export function createMockVaultState(
       sessionExpirySlots: 0n,
       bump: 255,
       policyVersion: 0n,
+      hasPostAssertions: 0,
     },
     tracker: null,
     overlay: null,

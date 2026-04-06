@@ -3,7 +3,10 @@ use anchor_lang::prelude::*;
 use anchor_lang::solana_program::instruction::AccountMeta;
 
 use crate::errors::SigilError;
-use crate::state::{AccountConstraint, ConstraintEntry, ConstraintOperator, DataConstraint};
+use crate::state::{
+    AccountConstraint, ConstraintEntry, ConstraintEntryZC, ConstraintOperator, DataConstraint,
+    InstructionConstraints,
+};
 
 /// Verify all data constraints against instruction data.
 /// Each constraint is ANDed — all must pass.
@@ -93,7 +96,7 @@ pub fn verify_against_entries(
 /// Compare two byte slices as little-endian unsigned integers.
 /// Returns: 1 if a > b, -1 if a < b, 0 if equal.
 /// Shorter slices are padded with zeros on the high end.
-fn compare_le_unsigned(a: &[u8], b: &[u8]) -> i32 {
+pub(crate) fn compare_le_unsigned(a: &[u8], b: &[u8]) -> i32 {
     let max_len = a.len().max(b.len());
     // Compare from most-significant byte (highest index in LE) to least
     for i in (0..max_len).rev() {
@@ -112,7 +115,7 @@ fn compare_le_unsigned(a: &[u8], b: &[u8]) -> i32 {
 /// Compare two byte slices as little-endian signed (two's complement) integers.
 /// Returns: 1 if a > b, -1 if a < b, 0 if equal.
 /// Shorter slices are sign-extended (padded with 0x00 if positive, 0xFF if negative).
-fn compare_le_signed(a: &[u8], b: &[u8]) -> i32 {
+pub(crate) fn compare_le_signed(a: &[u8], b: &[u8]) -> i32 {
     let max_len = a.len().max(b.len());
     // Sign bit is MSB of the highest byte (last byte in LE)
     let a_negative = !a.is_empty() && (a[a.len() - 1] & 0x80) != 0;
@@ -146,7 +149,7 @@ fn compare_le_signed(a: &[u8], b: &[u8]) -> i32 {
 /// Bitmask check: all bits set in `mask` must also be set in `actual`.
 /// Semantic: (actual & mask) == mask.
 /// If actual is shorter than mask, missing bytes are treated as 0x00.
-fn bitmask_check(actual: &[u8], mask: &[u8]) -> bool {
+pub(crate) fn bitmask_check(actual: &[u8], mask: &[u8]) -> bool {
     for (i, &m) in mask.iter().enumerate() {
         let a = if i < actual.len() { actual[i] } else { 0x00 };
         if (a & m) != m {
@@ -154,6 +157,99 @@ fn bitmask_check(actual: &[u8], mask: &[u8]) -> bool {
         }
     }
     true
+}
+
+// ─── Zero-copy verification functions ────────────────────────────────────────
+
+/// Compare actual bytes against expected using the given operator.
+/// Extracted for reuse in PostExecutionAssertions (Phase B).
+pub(crate) fn bytes_match(actual: &[u8], operator: &ConstraintOperator, expected: &[u8]) -> bool {
+    match operator {
+        ConstraintOperator::Eq => actual == expected,
+        ConstraintOperator::Ne => actual != expected,
+        ConstraintOperator::Gte => compare_le_unsigned(actual, expected) >= 0,
+        ConstraintOperator::Lte => compare_le_unsigned(actual, expected) <= 0,
+        ConstraintOperator::GteSigned => compare_le_signed(actual, expected) >= 0,
+        ConstraintOperator::LteSigned => compare_le_signed(actual, expected) <= 0,
+        ConstraintOperator::Bitmask => bitmask_check(actual, expected),
+    }
+}
+
+/// Zero-copy variant: verify data constraints from a ConstraintEntryZC.
+pub fn verify_data_constraints_zc(ix_data: &[u8], entry: &ConstraintEntryZC) -> Result<()> {
+    for j in 0..(entry.data_count as usize) {
+        let dc = &entry.data_constraints[j];
+        let offset = dc.offset as usize;
+        let len = dc.value_len as usize;
+        require!(
+            offset
+                .checked_add(len)
+                .is_some_and(|end| end <= ix_data.len()),
+            SigilError::ConstraintViolated
+        );
+        let actual = &ix_data[offset..offset + len];
+        let expected = &dc.value[..len];
+        let op = ConstraintOperator::try_from(dc.operator)
+            .map_err(|_| error!(SigilError::InvalidConstraintOperator))?;
+        require!(
+            bytes_match(actual, &op, expected),
+            SigilError::ConstraintViolated
+        );
+    }
+    Ok(())
+}
+
+/// Zero-copy variant: verify account constraints from a ConstraintEntryZC.
+pub fn verify_account_constraints_zc(
+    ix_accounts: &[AccountMeta],
+    entry: &ConstraintEntryZC,
+) -> Result<()> {
+    for k in 0..(entry.account_count as usize) {
+        let ac = &entry.account_constraints[k];
+        let idx = ac.index as usize;
+        require!(idx < ix_accounts.len(), SigilError::ConstraintViolated);
+        let expected_pk = Pubkey::from(ac.expected);
+        require!(
+            ix_accounts[idx].pubkey == expected_pk,
+            SigilError::ConstraintViolated
+        );
+    }
+    Ok(())
+}
+
+/// Zero-copy variant: verify an instruction against all constraint entries.
+/// Multiple entries with the same program_id are ORed.
+/// Returns Ok(true) if matched and passed, Ok(false) if no entries matched.
+pub fn verify_against_entries_zc(
+    constraints: &InstructionConstraints,
+    program_id: &Pubkey,
+    ix_data: &[u8],
+    ix_accounts: &[AccountMeta],
+) -> Result<bool> {
+    let program_bytes = program_id.to_bytes();
+    let count = constraints.entry_count as usize;
+    let mut found_any = false;
+    let mut any_passed = false;
+
+    for i in 0..count {
+        let entry = &constraints.entries[i];
+        if entry.program_id != program_bytes {
+            continue;
+        }
+        found_any = true;
+        let data_ok = verify_data_constraints_zc(ix_data, entry).is_ok();
+        let acct_ok = verify_account_constraints_zc(ix_accounts, entry).is_ok();
+        if data_ok && acct_ok {
+            any_passed = true;
+            break;
+        }
+    }
+
+    if !found_any {
+        return Ok(false);
+    }
+    require!(any_passed, SigilError::ConstraintViolated);
+    Ok(true)
 }
 
 #[cfg(test)]

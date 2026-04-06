@@ -1,4 +1,6 @@
 pub mod agent_transfer;
+pub mod allocate_constraints_pda;
+pub mod allocate_pending_constraints_pda;
 pub mod apply_agent_permissions_update;
 pub mod apply_close_constraints;
 pub mod apply_constraints_update;
@@ -12,6 +14,7 @@ pub mod close_vault;
 pub mod create_escrow;
 pub mod create_instruction_constraints;
 pub mod deposit_funds;
+pub mod extend_pda;
 pub mod finalize_session;
 pub mod freeze_vault;
 pub mod initialize_vault;
@@ -34,6 +37,8 @@ pub mod withdraw_funds;
 
 #[allow(ambiguous_glob_reexports)]
 pub use agent_transfer::*;
+pub use allocate_constraints_pda::*;
+pub use allocate_pending_constraints_pda::*;
 pub use apply_agent_permissions_update::*;
 pub use apply_close_constraints::*;
 pub use apply_constraints_update::*;
@@ -47,6 +52,7 @@ pub use close_vault::*;
 pub use create_escrow::*;
 pub use create_instruction_constraints::*;
 pub use deposit_funds::*;
+pub use extend_pda::*;
 pub use finalize_session::*;
 pub use freeze_vault::*;
 pub use initialize_vault::*;

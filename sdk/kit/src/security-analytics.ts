@@ -364,9 +364,12 @@ export function getSecurityPosture(state: ResolvedVaultState): SecurityPosture {
         policy.protocolMode !== PROTOCOL_MODE_ALLOWLIST ||
         !policy.protocols ||
         policy.protocols.every((p: Address) =>
-          constraints.entries.some(
-            (e: { programId: Address }) => String(e.programId) === String(p),
-          ),
+          constraints.entries
+            .slice(
+              0,
+              (constraints as any).entryCount ?? constraints.entries.length,
+            )
+            .some((e: any) => String(e.programId) === String(p)),
         ),
       severity: "info",
       detail:
@@ -380,7 +383,7 @@ export function getSecurityPosture(state: ResolvedVaultState): SecurityPosture {
       label: "Protocol mode ALL has constraint protection",
       passed:
         policy.protocolMode !== 0 /* PROTOCOL_MODE_ALL */ ||
-        (constraints !== null && constraints.strictMode === true),
+        (constraints !== null && Number(constraints.strictMode) !== 0),
       severity: "critical",
       detail:
         "Protocol mode ALL allows agents to call any program. Without strict-mode constraints, " +

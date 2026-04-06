@@ -17,7 +17,6 @@ pub struct ApplyConstraintsUpdate<'info> {
     pub vault: Account<'info, AgentVault>,
 
     /// PolicyConfig — needed to bump policy_version on constraint changes.
-    /// IDL BREAKING CHANGE: this account was added in the TOCTOU fix.
     #[account(
         mut,
         has_one = vault,
@@ -28,36 +27,65 @@ pub struct ApplyConstraintsUpdate<'info> {
 
     #[account(
         mut,
-        has_one = vault @ SigilError::InvalidConstraintsPda,
         seeds = [b"constraints", vault.key().as_ref()],
-        bump = constraints.bump,
+        bump = constraints.load()?.bump,
     )]
-    pub constraints: Account<'info, InstructionConstraints>,
+    pub constraints: AccountLoader<'info, InstructionConstraints>,
 
     #[account(
         mut,
-        has_one = vault @ SigilError::InvalidPendingConstraintsPda,
         seeds = [b"pending_constraints", vault.key().as_ref()],
-        bump = pending_constraints.bump,
+        bump = pending_constraints.load()?.bump,
         close = owner,
     )]
-    pub pending_constraints: Account<'info, PendingConstraintsUpdate>,
+    pub pending_constraints: AccountLoader<'info, PendingConstraintsUpdate>,
 }
 
 pub fn handler(ctx: Context<ApplyConstraintsUpdate>) -> Result<()> {
     let clock = Clock::get()?;
-    let pending = &ctx.accounts.pending_constraints;
+    let vault_key = ctx.accounts.vault.key();
 
-    // Timelock must have expired
-    require!(
-        pending.is_ready(clock.unix_timestamp),
-        SigilError::TimelockNotExpired
-    );
+    // Read pending: verify vault + timelock, extract scalar fields
+    let (new_entry_count, new_strict_mode) = {
+        let pending = ctx.accounts.pending_constraints.load()?;
+        require!(
+            pending.vault == vault_key.to_bytes(),
+            SigilError::InvalidPendingConstraintsPda
+        );
+        require!(
+            pending.is_ready(clock.unix_timestamp),
+            SigilError::TimelockNotExpired
+        );
+        (pending.entry_count, pending.strict_mode)
+    };
 
-    // Overwrite constraint entries and strict_mode
-    let constraints = &mut ctx.accounts.constraints;
-    constraints.entries = pending.entries.clone();
-    constraints.strict_mode = pending.strict_mode;
+    // Direct raw byte copy between account data buffers to avoid 35KB stack allocation.
+    // Both accounts are zero-copy with identical entries layout at the same offset.
+    // entries starts at byte offset 8 (disc) + 32 (vault) = 40 in both structs.
+    {
+        let pending_info = ctx.accounts.pending_constraints.to_account_info();
+        let constraints_info = ctx.accounts.constraints.to_account_info();
+        let pending_data = pending_info.try_borrow_data()?;
+        let mut constraints_data = constraints_info.try_borrow_mut_data()?;
+
+        let entries_offset = 8 + 32; // discriminator + vault
+        let entries_size = core::mem::size_of::<constraints::ConstraintEntryZC>()
+            * constraints::MAX_CONSTRAINT_ENTRIES;
+
+        constraints_data[entries_offset..entries_offset + entries_size]
+            .copy_from_slice(&pending_data[entries_offset..entries_offset + entries_size]);
+    }
+
+    // Set scalar fields via load_mut
+    {
+        let mut constraints = ctx.accounts.constraints.load_mut()?;
+        require!(
+            constraints.vault == vault_key.to_bytes(),
+            SigilError::InvalidConstraintsPda
+        );
+        constraints.entry_count = new_entry_count;
+        constraints.strict_mode = new_strict_mode;
+    }
 
     // Bump policy version — constraint changes affect security posture
     let policy = &mut ctx.accounts.policy;
@@ -67,7 +95,7 @@ pub fn handler(ctx: Context<ApplyConstraintsUpdate>) -> Result<()> {
         .ok_or(error!(SigilError::Overflow))?;
 
     emit!(ConstraintsChangeApplied {
-        vault: ctx.accounts.vault.key(),
+        vault: vault_key,
         applied_at: clock.unix_timestamp,
     });
 

@@ -69,6 +69,8 @@ import {
 } from "../accounts/index.js";
 import {
   getAgentTransferInstructionAsync,
+  getAllocateConstraintsPdaInstructionAsync,
+  getAllocatePendingConstraintsPdaInstructionAsync,
   getApplyAgentPermissionsUpdateInstructionAsync,
   getApplyCloseConstraintsInstructionAsync,
   getApplyConstraintsUpdateInstructionAsync,
@@ -82,6 +84,7 @@ import {
   getCreateEscrowInstructionAsync,
   getCreateInstructionConstraintsInstructionAsync,
   getDepositFundsInstructionAsync,
+  getExtendPdaInstruction,
   getFinalizeSessionInstructionAsync,
   getFreezeVaultInstruction,
   getInitializeVaultInstructionAsync,
@@ -100,6 +103,8 @@ import {
   getValidateAndAuthorizeInstructionAsync,
   getWithdrawFundsInstructionAsync,
   parseAgentTransferInstruction,
+  parseAllocateConstraintsPdaInstruction,
+  parseAllocatePendingConstraintsPdaInstruction,
   parseApplyAgentPermissionsUpdateInstruction,
   parseApplyCloseConstraintsInstruction,
   parseApplyConstraintsUpdateInstruction,
@@ -113,6 +118,7 @@ import {
   parseCreateEscrowInstruction,
   parseCreateInstructionConstraintsInstruction,
   parseDepositFundsInstruction,
+  parseExtendPdaInstruction,
   parseFinalizeSessionInstruction,
   parseFreezeVaultInstruction,
   parseInitializeVaultInstruction,
@@ -131,6 +137,8 @@ import {
   parseValidateAndAuthorizeInstruction,
   parseWithdrawFundsInstruction,
   type AgentTransferAsyncInput,
+  type AllocateConstraintsPdaAsyncInput,
+  type AllocatePendingConstraintsPdaAsyncInput,
   type ApplyAgentPermissionsUpdateAsyncInput,
   type ApplyCloseConstraintsAsyncInput,
   type ApplyConstraintsUpdateAsyncInput,
@@ -144,10 +152,13 @@ import {
   type CreateEscrowAsyncInput,
   type CreateInstructionConstraintsAsyncInput,
   type DepositFundsAsyncInput,
+  type ExtendPdaInput,
   type FinalizeSessionAsyncInput,
   type FreezeVaultInput,
   type InitializeVaultAsyncInput,
   type ParsedAgentTransferInstruction,
+  type ParsedAllocateConstraintsPdaInstruction,
+  type ParsedAllocatePendingConstraintsPdaInstruction,
   type ParsedApplyAgentPermissionsUpdateInstruction,
   type ParsedApplyCloseConstraintsInstruction,
   type ParsedApplyConstraintsUpdateInstruction,
@@ -161,6 +172,7 @@ import {
   type ParsedCreateEscrowInstruction,
   type ParsedCreateInstructionConstraintsInstruction,
   type ParsedDepositFundsInstruction,
+  type ParsedExtendPdaInstruction,
   type ParsedFinalizeSessionInstruction,
   type ParsedFreezeVaultInstruction,
   type ParsedInitializeVaultInstruction,
@@ -344,6 +356,8 @@ export function identifySigilAccount(
 
 export enum SigilInstruction {
   AgentTransfer,
+  AllocateConstraintsPda,
+  AllocatePendingConstraintsPda,
   ApplyAgentPermissionsUpdate,
   ApplyCloseConstraints,
   ApplyConstraintsUpdate,
@@ -357,6 +371,7 @@ export enum SigilInstruction {
   CreateEscrow,
   CreateInstructionConstraints,
   DepositFunds,
+  ExtendPda,
   FinalizeSession,
   FreezeVault,
   InitializeVault,
@@ -390,6 +405,28 @@ export function identifySigilInstruction(
     )
   ) {
     return SigilInstruction.AgentTransfer;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([55, 127, 43, 98, 168, 156, 152, 157]),
+      ),
+      0,
+    )
+  ) {
+    return SigilInstruction.AllocateConstraintsPda;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([211, 244, 224, 20, 224, 183, 236, 165]),
+      ),
+      0,
+    )
+  ) {
+    return SigilInstruction.AllocatePendingConstraintsPda;
   }
   if (
     containsBytes(
@@ -533,6 +570,17 @@ export function identifySigilInstruction(
     )
   ) {
     return SigilInstruction.DepositFunds;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([13, 211, 140, 90, 104, 28, 141, 200]),
+      ),
+      0,
+    )
+  ) {
+    return SigilInstruction.ExtendPda;
   }
   if (
     containsBytes(
@@ -734,6 +782,12 @@ export type ParsedSigilInstruction<
       instructionType: SigilInstruction.AgentTransfer;
     } & ParsedAgentTransferInstruction<TProgram>)
   | ({
+      instructionType: SigilInstruction.AllocateConstraintsPda;
+    } & ParsedAllocateConstraintsPdaInstruction<TProgram>)
+  | ({
+      instructionType: SigilInstruction.AllocatePendingConstraintsPda;
+    } & ParsedAllocatePendingConstraintsPdaInstruction<TProgram>)
+  | ({
       instructionType: SigilInstruction.ApplyAgentPermissionsUpdate;
     } & ParsedApplyAgentPermissionsUpdateInstruction<TProgram>)
   | ({
@@ -772,6 +826,9 @@ export type ParsedSigilInstruction<
   | ({
       instructionType: SigilInstruction.DepositFunds;
     } & ParsedDepositFundsInstruction<TProgram>)
+  | ({
+      instructionType: SigilInstruction.ExtendPda;
+    } & ParsedExtendPdaInstruction<TProgram>)
   | ({
       instructionType: SigilInstruction.FinalizeSession;
     } & ParsedFinalizeSessionInstruction<TProgram>)
@@ -834,6 +891,20 @@ export function parseSigilInstruction<TProgram extends string>(
       return {
         instructionType: SigilInstruction.AgentTransfer,
         ...parseAgentTransferInstruction(instruction),
+      };
+    }
+    case SigilInstruction.AllocateConstraintsPda: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: SigilInstruction.AllocateConstraintsPda,
+        ...parseAllocateConstraintsPdaInstruction(instruction),
+      };
+    }
+    case SigilInstruction.AllocatePendingConstraintsPda: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: SigilInstruction.AllocatePendingConstraintsPda,
+        ...parseAllocatePendingConstraintsPdaInstruction(instruction),
       };
     }
     case SigilInstruction.ApplyAgentPermissionsUpdate: {
@@ -925,6 +996,13 @@ export function parseSigilInstruction<TProgram extends string>(
       return {
         instructionType: SigilInstruction.DepositFunds,
         ...parseDepositFundsInstruction(instruction),
+      };
+    }
+    case SigilInstruction.ExtendPda: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: SigilInstruction.ExtendPda,
+        ...parseExtendPdaInstruction(instruction),
       };
     }
     case SigilInstruction.FinalizeSession: {
@@ -1096,6 +1174,14 @@ export type SigilPluginInstructions = {
     input: AgentTransferAsyncInput,
   ) => ReturnType<typeof getAgentTransferInstructionAsync> &
     SelfPlanAndSendFunctions;
+  allocateConstraintsPda: (
+    input: AllocateConstraintsPdaAsyncInput,
+  ) => ReturnType<typeof getAllocateConstraintsPdaInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  allocatePendingConstraintsPda: (
+    input: AllocatePendingConstraintsPdaAsyncInput,
+  ) => ReturnType<typeof getAllocatePendingConstraintsPdaInstructionAsync> &
+    SelfPlanAndSendFunctions;
   applyAgentPermissionsUpdate: (
     input: ApplyAgentPermissionsUpdateAsyncInput,
   ) => ReturnType<typeof getApplyAgentPermissionsUpdateInstructionAsync> &
@@ -1148,6 +1234,9 @@ export type SigilPluginInstructions = {
     input: DepositFundsAsyncInput,
   ) => ReturnType<typeof getDepositFundsInstructionAsync> &
     SelfPlanAndSendFunctions;
+  extendPda: (
+    input: ExtendPdaInput,
+  ) => ReturnType<typeof getExtendPdaInstruction> & SelfPlanAndSendFunctions;
   finalizeSession: (
     input: MakeOptional<FinalizeSessionAsyncInput, "payer">,
   ) => ReturnType<typeof getFinalizeSessionInstructionAsync> &
@@ -1266,6 +1355,16 @@ export function sigilProgram() {
               client,
               getAgentTransferInstructionAsync(input),
             ),
+          allocateConstraintsPda: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getAllocateConstraintsPdaInstructionAsync(input),
+            ),
+          allocatePendingConstraintsPda: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getAllocatePendingConstraintsPdaInstructionAsync(input),
+            ),
           applyAgentPermissionsUpdate: (input) =>
             addSelfPlanAndSendFunctions(
               client,
@@ -1331,6 +1430,8 @@ export function sigilProgram() {
               client,
               getDepositFundsInstructionAsync(input),
             ),
+          extendPda: (input) =>
+            addSelfPlanAndSendFunctions(client, getExtendPdaInstruction(input)),
           finalizeSession: (input) =>
             addSelfPlanAndSendFunctions(
               client,

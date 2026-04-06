@@ -33,6 +33,8 @@ import {
   advanceTime,
   sendVersionedTx,
   expectSigilError,
+  createConstraintsAccount,
+  queueConstraintsUpdateMultiIx,
   TestEnv,
   LiteSVM,
 } from "./helpers/litesvm-setup";
@@ -486,16 +488,15 @@ describe("TOCTOU Security Fix", () => {
       },
     ];
 
-    await program.methods
-      .createInstructionConstraints(entries, false)
-      .accounts({
-        owner: owner.publicKey,
-        vault: v.vaultPda,
-        policy: v.policyPda,
-        constraints: constraintsPda,
-        systemProgram: SystemProgram.programId,
-      } as any)
-      .rpc();
+    createConstraintsAccount(
+      program,
+      svm,
+      owner.payer,
+      v.vaultPda,
+      v.policyPda,
+      entries,
+      false,
+    );
 
     // Queue constraints update
     const [pendingConstraintsPda] = PublicKey.findProgramAddressSync(
@@ -517,17 +518,16 @@ describe("TOCTOU Security Fix", () => {
       },
     ];
 
-    await program.methods
-      .queueConstraintsUpdate(newEntries, false)
-      .accounts({
-        owner: owner.publicKey,
-        vault: v.vaultPda,
-        policy: v.policyPda,
-        constraints: constraintsPda,
-        pendingConstraints: pendingConstraintsPda,
-        systemProgram: SystemProgram.programId,
-      } as any)
-      .rpc();
+    queueConstraintsUpdateMultiIx(
+      program,
+      svm,
+      owner.payer,
+      v.vaultPda,
+      v.policyPda,
+      constraintsPda,
+      newEntries,
+      false,
+    );
 
     // Advance time past the 1800s timelock
     advanceTime(svm, 1801);

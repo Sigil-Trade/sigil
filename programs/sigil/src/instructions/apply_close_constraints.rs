@@ -26,12 +26,11 @@ pub struct ApplyCloseConstraints<'info> {
 
     #[account(
         mut,
-        has_one = vault @ SigilError::InvalidConstraintsPda,
         seeds = [b"constraints", vault.key().as_ref()],
-        bump = constraints.bump,
+        bump = constraints.load()?.bump,
         close = owner,
     )]
-    pub constraints: Account<'info, InstructionConstraints>,
+    pub constraints: AccountLoader<'info, InstructionConstraints>,
 
     #[account(
         mut,
@@ -46,6 +45,15 @@ pub struct ApplyCloseConstraints<'info> {
 pub fn handler(ctx: Context<ApplyCloseConstraints>) -> Result<()> {
     let clock = Clock::get()?;
     let pending = &ctx.accounts.pending_close_constraints;
+
+    // Verify constraints belongs to this vault (replaces has_one = vault)
+    {
+        let c = ctx.accounts.constraints.load()?;
+        require!(
+            c.vault == ctx.accounts.vault.key().to_bytes(),
+            SigilError::InvalidConstraintsPda
+        );
+    }
 
     // Timelock must have expired
     require!(

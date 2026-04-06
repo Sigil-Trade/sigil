@@ -7,6 +7,8 @@
  */
 
 export * from "./agentTransfer.js";
+export * from "./allocateConstraintsPda.js";
+export * from "./allocatePendingConstraintsPda.js";
 export * from "./applyAgentPermissionsUpdate.js";
 export * from "./applyCloseConstraints.js";
 export * from "./applyConstraintsUpdate.js";
@@ -20,6 +22,7 @@ export * from "./closeVault.js";
 export * from "./createEscrow.js";
 export * from "./createInstructionConstraints.js";
 export * from "./depositFunds.js";
+export * from "./extendPda.js";
 export * from "./finalizeSession.js";
 export * from "./freezeVault.js";
 export * from "./initializeVault.js";

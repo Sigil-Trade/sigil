@@ -15,12 +15,8 @@ import {
   fetchEncodedAccounts,
   fixDecoderSize,
   fixEncoderSize,
-  getAddressDecoder,
-  getAddressEncoder,
   getArrayDecoder,
   getArrayEncoder,
-  getBooleanDecoder,
-  getBooleanEncoder,
   getBytesDecoder,
   getBytesEncoder,
   getI64Decoder,
@@ -32,21 +28,21 @@ import {
   transformEncoder,
   type Account,
   type Address,
-  type Codec,
-  type Decoder,
   type EncodedAccount,
-  type Encoder,
   type FetchAccountConfig,
   type FetchAccountsConfig,
+  type FixedSizeCodec,
+  type FixedSizeDecoder,
+  type FixedSizeEncoder,
   type MaybeAccount,
   type MaybeEncodedAccount,
   type ReadonlyUint8Array,
 } from "@solana/kit";
 import {
-  getConstraintEntryDecoder,
-  getConstraintEntryEncoder,
-  type ConstraintEntry,
-  type ConstraintEntryArgs,
+  getConstraintEntryZCDecoder,
+  getConstraintEntryZCEncoder,
+  type ConstraintEntryZC,
+  type ConstraintEntryZCArgs,
 } from "../types/index.js";
 
 export const PENDING_CONSTRAINTS_UPDATE_DISCRIMINATOR = new Uint8Array([
@@ -61,46 +57,56 @@ export function getPendingConstraintsUpdateDiscriminatorBytes() {
 
 export type PendingConstraintsUpdate = {
   discriminator: ReadonlyUint8Array;
-  /** Associated vault pubkey */
-  vault: Address;
-  /** New constraint entries to apply */
-  entries: Array<ConstraintEntry>;
-  /** Whether to reject programs without matching constraint entries */
-  strictMode: boolean;
+  /** Associated vault pubkey (as raw bytes for Pod compatibility) */
+  vault: ReadonlyUint8Array;
+  /** New constraint entries to apply (fixed array, use entry_count for active) */
+  entries: Array<ConstraintEntryZC>;
+  /** Number of active entries (0..=64) */
+  entryCount: number;
+  /** Whether to reject programs without matching constraint entries (0 = permissive, non-zero = strict) */
+  strictMode: number;
+  /** Bump seed for PDA */
+  bump: number;
+  /** Alignment padding */
+  padding: ReadonlyUint8Array;
   /** Unix timestamp when this update was queued */
   queuedAt: bigint;
   /** Unix timestamp when this update becomes executable */
   executesAt: bigint;
-  /** Bump seed for PDA */
-  bump: number;
 };
 
 export type PendingConstraintsUpdateArgs = {
-  /** Associated vault pubkey */
-  vault: Address;
-  /** New constraint entries to apply */
-  entries: Array<ConstraintEntryArgs>;
-  /** Whether to reject programs without matching constraint entries */
-  strictMode: boolean;
+  /** Associated vault pubkey (as raw bytes for Pod compatibility) */
+  vault: ReadonlyUint8Array;
+  /** New constraint entries to apply (fixed array, use entry_count for active) */
+  entries: Array<ConstraintEntryZCArgs>;
+  /** Number of active entries (0..=64) */
+  entryCount: number;
+  /** Whether to reject programs without matching constraint entries (0 = permissive, non-zero = strict) */
+  strictMode: number;
+  /** Bump seed for PDA */
+  bump: number;
+  /** Alignment padding */
+  padding: ReadonlyUint8Array;
   /** Unix timestamp when this update was queued */
   queuedAt: number | bigint;
   /** Unix timestamp when this update becomes executable */
   executesAt: number | bigint;
-  /** Bump seed for PDA */
-  bump: number;
 };
 
 /** Gets the encoder for {@link PendingConstraintsUpdateArgs} account data. */
-export function getPendingConstraintsUpdateEncoder(): Encoder<PendingConstraintsUpdateArgs> {
+export function getPendingConstraintsUpdateEncoder(): FixedSizeEncoder<PendingConstraintsUpdateArgs> {
   return transformEncoder(
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
-      ["vault", getAddressEncoder()],
-      ["entries", getArrayEncoder(getConstraintEntryEncoder())],
-      ["strictMode", getBooleanEncoder()],
+      ["vault", fixEncoderSize(getBytesEncoder(), 32)],
+      ["entries", getArrayEncoder(getConstraintEntryZCEncoder(), { size: 64 })],
+      ["entryCount", getU8Encoder()],
+      ["strictMode", getU8Encoder()],
+      ["bump", getU8Encoder()],
+      ["padding", fixEncoderSize(getBytesEncoder(), 5)],
       ["queuedAt", getI64Encoder()],
       ["executesAt", getI64Encoder()],
-      ["bump", getU8Encoder()],
     ]),
     (value) => ({
       ...value,
@@ -110,20 +116,22 @@ export function getPendingConstraintsUpdateEncoder(): Encoder<PendingConstraints
 }
 
 /** Gets the decoder for {@link PendingConstraintsUpdate} account data. */
-export function getPendingConstraintsUpdateDecoder(): Decoder<PendingConstraintsUpdate> {
+export function getPendingConstraintsUpdateDecoder(): FixedSizeDecoder<PendingConstraintsUpdate> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
-    ["vault", getAddressDecoder()],
-    ["entries", getArrayDecoder(getConstraintEntryDecoder())],
-    ["strictMode", getBooleanDecoder()],
+    ["vault", fixDecoderSize(getBytesDecoder(), 32)],
+    ["entries", getArrayDecoder(getConstraintEntryZCDecoder(), { size: 64 })],
+    ["entryCount", getU8Decoder()],
+    ["strictMode", getU8Decoder()],
+    ["bump", getU8Decoder()],
+    ["padding", fixDecoderSize(getBytesDecoder(), 5)],
     ["queuedAt", getI64Decoder()],
     ["executesAt", getI64Decoder()],
-    ["bump", getU8Decoder()],
   ]);
 }
 
 /** Gets the codec for {@link PendingConstraintsUpdate} account data. */
-export function getPendingConstraintsUpdateCodec(): Codec<
+export function getPendingConstraintsUpdateCodec(): FixedSizeCodec<
   PendingConstraintsUpdateArgs,
   PendingConstraintsUpdate
 > {
@@ -206,4 +214,8 @@ export async function fetchAllMaybePendingConstraintsUpdate(
   return maybeAccounts.map((maybeAccount) =>
     decodePendingConstraintsUpdate(maybeAccount),
   );
+}
+
+export function getPendingConstraintsUpdateSize(): number {
+  return 35904;
 }

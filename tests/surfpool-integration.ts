@@ -17,6 +17,8 @@ import {
   SystemProgram,
   LAMPORTS_PER_SOL,
   SYSVAR_INSTRUCTIONS_PUBKEY,
+  Transaction,
+  sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
@@ -3632,21 +3634,45 @@ describe("surfpool-integration", function () {
         program.programId,
       );
 
-      // Create
-      await program.methods
-        .createInstructionConstraints([sampleEntry], false)
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: tlSetup.vaultPda,
-          policy: tlSetup.policyPda,
-          constraints: cPda,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
+      // Create — multi-IX: allocate + extend×3 + populate (Solana 10,240-byte CPI limit)
+      {
+        const allocIx = await (program.methods.allocateConstraintsPda() as any)
+          .accounts({
+            owner: env.payer.publicKey,
+            vault: tlSetup.vaultPda,
+            policy: tlSetup.policyPda,
+            constraints: cPda,
+            systemProgram: SystemProgram.programId,
+          })
+          .instruction();
+        const extendIxs = await Promise.all(
+          [20480, 30720, 35888].map((t) =>
+            (program.methods.extendPda(t) as any)
+              .accounts({
+                owner: env.payer.publicKey,
+                vault: tlSetup.vaultPda,
+                pda: cPda,
+                systemProgram: SystemProgram.programId,
+              })
+              .instruction(),
+          ),
+        );
+        const populateIx = await program.methods
+          .createInstructionConstraints([sampleEntry], false)
+          .accounts({
+            owner: env.payer.publicKey,
+            vault: tlSetup.vaultPda,
+            policy: tlSetup.policyPda,
+            constraints: cPda,
+          } as any)
+          .instruction();
+        const tx = new Transaction().add(allocIx, ...extendIxs, populateIx);
+        await sendAndConfirmTransaction(env.connection, tx, [env.payer]);
+      }
 
       let constraints =
         await program.account.instructionConstraints.fetch(cPda);
-      expect(constraints.entries.length).to.equal(1);
+      expect(constraints.entryCount).to.equal(1);
 
       // Queue update
       const updatedEntry = {
@@ -3659,17 +3685,45 @@ describe("surfpool-integration", function () {
           },
         ],
       };
-      await program.methods
-        .queueConstraintsUpdate([updatedEntry], true)
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: tlSetup.vaultPda,
-          policy: tlSetup.policyPda,
-          constraints: cPda,
-          pendingConstraints: pcPda,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
+      // Queue — multi-IX: allocate pending + extend×3 + populate
+      {
+        const allocIx = await (
+          program.methods.allocatePendingConstraintsPda() as any
+        )
+          .accounts({
+            owner: env.payer.publicKey,
+            vault: tlSetup.vaultPda,
+            policy: tlSetup.policyPda,
+            constraints: cPda,
+            pendingConstraints: pcPda,
+            systemProgram: SystemProgram.programId,
+          })
+          .instruction();
+        const extendIxs = await Promise.all(
+          [20480, 30720, 35904].map((t) =>
+            (program.methods.extendPda(t) as any)
+              .accounts({
+                owner: env.payer.publicKey,
+                vault: tlSetup.vaultPda,
+                pda: pcPda,
+                systemProgram: SystemProgram.programId,
+              })
+              .instruction(),
+          ),
+        );
+        const populateIx = await program.methods
+          .queueConstraintsUpdate([updatedEntry], true)
+          .accounts({
+            owner: env.payer.publicKey,
+            vault: tlSetup.vaultPda,
+            policy: tlSetup.policyPda,
+            constraints: cPda,
+            pendingConstraints: pcPda,
+          } as any)
+          .instruction();
+        const tx = new Transaction().add(allocIx, ...extendIxs, populateIx);
+        await sendAndConfirmTransaction(env.connection, tx, [env.payer]);
+      }
 
       // Time travel past 1800s timelock
       const SYSVAR_CLOCK = new PublicKey(
@@ -3702,7 +3756,7 @@ describe("surfpool-integration", function () {
       await sendVersionedTx(env.connection, [applyIx], env.payer);
 
       constraints = await program.account.instructionConstraints.fetch(cPda);
-      expect(constraints.strictMode).to.equal(true);
+      expect(Number(constraints.strictMode)).to.equal(1); // u8 in zero-copy
     });
 
     it("queue+apply close_constraints reclaims rent", async () => {
@@ -3721,16 +3775,41 @@ describe("surfpool-integration", function () {
         program.programId,
       );
 
-      await program.methods
-        .createInstructionConstraints([sampleEntry], false)
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: closeSetup.vaultPda,
-          policy: closeSetup.policyPda,
-          constraints: closePda,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
+      // Multi-IX: allocate + extend×3 + populate (Solana 10,240-byte CPI limit)
+      {
+        const allocIx = await (program.methods.allocateConstraintsPda() as any)
+          .accounts({
+            owner: env.payer.publicKey,
+            vault: closeSetup.vaultPda,
+            policy: closeSetup.policyPda,
+            constraints: closePda,
+            systemProgram: SystemProgram.programId,
+          })
+          .instruction();
+        const extendIxs = await Promise.all(
+          [20480, 30720, 35888].map((t) =>
+            (program.methods.extendPda(t) as any)
+              .accounts({
+                owner: env.payer.publicKey,
+                vault: closeSetup.vaultPda,
+                pda: closePda,
+                systemProgram: SystemProgram.programId,
+              })
+              .instruction(),
+          ),
+        );
+        const populateIx = await program.methods
+          .createInstructionConstraints([sampleEntry], false)
+          .accounts({
+            owner: env.payer.publicKey,
+            vault: closeSetup.vaultPda,
+            policy: closeSetup.policyPda,
+            constraints: closePda,
+          } as any)
+          .instruction();
+        const tx = new Transaction().add(allocIx, ...extendIxs, populateIx);
+        await sendAndConfirmTransaction(env.connection, tx, [env.payer]);
+      }
 
       // Queue close
       await program.methods
@@ -3793,16 +3872,41 @@ describe("surfpool-integration", function () {
       );
 
       // First create constraints (create is allowed even with timelock)
-      await program.methods
-        .createInstructionConstraints([sampleEntry], false)
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: tlSetup.vaultPda,
-          policy: tlSetup.policyPda,
-          constraints: cPda,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
+      // Multi-IX: allocate + extend×3 + populate (Solana 10,240-byte CPI limit)
+      {
+        const allocIx = await (program.methods.allocateConstraintsPda() as any)
+          .accounts({
+            owner: env.payer.publicKey,
+            vault: tlSetup.vaultPda,
+            policy: tlSetup.policyPda,
+            constraints: cPda,
+            systemProgram: SystemProgram.programId,
+          })
+          .instruction();
+        const extendIxs = await Promise.all(
+          [20480, 30720, 35888].map((t) =>
+            (program.methods.extendPda(t) as any)
+              .accounts({
+                owner: env.payer.publicKey,
+                vault: tlSetup.vaultPda,
+                pda: cPda,
+                systemProgram: SystemProgram.programId,
+              })
+              .instruction(),
+          ),
+        );
+        const populateIx = await program.methods
+          .createInstructionConstraints([sampleEntry], false)
+          .accounts({
+            owner: env.payer.publicKey,
+            vault: tlSetup.vaultPda,
+            policy: tlSetup.policyPda,
+            constraints: cPda,
+          } as any)
+          .instruction();
+        const tx = new Transaction().add(allocIx, ...extendIxs, populateIx);
+        await sendAndConfirmTransaction(env.connection, tx, [env.payer]);
+      }
 
       // Queue update
       const queuedEntry = {
@@ -3816,17 +3920,45 @@ describe("surfpool-integration", function () {
         ],
         accountConstraints: [],
       };
-      await program.methods
-        .queueConstraintsUpdate([queuedEntry], false)
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: tlSetup.vaultPda,
-          policy: tlSetup.policyPda,
-          constraints: cPda,
-          pendingConstraints: pcPda,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
+      // Multi-IX: allocate pending + extend×3 + populate
+      {
+        const allocIx = await (
+          program.methods.allocatePendingConstraintsPda() as any
+        )
+          .accounts({
+            owner: env.payer.publicKey,
+            vault: tlSetup.vaultPda,
+            policy: tlSetup.policyPda,
+            constraints: cPda,
+            pendingConstraints: pcPda,
+            systemProgram: SystemProgram.programId,
+          })
+          .instruction();
+        const extendIxs = await Promise.all(
+          [20480, 30720, 35904].map((t) =>
+            (program.methods.extendPda(t) as any)
+              .accounts({
+                owner: env.payer.publicKey,
+                vault: tlSetup.vaultPda,
+                pda: pcPda,
+                systemProgram: SystemProgram.programId,
+              })
+              .instruction(),
+          ),
+        );
+        const populateIx = await program.methods
+          .queueConstraintsUpdate([queuedEntry], false)
+          .accounts({
+            owner: env.payer.publicKey,
+            vault: tlSetup.vaultPda,
+            policy: tlSetup.policyPda,
+            constraints: cPda,
+            pendingConstraints: pcPda,
+          } as any)
+          .instruction();
+        const tx = new Transaction().add(allocIx, ...extendIxs, populateIx);
+        await sendAndConfirmTransaction(env.connection, tx, [env.payer]);
+      }
 
       // Time travel past 1800s timelock — read Clock sysvar for accurate time
       const SYSVAR_CLOCK = new PublicKey(
@@ -3863,7 +3995,7 @@ describe("surfpool-integration", function () {
 
       const constraints =
         await program.account.instructionConstraints.fetch(cPda);
-      expect(constraints.entries.length).to.equal(1);
+      expect(constraints.entryCount).to.equal(1);
     });
 
     it("apply before timelock expires fails", async () => {
@@ -3879,29 +4011,81 @@ describe("surfpool-integration", function () {
         program.programId,
       );
 
-      // Create + queue
-      await program.methods
-        .createInstructionConstraints([sampleEntry], false)
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: tlSetup2.vaultPda,
-          policy: tlSetup2.policyPda,
-          constraints: cPda,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
+      // Create — multi-IX: allocate + extend×3 + populate
+      {
+        const allocIx = await (program.methods.allocateConstraintsPda() as any)
+          .accounts({
+            owner: env.payer.publicKey,
+            vault: tlSetup2.vaultPda,
+            policy: tlSetup2.policyPda,
+            constraints: cPda,
+            systemProgram: SystemProgram.programId,
+          })
+          .instruction();
+        const extendIxs = await Promise.all(
+          [20480, 30720, 35888].map((t) =>
+            (program.methods.extendPda(t) as any)
+              .accounts({
+                owner: env.payer.publicKey,
+                vault: tlSetup2.vaultPda,
+                pda: cPda,
+                systemProgram: SystemProgram.programId,
+              })
+              .instruction(),
+          ),
+        );
+        const populateIx = await program.methods
+          .createInstructionConstraints([sampleEntry], false)
+          .accounts({
+            owner: env.payer.publicKey,
+            vault: tlSetup2.vaultPda,
+            policy: tlSetup2.policyPda,
+            constraints: cPda,
+          } as any)
+          .instruction();
+        const tx = new Transaction().add(allocIx, ...extendIxs, populateIx);
+        await sendAndConfirmTransaction(env.connection, tx, [env.payer]);
+      }
 
-      await program.methods
-        .queueConstraintsUpdate([sampleEntry], true)
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: tlSetup2.vaultPda,
-          policy: tlSetup2.policyPda,
-          constraints: cPda,
-          pendingConstraints: pcPda,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
+      // Queue — multi-IX: allocate pending + extend×3 + populate
+      {
+        const allocIx = await (
+          program.methods.allocatePendingConstraintsPda() as any
+        )
+          .accounts({
+            owner: env.payer.publicKey,
+            vault: tlSetup2.vaultPda,
+            policy: tlSetup2.policyPda,
+            constraints: cPda,
+            pendingConstraints: pcPda,
+            systemProgram: SystemProgram.programId,
+          })
+          .instruction();
+        const extendIxs = await Promise.all(
+          [20480, 30720, 35904].map((t) =>
+            (program.methods.extendPda(t) as any)
+              .accounts({
+                owner: env.payer.publicKey,
+                vault: tlSetup2.vaultPda,
+                pda: pcPda,
+                systemProgram: SystemProgram.programId,
+              })
+              .instruction(),
+          ),
+        );
+        const populateIx = await program.methods
+          .queueConstraintsUpdate([sampleEntry], true)
+          .accounts({
+            owner: env.payer.publicKey,
+            vault: tlSetup2.vaultPda,
+            policy: tlSetup2.policyPda,
+            constraints: cPda,
+            pendingConstraints: pcPda,
+          } as any)
+          .instruction();
+        const tx = new Transaction().add(allocIx, ...extendIxs, populateIx);
+        await sendAndConfirmTransaction(env.connection, tx, [env.payer]);
+      }
 
       // Apply immediately — should fail
       const applyIx = await program.methods
