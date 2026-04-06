@@ -9,6 +9,7 @@ import {
   SYSVAR_INSTRUCTIONS_PUBKEY,
   TransactionInstruction,
 } from "@solana/web3.js";
+import { createHash } from "crypto";
 import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -2290,6 +2291,369 @@ describe("instruction-constraints", () => {
           pendingConstraints: tlPending,
         } as any)
         .rpc();
+    });
+  });
+
+  // =======================================================================
+  // Multi-instruction PDA creation guards
+  // =======================================================================
+  describe("multi-instruction PDA creation guards", () => {
+    // Constants matching litesvm-setup (not exported)
+    const CONSTRAINTS_SIZE = 35_888;
+    const MAX_CPI_SIZE = 10_240;
+
+    const EXTEND_PDA_DISC = createHash("sha256")
+      .update("global:extend_pda")
+      .digest()
+      .subarray(0, 8);
+
+    const ALLOC_CONSTRAINTS_DISC = createHash("sha256")
+      .update("global:allocate_constraints_pda")
+      .digest()
+      .subarray(0, 8);
+
+    function buildExtendPdaIx(
+      programId: PublicKey,
+      ownerKey: PublicKey,
+      vault: PublicKey,
+      pda: PublicKey,
+      targetSize: number,
+    ): TransactionInstruction {
+      const data = Buffer.alloc(12);
+      EXTEND_PDA_DISC.copy(data, 0);
+      data.writeUInt32LE(targetSize, 8);
+      return new TransactionInstruction({
+        programId,
+        keys: [
+          { pubkey: ownerKey, isSigner: true, isWritable: true },
+          { pubkey: vault, isSigner: false, isWritable: false },
+          { pubkey: pda, isSigner: false, isWritable: true },
+          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        ],
+        data,
+      });
+    }
+
+    function buildAllocateIx(
+      programId: PublicKey,
+      ownerKey: PublicKey,
+      vault: PublicKey,
+      policy: PublicKey,
+      constraintsPda: PublicKey,
+    ): TransactionInstruction {
+      return new TransactionInstruction({
+        programId,
+        keys: [
+          { pubkey: ownerKey, isSigner: true, isWritable: true },
+          { pubkey: vault, isSigner: false, isWritable: false },
+          { pubkey: policy, isSigner: false, isWritable: false },
+          { pubkey: constraintsPda, isSigner: false, isWritable: true },
+          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        ],
+        data: ALLOC_CONSTRAINTS_DISC,
+      });
+    }
+
+    /** Derive all PDAs for a fresh vault, initialize it, return them. */
+    async function setupFreshVault(vaultIdNum: number) {
+      const id = new BN(vaultIdNum);
+      const [vault] = PublicKey.findProgramAddressSync(
+        [Buffer.from("vault"), owner.publicKey.toBuffer(), id.toArrayLike(Buffer, "le", 8)],
+        program.programId,
+      );
+      const [policy] = PublicKey.findProgramAddressSync(
+        [Buffer.from("policy"), vault.toBuffer()],
+        program.programId,
+      );
+      const [tracker] = PublicKey.findProgramAddressSync(
+        [Buffer.from("tracker"), vault.toBuffer()],
+        program.programId,
+      );
+      const [overlay] = PublicKey.findProgramAddressSync(
+        [Buffer.from("agent_spend"), vault.toBuffer(), Buffer.from([0])],
+        program.programId,
+      );
+      const [constraints] = PublicKey.findProgramAddressSync(
+        [Buffer.from("constraints"), vault.toBuffer()],
+        program.programId,
+      );
+      const [pendingClose] = PublicKey.findProgramAddressSync(
+        [Buffer.from("pending_close_constraints"), vault.toBuffer()],
+        program.programId,
+      );
+
+      await program.methods
+        .initializeVault(
+          id,
+          new BN(500_000_000),
+          new BN(100_000_000),
+          0,
+          [],
+          new BN(0) as any,
+          3,
+          0,
+          100,
+          new BN(1800),
+          [],
+          [],
+        )
+        .accounts({
+          owner: owner.publicKey,
+          vault,
+          policy,
+          tracker,
+          agentSpendOverlay: overlay,
+          feeDestination: feeDestination.publicKey,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .rpc();
+
+      return { vault, policy, tracker, overlay, constraints, pendingClose };
+    }
+
+    const sampleEntries = [
+      {
+        programId: jupiterProgramId,
+        dataConstraints: [
+          { offset: 0, operator: { eq: {} }, value: Buffer.from([0xaa]) },
+        ],
+        accountConstraints: [],
+      },
+    ];
+
+    it("extend_pda rejects target > max PDA size (35,904)", async () => {
+      const f = await setupFreshVault(9001);
+
+      // Allocate at MAX_CPI_SIZE
+      const allocIx = buildAllocateIx(
+        program.programId, owner.publicKey, f.vault, f.policy, f.constraints,
+      );
+      sendVersionedTx(svm, [allocIx], owner.payer);
+
+      // Try extend with target = 40000 (exceeds max of 35,904)
+      const extendIx = buildExtendPdaIx(
+        program.programId, owner.publicKey, f.vault, f.constraints, 40_000,
+      );
+      try {
+        sendVersionedTx(svm, [extendIx], owner.payer);
+        expect.fail("Should have thrown");
+      } catch (err: any) {
+        expectSigilError(err.toString(), "InvalidConstraintConfig");
+      }
+      // No cleanup needed — fresh vault (9001), partial PDA cannot be closed via AccountLoader
+    });
+
+    it("extend_pda rejects extending a populated PDA", async () => {
+      const f = await setupFreshVault(9002);
+
+      // Create full constraints (allocate + extend + populate)
+      createConstraintsAccount(
+        program, svm, owner.payer, f.vault, f.policy, sampleEntries, false,
+      );
+
+      // Try to extend the populated PDA further
+      const extendIx = buildExtendPdaIx(
+        program.programId, owner.publicKey, f.vault, f.constraints,
+        CONSTRAINTS_SIZE + 100,
+      );
+      try {
+        sendVersionedTx(svm, [extendIx], owner.payer);
+        expect.fail("Should have thrown");
+      } catch (err: any) {
+        expectSigilError(err.toString(), "InvalidConstraintConfig");
+      }
+
+      // Cleanup
+      await queueAndApplyCloseConstraints(
+        f.vault, f.policy, f.constraints, f.pendingClose,
+      );
+    });
+
+    it("populate rejects partially extended account", async () => {
+      const f = await setupFreshVault(9003);
+
+      // Allocate at MAX_CPI_SIZE
+      const allocIx = buildAllocateIx(
+        program.programId, owner.publicKey, f.vault, f.policy, f.constraints,
+      );
+      // Extend to only 20,480 (not full CONSTRAINTS_SIZE of 35,888)
+      const extendIx = buildExtendPdaIx(
+        program.programId, owner.publicKey, f.vault, f.constraints, 20_480,
+      );
+
+      // Build populate instruction manually
+      const populateData = (program.coder.instruction as any).encode(
+        "createInstructionConstraints",
+        { entries: sampleEntries, strictMode: false },
+      );
+      const populateIx = new TransactionInstruction({
+        programId: program.programId,
+        keys: [
+          { pubkey: owner.publicKey, isSigner: true, isWritable: true },
+          { pubkey: f.vault, isSigner: false, isWritable: false },
+          { pubkey: f.policy, isSigner: false, isWritable: true },
+          { pubkey: f.constraints, isSigner: false, isWritable: true },
+        ],
+        data: populateData,
+      });
+
+      // Send all in one TX: allocate + partial extend + populate
+      try {
+        sendVersionedTx(svm, [allocIx, extendIx, populateIx], owner.payer);
+        expect.fail("Should have thrown");
+      } catch (err: any) {
+        expectSigilError(err.toString(), "InvalidConstraintsPda");
+      }
+
+      // Cleanup — close if the PDA was partially created
+      if (accountExists(svm, f.constraints)) {
+        await queueAndApplyCloseConstraints(
+          f.vault, f.policy, f.constraints, f.pendingClose,
+        );
+      }
+    });
+
+    it("populate rejects double-init (allocate when constraints exist)", async () => {
+      const f = await setupFreshVault(9004);
+
+      // Create full constraints first
+      createConstraintsAccount(
+        program, svm, owner.payer, f.vault, f.policy, sampleEntries, false,
+      );
+
+      // Try to create constraints again on the same vault
+      try {
+        createConstraintsAccount(
+          program, svm, owner.payer, f.vault, f.policy, sampleEntries, false,
+        );
+        expect.fail("Should have thrown");
+      } catch (err: any) {
+        const errStr = err.toString();
+        expect(
+          errStr.includes("InvalidConstraintConfig") ||
+            errStr.includes("6051") ||
+            errStr.includes("already in use") ||
+            errStr.includes("0x0"),
+          `Expected constraint config or already-in-use error, got: ${errStr}`,
+        ).to.equal(true);
+      }
+
+      // Cleanup
+      await queueAndApplyCloseConstraints(
+        f.vault, f.policy, f.constraints, f.pendingClose,
+      );
+    });
+
+    it("extend_pda rejects no-growth (target = current size)", async () => {
+      const f = await setupFreshVault(9005);
+
+      // Allocate at MAX_CPI_SIZE
+      const allocIx = buildAllocateIx(
+        program.programId, owner.publicKey, f.vault, f.policy, f.constraints,
+      );
+      sendVersionedTx(svm, [allocIx], owner.payer);
+
+      // Try extend with target = current size (no growth)
+      const extendIx = buildExtendPdaIx(
+        program.programId, owner.publicKey, f.vault, f.constraints, MAX_CPI_SIZE,
+      );
+      try {
+        sendVersionedTx(svm, [extendIx], owner.payer);
+        expect.fail("Should have thrown");
+      } catch (err: any) {
+        expectSigilError(err.toString(), "InvalidConstraintConfig");
+      }
+      // No cleanup — fresh vault (9005), partial PDA cannot be closed via AccountLoader
+    });
+
+    it("extend_pda rejects shrink (target < current size)", async () => {
+      const f = await setupFreshVault(9006);
+
+      // Allocate and extend to 20,480
+      const allocIx = buildAllocateIx(
+        program.programId, owner.publicKey, f.vault, f.policy, f.constraints,
+      );
+      const extendIx1 = buildExtendPdaIx(
+        program.programId, owner.publicKey, f.vault, f.constraints, 20_480,
+      );
+      sendVersionedTx(svm, [allocIx, extendIx1], owner.payer);
+
+      // Try extend with target < current size (shrink)
+      const shrinkIx = buildExtendPdaIx(
+        program.programId, owner.publicKey, f.vault, f.constraints, 15_000,
+      );
+      try {
+        sendVersionedTx(svm, [shrinkIx], owner.payer);
+        expect.fail("Should have thrown");
+      } catch (err: any) {
+        expectSigilError(err.toString(), "InvalidConstraintConfig");
+      }
+      // No cleanup — fresh vault (9006), partial PDA cannot be closed via AccountLoader
+    });
+
+    it("extend_pda rejects non-owner", async () => {
+      const f = await setupFreshVault(9007);
+
+      // Allocate constraints PDA as legitimate owner
+      const allocIx = buildAllocateIx(
+        program.programId, owner.publicKey, f.vault, f.policy, f.constraints,
+      );
+      sendVersionedTx(svm, [allocIx], owner.payer);
+
+      // Create attacker and airdrop SOL
+      const attacker = Keypair.generate();
+      airdropSol(svm, attacker.publicKey, 5 * LAMPORTS_PER_SOL);
+
+      // Attacker tries to extend the PDA
+      const extendIx = buildExtendPdaIx(
+        program.programId, attacker.publicKey, f.vault, f.constraints, 20_480,
+      );
+      try {
+        sendVersionedTx(svm, [extendIx], attacker);
+        expect.fail("Should have thrown");
+      } catch (err: any) {
+        const errStr = err.toString();
+        expect(
+          errStr.includes("UnauthorizedOwner") ||
+            errStr.includes("ConstraintSeeds") ||
+            errStr.includes("6002") ||
+            errStr.includes("2006"),
+          `Expected unauthorized error, got: ${errStr}`,
+        ).to.equal(true);
+      }
+      // No cleanup — fresh vault (9007), partial PDA cannot be closed via AccountLoader
+    });
+
+    it("allocate_constraints_pda rejects when constraints already exist", async () => {
+      const f = await setupFreshVault(9008);
+
+      // Create full constraints
+      createConstraintsAccount(
+        program, svm, owner.payer, f.vault, f.policy, sampleEntries, false,
+      );
+
+      // Try just the allocate instruction again
+      const allocIx = buildAllocateIx(
+        program.programId, owner.publicKey, f.vault, f.policy, f.constraints,
+      );
+      try {
+        sendVersionedTx(svm, [allocIx], owner.payer);
+        expect.fail("Should have thrown");
+      } catch (err: any) {
+        const errStr = err.toString();
+        expect(
+          errStr.includes("InvalidConstraintConfig") ||
+            errStr.includes("6051") ||
+            errStr.includes("already in use") ||
+            errStr.includes("0x0"),
+          `Expected constraint config or already-in-use error, got: ${errStr}`,
+        ).to.equal(true);
+      }
+
+      // Cleanup
+      await queueAndApplyCloseConstraints(
+        f.vault, f.policy, f.constraints, f.pendingClose,
+      );
     });
   });
 });

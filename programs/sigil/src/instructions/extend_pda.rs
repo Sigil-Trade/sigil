@@ -2,6 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_lang::system_program;
 
 use crate::errors::SigilError;
+use crate::events::PdaExtended;
 use crate::state::*;
 
 use super::allocate_constraints_pda::MAX_CPI_ACCOUNT_SIZE;
@@ -42,10 +43,13 @@ pub fn handler(ctx: Context<ExtendPda>, target_size: u32) -> Result<()> {
         SigilError::InvalidConstraintsPda
     );
 
-    // Verify the vault field at offset 8..40 matches
+    // Verify: discriminator zeroed (not yet populated), vault field matches, target in bounds.
     {
         let data = pda_info.try_borrow_data()?;
         require!(data.len() >= 40, SigilError::InvalidConstraintsPda);
+        // Must NOT be already populated — prevents extending a live PDA
+        // (which would break AccountLoader's exact-size check permanently).
+        require!(data[..8] == [0u8; 8], SigilError::InvalidConstraintConfig);
         require!(
             data[8..40] == vault_key.to_bytes(),
             SigilError::ConstraintsVaultMismatch
@@ -54,6 +58,10 @@ pub fn handler(ctx: Context<ExtendPda>, target_size: u32) -> Result<()> {
 
     let current_size = pda_info.data_len();
     let target = target_size as usize;
+
+    // Cap at largest known PDA type (PendingConstraintsUpdate::SIZE = 35,904).
+    // Prevents accidentally extending SpendTracker or other program-owned PDAs.
+    require!(target <= 35_904, SigilError::InvalidConstraintConfig);
 
     // Must be growing, not shrinking
     require!(target > current_size, SigilError::InvalidConstraintConfig);
@@ -64,9 +72,9 @@ pub fn handler(ctx: Context<ExtendPda>, target_size: u32) -> Result<()> {
         SigilError::InvalidConstraintConfig
     );
 
-    // Realloc the account data
+    // Realloc the account data (zero-initialize new bytes for defense-in-depth)
     #[allow(deprecated)]
-    pda_info.realloc(target, false)?;
+    pda_info.realloc(target, true)?;
 
     // Transfer additional rent from owner to PDA via system_program CPI.
     // Direct lamport modification is not allowed on accounts we don't own (owner = system program).
@@ -88,6 +96,13 @@ pub fn handler(ctx: Context<ExtendPda>, target_size: u32) -> Result<()> {
             diff,
         )?;
     }
+
+    emit!(PdaExtended {
+        vault: vault_key,
+        old_size: current_size as u32,
+        new_size: target as u32,
+        timestamp: Clock::get()?.unix_timestamp,
+    });
 
     Ok(())
 }

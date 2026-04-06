@@ -2,6 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_lang::system_program;
 
 use crate::errors::SigilError;
+use crate::events::PdaAllocated;
 use crate::state::*;
 
 use super::allocate_constraints_pda::MAX_CPI_ACCOUNT_SIZE;
@@ -95,6 +96,13 @@ pub fn handler(ctx: Context<AllocatePendingConstraintsPda>) -> Result<()> {
         let mut data = info.try_borrow_mut_data()?;
         data[8..40].copy_from_slice(&vault_key.to_bytes());
     }
+
+    emit!(PdaAllocated {
+        vault: vault_key,
+        pda_type: 1, // pending_constraints
+        initial_size: MAX_CPI_ACCOUNT_SIZE as u32,
+        timestamp: Clock::get()?.unix_timestamp,
+    });
 
     Ok(())
 }
