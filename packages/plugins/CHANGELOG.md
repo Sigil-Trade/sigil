@@ -1,5 +1,12 @@
 # @usesigil/plugins
 
+## 1.0.2
+
+### Patch Changes
+
+- Updated dependencies [[`f9f874c`](https://github.com/Kaleb-Rupe/sigil/commit/f9f874c877979219dc7d5d7d3cd6ef27d0c443c1)]:
+  - @usesigil/kit@0.2.2
+
 ## 1.0.1
 
 ### Patch Changes

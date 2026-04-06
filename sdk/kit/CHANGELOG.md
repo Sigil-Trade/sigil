@@ -1,5 +1,13 @@
 # @usesigil/kit
 
+## 0.2.2
+
+### Patch Changes
+
+- [#174](https://github.com/Kaleb-Rupe/sigil/pull/174) [`f9f874c`](https://github.com/Kaleb-Rupe/sigil/commit/f9f874c877979219dc7d5d7d3cd6ef27d0c443c1) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - Remove external protocol bindings (Flash Trade, Kamino) from SDK source and npm package
+
+  Moved 108,700 lines of Codama-generated external protocol code out of `src/generated/protocols/` into a gitignored `generated-protocols/` directory. These files were never imported at runtime and were inflating the published package. The SDK's public API is unchanged — `seal()`, `createVault()`, instruction builders, and all exports remain identical. Protocol bindings can be regenerated locally via `pnpm codama:all`.
+
 ## 0.2.1
 
 ### Patch Changes
