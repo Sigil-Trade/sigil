@@ -68,8 +68,6 @@ export type QueueConstraintsUpdateInstruction<
   TAccountPolicy extends string | AccountMeta<string> = string,
   TAccountConstraints extends string | AccountMeta<string> = string,
   TAccountPendingConstraints extends string | AccountMeta<string> = string,
-  TAccountSystemProgram extends string | AccountMeta<string> =
-    "11111111111111111111111111111111",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
   InstructionWithData<ReadonlyUint8Array> &
@@ -91,9 +89,6 @@ export type QueueConstraintsUpdateInstruction<
       TAccountPendingConstraints extends string
         ? WritableAccount<TAccountPendingConstraints>
         : TAccountPendingConstraints,
-      TAccountSystemProgram extends string
-        ? ReadonlyAccount<TAccountSystemProgram>
-        : TAccountSystemProgram,
       ...TRemainingAccounts,
     ]
   >;
@@ -147,14 +142,14 @@ export type QueueConstraintsUpdateAsyncInput<
   TAccountPolicy extends string = string,
   TAccountConstraints extends string = string,
   TAccountPendingConstraints extends string = string,
-  TAccountSystemProgram extends string = string,
 > = {
   owner: TransactionSigner<TAccountOwner>;
   vault: Address<TAccountVault>;
   policy?: Address<TAccountPolicy>;
+  /** Existing constraints — seeds verify PDA, bump verified via load(). */
   constraints?: Address<TAccountConstraints>;
+  /** Verified in handler: correct size, program-owned, vault match, no discriminator. */
   pendingConstraints?: Address<TAccountPendingConstraints>;
-  systemProgram?: Address<TAccountSystemProgram>;
   entries: QueueConstraintsUpdateInstructionDataArgs["entries"];
   strictMode: QueueConstraintsUpdateInstructionDataArgs["strictMode"];
 };
@@ -165,7 +160,6 @@ export async function getQueueConstraintsUpdateInstructionAsync<
   TAccountPolicy extends string,
   TAccountConstraints extends string,
   TAccountPendingConstraints extends string,
-  TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: QueueConstraintsUpdateAsyncInput<
@@ -173,8 +167,7 @@ export async function getQueueConstraintsUpdateInstructionAsync<
     TAccountVault,
     TAccountPolicy,
     TAccountConstraints,
-    TAccountPendingConstraints,
-    TAccountSystemProgram
+    TAccountPendingConstraints
   >,
   config?: { programAddress?: TProgramAddress },
 ): Promise<
@@ -184,8 +177,7 @@ export async function getQueueConstraintsUpdateInstructionAsync<
     TAccountVault,
     TAccountPolicy,
     TAccountConstraints,
-    TAccountPendingConstraints,
-    TAccountSystemProgram
+    TAccountPendingConstraints
   >
 > {
   // Program address.
@@ -201,7 +193,6 @@ export async function getQueueConstraintsUpdateInstructionAsync<
       value: input.pendingConstraints ?? null,
       isWritable: true,
     },
-    systemProgram: { value: input.systemProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -261,10 +252,6 @@ export async function getQueueConstraintsUpdateInstructionAsync<
       ],
     });
   }
-  if (!accounts.systemProgram.value) {
-    accounts.systemProgram.value =
-      "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
-  }
 
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
   return Object.freeze({
@@ -274,7 +261,6 @@ export async function getQueueConstraintsUpdateInstructionAsync<
       getAccountMeta("policy", accounts.policy),
       getAccountMeta("constraints", accounts.constraints),
       getAccountMeta("pendingConstraints", accounts.pendingConstraints),
-      getAccountMeta("systemProgram", accounts.systemProgram),
     ],
     data: getQueueConstraintsUpdateInstructionDataEncoder().encode(
       args as QueueConstraintsUpdateInstructionDataArgs,
@@ -286,8 +272,7 @@ export async function getQueueConstraintsUpdateInstructionAsync<
     TAccountVault,
     TAccountPolicy,
     TAccountConstraints,
-    TAccountPendingConstraints,
-    TAccountSystemProgram
+    TAccountPendingConstraints
   >);
 }
 
@@ -297,14 +282,14 @@ export type QueueConstraintsUpdateInput<
   TAccountPolicy extends string = string,
   TAccountConstraints extends string = string,
   TAccountPendingConstraints extends string = string,
-  TAccountSystemProgram extends string = string,
 > = {
   owner: TransactionSigner<TAccountOwner>;
   vault: Address<TAccountVault>;
   policy: Address<TAccountPolicy>;
+  /** Existing constraints — seeds verify PDA, bump verified via load(). */
   constraints: Address<TAccountConstraints>;
+  /** Verified in handler: correct size, program-owned, vault match, no discriminator. */
   pendingConstraints: Address<TAccountPendingConstraints>;
-  systemProgram?: Address<TAccountSystemProgram>;
   entries: QueueConstraintsUpdateInstructionDataArgs["entries"];
   strictMode: QueueConstraintsUpdateInstructionDataArgs["strictMode"];
 };
@@ -315,7 +300,6 @@ export function getQueueConstraintsUpdateInstruction<
   TAccountPolicy extends string,
   TAccountConstraints extends string,
   TAccountPendingConstraints extends string,
-  TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: QueueConstraintsUpdateInput<
@@ -323,8 +307,7 @@ export function getQueueConstraintsUpdateInstruction<
     TAccountVault,
     TAccountPolicy,
     TAccountConstraints,
-    TAccountPendingConstraints,
-    TAccountSystemProgram
+    TAccountPendingConstraints
   >,
   config?: { programAddress?: TProgramAddress },
 ): QueueConstraintsUpdateInstruction<
@@ -333,8 +316,7 @@ export function getQueueConstraintsUpdateInstruction<
   TAccountVault,
   TAccountPolicy,
   TAccountConstraints,
-  TAccountPendingConstraints,
-  TAccountSystemProgram
+  TAccountPendingConstraints
 > {
   // Program address.
   const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
@@ -349,7 +331,6 @@ export function getQueueConstraintsUpdateInstruction<
       value: input.pendingConstraints ?? null,
       isWritable: true,
     },
-    systemProgram: { value: input.systemProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -359,12 +340,6 @@ export function getQueueConstraintsUpdateInstruction<
   // Original args.
   const args = { ...input };
 
-  // Resolve default values.
-  if (!accounts.systemProgram.value) {
-    accounts.systemProgram.value =
-      "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
-  }
-
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
   return Object.freeze({
     accounts: [
@@ -373,7 +348,6 @@ export function getQueueConstraintsUpdateInstruction<
       getAccountMeta("policy", accounts.policy),
       getAccountMeta("constraints", accounts.constraints),
       getAccountMeta("pendingConstraints", accounts.pendingConstraints),
-      getAccountMeta("systemProgram", accounts.systemProgram),
     ],
     data: getQueueConstraintsUpdateInstructionDataEncoder().encode(
       args as QueueConstraintsUpdateInstructionDataArgs,
@@ -385,8 +359,7 @@ export function getQueueConstraintsUpdateInstruction<
     TAccountVault,
     TAccountPolicy,
     TAccountConstraints,
-    TAccountPendingConstraints,
-    TAccountSystemProgram
+    TAccountPendingConstraints
   >);
 }
 
@@ -399,9 +372,10 @@ export type ParsedQueueConstraintsUpdateInstruction<
     owner: TAccountMetas[0];
     vault: TAccountMetas[1];
     policy: TAccountMetas[2];
+    /** Existing constraints — seeds verify PDA, bump verified via load(). */
     constraints: TAccountMetas[3];
+    /** Verified in handler: correct size, program-owned, vault match, no discriminator. */
     pendingConstraints: TAccountMetas[4];
-    systemProgram: TAccountMetas[5];
   };
   data: QueueConstraintsUpdateInstructionData;
 };
@@ -414,12 +388,12 @@ export function parseQueueConstraintsUpdateInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedQueueConstraintsUpdateInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 6) {
+  if (instruction.accounts.length < 5) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 6,
+        expectedAccountMetas: 5,
       },
     );
   }
@@ -437,7 +411,6 @@ export function parseQueueConstraintsUpdateInstruction<
       policy: getNextAccount(),
       constraints: getNextAccount(),
       pendingConstraints: getNextAccount(),
-      systemProgram: getNextAccount(),
     },
     data: getQueueConstraintsUpdateInstructionDataDecoder().decode(
       instruction.data,

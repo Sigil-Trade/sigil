@@ -41,23 +41,25 @@ import {
 } from "@solana/program-client-core";
 import { SIGIL_PROGRAM_ADDRESS } from "../programs/index.js";
 
-export const APPLY_CONSTRAINTS_UPDATE_DISCRIMINATOR = new Uint8Array([
-  175, 103, 90, 155, 134, 91, 135, 242,
+export const ALLOCATE_PENDING_CONSTRAINTS_PDA_DISCRIMINATOR = new Uint8Array([
+  211, 244, 224, 20, 224, 183, 236, 165,
 ]);
 
-export function getApplyConstraintsUpdateDiscriminatorBytes() {
+export function getAllocatePendingConstraintsPdaDiscriminatorBytes() {
   return fixEncoderSize(getBytesEncoder(), 8).encode(
-    APPLY_CONSTRAINTS_UPDATE_DISCRIMINATOR,
+    ALLOCATE_PENDING_CONSTRAINTS_PDA_DISCRIMINATOR,
   );
 }
 
-export type ApplyConstraintsUpdateInstruction<
+export type AllocatePendingConstraintsPdaInstruction<
   TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountOwner extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
   TAccountPolicy extends string | AccountMeta<string> = string,
   TAccountConstraints extends string | AccountMeta<string> = string,
   TAccountPendingConstraints extends string | AccountMeta<string> = string,
+  TAccountSystemProgram extends string | AccountMeta<string> =
+    "11111111111111111111111111111111",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
   InstructionWithData<ReadonlyUint8Array> &
@@ -71,89 +73,97 @@ export type ApplyConstraintsUpdateInstruction<
         ? ReadonlyAccount<TAccountVault>
         : TAccountVault,
       TAccountPolicy extends string
-        ? WritableAccount<TAccountPolicy>
+        ? ReadonlyAccount<TAccountPolicy>
         : TAccountPolicy,
       TAccountConstraints extends string
-        ? WritableAccount<TAccountConstraints>
+        ? ReadonlyAccount<TAccountConstraints>
         : TAccountConstraints,
       TAccountPendingConstraints extends string
         ? WritableAccount<TAccountPendingConstraints>
         : TAccountPendingConstraints,
+      TAccountSystemProgram extends string
+        ? ReadonlyAccount<TAccountSystemProgram>
+        : TAccountSystemProgram,
       ...TRemainingAccounts,
     ]
   >;
 
-export type ApplyConstraintsUpdateInstructionData = {
+export type AllocatePendingConstraintsPdaInstructionData = {
   discriminator: ReadonlyUint8Array;
 };
 
-export type ApplyConstraintsUpdateInstructionDataArgs = {};
+export type AllocatePendingConstraintsPdaInstructionDataArgs = {};
 
-export function getApplyConstraintsUpdateInstructionDataEncoder(): FixedSizeEncoder<ApplyConstraintsUpdateInstructionDataArgs> {
+export function getAllocatePendingConstraintsPdaInstructionDataEncoder(): FixedSizeEncoder<AllocatePendingConstraintsPdaInstructionDataArgs> {
   return transformEncoder(
     getStructEncoder([["discriminator", fixEncoderSize(getBytesEncoder(), 8)]]),
     (value) => ({
       ...value,
-      discriminator: APPLY_CONSTRAINTS_UPDATE_DISCRIMINATOR,
+      discriminator: ALLOCATE_PENDING_CONSTRAINTS_PDA_DISCRIMINATOR,
     }),
   );
 }
 
-export function getApplyConstraintsUpdateInstructionDataDecoder(): FixedSizeDecoder<ApplyConstraintsUpdateInstructionData> {
+export function getAllocatePendingConstraintsPdaInstructionDataDecoder(): FixedSizeDecoder<AllocatePendingConstraintsPdaInstructionData> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
   ]);
 }
 
-export function getApplyConstraintsUpdateInstructionDataCodec(): FixedSizeCodec<
-  ApplyConstraintsUpdateInstructionDataArgs,
-  ApplyConstraintsUpdateInstructionData
+export function getAllocatePendingConstraintsPdaInstructionDataCodec(): FixedSizeCodec<
+  AllocatePendingConstraintsPdaInstructionDataArgs,
+  AllocatePendingConstraintsPdaInstructionData
 > {
   return combineCodec(
-    getApplyConstraintsUpdateInstructionDataEncoder(),
-    getApplyConstraintsUpdateInstructionDataDecoder(),
+    getAllocatePendingConstraintsPdaInstructionDataEncoder(),
+    getAllocatePendingConstraintsPdaInstructionDataDecoder(),
   );
 }
 
-export type ApplyConstraintsUpdateAsyncInput<
+export type AllocatePendingConstraintsPdaAsyncInput<
   TAccountOwner extends string = string,
   TAccountVault extends string = string,
   TAccountPolicy extends string = string,
   TAccountConstraints extends string = string,
   TAccountPendingConstraints extends string = string,
+  TAccountSystemProgram extends string = string,
 > = {
   owner: TransactionSigner<TAccountOwner>;
   vault: Address<TAccountVault>;
-  /** PolicyConfig — needed to bump policy_version on constraint changes. */
   policy?: Address<TAccountPolicy>;
+  /** Existing constraints PDA must exist (proves there's something to update). */
   constraints?: Address<TAccountConstraints>;
   pendingConstraints?: Address<TAccountPendingConstraints>;
+  systemProgram?: Address<TAccountSystemProgram>;
 };
 
-export async function getApplyConstraintsUpdateInstructionAsync<
+export async function getAllocatePendingConstraintsPdaInstructionAsync<
   TAccountOwner extends string,
   TAccountVault extends string,
   TAccountPolicy extends string,
   TAccountConstraints extends string,
   TAccountPendingConstraints extends string,
+  TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
-  input: ApplyConstraintsUpdateAsyncInput<
+  input: AllocatePendingConstraintsPdaAsyncInput<
     TAccountOwner,
     TAccountVault,
     TAccountPolicy,
     TAccountConstraints,
-    TAccountPendingConstraints
+    TAccountPendingConstraints,
+    TAccountSystemProgram
   >,
   config?: { programAddress?: TProgramAddress },
 ): Promise<
-  ApplyConstraintsUpdateInstruction<
+  AllocatePendingConstraintsPdaInstruction<
     TProgramAddress,
     TAccountOwner,
     TAccountVault,
     TAccountPolicy,
     TAccountConstraints,
-    TAccountPendingConstraints
+    TAccountPendingConstraints,
+    TAccountSystemProgram
   >
 > {
   // Program address.
@@ -163,12 +173,13 @@ export async function getApplyConstraintsUpdateInstructionAsync<
   const originalAccounts = {
     owner: { value: input.owner ?? null, isWritable: true },
     vault: { value: input.vault ?? null, isWritable: false },
-    policy: { value: input.policy ?? null, isWritable: true },
-    constraints: { value: input.constraints ?? null, isWritable: true },
+    policy: { value: input.policy ?? null, isWritable: false },
+    constraints: { value: input.constraints ?? null, isWritable: false },
     pendingConstraints: {
       value: input.pendingConstraints ?? null,
       isWritable: true,
     },
+    systemProgram: { value: input.systemProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -225,6 +236,10 @@ export async function getApplyConstraintsUpdateInstructionAsync<
       ],
     });
   }
+  if (!accounts.systemProgram.value) {
+    accounts.systemProgram.value =
+      "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
+  }
 
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
   return Object.freeze({
@@ -234,57 +249,64 @@ export async function getApplyConstraintsUpdateInstructionAsync<
       getAccountMeta("policy", accounts.policy),
       getAccountMeta("constraints", accounts.constraints),
       getAccountMeta("pendingConstraints", accounts.pendingConstraints),
+      getAccountMeta("systemProgram", accounts.systemProgram),
     ],
-    data: getApplyConstraintsUpdateInstructionDataEncoder().encode({}),
+    data: getAllocatePendingConstraintsPdaInstructionDataEncoder().encode({}),
     programAddress,
-  } as ApplyConstraintsUpdateInstruction<
+  } as AllocatePendingConstraintsPdaInstruction<
     TProgramAddress,
     TAccountOwner,
     TAccountVault,
     TAccountPolicy,
     TAccountConstraints,
-    TAccountPendingConstraints
+    TAccountPendingConstraints,
+    TAccountSystemProgram
   >);
 }
 
-export type ApplyConstraintsUpdateInput<
+export type AllocatePendingConstraintsPdaInput<
   TAccountOwner extends string = string,
   TAccountVault extends string = string,
   TAccountPolicy extends string = string,
   TAccountConstraints extends string = string,
   TAccountPendingConstraints extends string = string,
+  TAccountSystemProgram extends string = string,
 > = {
   owner: TransactionSigner<TAccountOwner>;
   vault: Address<TAccountVault>;
-  /** PolicyConfig — needed to bump policy_version on constraint changes. */
   policy: Address<TAccountPolicy>;
+  /** Existing constraints PDA must exist (proves there's something to update). */
   constraints: Address<TAccountConstraints>;
   pendingConstraints: Address<TAccountPendingConstraints>;
+  systemProgram?: Address<TAccountSystemProgram>;
 };
 
-export function getApplyConstraintsUpdateInstruction<
+export function getAllocatePendingConstraintsPdaInstruction<
   TAccountOwner extends string,
   TAccountVault extends string,
   TAccountPolicy extends string,
   TAccountConstraints extends string,
   TAccountPendingConstraints extends string,
+  TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
-  input: ApplyConstraintsUpdateInput<
+  input: AllocatePendingConstraintsPdaInput<
     TAccountOwner,
     TAccountVault,
     TAccountPolicy,
     TAccountConstraints,
-    TAccountPendingConstraints
+    TAccountPendingConstraints,
+    TAccountSystemProgram
   >,
   config?: { programAddress?: TProgramAddress },
-): ApplyConstraintsUpdateInstruction<
+): AllocatePendingConstraintsPdaInstruction<
   TProgramAddress,
   TAccountOwner,
   TAccountVault,
   TAccountPolicy,
   TAccountConstraints,
-  TAccountPendingConstraints
+  TAccountPendingConstraints,
+  TAccountSystemProgram
 > {
   // Program address.
   const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
@@ -293,17 +315,24 @@ export function getApplyConstraintsUpdateInstruction<
   const originalAccounts = {
     owner: { value: input.owner ?? null, isWritable: true },
     vault: { value: input.vault ?? null, isWritable: false },
-    policy: { value: input.policy ?? null, isWritable: true },
-    constraints: { value: input.constraints ?? null, isWritable: true },
+    policy: { value: input.policy ?? null, isWritable: false },
+    constraints: { value: input.constraints ?? null, isWritable: false },
     pendingConstraints: {
       value: input.pendingConstraints ?? null,
       isWritable: true,
     },
+    systemProgram: { value: input.systemProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
     ResolvedInstructionAccount
   >;
+
+  // Resolve default values.
+  if (!accounts.systemProgram.value) {
+    accounts.systemProgram.value =
+      "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
+  }
 
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
   return Object.freeze({
@@ -313,20 +342,22 @@ export function getApplyConstraintsUpdateInstruction<
       getAccountMeta("policy", accounts.policy),
       getAccountMeta("constraints", accounts.constraints),
       getAccountMeta("pendingConstraints", accounts.pendingConstraints),
+      getAccountMeta("systemProgram", accounts.systemProgram),
     ],
-    data: getApplyConstraintsUpdateInstructionDataEncoder().encode({}),
+    data: getAllocatePendingConstraintsPdaInstructionDataEncoder().encode({}),
     programAddress,
-  } as ApplyConstraintsUpdateInstruction<
+  } as AllocatePendingConstraintsPdaInstruction<
     TProgramAddress,
     TAccountOwner,
     TAccountVault,
     TAccountPolicy,
     TAccountConstraints,
-    TAccountPendingConstraints
+    TAccountPendingConstraints,
+    TAccountSystemProgram
   >);
 }
 
-export type ParsedApplyConstraintsUpdateInstruction<
+export type ParsedAllocatePendingConstraintsPdaInstruction<
   TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
@@ -334,28 +365,29 @@ export type ParsedApplyConstraintsUpdateInstruction<
   accounts: {
     owner: TAccountMetas[0];
     vault: TAccountMetas[1];
-    /** PolicyConfig — needed to bump policy_version on constraint changes. */
     policy: TAccountMetas[2];
+    /** Existing constraints PDA must exist (proves there's something to update). */
     constraints: TAccountMetas[3];
     pendingConstraints: TAccountMetas[4];
+    systemProgram: TAccountMetas[5];
   };
-  data: ApplyConstraintsUpdateInstructionData;
+  data: AllocatePendingConstraintsPdaInstructionData;
 };
 
-export function parseApplyConstraintsUpdateInstruction<
+export function parseAllocatePendingConstraintsPdaInstruction<
   TProgram extends string,
   TAccountMetas extends readonly AccountMeta[],
 >(
   instruction: Instruction<TProgram> &
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
-): ParsedApplyConstraintsUpdateInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 5) {
+): ParsedAllocatePendingConstraintsPdaInstruction<TProgram, TAccountMetas> {
+  if (instruction.accounts.length < 6) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 5,
+        expectedAccountMetas: 6,
       },
     );
   }
@@ -373,8 +405,9 @@ export function parseApplyConstraintsUpdateInstruction<
       policy: getNextAccount(),
       constraints: getNextAccount(),
       pendingConstraints: getNextAccount(),
+      systemProgram: getNextAccount(),
     },
-    data: getApplyConstraintsUpdateInstructionDataDecoder().decode(
+    data: getAllocatePendingConstraintsPdaInstructionDataDecoder().decode(
       instruction.data,
     ),
   };

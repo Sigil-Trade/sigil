@@ -67,8 +67,6 @@ export type CreateInstructionConstraintsInstruction<
   TAccountVault extends string | AccountMeta<string> = string,
   TAccountPolicy extends string | AccountMeta<string> = string,
   TAccountConstraints extends string | AccountMeta<string> = string,
-  TAccountSystemProgram extends string | AccountMeta<string> =
-    "11111111111111111111111111111111",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
   InstructionWithData<ReadonlyUint8Array> &
@@ -87,9 +85,6 @@ export type CreateInstructionConstraintsInstruction<
       TAccountConstraints extends string
         ? WritableAccount<TAccountConstraints>
         : TAccountConstraints,
-      TAccountSystemProgram extends string
-        ? ReadonlyAccount<TAccountSystemProgram>
-        : TAccountSystemProgram,
       ...TRemainingAccounts,
     ]
   >;
@@ -142,13 +137,12 @@ export type CreateInstructionConstraintsAsyncInput<
   TAccountVault extends string = string,
   TAccountPolicy extends string = string,
   TAccountConstraints extends string = string,
-  TAccountSystemProgram extends string = string,
 > = {
   owner: TransactionSigner<TAccountOwner>;
   vault: Address<TAccountVault>;
   policy?: Address<TAccountPolicy>;
+  /** Verified in handler: correct size, program-owned, vault match, no discriminator yet. */
   constraints?: Address<TAccountConstraints>;
-  systemProgram?: Address<TAccountSystemProgram>;
   entries: CreateInstructionConstraintsInstructionDataArgs["entries"];
   strictMode: CreateInstructionConstraintsInstructionDataArgs["strictMode"];
 };
@@ -158,15 +152,13 @@ export async function getCreateInstructionConstraintsInstructionAsync<
   TAccountVault extends string,
   TAccountPolicy extends string,
   TAccountConstraints extends string,
-  TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: CreateInstructionConstraintsAsyncInput<
     TAccountOwner,
     TAccountVault,
     TAccountPolicy,
-    TAccountConstraints,
-    TAccountSystemProgram
+    TAccountConstraints
   >,
   config?: { programAddress?: TProgramAddress },
 ): Promise<
@@ -175,8 +167,7 @@ export async function getCreateInstructionConstraintsInstructionAsync<
     TAccountOwner,
     TAccountVault,
     TAccountPolicy,
-    TAccountConstraints,
-    TAccountSystemProgram
+    TAccountConstraints
   >
 > {
   // Program address.
@@ -188,7 +179,6 @@ export async function getCreateInstructionConstraintsInstructionAsync<
     vault: { value: input.vault ?? null, isWritable: false },
     policy: { value: input.policy ?? null, isWritable: true },
     constraints: { value: input.constraints ?? null, isWritable: true },
-    systemProgram: { value: input.systemProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -229,10 +219,6 @@ export async function getCreateInstructionConstraintsInstructionAsync<
       ],
     });
   }
-  if (!accounts.systemProgram.value) {
-    accounts.systemProgram.value =
-      "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
-  }
 
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
   return Object.freeze({
@@ -241,7 +227,6 @@ export async function getCreateInstructionConstraintsInstructionAsync<
       getAccountMeta("vault", accounts.vault),
       getAccountMeta("policy", accounts.policy),
       getAccountMeta("constraints", accounts.constraints),
-      getAccountMeta("systemProgram", accounts.systemProgram),
     ],
     data: getCreateInstructionConstraintsInstructionDataEncoder().encode(
       args as CreateInstructionConstraintsInstructionDataArgs,
@@ -252,8 +237,7 @@ export async function getCreateInstructionConstraintsInstructionAsync<
     TAccountOwner,
     TAccountVault,
     TAccountPolicy,
-    TAccountConstraints,
-    TAccountSystemProgram
+    TAccountConstraints
   >);
 }
 
@@ -262,13 +246,12 @@ export type CreateInstructionConstraintsInput<
   TAccountVault extends string = string,
   TAccountPolicy extends string = string,
   TAccountConstraints extends string = string,
-  TAccountSystemProgram extends string = string,
 > = {
   owner: TransactionSigner<TAccountOwner>;
   vault: Address<TAccountVault>;
   policy: Address<TAccountPolicy>;
+  /** Verified in handler: correct size, program-owned, vault match, no discriminator yet. */
   constraints: Address<TAccountConstraints>;
-  systemProgram?: Address<TAccountSystemProgram>;
   entries: CreateInstructionConstraintsInstructionDataArgs["entries"];
   strictMode: CreateInstructionConstraintsInstructionDataArgs["strictMode"];
 };
@@ -278,15 +261,13 @@ export function getCreateInstructionConstraintsInstruction<
   TAccountVault extends string,
   TAccountPolicy extends string,
   TAccountConstraints extends string,
-  TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: CreateInstructionConstraintsInput<
     TAccountOwner,
     TAccountVault,
     TAccountPolicy,
-    TAccountConstraints,
-    TAccountSystemProgram
+    TAccountConstraints
   >,
   config?: { programAddress?: TProgramAddress },
 ): CreateInstructionConstraintsInstruction<
@@ -294,8 +275,7 @@ export function getCreateInstructionConstraintsInstruction<
   TAccountOwner,
   TAccountVault,
   TAccountPolicy,
-  TAccountConstraints,
-  TAccountSystemProgram
+  TAccountConstraints
 > {
   // Program address.
   const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
@@ -306,7 +286,6 @@ export function getCreateInstructionConstraintsInstruction<
     vault: { value: input.vault ?? null, isWritable: false },
     policy: { value: input.policy ?? null, isWritable: true },
     constraints: { value: input.constraints ?? null, isWritable: true },
-    systemProgram: { value: input.systemProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -316,12 +295,6 @@ export function getCreateInstructionConstraintsInstruction<
   // Original args.
   const args = { ...input };
 
-  // Resolve default values.
-  if (!accounts.systemProgram.value) {
-    accounts.systemProgram.value =
-      "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
-  }
-
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
   return Object.freeze({
     accounts: [
@@ -329,7 +302,6 @@ export function getCreateInstructionConstraintsInstruction<
       getAccountMeta("vault", accounts.vault),
       getAccountMeta("policy", accounts.policy),
       getAccountMeta("constraints", accounts.constraints),
-      getAccountMeta("systemProgram", accounts.systemProgram),
     ],
     data: getCreateInstructionConstraintsInstructionDataEncoder().encode(
       args as CreateInstructionConstraintsInstructionDataArgs,
@@ -340,8 +312,7 @@ export function getCreateInstructionConstraintsInstruction<
     TAccountOwner,
     TAccountVault,
     TAccountPolicy,
-    TAccountConstraints,
-    TAccountSystemProgram
+    TAccountConstraints
   >);
 }
 
@@ -354,8 +325,8 @@ export type ParsedCreateInstructionConstraintsInstruction<
     owner: TAccountMetas[0];
     vault: TAccountMetas[1];
     policy: TAccountMetas[2];
+    /** Verified in handler: correct size, program-owned, vault match, no discriminator yet. */
     constraints: TAccountMetas[3];
-    systemProgram: TAccountMetas[4];
   };
   data: CreateInstructionConstraintsInstructionData;
 };
@@ -368,12 +339,12 @@ export function parseCreateInstructionConstraintsInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedCreateInstructionConstraintsInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 5) {
+  if (instruction.accounts.length < 4) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 5,
+        expectedAccountMetas: 4,
       },
     );
   }
@@ -390,7 +361,6 @@ export function parseCreateInstructionConstraintsInstruction<
       vault: getNextAccount(),
       policy: getNextAccount(),
       constraints: getNextAccount(),
-      systemProgram: getNextAccount(),
     },
     data: getCreateInstructionConstraintsInstructionDataDecoder().decode(
       instruction.data,

@@ -140,6 +140,12 @@ export type PolicyConfig = {
    * program rejects if version changed since the agent's RPC read.
    */
   policyVersion: bigint;
+  /**
+   * Whether native PostExecutionAssertions are configured for this vault.
+   * When true, finalize_session requires the assertions PDA in remaining_accounts.
+   * 0 = no assertions, non-zero = assertions required.
+   */
+  hasPostAssertions: number;
 };
 
 export type PolicyConfigArgs = {
@@ -226,6 +232,12 @@ export type PolicyConfigArgs = {
    * program rejects if version changed since the agent's RPC read.
    */
   policyVersion: number | bigint;
+  /**
+   * Whether native PostExecutionAssertions are configured for this vault.
+   * When true, finalize_session requires the assertions PDA in remaining_accounts.
+   * 0 = no assertions, non-zero = assertions required.
+   */
+  hasPostAssertions: number;
 };
 
 /** Gets the encoder for {@link PolicyConfigArgs} account data. */
@@ -252,6 +264,7 @@ export function getPolicyConfigEncoder(): Encoder<PolicyConfigArgs> {
       ["sessionExpirySlots", getU64Encoder()],
       ["bump", getU8Encoder()],
       ["policyVersion", getU64Encoder()],
+      ["hasPostAssertions", getU8Encoder()],
     ]),
     (value) => ({ ...value, discriminator: POLICY_CONFIG_DISCRIMINATOR }),
   );
@@ -280,6 +293,7 @@ export function getPolicyConfigDecoder(): Decoder<PolicyConfig> {
     ["sessionExpirySlots", getU64Decoder()],
     ["bump", getU8Decoder()],
     ["policyVersion", getU64Decoder()],
+    ["hasPostAssertions", getU8Decoder()],
   ]);
 }
 

@@ -166,6 +166,18 @@ export const SIGIL_ERROR__PENDING_AGENT_PERMS_EXISTS = 0x17b9; // 6073
 export const SIGIL_ERROR__PENDING_CLOSE_CONSTRAINTS_EXISTS = 0x17ba; // 6074
 /** ActiveSessionsExist: Cannot close vault with active sessions (finalize pending sessions first) */
 export const SIGIL_ERROR__ACTIVE_SESSIONS_EXIST = 0x17bb; // 6075
+/** PostAssertionFailed: Post-execution assertion failed: account state did not satisfy constraint */
+export const SIGIL_ERROR__POST_ASSERTION_FAILED = 0x17bc; // 6076
+/** InvalidPostAssertionIndex: Post-assertion constraint references invalid instruction index */
+export const SIGIL_ERROR__INVALID_POST_ASSERTION_INDEX = 0x17bd; // 6077
+/** ConstraintIndexOutOfBounds: Constraint entry index out of bounds for zero-copy array */
+export const SIGIL_ERROR__CONSTRAINT_INDEX_OUT_OF_BOUNDS = 0x17be; // 6078
+/** InvalidConstraintOperator: Constraint operator value is not a valid ConstraintOperator discriminant */
+export const SIGIL_ERROR__INVALID_CONSTRAINT_OPERATOR = 0x17bf; // 6079
+/** ConstraintsVaultMismatch: Zero-copy constraints account has wrong vault */
+export const SIGIL_ERROR__CONSTRAINTS_VAULT_MISMATCH = 0x17c0; // 6080
+/** ConstraintEntryCountExceeded: Cannot pack entries: entry count exceeds MAX_CONSTRAINT_ENTRIES */
+export const SIGIL_ERROR__CONSTRAINT_ENTRY_COUNT_EXCEEDED = 0x17c1; // 6081
 
 export type SigilError =
   | typeof SIGIL_ERROR__ACTIVE_ESCROWS_EXIST
@@ -177,7 +189,10 @@ export type SigilError =
   | typeof SIGIL_ERROR__AGENT_PAUSED
   | typeof SIGIL_ERROR__AGENT_SLOT_NOT_FOUND
   | typeof SIGIL_ERROR__AGENT_SPEND_LIMIT_EXCEEDED
+  | typeof SIGIL_ERROR__CONSTRAINT_ENTRY_COUNT_EXCEEDED
+  | typeof SIGIL_ERROR__CONSTRAINT_INDEX_OUT_OF_BOUNDS
   | typeof SIGIL_ERROR__CONSTRAINTS_NOT_CLOSED
+  | typeof SIGIL_ERROR__CONSTRAINTS_VAULT_MISMATCH
   | typeof SIGIL_ERROR__CONSTRAINT_VIOLATED
   | typeof SIGIL_ERROR__CPI_CALL_NOT_ALLOWED
   | typeof SIGIL_ERROR__DESTINATION_NOT_ALLOWED
@@ -191,6 +206,7 @@ export type SigilError =
   | typeof SIGIL_ERROR__INSUFFICIENT_PERMISSIONS
   | typeof SIGIL_ERROR__INVALID_AGENT_KEY
   | typeof SIGIL_ERROR__INVALID_CONSTRAINT_CONFIG
+  | typeof SIGIL_ERROR__INVALID_CONSTRAINT_OPERATOR
   | typeof SIGIL_ERROR__INVALID_CONSTRAINTS_PDA
   | typeof SIGIL_ERROR__INVALID_ESCROW_VAULT
   | typeof SIGIL_ERROR__INVALID_FEE_DESTINATION
@@ -198,6 +214,7 @@ export type SigilError =
   | typeof SIGIL_ERROR__INVALID_NON_SPENDING_AMOUNT
   | typeof SIGIL_ERROR__INVALID_PENDING_CONSTRAINTS_PDA
   | typeof SIGIL_ERROR__INVALID_PERMISSIONS
+  | typeof SIGIL_ERROR__INVALID_POST_ASSERTION_INDEX
   | typeof SIGIL_ERROR__INVALID_PROTOCOL_MODE
   | typeof SIGIL_ERROR__INVALID_PROTOCOL_TREASURY
   | typeof SIGIL_ERROR__INVALID_SESSION
@@ -218,6 +235,7 @@ export type SigilError =
   | typeof SIGIL_ERROR__PENDING_POLICY_EXISTS
   | typeof SIGIL_ERROR__POLICY_VERSION_MISMATCH
   | typeof SIGIL_ERROR__POSITION_OPENING_DISALLOWED
+  | typeof SIGIL_ERROR__POST_ASSERTION_FAILED
   | typeof SIGIL_ERROR__PROTOCOL_CAP_EXCEEDED
   | typeof SIGIL_ERROR__PROTOCOL_CAPS_MISMATCH
   | typeof SIGIL_ERROR__PROTOCOL_MISMATCH
@@ -257,7 +275,10 @@ if (process.env.NODE_ENV !== "production") {
     [SIGIL_ERROR__AGENT_PAUSED]: `Agent is paused and cannot execute actions`,
     [SIGIL_ERROR__AGENT_SLOT_NOT_FOUND]: `Agent has per-agent spending limit but no overlay tracking slot`,
     [SIGIL_ERROR__AGENT_SPEND_LIMIT_EXCEEDED]: `Agent rolling 24h spend exceeds per-agent spending limit`,
+    [SIGIL_ERROR__CONSTRAINT_ENTRY_COUNT_EXCEEDED]: `Cannot pack entries: entry count exceeds MAX_CONSTRAINT_ENTRIES`,
+    [SIGIL_ERROR__CONSTRAINT_INDEX_OUT_OF_BOUNDS]: `Constraint entry index out of bounds for zero-copy array`,
     [SIGIL_ERROR__CONSTRAINTS_NOT_CLOSED]: `Instruction constraints must be closed before closing vault`,
+    [SIGIL_ERROR__CONSTRAINTS_VAULT_MISMATCH]: `Zero-copy constraints account has wrong vault`,
     [SIGIL_ERROR__CONSTRAINT_VIOLATED]: `Instruction constraint violated`,
     [SIGIL_ERROR__CPI_CALL_NOT_ALLOWED]: `Instruction must be top-level (CPI calls not allowed)`,
     [SIGIL_ERROR__DESTINATION_NOT_ALLOWED]: `Destination not in allowed list`,
@@ -271,6 +292,7 @@ if (process.env.NODE_ENV !== "production") {
     [SIGIL_ERROR__INSUFFICIENT_PERMISSIONS]: `Agent lacks permission for this action type`,
     [SIGIL_ERROR__INVALID_AGENT_KEY]: `Invalid agent: cannot be the zero address`,
     [SIGIL_ERROR__INVALID_CONSTRAINT_CONFIG]: `Invalid constraint configuration: bounds exceeded`,
+    [SIGIL_ERROR__INVALID_CONSTRAINT_OPERATOR]: `Constraint operator value is not a valid ConstraintOperator discriminant`,
     [SIGIL_ERROR__INVALID_CONSTRAINTS_PDA]: `Invalid constraints PDA: wrong owner or vault`,
     [SIGIL_ERROR__INVALID_ESCROW_VAULT]: `Invalid escrow vault`,
     [SIGIL_ERROR__INVALID_FEE_DESTINATION]: `Fee destination account invalid`,
@@ -278,6 +300,7 @@ if (process.env.NODE_ENV !== "production") {
     [SIGIL_ERROR__INVALID_NON_SPENDING_AMOUNT]: `Non-spending action must have amount = 0`,
     [SIGIL_ERROR__INVALID_PENDING_CONSTRAINTS_PDA]: `Invalid pending constraints PDA: wrong owner or vault`,
     [SIGIL_ERROR__INVALID_PERMISSIONS]: `Permission bitmask contains invalid bits`,
+    [SIGIL_ERROR__INVALID_POST_ASSERTION_INDEX]: `Post-assertion constraint references invalid instruction index`,
     [SIGIL_ERROR__INVALID_PROTOCOL_MODE]: `Invalid protocol mode (must be 0, 1, or 2)`,
     [SIGIL_ERROR__INVALID_PROTOCOL_TREASURY]: `Protocol treasury account does not match expected address`,
     [SIGIL_ERROR__INVALID_SESSION]: `Invalid session: does not belong to this vault`,
@@ -298,6 +321,7 @@ if (process.env.NODE_ENV !== "production") {
     [SIGIL_ERROR__PENDING_POLICY_EXISTS]: `Pending policy update must be applied or cancelled before closing vault`,
     [SIGIL_ERROR__POLICY_VERSION_MISMATCH]: `Policy version mismatch — policy changed since agent's last RPC read`,
     [SIGIL_ERROR__POSITION_OPENING_DISALLOWED]: `Cannot open new positions (policy disallows)`,
+    [SIGIL_ERROR__POST_ASSERTION_FAILED]: `Post-execution assertion failed: account state did not satisfy constraint`,
     [SIGIL_ERROR__PROTOCOL_CAP_EXCEEDED]: `Per-protocol rolling 24h spending cap would be exceeded`,
     [SIGIL_ERROR__PROTOCOL_CAPS_MISMATCH]: `protocol_caps length must match protocols length when has_protocol_caps is true`,
     [SIGIL_ERROR__PROTOCOL_MISMATCH]: `DeFi instruction program does not match declared target_protocol`,
