@@ -737,13 +737,20 @@ describe("assembleEntries — discriminator invariant (F7)", () => {
     );
   });
 
-  it("allows entry with only account constraints (no data constraints, no disc check)", () => {
+  it("rejects entry with only account constraints (A5 discriminator anchor required)", () => {
+    // Fix A5 (docs/SECURITY-FINDINGS-2026-04-07.md Finding 1): account-only
+    // entries matched ANY instruction on the program_id, enabling
+    // privilege escalation via account-layout conflation. Every entry
+    // must now include a discriminator anchor as its first data
+    // constraint — this inversion is the regression guard.
     const compiled: CompiledConstraint = {
       discriminator: TEST_DISC,
       dataConstraints: [],
       accountConstraints: [makeAccountConstraint(TEST_PROGRAM, 0)],
     };
-    expect(() => assembleEntries(TEST_PROGRAM, [compiled])).not.to.throw();
+    expect(() => assembleEntries(TEST_PROGRAM, [compiled])).to.throw(
+      /at least one data constraint/,
+    );
   });
 });
 

@@ -118,11 +118,34 @@ impl InstructionConstraints {
                 entry.account_constraints.len() <= MAX_ACCOUNT_CONSTRAINTS_PER_ENTRY,
                 SigilError::InvalidConstraintConfig
             );
-            // Reject fully empty entries (no data_constraints AND no account_constraints)
+            // Fix A5: every entry MUST anchor on the target instruction
+            // discriminator via its FIRST DataConstraint. Without this, an
+            // entry with data_constraints=[] and only account_constraints
+            // passes validation and matches ANY instruction with the
+            // matching program_id — privilege escalation via account-layout
+            // conflation (different Anchor instructions on the same program
+            // often share account slots). The first DataConstraint must be
+            // an Eq at offset 0 with a non-zero value of at least 8 bytes
+            // (standard Anchor instruction discriminator width). This check
+            // supersedes the old "reject fully empty entries" rule since a
+            // non-empty data_constraints implies a non-empty entry.
+            // See docs/SECURITY-FINDINGS-2026-04-07.md Finding 1.
             require!(
-                !entry.data_constraints.is_empty() || !entry.account_constraints.is_empty(),
+                !entry.data_constraints.is_empty(),
                 SigilError::InvalidConstraintConfig
             );
+            let first = &entry.data_constraints[0];
+            require!(first.offset == 0, SigilError::InvalidConstraintConfig);
+            require!(
+                first.operator == ConstraintOperator::Eq,
+                SigilError::InvalidConstraintConfig
+            );
+            require!(first.value.len() >= 8, SigilError::InvalidConstraintConfig);
+            require!(
+                first.value.iter().any(|&b| b != 0),
+                SigilError::InvalidConstraintConfig
+            );
+
             for dc in &entry.data_constraints {
                 require!(
                     dc.value.len() <= MAX_CONSTRAINT_VALUE_LEN,
@@ -155,6 +178,15 @@ impl InstructionConstraints {
 mod tests {
     use super::*;
 
+    /// Standard 8-byte Anchor discriminator anchor used by valid test entries.
+    fn discriminator_anchor() -> DataConstraint {
+        DataConstraint {
+            offset: 0,
+            operator: ConstraintOperator::Eq,
+            value: vec![0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
+        }
+    }
+
     fn mk_entry(data_constraints: Vec<DataConstraint>) -> ConstraintEntry {
         ConstraintEntry {
             program_id: Pubkey::default(),
@@ -163,45 +195,182 @@ mod tests {
         }
     }
 
+    fn mk_entry_with_accounts(
+        data_constraints: Vec<DataConstraint>,
+        account_constraints: Vec<AccountConstraint>,
+    ) -> ConstraintEntry {
+        ConstraintEntry {
+            program_id: Pubkey::default(),
+            data_constraints,
+            account_constraints,
+        }
+    }
+
+    // ─── A3 tests (zero-mask Bitmask rejection) ─────────────────────────────
+
     #[test]
     fn validate_entries_rejects_single_byte_zero_mask_bitmask() {
-        let entries = vec![mk_entry(vec![DataConstraint {
-            offset: 0,
-            operator: ConstraintOperator::Bitmask,
-            value: vec![0x00],
-        }])];
+        // A3: Bitmask with all-zero mask at a non-anchor offset is rejected.
+        let entries = vec![mk_entry(vec![
+            discriminator_anchor(),
+            DataConstraint {
+                offset: 8,
+                operator: ConstraintOperator::Bitmask,
+                value: vec![0x00],
+            },
+        ])];
         assert!(InstructionConstraints::validate_entries(&entries).is_err());
     }
 
     #[test]
     fn validate_entries_rejects_multi_byte_zero_mask_bitmask() {
+        let entries = vec![mk_entry(vec![
+            discriminator_anchor(),
+            DataConstraint {
+                offset: 8,
+                operator: ConstraintOperator::Bitmask,
+                value: vec![0u8; 8],
+            },
+        ])];
+        assert!(InstructionConstraints::validate_entries(&entries).is_err());
+    }
+
+    #[test]
+    fn validate_entries_accepts_non_zero_mask_bitmask() {
+        let entries = vec![mk_entry(vec![
+            discriminator_anchor(),
+            DataConstraint {
+                offset: 8,
+                operator: ConstraintOperator::Bitmask,
+                value: vec![0x00, 0x80, 0x00],
+            },
+        ])];
+        assert!(InstructionConstraints::validate_entries(&entries).is_ok());
+    }
+
+    #[test]
+    fn validate_entries_accepts_all_zero_eq_value_at_non_anchor_offset() {
+        // Non-anchor Eq with all-zero value is a legitimate constraint
+        // (e.g., "bytes 8..16 must be zero"). Only the FIRST DC must be a
+        // non-zero discriminator anchor (Fix A5).
+        let entries = vec![mk_entry(vec![
+            discriminator_anchor(),
+            DataConstraint {
+                offset: 8,
+                operator: ConstraintOperator::Eq,
+                value: vec![0u8; 8],
+            },
+        ])];
+        assert!(InstructionConstraints::validate_entries(&entries).is_ok());
+    }
+
+    // ─── A5 tests (discriminator anchor invariant) ──────────────────────────
+
+    #[test]
+    fn validate_entries_rejects_empty_data_constraints_with_accounts() {
+        // A5 PoC: account-only entry matches ANY instruction on the
+        // program_id. Must be rejected at validation time.
+        let entries = vec![mk_entry_with_accounts(
+            vec![],
+            vec![AccountConstraint {
+                index: 0,
+                expected: Pubkey::default(),
+            }],
+        )];
+        assert!(InstructionConstraints::validate_entries(&entries).is_err());
+    }
+
+    #[test]
+    fn validate_entries_rejects_fully_empty_entry() {
+        // Trivially invalid: no data, no accounts. The A5 check catches
+        // this as a side effect (data_constraints must be non-empty).
+        let entries = vec![mk_entry(vec![])];
+        assert!(InstructionConstraints::validate_entries(&entries).is_err());
+    }
+
+    #[test]
+    fn validate_entries_rejects_first_dc_not_eq() {
+        // First DC must be Eq. Lte @ offset 0 is a range pin, not an
+        // instruction discriminator — reject.
         let entries = vec![mk_entry(vec![DataConstraint {
             offset: 0,
-            operator: ConstraintOperator::Bitmask,
+            operator: ConstraintOperator::Lte,
+            value: vec![0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
+        }])];
+        assert!(InstructionConstraints::validate_entries(&entries).is_err());
+    }
+
+    #[test]
+    fn validate_entries_rejects_first_dc_at_nonzero_offset() {
+        // First DC must be at offset 0 (instruction discriminator byte
+        // range). Eq @ offset 8 is not an anchor.
+        let entries = vec![mk_entry(vec![DataConstraint {
+            offset: 8,
+            operator: ConstraintOperator::Eq,
+            value: vec![0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
+        }])];
+        assert!(InstructionConstraints::validate_entries(&entries).is_err());
+    }
+
+    #[test]
+    fn validate_entries_rejects_first_dc_short_value() {
+        // Standard Anchor discriminator is 8 bytes. Shorter values do not
+        // form a full discriminator match.
+        let entries = vec![mk_entry(vec![DataConstraint {
+            offset: 0,
+            operator: ConstraintOperator::Eq,
+            value: vec![0x01, 0x02, 0x03, 0x04],
+        }])];
+        assert!(InstructionConstraints::validate_entries(&entries).is_err());
+    }
+
+    #[test]
+    fn validate_entries_rejects_first_dc_all_zero_value() {
+        // An all-zero "discriminator" is almost certainly a caller bug or
+        // a bypass attempt — Blake3 discriminators are effectively never
+        // all zero. Reject unambiguously.
+        let entries = vec![mk_entry(vec![DataConstraint {
+            offset: 0,
+            operator: ConstraintOperator::Eq,
             value: vec![0u8; 8],
         }])];
         assert!(InstructionConstraints::validate_entries(&entries).is_err());
     }
 
     #[test]
-    fn validate_entries_accepts_non_zero_mask_bitmask() {
-        let entries = vec![mk_entry(vec![DataConstraint {
-            offset: 0,
-            operator: ConstraintOperator::Bitmask,
-            value: vec![0x00, 0x80, 0x00],
-        }])];
+    fn validate_entries_accepts_valid_anchor_only() {
+        // Minimal valid entry: just the discriminator anchor. Pins a
+        // specific Anchor instruction with no additional field-level or
+        // account-level checks.
+        let entries = vec![mk_entry(vec![discriminator_anchor()])];
         assert!(InstructionConstraints::validate_entries(&entries).is_ok());
     }
 
     #[test]
-    fn validate_entries_accepts_all_zero_eq_value() {
-        // Non-Bitmask operators with all-zero value are not wildcards —
-        // Eq/Ne/Gte/Lte require exact or bounded comparison. Zero is a
-        // valid pattern (e.g., "first 8 bytes must be zero").
+    fn validate_entries_accepts_anchor_plus_account_constraint() {
+        // Anchor + account constraint: pin the instruction AND require a
+        // specific pubkey at a specific account index.
+        let entries = vec![mk_entry_with_accounts(
+            vec![discriminator_anchor()],
+            vec![AccountConstraint {
+                index: 3,
+                expected: Pubkey::default(),
+            }],
+        )];
+        assert!(InstructionConstraints::validate_entries(&entries).is_ok());
+    }
+
+    #[test]
+    fn validate_entries_accepts_anchor_with_longer_value() {
+        // First DC can be longer than 8 bytes — discriminator + first arg
+        // bytes all constrained as one Eq match.
         let entries = vec![mk_entry(vec![DataConstraint {
             offset: 0,
             operator: ConstraintOperator::Eq,
-            value: vec![0u8; 8],
+            value: vec![
+                0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, // discriminator
+                0xAA, 0xBB, 0xCC, 0xDD, // + first 4 arg bytes
+            ],
         }])];
         assert!(InstructionConstraints::validate_entries(&entries).is_ok());
     }

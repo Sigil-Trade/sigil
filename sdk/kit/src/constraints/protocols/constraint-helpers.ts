@@ -389,12 +389,18 @@ export function assembleEntries(
   }
 
   return compiledRules.map((compiled, i) => {
-    if (
-      compiled.dataConstraints.length === 0 &&
-      compiled.accountConstraints.length === 0
-    ) {
+    // Fix A5: every entry must have at least one data constraint, and
+    // the first must be the discriminator anchor (enforced below). An
+    // entry with empty dataConstraints would match ANY instruction on
+    // the program_id — privilege escalation via account-layout
+    // conflation. Supersedes the older "at least one of data OR
+    // account" rule. See docs/SECURITY-FINDINGS-2026-04-07.md Finding 1.
+    if (compiled.dataConstraints.length === 0) {
       throw new Error(
-        `Entry ${i}: must have at least one data or account constraint`,
+        `Entry ${i}: must have at least one data constraint ` +
+          `(the discriminator anchor). Use ` +
+          `makeDiscriminatorConstraint(compiled.discriminator) ` +
+          `as the first entry.`,
       );
     }
     if (compiled.dataConstraints.length > MAX_DATA_CONSTRAINTS_PER_ENTRY) {
@@ -434,10 +440,12 @@ export function assembleEntries(
     }
 
     // Enforce discriminator invariant: dataConstraints[0] must match the
-    // declared discriminator. Without this, a descriptor author who forgets
-    // to include the discriminator constraint produces an entry that matches
-    // ANY instruction with the same program_id — privilege escalation.
-    if (compiled.dataConstraints.length > 0) {
+    // declared discriminator. Without this, a descriptor author who
+    // forgets to include the discriminator constraint produces an entry
+    // that matches ANY instruction with the same program_id — privilege
+    // escalation. After Fix A5 this check always runs because empty
+    // dataConstraints is rejected earlier.
+    {
       const first = compiled.dataConstraints[0];
       const expected = compiled.discriminator;
       const actual = first.value;
