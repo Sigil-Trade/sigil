@@ -172,7 +172,21 @@ export async function getAgents(
     // for low-volume agents without inflating RPC cost.
     const [state, activity] = await Promise.all([
       resolveVaultStateForOwner(rpc, vault, undefined, toNet(network)),
-      getVaultActivity(rpc, vault, 100, toNet(network)).catch(() => []),
+      // Fix for docs/SECURITY-FINDINGS-2026-04-07.md Finding 5: the
+      // previous `.catch(() => [])` swallowed activity-fetch failures
+      // silently. If Helius started rate-limiting getSignaturesForAddress,
+      // every dashboard call would show "last action: never" for every
+      // agent forever and nobody would notice. Graceful degradation is
+      // still the right behavior (activity is enrichment, not core), but
+      // it must be observable — console.warn is the minimum bar.
+      getVaultActivity(rpc, vault, 100, toNet(network)).catch((err) => {
+        // eslint-disable-next-line no-console
+        console.warn(
+          "[OwnerClient.getAgents] activity enrichment failed — falling back to empty last-action fields:",
+          err instanceof Error ? err.message : String(err),
+        );
+        return [];
+      }),
     ]);
     const vaultAgents = (state.vault as AgentVault).agents;
     if (!vaultAgents || vaultAgents.length === 0) return [];
