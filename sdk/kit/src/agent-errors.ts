@@ -1268,7 +1268,10 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
 // SDK error codes (7000-7033) — numeric to match agent error code pattern
 // ---------------------------------------------------------------------------
 
-const SDK_ERROR_CODES: Record<number, string> = {
+// Exported so dashboard/errors.ts can build a reverse (name → code) lookup
+// and preserve DxError.code fidelity when toAgentError returns a string
+// code like "RPC_ERROR" instead of a numeric on-chain code.
+export const SDK_ERROR_CODES: Record<number, string> = {
   7000: "NETWORK_ERROR",
   7001: "RPC_ERROR",
   7002: "SIMULATION_FAILED",
