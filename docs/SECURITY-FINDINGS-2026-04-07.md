@@ -573,3 +573,257 @@ A clean Phase 1.5 should include:
 
 Nothing in Phase 1.5 should be committed to the constraint engine
 codebase until Findings 1 and 2 land first — those are load-bearing.
+
+---
+
+## Addendum (2026-04-08) — Gate 5 code-review results
+
+After the initial findings above were documented and the Phase 1 STOP
+disposition was set, the Gate 5 code-reviewer agent (background task
+`a8c1be1`) completed its review of the three Phase 1 hotspot commits:
+`de7ce4d` (SDK reads), `6680469` (RPC proxy), `a0edcc5` (parser).
+
+**Gate 5 verdict: PASS WITH ONE FIX REQUIRED.**
+Count: 0 CRITICAL, 1 HIGH, 3 MEDIUM, 5 LOW.
+
+Commit `de7ce4d` (SDK reads.ts / errors.ts / mutations.ts) was rated
+**CLEAN** — all 14 PendingPolicyUpdate fields verified, getPolicy's
+inner null-handling confirmed preserved, getAgents activity plumbing
+correct (N+1 prevention holds), error propagation sound. No new
+findings beyond the CRITICAL / HIGH already recorded above (#4 and #5).
+
+The RPC proxy and parser commits produced new findings.
+
+### Finding 8 — RPC proxy body buffered before size check
+
+**Severity:** HIGH
+**Layer:** dashboard
+**File:** `sigil-dashboard/src/app/api/rpc/route.ts:188-200`
+
+Same class as Finding 7's "(d) body size pre-check" LOW note, but
+Gate 5 rates it HIGH because the commit advertises "hardening" and the
+attacker budget is bigger than the Pentester pass estimated: within
+the 60 req/min rate limit, an attacker can push up to the Vercel
+Function default (~4.5 MB per request), for **~270 MB/min of ingress
+per IP**. Multiplied by the 10,000 tracked IP cap, real DOS vector.
+
+**Fix:** inspect `Content-Length` header before calling
+`request.text()` and reject early when it exceeds `MAX_BODY_BYTES`.
+Additionally set a Vercel Function `bodyParser.sizeLimit` or the
+equivalent Next.js 16 route segment config.
+
+**Effort:** ~10 LOC + 1 test. 30 minutes.
+
+### Finding 9 — RPC proxy LRU eviction can delete the just-refreshed entry
+
+**Severity:** MEDIUM
+**Layer:** dashboard
+**File:** `sigil-dashboard/src/app/api/rpc/route.ts:70-78`
+
+`Map.set()` on an existing key does NOT refresh insertion order. A
+returning client whose state has expired can be the oldest-insertion
+key; the eviction that runs immediately after the `set()` then deletes
+the entry we just refreshed, silently resetting that user's budget.
+
+```ts
+if (!state || state.resetAt <= now) {
+  rateState.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+  if (rateState.size > MAX_TRACKED_IPS) {
+    const oldest = rateState.keys().next().value;
+    if (oldest !== undefined) rateState.delete(oldest);   // ← may delete `ip`
+  }
+  return true;
+}
+```
+
+**Fix:** `rateState.delete(ip)` BEFORE the `set`, so the re-inserted
+entry is at the end of the order. Then size-cap eviction will target a
+genuinely different IP.
+
+**Effort:** ~2 LOC + 1 unit test for LRU ordering. 10 minutes.
+
+### Finding 10 — RPC proxy Content-Type check runs before rate limit
+
+**Severity:** LOW
+**Layer:** dashboard
+**File:** `sigil-dashboard/src/app/api/rpc/route.ts:171-185`
+
+An attacker can send invalid-Content-Type requests infinitely without
+depleting rate-limit budget. Wastes compute on invalid-content
+rejection. Move the Content-Type check below `checkRateLimit`.
+
+**Effort:** ~4 LOC move. 2 minutes.
+
+### Finding 11 — RPC proxy returns HTTP 200 for parser/envelope errors
+
+**Severity:** LOW
+**Layer:** dashboard
+**File:** `sigil-dashboard/src/app/api/rpc/route.ts:124-135, 207, 219`
+
+JSON-RPC 2.0 compliant but standard HTTP tooling (cache layers, error
+budget dashboards, CDN logs) sees 200s for malformed input. Consider
+HTTP 400 for client-side errors.
+
+**Effort:** ~5 LOC + documentation. 5 minutes. This is a judgment
+call — leaving as 200 is also defensible.
+
+### Finding 12 — Parser nested-Option<i64> signedness regression
+
+**Severity:** MEDIUM — **new latent bug introduced by my Phase 1 commit**
+**Layer:** SDK / parser
+**File:** `sigil-dashboard/src/lib/constraint-parser/parser.ts:310-320` (inside `expandDefinedStruct`)
+
+```ts
+const leafOffset = subOffset + (sizeResult.payloadOffset ?? 0);
+const leafSize = sizeResult.size - (sizeResult.payloadOffset ?? 0);
+result.push({
+  name: fieldName, offset: leafOffset, size: leafSize,
+  type: idlTypeToFieldType(field.type, leafSize),  // ← bug: passes the outer Option<T>, not T
+});
+```
+
+When a struct field is `Option<i64>`, `field.type` is `{option: "i64"}`
+(an object). `idlTypeToFieldType` sees a non-string type, falls
+through to the size-based fallback, and maps `leafSize=8` → `"u64"`.
+**Fix #7 (signedness preservation) is silently undone inside nested
+structs.** The top-level args branch (parser.ts:443-449) handles this
+correctly by extracting the inner `option`/`coption` payload type. The
+`expandDefinedStruct` branch does not.
+
+**Fix:** In `expandDefinedStruct`, when `sizeResult.payloadOffset !==
+undefined`, unwrap the Option/COption and pass the inner type:
+
+```ts
+let leafFieldType: IdlType = field.type;
+if (typeof field.type === "object") {
+  if ("option" in field.type) leafFieldType = field.type.option;
+  else if ("coption" in field.type) leafFieldType = field.type.coption;
+}
+result.push({
+  name: fieldName,
+  offset: leafOffset,
+  size: leafSize,
+  type: idlTypeToFieldType(leafFieldType, leafSize),
+});
+```
+
+**Regression test:** add an `Option<i64>` fixture to
+`parser.test.ts` that wraps an i64 inside a struct field and verifies
+the type is `"i64"`, not `"u64"`. See Finding 14 below.
+
+**Effort:** ~10 LOC + 1 test. 15 minutes.
+
+### Finding 13 — Parser integration tests are not hermetic (and break on Windows)
+
+**Severity:** MEDIUM
+**Layer:** tests
+**File:** `sigil-dashboard/__tests__/constraints/parser.integration.test.ts:33-38`
+
+```ts
+const IDL_ROOT = path.resolve(
+  path.dirname(new URL(import.meta.url).pathname),
+  "..", "..", "..",
+);
+```
+
+`IDL_ROOT` resolves to `Middleware-Agent-Layer/` (the **parent** of
+`sigil-dashboard/`). The 4 IDL files (`flash-trade-idl.json`,
+`jupiter-perpetuals-idl.json`, `idl.json`, `perpetuals.json`) live
+there, not inside the dashboard repo. If `sigil-dashboard/` is moved,
+cloned standalone, or the IDLs relocated, every integration test
+silently `ENOENT`s. Project CLAUDE.md says each sub-project should be
+self-contained.
+
+Additionally: `new URL(import.meta.url).pathname` produces a
+leading-slash POSIX path but a malformed Windows path (`/C:/...`),
+breaking the tests on Windows.
+
+**Fix:**
+1. Copy the 4 IDL fixtures into
+   `sigil-dashboard/__tests__/constraints/fixtures/idls/`
+2. Use `fileURLToPath(import.meta.url)` from `node:url` for
+   cross-platform path resolution
+
+**Effort:** ~15 LOC + 4 file copies (~1 MB total). 15 minutes.
+
+### Finding 14 — Parser `allArgs` silently drops fixed args after variable boundary
+
+**Severity:** LOW
+**Layer:** SDK / parser
+**File:** `sigil-dashboard/src/lib/constraint-parser/parser.ts:499-507`
+
+After `hitVariableBoundary = true`, any subsequent fixed-size arg
+(e.g., `u64` after `Vec<u8>`) takes neither the pre-boundary branch
+nor the variable-boundary branch, so `allArgs` never gets an entry.
+`parsedFields` still correctly throws for constrainable post-boundary
+fields, but introspection via `allArgs` cannot distinguish
+"not present in the IDL" from "post-boundary fixed".
+
+**Fix:** Always emit an `allArgs` entry with
+`{ offset: -1, size: -1, type: "post-variable" }` once past the
+boundary.
+
+**Effort:** ~5 LOC. 5 minutes.
+
+### Finding 15 — Parser fixtures miss `Option<i64>` regression guard
+
+**Severity:** LOW — directly enables Finding 12 to regress silently
+**Layer:** tests
+**File:** `sigil-dashboard/__tests__/constraints/parser.test.ts`
+
+All 8 documented fixes are exercised, but the signedness-preservation
+fix (#7) is only tested on BARE primitives — not inside `Option<T>`
+or `COption<T>` or nested structs. Finding 12 would have been caught
+at commit time with a single extra fixture.
+
+**Fix:** Add an `Option<i64>` fixture with expected type `"i64"` and a
+similar `COption<i64>` fixture.
+
+**Effort:** ~20 LOC. 10 minutes.
+
+### Finding 16 — Parser integration pass-rate threshold too lenient
+
+**Severity:** LOW
+**Layer:** tests
+**File:** `sigil-dashboard/__tests__/constraints/parser.integration.test.ts:129,145,161,177`
+
+Current gate is `passRate >= 0.9` per IDL — up to 10% of instructions
+per IDL may silently throw during walking. For parser-foundation work,
+project CLAUDE.md's "zero-tolerance" posture toward boundary errors
+suggests 100% walk is a more honest gate.
+
+**Fix:** Either tighten the threshold to 1.0, or assert that all
+failures are expected "variable-length boundary" errors (not
+unknown-primitive / undefined-type / depth-exceeded).
+
+**Effort:** ~10 LOC + possibly expanding the error classification.
+20 minutes.
+
+---
+
+## Updated Phase 1.5 order of operations
+
+Merging the original list with the Gate 5 additions (fastest-first
+within severity):
+
+1. **Finding 2 (A3, 5 LOC)** — smallest critical on-chain patch
+2. **Finding 1 (A5, ~50 LOC + SDK anchor update)** — load-bearing
+   on-chain
+3. **Finding 4 (toDxError, 15 LOC)** — CRITICAL SDK
+4. **Finding 6 (X-Real-IP, 10 LOC)** — HIGH dashboard
+5. **Finding 8 (body buffer DOS, 10 LOC)** — HIGH dashboard
+6. **Finding 3 (A9, 27 handlers + macro)** — defense-in-depth on-chain
+7. **Finding 9 (LRU refresh bug, 2 LOC)** — correctness
+8. **Finding 12 (nested Option<i64> signedness, 10 LOC)** — latent
+   regression of the Phase 1 Fix #7
+9. **Finding 13 (integration test hermeticity, 15 LOC + fixture
+   copies)** — portability
+10. **Findings 5, 7, 10, 11, 14, 15, 16 (small items)** — cleanup
+11. **ISC-52 differential fuzz 10K+**
+12. **16 of the top-20 IDL integration tests** (requires
+    `idl-fetch.ts` from Step 2 of the Constraint Builder plan)
+13. **ISC-80/81/82 regression tests** — Bug 1 N+1 pin, Bug 3
+    round-trip, cursor math invariant
+
+Findings 1 and 2 remain load-bearing — nothing in Phase 1.5 touching
+the constraint engine codebase should commit until they land.
