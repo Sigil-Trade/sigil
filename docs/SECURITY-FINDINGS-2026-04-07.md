@@ -4,13 +4,13 @@
 **Source:** Phase 1 Sigil Constraint Engine Foundation Sprint verification pass + Gate 5 code review + Phase 1.5 addendum
 **Verifier:** Multi-agent pentest + silent-failure-hunter + code-reviewer against live source
 
-**Closure status as of 2026-04-08:** 9 of 16 findings CLOSED. Remaining: Finding 3 (A9 CPI guard — the last load-bearing MEDIUM), Finding 8b (chunked encoding DOS — new), Findings 10/11/13/14/16 (LOW or test-only), plus Phase 1 deferred items.
+**Closure status as of 2026-04-08 (Phase 1.5 FULL CLOSE):** 10 of 16 findings CLOSED + 1 COVERED. All CRITICAL + HIGH + MEDIUM-above-the-line items are now closed including Finding 3 (A9 CPI guard on 28 handlers via `reject_cpi!()` macro, commit 37485ac). Remaining: Finding 8b (chunked encoding DOS — new), Findings 10/11/13/14/16 (LOW or test-only), META items (route test coverage, CPI regression harness), plus Phase 1 deferred items — all Phase 1.6 / Phase 2 prereqs.
 
 | # | Finding | Severity | Status | Commit |
 |---|---|---|---|---|
 | 1 | A5 discriminator anchor invariant | CRITICAL (9) | ✅ **CLOSED** | 40beafe |
 | 2 | A3 zero-mask Bitmask wildcard | HIGH (7) | ✅ **CLOSED** | 4bf7463 |
-| 3 | A9 CPI guard on 27 handlers | MEDIUM (6) | ⏳ open | — |
+| 3 | A9 CPI guard on 28 handlers (Pentester said 27, actual count 28 incl. close_settled_escrow) | MEDIUM (6) | ✅ **CLOSED** | 37485ac |
 | 4 | toDxError string-code collapse | CRITICAL | ✅ **CLOSED** | 6e904fb |
 | 5 | getVaultActivity silent swallow | HIGH | ✅ **CLOSED** | c7774ae |
 | 6 | RPC proxy X-Real-IP bypass | HIGH | ✅ **CLOSED** | 3403518 |
@@ -902,10 +902,59 @@ LiteSVM passing. CU impact: `validate+finalize:stablecoin` 67,952 →
 72,452 (+4,500 CU per data-constraint check, well inside the 1.4M
 budget).
 
-### Finding 3 — A9 CPI guard on 27 handlers → STILL OPEN
+### Finding 3 — A9 CPI guard on 28 handlers → CLOSED
 
-Unchanged from the initial finding. Still the biggest remaining item.
-Next target in the Phase 1.5 order of operations.
+**Commit:** `37485ac` `fix(security): A9 enforce CPI guard on all 28 missing state-mutating handlers`
+
+New `reject_cpi!()` declarative macro added to
+`programs/sigil/src/instructions/utils.rs` using fully-qualified paths
+so handlers don't need to import `get_stack_height`,
+`TRANSACTION_LEVEL_STACK_HEIGHT`, or `SigilError` just to call it.
+Applied as `crate::reject_cpi!();` to the first statement of the
+handler body in all 28 previously-unguarded handlers.
+
+Handler count note: the initial Pentester finding said 27 missing,
+actual count is 28 (the Pentester missed `close_settled_escrow`).
+Total state-mutating handlers = 34: 6 pre-existing guarded handlers
+(validate_and_authorize, finalize_session, create_escrow,
+settle_escrow, refund_escrow, agent_transfer) + 28 newly guarded.
+
+Per-handler list in the commit message; grouped by lifecycle:
+account (8), funds (2), agent (4), policy timelock (3), agent
+permissions timelock (3), constraints lifecycle (7), position sync
+(1). Total 28.
+
+The 6 pre-existing guarded handlers are LEFT INLINE with their
+current `require!(get_stack_height() == ...)` pattern. Unifying them
+to use the new macro was considered but deferred — refactoring
+audited working code expands the diff for zero security benefit.
+Noted as Phase 1.6 style cleanup.
+
+**Verification:**
+- `cargo fmt` clean
+- `cargo check --lib` clean (1.58s)
+- `cargo test --lib` → 83 passed, 0 failed (no regressions from
+  macro expansion across 28 new call sites)
+- `anchor build --no-idl` → 5.56s release profile
+- IDL restored per project CLAUDE.md
+- `pnpm test` → 145 LiteSVM tests passing (all existing test flows
+  still work at top-level stack height where the guard passes)
+- `sdk/kit pnpm test` → 1,219 SDK tests passing (sanity — Rust
+  changes don't touch TypeScript)
+
+**CPI-exploit regression tests — deferred to Phase 1.6:**
+Writing a proper CPI regression test requires deploying a secondary
+"malicious" program inside LiteSVM that makes a CPI call into a
+Sigil handler, then asserting the transaction fails with
+`CpiCallNotAllowed` (error code 6033). The existing codebase has the
+SPEC for this (`tests/security-exploits.ts:11441` comment: "C-1
+(CpiCallNotAllowed 6034): Requires deploying a CPI-caller program")
+but the test has never been implemented because the infrastructure
+to compile and deploy a secondary program inside LiteSVM doesn't
+exist yet. The 6 pre-existing guarded handlers also lack LiteSVM
+CPI tests for the same reason. This commit extends the same pattern
+(code fix landed, regression tests pending) to the 28 newly-guarded
+handlers. Tracked as a Phase 1.6 prereq.
 
 ### Finding 4 — toDxError string-code collapse → CLOSED
 
@@ -1085,9 +1134,8 @@ work. Estimated 2-3 hours + ~200 LOC of test scaffolding. Deferred.
 
 ### Phase 1.5 close line (2026-04-08)
 
-**Above the line (must land for Phase 1.5 to close):**
-- Finding 3 — A9 CPI guard on 27 handlers (MEDIUM, on-chain,
-  load-bearing for Phase 2)
+**Above the line — CLOSED:**
+- ✅ Finding 3 — A9 CPI guard on 28 handlers (commit 37485ac)
 
 **Below the line (Phase 1.6 / Phase 2 prereqs):**
 - Finding 8b — chunked-encoding DOS (new, MEDIUM)
