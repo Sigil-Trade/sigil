@@ -49,6 +49,8 @@ pub struct ApplyAgentPermissionsUpdate<'info> {
 }
 
 pub fn handler(ctx: Context<ApplyAgentPermissionsUpdate>) -> Result<()> {
+    crate::reject_cpi!();
+
     let clock = Clock::get()?;
     let pending = &ctx.accounts.pending_agent_perms;
 

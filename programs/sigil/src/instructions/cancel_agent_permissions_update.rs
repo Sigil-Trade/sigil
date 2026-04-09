@@ -31,6 +31,8 @@ pub struct CancelAgentPermissionsUpdate<'info> {
 }
 
 pub fn handler(ctx: Context<CancelAgentPermissionsUpdate>) -> Result<()> {
+    crate::reject_cpi!();
+
     emit!(AgentPermissionsChangeCancelled {
         vault: ctx.accounts.vault.key(),
         agent: ctx.accounts.pending_agent_perms.agent,

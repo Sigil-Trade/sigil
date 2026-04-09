@@ -35,6 +35,8 @@ pub struct CancelPendingPolicy<'info> {
 }
 
 pub fn handler(ctx: Context<CancelPendingPolicy>) -> Result<()> {
+    crate::reject_cpi!();
+
     ctx.accounts.policy.has_pending_policy = false;
 
     emit!(PolicyChangeCancelled {

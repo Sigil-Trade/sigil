@@ -3674,14 +3674,18 @@ describe("surfpool-integration", function () {
         await program.account.instructionConstraints.fetch(cPda);
       expect(constraints.entryCount).to.equal(1);
 
-      // Queue update
+      // Queue update — distinct 8-byte discriminator anchor to prove the
+      // update took effect. A5 invariant (constraints.rs:121-147) requires
+      // the first DataConstraint to be offset=0, Eq, >=8 bytes, non-zero.
       const updatedEntry = {
         ...sampleEntry,
         dataConstraints: [
           {
             offset: 0,
-            operator: { ne: {} },
-            value: Buffer.from([0x00, 0x00, 0x00, 0x00]),
+            operator: { eq: {} },
+            value: Buffer.from([
+              0xf2, 0x4b, 0x66, 0xa9, 0x7e, 0xe5, 0xa5, 0x1f,
+            ]),
           },
         ],
       };
@@ -3908,14 +3912,18 @@ describe("surfpool-integration", function () {
         await sendAndConfirmTransaction(env.connection, tx, [env.payer]);
       }
 
-      // Queue update
+      // Queue update — distinct 8-byte discriminator anchor to prove the
+      // update took effect. A5 invariant (constraints.rs:121-147) requires
+      // the first DataConstraint to be offset=0, Eq, >=8 bytes, non-zero.
       const queuedEntry = {
         programId: dummyProtocol,
         dataConstraints: [
           {
-            offset: 8,
-            operator: { gte: {} },
-            value: Buffer.from([0x01, 0x00, 0x00, 0x00]),
+            offset: 0,
+            operator: { eq: {} },
+            value: Buffer.from([
+              0x33, 0xe6, 0x85, 0xa4, 0xc3, 0x82, 0x21, 0x8f,
+            ]),
           },
         ],
         accountConstraints: [],

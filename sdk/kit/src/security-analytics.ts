@@ -9,7 +9,7 @@
  * agent and perfect everything else would get "90/100" — dangerously misleading.
  */
 
-import type { Address } from "@solana/kit";
+import { getAddressEncoder, type Address } from "@solana/kit";
 import type {
   ResolvedVaultState,
   ResolvedVaultStateForOwner,
@@ -298,10 +298,21 @@ export function getSecurityPosture(state: ResolvedVaultState): SecurityPosture {
         )
           return true;
         if (!policy.protocols) return true;
-        const allowedSet = new Set(policy.protocols.map(String));
-        for (const entry of constraints.entries) {
-          if (entry.programId && !allowedSet.has(String(entry.programId)))
-            return false;
+        const encoder = getAddressEncoder();
+        const allowedBytes = policy.protocols.map((p) => encoder.encode(p));
+        const activeEntries = constraints.entries.slice(
+          0,
+          constraints.entryCount,
+        );
+        for (const entry of activeEntries) {
+          const matches = allowedBytes.some((ab) => {
+            if (ab.length !== entry.programId.length) return false;
+            for (let i = 0; i < 32; i++) {
+              if (ab[i] !== entry.programId[i]) return false;
+            }
+            return true;
+          });
+          if (!matches) return false;
         }
         return true;
       })(),
@@ -358,19 +369,30 @@ export function getSecurityPosture(state: ResolvedVaultState): SecurityPosture {
     {
       id: "constraints-cover-allowlist",
       label: "All allowlisted protocols have constraint entries",
-      passed:
-        !constraints ||
-        !constraints.entries ||
-        policy.protocolMode !== PROTOCOL_MODE_ALLOWLIST ||
-        !policy.protocols ||
-        policy.protocols.every((p: Address) =>
-          constraints.entries
-            .slice(
-              0,
-              (constraints as any).entryCount ?? constraints.entries.length,
-            )
-            .some((e: any) => String(e.programId) === String(p)),
-        ),
+      passed: (() => {
+        if (
+          !constraints ||
+          !constraints.entries ||
+          policy.protocolMode !== PROTOCOL_MODE_ALLOWLIST ||
+          !policy.protocols
+        )
+          return true;
+        const encoder = getAddressEncoder();
+        const activeEntries = constraints.entries.slice(
+          0,
+          constraints.entryCount,
+        );
+        return policy.protocols.every((p: Address) => {
+          const pBytes = encoder.encode(p);
+          return activeEntries.some((e) => {
+            if (pBytes.length !== e.programId.length) return false;
+            for (let i = 0; i < 32; i++) {
+              if (pBytes[i] !== e.programId[i]) return false;
+            }
+            return true;
+          });
+        });
+      })(),
       severity: "info",
       detail:
         "Protocols on the allowlist without constraint entries rely solely on spending caps for protection.",

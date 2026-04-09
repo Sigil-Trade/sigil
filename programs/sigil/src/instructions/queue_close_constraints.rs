@@ -44,6 +44,8 @@ pub struct QueueCloseConstraints<'info> {
 }
 
 pub fn handler(ctx: Context<QueueCloseConstraints>) -> Result<()> {
+    crate::reject_cpi!();
+
     let vault = &ctx.accounts.vault;
     let policy = &ctx.accounts.policy;
 

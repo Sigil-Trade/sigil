@@ -49,6 +49,8 @@ pub struct CloseVault<'info> {
 }
 
 pub fn handler(ctx: Context<CloseVault>) -> Result<()> {
+    crate::reject_cpi!();
+
     let vault = &ctx.accounts.vault;
 
     require!(

@@ -54,6 +54,8 @@ pub fn handler(
     has_protocol_caps: Option<bool>,
     protocol_caps: Option<Vec<u64>>,
 ) -> Result<()> {
+    crate::reject_cpi!();
+
     let vault = &ctx.accounts.vault;
     let policy = &ctx.accounts.policy;
 

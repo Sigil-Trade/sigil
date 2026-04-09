@@ -682,13 +682,17 @@ mod tests {
         assert!(!bitmask_check(&[0x0E], &[0x0F]));
     }
 
-    #[test]
-    fn bitmask_zero_mask_always_passes() {
-        // mask=0x00, any actual passes
-        assert!(bitmask_check(&[0x00], &[0x00]));
-        assert!(bitmask_check(&[0xFF], &[0x00]));
-        assert!(bitmask_check(&[0x42], &[0x00]));
-    }
+    // NOTE: `bitmask_zero_mask_always_passes` was removed as part of the
+    // A3 fix (docs/SECURITY-FINDINGS-2026-04-07.md Finding 2). The
+    // `bitmask_check` math primitive itself is unchanged — it still
+    // returns true for all-zero masks because mathematically
+    // `(actual & 0) == 0` is always true. The fix lives one layer up
+    // in `InstructionConstraints::validate_entries` (state/constraints.rs),
+    // which now rejects zero-mask Bitmask constraints at validation time
+    // so they can never be packed into the zero-copy account and
+    // therefore can never reach `bitmask_check` in production. Tests
+    // asserting the new rejection behavior live in the `tests` module
+    // of `state/constraints.rs`.
 
     #[test]
     fn bitmask_multi_byte() {

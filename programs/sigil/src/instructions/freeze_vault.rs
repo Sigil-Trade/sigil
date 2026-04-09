@@ -18,6 +18,8 @@ pub struct FreezeVault<'info> {
 }
 
 pub fn handler(ctx: Context<FreezeVault>) -> Result<()> {
+    crate::reject_cpi!();
+
     let vault = &mut ctx.accounts.vault;
 
     // Only active vaults can be frozen

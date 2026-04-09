@@ -34,6 +34,8 @@ pub struct ExtendPda<'info> {
 }
 
 pub fn handler(ctx: Context<ExtendPda>, target_size: u32) -> Result<()> {
+    crate::reject_cpi!();
+
     let pda_info = ctx.accounts.pda.to_account_info();
     let vault_key = ctx.accounts.vault.key();
 

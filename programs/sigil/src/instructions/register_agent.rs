@@ -31,6 +31,8 @@ pub fn handler(
     permissions: u64,
     spending_limit_usd: u64,
 ) -> Result<()> {
+    crate::reject_cpi!();
+
     let vault = &mut ctx.accounts.vault;
 
     require!(

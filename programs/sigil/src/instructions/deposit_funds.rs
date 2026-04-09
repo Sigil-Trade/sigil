@@ -44,6 +44,8 @@ pub struct DepositFunds<'info> {
 }
 
 pub fn handler(ctx: Context<DepositFunds>, amount: u64) -> Result<()> {
+    crate::reject_cpi!();
+
     let vault = &mut ctx.accounts.vault;
     require!(
         vault.status != VaultStatus::Closed,

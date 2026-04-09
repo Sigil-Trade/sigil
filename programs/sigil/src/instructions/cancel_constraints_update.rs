@@ -26,6 +26,8 @@ pub struct CancelConstraintsUpdate<'info> {
 }
 
 pub fn handler(ctx: Context<CancelConstraintsUpdate>) -> Result<()> {
+    crate::reject_cpi!();
+
     // Verify vault matches (replaces has_one = vault)
     {
         let pending = ctx.accounts.pending_constraints.load()?;

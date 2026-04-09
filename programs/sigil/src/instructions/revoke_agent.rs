@@ -27,6 +27,8 @@ pub struct RevokeAgent<'info> {
 }
 
 pub fn handler(ctx: Context<RevokeAgent>, agent_to_remove: Pubkey) -> Result<()> {
+    crate::reject_cpi!();
+
     let vault = &mut ctx.accounts.vault;
 
     require!(

@@ -72,9 +72,8 @@ import type {
   TxOpts,
   PolicyChanges,
   ConstraintEntry,
-  DxError,
 } from "./types.js";
-import { toAgentError } from "../agent-errors.js";
+import { toDxError } from "./errors.js";
 
 // ─── Shared Helper ───────────────────────────────────────────────────────────
 
@@ -128,30 +127,7 @@ async function run(
   }
 }
 
-/** Normalize any error into a DxError with code, message, and recovery actions. */
-function toDxError(err: unknown): DxError {
-  try {
-    const agentErr = toAgentError(err);
-    return {
-      code: (() => {
-        const n = Number(agentErr.code);
-        return Number.isFinite(n) ? n : 7000;
-      })(),
-      message: agentErr.message,
-      recovery:
-        agentErr.recovery_actions?.map((a: any) => a.description ?? a.action) ??
-        [],
-    };
-  } catch {
-    // toAgentError itself failed — wrap the original error
-    const msg = err instanceof Error ? err.message : String(err);
-    return {
-      code: 7999,
-      message: msg,
-      recovery: ["Check transaction logs for details"],
-    };
-  }
-}
+// toDxError is now in ./errors.ts (shared with reads.ts)
 
 // ─── Client-Side Validation ──────────────────────────────────────────────────
 // Fail fast with clear errors instead of burning RPC round-trips.

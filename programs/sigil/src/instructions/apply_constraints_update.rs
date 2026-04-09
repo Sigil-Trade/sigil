@@ -42,6 +42,8 @@ pub struct ApplyConstraintsUpdate<'info> {
 }
 
 pub fn handler(ctx: Context<ApplyConstraintsUpdate>) -> Result<()> {
+    crate::reject_cpi!();
+
     let clock = Clock::get()?;
     let vault_key = ctx.accounts.vault.key();
 

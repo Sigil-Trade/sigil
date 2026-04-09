@@ -2,9 +2,9 @@
   "name": "@usesigil/platform",
   "version": "0.1.0",
   "author": "Kaleb Rupe (https://x.com/MightieMags)",
-  "homepage": "https://github.com/Kaleb-Rupe/sigil#readme",
+  "homepage": "https://github.com/Sigil-Trade/sigil#readme",
   "bugs": {
-    "url": "https://github.com/Kaleb-Rupe/sigil/issues",
+    "url": "https://github.com/Sigil-Trade/sigil/issues",
     "email": "https://t.me/MightyMags"
   },
   "description": "Platform client for Sigil — request TEE wallet provisioning via Solana Actions",
@@ -51,7 +51,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Kaleb-Rupe/sigil",
+    "url": "https://github.com/Sigil-Trade/sigil",
     "directory": "sdk/platform"
   }
 }

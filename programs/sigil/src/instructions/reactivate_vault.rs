@@ -22,6 +22,8 @@ pub fn handler(
     new_agent: Option<Pubkey>,
     new_agent_permissions: Option<u64>,
 ) -> Result<()> {
+    crate::reject_cpi!();
+
     let vault = &mut ctx.accounts.vault;
 
     // 1. Check frozen

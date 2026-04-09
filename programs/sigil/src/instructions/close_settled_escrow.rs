@@ -32,6 +32,8 @@ pub struct CloseSettledEscrow<'info> {
 }
 
 pub fn handler(ctx: Context<CloseSettledEscrow>, _escrow_id: u64) -> Result<()> {
+    crate::reject_cpi!();
+
     let escrow = &ctx.accounts.escrow;
 
     // Escrow must be settled or refunded (not Active)

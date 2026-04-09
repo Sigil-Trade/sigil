@@ -18,6 +18,8 @@ pub struct UnpauseAgent<'info> {
 }
 
 pub fn handler(ctx: Context<UnpauseAgent>, agent_to_unpause: Pubkey) -> Result<()> {
+    crate::reject_cpi!();
+
     let vault = &mut ctx.accounts.vault;
 
     // Works on Active or Frozen vaults (not Closed)

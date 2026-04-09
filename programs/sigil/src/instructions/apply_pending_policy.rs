@@ -35,6 +35,8 @@ pub struct ApplyPendingPolicy<'info> {
 }
 
 pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
+    crate::reject_cpi!();
+
     let clock = Clock::get()?;
     let pending = &ctx.accounts.pending_policy;
 

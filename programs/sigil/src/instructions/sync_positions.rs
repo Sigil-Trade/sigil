@@ -23,6 +23,8 @@ pub struct SyncPositions<'info> {
 }
 
 pub fn handler(ctx: Context<SyncPositions>, actual_positions: u8) -> Result<()> {
+    crate::reject_cpi!();
+
     let vault = &mut ctx.accounts.vault;
     let old = vault.open_positions;
     vault.open_positions = actual_positions;

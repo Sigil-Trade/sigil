@@ -42,6 +42,8 @@ pub struct AllocateConstraintsPda<'info> {
 }
 
 pub fn handler(ctx: Context<AllocateConstraintsPda>) -> Result<()> {
+    crate::reject_cpi!();
+
     // Guard: account must not already exist
     require!(
         ctx.accounts.constraints.lamports() == 0,

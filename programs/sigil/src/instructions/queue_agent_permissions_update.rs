@@ -42,6 +42,8 @@ pub fn handler(
     new_permissions: u64,
     spending_limit_usd: u64,
 ) -> Result<()> {
+    crate::reject_cpi!();
+
     let vault = &ctx.accounts.vault;
     let policy = &ctx.accounts.policy;
 

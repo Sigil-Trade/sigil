@@ -43,6 +43,8 @@ pub struct ApplyCloseConstraints<'info> {
 }
 
 pub fn handler(ctx: Context<ApplyCloseConstraints>) -> Result<()> {
+    crate::reject_cpi!();
+
     let clock = Clock::get()?;
     let pending = &ctx.accounts.pending_close_constraints;
 

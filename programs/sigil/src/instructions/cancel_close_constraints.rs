@@ -27,6 +27,8 @@ pub struct CancelCloseConstraints<'info> {
 }
 
 pub fn handler(ctx: Context<CancelCloseConstraints>) -> Result<()> {
+    crate::reject_cpi!();
+
     emit!(CloseConstraintsCancelled {
         vault: ctx.accounts.vault.key(),
     });

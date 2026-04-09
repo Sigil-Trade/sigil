@@ -46,6 +46,8 @@ pub fn handler(
     entries: Vec<ConstraintEntry>,
     strict_mode: bool,
 ) -> Result<()> {
+    crate::reject_cpi!();
+
     InstructionConstraints::validate_entries(&entries)?;
 
     let vault_key = ctx.accounts.vault.key();

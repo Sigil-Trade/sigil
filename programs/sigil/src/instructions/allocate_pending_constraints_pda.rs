@@ -46,6 +46,8 @@ pub struct AllocatePendingConstraintsPda<'info> {
 }
 
 pub fn handler(ctx: Context<AllocatePendingConstraintsPda>) -> Result<()> {
+    crate::reject_cpi!();
+
     let policy = &ctx.accounts.policy;
 
     // Timelock must be configured to use queue

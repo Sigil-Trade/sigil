@@ -70,6 +70,8 @@ pub fn handler(
     allowed_destinations: Vec<Pubkey>,
     protocol_caps: Vec<u64>,
 ) -> Result<()> {
+    crate::reject_cpi!();
+
     // Validate protocol_mode
     require!(
         protocol_mode <= PROTOCOL_MODE_DENYLIST,

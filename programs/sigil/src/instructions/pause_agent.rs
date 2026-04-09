@@ -18,6 +18,8 @@ pub struct PauseAgent<'info> {
 }
 
 pub fn handler(ctx: Context<PauseAgent>, agent_to_pause: Pubkey) -> Result<()> {
+    crate::reject_cpi!();
+
     let vault = &mut ctx.accounts.vault;
 
     // Works on Active or Frozen vaults (not Closed)

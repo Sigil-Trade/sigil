@@ -40,6 +40,8 @@ pub struct WithdrawFunds<'info> {
 }
 
 pub fn handler(ctx: Context<WithdrawFunds>, amount: u64) -> Result<()> {
+    crate::reject_cpi!();
+
     let vault = &mut ctx.accounts.vault;
 
     require!(
