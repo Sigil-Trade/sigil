@@ -946,15 +946,24 @@ Noted as Phase 1.6 style cleanup.
 Writing a proper CPI regression test requires deploying a secondary
 "malicious" program inside LiteSVM that makes a CPI call into a
 Sigil handler, then asserting the transaction fails with
-`CpiCallNotAllowed` (error code 6033). The existing codebase has the
-SPEC for this (`tests/security-exploits.ts:11441` comment: "C-1
-(CpiCallNotAllowed 6034): Requires deploying a CPI-caller program")
-but the test has never been implemented because the infrastructure
-to compile and deploy a secondary program inside LiteSVM doesn't
-exist yet. The 6 pre-existing guarded handlers also lack LiteSVM
-CPI tests for the same reason. This commit extends the same pattern
-(code fix landed, regression tests pending) to the 28 newly-guarded
-handlers. Tracked as a Phase 1.6 prereq.
+`CpiCallNotAllowed`. **Definitive error code: 6033** (confirmed by
+counting enum position from `VaultNotActive` = 6000 in
+`programs/sigil/src/errors.rs:110` — `CpiCallNotAllowed` is at
+enum position 34, yielding 6033). Both `tests/helpers/litesvm-setup.ts:697`
+(`CpiCallNotAllowed: 6033`) and `tests/helpers/surfpool-setup.ts:495`
+(`6033: "CpiCallNotAllowed"`) agree. The SPEC comment at
+`tests/security-exploits.ts:11441` says "(CpiCallNotAllowed 6034)" —
+**off by one vs. the definitive value**; it's a stale unit test SPEC
+comment that was never reconciled because the test was never
+implemented. When the Phase 1.6 CPI regression test harness is
+built, it MUST assert against code **6033**, not 6034, and the stale
+comment at security-exploits.ts:11441 should be corrected in the
+same commit. The test has never been implemented because the
+infrastructure to compile and deploy a secondary program inside
+LiteSVM doesn't exist yet. The 6 pre-existing guarded handlers also
+lack LiteSVM CPI tests for the same reason. The A9 commit extends
+the same pattern (code fix landed, regression tests pending) to the
+28 newly-guarded handlers. Tracked as a Phase 1.6 prereq.
 
 ### Finding 4 — toDxError string-code collapse → CLOSED
 
