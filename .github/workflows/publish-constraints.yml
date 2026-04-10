@@ -1,0 +1,96 @@
+# Publish @sigil-trade/constraints to GitHub Packages (private).
+#
+# Triggers:
+#   - Push to main with changes in packages/constraints/
+#   - Manual dispatch (for retrying failed publishes)
+#
+# Uses the default GITHUB_TOKEN which has write:packages permission
+# for repos in the Sigil-Trade org. No additional secrets needed.
+#
+# Security: no untrusted inputs (event titles, PR bodies, commit
+# messages) are used in run: commands. All inputs are from package.json
+# which is committed code.
+
+name: Publish Constraints Package
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/constraints/**"
+  workflow_dispatch:
+
+concurrency:
+  group: publish-constraints
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    name: Build & Publish @sigil-trade/constraints
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+        with:
+          version: 10
+
+      - name: Install Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 22
+          registry-url: "https://npm.pkg.github.com"
+          scope: "@sigil-trade"
+
+      - name: Install dependencies
+        working-directory: packages/constraints
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        working-directory: packages/constraints
+        run: pnpm build
+
+      - name: Check if version is already published
+        id: version-check
+        working-directory: packages/constraints
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PKG_VERSION=$(node --input-type=module -e "import p from './package.json' with { type: 'json' }; process.stdout.write(p.version)")
+          echo "version=$PKG_VERSION" >> "$GITHUB_OUTPUT"
+
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer $NODE_AUTH_TOKEN" \
+            "https://npm.pkg.github.com/@sigil-trade%2Fconstraints/$PKG_VERSION")
+
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish to GitHub Packages
+        if: steps.version-check.outputs.exists == 'false'
+        working-directory: packages/constraints
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm publish --no-git-checks --access restricted
+
+      - name: Summary
+        env:
+          PKG_VERSION: ${{ steps.version-check.outputs.version }}
+          ALREADY_EXISTS: ${{ steps.version-check.outputs.exists }}
+        run: |
+          echo "## @sigil-trade/constraints" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$ALREADY_EXISTS" = "true" ]; then
+            echo "Version $PKG_VERSION already published — skipped" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Published v$PKG_VERSION to GitHub Packages" >> "$GITHUB_STEP_SUMMARY"
+          fi
