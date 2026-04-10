@@ -1,6 +1,6 @@
 # @usesigil/plugins
 
-Agent framework adapters for [Sigil](https://github.com/Kaleb-Rupe/sigil) — plug Sigil's security guardrails into popular AI agent frameworks.
+Agent framework adapters for [Sigil](https://github.com/Sigil-Trade/sigil) — plug Sigil's security guardrails into popular AI agent frameworks.
 
 ## Available Adapters
 

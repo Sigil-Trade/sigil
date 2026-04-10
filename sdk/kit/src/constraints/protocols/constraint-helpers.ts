@@ -151,6 +151,12 @@ export function makeDiscriminatorConstraint(
       `Expected 8-byte Anchor discriminator, got ${discriminator.length} bytes`,
     );
   }
+  // Match on-chain A5 invariant (constraints.rs:144): reject all-zero discriminators
+  if (discriminator.every((b) => b === 0)) {
+    throw new Error(
+      "Discriminator cannot be all zeros — on-chain A5 invariant rejects this",
+    );
+  }
   return {
     offset: 0,
     operator: ConstraintOperator.Eq,

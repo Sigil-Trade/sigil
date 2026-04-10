@@ -1,6 +1,6 @@
 # @usesigil/custody
 
-TEE wallet custody adapters for [Sigil](https://github.com/Kaleb-Rupe/sigil) — hardware-enclave signing where the private key never leaves the TEE.
+TEE wallet custody adapters for [Sigil](https://github.com/Sigil-Trade/sigil) — hardware-enclave signing where the private key never leaves the TEE.
 
 ## Adapters
 

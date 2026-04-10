@@ -619,7 +619,7 @@ describe("instruction-constraints", () => {
           {
             programId: jupiterProgramId,
             dataConstraints: [
-              { offset: 0, operator: { eq: {} }, value: Buffer.from([0x01]) },
+              { offset: 0, operator: { eq: {} }, value: Buffer.from([0x01, 0, 0, 0, 0, 0, 0, 0]) },
             ],
             accountConstraints: [],
           },
@@ -665,7 +665,7 @@ describe("instruction-constraints", () => {
         entries.push({
           programId: Keypair.generate().publicKey,
           dataConstraints: [
-            { offset: 0, operator: { eq: {} }, value: Buffer.from([0x01]) },
+            { offset: 0, operator: { eq: {} }, value: Buffer.from([0x01, 0, 0, 0, 0, 0, 0, 0]) },
           ],
           accountConstraints: [],
         });
@@ -904,14 +904,16 @@ describe("instruction-constraints", () => {
     // All updates/closes now go through the queue+apply path.
 
     it("queue → apply after timelock expires", async () => {
+      // A5 invariant: first DC must be offset=0, Eq, >=8 bytes, non-zero.
+      // Use a distinct discriminator to prove the update took effect.
       const newEntries = [
         {
           programId: jupiterProgramId,
           dataConstraints: [
             {
               offset: 0,
-              operator: { ne: {} },
-              value: Buffer.from([0x00]),
+              operator: { eq: {} },
+              value: Buffer.from([0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7, 0xd8]),
             },
           ],
           accountConstraints: [],
@@ -972,7 +974,7 @@ describe("instruction-constraints", () => {
           {
             programId: jupiterProgramId,
             dataConstraints: [
-              { offset: 0, operator: { eq: {} }, value: Buffer.from([0x01]) },
+              { offset: 0, operator: { eq: {} }, value: Buffer.from([0x01, 0, 0, 0, 0, 0, 0, 0]) },
             ],
             accountConstraints: [],
           },
@@ -1265,7 +1267,7 @@ describe("instruction-constraints", () => {
         {
           programId: jupiterProgramId,
           dataConstraints: [
-            { offset: 0, operator: { eq: {} }, value: Buffer.from([0xff]) },
+            { offset: 0, operator: { eq: {} }, value: Buffer.from([0xff, 0, 0, 0, 0, 0, 0, 0]) },
           ],
           accountConstraints: [],
         },
@@ -1313,7 +1315,7 @@ describe("instruction-constraints", () => {
           {
             programId: jupiterProgramId,
             dataConstraints: [
-              { offset: 0, operator: { eq: {} }, value: Buffer.from([0xff]) },
+              { offset: 0, operator: { eq: {} }, value: Buffer.from([0xff, 0, 0, 0, 0, 0, 0, 0]) },
             ],
             accountConstraints: [],
           },
@@ -1804,7 +1806,7 @@ describe("instruction-constraints", () => {
           {
             programId: signedTestProgram,
             dataConstraints: [
-              { offset: 0, operator: { eq: {} }, value: Buffer.from([0x01]) },
+              { offset: 0, operator: { eq: {} }, value: Buffer.from([0x01, 0, 0, 0, 0, 0, 0, 0]) },
               { offset: 1, operator: { ne: {} }, value: Buffer.from([0x02]) },
               {
                 offset: 2,
@@ -2043,7 +2045,7 @@ describe("instruction-constraints", () => {
           {
             programId: program.programId,
             dataConstraints: [
-              { offset: 0, operator: { eq: {} }, value: Buffer.from([0xaa]) },
+              { offset: 0, operator: { eq: {} }, value: Buffer.from([0xaa, 0, 0, 0, 0, 0, 0, 0]) },
             ],
             accountConstraints: [],
           },
@@ -2092,7 +2094,7 @@ describe("instruction-constraints", () => {
           {
             programId: jupiterProgramId, // only constrained program
             dataConstraints: [
-              { offset: 0, operator: { eq: {} }, value: Buffer.from([0x01]) },
+              { offset: 0, operator: { eq: {} }, value: Buffer.from([0x01, 0, 0, 0, 0, 0, 0, 0]) },
             ],
             accountConstraints: [],
           },
@@ -2227,7 +2229,7 @@ describe("instruction-constraints", () => {
           {
             programId: jupiterProgramId,
             dataConstraints: [
-              { offset: 0, operator: { eq: {} }, value: Buffer.from([0x01]) },
+              { offset: 0, operator: { eq: {} }, value: Buffer.from([0x01, 0, 0, 0, 0, 0, 0, 0]) },
             ],
             accountConstraints: [],
           },
@@ -2235,14 +2237,14 @@ describe("instruction-constraints", () => {
         false,
       );
 
-      // Queue first update
+      // Queue first update — distinct 8-byte discriminator to prove update worked
       queueConstraintsUpdateMultiIx(
         program, svm, owner.payer, tlVault, tlPolicy, tlConstraints,
         [
           {
             programId: jupiterProgramId,
             dataConstraints: [
-              { offset: 0, operator: { ne: {} }, value: Buffer.from([0x00]) },
+              { offset: 0, operator: { eq: {} }, value: Buffer.from([0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8]) },
             ],
             accountConstraints: [],
           },
@@ -2250,7 +2252,7 @@ describe("instruction-constraints", () => {
         false,
       );
 
-      // Queue second update → should fail
+      // Queue second update → should fail (pending already exists)
       try {
         queueConstraintsUpdateMultiIx(
           program, svm, owner.payer, tlVault, tlPolicy, tlConstraints,
@@ -2261,7 +2263,7 @@ describe("instruction-constraints", () => {
                 {
                   offset: 0,
                   operator: { eq: {} },
-                  value: Buffer.from([0x02]),
+                  value: Buffer.from([0xb1, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7, 0xb8]),
                 },
               ],
               accountConstraints: [],
@@ -2415,7 +2417,7 @@ describe("instruction-constraints", () => {
       {
         programId: jupiterProgramId,
         dataConstraints: [
-          { offset: 0, operator: { eq: {} }, value: Buffer.from([0xaa]) },
+          { offset: 0, operator: { eq: {} }, value: Buffer.from([0xaa, 0, 0, 0, 0, 0, 0, 0]) },
         ],
         accountConstraints: [],
       },

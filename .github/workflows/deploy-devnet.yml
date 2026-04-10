@@ -255,7 +255,7 @@ jobs:
         run: |
           set -e
           solana-verify verify-from-repo \
-            https://github.com/Kaleb-Rupe/sigil \
+            https://github.com/Sigil-Trade/sigil \
             --program-id 4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL \
             --library-name sigil \
             --mount-path . \

@@ -2,7 +2,7 @@
   "$schema": "https://unpkg.com/@changesets/config@3.1.1/schema.json",
   "changelog": [
     "@changesets/changelog-github",
-    { "repo": "Kaleb-Rupe/sigil" }
+    { "repo": "Sigil-Trade/sigil" }
   ],
   "commit": false,
   "fixed": [],
