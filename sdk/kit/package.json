@@ -32,10 +32,6 @@
     "./dashboard": {
       "import": "./dist/dashboard/index.js",
       "types": "./dist/dashboard/index.d.ts"
-    },
-    "./constraints": {
-      "import": "./dist/constraints/index.js",
-      "types": "./dist/constraints/index.d.ts"
     }
   },
   "files": [
