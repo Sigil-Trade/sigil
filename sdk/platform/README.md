@@ -154,7 +154,7 @@ interface ActionMetadata {
 
 - X/Twitter: [@MightieMags](https://x.com/MightieMags)
 - Telegram: [MightyMags](https://t.me/MightyMags)
-- Issues: [GitHub Issues](https://github.com/Kaleb-Rupe/sigil/issues)
+- Issues: [GitHub Issues](https://github.com/Sigil-Trade/sigil/issues)
 
 ## License
 

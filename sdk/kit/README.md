@@ -181,9 +181,9 @@ import { provisionVault, createDevnetRpc } from "@usesigil/kit/testing/devnet";
 
 ## Links
 
-- [GitHub](https://github.com/Kaleb-Rupe/sigil)
+- [GitHub](https://github.com/Sigil-Trade/sigil)
 - [npm](https://www.npmjs.com/package/@usesigil/kit)
-- [Issues](https://github.com/Kaleb-Rupe/sigil/issues)
+- [Issues](https://github.com/Sigil-Trade/sigil/issues)
 
 ## License
 

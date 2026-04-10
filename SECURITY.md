@@ -17,7 +17,7 @@
 Please report security issues via one of the following channels:
 
 - **Telegram:** [@MightyMags](https://t.me/MightyMags) (preferred for urgent issues)
-- **Email:** Open a [private security advisory](https://github.com/Kaleb-Rupe/sigil/security/advisories/new) on this repository
+- **Email:** Open a [private security advisory](https://github.com/Sigil-Trade/sigil/security/advisories/new) on this repository
 
 Include as much detail as possible:
 

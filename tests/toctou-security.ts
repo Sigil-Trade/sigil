@@ -504,14 +504,15 @@ describe("TOCTOU Security Fix", () => {
       program.programId,
     );
 
+    // A5 invariant: first DC must be offset=0, Eq, >=8 bytes, non-zero.
     const newEntries = [
       {
         programId: jupiterProgramId,
         dataConstraints: [
           {
             offset: 0,
-            operator: { ne: {} },
-            value: Buffer.from([0x00]),
+            operator: { eq: {} },
+            value: Buffer.from([0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8]),
           },
         ],
         accountConstraints: [],

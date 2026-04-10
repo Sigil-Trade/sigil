@@ -8,7 +8,7 @@
 
 Your policies are enforced by Solana validators, not software promises.
 
-[![CI](https://github.com/Kaleb-Rupe/sigil/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Kaleb-Rupe/sigil/actions/workflows/ci.yml)
+[![CI](https://github.com/Sigil-Trade/sigil/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Sigil-Trade/sigil/actions/workflows/ci.yml)
 ![Tests](https://img.shields.io/badge/tests-1826-brightgreen)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 
