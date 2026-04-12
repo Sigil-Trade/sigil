@@ -37,10 +37,7 @@ pub struct CreatePostAssertions<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handler(
-    ctx: Context<CreatePostAssertions>,
-    entries: Vec<PostAssertionEntry>,
-) -> Result<()> {
+pub fn handler(ctx: Context<CreatePostAssertions>, entries: Vec<PostAssertionEntry>) -> Result<()> {
     crate::reject_cpi!();
 
     // Validate entries
@@ -63,7 +60,10 @@ pub fn handler(
         zc.assertion_mode = entry.assertion_mode;
 
         // Copy expected value (padded to MAX_CONSTRAINT_VALUE_LEN)
-        let len = entry.expected_value.len().min(crate::state::constraints::MAX_CONSTRAINT_VALUE_LEN);
+        let len = entry
+            .expected_value
+            .len()
+            .min(crate::state::constraints::MAX_CONSTRAINT_VALUE_LEN);
         zc.expected_value[..len].copy_from_slice(&entry.expected_value[..len]);
     }
 

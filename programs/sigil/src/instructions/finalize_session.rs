@@ -526,10 +526,7 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
 
                         // Find the target account in remaining_accounts
                         let target = remaining.iter().find(|a| a.key() == target_pubkey);
-                        require!(
-                            target.is_some(),
-                            SigilError::InvalidPostAssertionIndex
-                        );
+                        require!(target.is_some(), SigilError::InvalidPostAssertionIndex);
                         let target = target.unwrap();
                         let target_data = target.try_borrow_data()?;
 
