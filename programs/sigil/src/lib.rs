@@ -11,6 +11,7 @@ pub mod state;
 mod certora;
 
 use instructions::*;
+use state::post_assertions::PostAssertionEntry;
 
 declare_id!("4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL");
 
@@ -244,6 +245,22 @@ pub mod sigil {
     /// Cancel a queued constraint closure.
     pub fn cancel_close_constraints(ctx: Context<CancelCloseConstraints>) -> Result<()> {
         instructions::cancel_close_constraints::handler(ctx)
+    }
+
+    // ─── Post-Execution Assertions (Phase B) ─────────────────────────────────
+
+    /// Create post-execution assertions for a vault.
+    /// Assertions check account data bytes AFTER DeFi instructions execute.
+    pub fn create_post_assertions(
+        ctx: Context<CreatePostAssertions>,
+        entries: Vec<PostAssertionEntry>,
+    ) -> Result<()> {
+        instructions::create_post_assertions::handler(ctx, entries)
+    }
+
+    /// Close post-execution assertions for a vault. Returns rent to owner.
+    pub fn close_post_assertions(ctx: Context<ClosePostAssertions>) -> Result<()> {
+        instructions::close_post_assertions::handler(ctx)
     }
 
     /// Transfer tokens from the vault to an allowed destination.

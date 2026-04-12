@@ -493,6 +493,76 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
         }
     }
 
+    // ─── Post-Execution Assertions (Phase B1) ─────────────────────────────
+    // If the vault has post-assertions configured, verify account state
+    // AFTER the DeFi instruction executed. Uses remaining_accounts to
+    // pass target accounts for byte-level comparison.
+    let policy_ref = &ctx.accounts.policy;
+    if !is_expired && policy_ref.has_post_assertions != 0 {
+        // Post-assertions PDA is expected as the LAST remaining_account
+        let remaining = &ctx.remaining_accounts;
+        if !remaining.is_empty() {
+            let assertions_info = &remaining[remaining.len() - 1];
+
+            // Verify the assertions PDA is owned by this program
+            if assertions_info.owner == &crate::ID {
+                let assertions_data = assertions_info.try_borrow_data()?;
+                let struct_size = core::mem::size_of::<PostExecutionAssertions>();
+
+                if assertions_data.len() >= 8 + struct_size {
+                    let assertions: &PostExecutionAssertions =
+                        bytemuck::from_bytes(&assertions_data[8..8 + struct_size]);
+
+                    // Verify PDA belongs to this vault
+                    require!(
+                        assertions.vault == vault_key.to_bytes(),
+                        SigilError::PostAssertionFailed
+                    );
+
+                    let count = assertions.entry_count as usize;
+                    for i in 0..count {
+                        let entry = &assertions.entries[i];
+                        let target_pubkey = Pubkey::new_from_array(entry.target_account);
+
+                        // Find the target account in remaining_accounts
+                        let target = remaining.iter().find(|a| a.key() == target_pubkey);
+                        require!(
+                            target.is_some(),
+                            SigilError::InvalidPostAssertionIndex
+                        );
+                        let target = target.unwrap();
+                        let target_data = target.try_borrow_data()?;
+
+                        // Phase B1: absolute value assertions only (mode == 0)
+                        if entry.assertion_mode == 0 {
+                            let offset = entry.offset as usize;
+                            let len = entry.value_len as usize;
+
+                            if offset + len <= target_data.len() {
+                                let actual = &target_data[offset..offset + len];
+                                let expected = &entry.expected_value[..len];
+                                let operator = ConstraintOperator::try_from(entry.operator)
+                                    .map_err(|_| error!(SigilError::InvalidConstraintOperator))?;
+
+                                let passed = crate::instructions::integrations::generic_constraints::bytes_match(
+                                    actual,
+                                    &operator,
+                                    expected,
+                                );
+
+                                require!(passed, SigilError::PostAssertionFailed);
+                            } else {
+                                // Target account data too short for the configured offset
+                                return Err(error!(SigilError::PostAssertionFailed));
+                            }
+                        }
+                        // Phase B2/B3 assertion modes handled in future commits
+                    }
+                }
+            }
+        }
+    }
+
     // Analytics: count expired sessions for success rate metric.
     if is_expired {
         vault.total_failed_transactions = vault

@@ -294,3 +294,26 @@ pub struct CloseConstraintsApplied {
 pub struct CloseConstraintsCancelled {
     pub vault: Pubkey,
 }
+
+// --- Post-execution assertions (Phase B) ---
+
+#[event]
+pub struct PostAssertionsCreated {
+    pub vault: Pubkey,
+    pub entry_count: u8,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct PostAssertionsClosed {
+    pub vault: Pubkey,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct PostAssertionChecked {
+    pub vault: Pubkey,
+    pub entry_index: u8,
+    pub passed: bool,
+    pub timestamp: i64,
+}
