@@ -38,6 +38,7 @@ import type {
 
 import * as reads from "./reads.js";
 import * as mutations from "./mutations.js";
+import * as constraintReads from "./constraint-reads.js";
 import { discoverVaults as discoverVaultsImpl } from "./discover.js";
 
 // Re-export all types for consumers
@@ -63,6 +64,16 @@ export type {
   HealthCheck,
   ProtocolBreakdownEntry,
 } from "./types.js";
+
+export type { ConstraintsPdaInfo } from "./constraint-reads.js";
+export {
+  findConstraintsPda,
+  findPendingConstraintsPda,
+  findPendingCloseConstraintsPda,
+  fetchConstraints,
+  fetchPendingConstraintsUpdate,
+  fetchPendingCloseConstraints,
+} from "./constraint-reads.js";
 
 /**
  * Owner-side client for Sigil vault management.
@@ -370,6 +381,28 @@ export class OwnerClient {
       this.network,
       opts,
     );
+  }
+
+  // ─── Constraint Reads (Phase A1.5) ──────────────────────────────────────
+
+  /** Get the constraints PDA address for this vault. */
+  async findConstraintsPda(): Promise<Address> {
+    return constraintReads.findConstraintsPda(this.vault);
+  }
+
+  /** Fetch the InstructionConstraints account (raw bytes). */
+  async fetchConstraints() {
+    return constraintReads.fetchConstraints(this.rpc, this.vault);
+  }
+
+  /** Fetch the PendingConstraintsUpdate account (raw bytes). */
+  async fetchPendingConstraintsUpdate() {
+    return constraintReads.fetchPendingConstraintsUpdate(this.rpc, this.vault);
+  }
+
+  /** Fetch the PendingCloseConstraints account (raw bytes). */
+  async fetchPendingCloseConstraints() {
+    return constraintReads.fetchPendingCloseConstraints(this.rpc, this.vault);
   }
 
   // ─── Constraints (timelocked for modifications/deletion) ────────────────────
