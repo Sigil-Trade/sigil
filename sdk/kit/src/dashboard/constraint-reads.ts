@@ -23,7 +23,9 @@ import { SIGIL_PROGRAM_ADDRESS } from "../generated/programs/sigil.js";
 // ─── PDA Derivation ─────────────────────────────────────────────────────
 
 const CONSTRAINTS_SEED = new TextEncoder().encode("constraints");
-const PENDING_CONSTRAINTS_SEED = new TextEncoder().encode("pending_constraints");
+const PENDING_CONSTRAINTS_SEED = new TextEncoder().encode(
+  "pending_constraints",
+);
 const PENDING_CLOSE_CONSTRAINTS_SEED = new TextEncoder().encode(
   "pending_close_constraints",
 );
