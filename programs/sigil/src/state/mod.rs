@@ -27,8 +27,9 @@ pub use vault::*;
 /// Maximum number of agents per vault
 pub const MAX_AGENTS_PER_VAULT: usize = 10;
 
-/// Full permission bitmask — bits 0-20 (21 ActionType variants).
-pub const FULL_PERMISSIONS: u64 = (1u64 << 21) - 1;
+/// Full capability level — Operator (spending + non-spending).
+/// Used in tests and presets where the agent should have full access.
+pub const FULL_CAPABILITY: u8 = 2; // CAPABILITY_OPERATOR
 
 /// Maximum number of allowed protocols in a policy
 pub const MAX_ALLOWED_PROTOCOLS: usize = 10;
@@ -251,125 +252,8 @@ pub enum PositionEffect {
     None,
 }
 
-/// Action types that agents can request
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
-pub enum ActionType {
-    /// Token swap (e.g., Jupiter)
-    Swap,
-    /// Open a perpetual position (e.g., Flash Trade, Drift)
-    OpenPosition,
-    /// Close a perpetual position
-    ClosePosition,
-    /// Increase position size
-    IncreasePosition,
-    /// Decrease position size
-    DecreasePosition,
-    /// Deposit into a lending/yield protocol
-    Deposit,
-    /// Withdraw from a lending/yield protocol
-    Withdraw,
-    /// Direct token transfer to an allowed destination
-    Transfer,
-    /// Add collateral to an existing position
-    AddCollateral,
-    /// Remove collateral from an existing position
-    RemoveCollateral,
-    /// Place a trigger order (take-profit / stop-loss)
-    PlaceTriggerOrder,
-    /// Edit an existing trigger order
-    EditTriggerOrder,
-    /// Cancel a trigger order
-    CancelTriggerOrder,
-    /// Place a limit order (collateral committed on-chain)
-    PlaceLimitOrder,
-    /// Edit an existing limit order
-    EditLimitOrder,
-    /// Cancel a limit order (collateral returned)
-    CancelLimitOrder,
-    /// Swap token then open a perpetual position
-    SwapAndOpenPosition,
-    /// Close a perpetual position then swap output token
-    CloseAndSwapPosition,
-    /// Create an escrow deposit between two vaults
-    CreateEscrow,
-    /// Settle an escrow (destination agent claims funds)
-    SettleEscrow,
-    /// Refund an escrow (source agent/owner reclaims after expiry)
-    RefundEscrow,
-}
-
-impl ActionType {
-    /// Returns the permission bit index for this action type.
-    /// Used with the per-agent permission bitmask in AgentEntry.
-    pub fn permission_bit(&self) -> u8 {
-        match self {
-            ActionType::Swap => 0,
-            ActionType::OpenPosition => 1,
-            ActionType::ClosePosition => 2,
-            ActionType::IncreasePosition => 3,
-            ActionType::DecreasePosition => 4,
-            ActionType::Deposit => 5,
-            ActionType::Withdraw => 6,
-            ActionType::Transfer => 7,
-            ActionType::AddCollateral => 8,
-            ActionType::RemoveCollateral => 9,
-            ActionType::PlaceTriggerOrder => 10,
-            ActionType::EditTriggerOrder => 11,
-            ActionType::CancelTriggerOrder => 12,
-            ActionType::PlaceLimitOrder => 13,
-            ActionType::EditLimitOrder => 14,
-            ActionType::CancelLimitOrder => 15,
-            ActionType::SwapAndOpenPosition => 16,
-            ActionType::CloseAndSwapPosition => 17,
-            ActionType::CreateEscrow => 18,
-            ActionType::SettleEscrow => 19,
-            ActionType::RefundEscrow => 20,
-        }
-    }
-
-    /// Whether this action spends tokens from the vault (fees, delegation,
-    /// and spend tracking apply). Risk-reducing actions (ClosePosition,
-    /// DecreasePosition, CloseAndSwapPosition) return collateral TO the
-    /// vault and are therefore non-spending.
-    pub fn is_spending(&self) -> bool {
-        matches!(
-            self,
-            ActionType::Swap
-                | ActionType::OpenPosition
-                | ActionType::IncreasePosition
-                | ActionType::Deposit
-                | ActionType::Transfer
-                | ActionType::AddCollateral
-                | ActionType::PlaceLimitOrder
-                | ActionType::SwapAndOpenPosition
-                | ActionType::CreateEscrow
-        )
-    }
-
-    /// The effect of this action on the vault's open position counter.
-    pub fn position_effect(&self) -> PositionEffect {
-        match self {
-            ActionType::OpenPosition
-            | ActionType::SwapAndOpenPosition
-            | ActionType::PlaceLimitOrder => PositionEffect::Increment,
-            ActionType::ClosePosition
-            | ActionType::CloseAndSwapPosition
-            | ActionType::CancelLimitOrder => PositionEffect::Decrement,
-            _ => PositionEffect::None,
-        }
-    }
-
-    /// Whether this action requires token delegation to the agent.
-    pub fn needs_delegation(&self) -> bool {
-        self.is_spending()
-    }
-
-    /// Whether this action is an escrow-specific action.
-    /// Escrow actions use standalone instructions, not the validate→finalize composition flow.
-    pub fn is_escrow_action(&self) -> bool {
-        matches!(
-            self,
-            ActionType::CreateEscrow | ActionType::SettleEscrow | ActionType::RefundEscrow
-        )
-    }
-}
+// ActionType enum REMOVED — spending classification and position tracking
+// now derive from matched ConstraintEntryZC fields (is_spending, position_effect).
+// See RFC-ACTIONTYPE-ELIMINATION.md for design rationale.
+// Agent permissions use the 2-bit capability field (CAPABILITY_OBSERVER / CAPABILITY_OPERATOR)
+// instead of the old 21-bit bitmask.

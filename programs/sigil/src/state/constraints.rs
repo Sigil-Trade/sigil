@@ -55,6 +55,10 @@ pub struct ConstraintEntry {
     pub program_id: Pubkey,                          // 32
     pub data_constraints: Vec<DataConstraint>,       // bounded to MAX_DATA_CONSTRAINTS_PER_ENTRY
     pub account_constraints: Vec<AccountConstraint>, // bounded to MAX_ACCOUNT_CONSTRAINTS_PER_ENTRY
+    /// Spending classification: 1=Spending, 2=NonSpending. Required (0 rejected).
+    pub is_spending: u8,
+    /// Position effect: 0=None, 1=Increment, 2=Decrement.
+    pub position_effect: u8,
 }
 
 // ─── Zero-copy types (on-chain account layout) ─────────────────────────────
@@ -82,25 +86,35 @@ pub struct ConstraintEntryZC {
     pub program_id: [u8; 32], // 32
     pub data_constraints: [DataConstraintZC; MAX_DATA_CONSTRAINTS_PER_ENTRY], // 8 * 40 = 320
     pub account_constraints: [AccountConstraintZC; MAX_ACCOUNT_CONSTRAINTS_PER_ENTRY], // 5 * 40 = 200
-    pub data_count: u8,    // 1 (active data constraints in this entry)
-    pub account_count: u8, // 1 (active account constraints in this entry)
-    pub _padding: [u8; 6], // 6 (align: 32+320+200+1+1+6=560)
+    pub data_count: u8,       // 1 (active data constraints in this entry)
+    pub account_count: u8,    // 1 (active account constraints in this entry)
+    /// Spending classification: 0=Unset (treated as spending), 1=Spending, 2=NonSpending.
+    /// Set by vault owner at constraint creation time. The constraint engine returns
+    /// this value when it matches an entry — replaces ActionType.is_spending().
+    pub is_spending: u8,      // 1 (was padding[0])
+    /// Position tracking: 0=None, 1=Increment (opens position), 2=Decrement (closes position).
+    /// Replaces ActionType.position_effect().
+    pub position_effect: u8,  // 1 (was padding[1])
+    pub _padding: [u8; 4],    // 4 (reduced from 6: 32+320+200+1+1+1+1+4=560)
 }
-// = 560 bytes
+// = 560 bytes (unchanged)
 
 #[account(zero_copy)]
 pub struct InstructionConstraints {
     pub vault: [u8; 32],                                      // 32
     pub entries: [ConstraintEntryZC; MAX_CONSTRAINT_ENTRIES], // 64 * 560 = 35,840
     pub entry_count: u8,                                      // 1 (active entries, 0..=64)
-    pub strict_mode: u8,   // 1 (0 = permissive, non-zero = strict)
-    pub bump: u8,          // 1
-    pub _padding: [u8; 5], // 5 (align: 32+35840+1+1+1+5=35880)
+    pub strict_mode: u8,          // 1 (0 = permissive, non-zero = strict)
+    pub bump: u8,                 // 1
+    /// Constraint schema version. Always 1 for new deployments.
+    pub constraint_version: u8,   // 1 (was padding[0])
+    pub _padding: [u8; 4],        // 4 (reduced from 5: 32+35840+1+1+1+1+4=35880)
 }
 
 impl InstructionConstraints {
     // SIZE = 8 (discriminator) + 35,880 (fields) = 35,888 bytes
-    pub const SIZE: usize = 8 + 32 + (560 * MAX_CONSTRAINT_ENTRIES) + 1 + 1 + 1 + 5;
+    // 8 (disc) + 32 (vault) + 35840 (entries) + 1 (entry_count) + 1 (strict_mode) + 1 (bump) + 1 (constraint_version) + 4 (padding) = 35888
+    pub const SIZE: usize = 8 + 32 + (560 * MAX_CONSTRAINT_ENTRIES) + 1 + 1 + 1 + 1 + 4;
 
     /// Validate constraint entries in their Borsh-deserialized form (instruction parameters).
     /// Called before pack_entries() converts them to the zero-copy layout.
@@ -169,6 +183,17 @@ impl InstructionConstraints {
                     );
                 }
             }
+
+            // is_spending must be 1 (Spending) or 2 (NonSpending). 0 (Unset) rejected.
+            require!(
+                entry.is_spending == 1 || entry.is_spending == 2,
+                SigilError::InvalidConstraintConfig
+            );
+            // position_effect must be 0-2
+            require!(
+                entry.position_effect <= 2,
+                SigilError::InvalidConstraintConfig
+            );
         }
         Ok(())
     }

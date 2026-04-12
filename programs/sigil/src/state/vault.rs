@@ -1,14 +1,23 @@
 use super::{VaultStatus, MAX_AGENTS_PER_VAULT};
 use anchor_lang::prelude::*;
 
+/// Agent capability levels (replaces 21-bit ActionType bitmask).
+/// 0 = Disabled, 1 = Observer (non-spending only), 2 = Operator (full access), 3 = Reserved.
+pub const CAPABILITY_DISABLED: u8 = 0;
+pub const CAPABILITY_OBSERVER: u8 = 1;
+pub const CAPABILITY_OPERATOR: u8 = 2;
+
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug, PartialEq)]
 pub struct AgentEntry {
     pub pubkey: Pubkey,          // 32 bytes
-    pub permissions: u64,        // 8 bytes
+    /// Agent capability: 0=Disabled, 1=Observer (non-spending), 2=Operator (full).
+    /// Replaces the 21-bit ActionType permission bitmask.
+    pub capability: u8,          // 1 byte (was permissions: u64, 8 bytes)
     pub spending_limit_usd: u64, // 8 bytes — 0 = no per-agent limit
     pub paused: bool,            // 1 byte  — owner-controlled suspension
+    pub _reserved: [u8; 7],      // 7 bytes — maintain layout size for account stability
 }
-// Total: 49 bytes per entry
+// Total: 50 bytes per entry (32 + 1 + 8 + 1 + 7 = 49... wait, we need to maintain the same total)
 
 #[account]
 pub struct AgentVault {
@@ -133,9 +142,18 @@ impl AgentVault {
         self.agents.iter().find(|a| a.pubkey == *signer)
     }
 
-    pub fn has_permission(&self, signer: &Pubkey, action_type: &ActionType) -> bool {
+    /// Check if an agent has sufficient capability for the requested operation.
+    /// is_spending: whether the matched constraint entry is classified as spending.
+    /// Returns true if the agent's capability level permits the operation.
+    pub fn has_capability(&self, signer: &Pubkey, is_spending: bool) -> bool {
         self.get_agent(signer)
-            .map(|a| a.permissions & (1u64 << action_type.permission_bit()) != 0)
+            .map(|a| {
+                if is_spending {
+                    a.capability >= CAPABILITY_OPERATOR
+                } else {
+                    a.capability >= CAPABILITY_OBSERVER
+                }
+            })
             .unwrap_or(false)
     }
 
