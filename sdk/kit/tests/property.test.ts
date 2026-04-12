@@ -231,15 +231,16 @@ describe("Property Tests — Category A: Exported Function Properties", () => {
   // ── hasPermission ─────────────────────────────────────────────────────
 
   describe("hasPermission", () => {
-    it("FULL_PERMISSIONS = (1n << 21n) - 1n", () => {
-      expect(FULL_PERMISSIONS).to.equal((1n << 21n) - 1n);
+    it("FULL_CAPABILITY = 2n (backward-compat alias FULL_PERMISSIONS)", () => {
+      expect(FULL_PERMISSIONS).to.equal(2n);
     });
 
-    it("FULL_PERMISSIONS grants all 21 action types", () => {
+    it("legacy all-bits grants all 21 action types", () => {
+      const ALL_BITS = (1n << 21n) - 1n;
       for (const key of ACTION_KEYS) {
-        expect(hasPermission(FULL_PERMISSIONS, key)).to.equal(
+        expect(hasPermission(ALL_BITS, key)).to.equal(
           true,
-          `FULL_PERMISSIONS should grant ${key}`,
+          `ALL_BITS should grant ${key}`,
         );
       }
     });
@@ -1324,7 +1325,7 @@ describe("Adversarial SDK Attack Tests", () => {
       }
     });
 
-    it("FULL_PERMISSIONS is exactly the OR of all 21 bits", () => {
+    it("legacy all-bits is exactly the OR of all 21 bits", () => {
       const ACTION_KEYS = [
         "swap",
         "openPosition",
@@ -1349,7 +1350,7 @@ describe("Adversarial SDK Attack Tests", () => {
         "refundEscrow",
       ];
       const combined = stringsToPermissions(ACTION_KEYS);
-      expect(combined).to.equal(FULL_PERMISSIONS);
+      expect(combined).to.equal((1n << 21n) - 1n); // legacy all-bits value
     });
   });
 

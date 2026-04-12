@@ -40,7 +40,7 @@ export interface InscribeOptions {
   owner: TransactionSigner;
   /** Agent signer to register in the vault */
   agent: TransactionSigner;
-  /** Agent permissions bitmask. Default: FULL_PERMISSIONS */
+  /** Agent capability bitmask. Default: FULL_CAPABILITY */
   permissions?: bigint;
   /** Agent spending limit in USD (6 decimals). Default: 500_000_000 ($500) */
   spendingLimitUsd?: bigint;

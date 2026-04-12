@@ -22,7 +22,7 @@ import { resolveVaultState } from "../../src/state-resolver.js";
 import { fetchMaybeAgentVault } from "../../src/generated/accounts/agentVault.js";
 import { getQueuePolicyUpdateInstructionAsync } from "../../src/generated/instructions/queuePolicyUpdate.js";
 import { getCancelPendingPolicyInstructionAsync } from "../../src/generated/instructions/cancelPendingPolicy.js";
-import { USDC_MINT_DEVNET, FULL_PERMISSIONS } from "../../src/types.js";
+import { USDC_MINT_DEVNET, FULL_CAPABILITY } from "../../src/types.js";
 import type { Instruction } from "@solana/kit";
 
 // Skip entire file if no devnet env
@@ -83,12 +83,12 @@ describe("Kit SDK Devnet — Vault Lifecycle", function () {
     const ownerFromVault = state.vault.owner;
     expect(ownerFromVault).to.equal(owner.address);
 
-    // Check agent is registered with FULL_PERMISSIONS
+    // Check agent is registered with FULL_CAPABILITY
     const agentEntry = state.vault.agents.find(
       (a) => a.pubkey === agent.address,
     );
     expect(agentEntry).to.exist;
-    expect(agentEntry!.permissions).to.equal(FULL_PERMISSIONS);
+    expect(agentEntry!.permissions).to.equal(FULL_CAPABILITY);
 
     // Check daily spending cap
     expect(Number(state.policy.dailySpendingCapUsd)).to.equal(500_000_000);

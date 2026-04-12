@@ -15,7 +15,11 @@ import {
   type FixedSizeEncoder,
 } from "@solana/kit";
 
-/** Action types that agents can request */
+/**
+ * @deprecated v6: ActionType enum is eliminated. Spending is determined by amount > 0.
+ * This enum is retained for wire-format backward compatibility with deployed programs.
+ * New code should not reference ActionType directly.
+ */
 export enum ActionType {
   Swap,
   OpenPosition,

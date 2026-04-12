@@ -196,7 +196,7 @@ describe("devnet-smoke-test", () => {
       program.programId,
     );
     await program.methods
-      .registerAgent(agent.publicKey, new BN(2097151), new BN(0)) // FULL_PERMISSIONS
+      .registerAgent(agent.publicKey, 2, new BN(0)) // FULL_CAPABILITY
       .accounts({
         owner: owner.publicKey,
         vault: vaultPda,
@@ -265,11 +265,9 @@ describe("devnet-smoke-test", () => {
     // Build validate instruction
     const validateIx = await program.methods
       .validateAndAuthorize(
-        { swap: {} },
         usdcMint,
         new BN(50_000_000), // 50 tokens
         jupiterProgramId,
-        null,
         new BN(0),
       )
       .accounts({
@@ -376,7 +374,7 @@ describe("devnet-smoke-test", () => {
   it("8. reactivate_vault", async () => {
     // revokeAgent removed the agent, so we must provide a new one
     await program.methods
-      .reactivateVault(agent.publicKey, new BN(2097151)) // FULL_PERMISSIONS
+      .reactivateVault(agent.publicKey, 2) // FULL_CAPABILITY
       .accounts({
         owner: owner.publicKey,
         vault: vaultPda,

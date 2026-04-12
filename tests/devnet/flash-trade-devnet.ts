@@ -69,7 +69,7 @@ const FLASH_USDC_DEVNET = new PublicKey(
   "Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr",
 );
 
-const FULL_PERMISSIONS = new BN((1n << 21n) - 1n);
+const FULL_CAPABILITY = 2;
 
 // ─── Test Suite ────────────────────────────────────────────────────────────
 
@@ -242,7 +242,7 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
 
       // Register agent
       await program.methods
-        .registerAgent(agent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: vaultPda,
@@ -317,11 +317,9 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
 
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           FLASH_USDC_DEVNET,
           new BN(500_000), // $0.50
           FLASH_TRADE_DEVNET,
-          null, // no leverage
           new BN(0), // expectedPolicyVersion
         )
         .accounts({
@@ -481,7 +479,6 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
       tracker: PublicKey,
       overlay: PublicKey,
       vaultAta: PublicKey,
-      actionType: any = { swap: {} },
       amount: BN = new BN(5_000_000),
     ): Promise<{
       totalSize: number;
@@ -505,11 +502,9 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
       });
       const validateIx = await program.methods
         .validateAndAuthorize(
-          actionType,
           FLASH_USDC_DEVNET,
           amount,
           FLASH_TRADE_DEVNET,
-          null,
           new BN(0),
         )
         .accounts({
@@ -619,7 +614,7 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
         .rpc();
 
       await program.methods
-        .registerAgent(agent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: vaultPda,
@@ -744,7 +739,6 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
         trackerPda,
         overlayPda,
         vaultFlashUsdcAta,
-        { deposit: {} },
       );
       expect(totalSize).to.be.lessThanOrEqual(1232);
       console.log(
@@ -837,7 +831,7 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
         .rpc();
 
       await program.methods
-        .registerAgent(agent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: pdas.vaultPda,
@@ -877,11 +871,9 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
       });
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           FLASH_USDC_DEVNET,
           new BN(100_000),
           FLASH_TRADE_DEVNET,
-          null,
           new BN(0),
         )
         .accounts({
@@ -979,7 +971,7 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
         .rpc();
 
       await program.methods
-        .registerAgent(agent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: pdas.vaultPda,
@@ -1018,11 +1010,9 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
         });
         const validateIx = await program.methods
           .validateAndAuthorize(
-            { swap: {} },
             FLASH_USDC_DEVNET,
             new BN(100_000),
             randomProgram, // NOT in allowlist
-            null,
             new BN(0),
           )
           .accounts({

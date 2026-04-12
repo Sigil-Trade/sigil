@@ -365,7 +365,7 @@ export async function createFullVault(
   // Register agent (multi-agent: agent pubkey + permissions bitmask + spending limit)
   if (!skipAgent) {
     await program.methods
-      .registerAgent(agent.publicKey, new BN(2097151), new BN(0)) // FULL_PERMISSIONS
+      .registerAgent(agent.publicKey, 2, new BN(0)) // FULL_CAPABILITY
       .accounts({
         owner: owner.publicKey,
         vault: pdas.vaultPda,
@@ -415,8 +415,6 @@ export interface AuthorizeOpts {
   mint: PublicKey;
   amount: BN;
   protocol: PublicKey;
-  actionType?: any;
-  leverageBps?: number | null;
   protocolTreasuryAta?: PublicKey | null;
   feeDestinationAta?: PublicKey | null;
   outputStablecoinAccount?: PublicKey | null;
@@ -446,8 +444,6 @@ export async function buildAuthorizeIx(opts: AuthorizeOpts) {
     mint,
     amount,
     protocol,
-    actionType = { swap: {} },
-    leverageBps = null,
     protocolTreasuryAta = null,
     feeDestinationAta = null,
     outputStablecoinAccount = null,
@@ -472,11 +468,9 @@ export async function buildAuthorizeIx(opts: AuthorizeOpts) {
   );
   return program.methods
     .validateAndAuthorize(
-      actionType,
       mint,
       amount,
       protocol,
-      leverageBps !== null ? (new BN(leverageBps) as any) : null,
       policyVersion,
     )
     .accounts({

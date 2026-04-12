@@ -24,7 +24,6 @@ import type {
 } from "@solana/kit";
 import { compileTransaction, AccountRole } from "@solana/kit";
 
-import { ActionType } from "./generated/types/actionType.js";
 import { VaultStatus } from "./generated/types/vaultStatus.js";
 import { getValidateAndAuthorizeInstructionAsync } from "./generated/instructions/validateAndAuthorize.js";
 import { getFinalizeSessionInstructionAsync } from "./generated/instructions/finalizeSession.js";
@@ -53,8 +52,6 @@ import { deriveAta } from "./x402/transfer-builder.js";
 import {
   type Network,
   isStablecoinMint,
-  hasPermission,
-  isSpendingAction,
   validateNetwork,
   normalizeNetwork,
   toInstruction,
@@ -131,21 +128,8 @@ export interface SealParams {
    * Must be > 0 for spending actions, 0 for non-spending actions.
    */
   amount: bigint;
-  /**
-   * DeFi action type. Determines permission check and spending classification.
-   * Default: `ActionType.Swap`.
-   *
-   * 9 spending: Swap, OpenPosition, IncreasePosition, Deposit, Transfer,
-   *   AddCollateral, PlaceLimitOrder, SwapAndOpenPosition, CreateEscrow.
-   * 12 non-spending: ClosePosition, DecreasePosition, Withdraw, RemoveCollateral,
-   *   PlaceTriggerOrder, EditTriggerOrder, CancelTriggerOrder, EditLimitOrder,
-   *   CancelLimitOrder, CloseAndSwapPosition, SettleEscrow, RefundEscrow.
-   */
-  actionType?: ActionType;
   /** Protocol program address. Auto-detected from first DeFi instruction if omitted. */
   targetProtocol?: Address;
-  /** Declared leverage in basis points (100 = 1x). Advisory — on-chain checks declared value. */
-  leverageBps?: number;
   /** Override compute unit budget. Default: auto-estimated from action type. */
   computeUnits?: number;
   /** Priority fee in microLamports per CU. Default: 0 (no priority fee). */
@@ -173,7 +157,8 @@ export interface SealParams {
 export interface SealResult {
   ok: true;
   transaction: ReturnType<typeof compileTransaction>;
-  actionType: ActionType;
+  /** Whether this action is spending (amount > 0). */
+  isSpending: boolean;
   warnings: string[];
   txSizeBytes: number;
   /** Block height after which the blockhash expires. Sign and send before this. */
@@ -214,29 +199,8 @@ export function replaceAgentAtas(
   }));
 }
 
-const ACTION_TYPE_KEYS: Record<number, string> = {
-  [ActionType.Swap]: "swap",
-  [ActionType.OpenPosition]: "openPosition",
-  [ActionType.ClosePosition]: "closePosition",
-  [ActionType.IncreasePosition]: "increasePosition",
-  [ActionType.DecreasePosition]: "decreasePosition",
-  [ActionType.Deposit]: "deposit",
-  [ActionType.Withdraw]: "withdraw",
-  [ActionType.Transfer]: "transfer",
-  [ActionType.AddCollateral]: "addCollateral",
-  [ActionType.RemoveCollateral]: "removeCollateral",
-  [ActionType.PlaceTriggerOrder]: "placeTriggerOrder",
-  [ActionType.EditTriggerOrder]: "editTriggerOrder",
-  [ActionType.CancelTriggerOrder]: "cancelTriggerOrder",
-  [ActionType.PlaceLimitOrder]: "placeLimitOrder",
-  [ActionType.EditLimitOrder]: "editLimitOrder",
-  [ActionType.CancelLimitOrder]: "cancelLimitOrder",
-  [ActionType.SwapAndOpenPosition]: "swapAndOpenPosition",
-  [ActionType.CloseAndSwapPosition]: "closeAndSwapPosition",
-  [ActionType.CreateEscrow]: "createEscrow",
-  [ActionType.SettleEscrow]: "settleEscrow",
-  [ActionType.RefundEscrow]: "refundEscrow",
-};
+// ACTION_TYPE_KEYS removed — ActionType enum eliminated in v6.
+// Spending is now determined by amount > 0n.
 
 // ─── Shared caches (module-level singletons) ────────────────────────────────
 
@@ -313,28 +277,8 @@ export async function seal(params: SealParams): Promise<SealResult> {
     );
   }
 
-  // Step 3: Determine actionType + spending
-  const actionType = params.actionType ?? ActionType.Swap;
-  const actionKey = ACTION_TYPE_KEYS[actionType];
-  if (!actionKey) {
-    throw new Error(`Unknown ActionType: ${actionType}`);
-  }
-
-  // Escrow actions use standalone instructions, not the validate/finalize composition flow.
-  // On-chain validate_and_authorize rejects escrow actions with InvalidSession.
-  const ESCROW_ACTIONS = new Set([
-    ActionType.CreateEscrow,
-    ActionType.SettleEscrow,
-    ActionType.RefundEscrow,
-  ]);
-  if (ESCROW_ACTIONS.has(actionType)) {
-    throw new Error(
-      `Escrow action "${actionKey}" uses standalone instructions, not seal(). ` +
-        `Use createEscrow/settleEscrow/refundEscrow directly.`,
-    );
-  }
-
-  const spending = isSpendingAction(actionKey);
+  // Step 3: Determine spending from amount (ActionType eliminated in v6)
+  const spending = params.amount > 0n;
   const U64_MAX = 18446744073709551615n;
   if (params.amount < 0n) {
     throw new Error(
@@ -346,14 +290,6 @@ export async function seal(params: SealParams): Promise<SealResult> {
     throw new Error(
       `Amount exceeds u64 maximum, got ${params.amount}. ` +
         `Sigil amounts are unsigned 64-bit integers (0 to ${U64_MAX}).`,
-    );
-  }
-  if (spending && params.amount === 0n) {
-    throw new Error(`Spending action "${actionKey}" requires amount > 0`);
-  }
-  if (!spending && params.amount !== undefined && params.amount !== 0n) {
-    throw new Error(
-      `Non-spending action "${actionKey}" requires amount === 0 (on-chain enforces InvalidNonSpendingAmount)`,
     );
   }
 
@@ -422,9 +358,11 @@ export async function seal(params: SealParams): Promise<SealResult> {
   }
 
   // Step 6: Pre-flight checks
-  // 6a: Permission check (hard error)
-  if (!hasPermission(agentEntry.permissions, actionKey)) {
-    throw new Error(`Agent lacks permission for action "${actionKey}"`);
+  // 6a: Permission check — capability-based (v6: agent must have non-zero capability)
+  if (agentEntry.permissions === 0n) {
+    throw new Error(
+      `Agent ${params.agent.address} has zero capability in vault ${params.vault}`,
+    );
   }
 
   // 6b: Protocol allowlist (hard error)
@@ -477,15 +415,17 @@ export async function seal(params: SealParams): Promise<SealResult> {
     }
   }
 
-  // 6d: Position limit check for increment actions (all 3 PositionEffect::Increment types)
+  // 6d: Position limit check — if vault is at max positions, warn.
+  // Without ActionType, we cannot know if this is a position-opening action.
+  // On-chain enforces the hard limit; SDK provides a best-effort warning.
   if (
-    (actionType === ActionType.OpenPosition ||
-      actionType === ActionType.SwapAndOpenPosition ||
-      actionType === ActionType.PlaceLimitOrder) &&
-    state.vault.openPositions >= state.policy.maxConcurrentPositions
+    spending &&
+    state.vault.openPositions >= state.policy.maxConcurrentPositions &&
+    state.policy.maxConcurrentPositions > 0
   ) {
-    throw new Error(
-      `Position limit reached: ${state.vault.openPositions}/${state.policy.maxConcurrentPositions}`,
+    warnings.push(
+      `Position limit may be reached: ${state.vault.openPositions}/${state.policy.maxConcurrentPositions}. ` +
+        `On-chain will reject if this is a position-opening action.`,
     );
   }
 
@@ -593,11 +533,11 @@ export async function seal(params: SealParams): Promise<SealResult> {
     protocolTreasuryTokenAccount,
     feeDestinationTokenAccount,
     outputStablecoinAccount,
-    actionType,
+    actionType: 0 as any, // v6: ActionType eliminated; on-chain ignores this field
     tokenMint: params.tokenMint,
     amount: params.amount,
     targetProtocol,
-    leverageBps: params.leverageBps ?? null,
+    leverageBps: null, // v6: leverageBps eliminated
     expectedPolicyVersion: state.policy.policyVersion ?? 0n,
   });
 
@@ -719,7 +659,7 @@ export async function seal(params: SealParams): Promise<SealResult> {
   return {
     ok: true,
     transaction: compiledTx,
-    actionType,
+    isSpending: spending,
     warnings,
     txSizeBytes: byteLength,
     lastValidBlockHeight: blockhash.lastValidBlockHeight,
@@ -757,9 +697,7 @@ export interface SigilClientConfig {
 export interface ClientSealOpts {
   tokenMint: Address;
   amount: bigint;
-  actionType?: ActionType;
   targetProtocol?: Address;
-  leverageBps?: number;
   computeUnits?: number;
   priorityFeeMicroLamports?: number;
   outputStablecoinAccount?: Address;
@@ -893,7 +831,7 @@ export class SigilClient {
     } catch (err) {
       const sdkError = toSigilAgentError(err);
       this.onErrorCallback?.(sdkError, {
-        action: opts.actionType?.toString() ?? "unknown",
+        action: opts.amount > 0n ? "spending" : "non-spending",
         tokenMint: opts.tokenMint,
         amount: opts.amount,
       });

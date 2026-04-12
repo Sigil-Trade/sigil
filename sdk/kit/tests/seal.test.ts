@@ -10,11 +10,10 @@ import {
 } from "../src/seal.js";
 import { createVault, type CreateVaultOptions } from "../src/create-vault.js";
 import { deriveAta } from "../src/x402/transfer-builder.js";
-import { ActionType } from "../src/generated/types/actionType.js";
 import { VaultStatus } from "../src/generated/types/vaultStatus.js";
 import type { ResolvedVaultState } from "../src/state-resolver.js";
 import {
-  FULL_PERMISSIONS,
+  FULL_CAPABILITY,
   PROTOCOL_TREASURY,
   USDC_MINT_DEVNET,
 } from "../src/types.js";
@@ -90,7 +89,7 @@ describe("seal()", () => {
     const result = await seal(baseSealParams());
 
     expect(result.transaction).to.exist;
-    expect(result.actionType).to.equal(ActionType.Swap);
+    expect(result.isSpending).to.equal(true);
     expect(result.warnings).to.be.an("array");
     expect(result.txSizeBytes).to.be.a("number");
     expect(result.txSizeBytes).to.be.greaterThan(0);
@@ -111,9 +110,9 @@ describe("seal()", () => {
     expect(protocolWarnings).to.have.length(0);
   });
 
-  it("defaults actionType to Swap when not provided", async () => {
-    const result = await seal(baseSealParams({ actionType: undefined }));
-    expect(result.actionType).to.equal(ActionType.Swap);
+  it("determines spending from amount > 0n", async () => {
+    const result = await seal(baseSealParams({ amount: 100_000_000n }));
+    expect(result.isSpending).to.equal(true);
   });
 
   it("throws on non-active vault (status !== Active)", async () => {
@@ -181,16 +180,16 @@ describe("seal()", () => {
     }
   });
 
-  it("throws on no permission for action", async () => {
+  it("throws on zero capability agent", async () => {
     try {
       await seal(
         baseSealParams({
-          cachedState: makeCachedState({ agentPermissions: 0n }),
+          cachedState: makeCachedState({ agentCapability: 0n }),
         }),
       );
       expect.fail("should throw");
     } catch (e: any) {
-      expect(e.message).to.include("lacks permission");
+      expect(e.message).to.include("zero capability");
     }
   });
 
@@ -210,18 +209,13 @@ describe("seal()", () => {
     }
   });
 
-  it("throws on spending action with amount=0", async () => {
-    try {
-      await seal(
-        baseSealParams({
-          amount: 0n,
-          actionType: ActionType.Swap,
-        }),
-      );
-      expect.fail("should throw");
-    } catch (e: any) {
-      expect(e.message).to.include("requires amount > 0");
-    }
+  it("amount=0 results in non-spending seal", async () => {
+    const result = await seal(
+      baseSealParams({
+        amount: 0n,
+      }),
+    );
+    expect(result.isSpending).to.equal(false);
   });
 
   it("throws when no target protocol or DeFi instructions", async () => {
@@ -238,21 +232,20 @@ describe("seal()", () => {
     }
   });
 
-  it("throws on position limit exceeded", async () => {
-    try {
-      await seal(
-        baseSealParams({
-          actionType: ActionType.OpenPosition,
-          cachedState: makeCachedState({
-            maxConcurrentPositions: 2,
-            openPositions: 2,
-          }),
+  it("warns on position limit approached for spending actions", async () => {
+    const result = await seal(
+      baseSealParams({
+        amount: 100_000_000n,
+        cachedState: makeCachedState({
+          maxConcurrentPositions: 2,
+          openPositions: 2,
         }),
-      );
-      expect.fail("should throw");
-    } catch (e: any) {
-      expect(e.message).to.include("Position limit reached");
-    }
+      }),
+    );
+    const posWarnings = result.warnings.filter((w) =>
+      w.includes("Position limit"),
+    );
+    expect(posWarnings.length).to.be.greaterThan(0);
   });
 });
 
@@ -435,23 +428,22 @@ describe("SigilClient", () => {
 
     expect(result.ok).to.equal(true);
     expect(result.transaction).to.exist;
-    expect(result.actionType).to.equal(ActionType.Swap);
+    expect(result.isSpending).to.equal(true);
     expect(result.txSizeBytes).to.be.a("number");
   });
 
-  it("client.seal() produces same actionType as direct seal() with identical params", async () => {
+  it("client.seal() produces same isSpending as direct seal() with identical params", async () => {
     const state = makeCachedState();
     const blockhash = {
       blockhash: "GHtXQBpokCiBP6spMNfMW9qLBjfQJhmR4GWzCiQ2ATQA",
       lastValidBlockHeight: 200n,
     };
 
-    // Use ClosePosition (non-spending, amount=0) to avoid RPC calls for fee ATAs
+    // Use amount=0 (non-spending) to avoid RPC calls for fee ATAs
     const directResult = await seal(
       baseSealParams({
         cachedState: state,
         blockhash,
-        actionType: ActionType.ClosePosition,
         amount: 0n,
       }),
     );
@@ -460,13 +452,12 @@ describe("SigilClient", () => {
     const clientResult = await client.seal([makeInstruction(JUPITER)], {
       tokenMint: USDC_DEVNET,
       amount: 0n,
-      actionType: ActionType.ClosePosition,
       cachedState: state,
       // Pre-supply ALTs to avoid RPC call for ALT resolution
       addressLookupTables: {},
     });
 
-    expect(clientResult.actionType).to.equal(directResult.actionType);
+    expect(clientResult.isSpending).to.equal(directResult.isSpending);
     expect(clientResult.ok).to.equal(directResult.ok);
   });
 

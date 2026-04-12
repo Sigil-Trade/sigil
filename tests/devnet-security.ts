@@ -211,11 +211,9 @@ describe("devnet-security", () => {
     try {
       await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           mint,
           new BN(10_000_000),
           jupiterProgramId,
-          null,
           new BN(0),
         )
         .accounts({

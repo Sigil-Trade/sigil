@@ -40,8 +40,7 @@ import {
   LiteSVMProvider,
 } from "./helpers/litesvm-setup";
 
-// 21-bit permission bitmask (covers all 21 ActionType variants including escrow)
-const FULL_PERMISSIONS = new BN((1n << 21n) - 1n);
+const FULL_CAPABILITY = 2; // CAPABILITY_OPERATOR
 
 // Protocol treasury (must match on-chain constant)
 const PROTOCOL_TREASURY = new PublicKey(
@@ -305,7 +304,7 @@ describe("escrow-integration", () => {
 
     // Register source agent
     await program.methods
-      .registerAgent(sourceAgent.publicKey, FULL_PERMISSIONS, new BN(0))
+      .registerAgent(sourceAgent.publicKey, FULL_CAPABILITY, new BN(0))
       .accounts({
         owner: sourceOwner.publicKey,
         vault: sourceVaultPda,
@@ -378,7 +377,7 @@ describe("escrow-integration", () => {
 
     // Register destination agent
     await destProgram.methods
-      .registerAgent(destAgent.publicKey, FULL_PERMISSIONS, new BN(0))
+      .registerAgent(destAgent.publicKey, FULL_CAPABILITY, new BN(0))
       .accounts({
         owner: destOwnerKeypair.publicKey,
         vault: destVaultPda,

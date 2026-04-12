@@ -65,7 +65,7 @@ const allowedProtocol = Keypair.generate().publicKey;
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
-const FULL_PERMISSIONS = new BN((1n << 21n) - 1n);
+const FULL_CAPABILITY = 2;
 
 async function createVault(opts: {
   dailyCap: BN;
@@ -118,7 +118,7 @@ async function createVault(opts: {
   await program.methods
     .registerAgent(
       opts.agent.publicKey,
-      FULL_PERMISSIONS,
+      FULL_CAPABILITY,
       opts.agentSpendLimit ?? new BN(0),
     )
     .accounts({
@@ -210,11 +210,9 @@ async function doComposedTx(
 
   const validateIx = await program.methods
     .validateAndAuthorize(
-      { swap: {} },
       usdcMint,
       amount,
       allowedProtocol,
-      null,
       new BN(0),
     )
     .accounts({
@@ -851,7 +849,7 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
         .rpc();
 
       await program.methods
-        .registerAgent(destAgent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(destAgent.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: destPdas.vaultPda,
@@ -1000,7 +998,7 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
       await program.methods
         .registerAgent(
           multiAgent2.publicKey,
-          FULL_PERMISSIONS,
+          FULL_CAPABILITY,
           new BN(75_000_000), // $75 per-agent
         )
         .accounts({
@@ -1211,11 +1209,9 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
       });
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { withdraw: {} }, // non-spending
           usdcMint,
           new BN(0), // amount=0 for non-spending
           allowedProtocol,
-          null,
           new BN(0),
         )
         .accounts({

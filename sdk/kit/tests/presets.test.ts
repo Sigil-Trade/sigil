@@ -12,6 +12,7 @@ import {
   type PresetName,
 } from "../src/presets.js";
 import {
+  FULL_CAPABILITY,
   FULL_PERMISSIONS,
   SWAP_ONLY,
   PERPS_FULL,
@@ -46,10 +47,11 @@ describe("VAULT_PRESETS", () => {
         expect(preset.description).to.be.a("string").with.length.greaterThan(0);
       });
 
-      it("has valid permissions (fits in 21 bits)", () => {
-        expect(preset.permissions).to.be.a("bigint");
-        expect(preset.permissions >= 0n).to.be.true;
-        expect(preset.permissions <= FULL_PERMISSIONS).to.be.true;
+      it("has valid capability (non-negative bigint)", () => {
+        expect(preset.capability).to.be.a("bigint");
+        expect(preset.capability >= 0n).to.be.true;
+        // permissions alias matches capability
+        expect(preset.permissions).to.equal(preset.capability);
       });
 
       it("has positive spending caps", () => {
@@ -119,8 +121,9 @@ describe("preset values", () => {
     expect(perms & WITHDRAW).to.equal(WITHDRAW);
   });
 
-  it("full-access has FULL_PERMISSIONS", () => {
-    expect(VAULT_PRESETS["full-access"].permissions).to.equal(FULL_PERMISSIONS);
+  it("full-access has FULL_CAPABILITY", () => {
+    expect(VAULT_PRESETS["full-access"].capability).to.equal(FULL_CAPABILITY);
+    expect(VAULT_PRESETS["full-access"].permissions).to.equal(FULL_CAPABILITY);
   });
 
   it("full-access uses protocol mode all", () => {

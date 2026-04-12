@@ -8,7 +8,7 @@
 import type { Address } from "@solana/kit";
 import { VaultStatus } from "../generated/types/vaultStatus.js";
 import type { ResolvedVaultState } from "../state-resolver.js";
-import { FULL_PERMISSIONS } from "../types.js";
+import { FULL_CAPABILITY } from "../types.js";
 import { MOCK_VAULT, MOCK_AGENT, MOCK_OWNER } from "./mock-rpc.js";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -19,6 +19,8 @@ export interface MockVaultStateOverrides {
   owner?: Address;
   status?: VaultStatus;
   agentPaused?: boolean;
+  agentCapability?: bigint;
+  /** @deprecated Use agentCapability instead. */
   agentPermissions?: bigint;
   noAgents?: boolean;
   dailyCap?: bigint;
@@ -61,7 +63,7 @@ export function createMockVaultState(
         : [
             {
               pubkey: agent,
-              permissions: overrides?.agentPermissions ?? FULL_PERMISSIONS,
+              permissions: overrides?.agentCapability ?? overrides?.agentPermissions ?? FULL_CAPABILITY,
               spendingLimitUsd: 0n,
               paused: overrides?.agentPaused ?? false,
             },

@@ -35,6 +35,11 @@ export interface VaultActivityItem {
   amountDisplay: string | null;
   tokenMint: Address | null;
   tokenSymbol: string | null;
+  /** Whether this was a spending action (amount > 0). */
+  isSpending: boolean;
+  /** Position effect: "increment", "decrement", or "none". */
+  positionEffect: string | null;
+  /** @deprecated Use isSpending/positionEffect instead. Legacy field for backward compat. */
   actionType: string | null;
   protocol: Address | null;
   protocolName: string | null;
@@ -141,7 +146,7 @@ export function describeEvent(
 
     case "AgentPermissionsUpdated": {
       const permCount = countBits(f.newPermissions as bigint);
-      return `Agent ${formatAddress(f.agent as string)} permissions updated (${permCount} of 21 actions enabled)`;
+      return `Agent ${formatAddress(f.agent as string)} capability updated (${permCount} bits set)`;
     }
 
     case "VaultFrozen":
@@ -239,15 +244,38 @@ export function buildActivityItem(
         ? formatUsd(amount, 2)
         : null;
 
-  // actionType has different shapes: Codama enum { __kind: "Swap" } vs u8 number
+  // New v6 fields: isSpending + positionEffect
+  // Check for new-style event fields first, fall back to legacy actionType parsing.
+  let isSpending = false;
+  let positionEffect: string | null = null;
   let actionType: string | null = null;
-  if (f?.actionType != null) {
+
+  if (f?.isSpending != null) {
+    // New v6 event format
+    isSpending = f.isSpending as boolean;
+    positionEffect = (f.positionEffect as string) ?? null;
+  } else if (f?.actionType != null) {
+    // Legacy event format — derive isSpending/positionEffect from actionType
     const at = f.actionType;
     if (typeof at === "object" && at !== null && "__kind" in at) {
       actionType = (at as { __kind: string }).__kind;
     } else if (typeof at === "number" || typeof at === "bigint") {
       actionType = parseActionType(Number(at))?.toString() ?? null;
     }
+    if (actionType) {
+      isSpending = [
+        "swap", "Swap", "openPosition", "OpenPosition",
+        "increasePosition", "IncreasePosition", "deposit", "Deposit",
+        "transfer", "Transfer", "addCollateral", "AddCollateral",
+        "placeLimitOrder", "PlaceLimitOrder",
+        "swapAndOpenPosition", "SwapAndOpenPosition",
+        "createEscrow", "CreateEscrow",
+      ].includes(actionType);
+    }
+  }
+  // Also infer isSpending from amount if no event field present
+  if (!isSpending && amount !== null && amount > 0n) {
+    isSpending = true;
   }
 
   return {
@@ -260,6 +288,8 @@ export function buildActivityItem(
     amountDisplay,
     tokenMint,
     tokenSymbol: token?.symbol ?? null,
+    isSpending,
+    positionEffect,
     actionType,
     protocol,
     protocolName: protocol ? resolveProtocolName(protocol) : null,

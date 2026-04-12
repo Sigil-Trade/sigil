@@ -104,8 +104,6 @@ describe("devnet-positions", () => {
       mint,
       amount: new BN(10_000_000), // openPosition is spending
       protocol: jupiterProgramId,
-      actionType: { openPosition: {} },
-      leverageBps: 2000,
       protocolTreasuryAta: vault.protocolTreasuryAta,
       feeDestinationAta: null,
       mockSpendDestination: mockSpendDest ?? null,
@@ -132,7 +130,6 @@ describe("devnet-positions", () => {
       mint,
       amount: new BN(0), // closePosition is non-spending: amount must be 0
       protocol: jupiterProgramId,
-      actionType: { closePosition: {} },
       protocolTreasuryAta: null, // no fees for non-spending
       feeDestinationAta: null,
     });
@@ -192,8 +189,6 @@ describe("devnet-positions", () => {
         mint,
         amount: new BN(10_000_000),
         protocol: jupiterProgramId,
-        actionType: { openPosition: {} },
-        leverageBps: 2000,
         protocolTreasuryAta: vault.protocolTreasuryAta,
         feeDestinationAta: null,
         mockSpendDestination: agentMintAta,

@@ -38,7 +38,7 @@ import {
   LiteSVM,
 } from "./helpers/litesvm-setup";
 
-const FULL_PERMISSIONS = new BN((1n << 21n) - 1n);
+const FULL_CAPABILITY = 2; // CAPABILITY_OPERATOR
 
 /**
  * Jupiter Lend Integration Tests
@@ -105,7 +105,6 @@ describe("jupiter-lend-integration", () => {
     tokenMint: PublicKey,
     amount: BN,
     targetProtocol: PublicKey,
-    actionType: any,
     overrideVaultTokenAta?: PublicKey,
     overrideOverlay?: PublicKey,
   ): Promise<VersionedTxResult> {
@@ -136,11 +135,9 @@ describe("jupiter-lend-integration", () => {
     // 2. Validate and authorize
     const validateIx = await program.methods
       .validateAndAuthorize(
-        actionType,
         tokenMint,
         amount,
         targetProtocol,
-        null, // no leverage for lend
         new BN(0), // expectedPolicyVersion
       )
       .accountsPartial({
@@ -271,7 +268,7 @@ describe("jupiter-lend-integration", () => {
 
     // Register agent
     await program.methods
-      .registerAgent(agent.publicKey, FULL_PERMISSIONS, new BN(0))
+      .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
       .accountsPartial({
         owner: owner.publicKey,
         vault: vaultPda,
@@ -327,7 +324,6 @@ describe("jupiter-lend-integration", () => {
         usdcMint,
         amount,
         lendProtocol,
-        { deposit: {} },
       );
 
       expect(result.signature).to.be.a("string");
@@ -353,7 +349,6 @@ describe("jupiter-lend-integration", () => {
         usdcMint,
         new BN(0), // non-spending
         lendProtocol,
-        { withdraw: {} },
       );
 
       expect(result.signature).to.be.a("string");
@@ -383,7 +378,6 @@ describe("jupiter-lend-integration", () => {
         usdcMint,
         new BN(200_000_000),
         lendProtocol,
-        { deposit: {} },
       );
 
       await sendComposedLend(
@@ -394,7 +388,6 @@ describe("jupiter-lend-integration", () => {
         usdcMint,
         new BN(200_000_000),
         lendProtocol,
-        { deposit: {} },
       );
 
       // Would exceed 500 USDC cap if declaration-based, but succeeds
@@ -407,7 +400,6 @@ describe("jupiter-lend-integration", () => {
         usdcMint,
         new BN(1_000_000),
         lendProtocol,
-        { deposit: {} },
       );
 
       // Verify all TXs succeeded
@@ -432,7 +424,6 @@ describe("jupiter-lend-integration", () => {
           usdcMint,
           new BN(10_000_000),
           fakeProtocol, // not in allowed protocols
-          { deposit: {} },
         );
         expect.fail("Should have thrown");
       } catch (err: any) {
@@ -502,7 +493,7 @@ describe("jupiter-lend-integration", () => {
         .rpc();
 
       await program.methods
-        .registerAgent(agent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
         .accountsPartial({
           owner: owner.publicKey,
           vault: frozenVault,
@@ -543,7 +534,6 @@ describe("jupiter-lend-integration", () => {
           usdcMint,
           new BN(10_000_000),
           lendProtocol,
-          { deposit: {} },
           frozenVaultAta,
           frozenOverlay,
         );
@@ -622,7 +612,7 @@ describe("jupiter-lend-integration", () => {
         .rpc();
 
       await program.methods
-        .registerAgent(agent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
         .accountsPartial({
           owner: owner.publicKey,
           vault: rollingVault,
@@ -663,7 +653,6 @@ describe("jupiter-lend-integration", () => {
         usdcMint,
         new BN(40_000_000),
         lendProtocol,
-        { deposit: {} },
         rollingVaultUsdcAta,
         rollingOverlay,
       );
@@ -680,7 +669,6 @@ describe("jupiter-lend-integration", () => {
         usdcMint,
         new BN(40_000_000),
         lendProtocol,
-        { deposit: {} },
         rollingVaultUsdcAta,
         rollingOverlay,
       );
@@ -698,7 +686,6 @@ describe("jupiter-lend-integration", () => {
         usdcMint,
         new BN(30_000_000),
         lendProtocol,
-        { deposit: {} },
         rollingVaultUsdcAta,
         rollingOverlay,
       );

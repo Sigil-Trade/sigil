@@ -717,7 +717,7 @@ export interface SetupVaultOpts {
   dailyCap?: BN;
   maxTxSize?: BN;
   vaultFunding?: number;
-  agentPermissions?: BN;
+  agentCapability?: number;
   agentSpendingLimit?: BN;
   timelockDuration?: BN;
   allowedDestinations?: PublicKey[];
@@ -741,7 +741,7 @@ export interface VaultSetupResult {
   protocolTreasuryAta: PublicKey;
 }
 
-const FULL_PERMISSIONS_BN = new BN((1n << 21n) - 1n);
+const FULL_CAPABILITY = 2;
 
 /**
  * Create a vault with agent, fund it, and return all PDAs and keypairs.
@@ -756,7 +756,7 @@ export async function setupVaultWithAgent(
     dailyCap = new BN(500_000_000),
     maxTxSize = new BN(100_000_000),
     vaultFunding = 1_000_000_000,
-    agentPermissions = FULL_PERMISSIONS_BN,
+    agentCapability = FULL_CAPABILITY,
     agentSpendingLimit = new BN(0),
     timelockDuration = new BN(1800), // MIN_TIMELOCK_DURATION: 30 minutes
     allowedDestinations = [],
@@ -803,7 +803,7 @@ export async function setupVaultWithAgent(
 
   if (!skipAgent) {
     await program.methods
-      .registerAgent(agent.publicKey, agentPermissions, agentSpendingLimit)
+      .registerAgent(agent.publicKey, agentCapability, agentSpendingLimit)
       .accounts({
         owner: owner.publicKey,
         vault: pdas.vaultPda,

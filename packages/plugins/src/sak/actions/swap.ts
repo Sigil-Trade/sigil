@@ -1,7 +1,6 @@
 import { z } from "zod";
 import type { SigilClient } from "@usesigil/kit";
 import {
-  ActionType,
   resolveToken,
   toAgentError,
   toBaseUnits,
@@ -76,7 +75,6 @@ export function swapAction(client: SigilClient, jupiterApiUrl: string) {
         const execResult = await client.executeAndConfirm(parsed.instructions, {
           tokenMint: inputMint,
           amount: baseAmount,
-          actionType: ActionType.Swap,
           protocolAltAddresses: parsed.addressLookupTableAddresses,
         });
 

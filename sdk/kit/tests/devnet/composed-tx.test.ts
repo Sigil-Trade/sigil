@@ -26,7 +26,7 @@ import {
 import { TransactionExecutor } from "../../src/transaction-executor.js";
 import { getValidateAndAuthorizeInstructionAsync } from "../../src/generated/instructions/validateAndAuthorize.js";
 import { getFinalizeSessionInstructionAsync } from "../../src/generated/instructions/finalizeSession.js";
-import { ActionType } from "../../src/generated/types/actionType.js";
+// ActionType import removed — v6 elimination. Pass 0 as wire-compat placeholder.
 import { resolveVaultState } from "../../src/state-resolver.js";
 import { deriveAta } from "../../src/x402/transfer-builder.js";
 import {
@@ -53,7 +53,7 @@ async function buildSwapInstructions(
     vaultTokenAccount: vaultTokenAta,
     tokenMintAccount: USDC_MINT_DEVNET,
     protocolTreasuryTokenAccount: protocolTreasuryAta,
-    actionType: ActionType.Swap,
+    actionType: 0 as any, // v6: ActionType eliminated, wire-compat placeholder
     tokenMint: USDC_MINT_DEVNET,
     amount,
     targetProtocol: JUPITER_PROGRAM_ADDRESS,

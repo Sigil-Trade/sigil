@@ -21,7 +21,7 @@ import {
   type MockVaultStateOverrides,
 } from "../src/testing/index.js";
 import { seal } from "../src/seal.js";
-import { FULL_PERMISSIONS } from "../src/types.js";
+import { FULL_CAPABILITY } from "../src/types.js";
 
 // ─── Known program addresses for seal() test ────────────────────────────────
 
@@ -81,7 +81,7 @@ describe("testing utilities", () => {
       expect(state.vault.owner).to.equal(MOCK_OWNER);
       expect(state.vault.agents).to.have.length(1);
       expect(state.vault.agents[0].pubkey).to.equal(MOCK_AGENT);
-      expect(state.vault.agents[0].permissions).to.equal(FULL_PERMISSIONS);
+      expect(state.vault.agents[0].permissions).to.equal(FULL_CAPABILITY);
       expect(state.policy.dailySpendingCapUsd).to.equal(1_000_000_000n);
       expect(state.globalBudget.remaining).to.equal(1_000_000_000n);
       expect(state.tracker).to.be.null;

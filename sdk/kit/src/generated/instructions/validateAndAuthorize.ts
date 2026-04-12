@@ -142,19 +142,23 @@ export type ValidateAndAuthorizeInstruction<
 
 export type ValidateAndAuthorizeInstructionData = {
   discriminator: ReadonlyUint8Array;
+  /** @deprecated v6: ActionType eliminated. On-chain ignores this field. */
   actionType: ActionType;
   tokenMint: Address;
   amount: bigint;
   targetProtocol: Address;
+  /** @deprecated v6: leverageBps eliminated. On-chain ignores this field. */
   leverageBps: Option<number>;
   expectedPolicyVersion: bigint;
 };
 
 export type ValidateAndAuthorizeInstructionDataArgs = {
+  /** @deprecated v6: ActionType eliminated. Pass any value; on-chain ignores it. */
   actionType: ActionTypeArgs;
   tokenMint: Address;
   amount: number | bigint;
   targetProtocol: Address;
+  /** @deprecated v6: leverageBps eliminated. Pass null; on-chain ignores it. */
   leverageBps: OptionOrNullable<number>;
   expectedPolicyVersion: number | bigint;
 };

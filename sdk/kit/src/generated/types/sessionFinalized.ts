@@ -39,8 +39,10 @@ export type SessionFinalized = {
   actualSpendUsd: bigint;
   /** Vault stablecoin balance after this transaction (0 for non-spending). */
   balanceAfterUsd: bigint;
-  /** ActionType as u8 for downstream classification (permission_bit() value, 0-20). */
-  actionType: number;
+  /** Whether this was a spending action. Replaces legacy actionType. */
+  isSpending: boolean;
+  /** Position effect: 0=none, 1=increment, 2=decrement. */
+  positionEffect: number;
 };
 
 export type SessionFinalizedArgs = {
@@ -56,8 +58,10 @@ export type SessionFinalizedArgs = {
   actualSpendUsd: number | bigint;
   /** Vault stablecoin balance after this transaction (0 for non-spending). */
   balanceAfterUsd: number | bigint;
-  /** ActionType as u8 for downstream classification (permission_bit() value, 0-20). */
-  actionType: number;
+  /** Whether this was a spending action. Replaces legacy actionType. */
+  isSpending: boolean;
+  /** Position effect: 0=none, 1=increment, 2=decrement. */
+  positionEffect: number;
 };
 
 export function getSessionFinalizedEncoder(): FixedSizeEncoder<SessionFinalizedArgs> {
@@ -69,7 +73,8 @@ export function getSessionFinalizedEncoder(): FixedSizeEncoder<SessionFinalizedA
     ["timestamp", getI64Encoder()],
     ["actualSpendUsd", getU64Encoder()],
     ["balanceAfterUsd", getU64Encoder()],
-    ["actionType", getU8Encoder()],
+    ["isSpending", getBooleanEncoder()],
+    ["positionEffect", getU8Encoder()],
   ]);
 }
 
@@ -82,7 +87,8 @@ export function getSessionFinalizedDecoder(): FixedSizeDecoder<SessionFinalized>
     ["timestamp", getI64Decoder()],
     ["actualSpendUsd", getU64Decoder()],
     ["balanceAfterUsd", getU64Decoder()],
-    ["actionType", getU8Decoder()],
+    ["isSpending", getBooleanDecoder()],
+    ["positionEffect", getU8Decoder()],
   ]);
 }
 

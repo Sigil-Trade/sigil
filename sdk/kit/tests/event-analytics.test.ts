@@ -162,7 +162,7 @@ describe("buildActivityItem", () => {
     expect(item.description).to.include("deposited");
   });
 
-  it("handles ActionAuthorized with Codama enum actionType", () => {
+  it("handles ActionAuthorized with legacy Codama enum actionType", () => {
     const decoded: DecodedSigilEvent = {
       name: "ActionAuthorized",
       data: new Uint8Array(0),
@@ -183,7 +183,33 @@ describe("buildActivityItem", () => {
 
     const item = buildActivityItem(decoded, "tx456", 1700000000);
     expect(item.actionType).to.equal("Swap");
+    expect(item.isSpending).to.equal(true); // derived from legacy actionType
     expect(item.protocolName).to.equal("Jupiter");
+    expect(item.category).to.equal("trade");
+  });
+
+  it("handles ActionAuthorized with v6 isSpending field", () => {
+    const decoded: DecodedSigilEvent = {
+      name: "ActionAuthorized",
+      data: new Uint8Array(0),
+      fields: {
+        vault: "v",
+        agent: "agent123456789abc",
+        isSpending: true,
+        tokenMint: "mint123",
+        amount: 100_000_000n,
+        usdAmount: 100_000_000n,
+        protocol: "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+        rollingSpendUsdAfter: 0n,
+        dailyCapUsd: 1_000_000_000n,
+        delegated: true,
+        timestamp: 1700000000n,
+      },
+    };
+
+    const item = buildActivityItem(decoded, "tx456v6", 1700000000);
+    expect(item.isSpending).to.equal(true);
+    expect(item.actionType).to.be.null; // v6 events don't have legacy actionType
     expect(item.category).to.equal("trade");
   });
 

@@ -26,7 +26,7 @@ import {
 } from "./balance-tracker.js";
 import { getSpendingVelocity } from "./spending-analytics.js";
 import {
-  FULL_PERMISSIONS,
+  FULL_CAPABILITY,
   PROTOCOL_MODE_ALLOWLIST,
   EPOCH_DURATION,
   NUM_EPOCHS,
@@ -154,8 +154,8 @@ export function getVaultHealth(
   const securityChecks: VaultSecurityCheck[] = [
     {
       id: "no-full-perms",
-      label: "No agent has full permissions",
-      passed: !vault.agents.some((a) => a.permissions === FULL_PERMISSIONS),
+      label: "No agent has full capability",
+      passed: !vault.agents.some((a) => a.permissions === FULL_CAPABILITY),
       severity: "critical",
     },
     {

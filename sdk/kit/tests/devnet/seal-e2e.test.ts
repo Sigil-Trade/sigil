@@ -29,12 +29,11 @@ import { seal } from "../../src/seal.js";
 import { resolveVaultState } from "../../src/state-resolver.js";
 import { TransactionExecutor } from "../../src/transaction-executor.js";
 import { parseSigilEvents } from "../../src/events.js";
-import { ActionType } from "../../src/generated/types/actionType.js";
 import { VaultStatus } from "../../src/generated/types/vaultStatus.js";
 import {
   USDC_MINT_DEVNET,
   JUPITER_PROGRAM_ADDRESS,
-  FULL_PERMISSIONS,
+  FULL_CAPABILITY,
 } from "../../src/types.js";
 import { getSetComputeUnitLimitInstruction } from "@solana-program/compute-budget";
 import {
@@ -71,7 +70,7 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
         agent,
         dailySpendingCapUsd: 500_000_000n, // $500
         maxTransactionSizeUsd: 100_000_000n, // $100
-        permissions: FULL_PERMISSIONS,
+        permissions: FULL_CAPABILITY,
         spendingLimitUsd: 0n,
       });
 
@@ -101,7 +100,7 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
       expect(state.vault.owner).to.equal(owner.address);
       expect(state.vault.agents).to.have.length(1);
       expect(state.vault.agents[0].pubkey).to.equal(agent.address);
-      expect(state.vault.agents[0].permissions).to.equal(FULL_PERMISSIONS);
+      expect(state.vault.agents[0].permissions).to.equal(FULL_CAPABILITY);
       expect(state.policy.dailySpendingCapUsd).to.equal(500_000_000n);
 
       // Store for seal test
@@ -135,7 +134,7 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
         network: "devnet",
         tokenMint: USDC_MINT_DEVNET,
         amount: 1_000_000n, // $1
-        actionType: ActionType.Swap,
+        // actionType removed in v6 — spending determined by amount > 0
         cachedState: state,
         blockhash: {
           blockhash: "GHtXQBpokCiBP6spMNfMW9qLBjfQJhmR4GWzCiQ2ATQA",
@@ -144,7 +143,7 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
       });
 
       expect(result.transaction).to.exist;
-      expect(result.actionType).to.equal(ActionType.Swap);
+      expect(result.isSpending).to.equal(true);
       expect(result.txSizeBytes).to.be.a("number");
       expect(result.txSizeBytes).to.be.greaterThan(0);
       // Cap warning: $1 is well within $500 cap
@@ -197,7 +196,7 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
         network: "devnet",
         tokenMint: USDC_MINT_DEVNET,
         amount: 0n, // no-op — zero spending
-        actionType: ActionType.Swap,
+        // actionType removed in v6 — spending determined by amount > 0
         targetProtocol: MEMO_PROGRAM,
         cachedState: state,
       });
@@ -271,7 +270,7 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
         network: "devnet",
         tokenMint: USDC_MINT_DEVNET,
         amount: 0n,
-        actionType: ActionType.Swap,
+        // actionType removed in v6 — spending determined by amount > 0
         targetProtocol: MEMO_PROGRAM,
         cachedState: state,
       });
@@ -347,7 +346,7 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
         network: "devnet",
         tokenMint: USDC_MINT_DEVNET,
         amount: 20_000_000n, // $20 > $10 cap
-        actionType: ActionType.Swap,
+        // actionType removed in v6 — spending determined by amount > 0
         targetProtocol: MEMO_PROGRAM,
         cachedState: state,
       });
@@ -450,7 +449,7 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
           network: "devnet",
           tokenMint: USDC_MINT_DEVNET,
           amount: 1_000_000n,
-          actionType: ActionType.Swap,
+          // actionType removed in v6 — spending determined by amount > 0
           targetProtocol: MEMO_PROGRAM,
           cachedState: restrictedState,
         });

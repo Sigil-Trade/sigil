@@ -1362,6 +1362,119 @@ export type Sigil = {
       "args": []
     },
     {
+      "name": "closePostAssertions",
+      "docs": [
+        "Close post-execution assertions for a vault. Returns rent to owner."
+      ],
+      "discriminator": [
+        226,
+        172,
+        252,
+        173,
+        29,
+        236,
+        59,
+        248
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "vault"
+          ]
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "account",
+                "path": "vault.vault_id",
+                "account": "agentVault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "policy",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "postAssertions",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  115,
+                  116,
+                  95,
+                  97,
+                  115,
+                  115,
+                  101,
+                  114,
+                  116,
+                  105,
+                  111,
+                  110,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "closeSettledEscrow",
       "docs": [
         "Close a settled/refunded escrow PDA — owner reclaims rent."
@@ -2016,6 +2129,131 @@ export type Sigil = {
         {
           "name": "strictMode",
           "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "createPostAssertions",
+      "docs": [
+        "Create post-execution assertions for a vault.",
+        "Assertions check account data bytes AFTER DeFi instructions execute."
+      ],
+      "discriminator": [
+        204,
+        21,
+        218,
+        182,
+        202,
+        140,
+        239,
+        63
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "vault"
+          ]
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "account",
+                "path": "vault.vault_id",
+                "account": "agentVault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "policy",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "postAssertions",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  115,
+                  116,
+                  95,
+                  97,
+                  115,
+                  115,
+                  101,
+                  114,
+                  116,
+                  105,
+                  111,
+                  110,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "entries",
+          "type": {
+            "vec": {
+              "defined": {
+                "name": "postAssertionEntry"
+              }
+            }
+          }
         }
       ]
     },
@@ -2950,8 +3188,8 @@ export type Sigil = {
           "type": "pubkey"
         },
         {
-          "name": "newPermissions",
-          "type": "u64"
+          "name": "newCapability",
+          "type": "u8"
         },
         {
           "name": "spendingLimitUsd",
@@ -3539,9 +3777,9 @@ export type Sigil = {
           }
         },
         {
-          "name": "newAgentPermissions",
+          "name": "newAgentCapability",
           "type": {
-            "option": "u64"
+            "option": "u8"
           }
         }
       ]
@@ -3805,8 +4043,8 @@ export type Sigil = {
           "type": "pubkey"
         },
         {
-          "name": "permissions",
-          "type": "u64"
+          "name": "capability",
+          "type": "u8"
         },
         {
           "name": "spendingLimitUsd",
@@ -4421,14 +4659,6 @@ export type Sigil = {
       ],
       "args": [
         {
-          "name": "actionType",
-          "type": {
-            "defined": {
-              "name": "actionType"
-            }
-          }
-        },
-        {
           "name": "tokenMint",
           "type": "pubkey"
         },
@@ -4439,12 +4669,6 @@ export type Sigil = {
         {
           "name": "targetProtocol",
           "type": "pubkey"
-        },
-        {
-          "name": "leverageBps",
-          "type": {
-            "option": "u16"
-          }
         },
         {
           "name": "expectedPolicyVersion",
@@ -4821,6 +5045,19 @@ export type Sigil = {
         51,
         148,
         146
+      ]
+    },
+    {
+      "name": "postExecutionAssertions",
+      "discriminator": [
+        1,
+        104,
+        4,
+        208,
+        143,
+        120,
+        4,
+        77
       ]
     },
     {
@@ -5239,6 +5476,45 @@ export type Sigil = {
         13,
         0,
         95
+      ]
+    },
+    {
+      "name": "postAssertionChecked",
+      "discriminator": [
+        166,
+        106,
+        92,
+        10,
+        195,
+        60,
+        247,
+        125
+      ]
+    },
+    {
+      "name": "postAssertionsClosed",
+      "discriminator": [
+        7,
+        20,
+        224,
+        102,
+        80,
+        60,
+        78,
+        11
+      ]
+    },
+    {
+      "name": "postAssertionsCreated",
+      "discriminator": [
+        49,
+        89,
+        152,
+        110,
+        58,
+        20,
+        68,
+        31
       ]
     },
     {
@@ -5787,12 +6063,8 @@ export type Sigil = {
             "type": "pubkey"
           },
           {
-            "name": "actionType",
-            "type": {
-              "defined": {
-                "name": "actionType"
-              }
-            }
+            "name": "isSpending",
+            "type": "bool"
           },
           {
             "name": "tokenMint",
@@ -5812,11 +6084,6 @@ export type Sigil = {
           },
           {
             "name": "rollingSpendUsdAfter",
-            "docs": [
-              "DEPRECATED (v5): Always 0 since outcome-based spending.",
-              "Actual rolling spend is in SessionFinalized.actual_spend_usd.",
-              "Retained for IDL backward compatibility."
-            ],
             "type": "u64"
           },
           {
@@ -5830,80 +6097,6 @@ export type Sigil = {
           {
             "name": "timestamp",
             "type": "i64"
-          }
-        ]
-      }
-    },
-    {
-      "name": "actionType",
-      "docs": [
-        "Action types that agents can request"
-      ],
-      "type": {
-        "kind": "enum",
-        "variants": [
-          {
-            "name": "swap"
-          },
-          {
-            "name": "openPosition"
-          },
-          {
-            "name": "closePosition"
-          },
-          {
-            "name": "increasePosition"
-          },
-          {
-            "name": "decreasePosition"
-          },
-          {
-            "name": "deposit"
-          },
-          {
-            "name": "withdraw"
-          },
-          {
-            "name": "transfer"
-          },
-          {
-            "name": "addCollateral"
-          },
-          {
-            "name": "removeCollateral"
-          },
-          {
-            "name": "placeTriggerOrder"
-          },
-          {
-            "name": "editTriggerOrder"
-          },
-          {
-            "name": "cancelTriggerOrder"
-          },
-          {
-            "name": "placeLimitOrder"
-          },
-          {
-            "name": "editLimitOrder"
-          },
-          {
-            "name": "cancelLimitOrder"
-          },
-          {
-            "name": "swapAndOpenPosition"
-          },
-          {
-            "name": "closeAndSwapPosition"
-          },
-          {
-            "name": "createEscrow"
-          },
-          {
-            "name": "settleEscrow"
-          },
-          {
-            "name": "refundEscrow"
           }
         ]
       }
@@ -5971,8 +6164,12 @@ export type Sigil = {
             "type": "pubkey"
           },
           {
-            "name": "permissions",
-            "type": "u64"
+            "name": "capability",
+            "docs": [
+              "Agent capability: 0=Disabled, 1=Observer (non-spending), 2=Operator (full).",
+              "Replaces the 21-bit ActionType permission bitmask."
+            ],
+            "type": "u8"
           },
           {
             "name": "spendingLimitUsd",
@@ -5981,6 +6178,15 @@ export type Sigil = {
           {
             "name": "paused",
             "type": "bool"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": [
+                "u8",
+                7
+              ]
+            }
           }
         ]
       }
@@ -6075,8 +6281,8 @@ export type Sigil = {
             "type": "pubkey"
           },
           {
-            "name": "permissions",
-            "type": "u64"
+            "name": "capability",
+            "type": "u8"
           },
           {
             "name": "spendingLimitUsd",
@@ -6504,6 +6710,20 @@ export type Sigil = {
                 }
               }
             }
+          },
+          {
+            "name": "isSpending",
+            "docs": [
+              "Spending classification: 1=Spending, 2=NonSpending. Required (0 rejected)."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "positionEffect",
+            "docs": [
+              "Position effect: 0=None, 1=Increment, 2=Decrement."
+            ],
+            "type": "u8"
           }
         ]
       }
@@ -6561,11 +6781,28 @@ export type Sigil = {
             "type": "u8"
           },
           {
+            "name": "isSpending",
+            "docs": [
+              "Spending classification: 0=Unset (treated as spending), 1=Spending, 2=NonSpending.",
+              "Set by vault owner at constraint creation time. The constraint engine returns",
+              "this value when it matches an entry — replaces ActionType.is_spending()."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "positionEffect",
+            "docs": [
+              "Position tracking: 0=None, 1=Increment (opens position), 2=Decrement (closes position).",
+              "Replaces ActionType.position_effect()."
+            ],
+            "type": "u8"
+          },
+          {
             "name": "padding",
             "type": {
               "array": [
                 "u8",
-                6
+                4
               ]
             }
           }
@@ -7080,11 +7317,18 @@ export type Sigil = {
             "type": "u8"
           },
           {
+            "name": "constraintVersion",
+            "docs": [
+              "Constraint schema version. Always 1 for new deployments."
+            ],
+            "type": "u8"
+          },
+          {
             "name": "padding",
             "type": {
               "array": [
                 "u8",
-                5
+                4
               ]
             }
           }
@@ -7182,8 +7426,17 @@ export type Sigil = {
             "type": "pubkey"
           },
           {
-            "name": "newPermissions",
-            "type": "u64"
+            "name": "newCapability",
+            "type": "u8"
+          },
+          {
+            "name": "reservedCap",
+            "type": {
+              "array": [
+                "u8",
+                7
+              ]
+            }
           },
           {
             "name": "spendingLimitUsd",
@@ -7555,8 +7808,7 @@ export type Sigil = {
           {
             "name": "maxLeverageBps",
             "docs": [
-              "Maximum leverage multiplier in basis points (e.g., 10000 = 100x)",
-              "Set to 0 to disallow leveraged positions entirely"
+              "DEPRECATED: Not enforced on-chain. Kept for layout stability. See Phase B3 post-assertions."
             ],
             "type": "u16"
           },
@@ -7705,6 +7957,266 @@ export type Sigil = {
       }
     },
     {
+      "name": "postAssertionChecked",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "entryIndex",
+            "type": "u8"
+          },
+          {
+            "name": "passed",
+            "type": "bool"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "postAssertionEntry",
+      "docs": [
+        "Borsh-serializable assertion entry (instruction parameter form)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "targetAccount",
+            "type": "pubkey"
+          },
+          {
+            "name": "offset",
+            "type": "u16"
+          },
+          {
+            "name": "valueLen",
+            "type": "u8"
+          },
+          {
+            "name": "operator",
+            "type": "u8"
+          },
+          {
+            "name": "expectedValue",
+            "type": "bytes"
+          },
+          {
+            "name": "assertionMode",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "postAssertionEntryZc",
+      "docs": [
+        "Post-execution assertion: checks account data bytes AFTER the DeFi",
+        "instruction executes, within the same atomic transaction.",
+        "",
+        "Same bytes-at-offset pattern as DataConstraintZC, but applied to",
+        "account data instead of instruction data. Protocol-agnostic — the",
+        "vault owner configures byte offsets from protocol documentation.",
+        "",
+        "Phase B1: absolute value assertions (check field ≤ max, field ≥ min).",
+        "Phase B3 will add CrossFieldLte for leverage ratio enforcement."
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "targetAccount",
+            "docs": [
+              "The account to read after execution (passed via remaining_accounts).",
+              "Typically a Position PDA, User account, or similar protocol state."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "offset",
+            "docs": [
+              "Byte offset in the target account's data to read."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "valueLen",
+            "docs": [
+              "Length of the value to compare (1-32 bytes)."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "operator",
+            "docs": [
+              "Comparison operator (reuses ConstraintOperator: Eq, Ne, Gte, Lte, etc.)"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "expectedValue",
+            "docs": [
+              "Expected value for comparison (same max as DataConstraint)."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "assertionMode",
+            "docs": [
+              "Assertion mode:",
+              "0 = Absolute: check current value against expected_value",
+              "1 = MaxDecrease: check (snapshot - current) ≤ expected_value (Phase B2)",
+              "2 = MaxIncrease: check (current - snapshot) ≤ expected_value (Phase B2)",
+              "3 = NoChange: check current == snapshot (Phase B2)"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "padding",
+            "docs": [
+              "Padding to align to 8 bytes. Total: 32 + 2 + 1 + 1 + 32 + 1 + 7 = 76",
+              "Future: 4 bytes for cross-field offset_b (Phase B3 CrossFieldLte)",
+              "Future: 2 bytes for cross-field multiplier (Phase B3)",
+              "Future: 1 byte for cross-field flags"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                7
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "postAssertionsClosed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "postAssertionsCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "entryCount",
+            "type": "u8"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "postExecutionAssertions",
+      "docs": [
+        "On-chain account storing post-execution assertions for a vault.",
+        "Seeds: [b\"post_assertions\", vault.key()]"
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "docs": [
+              "The vault this assertion set belongs to."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "entries",
+            "docs": [
+              "Assertion entries (fixed-size array, up to MAX_POST_ASSERTION_ENTRIES)."
+            ],
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "postAssertionEntryZc"
+                  }
+                },
+                4
+              ]
+            }
+          },
+          {
+            "name": "entryCount",
+            "docs": [
+              "Number of active entries (0..=4)."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "PDA bump seed."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "padding",
+            "docs": [
+              "Reserved for future use."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                6
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "protocolSpendCounter",
       "docs": [
         "Per-protocol spend counter using simple 24h window.",
@@ -7789,15 +8301,19 @@ export type Sigil = {
             "type": "pubkey"
           },
           {
-            "name": "actionType",
+            "name": "isSpending",
             "docs": [
-              "The action type that was authorized (stored so finalize can record it)"
+              "Whether the matched constraint entry classifies this as spending.",
+              "Derived from amount > 0 in validate_and_authorize."
             ],
-            "type": {
-              "defined": {
-                "name": "actionType"
-              }
-            }
+            "type": "bool"
+          },
+          {
+            "name": "positionEffect",
+            "docs": [
+              "Position effect from matched constraint entry (0=None, 1=Increment, 2=Decrement)."
+            ],
+            "type": "u8"
           },
           {
             "name": "expiresAtSlot",
@@ -7893,8 +8409,7 @@ export type Sigil = {
           {
             "name": "actualSpendUsd",
             "docs": [
-              "Actual stablecoin spend measured by balance delta (0 for non-spending actions).",
-              "For stablecoin-input: outflow minus fees. For non-stablecoin-input: stablecoin gain."
+              "Actual stablecoin spend measured by balance delta (0 for non-spending actions)."
             ],
             "type": "u64"
           },
@@ -7906,9 +8421,16 @@ export type Sigil = {
             "type": "u64"
           },
           {
-            "name": "actionType",
+            "name": "isSpending",
             "docs": [
-              "ActionType as u8 for downstream classification (permission_bit() value, 0-20)."
+              "Whether this was a spending action."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "positionEffect",
+            "docs": [
+              "Position effect: 0=None, 1=Increment, 2=Decrement."
             ],
             "type": "u8"
           }
@@ -8085,9 +8607,9 @@ export type Sigil = {
             }
           },
           {
-            "name": "newAgentPermissions",
+            "name": "newAgentCapability",
             "type": {
-              "option": "u64"
+              "option": "u8"
             }
           },
           {

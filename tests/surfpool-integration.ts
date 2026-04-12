@@ -61,7 +61,7 @@ import {
   VersionedTxResult,
 } from "./helpers/surfpool-setup";
 
-const FULL_PERMISSIONS = new BN((1n << 21n) - 1n);
+const FULL_CAPABILITY = 2;
 
 // Helper: read current policy version for any vault's policy PDA
 async function readPolicyVersion(
@@ -176,7 +176,7 @@ describe("surfpool-integration", function () {
     it("registers agent and deposits USDC", async () => {
       // Register agent
       await program.methods
-        .registerAgent(agent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: env.payer.publicKey,
           vault: vaultPda,
@@ -226,11 +226,9 @@ describe("surfpool-integration", function () {
 
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           DEVNET_USDC_MINT,
           new BN(50_000_000), // 50 USDC
           program.programId, // dummy protocol
-          null,
           await readPolicyVersion(program, policyPda),
         )
         .accountsPartial({
@@ -350,7 +348,7 @@ describe("surfpool-integration", function () {
         .rpc();
 
       await program.methods
-        .registerAgent(agent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: env.payer.publicKey,
           vault: vaultPda,
@@ -393,11 +391,9 @@ describe("surfpool-integration", function () {
 
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           DEVNET_USDC_MINT,
           new BN(10_000_000), // 10 USDC
           program.programId,
-          null,
           await readPolicyVersion(program, policyPda),
         )
         .accountsPartial({
@@ -457,11 +453,9 @@ describe("surfpool-integration", function () {
       // finalize is required in same tx, but we can check the error)
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           DEVNET_USDC_MINT,
           new BN(10_000_000),
           program.programId,
-          null,
           await readPolicyVersion(program, policyPda),
         )
         .accountsPartial({
@@ -509,11 +503,9 @@ describe("surfpool-integration", function () {
 
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           DEVNET_USDC_MINT,
           new BN(5_000_000), // 5 USDC
           program.programId,
-          null,
           await readPolicyVersion(program, policyPda),
         )
         .accountsPartial({
@@ -623,7 +615,7 @@ describe("surfpool-integration", function () {
         .rpc();
 
       await program.methods
-        .registerAgent(agent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: env.payer.publicKey,
           vault: vaultPda,
@@ -666,11 +658,9 @@ describe("surfpool-integration", function () {
 
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           DEVNET_USDC_MINT,
           new BN(25_000_000), // 25 USDC
           program.programId,
-          null,
           await readPolicyVersion(program, policyPda),
         )
         .accountsPartial({
@@ -733,11 +723,9 @@ describe("surfpool-integration", function () {
 
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           DEVNET_USDC_MINT,
           new BN(25_000_000), // 25 USDC (valid amount)
           program.programId,
-          null,
           await readPolicyVersion(program, policyPda),
         )
         .accountsPartial({
@@ -810,11 +798,9 @@ describe("surfpool-integration", function () {
       // Second swap (first was 25 USDC)
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           DEVNET_USDC_MINT,
           new BN(30_000_000), // 30 USDC
           program.programId,
-          null,
           await readPolicyVersion(program, policyPda),
         )
         .accountsPartial({
@@ -924,7 +910,7 @@ describe("surfpool-integration", function () {
         .rpc();
 
       await program.methods
-        .registerAgent(agent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: env.payer.publicKey,
           vault: vaultPda,
@@ -990,11 +976,9 @@ describe("surfpool-integration", function () {
 
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           DEVNET_USDC_MINT,
           new BN(amount),
           program.programId,
-          null,
           await readPolicyVersion(program, policyPda),
         )
         .accountsPartial({
@@ -1106,7 +1090,7 @@ describe("surfpool-integration", function () {
         .rpc();
 
       await program.methods
-        .registerAgent(agent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: env.payer.publicKey,
           vault: vaultPda,
@@ -1149,11 +1133,9 @@ describe("surfpool-integration", function () {
 
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           DEVNET_USDC_MINT,
           new BN(20_000_000),
           program.programId,
-          null,
           await readPolicyVersion(program, policyPda),
         )
         .accountsPartial({
@@ -1802,7 +1784,7 @@ describe("surfpool-integration", function () {
       // Register a second agent for pause isolation tests
       agent2 = await createWallet(env.connection, "agent2", 10);
       await program.methods
-        .registerAgent(agent2.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(agent2.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: env.payer.publicKey,
           vault: setup.vaultPda,
@@ -1832,11 +1814,9 @@ describe("surfpool-integration", function () {
       );
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           DEVNET_USDC_MINT,
           new BN(10_000_000),
           program.programId,
-          null,
           await readPolicyVersion(program, setup.policyPda),
         )
         .accountsPartial({
@@ -1904,11 +1884,9 @@ describe("surfpool-integration", function () {
       );
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           DEVNET_USDC_MINT,
           new BN(5_000_000),
           program.programId,
-          null,
           await readPolicyVersion(program, setup.policyPda),
         )
         .accountsPartial({
@@ -2019,11 +1997,9 @@ describe("surfpool-integration", function () {
       );
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           DEVNET_USDC_MINT,
           new BN(5_000_000),
           program.programId,
-          null,
           await readPolicyVersion(program, setup.policyPda),
         )
         .accountsPartial({
@@ -2081,11 +2057,9 @@ describe("surfpool-integration", function () {
 
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           DEVNET_USDC_MINT,
           new BN(5_000_000),
           program.programId,
-          null,
           await readPolicyVersion(program, setup.policyPda),
         )
         .accountsPartial({
@@ -2156,11 +2130,9 @@ describe("surfpool-integration", function () {
       );
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           DEVNET_USDC_MINT,
           new BN(5_000_000),
           program.programId,
-          null,
           await readPolicyVersion(program, setup.policyPda),
         )
         .accountsPartial({
@@ -2266,11 +2238,11 @@ describe("surfpool-integration", function () {
   // Suite 10: Multi-agent permissions
   // ═══════════════════════════════════════════════════════════════════════════
   describe("10. multi-agent permissions", () => {
-    // Permission bits: 0=Swap, 4=Deposit, 7=Transfer, 9=ClosePosition
-    const SWAP_ONLY = new BN(1); // bit 0
-    const NO_SWAP = new BN(((1n << 21n) - 1n) ^ 1n); // all bits except 0
-    const TRANSFER_ONLY = new BN(1 << 7); // bit 7
-    const ZERO_PERMISSIONS = new BN(0);
+    // Capability levels: 0=Disabled, 1=Observer (non-spending), 2=Operator (full)
+    const SWAP_ONLY = 2; // Operator — can do spending operations (swap)
+    const NO_SWAP = 1; // Observer — non-spending only, swap (spending) blocked
+    const TRANSFER_ONLY = 2; // Operator — can do spending operations (transfer)
+    const ZERO_PERMISSIONS = 0; // Disabled — no operations
 
     let swapSetup: VaultSetupResult;
     let noSwapSetup: VaultSetupResult;
@@ -2278,12 +2250,12 @@ describe("surfpool-integration", function () {
     before(async () => {
       // Vault with swap-only agent (timelockDuration required for queue/apply)
       swapSetup = await setupVaultWithAgent(env, program, {
-        agentPermissions: SWAP_ONLY,
+        agentCapability: SWAP_ONLY,
         timelockDuration: new BN(1800),
       });
       // Vault with no-swap agent
       noSwapSetup = await setupVaultWithAgent(env, program, {
-        agentPermissions: NO_SWAP,
+        agentCapability: NO_SWAP,
       });
     });
 
@@ -2297,11 +2269,9 @@ describe("surfpool-integration", function () {
 
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           DEVNET_USDC_MINT,
           new BN(5_000_000),
           program.programId,
-          null,
           await readPolicyVersion(program, swapSetup.policyPda),
         )
         .accountsPartial({
@@ -2364,11 +2334,9 @@ describe("surfpool-integration", function () {
 
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           DEVNET_USDC_MINT,
           new BN(5_000_000),
           program.programId,
-          null,
           currentVersion,
         )
         .accountsPartial({
@@ -2430,7 +2398,7 @@ describe("surfpool-integration", function () {
       await program.methods
         .queueAgentPermissionsUpdate(
           swapSetup.agent.publicKey,
-          FULL_PERMISSIONS,
+          FULL_CAPABILITY,
           new BN(0),
         )
         .accounts({
@@ -2472,9 +2440,7 @@ describe("surfpool-integration", function () {
         (a: any) =>
           a.pubkey.toString() === swapSetup.agent.publicKey.toString(),
       );
-      expect(agentEntry.permissions.toNumber()).to.equal(
-        FULL_PERMISSIONS.toNumber(),
-      );
+      expect(agentEntry.capability).to.equal(FULL_CAPABILITY);
     });
 
     it("two agents with different permissions operate independently", async () => {
@@ -2501,11 +2467,9 @@ describe("surfpool-integration", function () {
       const currentVersion = (pol as any).policyVersion ?? new BN(0);
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           DEVNET_USDC_MINT,
           new BN(5_000_000),
           program.programId,
-          null,
           currentVersion,
         )
         .accountsPartial({
@@ -2563,7 +2527,7 @@ describe("surfpool-integration", function () {
       );
 
       const transferSetup = await setupVaultWithAgent(env, program, {
-        agentPermissions: TRANSFER_ONLY,
+        agentCapability: TRANSFER_ONLY,
         allowedDestinations: [destWallet.publicKey],
       });
 
@@ -2594,7 +2558,7 @@ describe("surfpool-integration", function () {
 
     it("zero-permission agent fails on any action", async () => {
       const zeroSetup = await setupVaultWithAgent(env, program, {
-        agentPermissions: ZERO_PERMISSIONS,
+        agentCapability: ZERO_PERMISSIONS,
       });
 
       const sessionPda = deriveSessionPda(
@@ -2606,11 +2570,9 @@ describe("surfpool-integration", function () {
 
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           DEVNET_USDC_MINT,
           new BN(5_000_000),
           program.programId,
-          null,
           await readPolicyVersion(program, zeroSetup.policyPda),
         )
         .accountsPartial({
@@ -2904,7 +2866,7 @@ describe("surfpool-integration", function () {
       for (let i = 2; i <= 10; i++) {
         const extra = await createWallet(env.connection, `maxAgent${i}`, 2);
         const regIx = await program.methods
-          .registerAgent(extra.publicKey, FULL_PERMISSIONS, new BN(0))
+          .registerAgent(extra.publicKey, FULL_CAPABILITY, new BN(0))
           .accounts({
             owner: env.payer.publicKey,
             vault: maxSetup.vaultPda,
@@ -2917,7 +2879,7 @@ describe("surfpool-integration", function () {
       // 11th agent should fail
       const eleventh = await createWallet(env.connection, "agent11", 2);
       const regIx = await program.methods
-        .registerAgent(eleventh.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(eleventh.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: env.payer.publicKey,
           vault: maxSetup.vaultPda,
@@ -3411,11 +3373,9 @@ describe("surfpool-integration", function () {
 
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           DEVNET_USDC_MINT,
           new BN(5_000_000),
           program.programId,
-          null,
           await readPolicyVersion(program, setup.policyPda),
         )
         .accountsPartial({
@@ -3479,11 +3439,9 @@ describe("surfpool-integration", function () {
 
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           DEVNET_USDC_MINT,
           new BN(5_000_000),
           program.programId,
-          null,
           await readPolicyVersion(program, setup.policyPda),
         )
         .accountsPartial({

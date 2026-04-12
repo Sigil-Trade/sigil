@@ -23,17 +23,12 @@ import {
   type FixedSizeDecoder,
   type FixedSizeEncoder,
 } from "@solana/kit";
-import {
-  getActionTypeDecoder,
-  getActionTypeEncoder,
-  type ActionType,
-  type ActionTypeArgs,
-} from "./index.js";
 
 export type ActionAuthorized = {
   vault: Address;
   agent: Address;
-  actionType: ActionType;
+  /** Whether this is a spending action (amount > 0). Replaces legacy actionType. */
+  isSpending: boolean;
   tokenMint: Address;
   amount: bigint;
   usdAmount: bigint;
@@ -52,7 +47,8 @@ export type ActionAuthorized = {
 export type ActionAuthorizedArgs = {
   vault: Address;
   agent: Address;
-  actionType: ActionTypeArgs;
+  /** Whether this is a spending action (amount > 0). Replaces legacy actionType. */
+  isSpending: boolean;
   tokenMint: Address;
   amount: number | bigint;
   usdAmount: number | bigint;
@@ -72,7 +68,7 @@ export function getActionAuthorizedEncoder(): FixedSizeEncoder<ActionAuthorizedA
   return getStructEncoder([
     ["vault", getAddressEncoder()],
     ["agent", getAddressEncoder()],
-    ["actionType", getActionTypeEncoder()],
+    ["isSpending", getBooleanEncoder()],
     ["tokenMint", getAddressEncoder()],
     ["amount", getU64Encoder()],
     ["usdAmount", getU64Encoder()],
@@ -88,7 +84,7 @@ export function getActionAuthorizedDecoder(): FixedSizeDecoder<ActionAuthorized>
   return getStructDecoder([
     ["vault", getAddressDecoder()],
     ["agent", getAddressDecoder()],
-    ["actionType", getActionTypeDecoder()],
+    ["isSpending", getBooleanDecoder()],
     ["tokenMint", getAddressDecoder()],
     ["amount", getU64Decoder()],
     ["usdAmount", getU64Decoder()],

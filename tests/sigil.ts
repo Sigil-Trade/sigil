@@ -39,7 +39,9 @@ import {
   LiteSVM,
 } from "./helpers/litesvm-setup";
 
-const FULL_PERMISSIONS = new BN((1n << 21n) - 1n);
+const FULL_CAPABILITY = 2; // CAPABILITY_OPERATOR
+const VIEWER_CAPABILITY = 1;
+const BAD_CAPABILITY = 255;
 
 describe("sigil", () => {
   let env: TestEnv;
@@ -387,7 +389,7 @@ describe("sigil", () => {
   describe("register_agent", () => {
     it("registers an agent pubkey", async () => {
       await program.methods
-        .registerAgent(agent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: vaultPda,
@@ -399,17 +401,15 @@ describe("sigil", () => {
       expect(vault.agents[0].pubkey.toString()).to.equal(
         agent.publicKey.toString(),
       );
-      // P1 #16: Verify permission bitmask actually stored (not just pubkey)
-      expect(vault.agents[0].permissions.toString()).to.equal(
-        FULL_PERMISSIONS.toString(),
-      );
+      // P1 #16: Verify capability actually stored (not just pubkey)
+      expect(vault.agents[0].capability).to.equal(FULL_CAPABILITY);
     });
 
     it("rejects double registration", async () => {
       try {
         // Register the SAME agent pubkey that was already registered
         await program.methods
-          .registerAgent(agent.publicKey, FULL_PERMISSIONS, new BN(0))
+          .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
           .accounts({
             owner: owner.publicKey,
             vault: vaultPda,
@@ -476,7 +476,7 @@ describe("sigil", () => {
       // Try to register agent as non-owner
       try {
         await program.methods
-          .registerAgent(agent.publicKey, FULL_PERMISSIONS, new BN(0))
+          .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
           .accounts({
             owner: unauthorizedUser.publicKey,
             vault: v,
@@ -687,7 +687,7 @@ describe("sigil", () => {
         } as any)
         .rpc();
       await program.methods
-        .registerAgent(agent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: revokeVaultPda,
@@ -808,7 +808,7 @@ describe("sigil", () => {
 
       // Register agent then freeze by revoking
       await program.methods
-        .registerAgent(agent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: reactVaultPda,
@@ -828,7 +828,7 @@ describe("sigil", () => {
 
     it("reactivates a frozen vault", async () => {
       await program.methods
-        .reactivateVault(agent.publicKey, FULL_PERMISSIONS)
+        .reactivateVault(agent.publicKey, FULL_CAPABILITY)
         .accounts({ owner: owner.publicKey, vault: reactVaultPda } as any)
         .rpc();
 
@@ -871,7 +871,7 @@ describe("sigil", () => {
 
       // Clean up: reactivate with new agent for subsequent tests
       await program.methods
-        .reactivateVault(agent.publicKey, FULL_PERMISSIONS)
+        .reactivateVault(agent.publicKey, FULL_CAPABILITY)
         .accounts({ owner: owner.publicKey, vault: reactVaultPda } as any)
         .rpc();
     });
@@ -889,7 +889,7 @@ describe("sigil", () => {
 
       const newAgent = Keypair.generate();
       await program.methods
-        .reactivateVault(newAgent.publicKey, FULL_PERMISSIONS)
+        .reactivateVault(newAgent.publicKey, FULL_CAPABILITY)
         .accounts({ owner: owner.publicKey, vault: reactVaultPda } as any)
         .rpc();
 
@@ -992,11 +992,9 @@ describe("sigil", () => {
 
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} }, // ActionType::Swap
           usdcMint,
           amount,
           jupiterProgramId,
-          null, // no leverage
           await pv(), // expectedPolicyVersion
         )
         .accountsPartial({
@@ -1088,11 +1086,9 @@ describe("sigil", () => {
       const amount = new BN(50_000_000);
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           usdcMint,
           amount,
           jupiterProgramId,
-          null,
           await pv(), // restored pv() v2
         )
         .accountsPartial({
@@ -1229,11 +1225,9 @@ describe("sigil", () => {
       try {
         await program.methods
           .validateAndAuthorize(
-            { swap: {} },
             solMint, // non-stablecoin token mint
             new BN(1_000_000),
             jupiterProgramId,
-            null,
             await pv(),
           )
           .accounts({
@@ -1266,11 +1260,9 @@ describe("sigil", () => {
       try {
         await program.methods
           .validateAndAuthorize(
-            { swap: {} },
             usdcMint,
             new BN(1_000_000),
             fakeProtocol, // not in protocols
-            null,
             await pv(),
           )
           .accounts({
@@ -1303,11 +1295,9 @@ describe("sigil", () => {
       try {
         await program.methods
           .validateAndAuthorize(
-            { swap: {} },
             usdcMint,
             new BN(200_000_000), // would exceed max_transaction_size — but checked in finalize now
             jupiterProgramId,
-            null,
             await pv(),
           )
           .accounts({
@@ -1341,11 +1331,9 @@ describe("sigil", () => {
       try {
         await program.methods
           .validateAndAuthorize(
-            { swap: {} },
             usdcMint,
             new BN(100_000_000),
             jupiterProgramId,
-            null,
             await pv(),
           )
           .accounts({
@@ -1389,11 +1377,9 @@ describe("sigil", () => {
       try {
         await program.methods
           .validateAndAuthorize(
-            { swap: {} },
             usdcMint,
             new BN(1_000_000),
             jupiterProgramId,
-            null,
             await pv(),
           )
           .accounts({
@@ -1470,11 +1456,9 @@ describe("sigil", () => {
       try {
         await program.methods
           .validateAndAuthorize(
-            { swap: {} },
             usdcMint,
             new BN(1_000_000),
             jupiterProgramId,
-            null,
             await pv(),
           )
           .accounts({
@@ -1962,7 +1946,7 @@ describe("sigil", () => {
         program.programId,
       );
       await program.methods
-        .registerAgent(agent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: feeVaultPda,
@@ -2004,11 +1988,9 @@ describe("sigil", () => {
       // Compose validate+finalize atomically
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           usdcMint,
           new BN(10_000_000),
           jupiterProgramId,
-          null,
           await pv(feePolicyPda),
         )
         .accountsPartial({
@@ -2132,11 +2114,9 @@ describe("sigil", () => {
       // Compose validate+finalize atomically
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           usdcMint,
           new BN(10_000_000),
           jupiterProgramId,
-          null,
           await pv(feePolicyPda),
         )
         .accountsPartial({
@@ -2201,11 +2181,9 @@ describe("sigil", () => {
       // Compose validate+finalize atomically (no DeFi instruction between them)
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           usdcMint,
           new BN(10_000_000),
           jupiterProgramId,
-          null,
           await pv(feePolicyPda),
         )
         .accountsPartial({
@@ -2385,7 +2363,7 @@ describe("sigil", () => {
 
       // Register agent
       await program.methods
-        .registerAgent(lifecycleAgent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(lifecycleAgent.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: lifecycleVaultPda,
@@ -2417,11 +2395,9 @@ describe("sigil", () => {
     it("composed validate+finalize succeeds and session is closed atomically", async () => {
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           usdcMint,
           new BN(10_000_000),
           jupiterProgramId,
-          null,
           await pv(lifecyclePolicyPda),
         )
         .accountsPartial({
@@ -2483,11 +2459,9 @@ describe("sigil", () => {
       // Compose validate+finalize but with wrong rent recipient
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           usdcMint,
           new BN(5_000_000),
           jupiterProgramId,
-          null,
           await pv(lifecyclePolicyPda),
         )
         .accountsPartial({
@@ -2539,11 +2513,9 @@ describe("sigil", () => {
       for (let i = 0; i < 2; i++) {
         const validateIx = await program.methods
           .validateAndAuthorize(
-            { swap: {} },
             usdcMint,
             new BN(5_000_000),
             jupiterProgramId,
-            null,
             await pv(lifecyclePolicyPda),
           )
           .accountsPartial({
@@ -2645,7 +2617,7 @@ describe("sigil", () => {
         .rpc();
       try {
         await program.methods
-          .registerAgent(owner.publicKey, FULL_PERMISSIONS, new BN(0)) // owner = agent → reject
+          .registerAgent(owner.publicKey, FULL_CAPABILITY, new BN(0)) // owner = agent → reject
           .accounts({
             owner: owner.publicKey,
             vault: v,
@@ -2702,7 +2674,7 @@ describe("sigil", () => {
       }
 
       await program.methods
-        .reactivateVault(newAgent.publicKey, FULL_PERMISSIONS)
+        .reactivateVault(newAgent.publicKey, FULL_CAPABILITY)
         .accounts({ owner: owner.publicKey, vault: rv } as any)
         .rpc();
 
@@ -2720,11 +2692,9 @@ describe("sigil", () => {
       try {
         await program.methods
           .validateAndAuthorize(
-            { swap: {} },
             usdcMint,
             new BN(1_000_000),
             jupiterProgramId,
-            null,
             await pv(),
           )
           .accounts({
@@ -2808,7 +2778,7 @@ describe("sigil", () => {
 
       // Register agent then freeze by revoking
       await program.methods
-        .registerAgent(agent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: fv,
@@ -3006,7 +2976,7 @@ describe("sigil", () => {
 
       // Register agent, then close
       await program.methods
-        .registerAgent(agent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: cv,
@@ -3029,11 +2999,9 @@ describe("sigil", () => {
       try {
         await program.methods
           .validateAndAuthorize(
-            { swap: {} },
             usdcMint,
             new BN(1_000_000),
             jupiterProgramId,
-            null,
             await pv(),
           )
           .accounts({
@@ -3135,7 +3103,7 @@ describe("sigil", () => {
         } as any)
         .rpc();
       await program.methods
-        .registerAgent(ringAgent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(ringAgent.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: ringVaultPda,
@@ -3179,11 +3147,9 @@ describe("sigil", () => {
       for (let i = 0; i < 51; i++) {
         const validateIx = await program.methods
           .validateAndAuthorize(
-            { swap: {} },
             usdcMint,
             new BN(1_000_000), // 1 USDC each
             jupiterProgramId,
-            null,
             await pv(ringPolicyPda),
           )
           .accountsPartial({
@@ -3299,7 +3265,7 @@ describe("sigil", () => {
         } as any)
         .rpc();
       await program.methods
-        .registerAgent(feeEdgeAgent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(feeEdgeAgent.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: feeEdgeVaultPda,
@@ -3345,11 +3311,9 @@ describe("sigil", () => {
       // net = 1 - 1 = 0 → delegation = 0, 1 unit goes to treasury
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           usdcMint,
           new BN(1), // 1 lamport
           jupiterProgramId,
-          null,
           await pv(feeEdgePolicyPda),
         )
         .accountsPartial({
@@ -3412,11 +3376,9 @@ describe("sigil", () => {
       // Compose validate+finalize atomically
       const validateIx1 = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           usdcMint,
           new BN(4_999),
           jupiterProgramId,
-          null,
           await pv(feeEdgePolicyPda),
         )
         .accountsPartial({
@@ -3463,11 +3425,9 @@ describe("sigil", () => {
 
       const validateIx2 = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           usdcMint,
           new BN(5_000),
           jupiterProgramId,
-          null,
           await pv(feeEdgePolicyPda),
         )
         .accountsPartial({
@@ -3581,7 +3541,7 @@ describe("sigil", () => {
         } as any)
         .rpc();
       await program.methods
-        .registerAgent(tlAgent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(tlAgent.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: tlVaultPda,
@@ -4072,7 +4032,7 @@ describe("sigil", () => {
         } as any)
         .rpc();
       await program.methods
-        .registerAgent(destAgent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(destAgent.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: destVaultPda,
@@ -4217,7 +4177,7 @@ describe("sigil", () => {
         } as any)
         .rpc();
       await program.methods
-        .registerAgent(destAgent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(destAgent.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: anyVault,
@@ -4460,7 +4420,7 @@ describe("sigil", () => {
         } as any)
         .rpc();
       await program.methods
-        .registerAgent(destAgent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(destAgent.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: fv,
@@ -4620,11 +4580,10 @@ describe("sigil", () => {
         .rpc();
     });
 
-    it("registers 2 agents with different permissions", async () => {
-      // Agent 1: Swap-only (bit 0)
-      const SWAP_ONLY = new BN(1);
+    it("registers 2 agents with different capabilities", async () => {
+      // Agent 1: viewer (capability = 1)
       await program.methods
-        .registerAgent(agent.publicKey, SWAP_ONLY, new BN(0))
+        .registerAgent(agent.publicKey, VIEWER_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: maVault,
@@ -4632,9 +4591,9 @@ describe("sigil", () => {
         } as any)
         .rpc();
 
-      // Agent 2: full permissions
+      // Agent 2: full capability (operator)
       await program.methods
-        .registerAgent(agent2.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(agent2.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: maVault,
@@ -4647,16 +4606,14 @@ describe("sigil", () => {
       expect(vault.agents[0].pubkey.toString()).to.equal(
         agent.publicKey.toString(),
       );
-      expect(vault.agents[0].permissions.toNumber()).to.equal(1);
+      expect(vault.agents[0].capability).to.equal(VIEWER_CAPABILITY);
       expect(vault.agents[1].pubkey.toString()).to.equal(
         agent2.publicKey.toString(),
       );
-      expect(vault.agents[1].permissions.toNumber()).to.equal(
-        FULL_PERMISSIONS.toNumber(),
-      );
+      expect(vault.agents[1].capability).to.equal(FULL_CAPABILITY);
     });
 
-    it("agent with Swap permission swaps successfully", async () => {
+    it("agent with Observer capability succeeds with zero amount (non-spending)", async () => {
       const [session] = PublicKey.findProgramAddressSync(
         [
           Buffer.from("session"),
@@ -4669,11 +4626,9 @@ describe("sigil", () => {
 
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           usdcMint,
-          new BN(1_000_000),
+          new BN(0), // non-spending for Observer
           jupiterProgramId,
-          null,
           await pv(maPolicy),
         )
         .accounts({
@@ -4717,8 +4672,8 @@ describe("sigil", () => {
       sendVersionedTx(svm, [validateIx, finalizeIx], agent);
     });
 
-    it("agent without OpenPosition permission denied → InsufficientPermissions", async () => {
-      // Agent 1 has Swap-only (bit 0), OpenPosition is bit 1
+    it("observer agent spending denied → InsufficientPermissions", async () => {
+      // Agent 1 has Observer capability (1), spending requires Operator (2)
       const [session] = PublicKey.findProgramAddressSync(
         [
           Buffer.from("session"),
@@ -4731,11 +4686,9 @@ describe("sigil", () => {
 
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { openPosition: {} },
           usdcMint,
           new BN(1_000_000),
           jupiterProgramId,
-          null,
           await pv(maPolicy),
         )
         .accounts({
@@ -4820,7 +4773,7 @@ describe("sigil", () => {
     it("register up to 10 agents — succeeds", async () => {
       // Reactivate first
       await program.methods
-        .reactivateVault(agent.publicKey, FULL_PERMISSIONS)
+        .reactivateVault(agent.publicKey, FULL_CAPABILITY)
         .accounts({ owner: owner.publicKey, vault: maVault } as any)
         .rpc();
 
@@ -4829,7 +4782,7 @@ describe("sigil", () => {
         const a = Keypair.generate();
         airdropSol(svm, a.publicKey, LAMPORTS_PER_SOL);
         await program.methods
-          .registerAgent(a.publicKey, FULL_PERMISSIONS, new BN(0))
+          .registerAgent(a.publicKey, FULL_CAPABILITY, new BN(0))
           .accounts({
             owner: owner.publicKey,
             vault: maVault,
@@ -4846,7 +4799,7 @@ describe("sigil", () => {
       const extra = Keypair.generate();
       try {
         await program.methods
-          .registerAgent(extra.publicKey, FULL_PERMISSIONS, new BN(0))
+          .registerAgent(extra.publicKey, FULL_CAPABILITY, new BN(0))
           .accounts({
             owner: owner.publicKey,
             vault: maVault,
@@ -4859,7 +4812,7 @@ describe("sigil", () => {
       }
     });
 
-    it("reactivate with new agent + permissions", async () => {
+    it("reactivate with new agent + capability", async () => {
       // First freeze by revoking all 10 agents
       const vault10 = await program.account.agentVault.fetch(maVault);
       for (const a of vault10.agents) {
@@ -4874,9 +4827,8 @@ describe("sigil", () => {
       }
 
       const newAgent = Keypair.generate();
-      const SWAP_AND_TRANSFER = new BN(1 | (1 << 4)); // bits 0 + 4
       await program.methods
-        .reactivateVault(newAgent.publicKey, SWAP_AND_TRANSFER)
+        .reactivateVault(newAgent.publicKey, VIEWER_CAPABILITY)
         .accounts({ owner: owner.publicKey, vault: maVault } as any)
         .rpc();
 
@@ -4885,18 +4837,16 @@ describe("sigil", () => {
       expect(vault.agents[0].pubkey.toString()).to.equal(
         newAgent.publicKey.toString(),
       );
-      expect(vault.agents[0].permissions.toNumber()).to.equal(
-        SWAP_AND_TRANSFER.toNumber(),
-      );
+      expect(vault.agents[0].capability).to.equal(VIEWER_CAPABILITY);
       expect(vault.status).to.have.property("active");
     });
 
-    it("update agent permissions via queue+apply (owner-only)", async () => {
+    it("update agent capability via queue+apply (owner-only)", async () => {
       // Register a fresh agent for this test
       const updAgent = Keypair.generate();
       airdropSol(svm, updAgent.publicKey, LAMPORTS_PER_SOL);
       await program.methods
-        .registerAgent(updAgent.publicKey, new BN(1), new BN(0))
+        .registerAgent(updAgent.publicKey, VIEWER_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: maVault,
@@ -4914,11 +4864,11 @@ describe("sigil", () => {
         program.programId,
       );
 
-      // Queue permissions update
+      // Queue capability update
       await program.methods
         .queueAgentPermissionsUpdate(
           updAgent.publicKey,
-          FULL_PERMISSIONS,
+          FULL_CAPABILITY,
           new BN(0),
         )
         .accounts({
@@ -4932,7 +4882,7 @@ describe("sigil", () => {
 
       advanceTime(svm, 1801);
 
-      // Apply pending permissions update
+      // Apply pending capability update
       await program.methods
         .applyAgentPermissionsUpdate()
         .accounts({
@@ -4949,18 +4899,14 @@ describe("sigil", () => {
         (a: any) => a.pubkey.toString() === updAgent.publicKey.toString(),
       );
       expect(entry).to.not.be.undefined;
-      expect(entry!.permissions.toNumber()).to.equal(
-        FULL_PERMISSIONS.toNumber(),
-      );
+      expect(entry!.capability).to.equal(FULL_CAPABILITY);
     });
 
-    it("invalid permission bitmask → InvalidPermissions (6045)", async () => {
+    it("invalid capability value → InvalidPermissions (6045)", async () => {
       const badAgent = Keypair.generate();
-      // Bit 21+ is invalid (only 21 ActionType variants, bits 0-20 valid)
-      const BAD_PERMS = new BN(1n << 21n);
       try {
         await program.methods
-          .registerAgent(badAgent.publicKey, BAD_PERMS, new BN(0))
+          .registerAgent(badAgent.publicKey, BAD_CAPABILITY, new BN(0))
           .accounts({
             owner: owner.publicKey,
             vault: maVault,
@@ -5054,7 +5000,7 @@ describe("sigil", () => {
       await program.methods
         .registerAgent(
           epochAgent.publicKey,
-          FULL_PERMISSIONS,
+          FULL_CAPABILITY,
           new BN(1_000_000_000),
         )
         .accounts({
@@ -5356,7 +5302,7 @@ describe("sigil", () => {
 
       // Register agent
       await program.methods
-        .registerAgent(protoCapAgent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(protoCapAgent.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: protoCapOwner.publicKey,
           vault: pcVault,
@@ -5380,11 +5326,9 @@ describe("sigil", () => {
 
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           usdcMint,
           amount,
           protocol,
-          null,
           await pv(protoCapPolicyPda),
         )
         .accountsPartial({
@@ -5812,7 +5756,7 @@ describe("sigil", () => {
         .rpc();
 
       await program.methods
-        .registerAgent(freezeAgent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(freezeAgent.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: freezeVaultPda,
@@ -5821,7 +5765,7 @@ describe("sigil", () => {
         .rpc();
 
       await program.methods
-        .registerAgent(freezeAgent2.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(freezeAgent2.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: freezeVaultPda,
@@ -6036,7 +5980,7 @@ describe("sigil", () => {
         .rpc();
 
       await program.methods
-        .registerAgent(pauseAgent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(pauseAgent.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: pauseVaultPda,
@@ -6045,7 +5989,7 @@ describe("sigil", () => {
         .rpc();
 
       await program.methods
-        .registerAgent(pauseAgent2.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(pauseAgent2.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: pauseVaultPda,
@@ -6298,7 +6242,7 @@ describe("sigil", () => {
         .rpc();
     });
 
-    it("paused agent's permissions preserved after unpause", async () => {
+    it("paused agent's capability preserved after unpause", async () => {
       // Pause and unpause
       await program.methods
         .pauseAgent(pauseAgent.publicKey)
@@ -6321,9 +6265,7 @@ describe("sigil", () => {
         (a: any) => a.pubkey.toString() === pauseAgent.publicKey.toString(),
       );
       expect(entry.paused).to.equal(false);
-      expect(entry.permissions.toString()).to.equal(
-        FULL_PERMISSIONS.toString(),
-      );
+      expect(entry.capability).to.equal(FULL_CAPABILITY);
     });
   });
 });

@@ -64,7 +64,7 @@ import {
   FailedTransactionMetadata,
 } from "./helpers/litesvm-setup";
 
-const FULL_PERMISSIONS = new BN((1n << 21n) - 1n);
+const FULL_CAPABILITY = 2; // CAPABILITY_OPERATOR
 
 /**
  * Jupiter Integration Tests
@@ -167,11 +167,9 @@ describe("jupiter-integration", () => {
     // 2. Validate and authorize
     const validateIx = await program.methods
       .validateAndAuthorize(
-        { swap: {} },
         tokenMint,
         amount,
         targetProtocol,
-        null,
         new BN(0),
       )
       .accountsPartial({
@@ -304,7 +302,7 @@ describe("jupiter-integration", () => {
 
     // Register agent
     await program.methods
-      .registerAgent(agent.publicKey, FULL_PERMISSIONS, new BN(0))
+      .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
       .accountsPartial({
         owner: owner.publicKey,
         vault: vaultPda,
@@ -569,7 +567,7 @@ describe("jupiter-integration", () => {
         .rpc();
 
       await program.methods
-        .registerAgent(agent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
         .accountsPartial({
           owner: owner.publicKey,
           vault: frozenVault,
@@ -697,7 +695,7 @@ describe("jupiter-integration", () => {
         .rpc();
 
       await program.methods
-        .registerAgent(agent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
         .accountsPartial({
           owner: owner.publicKey,
           vault: rollingVault,

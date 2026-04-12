@@ -63,13 +63,14 @@ describe("getAgentProfile", () => {
     expect(getAgentProfile(state, "agent999" as Address)).to.be.null;
   });
 
-  it("detects FULL_PERMISSIONS", () => {
+  it("detects FULL_CAPABILITY", () => {
     const state = mockStateWithAgents([
       { pubkey: "agent1", spend: 0n, limit: 0n, perms: FULL_PERMISSIONS },
     ]);
     const profile = getAgentProfile(state, "agent1" as Address);
     expect(profile!.hasFullPermissions).to.equal(true);
-    expect(profile!.permissionCount).to.equal(21);
+    // FULL_CAPABILITY = 2n has 1 permission bit set (openPosition)
+    expect(profile!.permissionCount).to.equal(1);
   });
 
   it("detects approaching cap (>80%)", () => {

@@ -39,7 +39,7 @@ import {
   LiteSVM,
 } from "./helpers/litesvm-setup";
 
-const FULL_PERMISSIONS = new BN((1n << 21n) - 1n);
+const FULL_CAPABILITY = 2; // CAPABILITY_OPERATOR
 
 describe("TOCTOU Security Fix", () => {
   let env: TestEnv;
@@ -176,7 +176,7 @@ describe("TOCTOU Security Fix", () => {
       .rpc();
 
     await program.methods
-      .registerAgent(agent.publicKey, FULL_PERMISSIONS, new BN(0))
+      .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
       .accountsPartial({
         owner: owner.publicKey,
         vault: pdas.vaultPda,
@@ -276,11 +276,9 @@ describe("TOCTOU Security Fix", () => {
     try {
       const validateIx = await program.methods
         .validateAndAuthorize(
-          { swap: {} },
           usdcMint,
           new BN(10_000_000),
           jupiterProgramId,
-          null,
           new BN(0), // STALE: policy is now at version 1
         )
         .accountsPartial({

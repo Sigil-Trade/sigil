@@ -12,7 +12,7 @@
 import type { Address } from "@solana/kit";
 import type { CreateVaultOptions } from "./create-vault.js";
 import {
-  FULL_PERMISSIONS,
+  FULL_CAPABILITY,
   SWAP_ONLY,
   PERPS_FULL,
   PROTOCOL_MODE_ALL,
@@ -42,7 +42,9 @@ export interface VaultPreset {
   label: string;
   /** One-sentence description for the wizard card. */
   description: string;
-  /** Agent permission bitmask (21 bits). */
+  /** Agent capability bitmask. */
+  capability: bigint;
+  /** @deprecated Use capability instead. Alias for backward compatibility. */
   permissions: bigint;
   /** Rolling 24h spending cap in USD base units (6 decimals). */
   dailySpendingCapUsd: bigint;
@@ -66,7 +68,8 @@ export const VAULT_PRESETS = {
   "jupiter-swap-bot": {
     label: "Jupiter Swap Bot",
     description:
-      "Simple swap bot using Jupiter. Swap permission only, conservative caps.",
+      "Simple swap bot using Jupiter. Swap capability only, conservative caps.",
+    capability: SWAP_ONLY,
     permissions: SWAP_ONLY,
     dailySpendingCapUsd: 500_000_000n, // $500
     maxTransactionSizeUsd: 100_000_000n, // $100
@@ -80,6 +83,7 @@ export const VAULT_PRESETS = {
     label: "Perps Trader",
     description:
       "Leveraged trading on Flash Trade and Jupiter. Full order management with position limits.",
+    capability: PERPS_FULL | SWAP_ONLY,
     permissions: PERPS_FULL | SWAP_ONLY,
     dailySpendingCapUsd: 5_000_000_000n, // $5,000
     maxTransactionSizeUsd: 1_000_000_000n, // $1,000
@@ -93,6 +97,7 @@ export const VAULT_PRESETS = {
     label: "Lending Optimizer",
     description:
       "Deposit and withdraw across lending protocols. Low slippage, moderate caps.",
+    capability: LENDING_PERMISSIONS,
     permissions: LENDING_PERMISSIONS,
     dailySpendingCapUsd: 2_000_000_000n, // $2,000
     maxTransactionSizeUsd: 500_000_000n, // $500
@@ -109,8 +114,9 @@ export const VAULT_PRESETS = {
   "full-access": {
     label: "Full Access",
     description:
-      "All permissions enabled, all protocols allowed. For experienced users who need maximum flexibility.",
-    permissions: FULL_PERMISSIONS,
+      "Full capability enabled, all protocols allowed. For experienced users who need maximum flexibility.",
+    capability: FULL_CAPABILITY,
+    permissions: FULL_CAPABILITY,
     dailySpendingCapUsd: 10_000_000_000n, // $10,000
     maxTransactionSizeUsd: 5_000_000_000n, // $5,000
     maxSlippageBps: 500, // 5%

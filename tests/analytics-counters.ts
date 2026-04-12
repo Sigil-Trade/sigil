@@ -30,7 +30,7 @@ import {
   LiteSVM,
 } from "./helpers/litesvm-setup";
 
-const FULL_PERMISSIONS = new BN((1n << 21n) - 1n);
+const FULL_CAPABILITY = 2; // CAPABILITY_OPERATOR
 
 describe("analytics-counters", () => {
   let env: TestEnv;
@@ -157,7 +157,7 @@ describe("analytics-counters", () => {
 
     // Register agent
     await program.methods
-      .registerAgent(agent.publicKey, FULL_PERMISSIONS, new BN(0))
+      .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
       .accountsPartial({
         owner: owner.publicKey,
         vault: vaultPda,
@@ -198,11 +198,9 @@ describe("analytics-counters", () => {
   async function buildValidateIx(amount: BN) {
     return program.methods
       .validateAndAuthorize(
-        { swap: {} },
         usdcMint,
         amount,
         jupiterProgramId,
-        null,
         new BN(0),
       )
       .accountsPartial({
@@ -349,7 +347,7 @@ describe("analytics-counters", () => {
     airdropSol(svm, agent2.publicKey, 5 * LAMPORTS_PER_SOL);
 
     await program.methods
-      .registerAgent(agent2.publicKey, FULL_PERMISSIONS, new BN(0))
+      .registerAgent(agent2.publicKey, FULL_CAPABILITY, new BN(0))
       .accountsPartial({
         owner: owner.publicKey,
         vault: vaultPda,

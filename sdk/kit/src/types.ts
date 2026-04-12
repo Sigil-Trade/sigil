@@ -11,6 +11,7 @@ import type { Address, Instruction } from "@solana/kit";
 export { SIGIL_PROGRAM_ADDRESS } from "./generated/programs/sigil.js";
 
 // Re-export generated types
+/** @deprecated v6: ActionType eliminated. Use isSpending/positionEffect instead. */
 export type { ActionType } from "./generated/types/actionType.js";
 export type { VaultStatus } from "./generated/types/vaultStatus.js";
 export type { EscrowStatus } from "./generated/types/escrowStatus.js";
@@ -41,8 +42,14 @@ export const STABLECOIN_USD_FACTOR = 10n ** BigInt(USD_DECIMALS);
 // ─── Multi-agent Constants ────────────────────────────────────────────────────
 
 export const MAX_AGENTS_PER_VAULT = 10;
-/** Permission bitmask with all 21 bits set (18 base + 3 escrow ActionType variants) */
-export const FULL_PERMISSIONS = (1n << 21n) - 1n;
+/**
+ * Capability bitmask: 2n (bits 0+1 set) — "can spend" + "can hold positions".
+ * Replaces the legacy 21-bit ActionType permission bitmask.
+ * On-chain v6 uses a 2-bit capability model instead of per-action permissions.
+ */
+export const FULL_CAPABILITY = 2n;
+/** @deprecated Use FULL_CAPABILITY instead. Kept for backward compatibility. */
+export const FULL_PERMISSIONS = FULL_CAPABILITY;
 export const SWAP_ONLY = 1n << 0n;
 export const PERPS_ONLY = (1n << 1n) | (1n << 2n) | (1n << 3n) | (1n << 4n);
 export const TRANSFER_ONLY = 1n << 7n;
@@ -158,9 +165,12 @@ export function isStablecoinMint(mint: Address, network: Network): boolean {
   return mint === USDC_MINT_MAINNET || mint === USDT_MINT_MAINNET;
 }
 
-// ─── Permission System ────────────────────────────────────────────────────────
+// ─── Permission System (Legacy) ──────────────────────────────────────────────
 
-/** Permission bit mapping for each ActionType variant (21 total) */
+/**
+ * @deprecated v6: Permission bits replaced by capability bitmask. Retained for backward compat.
+ * Permission bit mapping for each legacy ActionType variant (21 total).
+ */
 export const ACTION_PERMISSION_MAP: Record<string, bigint> = {
   swap: 1n << 0n,
   openPosition: 1n << 1n,

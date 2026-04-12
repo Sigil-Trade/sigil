@@ -24,11 +24,10 @@ import { AccountRole, createSolanaRpc } from "@solana/kit";
 import { seal } from "../../src/seal.js";
 import { AltCache, mergeAltAddresses } from "../../src/alt-loader.js";
 import { SIGIL_ALT_DEVNET } from "../../src/alt-config.js";
-import { ActionType } from "../../src/generated/types/actionType.js";
 import { VaultStatus } from "../../src/generated/types/vaultStatus.js";
 import type { ResolvedVaultState } from "../../src/state-resolver.js";
 import {
-  FULL_PERMISSIONS,
+  FULL_CAPABILITY,
   USDC_MINT_MAINNET,
   JUPITER_PROGRAM_ADDRESS,
 } from "../../src/types.js";
@@ -72,7 +71,7 @@ function mockState(): ResolvedVaultState {
       agents: [
         {
           pubkey: AGENT,
-          permissions: FULL_PERMISSIONS,
+          permissions: FULL_CAPABILITY,
           spendingLimitUsd: 0n,
           paused: false,
         },
@@ -193,7 +192,7 @@ async function main() {
     network: "mainnet",
     tokenMint: USDC_MINT_MAINNET,
     amount: 100_000_000n,
-    actionType: ActionType.Swap,
+    // actionType removed in v6
     cachedState: mockState(),
     blockhash: {
       blockhash: "GHtXQBpokCiBP6spMNfMW9qLBjfQJhmR4GWzCiQ2ATQA",
@@ -231,7 +230,7 @@ async function main() {
     network: "mainnet",
     tokenMint: USDC_MINT_MAINNET,
     amount: 100_000_000n,
-    actionType: ActionType.Swap,
+    // actionType removed in v6
     cachedState: mockState(),
     blockhash: {
       blockhash: "GHtXQBpokCiBP6spMNfMW9qLBjfQJhmR4GWzCiQ2ATQA",
@@ -317,7 +316,7 @@ async function main() {
         network: "mainnet",
         tokenMint: USDC_MINT_MAINNET,
         amount: 100_000_000n,
-        actionType: ActionType.Swap,
+        // actionType removed in v6
         cachedState: mockState(),
         blockhash: {
           blockhash: "GHtXQBpokCiBP6spMNfMW9qLBjfQJhmR4GWzCiQ2ATQA",

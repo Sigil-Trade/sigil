@@ -41,7 +41,7 @@ import {
   LiteSVM,
 } from "./helpers/litesvm-setup";
 
-const FULL_PERMISSIONS = new BN((1n << 21n) - 1n);
+const FULL_CAPABILITY = 2; // CAPABILITY_OPERATOR
 
 describe("instruction-constraints", () => {
   let env: TestEnv;
@@ -181,7 +181,7 @@ describe("instruction-constraints", () => {
 
     // Register agent
     await program.methods
-      .registerAgent(agent.publicKey, FULL_PERMISSIONS, new BN(0))
+      .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
       .accounts({
         owner: owner.publicKey,
         vault: vaultPda,
@@ -242,7 +242,6 @@ describe("instruction-constraints", () => {
   // Helper: build validate instruction with optional remaining accounts
   async function buildValidateIx(
     amount: BN,
-    actionType: any,
     targetProtocol: PublicKey,
     remainingAccounts?: {
       pubkey: PublicKey;
@@ -261,11 +260,9 @@ describe("instruction-constraints", () => {
     );
     let builder = program.methods
       .validateAndAuthorize(
-        actionType,
         usdcMint,
         amount,
         targetProtocol,
-        null,
         await pv(),
       )
       .accounts({
@@ -461,7 +458,6 @@ describe("instruction-constraints", () => {
       // Validate without remaining accounts — should succeed
       const validateIx = await buildValidateIx(
         new BN(10_000_000),
-        { swap: {} },
         jupiterProgramId,
       );
       const finalizeIx = await buildFinalizeIx(agent.publicKey, usdcMint);
@@ -489,7 +485,6 @@ describe("instruction-constraints", () => {
       // We pass constraints PDA as remaining account
       const validateIx = await buildValidateIx(
         new BN(10_000_000),
-        { swap: {} },
         jupiterProgramId,
         [{ pubkey: constraintsPda, isSigner: false, isWritable: false }],
       );
@@ -504,7 +499,6 @@ describe("instruction-constraints", () => {
     it("non-spending action with constraints PDA succeeds when no intermediate ix", async () => {
       const validateIx = await buildValidateIx(
         new BN(0),
-        { closePosition: {} },
         jupiterProgramId,
         [{ pubkey: constraintsPda, isSigner: false, isWritable: false }],
       );
@@ -543,7 +537,6 @@ describe("instruction-constraints", () => {
       // has_constraints is true (constraints exist), but we don't pass remaining accounts
       const validateIx = await buildValidateIx(
         new BN(10_000_000),
-        { swap: {} },
         jupiterProgramId,
         // NO remaining accounts — bypass attempt
       );
@@ -630,7 +623,6 @@ describe("instruction-constraints", () => {
       // Try to use vault 2's constraints PDA on vault 1 → wrong PDA
       const validateIx = await buildValidateIx(
         new BN(10_000_000),
-        { swap: {} },
         jupiterProgramId,
         [{ pubkey: constraints2Pda, isSigner: false, isWritable: false }],
       );
@@ -1091,7 +1083,6 @@ describe("instruction-constraints", () => {
       // This should succeed — constraints PDA exists but no data constraints
       const validateIx = await buildValidateIx(
         new BN(10_000_000),
-        { swap: {} },
         jupiterProgramId,
         [{ pubkey: constraintsPda, isSigner: false, isWritable: false }],
       );
@@ -1131,7 +1122,6 @@ describe("instruction-constraints", () => {
       // Should succeed — unrelated program not in TX, no constraint check fires
       const validateIx = await buildValidateIx(
         new BN(10_000_000),
-        { swap: {} },
         jupiterProgramId,
         [{ pubkey: constraintsPda, isSigner: false, isWritable: false }],
       );
@@ -1289,7 +1279,6 @@ describe("instruction-constraints", () => {
       // Instruction data [0x01, 0x02] matches second entry → should pass
       const validateIx = await buildValidateIx(
         new BN(10_000_000),
-        { swap: {} },
         jupiterProgramId,
         [{ pubkey: constraintsPda, isSigner: false, isWritable: false }],
       );
@@ -1330,7 +1319,6 @@ describe("instruction-constraints", () => {
       // Instruction data [0x01, 0x02] matches first entry → should pass
       const validateIx = await buildValidateIx(
         new BN(10_000_000),
-        { swap: {} },
         jupiterProgramId,
         [{ pubkey: constraintsPda, isSigner: false, isWritable: false }],
       );
@@ -1640,7 +1628,6 @@ describe("instruction-constraints", () => {
 
       const validateIx = await buildValidateIx(
         new BN(10_000_000),
-        { swap: {} },
         jupiterProgramId,
         [{ pubkey: constraintsPda, isSigner: false, isWritable: false }],
       );
@@ -1676,7 +1663,6 @@ describe("instruction-constraints", () => {
 
       const validateIx = await buildValidateIx(
         new BN(10_000_000),
-        { swap: {} },
         jupiterProgramId,
         [{ pubkey: constraintsPda, isSigner: false, isWritable: false }],
       );
@@ -1929,7 +1915,7 @@ describe("instruction-constraints", () => {
         .rpc();
 
       await program.methods
-        .registerAgent(cvAgent.publicKey, FULL_PERMISSIONS, new BN(0))
+        .registerAgent(cvAgent.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: cvVault,
@@ -1961,7 +1947,6 @@ describe("instruction-constraints", () => {
 
     async function buildCvValidateIx(
       amount: BN,
-      actionType: any,
       targetProtocol: PublicKey,
       remainingAccounts?: {
         pubkey: PublicKey;
@@ -1980,11 +1965,9 @@ describe("instruction-constraints", () => {
       );
       let builder = program.methods
         .validateAndAuthorize(
-          actionType,
           usdcMint,
           amount,
           targetProtocol,
-          null,
           await pv(cvPolicy),
         )
         .accounts({
@@ -2061,7 +2044,6 @@ describe("instruction-constraints", () => {
       });
       const validateIx = await buildCvValidateIx(
         new BN(10_000_000),
-        { swap: {} },
         program.programId,
         [{ pubkey: cvConstraints, isSigner: false, isWritable: false }],
       );
@@ -2110,7 +2092,6 @@ describe("instruction-constraints", () => {
       });
       const validateIx = await buildCvValidateIx(
         new BN(10_000_000),
-        { swap: {} },
         program.programId,
         [{ pubkey: cvConstraints, isSigner: false, isWritable: false }],
       );

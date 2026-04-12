@@ -9,7 +9,7 @@ import type { Address } from "@solana/kit";
 import type { DecodedSigilEvent } from "./events.js";
 import type { ResolvedVaultState, EffectiveBudget } from "./state-resolver.js";
 import { bytesToAddress } from "./state-resolver.js";
-import { permissionsToStrings, FULL_PERMISSIONS } from "./types.js";
+import { permissionsToStrings, FULL_CAPABILITY } from "./types.js";
 import { computeHerfindahl } from "./math-utils.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -31,7 +31,7 @@ export interface AgentProfile {
   capUtilization: number;
   /** Whether agent is over 80% of its cap */
   isApproachingCap: boolean;
-  /** Whether agent has FULL_PERMISSIONS (all 21 bits) */
+  /** Whether agent has full capability */
   hasFullPermissions: boolean;
 }
 
@@ -113,7 +113,7 @@ export function getAgentProfile(
       lifetimeTxCount > 0n ? lifetimeSpend / lifetimeTxCount : 0n,
     capUtilization,
     isApproachingCap: capUtilization > 80,
-    hasFullPermissions: agentEntry.permissions === FULL_PERMISSIONS,
+    hasFullPermissions: agentEntry.permissions === FULL_CAPABILITY,
   };
 }
 

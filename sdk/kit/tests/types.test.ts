@@ -12,6 +12,7 @@ import {
   PROTOCOL_MODE_ALL,
   PROTOCOL_MODE_ALLOWLIST,
   PROTOCOL_MODE_DENYLIST,
+  FULL_CAPABILITY,
   FULL_PERMISSIONS,
   SWAP_ONLY,
   PERPS_ONLY,
@@ -81,20 +82,18 @@ describe("types", () => {
     });
   });
 
-  describe("FULL_PERMISSIONS", () => {
-    it("equals (1n << 21n) - 1n", () => {
-      expect(FULL_PERMISSIONS).to.equal((1n << 21n) - 1n);
+  describe("FULL_CAPABILITY / FULL_PERMISSIONS", () => {
+    it("FULL_CAPABILITY equals 2n", () => {
+      expect(FULL_CAPABILITY).to.equal(2n);
     });
 
-    it("has all 21 bits set", () => {
-      for (let i = 0; i < 21; i++) {
-        expect(FULL_PERMISSIONS & (1n << BigInt(i))).to.not.equal(0n);
-      }
+    it("FULL_PERMISSIONS is an alias for FULL_CAPABILITY", () => {
+      expect(FULL_PERMISSIONS).to.equal(FULL_CAPABILITY);
     });
 
-    it("permissionsToStrings returns 21 strings", () => {
-      const strings = permissionsToStrings(FULL_PERMISSIONS);
-      expect(strings).to.have.length(21);
+    it("FULL_CAPABILITY has bits 0 and 1 set", () => {
+      expect(FULL_CAPABILITY & 1n).to.equal(0n); // bit 0 NOT set (2n = 10 binary)
+      expect(FULL_CAPABILITY & 2n).to.equal(2n); // bit 1 set
     });
   });
 
@@ -175,9 +174,10 @@ describe("types", () => {
       expect(hasPermission(SWAP_ONLY, "swap")).to.be.true;
     });
 
-    it("all bits set returns true for any type", () => {
-      expect(hasPermission(FULL_PERMISSIONS, "transfer")).to.be.true;
-      expect(hasPermission(FULL_PERMISSIONS, "createEscrow")).to.be.true;
+    it("legacy all-bits-set returns true for any type", () => {
+      const ALL_BITS = (1n << 21n) - 1n; // legacy full bitmask
+      expect(hasPermission(ALL_BITS, "transfer")).to.be.true;
+      expect(hasPermission(ALL_BITS, "createEscrow")).to.be.true;
     });
 
     it("no bits set returns false", () => {
@@ -185,7 +185,8 @@ describe("types", () => {
     });
 
     it("unknown action type returns false", () => {
-      expect(hasPermission(FULL_PERMISSIONS, "unknownAction")).to.be.false;
+      const ALL_BITS = (1n << 21n) - 1n;
+      expect(hasPermission(ALL_BITS, "unknownAction")).to.be.false;
     });
 
     it("each of 21 action types is correctly mapped", () => {
@@ -197,8 +198,9 @@ describe("types", () => {
   });
 
   describe("permissionsToStrings", () => {
-    it("FULL_PERMISSIONS returns 21 strings", () => {
-      expect(permissionsToStrings(FULL_PERMISSIONS)).to.have.length(21);
+    it("legacy all-bits returns 21 strings", () => {
+      const ALL_BITS = (1n << 21n) - 1n;
+      expect(permissionsToStrings(ALL_BITS)).to.have.length(21);
     });
 
     it("0n returns empty array", () => {

@@ -448,6 +448,8 @@ const ACTION_NAMES = [
 /**
  * Ratio of granted permission bits actually exercised by each agent.
  * Shows which ActionTypes agents use vs what they're granted — security surface analysis.
+ *
+ * Handles both legacy (actionType enum) and new v6 (isSpending + positionEffect) event formats.
  */
 export function getPermissionUtilizationRate(
   state: { vault: { agents: Array<{ pubkey: Address; permissions: bigint }> } },
@@ -456,20 +458,27 @@ export function getPermissionUtilizationRate(
   // Count which ActionTypes each agent has used
   const agentActionUsage = new Map<string, Set<string>>();
   for (const e of events) {
-    if (
-      e.name === "ActionAuthorized" &&
-      e.fields?.agent &&
-      e.fields?.actionType
-    ) {
+    if (e.name === "ActionAuthorized" && e.fields?.agent) {
       const agent = e.fields.agent as string;
-      const actionObj = e.fields.actionType as { __kind: string } | number;
-      const actionName =
-        typeof actionObj === "object" && "__kind" in actionObj
-          ? actionObj.__kind
-          : (ACTION_NAMES[Number(actionObj)] ?? "Unknown");
-
       if (!agentActionUsage.has(agent)) agentActionUsage.set(agent, new Set());
-      agentActionUsage.get(agent)!.add(actionName);
+
+      // New v6 event format: isSpending + positionEffect
+      if (e.fields.isSpending != null) {
+        const label = (e.fields.isSpending as boolean) ? "Spending" : "NonSpending";
+        agentActionUsage.get(agent)!.add(label);
+        const effect = e.fields.positionEffect as string | undefined;
+        if (effect && effect !== "none") {
+          agentActionUsage.get(agent)!.add(`Position:${effect}`);
+        }
+      } else if (e.fields.actionType) {
+        // Legacy event format
+        const actionObj = e.fields.actionType as { __kind: string } | number;
+        const actionName =
+          typeof actionObj === "object" && "__kind" in actionObj
+            ? actionObj.__kind
+            : (ACTION_NAMES[Number(actionObj)] ?? "Unknown");
+        agentActionUsage.get(agent)!.add(actionName);
+      }
     }
   }
 

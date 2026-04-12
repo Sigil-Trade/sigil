@@ -39,7 +39,7 @@ import { getAgentOverlayPDA, getTrackerPDA } from "../resolve-accounts.js";
 import { sendAndConfirmTransaction, BlockhashCache } from "../rpc-helpers.js";
 import {
   USDC_MINT_DEVNET,
-  FULL_PERMISSIONS,
+  FULL_CAPABILITY,
   PROTOCOL_TREASURY,
 } from "../types.js";
 
@@ -244,7 +244,7 @@ export async function provisionVault(
   const dailyCap = opts.dailySpendingCapUsd ?? 500_000_000n;
   const maxTx = opts.maxTransactionSizeUsd ?? 100_000_000n;
   const protocolMode = opts.protocolMode ?? 0; // allow all
-  const permissions = opts.permissions ?? FULL_PERMISSIONS;
+  const permissions = opts.permissions ?? FULL_CAPABILITY;
   const spendingLimitUsd = opts.spendingLimitUsd ?? 0n;
 
   // 1. Derive PDAs via inscribe()

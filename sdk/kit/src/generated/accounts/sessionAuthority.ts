@@ -40,12 +40,7 @@ import {
   type MaybeEncodedAccount,
   type ReadonlyUint8Array,
 } from "@solana/kit";
-import {
-  getActionTypeDecoder,
-  getActionTypeEncoder,
-  type ActionType,
-  type ActionTypeArgs,
-} from "../types/index.js";
+// ActionType import removed — replaced by isSpending + positionEffect in v6
 
 export const SESSION_AUTHORITY_DISCRIMINATOR = new Uint8Array([
   48, 9, 30, 120, 134, 35, 172, 170,
@@ -69,8 +64,10 @@ export type SessionAuthority = {
   authorizedAmount: bigint;
   authorizedToken: Address;
   authorizedProtocol: Address;
-  /** The action type that was authorized (stored so finalize can record it) */
-  actionType: ActionType;
+  /** Whether this is a spending action. Replaces legacy actionType. */
+  isSpending: boolean;
+  /** Position effect: 0=none, 1=increment, 2=decrement. */
+  positionEffect: number;
   /** Slot-based expiry: session is valid until this slot */
   expiresAtSlot: bigint;
   /** Whether token delegation was set up (approve CPI) */
@@ -113,8 +110,10 @@ export type SessionAuthorityArgs = {
   authorizedAmount: number | bigint;
   authorizedToken: Address;
   authorizedProtocol: Address;
-  /** The action type that was authorized (stored so finalize can record it) */
-  actionType: ActionTypeArgs;
+  /** Whether this is a spending action. Replaces legacy actionType. */
+  isSpending: boolean;
+  /** Position effect: 0=none, 1=increment, 2=decrement. */
+  positionEffect: number;
   /** Slot-based expiry: session is valid until this slot */
   expiresAtSlot: number | bigint;
   /** Whether token delegation was set up (approve CPI) */
@@ -157,7 +156,8 @@ export function getSessionAuthorityEncoder(): FixedSizeEncoder<SessionAuthorityA
       ["authorizedAmount", getU64Encoder()],
       ["authorizedToken", getAddressEncoder()],
       ["authorizedProtocol", getAddressEncoder()],
-      ["actionType", getActionTypeEncoder()],
+      ["isSpending", getBooleanEncoder()],
+      ["positionEffect", getU8Encoder()],
       ["expiresAtSlot", getU64Encoder()],
       ["delegated", getBooleanEncoder()],
       ["delegationTokenAccount", getAddressEncoder()],
@@ -181,7 +181,8 @@ export function getSessionAuthorityDecoder(): FixedSizeDecoder<SessionAuthority>
     ["authorizedAmount", getU64Decoder()],
     ["authorizedToken", getAddressDecoder()],
     ["authorizedProtocol", getAddressDecoder()],
-    ["actionType", getActionTypeDecoder()],
+    ["isSpending", getBooleanDecoder()],
+    ["positionEffect", getU8Decoder()],
     ["expiresAtSlot", getU64Decoder()],
     ["delegated", getBooleanDecoder()],
     ["delegationTokenAccount", getAddressDecoder()],
