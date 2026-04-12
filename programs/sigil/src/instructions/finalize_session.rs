@@ -499,64 +499,93 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
     // pass target accounts for byte-level comparison.
     let policy_ref = &ctx.accounts.policy;
     if !is_expired && policy_ref.has_post_assertions != 0 {
-        // Post-assertions PDA is expected as the LAST remaining_account
+        // CRITICAL: hard-fail if assertions are configured but PDA is missing.
+        // Soft guards would let agents bypass assertions by not passing the PDA.
         let remaining = &ctx.remaining_accounts;
-        if !remaining.is_empty() {
-            let assertions_info = &remaining[remaining.len() - 1];
+        require!(!remaining.is_empty(), SigilError::PostAssertionFailed);
 
-            // Verify the assertions PDA is owned by this program
-            if assertions_info.owner == &crate::ID {
-                let assertions_data = assertions_info.try_borrow_data()?;
-                let struct_size = core::mem::size_of::<PostExecutionAssertions>();
+        let assertions_info = &remaining[remaining.len() - 1];
 
-                if assertions_data.len() >= 8 + struct_size {
-                    let assertions: &PostExecutionAssertions =
-                        bytemuck::from_bytes(&assertions_data[8..8 + struct_size]);
+        // Hard-fail: PDA must be owned by this program
+        require!(
+            assertions_info.owner == &crate::ID,
+            SigilError::PostAssertionFailed
+        );
 
-                    // Verify PDA belongs to this vault
-                    require!(
-                        assertions.vault == vault_key.to_bytes(),
-                        SigilError::PostAssertionFailed
-                    );
+        let assertions_data = assertions_info.try_borrow_data()?;
+        let struct_size = core::mem::size_of::<PostExecutionAssertions>();
 
-                    let count = assertions.entry_count as usize;
-                    for i in 0..count {
-                        let entry = &assertions.entries[i];
-                        let target_pubkey = Pubkey::new_from_array(entry.target_account);
+        // Hard-fail: account must be large enough
+        require!(
+            assertions_data.len() >= 8 + struct_size,
+            SigilError::PostAssertionFailed
+        );
 
-                        // Find the target account in remaining_accounts
-                        let target = remaining.iter().find(|a| a.key() == target_pubkey);
-                        require!(target.is_some(), SigilError::InvalidPostAssertionIndex);
-                        let target = target.unwrap();
-                        let target_data = target.try_borrow_data()?;
+        // CRITICAL: verify Anchor discriminator to prevent account substitution.
+        // Without this, any same-vault zero-copy account (SpendTracker,
+        // AgentSpendOverlay, InstructionConstraints) could be substituted —
+        // they all have vault as the first 32 bytes after discriminator.
+        // Zero-copy accounts use SHA256("account:PostExecutionAssertions")[0..8]
+        // as their discriminator. Verify via PDA derivation instead — if the
+        // account matches the expected PDA address, it IS the right account.
+        let (expected_pda, _) =
+            Pubkey::find_program_address(&[b"post_assertions", vault_key.as_ref()], &crate::ID);
+        require!(
+            assertions_info.key() == expected_pda,
+            SigilError::PostAssertionFailed
+        );
 
-                        // Phase B1: absolute value assertions only (mode == 0)
-                        if entry.assertion_mode == 0 {
-                            let offset = entry.offset as usize;
-                            let len = entry.value_len as usize;
+        let assertions: &PostExecutionAssertions =
+            bytemuck::from_bytes(&assertions_data[8..8 + struct_size]);
 
-                            if offset + len <= target_data.len() {
-                                let actual = &target_data[offset..offset + len];
-                                let expected = &entry.expected_value[..len];
-                                let operator = ConstraintOperator::try_from(entry.operator)
-                                    .map_err(|_| error!(SigilError::InvalidConstraintOperator))?;
+        // Verify PDA belongs to this vault
+        require!(
+            assertions.vault == vault_key.to_bytes(),
+            SigilError::PostAssertionFailed
+        );
 
-                                let passed = crate::instructions::integrations::generic_constraints::bytes_match(
-                                    actual,
-                                    &operator,
-                                    expected,
-                                );
+        let clock_ts = Clock::get()?.unix_timestamp;
+        let count = assertions.entry_count as usize;
+        for i in 0..count {
+            let entry = &assertions.entries[i];
+            let target_pubkey = Pubkey::new_from_array(entry.target_account);
 
-                                require!(passed, SigilError::PostAssertionFailed);
-                            } else {
-                                // Target account data too short for the configured offset
-                                return Err(error!(SigilError::PostAssertionFailed));
-                            }
-                        }
-                        // Phase B2/B3 assertion modes handled in future commits
-                    }
-                }
+            // Find the target account in remaining_accounts
+            let target = remaining.iter().find(|a| a.key() == target_pubkey);
+            require!(target.is_some(), SigilError::InvalidPostAssertionIndex);
+            let target = target.unwrap();
+            let target_data = target.try_borrow_data()?;
+
+            // Phase B1: absolute value assertions only (mode == 0)
+            if entry.assertion_mode == 0 {
+                let offset = entry.offset as usize;
+                let len = entry.value_len as usize;
+
+                // Checked arithmetic (CLAUDE.md constraint #3)
+                let end = offset
+                    .checked_add(len)
+                    .ok_or(error!(SigilError::PostAssertionFailed))?;
+                require!(end <= target_data.len(), SigilError::PostAssertionFailed);
+
+                let actual = &target_data[offset..end];
+                let expected = &entry.expected_value[..len];
+                let operator = ConstraintOperator::try_from(entry.operator)
+                    .map_err(|_| error!(SigilError::InvalidConstraintOperator))?;
+
+                let passed = crate::instructions::integrations::generic_constraints::bytes_match(
+                    actual, &operator, expected,
+                );
+
+                require!(passed, SigilError::PostAssertionFailed);
+
+                emit!(crate::events::PostAssertionChecked {
+                    vault: vault_key,
+                    entry_index: i as u8,
+                    passed: true,
+                    timestamp: clock_ts,
+                });
             }
+            // Phase B2/B3 assertion modes handled in future commits
         }
     }
 

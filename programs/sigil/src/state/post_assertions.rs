@@ -74,14 +74,20 @@ impl PostExecutionAssertions {
 
     /// Validate a set of assertion entries before storing.
     pub fn validate_entries(entries: &[PostAssertionEntry]) -> Result<()> {
+        // Must have at least 1 entry (creating empty assertions wastes rent)
         require!(
-            entries.len() <= MAX_POST_ASSERTION_ENTRIES,
+            !entries.is_empty() && entries.len() <= MAX_POST_ASSERTION_ENTRIES,
             crate::errors::SigilError::InvalidConstraintConfig
         );
         for entry in entries {
             // Value length must be 1-32
             require!(
                 entry.value_len > 0 && entry.value_len as usize <= MAX_CONSTRAINT_VALUE_LEN,
+                crate::errors::SigilError::InvalidConstraintConfig
+            );
+            // Expected value must be at least value_len bytes
+            require!(
+                entry.expected_value.len() >= entry.value_len as usize,
                 crate::errors::SigilError::InvalidConstraintConfig
             );
             // Operator must be valid (0-6)
