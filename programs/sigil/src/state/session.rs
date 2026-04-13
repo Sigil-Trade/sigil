@@ -72,7 +72,8 @@ impl SessionAuthority {
     /// protocol_fee (8) + developer_fee (8) +
     /// output_mint (32) + stablecoin_balance_before (8) + bump (1) +
     /// assertion_snapshots (128) + snapshot_lens (4)
-    pub const SIZE: usize = 8 + 32 + 32 + 1 + 8 + 32 + 32 + 1 + 1 + 8 + 1 + 32 + 8 + 8 + 32 + 8 + 1 + 128 + 4;
+    pub const SIZE: usize =
+        8 + 32 + 32 + 1 + 8 + 32 + 32 + 1 + 1 + 8 + 1 + 32 + 8 + 8 + 32 + 8 + 1 + 128 + 4;
 
     pub fn is_expired(&self, current_slot: u64) -> bool {
         current_slot > self.expires_at_slot

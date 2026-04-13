@@ -625,10 +625,8 @@ pub fn handler(
     // account bytes BEFORE the DeFi instruction executes.
     if policy.has_post_assertions != 0 {
         // Find PostExecutionAssertions PDA via derivation (audit H3: single call)
-        let (assertions_pda_expected, _) = Pubkey::find_program_address(
-            &[b"post_assertions", vault_key.as_ref()],
-            &crate::ID,
-        );
+        let (assertions_pda_expected, _) =
+            Pubkey::find_program_address(&[b"post_assertions", vault_key.as_ref()], &crate::ID);
 
         // PDA-based lookup (not positional — security audit H2 fix)
         let assertions_info = ctx
@@ -679,8 +677,7 @@ pub fn handler(
                 require!(end <= target_data.len(), SigilError::PostAssertionFailed);
 
                 // Capture snapshot
-                session.assertion_snapshots[i][..len]
-                    .copy_from_slice(&target_data[offset..end]);
+                session.assertion_snapshots[i][..len].copy_from_slice(&target_data[offset..end]);
                 session.snapshot_lens[i] = entry.value_len;
             }
         }

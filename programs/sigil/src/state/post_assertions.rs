@@ -176,8 +176,7 @@ impl PostExecutionAssertions {
             } else {
                 // When CrossFieldLte disabled, B3 fields must be zeroed
                 require!(
-                    entry.cross_field_offset_b == 0
-                        && entry.cross_field_multiplier_bps == 0,
+                    entry.cross_field_offset_b == 0 && entry.cross_field_multiplier_bps == 0,
                     crate::errors::SigilError::InvalidConstraintConfig
                 );
             }

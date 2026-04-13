@@ -567,10 +567,8 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
             let actual = &target_data[offset..end];
 
             // Exhaustive match on assertion_mode — unknown modes hard-fail (security audit H3)
-            let mode = crate::state::post_assertions::AssertionMode::try_from(
-                entry.assertion_mode,
-            )
-            .map_err(|_| error!(SigilError::InvalidConstraintConfig))?;
+            let mode = crate::state::post_assertions::AssertionMode::try_from(entry.assertion_mode)
+                .map_err(|_| error!(SigilError::InvalidConstraintConfig))?;
 
             match mode {
                 crate::state::post_assertions::AssertionMode::Absolute => {
@@ -596,7 +594,8 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
                         let field_a = u64::from_le_bytes(a_buf);
                         let field_b = u64::from_le_bytes(b_buf);
 
-                        let multiplier = u32::from_le_bytes(entry.cross_field_multiplier_bps) as u128;
+                        let multiplier =
+                            u32::from_le_bytes(entry.cross_field_multiplier_bps) as u128;
 
                         // Handle field_B = 0 explicitly (security audit H5)
                         if field_b == 0 {
