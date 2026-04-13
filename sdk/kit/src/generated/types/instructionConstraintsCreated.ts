@@ -7,27 +7,39 @@
  */
 
 import {
+  addDecoderSizePrefix,
+  addEncoderSizePrefix,
   combineCodec,
   getAddressDecoder,
   getAddressEncoder,
   getBooleanDecoder,
   getBooleanEncoder,
+  getBytesDecoder,
+  getBytesEncoder,
   getI64Decoder,
   getI64Encoder,
   getStructDecoder,
   getStructEncoder,
+  getU32Decoder,
+  getU32Encoder,
   getU8Decoder,
   getU8Encoder,
   type Address,
-  type FixedSizeCodec,
-  type FixedSizeDecoder,
-  type FixedSizeEncoder,
+  type Codec,
+  type Decoder,
+  type Encoder,
+  type ReadonlyUint8Array,
 } from "@solana/kit";
 
 export type InstructionConstraintsCreated = {
   vault: Address;
   entriesCount: number;
   strictMode: boolean;
+  /**
+   * Per-entry discriminator format (0=Anchor8, 1=Spl1).
+   * Enables off-chain monitors to detect format changes/downgrades.
+   */
+  discriminatorFormats: ReadonlyUint8Array;
   timestamp: bigint;
 };
 
@@ -35,28 +47,41 @@ export type InstructionConstraintsCreatedArgs = {
   vault: Address;
   entriesCount: number;
   strictMode: boolean;
+  /**
+   * Per-entry discriminator format (0=Anchor8, 1=Spl1).
+   * Enables off-chain monitors to detect format changes/downgrades.
+   */
+  discriminatorFormats: ReadonlyUint8Array;
   timestamp: number | bigint;
 };
 
-export function getInstructionConstraintsCreatedEncoder(): FixedSizeEncoder<InstructionConstraintsCreatedArgs> {
+export function getInstructionConstraintsCreatedEncoder(): Encoder<InstructionConstraintsCreatedArgs> {
   return getStructEncoder([
     ["vault", getAddressEncoder()],
     ["entriesCount", getU8Encoder()],
     ["strictMode", getBooleanEncoder()],
+    [
+      "discriminatorFormats",
+      addEncoderSizePrefix(getBytesEncoder(), getU32Encoder()),
+    ],
     ["timestamp", getI64Encoder()],
   ]);
 }
 
-export function getInstructionConstraintsCreatedDecoder(): FixedSizeDecoder<InstructionConstraintsCreated> {
+export function getInstructionConstraintsCreatedDecoder(): Decoder<InstructionConstraintsCreated> {
   return getStructDecoder([
     ["vault", getAddressDecoder()],
     ["entriesCount", getU8Decoder()],
     ["strictMode", getBooleanDecoder()],
+    [
+      "discriminatorFormats",
+      addDecoderSizePrefix(getBytesDecoder(), getU32Decoder()),
+    ],
     ["timestamp", getI64Decoder()],
   ]);
 }
 
-export function getInstructionConstraintsCreatedCodec(): FixedSizeCodec<
+export function getInstructionConstraintsCreatedCodec(): Codec<
   InstructionConstraintsCreatedArgs,
   InstructionConstraintsCreated
 > {

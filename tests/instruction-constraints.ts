@@ -359,10 +359,11 @@ describe("instruction-constraints", () => {
             {
               offset: 0,
               operator: { eq: {} },
-              value: Buffer.from([0xaa, 0xbb]),
+              value: Buffer.from([0xaa, 0xbb, 0, 0, 0, 0, 0, 0]),
             },
           ],
           accountConstraints: [],
+          discriminatorFormat: { anchor8: {} },
         },
       ];
 
@@ -402,6 +403,7 @@ describe("instruction-constraints", () => {
             },
           ],
           accountConstraints: [],
+          discriminatorFormat: { anchor8: {} },
         },
       ];
 
@@ -446,10 +448,11 @@ describe("instruction-constraints", () => {
             {
               offset: 0,
               operator: { eq: {} },
-              value: Buffer.from([0x01, 0x02]),
+              value: Buffer.from([0x01, 0x02, 0, 0, 0, 0, 0, 0]),
             },
           ],
           accountConstraints: [],
+          discriminatorFormat: { anchor8: {} },
         },
       ];
 
@@ -489,10 +492,11 @@ describe("instruction-constraints", () => {
             {
               offset: 0,
               operator: { eq: {} },
-              value: Buffer.from([0x01, 0x02]),
+              value: Buffer.from([0x01, 0x02, 0, 0, 0, 0, 0, 0]),
             },
           ],
           accountConstraints: [],
+          discriminatorFormat: { anchor8: {} },
         },
       ];
       createConstraintsAccount(
@@ -647,6 +651,7 @@ describe("instruction-constraints", () => {
               },
             ],
             accountConstraints: [],
+            discriminatorFormat: { anchor8: {} },
           },
         ],
         false,
@@ -696,6 +701,7 @@ describe("instruction-constraints", () => {
             },
           ],
           accountConstraints: [],
+          discriminatorFormat: { anchor8: {} },
         });
       }
 
@@ -725,12 +731,16 @@ describe("instruction-constraints", () => {
     });
 
     it("rejects >8 data constraints per entry → InvalidConstraintConfig", async () => {
+      // First DC must satisfy A5 (8 bytes for Anchor8) so the count check is what fires.
       const dataConstraints = [];
       for (let i = 0; i < 9; i++) {
         dataConstraints.push({
           offset: i,
           operator: { eq: {} },
-          value: Buffer.from([0x01]),
+          value:
+            i === 0
+              ? Buffer.from([0x01, 0, 0, 0, 0, 0, 0, 0])
+              : Buffer.from([0x01]),
         });
       }
 
@@ -746,6 +756,7 @@ describe("instruction-constraints", () => {
               programId: jupiterProgramId,
               dataConstraints,
               accountConstraints: [],
+              discriminatorFormat: { anchor8: {} },
             },
           ],
           false,
@@ -777,6 +788,7 @@ describe("instruction-constraints", () => {
                 },
               ],
               accountConstraints: [],
+              discriminatorFormat: { anchor8: {} },
             },
           ],
           false,
@@ -812,6 +824,7 @@ describe("instruction-constraints", () => {
               { offset: 0, operator: { eq: {} }, value: exactValue },
             ],
             accountConstraints: [],
+            discriminatorFormat: { anchor8: {} },
           },
         ],
         false,
@@ -849,10 +862,11 @@ describe("instruction-constraints", () => {
                 {
                   offset: 0,
                   operator: { eq: {} },
-                  value: Buffer.from([0x01, 0x02]),
+                  value: Buffer.from([0x01, 0x02, 0, 0, 0, 0, 0, 0]),
                 },
               ],
               accountConstraints: [],
+              discriminatorFormat: { anchor8: {} },
             },
           ],
           false,
@@ -944,10 +958,11 @@ describe("instruction-constraints", () => {
               {
                 offset: 0,
                 operator: { eq: {} },
-                value: Buffer.from([0xff]),
+                value: Buffer.from([0xff, 0, 0, 0, 0, 0, 0, 0]),
               },
             ],
             accountConstraints: [],
+            discriminatorFormat: { anchor8: {} },
           },
         ],
         false,
@@ -974,6 +989,7 @@ describe("instruction-constraints", () => {
             },
           ],
           accountConstraints: [],
+          discriminatorFormat: { anchor8: {} },
         },
       ];
 
@@ -1051,6 +1067,7 @@ describe("instruction-constraints", () => {
               },
             ],
             accountConstraints: [],
+            discriminatorFormat: { anchor8: {} },
           },
         ],
         false,
@@ -1161,6 +1178,7 @@ describe("instruction-constraints", () => {
             programId: jupiterProgramId,
             dataConstraints: [], // No data constraints — any instruction from Jupiter passes
             accountConstraints: [{ index: 0, expected: jupiterProgramId }],
+            discriminatorFormat: { anchor8: {} },
           },
         ],
         false,
@@ -1200,10 +1218,11 @@ describe("instruction-constraints", () => {
               {
                 offset: 0,
                 operator: { eq: {} },
-                value: Buffer.from([0xff]),
+                value: Buffer.from([0xff, 0, 0, 0, 0, 0, 0, 0]),
               },
             ],
             accountConstraints: [],
+            discriminatorFormat: { anchor8: {} },
           },
         ],
         false,
@@ -1256,6 +1275,7 @@ describe("instruction-constraints", () => {
                 },
               ],
               accountConstraints: [],
+              discriminatorFormat: { anchor8: {} },
             },
           ],
           false,
@@ -1283,10 +1303,11 @@ describe("instruction-constraints", () => {
               {
                 offset: 0,
                 operator: { eq: {} },
-                value: Buffer.from([0x01, 0x02]),
+                value: Buffer.from([0x01, 0x02, 0, 0, 0, 0, 0, 0]),
               },
             ],
             accountConstraints: [],
+            discriminatorFormat: { anchor8: {} },
           },
         ],
         false,
@@ -1315,6 +1336,7 @@ describe("instruction-constraints", () => {
                 },
               ],
               accountConstraints: [],
+              discriminatorFormat: { anchor8: {} },
             },
           ],
           false,
@@ -1358,6 +1380,7 @@ describe("instruction-constraints", () => {
             },
           ],
           accountConstraints: [],
+          discriminatorFormat: { anchor8: {} },
         },
         {
           programId: jupiterProgramId,
@@ -1365,10 +1388,11 @@ describe("instruction-constraints", () => {
             {
               offset: 0,
               operator: { eq: {} },
-              value: Buffer.from([0x01, 0x02]),
+              value: Buffer.from([0x01, 0x02, 0, 0, 0, 0, 0, 0]),
             },
           ],
           accountConstraints: [],
+          discriminatorFormat: { anchor8: {} },
         },
       ];
 
@@ -1402,10 +1426,11 @@ describe("instruction-constraints", () => {
               {
                 offset: 0,
                 operator: { eq: {} },
-                value: Buffer.from([0x01, 0x02]),
+                value: Buffer.from([0x01, 0x02, 0, 0, 0, 0, 0, 0]),
               },
             ],
             accountConstraints: [],
+            discriminatorFormat: { anchor8: {} },
           },
           {
             programId: jupiterProgramId,
@@ -1417,6 +1442,7 @@ describe("instruction-constraints", () => {
               },
             ],
             accountConstraints: [],
+            discriminatorFormat: { anchor8: {} },
           },
         ],
         false,
@@ -1468,10 +1494,11 @@ describe("instruction-constraints", () => {
               {
                 offset: 0,
                 operator: { eq: {} },
-                value: Buffer.from([0x01, 0x02]),
+                value: Buffer.from([0x01, 0x02, 0, 0, 0, 0, 0, 0]),
               },
             ],
             accountConstraints: [],
+            discriminatorFormat: { anchor8: {} },
           },
         ],
         false,
@@ -1505,6 +1532,7 @@ describe("instruction-constraints", () => {
                 { offset: 0, operator: { eq: {} }, value: Buffer.from([]) },
               ],
               accountConstraints: [],
+              discriminatorFormat: { anchor8: {} },
             },
           ],
           false,
@@ -1528,6 +1556,7 @@ describe("instruction-constraints", () => {
               programId: jupiterProgramId,
               dataConstraints: [],
               accountConstraints: [],
+              discriminatorFormat: { anchor8: {} },
             },
           ],
           false,
@@ -1545,9 +1574,14 @@ describe("instruction-constraints", () => {
         entries.push({
           programId: Keypair.generate().publicKey,
           dataConstraints: [
-            { offset: 0, operator: { eq: {} }, value: Buffer.from([i]) },
+            {
+              offset: 0,
+              operator: { eq: {} },
+              value: Buffer.from([i + 1, 0, 0, 0, 0, 0, 0, 0]),
+            },
           ],
           accountConstraints: [],
+          discriminatorFormat: { anchor8: {} },
         });
       }
 
@@ -1567,12 +1601,17 @@ describe("instruction-constraints", () => {
 
     it("8 data constraints per entry allowed", async () => {
       // Update with exactly 8 data constraints per entry (new limit)
+      // A5 invariant: first DC (offset=0, Eq) must have >= 8 bytes for Anchor8.
+      // Subsequent DCs at offset > 0 have no minimum length requirement.
       const dataConstraints = [];
       for (let i = 0; i < 8; i++) {
         dataConstraints.push({
           offset: i,
           operator: { eq: {} },
-          value: Buffer.from([i + 1]),
+          value:
+            i === 0
+              ? Buffer.from([0x01, 0, 0, 0, 0, 0, 0, 0])
+              : Buffer.from([i + 1]),
         });
       }
 
@@ -1582,6 +1621,7 @@ describe("instruction-constraints", () => {
             programId: jupiterProgramId,
             dataConstraints,
             accountConstraints: [],
+            discriminatorFormat: { anchor8: {} },
           },
         ],
         false,
@@ -1635,6 +1675,7 @@ describe("instruction-constraints", () => {
               },
             ],
             accountConstraints: [],
+            discriminatorFormat: { anchor8: {} },
           },
         ],
         false,
@@ -1677,6 +1718,7 @@ describe("instruction-constraints", () => {
               },
             ],
             accountConstraints: [],
+            discriminatorFormat: { anchor8: {} },
           },
         ],
         false,
@@ -1714,6 +1756,7 @@ describe("instruction-constraints", () => {
               },
             ],
             accountConstraints: [],
+            discriminatorFormat: { anchor8: {} },
           },
         ],
         false,
@@ -1760,6 +1803,7 @@ describe("instruction-constraints", () => {
               },
             ],
             accountConstraints: [],
+            discriminatorFormat: { anchor8: {} },
           },
         ],
         false,
@@ -1799,6 +1843,7 @@ describe("instruction-constraints", () => {
               },
             ],
             accountConstraints: [],
+            discriminatorFormat: { anchor8: {} },
           },
         ],
         false,
@@ -1842,6 +1887,7 @@ describe("instruction-constraints", () => {
               },
             ],
             accountConstraints: [],
+            discriminatorFormat: { anchor8: {} },
           },
           {
             programId: signedTestProgram,
@@ -1853,6 +1899,7 @@ describe("instruction-constraints", () => {
               },
             ],
             accountConstraints: [],
+            discriminatorFormat: { anchor8: {} },
           },
         ],
         false,
@@ -1900,7 +1947,7 @@ describe("instruction-constraints", () => {
               {
                 offset: 0,
                 operator: { eq: {} },
-                value: Buffer.from([0xaa, 0xbb, 0xcc, 0xdd]),
+                value: Buffer.from([0xaa, 0xbb, 0xcc, 0xdd, 0, 0, 0, 0]),
               },
               {
                 offset: 8,
@@ -1909,6 +1956,7 @@ describe("instruction-constraints", () => {
               },
             ],
             accountConstraints: [],
+            discriminatorFormat: { anchor8: {} },
           },
         ],
         false,
@@ -1978,6 +2026,7 @@ describe("instruction-constraints", () => {
               },
             ],
             accountConstraints: [],
+            discriminatorFormat: { anchor8: {} },
           },
         ],
         false,
@@ -2195,6 +2244,7 @@ describe("instruction-constraints", () => {
               },
             ],
             accountConstraints: [],
+            discriminatorFormat: { anchor8: {} },
           },
         ],
         false,
@@ -2251,6 +2301,7 @@ describe("instruction-constraints", () => {
               },
             ],
             accountConstraints: [],
+            discriminatorFormat: { anchor8: {} },
           },
         ],
         true, // strict_mode=true — reject programs without constraint entries
@@ -2393,6 +2444,7 @@ describe("instruction-constraints", () => {
               },
             ],
             accountConstraints: [],
+            discriminatorFormat: { anchor8: {} },
           },
         ],
         false,
@@ -2419,6 +2471,7 @@ describe("instruction-constraints", () => {
               },
             ],
             accountConstraints: [],
+            discriminatorFormat: { anchor8: {} },
           },
         ],
         false,
@@ -2446,6 +2499,7 @@ describe("instruction-constraints", () => {
                 },
               ],
               accountConstraints: [],
+              discriminatorFormat: { anchor8: {} },
             },
           ],
           false,
@@ -2615,6 +2669,7 @@ describe("instruction-constraints", () => {
           },
         ],
         accountConstraints: [],
+        discriminatorFormat: { anchor8: {} },
       },
     ];
 
@@ -2930,6 +2985,454 @@ describe("instruction-constraints", () => {
           `Expected constraint config or already-in-use error, got: ${errStr}`,
         ).to.equal(true);
       }
+
+      // Cleanup
+      await queueAndApplyCloseConstraints(
+        f.vault,
+        f.policy,
+        f.constraints,
+        f.pendingClose,
+      );
+    });
+  });
+
+  // =======================================================================
+  // Spl1 discriminator format — end-to-end integration
+  // =======================================================================
+  describe("Spl1 discriminator format", () => {
+    // Use vault IDs 7001+ to avoid collisions with other test suites
+    async function setupSpl1Vault(vaultIdNum: number) {
+      const id = new BN(vaultIdNum);
+      const [vault] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("vault"),
+          owner.publicKey.toBuffer(),
+          id.toArrayLike(Buffer, "le", 8),
+        ],
+        program.programId,
+      );
+      const [policy] = PublicKey.findProgramAddressSync(
+        [Buffer.from("policy"), vault.toBuffer()],
+        program.programId,
+      );
+      const [tracker] = PublicKey.findProgramAddressSync(
+        [Buffer.from("tracker"), vault.toBuffer()],
+        program.programId,
+      );
+      const [overlay] = PublicKey.findProgramAddressSync(
+        [Buffer.from("agent_spend"), vault.toBuffer(), Buffer.from([0])],
+        program.programId,
+      );
+      const [constraints] = PublicKey.findProgramAddressSync(
+        [Buffer.from("constraints"), vault.toBuffer()],
+        program.programId,
+      );
+      const [pendingConstraints] = PublicKey.findProgramAddressSync(
+        [Buffer.from("pending_constraints"), vault.toBuffer()],
+        program.programId,
+      );
+      const [pendingClose] = PublicKey.findProgramAddressSync(
+        [Buffer.from("pending_close_constraints"), vault.toBuffer()],
+        program.programId,
+      );
+
+      await program.methods
+        .initializeVault(
+          id,
+          new BN(500_000_000),
+          new BN(100_000_000),
+          0,
+          [],
+          new BN(0) as any,
+          3,
+          0,
+          100,
+          new BN(1800),
+          [],
+          [],
+        )
+        .accounts({
+          owner: owner.publicKey,
+          vault,
+          policy,
+          tracker,
+          agentSpendOverlay: overlay,
+          feeDestination: feeDestination.publicKey,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .rpc();
+
+      return {
+        vault,
+        policy,
+        tracker,
+        overlay,
+        constraints,
+        pendingConstraints,
+        pendingClose,
+      };
+    }
+
+    it("creates Spl1 constraint entry for SPL Token program (MintTo=0x07)", async () => {
+      const f = await setupSpl1Vault(7001);
+
+      // MintTo opcode (0x07) is not in the blocked list — should succeed
+      const entries = [
+        {
+          programId: TOKEN_PROGRAM_ID,
+          dataConstraints: [
+            { offset: 0, operator: { eq: {} }, value: Buffer.from([0x07]) },
+          ],
+          accountConstraints: [],
+          discriminatorFormat: { spl1: {} },
+        },
+      ];
+
+      createConstraintsAccount(
+        program,
+        svm,
+        owner.payer,
+        f.vault,
+        f.policy,
+        entries,
+        false,
+      );
+
+      const constraintsAcct = await fetchConstraints(program, f.constraints);
+      expect(constraintsAcct.entries.length).to.equal(1);
+      expect(constraintsAcct.entries[0].programId.toString()).to.equal(
+        TOKEN_PROGRAM_ID.toString(),
+      );
+      expect(constraintsAcct.entries[0].dataConstraints.length).to.equal(1);
+      // Verify the 1-byte value survived ZC packing into the 32-byte fixed buffer
+      expect(constraintsAcct.entries[0].dataConstraints[0].offset).to.equal(0);
+      expect(
+        Buffer.from(
+          constraintsAcct.entries[0].dataConstraints[0].value,
+        ).toString("hex"),
+      ).to.equal("07");
+      // Verify Spl1 format persisted (1 = Spl1, 0 = Anchor8)
+      expect(constraintsAcct.entries[0].discriminatorFormat).to.equal(1);
+
+      // Cleanup
+      await queueAndApplyCloseConstraints(
+        f.vault,
+        f.policy,
+        f.constraints,
+        f.pendingClose,
+      );
+    });
+
+    it("creates Spl1 constraint entry for Token-2022 program (FreezeAccount=0x0A)", async () => {
+      const f = await setupSpl1Vault(7002);
+
+      // Token-2022 program ID
+      const token2022 = new PublicKey(
+        "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      );
+
+      const entries = [
+        {
+          programId: token2022,
+          dataConstraints: [
+            { offset: 0, operator: { eq: {} }, value: Buffer.from([0x0a]) },
+          ],
+          accountConstraints: [],
+          discriminatorFormat: { spl1: {} },
+        },
+      ];
+
+      createConstraintsAccount(
+        program,
+        svm,
+        owner.payer,
+        f.vault,
+        f.policy,
+        entries,
+        false,
+      );
+
+      const constraintsAcct = await fetchConstraints(program, f.constraints);
+      expect(constraintsAcct.entries.length).to.equal(1);
+      expect(constraintsAcct.entries[0].programId.toString()).to.equal(
+        token2022.toString(),
+      );
+      // Verify the 1-byte value survived ZC packing
+      expect(
+        Buffer.from(
+          constraintsAcct.entries[0].dataConstraints[0].value,
+        ).toString("hex"),
+      ).to.equal("0a");
+      expect(constraintsAcct.entries[0].dataConstraints[0].offset).to.equal(0);
+      // Verify Spl1 format persisted (1 = Spl1, 0 = Anchor8)
+      expect(constraintsAcct.entries[0].discriminatorFormat).to.equal(1);
+
+      // Cleanup
+      await queueAndApplyCloseConstraints(
+        f.vault,
+        f.policy,
+        f.constraints,
+        f.pendingClose,
+      );
+    });
+
+    it("rejects Spl1 on non-SPL program → InvalidConstraintConfig", async () => {
+      const f = await setupSpl1Vault(7003);
+
+      // Spl1 format on a random (non-SPL) program must be rejected
+      const fakeProgram = Keypair.generate().publicKey;
+      const entries = [
+        {
+          programId: fakeProgram,
+          dataConstraints: [
+            { offset: 0, operator: { eq: {} }, value: Buffer.from([0x07]) },
+          ],
+          accountConstraints: [],
+          discriminatorFormat: { spl1: {} },
+        },
+      ];
+
+      try {
+        createConstraintsAccount(
+          program,
+          svm,
+          owner.payer,
+          f.vault,
+          f.policy,
+          entries,
+          false,
+        );
+        expect.fail("Should have rejected Spl1 on non-SPL program");
+      } catch (err: any) {
+        expectSigilError(err.toString(), "InvalidConstraintConfig");
+      }
+    });
+
+    it("rejects Spl1 with blocked Transfer opcode (0x03) → BlockedSplOpcode", async () => {
+      const f = await setupSpl1Vault(7004);
+
+      const entries = [
+        {
+          programId: TOKEN_PROGRAM_ID,
+          dataConstraints: [
+            { offset: 0, operator: { eq: {} }, value: Buffer.from([0x03]) },
+          ],
+          accountConstraints: [],
+          discriminatorFormat: { spl1: {} },
+        },
+      ];
+
+      try {
+        createConstraintsAccount(
+          program,
+          svm,
+          owner.payer,
+          f.vault,
+          f.policy,
+          entries,
+          false,
+        );
+        expect.fail("Should have rejected blocked SPL opcode");
+      } catch (err: any) {
+        expectSigilError(err.toString(), "BlockedSplOpcode");
+      }
+    });
+
+    it("rejects Spl1 with blocked TransferChecked opcode (0x0C) → BlockedSplOpcode", async () => {
+      const f = await setupSpl1Vault(7005);
+
+      const entries = [
+        {
+          programId: TOKEN_PROGRAM_ID,
+          dataConstraints: [
+            { offset: 0, operator: { eq: {} }, value: Buffer.from([0x0c]) },
+          ],
+          accountConstraints: [],
+          discriminatorFormat: { spl1: {} },
+        },
+      ];
+
+      try {
+        createConstraintsAccount(
+          program,
+          svm,
+          owner.payer,
+          f.vault,
+          f.policy,
+          entries,
+          false,
+        );
+        expect.fail("Should have rejected blocked SPL opcode");
+      } catch (err: any) {
+        expectSigilError(err.toString(), "BlockedSplOpcode");
+      }
+    });
+
+    // Cover all remaining blocked SPL opcodes (L-3 finding)
+    for (const [opcode, name] of [
+      [0x04, "Approve"],
+      [0x06, "SetAuthority"],
+      [0x08, "Burn"],
+      [0x09, "CloseAccount"],
+      [0x0d, "ApproveChecked"],
+      [0x0f, "BurnChecked"],
+      [0x1a, "TransferCheckedWithFee"],
+    ] as [number, string][]) {
+      it(`rejects Spl1 with blocked ${name} opcode (0x${opcode.toString(16).padStart(2, "0")}) → BlockedSplOpcode`, async () => {
+        const f = await setupSpl1Vault(7100 + opcode);
+
+        const entries = [
+          {
+            programId:
+              opcode === 0x1a
+                ? new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb")
+                : TOKEN_PROGRAM_ID,
+            dataConstraints: [
+              { offset: 0, operator: { eq: {} }, value: Buffer.from([opcode]) },
+            ],
+            accountConstraints: [],
+            discriminatorFormat: { spl1: {} },
+          },
+        ];
+
+        try {
+          createConstraintsAccount(
+            program,
+            svm,
+            owner.payer,
+            f.vault,
+            f.policy,
+            entries,
+            false,
+          );
+          expect.fail(`Should have rejected blocked SPL opcode ${name}`);
+        } catch (err: any) {
+          expectSigilError(err.toString(), "BlockedSplOpcode");
+        }
+      });
+    }
+
+    it("rejects mixed formats for same program_id → InvalidConstraintConfig", async () => {
+      const f = await setupSpl1Vault(7006);
+
+      // Two entries for TOKEN_PROGRAM_ID: one Spl1, one Anchor8 → must reject
+      const entries = [
+        {
+          programId: TOKEN_PROGRAM_ID,
+          dataConstraints: [
+            { offset: 0, operator: { eq: {} }, value: Buffer.from([0x07]) },
+          ],
+          accountConstraints: [],
+          discriminatorFormat: { spl1: {} },
+        },
+        {
+          programId: TOKEN_PROGRAM_ID,
+          dataConstraints: [
+            {
+              offset: 0,
+              operator: { eq: {} },
+              value: Buffer.from([0x07, 0, 0, 0, 0, 0, 0, 0]),
+            },
+          ],
+          accountConstraints: [],
+          discriminatorFormat: { anchor8: {} },
+        },
+      ];
+
+      try {
+        createConstraintsAccount(
+          program,
+          svm,
+          owner.payer,
+          f.vault,
+          f.policy,
+          entries,
+          false,
+        );
+        expect.fail("Should have rejected mixed formats for same program_id");
+      } catch (err: any) {
+        expectSigilError(err.toString(), "InvalidConstraintConfig");
+      }
+    });
+
+    it("Spl1 constraint survives queue+apply round-trip", async () => {
+      const f = await setupSpl1Vault(7007);
+
+      // Create initial Anchor8 constraints
+      const initialEntries = [
+        {
+          programId: jupiterProgramId,
+          dataConstraints: [
+            {
+              offset: 0,
+              operator: { eq: {} },
+              value: Buffer.from([0xaa, 0, 0, 0, 0, 0, 0, 0]),
+            },
+          ],
+          accountConstraints: [],
+          discriminatorFormat: { anchor8: {} },
+        },
+      ];
+      createConstraintsAccount(
+        program,
+        svm,
+        owner.payer,
+        f.vault,
+        f.policy,
+        initialEntries,
+        false,
+      );
+
+      // Queue update with Spl1 entry
+      const spl1Entries = [
+        {
+          programId: TOKEN_PROGRAM_ID,
+          dataConstraints: [
+            { offset: 0, operator: { eq: {} }, value: Buffer.from([0x07]) },
+          ],
+          accountConstraints: [],
+          discriminatorFormat: { spl1: {} },
+        },
+      ];
+
+      queueConstraintsUpdateMultiIx(
+        program,
+        svm,
+        owner.payer,
+        f.vault,
+        f.policy,
+        f.constraints,
+        spl1Entries,
+        false,
+      );
+      advanceTime(svm, 1801);
+
+      await program.methods
+        .applyConstraintsUpdate()
+        .accounts({
+          owner: owner.publicKey,
+          vault: f.vault,
+          policy: f.policy,
+          constraints: f.constraints,
+          pendingConstraints: f.pendingConstraints,
+        } as any)
+        .rpc();
+
+      // Verify the Spl1 entry persisted correctly — including format field
+      const constraintsAcct = await fetchConstraints(program, f.constraints);
+      expect(constraintsAcct.entries.length).to.equal(1);
+      expect(constraintsAcct.entries[0].programId.toString()).to.equal(
+        TOKEN_PROGRAM_ID.toString(),
+      );
+      // Critical: verify discriminator_format survived the queue→apply PDA memcpy
+      // 1 = Spl1 (would be 0 = Anchor8 if the field was silently zeroed)
+      expect(constraintsAcct.entries[0].discriminatorFormat).to.equal(1);
+      // Verify the 1-byte value also survived the round-trip
+      expect(
+        Buffer.from(
+          constraintsAcct.entries[0].dataConstraints[0].value,
+        ).toString("hex"),
+      ).to.equal("07");
 
       // Cleanup
       await queueAndApplyCloseConstraints(

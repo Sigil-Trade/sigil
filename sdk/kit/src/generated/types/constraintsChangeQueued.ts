@@ -7,41 +7,69 @@
  */
 
 import {
+  addDecoderSizePrefix,
+  addEncoderSizePrefix,
   combineCodec,
   getAddressDecoder,
   getAddressEncoder,
+  getBytesDecoder,
+  getBytesEncoder,
   getI64Decoder,
   getI64Encoder,
   getStructDecoder,
   getStructEncoder,
+  getU32Decoder,
+  getU32Encoder,
   type Address,
-  type FixedSizeCodec,
-  type FixedSizeDecoder,
-  type FixedSizeEncoder,
+  type Codec,
+  type Decoder,
+  type Encoder,
+  type ReadonlyUint8Array,
 } from "@solana/kit";
 
-export type ConstraintsChangeQueued = { vault: Address; executesAt: bigint };
+export type ConstraintsChangeQueued = {
+  vault: Address;
+  /**
+   * Per-entry discriminator format (0=Anchor8, 1=Spl1).
+   * Enables off-chain monitors to detect format changes/downgrades.
+   */
+  discriminatorFormats: ReadonlyUint8Array;
+  executesAt: bigint;
+};
 
 export type ConstraintsChangeQueuedArgs = {
   vault: Address;
+  /**
+   * Per-entry discriminator format (0=Anchor8, 1=Spl1).
+   * Enables off-chain monitors to detect format changes/downgrades.
+   */
+  discriminatorFormats: ReadonlyUint8Array;
   executesAt: number | bigint;
 };
 
-export function getConstraintsChangeQueuedEncoder(): FixedSizeEncoder<ConstraintsChangeQueuedArgs> {
+export function getConstraintsChangeQueuedEncoder(): Encoder<ConstraintsChangeQueuedArgs> {
   return getStructEncoder([
     ["vault", getAddressEncoder()],
+    [
+      "discriminatorFormats",
+      addEncoderSizePrefix(getBytesEncoder(), getU32Encoder()),
+    ],
     ["executesAt", getI64Encoder()],
   ]);
 }
 
-export function getConstraintsChangeQueuedDecoder(): FixedSizeDecoder<ConstraintsChangeQueued> {
+export function getConstraintsChangeQueuedDecoder(): Decoder<ConstraintsChangeQueued> {
   return getStructDecoder([
     ["vault", getAddressDecoder()],
+    [
+      "discriminatorFormats",
+      addDecoderSizePrefix(getBytesDecoder(), getU32Decoder()),
+    ],
     ["executesAt", getI64Decoder()],
   ]);
 }
 
-export function getConstraintsChangeQueuedCodec(): FixedSizeCodec<
+export function getConstraintsChangeQueuedCodec(): Codec<
   ConstraintsChangeQueuedArgs,
   ConstraintsChangeQueued
 > {

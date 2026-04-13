@@ -32,6 +32,7 @@ export * from "./constraintsChangeQueued.js";
 export * from "./dataConstraint.js";
 export * from "./dataConstraintZC.js";
 export * from "./delegationRevoked.js";
+export * from "./discriminatorFormat.js";
 export * from "./epochBucket.js";
 export * from "./escrowCreated.js";
 export * from "./escrowRefunded.js";
