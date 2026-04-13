@@ -46,6 +46,9 @@ import {
   getPositionsSyncedDecoder,
   getPdaAllocatedDecoder,
   getPdaExtendedDecoder,
+  getPostAssertionCheckedDecoder,
+  getPostAssertionsCreatedDecoder,
+  getPostAssertionsClosedDecoder,
 } from "./generated/types/index.js";
 
 /** All known Sigil event names */
@@ -176,6 +179,9 @@ const EVENT_DECODER_MAP: Record<
   PositionsSynced: getPositionsSyncedDecoder(),
   PdaAllocated: getPdaAllocatedDecoder(),
   PdaExtended: getPdaExtendedDecoder(),
+  PostAssertionChecked: getPostAssertionCheckedDecoder(),
+  PostAssertionsCreated: getPostAssertionsCreatedDecoder(),
+  PostAssertionsClosed: getPostAssertionsClosedDecoder(),
 };
 
 // Validate decoder map completeness at module init — catches drift when events are added/removed
