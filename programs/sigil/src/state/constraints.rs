@@ -36,6 +36,43 @@ impl TryFrom<u8> for ConstraintOperator {
     }
 }
 
+/// Discriminator format for the first DataConstraint in a ConstraintEntry.
+/// Controls the minimum byte length required for the instruction discriminator
+/// anchor (A5 invariant). Different Solana programs use different discriminator
+/// widths — Anchor uses 8-byte SHA-256 prefixes, SPL Token uses 1-byte enum
+/// indices. The format is checked at constraint creation time only; runtime
+/// verification in verify_data_constraints_zc() uses value_len directly.
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq)]
+pub enum DiscriminatorFormat {
+    /// 8-byte Anchor discriminator (SHA-256("global:<name>")[0..8]).
+    /// Default for all programs. Zero-initialized _padding maps here.
+    Anchor8 = 0,
+    /// 1-byte SPL Token / Token-2022 instruction enum index.
+    /// Transfer=0x03, Approve=0x04, TransferChecked=0x0C, etc.
+    Spl1 = 1,
+}
+
+impl DiscriminatorFormat {
+    /// Minimum byte length for the first DataConstraint value under this format.
+    pub fn min_discriminator_len(&self) -> usize {
+        match self {
+            DiscriminatorFormat::Anchor8 => 8,
+            DiscriminatorFormat::Spl1 => 1,
+        }
+    }
+}
+
+impl TryFrom<u8> for DiscriminatorFormat {
+    type Error = ();
+    fn try_from(v: u8) -> core::result::Result<Self, Self::Error> {
+        match v {
+            0 => Ok(DiscriminatorFormat::Anchor8),
+            1 => Ok(DiscriminatorFormat::Spl1),
+            _ => Err(()),
+        }
+    }
+}
+
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug, PartialEq)]
 pub struct DataConstraint {
     pub offset: u16,                  // 2
@@ -59,6 +96,10 @@ pub struct ConstraintEntry {
     pub is_spending: u8,
     /// Position effect: 0=None, 1=Increment, 2=Decrement.
     pub position_effect: u8,
+    /// Discriminator format for this entry's target program. Controls the
+    /// minimum byte length of the first DataConstraint (the A5 anchor).
+    /// Default: Anchor8 (0). Use Spl1 (1) for SPL Token / Token-2022.
+    pub discriminator_format: DiscriminatorFormat,
 }
 
 // ─── Zero-copy types (on-chain account layout) ─────────────────────────────
@@ -91,11 +132,15 @@ pub struct ConstraintEntryZC {
     /// Spending classification: 0=Unset (treated as spending), 1=Spending, 2=NonSpending.
     /// Set by vault owner at constraint creation time. The constraint engine returns
     /// this value when it matches an entry — replaces ActionType.is_spending().
-    pub is_spending: u8, // 1 (was padding[0])
+    pub is_spending: u8, // 1 (byte 554)
     /// Position tracking: 0=None, 1=Increment (opens position), 2=Decrement (closes position).
     /// Replaces ActionType.position_effect().
-    pub position_effect: u8, // 1 (was padding[1])
-    pub _padding: [u8; 4], // 4 (reduced from 6: 32+320+200+1+1+1+1+4=560)
+    pub position_effect: u8, // 1 (byte 555)
+    /// DiscriminatorFormat discriminant (0=Anchor8, 1=Spl1). Write-time only —
+    /// verify_data_constraints_zc() does not read this field at runtime.
+    /// Zero-initialized on existing V1 PDAs → 0 → Anchor8 (backward compatible).
+    pub discriminator_format: u8, // 1 (byte 556)
+    pub _padding: [u8; 3], // 3 (32+320+200+1+1+1+1+1+3=560)
 }
 // = 560 bytes (unchanged)
 
@@ -139,10 +184,8 @@ impl InstructionConstraints {
             // matching program_id — privilege escalation via account-layout
             // conflation (different Anchor instructions on the same program
             // often share account slots). The first DataConstraint must be
-            // an Eq at offset 0 with a non-zero value of at least 8 bytes
-            // (standard Anchor instruction discriminator width). This check
-            // supersedes the old "reject fully empty entries" rule since a
-            // non-empty data_constraints implies a non-empty entry.
+            // an Eq at offset 0 with a non-zero value whose length meets the
+            // minimum for the entry's discriminator_format.
             // See docs/SECURITY-FINDINGS-2026-04-07.md Finding 1.
             require!(
                 !entry.data_constraints.is_empty(),
@@ -154,7 +197,14 @@ impl InstructionConstraints {
                 first.operator == ConstraintOperator::Eq,
                 SigilError::InvalidConstraintConfig
             );
-            require!(first.value.len() >= 8, SigilError::InvalidConstraintConfig);
+            // Format-aware minimum discriminator length (A5 extended).
+            // Anchor8 (0) requires >= 8 bytes (original A5 behavior).
+            // Spl1 (1) requires >= 1 byte (SPL Token 1-byte opcode).
+            let min_len = entry.discriminator_format.min_discriminator_len();
+            require!(
+                first.value.len() >= min_len,
+                SigilError::InvalidConstraintConfig
+            );
             require!(
                 first.value.iter().any(|&b| b != 0),
                 SigilError::InvalidConstraintConfig
@@ -219,6 +269,21 @@ mod tests {
             account_constraints: vec![],
             is_spending: 1,
             position_effect: 0,
+            discriminator_format: DiscriminatorFormat::Anchor8,
+        }
+    }
+
+    fn mk_entry_with_format(
+        data_constraints: Vec<DataConstraint>,
+        format: DiscriminatorFormat,
+    ) -> ConstraintEntry {
+        ConstraintEntry {
+            program_id: Pubkey::default(),
+            data_constraints,
+            account_constraints: vec![],
+            is_spending: 1,
+            position_effect: 0,
+            discriminator_format: format,
         }
     }
 
@@ -232,6 +297,7 @@ mod tests {
             account_constraints,
             is_spending: 1,
             position_effect: 0,
+            discriminator_format: DiscriminatorFormat::Anchor8,
         }
     }
 
@@ -403,6 +469,121 @@ mod tests {
         }])];
         assert!(InstructionConstraints::validate_entries(&entries).is_ok());
     }
+
+    // ─── Multi-format discriminator tests ──────────────────────────────────
+
+    #[test]
+    fn validate_entries_accepts_spl1_format_with_1_byte_discriminator() {
+        // SPL Token Transfer = opcode 0x03 (1 byte). Format Spl1 allows >= 1.
+        let entries = vec![mk_entry_with_format(
+            vec![DataConstraint {
+                offset: 0,
+                operator: ConstraintOperator::Eq,
+                value: vec![0x03], // SPL Token Transfer
+            }],
+            DiscriminatorFormat::Spl1,
+        )];
+        assert!(InstructionConstraints::validate_entries(&entries).is_ok());
+    }
+
+    #[test]
+    fn validate_entries_rejects_spl1_format_with_empty_value() {
+        // Spl1 requires >= 1 byte. Empty value must be rejected.
+        let entries = vec![mk_entry_with_format(
+            vec![DataConstraint {
+                offset: 0,
+                operator: ConstraintOperator::Eq,
+                value: vec![],
+            }],
+            DiscriminatorFormat::Spl1,
+        )];
+        assert!(InstructionConstraints::validate_entries(&entries).is_err());
+    }
+
+    #[test]
+    fn validate_entries_rejects_spl1_format_with_all_zero_value() {
+        // Even with Spl1, all-zero discriminator is rejected (non-zero check).
+        let entries = vec![mk_entry_with_format(
+            vec![DataConstraint {
+                offset: 0,
+                operator: ConstraintOperator::Eq,
+                value: vec![0x00],
+            }],
+            DiscriminatorFormat::Spl1,
+        )];
+        assert!(InstructionConstraints::validate_entries(&entries).is_err());
+    }
+
+    #[test]
+    fn validate_entries_accepts_spl1_format_with_longer_value() {
+        // Spl1 with a value longer than 1 byte is valid — pins discriminator
+        // plus additional argument bytes in one Eq match.
+        let entries = vec![mk_entry_with_format(
+            vec![DataConstraint {
+                offset: 0,
+                operator: ConstraintOperator::Eq,
+                value: vec![0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01],
+                // SPL Transfer + amount=1 (u64 LE)
+            }],
+            DiscriminatorFormat::Spl1,
+        )];
+        assert!(InstructionConstraints::validate_entries(&entries).is_ok());
+    }
+
+    #[test]
+    fn validate_entries_legacy_format_0_still_requires_8_bytes() {
+        // Regression: format=Anchor8 with a 4-byte value must still be
+        // rejected. The original A5 behavior is preserved for format 0.
+        let entries = vec![mk_entry_with_format(
+            vec![DataConstraint {
+                offset: 0,
+                operator: ConstraintOperator::Eq,
+                value: vec![0x01, 0x02, 0x03, 0x04],
+            }],
+            DiscriminatorFormat::Anchor8,
+        )];
+        assert!(InstructionConstraints::validate_entries(&entries).is_err());
+    }
+
+    #[test]
+    fn validate_entries_format_0_default_backward_compatible() {
+        // Format=Anchor8 with a full 8-byte discriminator works exactly
+        // as before — existing behavior unchanged.
+        let entries = vec![mk_entry_with_format(
+            vec![discriminator_anchor()],
+            DiscriminatorFormat::Anchor8,
+        )];
+        assert!(InstructionConstraints::validate_entries(&entries).is_ok());
+    }
+
+    #[test]
+    fn validate_entries_spl1_with_transfer_checked_discriminator() {
+        // SPL Token TransferChecked = opcode 0x0C. Verify a real opcode.
+        let entries = vec![mk_entry_with_format(
+            vec![DataConstraint {
+                offset: 0,
+                operator: ConstraintOperator::Eq,
+                value: vec![0x0C], // TransferChecked
+            }],
+            DiscriminatorFormat::Spl1,
+        )];
+        assert!(InstructionConstraints::validate_entries(&entries).is_ok());
+    }
+
+    #[test]
+    fn validate_entries_spl1_still_requires_eq_at_offset_0() {
+        // Even with Spl1 format, the A5 invariant requires Eq at offset 0.
+        // Lte at offset 0 must be rejected regardless of format.
+        let entries = vec![mk_entry_with_format(
+            vec![DataConstraint {
+                offset: 0,
+                operator: ConstraintOperator::Lte,
+                value: vec![0x03],
+            }],
+            DiscriminatorFormat::Spl1,
+        )];
+        assert!(InstructionConstraints::validate_entries(&entries).is_err());
+    }
 }
 
 /// Pack Borsh-deserialized constraint entries into the zero-copy fixed-array layout.
@@ -416,6 +597,9 @@ pub(crate) fn pack_entries(
         dst[i].program_id = entry.program_id.to_bytes();
         dst[i].data_count = entry.data_constraints.len() as u8;
         dst[i].account_count = entry.account_constraints.len() as u8;
+        // Write-time metadata: discriminator format for A5 validation.
+        // verify_data_constraints_zc() does not read this at runtime.
+        dst[i].discriminator_format = entry.discriminator_format as u8;
 
         for (j, dc) in entry.data_constraints.iter().enumerate() {
             dst[i].data_constraints[j].offset = dc.offset;
