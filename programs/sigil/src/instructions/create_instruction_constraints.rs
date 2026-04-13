@@ -99,7 +99,10 @@ pub fn handler(
         vault: vault_key,
         entries_count: entry_count,
         strict_mode,
-        discriminator_formats: entries.iter().map(|e| e.discriminator_format as u8).collect(),
+        discriminator_formats: entries
+            .iter()
+            .map(|e| e.discriminator_format as u8)
+            .collect(),
         timestamp: Clock::get()?.unix_timestamp,
     });
 
