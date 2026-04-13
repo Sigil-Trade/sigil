@@ -125,6 +125,7 @@ pub fn handler(
 
     emit!(ConstraintsChangeQueued {
         vault: vault_key,
+        discriminator_formats: entries.iter().map(|e| e.discriminator_format as u8).collect(),
         executes_at,
     });
 

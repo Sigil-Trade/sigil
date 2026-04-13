@@ -163,6 +163,9 @@ pub struct InstructionConstraintsCreated {
     pub vault: Pubkey,
     pub entries_count: u8,
     pub strict_mode: bool,
+    /// Per-entry discriminator format (0=Anchor8, 1=Spl1).
+    /// Enables off-chain monitors to detect format changes/downgrades.
+    pub discriminator_formats: Vec<u8>,
     pub timestamp: i64,
 }
 
@@ -188,6 +191,9 @@ pub struct PdaExtended {
 #[event]
 pub struct ConstraintsChangeQueued {
     pub vault: Pubkey,
+    /// Per-entry discriminator format (0=Anchor8, 1=Spl1).
+    /// Enables off-chain monitors to detect format changes/downgrades.
+    pub discriminator_formats: Vec<u8>,
     pub executes_at: i64,
 }
 

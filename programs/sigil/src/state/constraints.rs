@@ -124,6 +124,19 @@ pub struct AccountConstraintZC {
 }
 // = 40 bytes
 
+/// BYTE LAYOUT REGISTRY — Canonical assignment of padding bytes.
+///
+/// Both `feat/multi-format-discriminator` and `feat/actiontype-elimination`
+/// branches carve fields from the original 6-byte `_padding`. This registry
+/// is the single source of truth. When merging, the layout MUST be:
+///
+///   byte 554: discriminator_format  (this branch)
+///   byte 555: is_spending           (actiontype-elimination branch)
+///   byte 556: position_effect       (actiontype-elimination branch)
+///   bytes 557-559: _padding[3]      (reserved for future use)
+///
+/// Total: 32+320+200+1+1+1+1+1+3 = 560 (unchanged).
+/// The branch that merges second MUST rebase and adjust its slot to match.
 #[zero_copy]
 pub struct ConstraintEntryZC {
     pub program_id: [u8; 32], // 32
@@ -314,6 +327,7 @@ impl InstructionConstraints {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bytemuck::Zeroable;
 
     /// Standard 8-byte Anchor discriminator anchor used by valid test entries.
     fn discriminator_anchor() -> DataConstraint {
@@ -807,6 +821,57 @@ mod tests {
             ),
         ];
         assert!(InstructionConstraints::validate_entries(&entries).is_ok());
+    }
+
+    // ─── L-1: Write-only semantics defensive test ──────────────────────────
+
+    #[test]
+    fn discriminator_format_is_write_only_at_runtime() {
+        // L-1: Confirm that an invalid discriminator_format byte in the ZC struct
+        // does NOT affect runtime verification. verify_data_constraints_zc() uses
+        // value_len directly and never reads discriminator_format. This test pins
+        // that behavior — if a future change reads the field at runtime, this
+        // test documents that it was intentionally write-only.
+        let mut entry = ConstraintEntryZC::zeroed();
+        entry.discriminator_format = 0xFF; // Invalid format — should be ignored at runtime
+        entry.data_count = 1;
+        entry.data_constraints[0].offset = 0;
+        entry.data_constraints[0].operator = 0; // Eq
+        entry.data_constraints[0].value_len = 1;
+        entry.data_constraints[0].value[0] = 0x07;
+
+        // Runtime verification should succeed despite invalid format byte
+        let ix_data = vec![0x07, 0x00, 0x00, 0x00];
+        use crate::instructions::integrations::generic_constraints::verify_data_constraints_zc;
+        assert!(verify_data_constraints_zc(&ix_data, &entry).is_ok());
+    }
+
+    // ─── L-2: TryFrom<u8> coverage ────────────────────────────────────────
+
+    #[test]
+    fn discriminator_format_try_from_valid_values() {
+        assert_eq!(
+            DiscriminatorFormat::try_from(0),
+            Ok(DiscriminatorFormat::Anchor8)
+        );
+        assert_eq!(
+            DiscriminatorFormat::try_from(1),
+            Ok(DiscriminatorFormat::Spl1)
+        );
+    }
+
+    #[test]
+    fn discriminator_format_try_from_rejects_invalid_values() {
+        assert!(DiscriminatorFormat::try_from(2).is_err());
+        assert!(DiscriminatorFormat::try_from(3).is_err());
+        assert!(DiscriminatorFormat::try_from(127).is_err());
+        assert!(DiscriminatorFormat::try_from(255).is_err());
+    }
+
+    #[test]
+    fn discriminator_format_round_trip_discriminants() {
+        assert_eq!(DiscriminatorFormat::Anchor8 as u8, 0);
+        assert_eq!(DiscriminatorFormat::Spl1 as u8, 1);
     }
 }
 

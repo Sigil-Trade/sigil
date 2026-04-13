@@ -3188,8 +3188,8 @@ export type Sigil = {
           "type": "pubkey"
         },
         {
-          "name": "newCapability",
-          "type": "u8"
+          "name": "newPermissions",
+          "type": "u64"
         },
         {
           "name": "spendingLimitUsd",
@@ -3777,9 +3777,9 @@ export type Sigil = {
           }
         },
         {
-          "name": "newAgentCapability",
+          "name": "newAgentPermissions",
           "type": {
-            "option": "u8"
+            "option": "u64"
           }
         }
       ]
@@ -4043,8 +4043,8 @@ export type Sigil = {
           "type": "pubkey"
         },
         {
-          "name": "capability",
-          "type": "u8"
+          "name": "permissions",
+          "type": "u64"
         },
         {
           "name": "spendingLimitUsd",
@@ -4659,6 +4659,14 @@ export type Sigil = {
       ],
       "args": [
         {
+          "name": "actionType",
+          "type": {
+            "defined": {
+              "name": "actionType"
+            }
+          }
+        },
+        {
           "name": "tokenMint",
           "type": "pubkey"
         },
@@ -4669,6 +4677,12 @@ export type Sigil = {
         {
           "name": "targetProtocol",
           "type": "pubkey"
+        },
+        {
+          "name": "leverageBps",
+          "type": {
+            "option": "u16"
+          }
         },
         {
           "name": "expectedPolicyVersion",
@@ -6063,8 +6077,12 @@ export type Sigil = {
             "type": "pubkey"
           },
           {
-            "name": "isSpending",
-            "type": "bool"
+            "name": "actionType",
+            "type": {
+              "defined": {
+                "name": "actionType"
+              }
+            }
           },
           {
             "name": "tokenMint",
@@ -6084,6 +6102,11 @@ export type Sigil = {
           },
           {
             "name": "rollingSpendUsdAfter",
+            "docs": [
+              "DEPRECATED (v5): Always 0 since outcome-based spending.",
+              "Actual rolling spend is in SessionFinalized.actual_spend_usd.",
+              "Retained for IDL backward compatibility."
+            ],
             "type": "u64"
           },
           {
@@ -6097,6 +6120,80 @@ export type Sigil = {
           {
             "name": "timestamp",
             "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "actionType",
+      "docs": [
+        "Action types that agents can request"
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "swap"
+          },
+          {
+            "name": "openPosition"
+          },
+          {
+            "name": "closePosition"
+          },
+          {
+            "name": "increasePosition"
+          },
+          {
+            "name": "decreasePosition"
+          },
+          {
+            "name": "deposit"
+          },
+          {
+            "name": "withdraw"
+          },
+          {
+            "name": "transfer"
+          },
+          {
+            "name": "addCollateral"
+          },
+          {
+            "name": "removeCollateral"
+          },
+          {
+            "name": "placeTriggerOrder"
+          },
+          {
+            "name": "editTriggerOrder"
+          },
+          {
+            "name": "cancelTriggerOrder"
+          },
+          {
+            "name": "placeLimitOrder"
+          },
+          {
+            "name": "editLimitOrder"
+          },
+          {
+            "name": "cancelLimitOrder"
+          },
+          {
+            "name": "swapAndOpenPosition"
+          },
+          {
+            "name": "closeAndSwapPosition"
+          },
+          {
+            "name": "createEscrow"
+          },
+          {
+            "name": "settleEscrow"
+          },
+          {
+            "name": "refundEscrow"
           }
         ]
       }
@@ -6164,12 +6261,8 @@ export type Sigil = {
             "type": "pubkey"
           },
           {
-            "name": "capability",
-            "docs": [
-              "Agent capability: 0=Disabled, 1=Observer (non-spending), 2=Operator (full).",
-              "Replaces the 21-bit ActionType permission bitmask."
-            ],
-            "type": "u8"
+            "name": "permissions",
+            "type": "u64"
           },
           {
             "name": "spendingLimitUsd",
@@ -6178,15 +6271,6 @@ export type Sigil = {
           {
             "name": "paused",
             "type": "bool"
-          },
-          {
-            "name": "reserved",
-            "type": {
-              "array": [
-                "u8",
-                7
-              ]
-            }
           }
         ]
       }
@@ -6281,8 +6365,8 @@ export type Sigil = {
             "type": "pubkey"
           },
           {
-            "name": "capability",
-            "type": "u8"
+            "name": "permissions",
+            "type": "u64"
           },
           {
             "name": "spendingLimitUsd",
@@ -6712,24 +6796,38 @@ export type Sigil = {
             }
           },
           {
-            "name": "isSpending",
+            "name": "discriminatorFormat",
             "docs": [
-              "Spending classification: 1=Spending, 2=NonSpending. Required (0 rejected)."
+              "Discriminator format for this entry's target program. Controls the",
+              "minimum byte length of the first DataConstraint (the A5 anchor).",
+              "Default: Anchor8 (0). Use Spl1 (1) for SPL Token / Token-2022."
             ],
-            "type": "u8"
-          },
-          {
-            "name": "positionEffect",
-            "docs": [
-              "Position effect: 0=None, 1=Increment, 2=Decrement."
-            ],
-            "type": "u8"
+            "type": {
+              "defined": {
+                "name": "discriminatorFormat"
+              }
+            }
           }
         ]
       }
     },
     {
       "name": "constraintEntryZc",
+      "docs": [
+        "BYTE LAYOUT REGISTRY — Canonical assignment of padding bytes.",
+        "",
+        "Both `feat/multi-format-discriminator` and `feat/actiontype-elimination`",
+        "branches carve fields from the original 6-byte `_padding`. This registry",
+        "is the single source of truth. When merging, the layout MUST be:",
+        "",
+        "byte 554: discriminator_format  (this branch)",
+        "byte 555: is_spending           (actiontype-elimination branch)",
+        "byte 556: position_effect       (actiontype-elimination branch)",
+        "bytes 557-559: _padding[3]      (reserved for future use)",
+        "",
+        "Total: 32+320+200+1+1+1+1+1+3 = 560 (unchanged).",
+        "The branch that merges second MUST rebase and adjust its slot to match."
+      ],
       "serialization": "bytemuck",
       "repr": {
         "kind": "c"
@@ -6781,19 +6879,12 @@ export type Sigil = {
             "type": "u8"
           },
           {
-            "name": "isSpending",
+            "name": "discriminatorFormat",
             "docs": [
-              "Spending classification: 0=Unset (treated as spending), 1=Spending, 2=NonSpending.",
-              "Set by vault owner at constraint creation time. The constraint engine returns",
-              "this value when it matches an entry — replaces ActionType.is_spending()."
-            ],
-            "type": "u8"
-          },
-          {
-            "name": "positionEffect",
-            "docs": [
-              "Position tracking: 0=None, 1=Increment (opens position), 2=Decrement (closes position).",
-              "Replaces ActionType.position_effect()."
+              "DiscriminatorFormat discriminant (0=Anchor8, 1=Spl1). Write-time only —",
+              "verify_data_constraints_zc() does not read this field at runtime.",
+              "Zero-initialized on existing V1 PDAs → 0 → Anchor8 (backward compatible).",
+              "BYTE LAYOUT: byte 554 — permanently reserved for discriminator_format."
             ],
             "type": "u8"
           },
@@ -6802,7 +6893,7 @@ export type Sigil = {
             "type": {
               "array": [
                 "u8",
-                4
+                5
               ]
             }
           }
@@ -6874,6 +6965,14 @@ export type Sigil = {
           {
             "name": "vault",
             "type": "pubkey"
+          },
+          {
+            "name": "discriminatorFormats",
+            "docs": [
+              "Per-entry discriminator format (0=Anchor8, 1=Spl1).",
+              "Enables off-chain monitors to detect format changes/downgrades."
+            ],
+            "type": "bytes"
           },
           {
             "name": "executesAt",
@@ -6964,6 +7063,28 @@ export type Sigil = {
           {
             "name": "timestamp",
             "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "discriminatorFormat",
+      "docs": [
+        "Discriminator format for the first DataConstraint in a ConstraintEntry.",
+        "Controls the minimum byte length required for the instruction discriminator",
+        "anchor (A5 invariant). Different Solana programs use different discriminator",
+        "widths — Anchor uses 8-byte SHA-256 prefixes, SPL Token uses 1-byte enum",
+        "indices. The format is checked at constraint creation time only; runtime",
+        "verification in verify_data_constraints_zc() uses value_len directly."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "anchor8"
+          },
+          {
+            "name": "spl1"
           }
         ]
       }
@@ -7317,18 +7438,11 @@ export type Sigil = {
             "type": "u8"
           },
           {
-            "name": "constraintVersion",
-            "docs": [
-              "Constraint schema version. Always 1 for new deployments."
-            ],
-            "type": "u8"
-          },
-          {
             "name": "padding",
             "type": {
               "array": [
                 "u8",
-                4
+                5
               ]
             }
           }
@@ -7351,6 +7465,14 @@ export type Sigil = {
           {
             "name": "strictMode",
             "type": "bool"
+          },
+          {
+            "name": "discriminatorFormats",
+            "docs": [
+              "Per-entry discriminator format (0=Anchor8, 1=Spl1).",
+              "Enables off-chain monitors to detect format changes/downgrades."
+            ],
+            "type": "bytes"
           },
           {
             "name": "timestamp",
@@ -7426,17 +7548,8 @@ export type Sigil = {
             "type": "pubkey"
           },
           {
-            "name": "newCapability",
-            "type": "u8"
-          },
-          {
-            "name": "reservedCap",
-            "type": {
-              "array": [
-                "u8",
-                7
-              ]
-            }
+            "name": "newPermissions",
+            "type": "u64"
           },
           {
             "name": "spendingLimitUsd",
@@ -7808,7 +7921,8 @@ export type Sigil = {
           {
             "name": "maxLeverageBps",
             "docs": [
-              "DEPRECATED: Not enforced on-chain. Kept for layout stability. See Phase B3 post-assertions."
+              "Maximum leverage multiplier in basis points (e.g., 10000 = 100x)",
+              "Set to 0 to disallow leveraged positions entirely"
             ],
             "type": "u16"
           },
@@ -8301,19 +8415,15 @@ export type Sigil = {
             "type": "pubkey"
           },
           {
-            "name": "isSpending",
+            "name": "actionType",
             "docs": [
-              "Whether the matched constraint entry classifies this as spending.",
-              "Derived from amount > 0 in validate_and_authorize."
+              "The action type that was authorized (stored so finalize can record it)"
             ],
-            "type": "bool"
-          },
-          {
-            "name": "positionEffect",
-            "docs": [
-              "Position effect from matched constraint entry (0=None, 1=Increment, 2=Decrement)."
-            ],
-            "type": "u8"
+            "type": {
+              "defined": {
+                "name": "actionType"
+              }
+            }
           },
           {
             "name": "expiresAtSlot",
@@ -8409,7 +8519,8 @@ export type Sigil = {
           {
             "name": "actualSpendUsd",
             "docs": [
-              "Actual stablecoin spend measured by balance delta (0 for non-spending actions)."
+              "Actual stablecoin spend measured by balance delta (0 for non-spending actions).",
+              "For stablecoin-input: outflow minus fees. For non-stablecoin-input: stablecoin gain."
             ],
             "type": "u64"
           },
@@ -8421,16 +8532,9 @@ export type Sigil = {
             "type": "u64"
           },
           {
-            "name": "isSpending",
+            "name": "actionType",
             "docs": [
-              "Whether this was a spending action."
-            ],
-            "type": "bool"
-          },
-          {
-            "name": "positionEffect",
-            "docs": [
-              "Position effect: 0=None, 1=Increment, 2=Decrement."
+              "ActionType as u8 for downstream classification (permission_bit() value, 0-20)."
             ],
             "type": "u8"
           }
@@ -8607,9 +8711,9 @@ export type Sigil = {
             }
           },
           {
-            "name": "newAgentCapability",
+            "name": "newAgentPermissions",
             "type": {
-              "option": "u8"
+              "option": "u64"
             }
           },
           {
