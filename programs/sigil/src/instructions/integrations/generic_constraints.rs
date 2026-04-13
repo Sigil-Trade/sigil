@@ -255,6 +255,7 @@ pub fn verify_against_entries_zc(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::DiscriminatorFormat;
 
     fn dc(offset: u16, op: ConstraintOperator, value: Vec<u8>) -> DataConstraint {
         DataConstraint {
@@ -384,6 +385,7 @@ mod tests {
                 account_constraints: vec![],
                 is_spending: 1,
                 position_effect: 0,
+                discriminator_format: DiscriminatorFormat::Anchor8,
             },
             ConstraintEntry {
                 program_id: pk2,
@@ -391,6 +393,7 @@ mod tests {
                 account_constraints: vec![],
                 is_spending: 1,
                 position_effect: 0,
+                discriminator_format: DiscriminatorFormat::Anchor8,
             },
         ];
         assert!(find_constraint_entry(&entries, &pk1).is_some());
@@ -408,6 +411,7 @@ mod tests {
                 account_constraints: vec![],
                 is_spending: 1,
                 position_effect: 0,
+                discriminator_format: DiscriminatorFormat::Anchor8,
             },
             ConstraintEntry {
                 program_id: pk,
@@ -415,6 +419,7 @@ mod tests {
                 account_constraints: vec![],
                 is_spending: 1,
                 position_effect: 0,
+                discriminator_format: DiscriminatorFormat::Anchor8,
             },
         ];
         let ix_data = vec![0xAA];
@@ -435,6 +440,7 @@ mod tests {
                 account_constraints: vec![],
                 is_spending: 1,
                 position_effect: 0,
+                discriminator_format: DiscriminatorFormat::Anchor8,
             },
             ConstraintEntry {
                 program_id: pk,
@@ -442,6 +448,7 @@ mod tests {
                 account_constraints: vec![],
                 is_spending: 1,
                 position_effect: 0,
+                discriminator_format: DiscriminatorFormat::Anchor8,
             },
         ];
         let ix_data = vec![0xAA];
@@ -458,6 +465,7 @@ mod tests {
             account_constraints: vec![],
             is_spending: 1,
             position_effect: 0,
+            discriminator_format: DiscriminatorFormat::Anchor8,
         }];
         let ix_data = vec![0xAA];
         assert_eq!(
@@ -476,6 +484,7 @@ mod tests {
             account_constraints: vec![],
             is_spending: 1,
             position_effect: 0,
+            discriminator_format: DiscriminatorFormat::Anchor8,
         }];
         let ix_data = vec![0xAA];
         // No entries for pk2 → Ok(false)

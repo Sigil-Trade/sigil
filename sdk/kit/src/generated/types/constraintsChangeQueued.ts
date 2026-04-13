@@ -10,38 +10,49 @@ import {
   combineCodec,
   getAddressDecoder,
   getAddressEncoder,
+  getArrayDecoder,
+  getArrayEncoder,
   getI64Decoder,
   getI64Encoder,
   getStructDecoder,
   getStructEncoder,
+  getU8Decoder,
+  getU8Encoder,
   type Address,
-  type FixedSizeCodec,
-  type FixedSizeDecoder,
-  type FixedSizeEncoder,
+  type Codec,
+  type Decoder,
+  type Encoder,
 } from "@solana/kit";
 
-export type ConstraintsChangeQueued = { vault: Address; executesAt: bigint };
+export type ConstraintsChangeQueued = {
+  vault: Address;
+  discriminatorFormats: Array<number>;
+  executesAt: bigint;
+};
 
 export type ConstraintsChangeQueuedArgs = {
   vault: Address;
+  discriminatorFormats: Array<number>;
   executesAt: number | bigint;
 };
 
-export function getConstraintsChangeQueuedEncoder(): FixedSizeEncoder<ConstraintsChangeQueuedArgs> {
+export function getConstraintsChangeQueuedEncoder(): Encoder<ConstraintsChangeQueuedArgs> {
   return getStructEncoder([
     ["vault", getAddressEncoder()],
+    ["discriminatorFormats", getArrayEncoder(getU8Encoder())],
     ["executesAt", getI64Encoder()],
   ]);
 }
 
-export function getConstraintsChangeQueuedDecoder(): FixedSizeDecoder<ConstraintsChangeQueued> {
+export function getConstraintsChangeQueuedDecoder(): Decoder<ConstraintsChangeQueued> {
   return getStructDecoder([
     ["vault", getAddressDecoder()],
+    ["discriminatorFormats", getArrayDecoder(getU8Decoder())],
     ["executesAt", getI64Decoder()],
   ]);
 }
 
-export function getConstraintsChangeQueuedCodec(): FixedSizeCodec<
+export function getConstraintsChangeQueuedCodec(): Codec<
   ConstraintsChangeQueuedArgs,
   ConstraintsChangeQueued
 > {

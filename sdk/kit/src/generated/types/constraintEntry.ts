@@ -26,10 +26,14 @@ import {
   getAccountConstraintEncoder,
   getDataConstraintDecoder,
   getDataConstraintEncoder,
+  getDiscriminatorFormatDecoder,
+  getDiscriminatorFormatEncoder,
   type AccountConstraint,
   type AccountConstraintArgs,
   type DataConstraint,
   type DataConstraintArgs,
+  type DiscriminatorFormat,
+  type DiscriminatorFormatArgs,
 } from "./index.js";
 
 export type ConstraintEntry = {
@@ -40,6 +44,7 @@ export type ConstraintEntry = {
   isSpending: number;
   /** Position effect: 0=None, 1=Increment, 2=Decrement. */
   positionEffect: number;
+  discriminatorFormat: DiscriminatorFormat;
 };
 
 export type ConstraintEntryArgs = {
@@ -50,6 +55,7 @@ export type ConstraintEntryArgs = {
   isSpending: number;
   /** Position effect: 0=None, 1=Increment, 2=Decrement. */
   positionEffect: number;
+  discriminatorFormat: DiscriminatorFormatArgs;
 };
 
 export function getConstraintEntryEncoder(): Encoder<ConstraintEntryArgs> {
@@ -59,6 +65,7 @@ export function getConstraintEntryEncoder(): Encoder<ConstraintEntryArgs> {
     ["accountConstraints", getArrayEncoder(getAccountConstraintEncoder())],
     ["isSpending", getU8Encoder()],
     ["positionEffect", getU8Encoder()],
+    ["discriminatorFormat", getDiscriminatorFormatEncoder()],
   ]);
 }
 
@@ -69,6 +76,7 @@ export function getConstraintEntryDecoder(): Decoder<ConstraintEntry> {
     ["accountConstraints", getArrayDecoder(getAccountConstraintDecoder())],
     ["isSpending", getU8Decoder()],
     ["positionEffect", getU8Decoder()],
+    ["discriminatorFormat", getDiscriminatorFormatDecoder()],
   ]);
 }
 

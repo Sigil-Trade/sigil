@@ -3578,6 +3578,7 @@ describe("surfpool-integration", function () {
       accountConstraints: [],
       isSpending: 1,
       positionEffect: 0,
+      discriminatorFormat: { anchor8: {} },
     };
 
     it("create + update constraints via queue+apply", async () => {
@@ -3889,6 +3890,7 @@ describe("surfpool-integration", function () {
         accountConstraints: [],
         isSpending: 1,
         positionEffect: 0,
+        discriminatorFormat: { anchor8: {} },
       };
       // Multi-IX: allocate pending + extend×3 + populate
       {

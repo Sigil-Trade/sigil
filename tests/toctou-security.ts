@@ -483,6 +483,7 @@ describe("TOCTOU Security Fix", () => {
           },
         ],
         accountConstraints: [],
+        discriminatorFormat: { anchor8: {} },
       },
     ];
 
@@ -516,6 +517,7 @@ describe("TOCTOU Security Fix", () => {
           },
         ],
         accountConstraints: [],
+        discriminatorFormat: { anchor8: {} },
       },
     ];
 

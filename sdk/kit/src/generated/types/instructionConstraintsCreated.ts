@@ -10,6 +10,8 @@ import {
   combineCodec,
   getAddressDecoder,
   getAddressEncoder,
+  getArrayDecoder,
+  getArrayEncoder,
   getBooleanDecoder,
   getBooleanEncoder,
   getI64Decoder,
@@ -19,15 +21,16 @@ import {
   getU8Decoder,
   getU8Encoder,
   type Address,
-  type FixedSizeCodec,
-  type FixedSizeDecoder,
-  type FixedSizeEncoder,
+  type Codec,
+  type Decoder,
+  type Encoder,
 } from "@solana/kit";
 
 export type InstructionConstraintsCreated = {
   vault: Address;
   entriesCount: number;
   strictMode: boolean;
+  discriminatorFormats: Array<number>;
   timestamp: bigint;
 };
 
@@ -35,28 +38,31 @@ export type InstructionConstraintsCreatedArgs = {
   vault: Address;
   entriesCount: number;
   strictMode: boolean;
+  discriminatorFormats: Array<number>;
   timestamp: number | bigint;
 };
 
-export function getInstructionConstraintsCreatedEncoder(): FixedSizeEncoder<InstructionConstraintsCreatedArgs> {
+export function getInstructionConstraintsCreatedEncoder(): Encoder<InstructionConstraintsCreatedArgs> {
   return getStructEncoder([
     ["vault", getAddressEncoder()],
     ["entriesCount", getU8Encoder()],
     ["strictMode", getBooleanEncoder()],
+    ["discriminatorFormats", getArrayEncoder(getU8Encoder())],
     ["timestamp", getI64Encoder()],
   ]);
 }
 
-export function getInstructionConstraintsCreatedDecoder(): FixedSizeDecoder<InstructionConstraintsCreated> {
+export function getInstructionConstraintsCreatedDecoder(): Decoder<InstructionConstraintsCreated> {
   return getStructDecoder([
     ["vault", getAddressDecoder()],
     ["entriesCount", getU8Decoder()],
     ["strictMode", getBooleanDecoder()],
+    ["discriminatorFormats", getArrayDecoder(getU8Decoder())],
     ["timestamp", getI64Decoder()],
   ]);
 }
 
-export function getInstructionConstraintsCreatedCodec(): FixedSizeCodec<
+export function getInstructionConstraintsCreatedCodec(): Codec<
   InstructionConstraintsCreatedArgs,
   InstructionConstraintsCreated
 > {

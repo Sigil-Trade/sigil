@@ -116,7 +116,7 @@ export const SIGIL_ERROR__INVALID_ESCROW_VAULT = 0x17a0; // 6048
 export const SIGIL_ERROR__ESCROW_CONDITIONS_NOT_MET = 0x17a1; // 6049
 /** EscrowDurationExceeded: Escrow duration exceeds maximum (30 days) */
 export const SIGIL_ERROR__ESCROW_DURATION_EXCEEDED = 0x17a2; // 6050
-/** InvalidConstraintConfig: Invalid constraint configuration: bounds exceeded */
+/** InvalidConstraintConfig: Invalid constraint configuration */
 export const SIGIL_ERROR__INVALID_CONSTRAINT_CONFIG = 0x17a3; // 6051
 /** ConstraintViolated: Instruction constraint violated */
 export const SIGIL_ERROR__CONSTRAINT_VIOLATED = 0x17a4; // 6052
@@ -178,6 +178,8 @@ export const SIGIL_ERROR__INVALID_CONSTRAINT_OPERATOR = 0x17bf; // 6079
 export const SIGIL_ERROR__CONSTRAINTS_VAULT_MISMATCH = 0x17c0; // 6080
 /** ConstraintEntryCountExceeded: Cannot pack entries: entry count exceeds MAX_CONSTRAINT_ENTRIES */
 export const SIGIL_ERROR__CONSTRAINT_ENTRY_COUNT_EXCEEDED = 0x17c1; // 6081
+/** BlockedSplOpcode: SPL opcode is blocked at runtime and cannot be used in constraints */
+export const SIGIL_ERROR__BLOCKED_SPL_OPCODE = 0x17c2; // 6082
 
 export type SigilError =
   | typeof SIGIL_ERROR__ACTIVE_ESCROWS_EXIST
@@ -189,6 +191,7 @@ export type SigilError =
   | typeof SIGIL_ERROR__AGENT_PAUSED
   | typeof SIGIL_ERROR__AGENT_SLOT_NOT_FOUND
   | typeof SIGIL_ERROR__AGENT_SPEND_LIMIT_EXCEEDED
+  | typeof SIGIL_ERROR__BLOCKED_SPL_OPCODE
   | typeof SIGIL_ERROR__CONSTRAINT_ENTRY_COUNT_EXCEEDED
   | typeof SIGIL_ERROR__CONSTRAINT_INDEX_OUT_OF_BOUNDS
   | typeof SIGIL_ERROR__CONSTRAINTS_NOT_CLOSED
@@ -275,6 +278,7 @@ if (process.env.NODE_ENV !== "production") {
     [SIGIL_ERROR__AGENT_PAUSED]: `Agent is paused and cannot execute actions`,
     [SIGIL_ERROR__AGENT_SLOT_NOT_FOUND]: `Agent has per-agent spending limit but no overlay tracking slot`,
     [SIGIL_ERROR__AGENT_SPEND_LIMIT_EXCEEDED]: `Agent rolling 24h spend exceeds per-agent spending limit`,
+    [SIGIL_ERROR__BLOCKED_SPL_OPCODE]: `SPL opcode is blocked at runtime and cannot be used in constraints`,
     [SIGIL_ERROR__CONSTRAINT_ENTRY_COUNT_EXCEEDED]: `Cannot pack entries: entry count exceeds MAX_CONSTRAINT_ENTRIES`,
     [SIGIL_ERROR__CONSTRAINT_INDEX_OUT_OF_BOUNDS]: `Constraint entry index out of bounds for zero-copy array`,
     [SIGIL_ERROR__CONSTRAINTS_NOT_CLOSED]: `Instruction constraints must be closed before closing vault`,
@@ -291,7 +295,7 @@ if (process.env.NODE_ENV !== "production") {
     [SIGIL_ERROR__INSUFFICIENT_BALANCE]: `Insufficient vault balance for withdrawal`,
     [SIGIL_ERROR__INSUFFICIENT_PERMISSIONS]: `Agent lacks permission for this action type`,
     [SIGIL_ERROR__INVALID_AGENT_KEY]: `Invalid agent: cannot be the zero address`,
-    [SIGIL_ERROR__INVALID_CONSTRAINT_CONFIG]: `Invalid constraint configuration: bounds exceeded`,
+    [SIGIL_ERROR__INVALID_CONSTRAINT_CONFIG]: `Invalid constraint configuration`,
     [SIGIL_ERROR__INVALID_CONSTRAINT_OPERATOR]: `Constraint operator value is not a valid ConstraintOperator discriminant`,
     [SIGIL_ERROR__INVALID_CONSTRAINTS_PDA]: `Invalid constraints PDA: wrong owner or vault`,
     [SIGIL_ERROR__INVALID_ESCROW_VAULT]: `Invalid escrow vault`,

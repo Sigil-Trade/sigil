@@ -736,6 +736,14 @@ const SIGIL_ERROR_CODES: Record<string, number> = {
   PolicyVersionMismatch: 6072,
   PendingAgentPermsExists: 6073,
   PendingCloseConstraintsExists: 6074,
+  ActiveSessionsExist: 6075,
+  PostAssertionFailed: 6076,
+  InvalidPostAssertionIndex: 6077,
+  ConstraintIndexOutOfBounds: 6078,
+  InvalidConstraintOperator: 6079,
+  ConstraintsVaultMismatch: 6080,
+  ConstraintEntryCountExceeded: 6081,
+  BlockedSplOpcode: 6082,
 };
 
 /**
@@ -1033,6 +1041,7 @@ export async function fetchConstraints(
             expected: new PublicKey(ac.expected),
           };
         }),
+        discriminatorFormat: e.discriminatorFormat,
       };
     }),
   };
