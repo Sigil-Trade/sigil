@@ -386,15 +386,14 @@ describe("Step 8 security checks", () => {
     expect(check!.passed).to.equal(true);
   });
 
-  it("passes no-permission-concentration at exactly 15 bits (boundary)", () => {
-    // 15 bits set: bits 0-14 — should PASS (threshold is > 15)
-    const fifteenBits = (1n << 15n) - 1n;
+  it("passes no-permission-concentration with Observer capability", () => {
+    // Observer (1) is not full capability — should PASS
     const state = mockSecurityState({
       vault: {
         agents: [
           {
             pubkey: "a1" as Address,
-            permissions: fifteenBits,
+            capability: 1n,
             spendingLimitUsd: 500_000_000n,
             paused: false,
           },
@@ -412,15 +411,14 @@ describe("Step 8 security checks", () => {
     expect(check!.passed).to.equal(true);
   });
 
-  it("fails no-permission-concentration at 16 bits (boundary)", () => {
-    // 16 bits set: bits 0-15 — should FAIL (> 15)
-    const highPerms = (1n << 16n) - 1n;
+  it("fails no-permission-concentration with Operator capability", () => {
+    // Operator (2) = FULL_CAPABILITY — should FAIL (full access)
     const state = mockSecurityState({
       vault: {
         agents: [
           {
             pubkey: "a1" as Address,
-            permissions: highPerms,
+            capability: 2n,
             spendingLimitUsd: 500_000_000n,
             paused: false,
           },
