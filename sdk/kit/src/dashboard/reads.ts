@@ -224,8 +224,8 @@ export async function getAgents(
       return {
         address: addr,
         status: (profile?.paused ? "paused" : "active") as "active" | "paused",
-        permissions: profile?.permissionStrings ?? [],
-        permissionBitmask: profile?.permissions ?? 0n,
+        capabilityLabel: profile?.capabilityLabel ?? "Disabled",
+        capability: profile?.capability ?? 0,
         spending: { amount: spentAmt, limit: capAmt, percent: pct },
         lastActionType,
         lastActionProtocol,
@@ -234,8 +234,8 @@ export async function getAgents(
         toJSON: () => ({
           address: addr,
           status: profile?.paused ? "paused" : "active",
-          permissions: profile?.permissionStrings ?? [],
-          permissionBitmask: bs(profile?.permissions ?? 0n),
+          capabilityLabel: profile?.capabilityLabel ?? "Disabled",
+          capability: profile?.capability ?? 0,
           spending: { amount: bs(spentAmt), limit: bs(capAmt), percent: pct },
           lastActionType,
           lastActionProtocol,

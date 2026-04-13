@@ -289,7 +289,7 @@ export async function provisionVault(
     vault: vaultAddress,
     agentSpendOverlay: overlayPDA,
     agent: agent.address,
-    permissions,
+    capability: Number(permissions),
     spendingLimitUsd,
   });
 

@@ -114,7 +114,7 @@ export async function createVault(
     vault: vaultAddress,
     agentSpendOverlay: agentOverlayAddress,
     agent: options.agent.address,
-    permissions: options.permissions ?? FULL_PERMISSIONS,
+    capability: Number(options.permissions ?? FULL_PERMISSIONS),
     spendingLimitUsd: options.spendingLimitUsd ?? 0n,
   });
 

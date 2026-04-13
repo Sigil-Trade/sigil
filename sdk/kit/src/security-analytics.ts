@@ -97,11 +97,15 @@ export function getSecurityPosture(state: ResolvedVaultState): SecurityPosture {
     {
       id: "no-full-perms",
       label: "No agent has full capability",
-      passed: !vault.agents.some((a) => a.permissions === FULL_CAPABILITY),
+      passed: !vault.agents.some(
+        (a) => a.capability === Number(FULL_CAPABILITY),
+      ),
       severity: "critical",
       detail:
         "An agent with full capability can perform any action including transfers.",
-      remediation: vault.agents.some((a) => a.permissions === FULL_CAPABILITY)
+      remediation: vault.agents.some(
+        (a) => a.capability === Number(FULL_CAPABILITY),
+      )
         ? "Restrict agent capability to only the actions they need."
         : null,
     },
@@ -327,9 +331,7 @@ export function getSecurityPosture(state: ResolvedVaultState): SecurityPosture {
       id: "no-permission-concentration",
       label: "No agent has full Operator capability",
       passed: !vault.agents.some(
-        (a: { capability?: bigint | number; permissions?: bigint }) =>
-          BigInt(a.capability ?? a.permissions ?? 0n) >=
-          BigInt(FULL_CAPABILITY),
+        (a) => a.capability >= Number(FULL_CAPABILITY),
       ),
       severity: "warning",
       detail:

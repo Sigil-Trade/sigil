@@ -452,17 +452,17 @@ const ACTION_NAMES = [
  * Handles both legacy (actionType enum) and new v6 (isSpending + positionEffect) event formats.
  */
 export function getPermissionUtilizationRate(
-  state: { vault: { agents: Array<{ pubkey: Address; permissions: bigint }> } },
+  state: { vault: { agents: Array<{ pubkey: Address; capability: number }> } },
   events: DecodedSigilEvent[],
 ): PermissionUtilization {
-  // Count which ActionTypes each agent has used
+  // Count which action categories each agent has used
   const agentActionUsage = new Map<string, Set<string>>();
   for (const e of events) {
     if (e.name === "ActionAuthorized" && e.fields?.agent) {
       const agent = e.fields.agent as string;
       if (!agentActionUsage.has(agent)) agentActionUsage.set(agent, new Set());
 
-      // New v6 event format: isSpending + positionEffect
+      // v6 event format: isSpending + positionEffect
       if (e.fields.isSpending != null) {
         const label = (e.fields.isSpending as boolean)
           ? "Spending"
@@ -487,14 +487,17 @@ export function getPermissionUtilizationRate(
   const globalActionCounts = new Map<string, number>();
   const byAgent: PermissionUtilization["byAgent"] = [];
 
+  // Capability-based granted permissions:
+  // 0=Disabled (no permissions), 1=Observer (NonSpending), 2=Operator (Spending + NonSpending)
+  const CAPABILITY_GRANTS: Record<number, string[]> = {
+    0: [],
+    1: ["NonSpending"],
+    2: ["Spending", "NonSpending"],
+  };
+
   for (const agentEntry of state.vault.agents) {
     const agent = agentEntry.pubkey;
-    const granted: string[] = [];
-    for (let bit = 0; bit < 21; bit++) {
-      if ((agentEntry.permissions & (1n << BigInt(bit))) !== 0n) {
-        granted.push(ACTION_NAMES[bit]);
-      }
-    }
+    const granted = CAPABILITY_GRANTS[agentEntry.capability] ?? [];
 
     const exercised =
       agentActionUsage.get(agent as string) ?? new Set<string>();

@@ -88,10 +88,10 @@ export interface HealthCheck {
 export interface AgentData {
   address: string;
   status: "active" | "paused";
-  /** Human-readable permission names from permissionsToStrings(). */
-  permissions: string[];
-  /** Raw bitmask for programmatic use. */
-  permissionBitmask: bigint;
+  /** Human-readable capability label (Disabled/Observer/Operator). */
+  capabilityLabel: string;
+  /** Numeric capability: 0=Disabled, 1=Observer, 2=Operator. */
+  capability: number;
   spending: {
     /** 24h rolling spend (6-decimal USD). */
     amount: bigint;
@@ -351,8 +351,8 @@ export interface SerializedVaultState {
 export interface SerializedAgentData {
   address: string;
   status: string;
-  permissions: string[];
-  permissionBitmask: string;
+  capabilityLabel: string;
+  capability: number;
   spending: { amount: string; limit: string; percent: number };
   lastActionType: string;
   lastActionProtocol: string;

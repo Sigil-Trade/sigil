@@ -9,16 +9,16 @@ import type { Address } from "@solana/kit";
 import type { DecodedSigilEvent } from "./events.js";
 import type { ResolvedVaultState, EffectiveBudget } from "./state-resolver.js";
 import { bytesToAddress } from "./state-resolver.js";
-import { permissionsToStrings, FULL_CAPABILITY } from "./types.js";
+import { FULL_CAPABILITY } from "./types.js";
 import { computeHerfindahl } from "./math-utils.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export interface AgentProfile {
   address: Address;
-  permissions: bigint;
-  permissionStrings: string[];
-  permissionCount: number;
+  /** Agent capability: 0=Disabled, 1=Observer, 2=Operator */
+  capability: number;
+  capabilityLabel: string;
   spendingLimitUsd: bigint;
   paused: boolean;
   budget: EffectiveBudget;
@@ -31,8 +31,8 @@ export interface AgentProfile {
   capUtilization: number;
   /** Whether agent is over 80% of its cap */
   isApproachingCap: boolean;
-  /** Whether agent has full capability */
-  hasFullPermissions: boolean;
+  /** Whether agent has full capability (Operator = 2) */
+  hasFullCapability: boolean;
 }
 
 export interface AgentRanking {
@@ -43,7 +43,7 @@ export interface AgentRanking {
   lifetimeSpend: bigint;
   capUtilization: number;
   paused: boolean;
-  permissionCount: number;
+  capability: number;
 }
 
 export interface AgentComparisonData {
@@ -97,13 +97,10 @@ export function getAgentProfile(
   const capUtilization =
     budget.cap > 0n ? Number((budget.spent24h * 10000n) / budget.cap) / 100 : 0;
 
-  const permStrings = permissionsToStrings(agentEntry.permissions);
-
   return {
     address: agentAddress,
-    permissions: agentEntry.permissions,
-    permissionStrings: permStrings,
-    permissionCount: permStrings.length,
+    capability: agentEntry.capability,
+    capabilityLabel: capabilityToLabel(agentEntry.capability),
     spendingLimitUsd: agentEntry.spendingLimitUsd,
     paused: agentEntry.paused,
     budget,
@@ -113,7 +110,7 @@ export function getAgentProfile(
       lifetimeTxCount > 0n ? lifetimeSpend / lifetimeTxCount : 0n,
     capUtilization,
     isApproachingCap: capUtilization > 80,
-    hasFullPermissions: agentEntry.permissions === FULL_CAPABILITY,
+    hasFullCapability: agentEntry.capability === Number(FULL_CAPABILITY),
   };
 }
 
@@ -159,7 +156,7 @@ export function getAgentLeaderboard(state: ResolvedVaultState): AgentRanking[] {
       lifetimeSpend,
       capUtilization,
       paused: agentEntry.paused,
-      permissionCount: countPermissionBits(agentEntry.permissions),
+      capability: agentEntry.capability,
     };
   });
 
@@ -208,14 +205,18 @@ export function getAgentComparison(
 
 // ─── Internal ────────────────────────────────────────────────────────────────
 
-function countPermissionBits(perms: bigint): number {
-  let count = 0;
-  let v = perms;
-  while (v > 0n) {
-    count += Number(v & 1n);
-    v >>= 1n;
+/** Convert 2-bit capability to a human-readable label. */
+function capabilityToLabel(capability: number): string {
+  switch (capability) {
+    case 0:
+      return "Disabled";
+    case 1:
+      return "Observer";
+    case 2:
+      return "Operator";
+    default:
+      return `Unknown(${capability})`;
   }
-  return count;
 }
 
 // ─── getAgentErrorBreakdown ──────────────────────────────────────────────────

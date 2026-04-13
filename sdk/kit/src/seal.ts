@@ -359,7 +359,7 @@ export async function seal(params: SealParams): Promise<SealResult> {
 
   // Step 6: Pre-flight checks
   // 6a: Permission check — capability-based (v6: agent must have non-zero capability)
-  if (agentEntry.permissions === 0n) {
+  if (agentEntry.capability === 0) {
     throw new Error(
       `Agent ${params.agent.address} has zero capability in vault ${params.vault}`,
     );
@@ -533,11 +533,9 @@ export async function seal(params: SealParams): Promise<SealResult> {
     protocolTreasuryTokenAccount,
     feeDestinationTokenAccount,
     outputStablecoinAccount,
-    actionType: 0 as any, // v6: ActionType eliminated; on-chain ignores this field
     tokenMint: params.tokenMint,
     amount: params.amount,
     targetProtocol,
-    leverageBps: null, // v6: leverageBps eliminated
     expectedPolicyVersion: state.policy.policyVersion ?? 0n,
   });
 

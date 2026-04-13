@@ -155,7 +155,9 @@ export function getVaultHealth(
     {
       id: "no-full-perms",
       label: "No agent has full capability",
-      passed: !vault.agents.some((a) => a.permissions === FULL_CAPABILITY),
+      passed: !vault.agents.some(
+        (a) => a.capability === Number(FULL_CAPABILITY),
+      ),
       severity: "critical",
     },
     {

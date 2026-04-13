@@ -150,21 +150,20 @@ function requireValidAddress(addr: string, field: string): void {
     );
 }
 
-const MAX_PERMISSIONS = (1n << 21n) - 1n; // 21 action types
+const MAX_CAPABILITY = 2; // 0=Disabled, 1=Observer, 2=Operator
 
 function requireValidPermissions(perms: bigint): void {
-  if (perms < 0n)
-    throw toDxError(new Error(`Permissions bitmask cannot be negative`));
+  if (perms < 0n) throw toDxError(new Error(`Capability cannot be negative`));
   if (perms === 0n)
     throw toDxError(
       new Error(
-        `Permissions bitmask is 0 — agent would have no permissions. Use at least one permission bit.`,
+        `Capability is 0 (Disabled) — agent would have no permissions. Use 1 (Observer) or 2 (Operator).`,
       ),
     );
-  if (perms > MAX_PERMISSIONS)
+  if (perms > BigInt(MAX_CAPABILITY))
     throw toDxError(
       new Error(
-        `Permissions bitmask exceeds maximum (${MAX_PERMISSIONS}). Only bits 0-20 are valid.`,
+        `Capability exceeds maximum (${MAX_CAPABILITY}). Valid values: 0=Disabled, 1=Observer, 2=Operator.`,
       ),
     );
 }
@@ -236,7 +235,7 @@ export async function resumeVault(
     owner,
     vault,
     newAgent: newAgent?.address ?? null,
-    newAgentPermissions: newAgent?.permissions ?? null,
+    newAgentCapability: newAgent ? Number(newAgent.permissions) : null,
   });
   return run(rpc, owner, network, [ix], opts);
 }
@@ -431,7 +430,7 @@ export async function addAgent(
     vault,
     agentSpendOverlay: overlayPda,
     agent,
-    permissions,
+    capability: Number(permissions),
     spendingLimitUsd: spendingLimit,
   });
   return run(rpc, owner, network, [ix], opts);
@@ -572,7 +571,7 @@ export async function queueAgentPermissions(
     owner,
     vault,
     agent,
-    newPermissions: permissions,
+    newCapability: Number(permissions),
     spendingLimitUsd: spendingLimit,
   });
   return run(rpc, owner, network, [ix], opts);

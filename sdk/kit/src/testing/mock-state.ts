@@ -63,12 +63,14 @@ export function createMockVaultState(
         : [
             {
               pubkey: agent,
-              permissions:
+              capability: Number(
                 overrides?.agentCapability ??
-                overrides?.agentPermissions ??
-                FULL_CAPABILITY,
+                  overrides?.agentPermissions ??
+                  FULL_CAPABILITY,
+              ),
               spendingLimitUsd: 0n,
               paused: overrides?.agentPaused ?? false,
+              reserved: new Uint8Array(7),
             },
           ],
       feeDestination,

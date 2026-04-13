@@ -12,7 +12,7 @@ export { SIGIL_PROGRAM_ADDRESS } from "./generated/programs/sigil.js";
 
 // Re-export generated types
 /** @deprecated v6: ActionType eliminated. Use isSpending/positionEffect instead. */
-export type { ActionType } from "./generated/types/actionType.js";
+export type ActionType = never;
 export type { VaultStatus } from "./generated/types/vaultStatus.js";
 export type { EscrowStatus } from "./generated/types/escrowStatus.js";
 export type { AgentEntry } from "./generated/types/agentEntry.js";
