@@ -310,7 +310,7 @@ describe("events", () => {
       const encodedSome = encoder.encode({
         vault: VAULT_ADDR,
         newAgent: AGENT_ADDR,
-        newAgentPermissions: 0x1fffffn, // FULL_PERMISSIONS
+        newAgentCapability: 2, // FULL_CAPABILITY
         timestamp: 1700000300n,
       });
 
@@ -327,7 +327,7 @@ describe("events", () => {
       const encodedNone = encoder.encode({
         vault: VAULT_ADDR,
         newAgent: null,
-        newAgentPermissions: null,
+        newAgentCapability: null,
         timestamp: 1700000400n,
       });
 

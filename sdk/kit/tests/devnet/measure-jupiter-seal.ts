@@ -74,6 +74,7 @@ function mockState(): ResolvedVaultState {
           capability: Number(FULL_CAPABILITY),
           spendingLimitUsd: 0n,
           paused: false,
+          reserved: new Uint8Array(7),
         },
       ],
       feeDestination: FEE_DEST,
