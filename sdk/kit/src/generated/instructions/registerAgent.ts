@@ -18,6 +18,8 @@ import {
   getStructEncoder,
   getU64Decoder,
   getU64Encoder,
+  getU8Decoder,
+  getU8Encoder,
   SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
   SolanaError,
   transformEncoder,
@@ -78,13 +80,13 @@ export type RegisterAgentInstruction<
 export type RegisterAgentInstructionData = {
   discriminator: ReadonlyUint8Array;
   agent: Address;
-  permissions: bigint;
+  capability: number;
   spendingLimitUsd: bigint;
 };
 
 export type RegisterAgentInstructionDataArgs = {
   agent: Address;
-  permissions: number | bigint;
+  capability: number;
   spendingLimitUsd: number | bigint;
 };
 
@@ -93,7 +95,7 @@ export function getRegisterAgentInstructionDataEncoder(): FixedSizeEncoder<Regis
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
       ["agent", getAddressEncoder()],
-      ["permissions", getU64Encoder()],
+      ["capability", getU8Encoder()],
       ["spendingLimitUsd", getU64Encoder()],
     ]),
     (value) => ({ ...value, discriminator: REGISTER_AGENT_DISCRIMINATOR }),
@@ -104,7 +106,7 @@ export function getRegisterAgentInstructionDataDecoder(): FixedSizeDecoder<Regis
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
     ["agent", getAddressDecoder()],
-    ["permissions", getU64Decoder()],
+    ["capability", getU8Decoder()],
     ["spendingLimitUsd", getU64Decoder()],
   ]);
 }
@@ -129,7 +131,7 @@ export type RegisterAgentInput<
   /** Agent spend overlay — per-agent tracking slot. */
   agentSpendOverlay: Address<TAccountAgentSpendOverlay>;
   agent: RegisterAgentInstructionDataArgs["agent"];
-  permissions: RegisterAgentInstructionDataArgs["permissions"];
+  capability: RegisterAgentInstructionDataArgs["capability"];
   spendingLimitUsd: RegisterAgentInstructionDataArgs["spendingLimitUsd"];
 };
 

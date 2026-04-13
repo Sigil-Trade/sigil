@@ -40,7 +40,6 @@ import {
   type MaybeEncodedAccount,
   type ReadonlyUint8Array,
 } from "@solana/kit";
-// ActionType import removed — replaced by isSpending + positionEffect in v6
 
 export const SESSION_AUTHORITY_DISCRIMINATOR = new Uint8Array([
   48, 9, 30, 120, 134, 35, 172, 170,
@@ -64,9 +63,12 @@ export type SessionAuthority = {
   authorizedAmount: bigint;
   authorizedToken: Address;
   authorizedProtocol: Address;
-  /** Whether this is a spending action. Replaces legacy actionType. */
+  /**
+   * Whether the matched constraint entry classifies this as spending.
+   * Derived from amount > 0 in validate_and_authorize.
+   */
   isSpending: boolean;
-  /** Position effect: 0=none, 1=increment, 2=decrement. */
+  /** Position effect from matched constraint entry (0=None, 1=Increment, 2=Decrement). */
   positionEffect: number;
   /** Slot-based expiry: session is valid until this slot */
   expiresAtSlot: bigint;
@@ -110,9 +112,12 @@ export type SessionAuthorityArgs = {
   authorizedAmount: number | bigint;
   authorizedToken: Address;
   authorizedProtocol: Address;
-  /** Whether this is a spending action. Replaces legacy actionType. */
+  /**
+   * Whether the matched constraint entry classifies this as spending.
+   * Derived from amount > 0 in validate_and_authorize.
+   */
   isSpending: boolean;
-  /** Position effect: 0=none, 1=increment, 2=decrement. */
+  /** Position effect from matched constraint entry (0=None, 1=Increment, 2=Decrement). */
   positionEffect: number;
   /** Slot-based expiry: session is valid until this slot */
   expiresAtSlot: number | bigint;
@@ -269,5 +274,5 @@ export async function fetchAllMaybeSessionAuthority(
 }
 
 export function getSessionAuthoritySize(): number {
-  return 244;
+  return 245;
 }

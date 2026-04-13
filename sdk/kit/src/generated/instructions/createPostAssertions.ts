@@ -10,26 +10,23 @@ import {
   combineCodec,
   fixDecoderSize,
   fixEncoderSize,
-  getAddressDecoder,
   getAddressEncoder,
+  getArrayDecoder,
+  getArrayEncoder,
   getBytesDecoder,
   getBytesEncoder,
   getProgramDerivedAddress,
   getStructDecoder,
   getStructEncoder,
-  getU64Decoder,
-  getU64Encoder,
-  getU8Decoder,
-  getU8Encoder,
   SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
   SolanaError,
   transformEncoder,
   type AccountMeta,
   type AccountSignerMeta,
   type Address,
-  type FixedSizeCodec,
-  type FixedSizeDecoder,
-  type FixedSizeEncoder,
+  type Codec,
+  type Decoder,
+  type Encoder,
   type Instruction,
   type InstructionWithAccounts,
   type InstructionWithData,
@@ -42,27 +39,32 @@ import {
 import {
   getAccountMetaFactory,
   getAddressFromResolvedInstructionAccount,
-  getNonNullResolvedInstructionInput,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
 import { SIGIL_PROGRAM_ADDRESS } from "../programs/index.js";
+import {
+  getPostAssertionEntryDecoder,
+  getPostAssertionEntryEncoder,
+  type PostAssertionEntry,
+  type PostAssertionEntryArgs,
+} from "../types/index.js";
 
-export const QUEUE_AGENT_PERMISSIONS_UPDATE_DISCRIMINATOR = new Uint8Array([
-  182, 37, 105, 181, 28, 195, 223, 167,
+export const CREATE_POST_ASSERTIONS_DISCRIMINATOR = new Uint8Array([
+  204, 21, 218, 182, 202, 140, 239, 63,
 ]);
 
-export function getQueueAgentPermissionsUpdateDiscriminatorBytes() {
+export function getCreatePostAssertionsDiscriminatorBytes() {
   return fixEncoderSize(getBytesEncoder(), 8).encode(
-    QUEUE_AGENT_PERMISSIONS_UPDATE_DISCRIMINATOR,
+    CREATE_POST_ASSERTIONS_DISCRIMINATOR,
   );
 }
 
-export type QueueAgentPermissionsUpdateInstruction<
+export type CreatePostAssertionsInstruction<
   TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountOwner extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
   TAccountPolicy extends string | AccountMeta<string> = string,
-  TAccountPendingAgentPerms extends string | AccountMeta<string> = string,
+  TAccountPostAssertions extends string | AccountMeta<string> = string,
   TAccountSystemProgram extends string | AccountMeta<string> =
     "11111111111111111111111111111111",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
@@ -75,14 +77,14 @@ export type QueueAgentPermissionsUpdateInstruction<
             AccountSignerMeta<TAccountOwner>
         : TAccountOwner,
       TAccountVault extends string
-        ? ReadonlyAccount<TAccountVault>
+        ? WritableAccount<TAccountVault>
         : TAccountVault,
       TAccountPolicy extends string
-        ? ReadonlyAccount<TAccountPolicy>
+        ? WritableAccount<TAccountPolicy>
         : TAccountPolicy,
-      TAccountPendingAgentPerms extends string
-        ? WritableAccount<TAccountPendingAgentPerms>
-        : TAccountPendingAgentPerms,
+      TAccountPostAssertions extends string
+        ? WritableAccount<TAccountPostAssertions>
+        : TAccountPostAssertions,
       TAccountSystemProgram extends string
         ? ReadonlyAccount<TAccountSystemProgram>
         : TAccountSystemProgram,
@@ -90,93 +92,83 @@ export type QueueAgentPermissionsUpdateInstruction<
     ]
   >;
 
-export type QueueAgentPermissionsUpdateInstructionData = {
+export type CreatePostAssertionsInstructionData = {
   discriminator: ReadonlyUint8Array;
-  agent: Address;
-  newCapability: number;
-  spendingLimitUsd: bigint;
+  entries: Array<PostAssertionEntry>;
 };
 
-export type QueueAgentPermissionsUpdateInstructionDataArgs = {
-  agent: Address;
-  newCapability: number;
-  spendingLimitUsd: number | bigint;
+export type CreatePostAssertionsInstructionDataArgs = {
+  entries: Array<PostAssertionEntryArgs>;
 };
 
-export function getQueueAgentPermissionsUpdateInstructionDataEncoder(): FixedSizeEncoder<QueueAgentPermissionsUpdateInstructionDataArgs> {
+export function getCreatePostAssertionsInstructionDataEncoder(): Encoder<CreatePostAssertionsInstructionDataArgs> {
   return transformEncoder(
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
-      ["agent", getAddressEncoder()],
-      ["newCapability", getU8Encoder()],
-      ["spendingLimitUsd", getU64Encoder()],
+      ["entries", getArrayEncoder(getPostAssertionEntryEncoder())],
     ]),
     (value) => ({
       ...value,
-      discriminator: QUEUE_AGENT_PERMISSIONS_UPDATE_DISCRIMINATOR,
+      discriminator: CREATE_POST_ASSERTIONS_DISCRIMINATOR,
     }),
   );
 }
 
-export function getQueueAgentPermissionsUpdateInstructionDataDecoder(): FixedSizeDecoder<QueueAgentPermissionsUpdateInstructionData> {
+export function getCreatePostAssertionsInstructionDataDecoder(): Decoder<CreatePostAssertionsInstructionData> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
-    ["agent", getAddressDecoder()],
-    ["newCapability", getU8Decoder()],
-    ["spendingLimitUsd", getU64Decoder()],
+    ["entries", getArrayDecoder(getPostAssertionEntryDecoder())],
   ]);
 }
 
-export function getQueueAgentPermissionsUpdateInstructionDataCodec(): FixedSizeCodec<
-  QueueAgentPermissionsUpdateInstructionDataArgs,
-  QueueAgentPermissionsUpdateInstructionData
+export function getCreatePostAssertionsInstructionDataCodec(): Codec<
+  CreatePostAssertionsInstructionDataArgs,
+  CreatePostAssertionsInstructionData
 > {
   return combineCodec(
-    getQueueAgentPermissionsUpdateInstructionDataEncoder(),
-    getQueueAgentPermissionsUpdateInstructionDataDecoder(),
+    getCreatePostAssertionsInstructionDataEncoder(),
+    getCreatePostAssertionsInstructionDataDecoder(),
   );
 }
 
-export type QueueAgentPermissionsUpdateAsyncInput<
+export type CreatePostAssertionsAsyncInput<
   TAccountOwner extends string = string,
   TAccountVault extends string = string,
   TAccountPolicy extends string = string,
-  TAccountPendingAgentPerms extends string = string,
+  TAccountPostAssertions extends string = string,
   TAccountSystemProgram extends string = string,
 > = {
   owner: TransactionSigner<TAccountOwner>;
   vault: Address<TAccountVault>;
   policy?: Address<TAccountPolicy>;
-  pendingAgentPerms?: Address<TAccountPendingAgentPerms>;
+  postAssertions?: Address<TAccountPostAssertions>;
   systemProgram?: Address<TAccountSystemProgram>;
-  agent: QueueAgentPermissionsUpdateInstructionDataArgs["agent"];
-  newCapability: QueueAgentPermissionsUpdateInstructionDataArgs["newCapability"];
-  spendingLimitUsd: QueueAgentPermissionsUpdateInstructionDataArgs["spendingLimitUsd"];
+  entries: CreatePostAssertionsInstructionDataArgs["entries"];
 };
 
-export async function getQueueAgentPermissionsUpdateInstructionAsync<
+export async function getCreatePostAssertionsInstructionAsync<
   TAccountOwner extends string,
   TAccountVault extends string,
   TAccountPolicy extends string,
-  TAccountPendingAgentPerms extends string,
+  TAccountPostAssertions extends string,
   TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
-  input: QueueAgentPermissionsUpdateAsyncInput<
+  input: CreatePostAssertionsAsyncInput<
     TAccountOwner,
     TAccountVault,
     TAccountPolicy,
-    TAccountPendingAgentPerms,
+    TAccountPostAssertions,
     TAccountSystemProgram
   >,
   config?: { programAddress?: TProgramAddress },
 ): Promise<
-  QueueAgentPermissionsUpdateInstruction<
+  CreatePostAssertionsInstruction<
     TProgramAddress,
     TAccountOwner,
     TAccountVault,
     TAccountPolicy,
-    TAccountPendingAgentPerms,
+    TAccountPostAssertions,
     TAccountSystemProgram
   >
 > {
@@ -186,12 +178,9 @@ export async function getQueueAgentPermissionsUpdateInstructionAsync<
   // Original accounts.
   const originalAccounts = {
     owner: { value: input.owner ?? null, isWritable: true },
-    vault: { value: input.vault ?? null, isWritable: false },
-    policy: { value: input.policy ?? null, isWritable: false },
-    pendingAgentPerms: {
-      value: input.pendingAgentPerms ?? null,
-      isWritable: true,
-    },
+    vault: { value: input.vault ?? null, isWritable: true },
+    policy: { value: input.policy ?? null, isWritable: true },
+    postAssertions: { value: input.postAssertions ?? null, isWritable: true },
     systemProgram: { value: input.systemProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
@@ -217,14 +206,14 @@ export async function getQueueAgentPermissionsUpdateInstructionAsync<
       ],
     });
   }
-  if (!accounts.pendingAgentPerms.value) {
-    accounts.pendingAgentPerms.value = await getProgramDerivedAddress({
+  if (!accounts.postAssertions.value) {
+    accounts.postAssertions.value = await getProgramDerivedAddress({
       programAddress,
       seeds: [
         getBytesEncoder().encode(
           new Uint8Array([
-            112, 101, 110, 100, 105, 110, 103, 95, 97, 103, 101, 110, 116, 95,
-            112, 101, 114, 109, 115,
+            112, 111, 115, 116, 95, 97, 115, 115, 101, 114, 116, 105, 111, 110,
+            115,
           ]),
         ),
         getAddressEncoder().encode(
@@ -232,9 +221,6 @@ export async function getQueueAgentPermissionsUpdateInstructionAsync<
             "vault",
             accounts.vault.value,
           ),
-        ),
-        getAddressEncoder().encode(
-          getNonNullResolvedInstructionInput("agent", args.agent),
         ),
       ],
     });
@@ -250,62 +236,60 @@ export async function getQueueAgentPermissionsUpdateInstructionAsync<
       getAccountMeta("owner", accounts.owner),
       getAccountMeta("vault", accounts.vault),
       getAccountMeta("policy", accounts.policy),
-      getAccountMeta("pendingAgentPerms", accounts.pendingAgentPerms),
+      getAccountMeta("postAssertions", accounts.postAssertions),
       getAccountMeta("systemProgram", accounts.systemProgram),
     ],
-    data: getQueueAgentPermissionsUpdateInstructionDataEncoder().encode(
-      args as QueueAgentPermissionsUpdateInstructionDataArgs,
+    data: getCreatePostAssertionsInstructionDataEncoder().encode(
+      args as CreatePostAssertionsInstructionDataArgs,
     ),
     programAddress,
-  } as QueueAgentPermissionsUpdateInstruction<
+  } as CreatePostAssertionsInstruction<
     TProgramAddress,
     TAccountOwner,
     TAccountVault,
     TAccountPolicy,
-    TAccountPendingAgentPerms,
+    TAccountPostAssertions,
     TAccountSystemProgram
   >);
 }
 
-export type QueueAgentPermissionsUpdateInput<
+export type CreatePostAssertionsInput<
   TAccountOwner extends string = string,
   TAccountVault extends string = string,
   TAccountPolicy extends string = string,
-  TAccountPendingAgentPerms extends string = string,
+  TAccountPostAssertions extends string = string,
   TAccountSystemProgram extends string = string,
 > = {
   owner: TransactionSigner<TAccountOwner>;
   vault: Address<TAccountVault>;
   policy: Address<TAccountPolicy>;
-  pendingAgentPerms: Address<TAccountPendingAgentPerms>;
+  postAssertions: Address<TAccountPostAssertions>;
   systemProgram?: Address<TAccountSystemProgram>;
-  agent: QueueAgentPermissionsUpdateInstructionDataArgs["agent"];
-  newCapability: QueueAgentPermissionsUpdateInstructionDataArgs["newCapability"];
-  spendingLimitUsd: QueueAgentPermissionsUpdateInstructionDataArgs["spendingLimitUsd"];
+  entries: CreatePostAssertionsInstructionDataArgs["entries"];
 };
 
-export function getQueueAgentPermissionsUpdateInstruction<
+export function getCreatePostAssertionsInstruction<
   TAccountOwner extends string,
   TAccountVault extends string,
   TAccountPolicy extends string,
-  TAccountPendingAgentPerms extends string,
+  TAccountPostAssertions extends string,
   TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
-  input: QueueAgentPermissionsUpdateInput<
+  input: CreatePostAssertionsInput<
     TAccountOwner,
     TAccountVault,
     TAccountPolicy,
-    TAccountPendingAgentPerms,
+    TAccountPostAssertions,
     TAccountSystemProgram
   >,
   config?: { programAddress?: TProgramAddress },
-): QueueAgentPermissionsUpdateInstruction<
+): CreatePostAssertionsInstruction<
   TProgramAddress,
   TAccountOwner,
   TAccountVault,
   TAccountPolicy,
-  TAccountPendingAgentPerms,
+  TAccountPostAssertions,
   TAccountSystemProgram
 > {
   // Program address.
@@ -314,12 +298,9 @@ export function getQueueAgentPermissionsUpdateInstruction<
   // Original accounts.
   const originalAccounts = {
     owner: { value: input.owner ?? null, isWritable: true },
-    vault: { value: input.vault ?? null, isWritable: false },
-    policy: { value: input.policy ?? null, isWritable: false },
-    pendingAgentPerms: {
-      value: input.pendingAgentPerms ?? null,
-      isWritable: true,
-    },
+    vault: { value: input.vault ?? null, isWritable: true },
+    policy: { value: input.policy ?? null, isWritable: true },
+    postAssertions: { value: input.postAssertions ?? null, isWritable: true },
     systemProgram: { value: input.systemProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
@@ -342,24 +323,24 @@ export function getQueueAgentPermissionsUpdateInstruction<
       getAccountMeta("owner", accounts.owner),
       getAccountMeta("vault", accounts.vault),
       getAccountMeta("policy", accounts.policy),
-      getAccountMeta("pendingAgentPerms", accounts.pendingAgentPerms),
+      getAccountMeta("postAssertions", accounts.postAssertions),
       getAccountMeta("systemProgram", accounts.systemProgram),
     ],
-    data: getQueueAgentPermissionsUpdateInstructionDataEncoder().encode(
-      args as QueueAgentPermissionsUpdateInstructionDataArgs,
+    data: getCreatePostAssertionsInstructionDataEncoder().encode(
+      args as CreatePostAssertionsInstructionDataArgs,
     ),
     programAddress,
-  } as QueueAgentPermissionsUpdateInstruction<
+  } as CreatePostAssertionsInstruction<
     TProgramAddress,
     TAccountOwner,
     TAccountVault,
     TAccountPolicy,
-    TAccountPendingAgentPerms,
+    TAccountPostAssertions,
     TAccountSystemProgram
   >);
 }
 
-export type ParsedQueueAgentPermissionsUpdateInstruction<
+export type ParsedCreatePostAssertionsInstruction<
   TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
@@ -368,20 +349,20 @@ export type ParsedQueueAgentPermissionsUpdateInstruction<
     owner: TAccountMetas[0];
     vault: TAccountMetas[1];
     policy: TAccountMetas[2];
-    pendingAgentPerms: TAccountMetas[3];
+    postAssertions: TAccountMetas[3];
     systemProgram: TAccountMetas[4];
   };
-  data: QueueAgentPermissionsUpdateInstructionData;
+  data: CreatePostAssertionsInstructionData;
 };
 
-export function parseQueueAgentPermissionsUpdateInstruction<
+export function parseCreatePostAssertionsInstruction<
   TProgram extends string,
   TAccountMetas extends readonly AccountMeta[],
 >(
   instruction: Instruction<TProgram> &
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
-): ParsedQueueAgentPermissionsUpdateInstruction<TProgram, TAccountMetas> {
+): ParsedCreatePostAssertionsInstruction<TProgram, TAccountMetas> {
   if (instruction.accounts.length < 5) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
@@ -403,10 +384,10 @@ export function parseQueueAgentPermissionsUpdateInstruction<
       owner: getNextAccount(),
       vault: getNextAccount(),
       policy: getNextAccount(),
-      pendingAgentPerms: getNextAccount(),
+      postAssertions: getNextAccount(),
       systemProgram: getNextAccount(),
     },
-    data: getQueueAgentPermissionsUpdateInstructionDataDecoder().decode(
+    data: getCreatePostAssertionsInstructionDataDecoder().decode(
       instruction.data,
     ),
   };

@@ -10,12 +10,12 @@ import {
   combineCodec,
   getAddressDecoder,
   getAddressEncoder,
+  getBooleanDecoder,
+  getBooleanEncoder,
   getI64Decoder,
   getI64Encoder,
   getStructDecoder,
   getStructEncoder,
-  getU64Decoder,
-  getU64Encoder,
   getU8Decoder,
   getU8Encoder,
   type Address,
@@ -24,45 +24,44 @@ import {
   type FixedSizeEncoder,
 } from "@solana/kit";
 
-export type AgentRegistered = {
+export type PostAssertionChecked = {
   vault: Address;
-  agent: Address;
-  capability: number;
-  spendingLimitUsd: bigint;
+  entryIndex: number;
+  passed: boolean;
   timestamp: bigint;
 };
 
-export type AgentRegisteredArgs = {
+export type PostAssertionCheckedArgs = {
   vault: Address;
-  agent: Address;
-  capability: number;
-  spendingLimitUsd: number | bigint;
+  entryIndex: number;
+  passed: boolean;
   timestamp: number | bigint;
 };
 
-export function getAgentRegisteredEncoder(): FixedSizeEncoder<AgentRegisteredArgs> {
+export function getPostAssertionCheckedEncoder(): FixedSizeEncoder<PostAssertionCheckedArgs> {
   return getStructEncoder([
     ["vault", getAddressEncoder()],
-    ["agent", getAddressEncoder()],
-    ["capability", getU8Encoder()],
-    ["spendingLimitUsd", getU64Encoder()],
+    ["entryIndex", getU8Encoder()],
+    ["passed", getBooleanEncoder()],
     ["timestamp", getI64Encoder()],
   ]);
 }
 
-export function getAgentRegisteredDecoder(): FixedSizeDecoder<AgentRegistered> {
+export function getPostAssertionCheckedDecoder(): FixedSizeDecoder<PostAssertionChecked> {
   return getStructDecoder([
     ["vault", getAddressDecoder()],
-    ["agent", getAddressDecoder()],
-    ["capability", getU8Decoder()],
-    ["spendingLimitUsd", getU64Decoder()],
+    ["entryIndex", getU8Decoder()],
+    ["passed", getBooleanDecoder()],
     ["timestamp", getI64Decoder()],
   ]);
 }
 
-export function getAgentRegisteredCodec(): FixedSizeCodec<
-  AgentRegisteredArgs,
-  AgentRegistered
+export function getPostAssertionCheckedCodec(): FixedSizeCodec<
+  PostAssertionCheckedArgs,
+  PostAssertionChecked
 > {
-  return combineCodec(getAgentRegisteredEncoder(), getAgentRegisteredDecoder());
+  return combineCodec(
+    getPostAssertionCheckedEncoder(),
+    getPostAssertionCheckedDecoder(),
+  );
 }

@@ -14,8 +14,6 @@ import {
   getI64Encoder,
   getStructDecoder,
   getStructEncoder,
-  getU64Decoder,
-  getU64Encoder,
   getU8Decoder,
   getU8Encoder,
   type Address,
@@ -24,45 +22,40 @@ import {
   type FixedSizeEncoder,
 } from "@solana/kit";
 
-export type AgentRegistered = {
+export type PostAssertionsCreated = {
   vault: Address;
-  agent: Address;
-  capability: number;
-  spendingLimitUsd: bigint;
+  entryCount: number;
   timestamp: bigint;
 };
 
-export type AgentRegisteredArgs = {
+export type PostAssertionsCreatedArgs = {
   vault: Address;
-  agent: Address;
-  capability: number;
-  spendingLimitUsd: number | bigint;
+  entryCount: number;
   timestamp: number | bigint;
 };
 
-export function getAgentRegisteredEncoder(): FixedSizeEncoder<AgentRegisteredArgs> {
+export function getPostAssertionsCreatedEncoder(): FixedSizeEncoder<PostAssertionsCreatedArgs> {
   return getStructEncoder([
     ["vault", getAddressEncoder()],
-    ["agent", getAddressEncoder()],
-    ["capability", getU8Encoder()],
-    ["spendingLimitUsd", getU64Encoder()],
+    ["entryCount", getU8Encoder()],
     ["timestamp", getI64Encoder()],
   ]);
 }
 
-export function getAgentRegisteredDecoder(): FixedSizeDecoder<AgentRegistered> {
+export function getPostAssertionsCreatedDecoder(): FixedSizeDecoder<PostAssertionsCreated> {
   return getStructDecoder([
     ["vault", getAddressDecoder()],
-    ["agent", getAddressDecoder()],
-    ["capability", getU8Decoder()],
-    ["spendingLimitUsd", getU64Decoder()],
+    ["entryCount", getU8Decoder()],
     ["timestamp", getI64Decoder()],
   ]);
 }
 
-export function getAgentRegisteredCodec(): FixedSizeCodec<
-  AgentRegisteredArgs,
-  AgentRegistered
+export function getPostAssertionsCreatedCodec(): FixedSizeCodec<
+  PostAssertionsCreatedArgs,
+  PostAssertionsCreated
 > {
-  return combineCodec(getAgentRegisteredEncoder(), getAgentRegisteredDecoder());
+  return combineCodec(
+    getPostAssertionsCreatedEncoder(),
+    getPostAssertionsCreatedDecoder(),
+  );
 }

@@ -32,16 +32,13 @@ export type SessionFinalized = {
   success: boolean;
   isExpired: boolean;
   timestamp: bigint;
-  /**
-   * Actual stablecoin spend measured by balance delta (0 for non-spending actions).
-   * For stablecoin-input: outflow minus fees. For non-stablecoin-input: stablecoin gain.
-   */
+  /** Actual stablecoin spend measured by balance delta (0 for non-spending actions). */
   actualSpendUsd: bigint;
   /** Vault stablecoin balance after this transaction (0 for non-spending). */
   balanceAfterUsd: bigint;
-  /** Whether this was a spending action. Replaces legacy actionType. */
+  /** Whether this was a spending action. */
   isSpending: boolean;
-  /** Position effect: 0=none, 1=increment, 2=decrement. */
+  /** Position effect: 0=None, 1=Increment, 2=Decrement. */
   positionEffect: number;
 };
 
@@ -51,16 +48,13 @@ export type SessionFinalizedArgs = {
   success: boolean;
   isExpired: boolean;
   timestamp: number | bigint;
-  /**
-   * Actual stablecoin spend measured by balance delta (0 for non-spending actions).
-   * For stablecoin-input: outflow minus fees. For non-stablecoin-input: stablecoin gain.
-   */
+  /** Actual stablecoin spend measured by balance delta (0 for non-spending actions). */
   actualSpendUsd: number | bigint;
   /** Vault stablecoin balance after this transaction (0 for non-spending). */
   balanceAfterUsd: number | bigint;
-  /** Whether this was a spending action. Replaces legacy actionType. */
+  /** Whether this was a spending action. */
   isSpending: boolean;
-  /** Position effect: 0=none, 1=increment, 2=decrement. */
+  /** Position effect: 0=None, 1=Increment, 2=Decrement. */
   positionEffect: number;
 };
 

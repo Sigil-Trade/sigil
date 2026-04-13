@@ -60,6 +60,8 @@ export type InstructionConstraints = {
   entryCount: number;
   strictMode: number;
   bump: number;
+  /** Constraint schema version. Always 1 for new deployments. */
+  constraintVersion: number;
   padding: ReadonlyUint8Array;
 };
 
@@ -69,6 +71,8 @@ export type InstructionConstraintsArgs = {
   entryCount: number;
   strictMode: number;
   bump: number;
+  /** Constraint schema version. Always 1 for new deployments. */
+  constraintVersion: number;
   padding: ReadonlyUint8Array;
 };
 
@@ -82,7 +86,8 @@ export function getInstructionConstraintsEncoder(): FixedSizeEncoder<Instruction
       ["entryCount", getU8Encoder()],
       ["strictMode", getU8Encoder()],
       ["bump", getU8Encoder()],
-      ["padding", fixEncoderSize(getBytesEncoder(), 5)],
+      ["constraintVersion", getU8Encoder()],
+      ["padding", fixEncoderSize(getBytesEncoder(), 4)],
     ]),
     (value) => ({
       ...value,
@@ -100,7 +105,8 @@ export function getInstructionConstraintsDecoder(): FixedSizeDecoder<Instruction
     ["entryCount", getU8Decoder()],
     ["strictMode", getU8Decoder()],
     ["bump", getU8Decoder()],
-    ["padding", fixDecoderSize(getBytesDecoder(), 5)],
+    ["constraintVersion", getU8Decoder()],
+    ["padding", fixDecoderSize(getBytesDecoder(), 4)],
   ]);
 }
 

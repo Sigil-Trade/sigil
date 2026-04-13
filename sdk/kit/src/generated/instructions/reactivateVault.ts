@@ -18,8 +18,8 @@ import {
   getOptionEncoder,
   getStructDecoder,
   getStructEncoder,
-  getU64Decoder,
-  getU64Encoder,
+  getU8Decoder,
+  getU8Encoder,
   SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
   SolanaError,
   transformEncoder,
@@ -78,12 +78,12 @@ export type ReactivateVaultInstruction<
 export type ReactivateVaultInstructionData = {
   discriminator: ReadonlyUint8Array;
   newAgent: Option<Address>;
-  newAgentPermissions: Option<bigint>;
+  newAgentCapability: Option<number>;
 };
 
 export type ReactivateVaultInstructionDataArgs = {
   newAgent: OptionOrNullable<Address>;
-  newAgentPermissions: OptionOrNullable<number | bigint>;
+  newAgentCapability: OptionOrNullable<number>;
 };
 
 export function getReactivateVaultInstructionDataEncoder(): Encoder<ReactivateVaultInstructionDataArgs> {
@@ -91,7 +91,7 @@ export function getReactivateVaultInstructionDataEncoder(): Encoder<ReactivateVa
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
       ["newAgent", getOptionEncoder(getAddressEncoder())],
-      ["newAgentPermissions", getOptionEncoder(getU64Encoder())],
+      ["newAgentCapability", getOptionEncoder(getU8Encoder())],
     ]),
     (value) => ({ ...value, discriminator: REACTIVATE_VAULT_DISCRIMINATOR }),
   );
@@ -101,7 +101,7 @@ export function getReactivateVaultInstructionDataDecoder(): Decoder<ReactivateVa
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
     ["newAgent", getOptionDecoder(getAddressDecoder())],
-    ["newAgentPermissions", getOptionDecoder(getU64Decoder())],
+    ["newAgentCapability", getOptionDecoder(getU8Decoder())],
   ]);
 }
 
@@ -122,7 +122,7 @@ export type ReactivateVaultInput<
   owner: TransactionSigner<TAccountOwner>;
   vault: Address<TAccountVault>;
   newAgent: ReactivateVaultInstructionDataArgs["newAgent"];
-  newAgentPermissions: ReactivateVaultInstructionDataArgs["newAgentPermissions"];
+  newAgentCapability: ReactivateVaultInstructionDataArgs["newAgentCapability"];
 };
 
 export function getReactivateVaultInstruction<

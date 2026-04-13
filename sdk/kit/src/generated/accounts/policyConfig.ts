@@ -78,10 +78,7 @@ export type PolicyConfig = {
    * Bounded to MAX_ALLOWED_PROTOCOLS entries.
    */
   protocols: Array<Address>;
-  /**
-   * Maximum leverage multiplier in basis points (e.g., 10000 = 100x)
-   * Set to 0 to disallow leveraged positions entirely
-   */
+  /** DEPRECATED: Not enforced on-chain. Kept for layout stability. See Phase B3 post-assertions. */
   maxLeverageBps: number;
   /** Whether the agent can open new positions (vs only close existing) */
   canOpenPositions: boolean;
@@ -170,10 +167,7 @@ export type PolicyConfigArgs = {
    * Bounded to MAX_ALLOWED_PROTOCOLS entries.
    */
   protocols: Array<Address>;
-  /**
-   * Maximum leverage multiplier in basis points (e.g., 10000 = 100x)
-   * Set to 0 to disallow leveraged positions entirely
-   */
+  /** DEPRECATED: Not enforced on-chain. Kept for layout stability. See Phase B3 post-assertions. */
   maxLeverageBps: number;
   /** Whether the agent can open new positions (vs only close existing) */
   canOpenPositions: boolean;

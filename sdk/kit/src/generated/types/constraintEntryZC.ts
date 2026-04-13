@@ -40,6 +40,17 @@ export type ConstraintEntryZC = {
   accountConstraints: Array<AccountConstraintZC>;
   dataCount: number;
   accountCount: number;
+  /**
+   * Spending classification: 0=Unset (treated as spending), 1=Spending, 2=NonSpending.
+   * Set by vault owner at constraint creation time. The constraint engine returns
+   * this value when it matches an entry — replaces ActionType.is_spending().
+   */
+  isSpending: number;
+  /**
+   * Position tracking: 0=None, 1=Increment (opens position), 2=Decrement (closes position).
+   * Replaces ActionType.position_effect().
+   */
+  positionEffect: number;
   padding: ReadonlyUint8Array;
 };
 
@@ -49,6 +60,17 @@ export type ConstraintEntryZCArgs = {
   accountConstraints: Array<AccountConstraintZCArgs>;
   dataCount: number;
   accountCount: number;
+  /**
+   * Spending classification: 0=Unset (treated as spending), 1=Spending, 2=NonSpending.
+   * Set by vault owner at constraint creation time. The constraint engine returns
+   * this value when it matches an entry — replaces ActionType.is_spending().
+   */
+  isSpending: number;
+  /**
+   * Position tracking: 0=None, 1=Increment (opens position), 2=Decrement (closes position).
+   * Replaces ActionType.position_effect().
+   */
+  positionEffect: number;
   padding: ReadonlyUint8Array;
 };
 
@@ -65,7 +87,9 @@ export function getConstraintEntryZCEncoder(): FixedSizeEncoder<ConstraintEntryZ
     ],
     ["dataCount", getU8Encoder()],
     ["accountCount", getU8Encoder()],
-    ["padding", fixEncoderSize(getBytesEncoder(), 6)],
+    ["isSpending", getU8Encoder()],
+    ["positionEffect", getU8Encoder()],
+    ["padding", fixEncoderSize(getBytesEncoder(), 4)],
   ]);
 }
 
@@ -82,7 +106,9 @@ export function getConstraintEntryZCDecoder(): FixedSizeDecoder<ConstraintEntryZ
     ],
     ["dataCount", getU8Decoder()],
     ["accountCount", getU8Decoder()],
-    ["padding", fixDecoderSize(getBytesDecoder(), 6)],
+    ["isSpending", getU8Decoder()],
+    ["positionEffect", getU8Decoder()],
+    ["padding", fixDecoderSize(getBytesDecoder(), 4)],
   ]);
 }
 

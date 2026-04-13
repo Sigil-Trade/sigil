@@ -8,49 +8,68 @@
 
 import {
   combineCodec,
+  fixDecoderSize,
+  fixEncoderSize,
   getAddressDecoder,
   getAddressEncoder,
   getBooleanDecoder,
   getBooleanEncoder,
+  getBytesDecoder,
+  getBytesEncoder,
   getStructDecoder,
   getStructEncoder,
   getU64Decoder,
   getU64Encoder,
+  getU8Decoder,
+  getU8Encoder,
   type Address,
   type FixedSizeCodec,
   type FixedSizeDecoder,
   type FixedSizeEncoder,
+  type ReadonlyUint8Array,
 } from "@solana/kit";
 
 export type AgentEntry = {
   pubkey: Address;
-  permissions: bigint;
+  /**
+   * Agent capability: 0=Disabled, 1=Observer (non-spending), 2=Operator (full).
+   * Replaces the 21-bit ActionType permission bitmask.
+   */
+  capability: number;
   spendingLimitUsd: bigint;
   paused: boolean;
+  reserved: ReadonlyUint8Array;
 };
 
 export type AgentEntryArgs = {
   pubkey: Address;
-  permissions: number | bigint;
+  /**
+   * Agent capability: 0=Disabled, 1=Observer (non-spending), 2=Operator (full).
+   * Replaces the 21-bit ActionType permission bitmask.
+   */
+  capability: number;
   spendingLimitUsd: number | bigint;
   paused: boolean;
+  reserved: ReadonlyUint8Array;
 };
 
 export function getAgentEntryEncoder(): FixedSizeEncoder<AgentEntryArgs> {
   return getStructEncoder([
     ["pubkey", getAddressEncoder()],
-    ["permissions", getU64Encoder()],
+    ["capability", getU8Encoder()],
     ["spendingLimitUsd", getU64Encoder()],
     ["paused", getBooleanEncoder()],
+    ["reserved", fixEncoderSize(getBytesEncoder(), 7)],
   ]);
 }
 
 export function getAgentEntryDecoder(): FixedSizeDecoder<AgentEntry> {
   return getStructDecoder([
     ["pubkey", getAddressDecoder()],
-    ["permissions", getU64Decoder()],
+    ["capability", getU8Decoder()],
     ["spendingLimitUsd", getU64Decoder()],
     ["paused", getBooleanDecoder()],
+    ["reserved", fixDecoderSize(getBytesDecoder(), 7)],
   ]);
 }
 

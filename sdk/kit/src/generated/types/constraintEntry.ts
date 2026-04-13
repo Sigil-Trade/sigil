@@ -14,6 +14,8 @@ import {
   getArrayEncoder,
   getStructDecoder,
   getStructEncoder,
+  getU8Decoder,
+  getU8Encoder,
   type Address,
   type Codec,
   type Decoder,
@@ -34,12 +36,20 @@ export type ConstraintEntry = {
   programId: Address;
   dataConstraints: Array<DataConstraint>;
   accountConstraints: Array<AccountConstraint>;
+  /** Spending classification: 1=Spending, 2=NonSpending. Required (0 rejected). */
+  isSpending: number;
+  /** Position effect: 0=None, 1=Increment, 2=Decrement. */
+  positionEffect: number;
 };
 
 export type ConstraintEntryArgs = {
   programId: Address;
   dataConstraints: Array<DataConstraintArgs>;
   accountConstraints: Array<AccountConstraintArgs>;
+  /** Spending classification: 1=Spending, 2=NonSpending. Required (0 rejected). */
+  isSpending: number;
+  /** Position effect: 0=None, 1=Increment, 2=Decrement. */
+  positionEffect: number;
 };
 
 export function getConstraintEntryEncoder(): Encoder<ConstraintEntryArgs> {
@@ -47,6 +57,8 @@ export function getConstraintEntryEncoder(): Encoder<ConstraintEntryArgs> {
     ["programId", getAddressEncoder()],
     ["dataConstraints", getArrayEncoder(getDataConstraintEncoder())],
     ["accountConstraints", getArrayEncoder(getAccountConstraintEncoder())],
+    ["isSpending", getU8Encoder()],
+    ["positionEffect", getU8Encoder()],
   ]);
 }
 
@@ -55,6 +67,8 @@ export function getConstraintEntryDecoder(): Decoder<ConstraintEntry> {
     ["programId", getAddressDecoder()],
     ["dataConstraints", getArrayDecoder(getDataConstraintDecoder())],
     ["accountConstraints", getArrayDecoder(getAccountConstraintDecoder())],
+    ["isSpending", getU8Decoder()],
+    ["positionEffect", getU8Decoder()],
   ]);
 }
 

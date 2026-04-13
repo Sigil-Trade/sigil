@@ -27,17 +27,11 @@ import {
 export type ActionAuthorized = {
   vault: Address;
   agent: Address;
-  /** Whether this is a spending action (amount > 0). Replaces legacy actionType. */
   isSpending: boolean;
   tokenMint: Address;
   amount: bigint;
   usdAmount: bigint;
   protocol: Address;
-  /**
-   * DEPRECATED (v5): Always 0 since outcome-based spending.
-   * Actual rolling spend is in SessionFinalized.actual_spend_usd.
-   * Retained for IDL backward compatibility.
-   */
   rollingSpendUsdAfter: bigint;
   dailyCapUsd: bigint;
   delegated: boolean;
@@ -47,17 +41,11 @@ export type ActionAuthorized = {
 export type ActionAuthorizedArgs = {
   vault: Address;
   agent: Address;
-  /** Whether this is a spending action (amount > 0). Replaces legacy actionType. */
   isSpending: boolean;
   tokenMint: Address;
   amount: number | bigint;
   usdAmount: number | bigint;
   protocol: Address;
-  /**
-   * DEPRECATED (v5): Always 0 since outcome-based spending.
-   * Actual rolling spend is in SessionFinalized.actual_spend_usd.
-   * Retained for IDL backward compatibility.
-   */
   rollingSpendUsdAfter: number | bigint;
   dailyCapUsd: number | bigint;
   delegated: boolean;

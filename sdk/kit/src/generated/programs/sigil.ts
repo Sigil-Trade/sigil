@@ -42,6 +42,7 @@ import {
   getPendingConstraintsUpdateCodec,
   getPendingPolicyUpdateCodec,
   getPolicyConfigCodec,
+  getPostExecutionAssertionsCodec,
   getSessionAuthorityCodec,
   getSpendTrackerCodec,
   type AgentSpendOverlay,
@@ -62,6 +63,8 @@ import {
   type PendingPolicyUpdateArgs,
   type PolicyConfig,
   type PolicyConfigArgs,
+  type PostExecutionAssertions,
+  type PostExecutionAssertionsArgs,
   type SessionAuthority,
   type SessionAuthorityArgs,
   type SpendTracker,
@@ -79,10 +82,12 @@ import {
   getCancelCloseConstraintsInstructionAsync,
   getCancelConstraintsUpdateInstructionAsync,
   getCancelPendingPolicyInstructionAsync,
+  getClosePostAssertionsInstructionAsync,
   getCloseSettledEscrowInstructionAsync,
   getCloseVaultInstructionAsync,
   getCreateEscrowInstructionAsync,
   getCreateInstructionConstraintsInstructionAsync,
+  getCreatePostAssertionsInstructionAsync,
   getDepositFundsInstructionAsync,
   getExtendPdaInstruction,
   getFinalizeSessionInstructionAsync,
@@ -113,10 +118,12 @@ import {
   parseCancelCloseConstraintsInstruction,
   parseCancelConstraintsUpdateInstruction,
   parseCancelPendingPolicyInstruction,
+  parseClosePostAssertionsInstruction,
   parseCloseSettledEscrowInstruction,
   parseCloseVaultInstruction,
   parseCreateEscrowInstruction,
   parseCreateInstructionConstraintsInstruction,
+  parseCreatePostAssertionsInstruction,
   parseDepositFundsInstruction,
   parseExtendPdaInstruction,
   parseFinalizeSessionInstruction,
@@ -147,10 +154,12 @@ import {
   type CancelCloseConstraintsAsyncInput,
   type CancelConstraintsUpdateAsyncInput,
   type CancelPendingPolicyAsyncInput,
+  type ClosePostAssertionsAsyncInput,
   type CloseSettledEscrowAsyncInput,
   type CloseVaultAsyncInput,
   type CreateEscrowAsyncInput,
   type CreateInstructionConstraintsAsyncInput,
+  type CreatePostAssertionsAsyncInput,
   type DepositFundsAsyncInput,
   type ExtendPdaInput,
   type FinalizeSessionAsyncInput,
@@ -167,10 +176,12 @@ import {
   type ParsedCancelCloseConstraintsInstruction,
   type ParsedCancelConstraintsUpdateInstruction,
   type ParsedCancelPendingPolicyInstruction,
+  type ParsedClosePostAssertionsInstruction,
   type ParsedCloseSettledEscrowInstruction,
   type ParsedCloseVaultInstruction,
   type ParsedCreateEscrowInstruction,
   type ParsedCreateInstructionConstraintsInstruction,
+  type ParsedCreatePostAssertionsInstruction,
   type ParsedDepositFundsInstruction,
   type ParsedExtendPdaInstruction,
   type ParsedFinalizeSessionInstruction,
@@ -219,6 +230,7 @@ export enum SigilAccount {
   PendingConstraintsUpdate,
   PendingPolicyUpdate,
   PolicyConfig,
+  PostExecutionAssertions,
   SessionAuthority,
   SpendTracker,
 }
@@ -330,6 +342,17 @@ export function identifySigilAccount(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([1, 104, 4, 208, 143, 120, 4, 77]),
+      ),
+      0,
+    )
+  ) {
+    return SigilAccount.PostExecutionAssertions;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([48, 9, 30, 120, 134, 35, 172, 170]),
       ),
       0,
@@ -366,10 +389,12 @@ export enum SigilInstruction {
   CancelCloseConstraints,
   CancelConstraintsUpdate,
   CancelPendingPolicy,
+  ClosePostAssertions,
   CloseSettledEscrow,
   CloseVault,
   CreateEscrow,
   CreateInstructionConstraints,
+  CreatePostAssertions,
   DepositFunds,
   ExtendPda,
   FinalizeSession,
@@ -520,6 +545,17 @@ export function identifySigilInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([226, 172, 252, 173, 29, 236, 59, 248]),
+      ),
+      0,
+    )
+  ) {
+    return SigilInstruction.ClosePostAssertions;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([169, 244, 164, 173, 181, 214, 139, 6]),
       ),
       0,
@@ -559,6 +595,17 @@ export function identifySigilInstruction(
     )
   ) {
     return SigilInstruction.CreateInstructionConstraints;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([204, 21, 218, 182, 202, 140, 239, 63]),
+      ),
+      0,
+    )
+  ) {
+    return SigilInstruction.CreatePostAssertions;
   }
   if (
     containsBytes(
@@ -812,6 +859,9 @@ export type ParsedSigilInstruction<
       instructionType: SigilInstruction.CancelPendingPolicy;
     } & ParsedCancelPendingPolicyInstruction<TProgram>)
   | ({
+      instructionType: SigilInstruction.ClosePostAssertions;
+    } & ParsedClosePostAssertionsInstruction<TProgram>)
+  | ({
       instructionType: SigilInstruction.CloseSettledEscrow;
     } & ParsedCloseSettledEscrowInstruction<TProgram>)
   | ({
@@ -823,6 +873,9 @@ export type ParsedSigilInstruction<
   | ({
       instructionType: SigilInstruction.CreateInstructionConstraints;
     } & ParsedCreateInstructionConstraintsInstruction<TProgram>)
+  | ({
+      instructionType: SigilInstruction.CreatePostAssertions;
+    } & ParsedCreatePostAssertionsInstruction<TProgram>)
   | ({
       instructionType: SigilInstruction.DepositFunds;
     } & ParsedDepositFundsInstruction<TProgram>)
@@ -963,6 +1016,13 @@ export function parseSigilInstruction<TProgram extends string>(
         ...parseCancelPendingPolicyInstruction(instruction),
       };
     }
+    case SigilInstruction.ClosePostAssertions: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: SigilInstruction.ClosePostAssertions,
+        ...parseClosePostAssertionsInstruction(instruction),
+      };
+    }
     case SigilInstruction.CloseSettledEscrow: {
       assertIsInstructionWithAccounts(instruction);
       return {
@@ -989,6 +1049,13 @@ export function parseSigilInstruction<TProgram extends string>(
       return {
         instructionType: SigilInstruction.CreateInstructionConstraints,
         ...parseCreateInstructionConstraintsInstruction(instruction),
+      };
+    }
+    case SigilInstruction.CreatePostAssertions: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: SigilInstruction.CreatePostAssertions,
+        ...parseCreatePostAssertionsInstruction(instruction),
       };
     }
     case SigilInstruction.DepositFunds: {
@@ -1163,6 +1230,8 @@ export type SigilPluginAccounts = {
     SelfFetchFunctions<PendingPolicyUpdateArgs, PendingPolicyUpdate>;
   policyConfig: ReturnType<typeof getPolicyConfigCodec> &
     SelfFetchFunctions<PolicyConfigArgs, PolicyConfig>;
+  postExecutionAssertions: ReturnType<typeof getPostExecutionAssertionsCodec> &
+    SelfFetchFunctions<PostExecutionAssertionsArgs, PostExecutionAssertions>;
   sessionAuthority: ReturnType<typeof getSessionAuthorityCodec> &
     SelfFetchFunctions<SessionAuthorityArgs, SessionAuthority>;
   spendTracker: ReturnType<typeof getSpendTrackerCodec> &
@@ -1214,6 +1283,10 @@ export type SigilPluginInstructions = {
     input: CancelPendingPolicyAsyncInput,
   ) => ReturnType<typeof getCancelPendingPolicyInstructionAsync> &
     SelfPlanAndSendFunctions;
+  closePostAssertions: (
+    input: ClosePostAssertionsAsyncInput,
+  ) => ReturnType<typeof getClosePostAssertionsInstructionAsync> &
+    SelfPlanAndSendFunctions;
   closeSettledEscrow: (
     input: CloseSettledEscrowAsyncInput,
   ) => ReturnType<typeof getCloseSettledEscrowInstructionAsync> &
@@ -1229,6 +1302,10 @@ export type SigilPluginInstructions = {
   createInstructionConstraints: (
     input: CreateInstructionConstraintsAsyncInput,
   ) => ReturnType<typeof getCreateInstructionConstraintsInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  createPostAssertions: (
+    input: CreatePostAssertionsAsyncInput,
+  ) => ReturnType<typeof getCreatePostAssertionsInstructionAsync> &
     SelfPlanAndSendFunctions;
   depositFunds: (
     input: DepositFundsAsyncInput,
@@ -1343,6 +1420,10 @@ export function sigilProgram() {
             getPendingPolicyUpdateCodec(),
           ),
           policyConfig: addSelfFetchFunctions(client, getPolicyConfigCodec()),
+          postExecutionAssertions: addSelfFetchFunctions(
+            client,
+            getPostExecutionAssertionsCodec(),
+          ),
           sessionAuthority: addSelfFetchFunctions(
             client,
             getSessionAuthorityCodec(),
@@ -1405,6 +1486,11 @@ export function sigilProgram() {
               client,
               getCancelPendingPolicyInstructionAsync(input),
             ),
+          closePostAssertions: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getClosePostAssertionsInstructionAsync(input),
+            ),
           closeSettledEscrow: (input) =>
             addSelfPlanAndSendFunctions(
               client,
@@ -1424,6 +1510,11 @@ export function sigilProgram() {
             addSelfPlanAndSendFunctions(
               client,
               getCreateInstructionConstraintsInstructionAsync(input),
+            ),
+          createPostAssertions: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getCreatePostAssertionsInstructionAsync(input),
             ),
           depositFunds: (input) =>
             addSelfPlanAndSendFunctions(

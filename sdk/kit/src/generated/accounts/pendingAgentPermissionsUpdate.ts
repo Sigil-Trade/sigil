@@ -55,7 +55,8 @@ export type PendingAgentPermissionsUpdate = {
   discriminator: ReadonlyUint8Array;
   vault: Address;
   agent: Address;
-  newPermissions: bigint;
+  newCapability: number;
+  reservedCap: ReadonlyUint8Array;
   spendingLimitUsd: bigint;
   queuedAt: bigint;
   executesAt: bigint;
@@ -65,7 +66,8 @@ export type PendingAgentPermissionsUpdate = {
 export type PendingAgentPermissionsUpdateArgs = {
   vault: Address;
   agent: Address;
-  newPermissions: number | bigint;
+  newCapability: number;
+  reservedCap: ReadonlyUint8Array;
   spendingLimitUsd: number | bigint;
   queuedAt: number | bigint;
   executesAt: number | bigint;
@@ -79,7 +81,8 @@ export function getPendingAgentPermissionsUpdateEncoder(): FixedSizeEncoder<Pend
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
       ["vault", getAddressEncoder()],
       ["agent", getAddressEncoder()],
-      ["newPermissions", getU64Encoder()],
+      ["newCapability", getU8Encoder()],
+      ["reservedCap", fixEncoderSize(getBytesEncoder(), 7)],
       ["spendingLimitUsd", getU64Encoder()],
       ["queuedAt", getI64Encoder()],
       ["executesAt", getI64Encoder()],
@@ -98,7 +101,8 @@ export function getPendingAgentPermissionsUpdateDecoder(): FixedSizeDecoder<Pend
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
     ["vault", getAddressDecoder()],
     ["agent", getAddressDecoder()],
-    ["newPermissions", getU64Decoder()],
+    ["newCapability", getU8Decoder()],
+    ["reservedCap", fixDecoderSize(getBytesDecoder(), 7)],
     ["spendingLimitUsd", getU64Decoder()],
     ["queuedAt", getI64Decoder()],
     ["executesAt", getI64Decoder()],

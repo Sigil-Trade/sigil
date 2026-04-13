@@ -14,13 +14,9 @@ import {
   getAddressEncoder,
   getBytesDecoder,
   getBytesEncoder,
-  getOptionDecoder,
-  getOptionEncoder,
   getProgramDerivedAddress,
   getStructDecoder,
   getStructEncoder,
-  getU16Decoder,
-  getU16Encoder,
   getU64Decoder,
   getU64Encoder,
   SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
@@ -29,14 +25,12 @@ import {
   type AccountMeta,
   type AccountSignerMeta,
   type Address,
-  type Codec,
-  type Decoder,
-  type Encoder,
+  type FixedSizeCodec,
+  type FixedSizeDecoder,
+  type FixedSizeEncoder,
   type Instruction,
   type InstructionWithAccounts,
   type InstructionWithData,
-  type Option,
-  type OptionOrNullable,
   type ReadonlyAccount,
   type ReadonlyUint8Array,
   type TransactionSigner,
@@ -50,12 +44,6 @@ import {
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
 import { SIGIL_PROGRAM_ADDRESS } from "../programs/index.js";
-import {
-  getActionTypeDecoder,
-  getActionTypeEncoder,
-  type ActionType,
-  type ActionTypeArgs,
-} from "../types/index.js";
 
 export const VALIDATE_AND_AUTHORIZE_DISCRIMINATOR = new Uint8Array([
   22, 183, 48, 222, 218, 11, 197, 152,
@@ -142,36 +130,26 @@ export type ValidateAndAuthorizeInstruction<
 
 export type ValidateAndAuthorizeInstructionData = {
   discriminator: ReadonlyUint8Array;
-  /** @deprecated v6: ActionType eliminated. On-chain ignores this field. */
-  actionType: ActionType;
   tokenMint: Address;
   amount: bigint;
   targetProtocol: Address;
-  /** @deprecated v6: leverageBps eliminated. On-chain ignores this field. */
-  leverageBps: Option<number>;
   expectedPolicyVersion: bigint;
 };
 
 export type ValidateAndAuthorizeInstructionDataArgs = {
-  /** @deprecated v6: ActionType eliminated. Pass any value; on-chain ignores it. */
-  actionType: ActionTypeArgs;
   tokenMint: Address;
   amount: number | bigint;
   targetProtocol: Address;
-  /** @deprecated v6: leverageBps eliminated. Pass null; on-chain ignores it. */
-  leverageBps: OptionOrNullable<number>;
   expectedPolicyVersion: number | bigint;
 };
 
-export function getValidateAndAuthorizeInstructionDataEncoder(): Encoder<ValidateAndAuthorizeInstructionDataArgs> {
+export function getValidateAndAuthorizeInstructionDataEncoder(): FixedSizeEncoder<ValidateAndAuthorizeInstructionDataArgs> {
   return transformEncoder(
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
-      ["actionType", getActionTypeEncoder()],
       ["tokenMint", getAddressEncoder()],
       ["amount", getU64Encoder()],
       ["targetProtocol", getAddressEncoder()],
-      ["leverageBps", getOptionEncoder(getU16Encoder())],
       ["expectedPolicyVersion", getU64Encoder()],
     ]),
     (value) => ({
@@ -181,19 +159,17 @@ export function getValidateAndAuthorizeInstructionDataEncoder(): Encoder<Validat
   );
 }
 
-export function getValidateAndAuthorizeInstructionDataDecoder(): Decoder<ValidateAndAuthorizeInstructionData> {
+export function getValidateAndAuthorizeInstructionDataDecoder(): FixedSizeDecoder<ValidateAndAuthorizeInstructionData> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
-    ["actionType", getActionTypeDecoder()],
     ["tokenMint", getAddressDecoder()],
     ["amount", getU64Decoder()],
     ["targetProtocol", getAddressDecoder()],
-    ["leverageBps", getOptionDecoder(getU16Decoder())],
     ["expectedPolicyVersion", getU64Decoder()],
   ]);
 }
 
-export function getValidateAndAuthorizeInstructionDataCodec(): Codec<
+export function getValidateAndAuthorizeInstructionDataCodec(): FixedSizeCodec<
   ValidateAndAuthorizeInstructionDataArgs,
   ValidateAndAuthorizeInstructionData
 > {
@@ -251,11 +227,9 @@ export type ValidateAndAuthorizeAsyncInput<
    * and protocol slippage enforcement.
    */
   instructionsSysvar?: Address<TAccountInstructionsSysvar>;
-  actionType: ValidateAndAuthorizeInstructionDataArgs["actionType"];
   tokenMint: ValidateAndAuthorizeInstructionDataArgs["tokenMint"];
   amount: ValidateAndAuthorizeInstructionDataArgs["amount"];
   targetProtocol: ValidateAndAuthorizeInstructionDataArgs["targetProtocol"];
-  leverageBps: ValidateAndAuthorizeInstructionDataArgs["leverageBps"];
   expectedPolicyVersion: ValidateAndAuthorizeInstructionDataArgs["expectedPolicyVersion"];
 };
 
@@ -528,11 +502,9 @@ export type ValidateAndAuthorizeInput<
    * and protocol slippage enforcement.
    */
   instructionsSysvar?: Address<TAccountInstructionsSysvar>;
-  actionType: ValidateAndAuthorizeInstructionDataArgs["actionType"];
   tokenMint: ValidateAndAuthorizeInstructionDataArgs["tokenMint"];
   amount: ValidateAndAuthorizeInstructionDataArgs["amount"];
   targetProtocol: ValidateAndAuthorizeInstructionDataArgs["targetProtocol"];
-  leverageBps: ValidateAndAuthorizeInstructionDataArgs["leverageBps"];
   expectedPolicyVersion: ValidateAndAuthorizeInstructionDataArgs["expectedPolicyVersion"];
 };
 

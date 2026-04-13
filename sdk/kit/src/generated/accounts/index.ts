@@ -15,5 +15,6 @@ export * from "./pendingCloseConstraints.js";
 export * from "./pendingConstraintsUpdate.js";
 export * from "./pendingPolicyUpdate.js";
 export * from "./policyConfig.js";
+export * from "./postExecutionAssertions.js";
 export * from "./sessionAuthority.js";
 export * from "./spendTracker.js";

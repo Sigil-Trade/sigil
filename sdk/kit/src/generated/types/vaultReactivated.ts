@@ -16,8 +16,8 @@ import {
   getOptionEncoder,
   getStructDecoder,
   getStructEncoder,
-  getU64Decoder,
-  getU64Encoder,
+  getU8Decoder,
+  getU8Encoder,
   type Address,
   type Codec,
   type Decoder,
@@ -29,14 +29,14 @@ import {
 export type VaultReactivated = {
   vault: Address;
   newAgent: Option<Address>;
-  newAgentPermissions: Option<bigint>;
+  newAgentCapability: Option<number>;
   timestamp: bigint;
 };
 
 export type VaultReactivatedArgs = {
   vault: Address;
   newAgent: OptionOrNullable<Address>;
-  newAgentPermissions: OptionOrNullable<number | bigint>;
+  newAgentCapability: OptionOrNullable<number>;
   timestamp: number | bigint;
 };
 
@@ -44,7 +44,7 @@ export function getVaultReactivatedEncoder(): Encoder<VaultReactivatedArgs> {
   return getStructEncoder([
     ["vault", getAddressEncoder()],
     ["newAgent", getOptionEncoder(getAddressEncoder())],
-    ["newAgentPermissions", getOptionEncoder(getU64Encoder())],
+    ["newAgentCapability", getOptionEncoder(getU8Encoder())],
     ["timestamp", getI64Encoder()],
   ]);
 }
@@ -53,7 +53,7 @@ export function getVaultReactivatedDecoder(): Decoder<VaultReactivated> {
   return getStructDecoder([
     ["vault", getAddressDecoder()],
     ["newAgent", getOptionDecoder(getAddressDecoder())],
-    ["newAgentPermissions", getOptionDecoder(getU64Decoder())],
+    ["newAgentCapability", getOptionDecoder(getU8Decoder())],
     ["timestamp", getI64Decoder()],
   ]);
 }
