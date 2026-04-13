@@ -27,7 +27,7 @@ const VAULT = "11111111111111111111111111111112" as Address;
 const VALID_AGENT = "22222222222222222222222222222222222222222222" as Address;
 const VALID_MINT = "33333333333333333333333333333333333333333333" as Address;
 const U64_MAX = (1n << 64n) - 1n;
-const MAX_PERMISSIONS = (1n << 21n) - 1n;
+const MAX_PERMISSIONS = 2n; // 0=Disabled, 1=Observer, 2=Operator
 
 function mockOwner(): TransactionSigner {
   return {

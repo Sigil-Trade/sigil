@@ -89,7 +89,7 @@ describe("getVaultHealth", () => {
           agents: [
             {
               pubkey: "agent1",
-              permissions: FULL_PERMISSIONS,
+              capability: Number(FULL_PERMISSIONS),
               spendingLimitUsd: 0n,
               paused: false,
             },

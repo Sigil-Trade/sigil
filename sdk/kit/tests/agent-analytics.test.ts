@@ -29,7 +29,7 @@ function mockStateWithAgents(
     });
     return {
       pubkey: a.pubkey as Address,
-      capability: a.perms,
+      capability: Number(a.perms),
       spendingLimitUsd: a.limit,
       paused: a.paused ?? false,
     };

@@ -83,7 +83,7 @@ describe("getSecurityPosture", () => {
         agents: [
           {
             pubkey: "a1" as Address,
-            permissions: FULL_PERMISSIONS,
+            capability: Number(FULL_PERMISSIONS),
             spendingLimitUsd: 0n,
             paused: false,
           },
