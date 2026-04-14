@@ -34,6 +34,8 @@ import type {
   PolicyChanges,
   ConstraintEntry,
   DiscoveredVault,
+  OverviewData,
+  GetOverviewOptions,
 } from "./types.js";
 
 import * as reads from "./reads.js";
@@ -63,7 +65,28 @@ export type {
   TokenBalance,
   HealthCheck,
   ProtocolBreakdownEntry,
+  OverviewContext,
+  OverviewData,
+  GetOverviewOptions,
 } from "./types.js";
+
+// ─── Overview composition helpers (S14) ──────────────────────────────────────
+// Exported for advanced consumers (custom dashboards, MCP servers, test
+// harnesses) that want to pre-fetch raw state once and compose views
+// themselves. Most consumers should use OwnerClient.getOverview() instead.
+//
+// @experimental These helpers and the OverviewContext shape may change while
+// the composition surface is iterated on. Pin your SDK version if you depend
+// on them directly.
+export {
+  buildVaultState,
+  buildAgents,
+  buildSpending,
+  buildHealth,
+  buildPolicy,
+  buildActivityRows,
+  DEFAULT_OVERVIEW_ACTIVITY_LIMIT,
+} from "./reads.js";
 
 export type { ConstraintsPdaInfo } from "./constraint-reads.js";
 export {
@@ -127,6 +150,24 @@ export class OwnerClient {
 
   async getPolicy(): Promise<PolicyData> {
     return reads.getPolicy(this.rpc, this.vault, this.network);
+  }
+
+  /**
+   * Single-call overview — all five view types plus unfiltered activity.
+   *
+   * Resolves vault state exactly once (vs. up to 5× when the individual
+   * reads are called separately) and derives PnL from that resolved state.
+   * The activity fetch is `getSignaturesForAddress` + up to `activityLimit`
+   * sequential `getTransaction` calls; it dominates wall time when
+   * `includeActivity: true` and can be skipped entirely with
+   * `{ includeActivity: false }` at the cost of agents losing their
+   * last-action enrichment fields.
+   *
+   * For filtered activity, use {@link OwnerClient.getActivity} alongside —
+   * `getOverview` does not accept `ActivityFilters`.
+   */
+  async getOverview(options?: GetOverviewOptions): Promise<OverviewData> {
+    return reads.getOverview(this.rpc, this.vault, this.network, options);
   }
 
   // ─── Vault Lifecycle ────────────────────────────────────────────────────────

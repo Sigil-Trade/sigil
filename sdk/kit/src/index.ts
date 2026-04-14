@@ -516,6 +516,7 @@ export type { ShieldStorage, SpendEntry, TxEntry } from "./core/index.js";
 // ─── Balance Tracker / P&L ──────────────────────────────────────────────────
 export {
   getVaultPnL,
+  getVaultPnLFromState,
   getVaultTokenBalances,
   getBalancePnL,
   BalanceSnapshotStore,
