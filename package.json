@@ -25,7 +25,8 @@
     "test:sdk": "pnpm -r --filter './sdk/*' --filter './packages/*' test",
     "test:rust": "cargo test --manifest-path programs/sigil/Cargo.toml",
     "test:all": "pnpm test:onchain:full && pnpm test:sdk && pnpm test:rust",
-    "update-readme": "node scripts/update-test-counts.js"
+    "update-readme": "node scripts/update-test-counts.js",
+    "count:check": "node scripts/verify-test-counts.js"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",

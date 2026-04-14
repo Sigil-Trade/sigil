@@ -20,7 +20,7 @@
     },
     {
       "name": "Flash Trade integration (leveraged perps)",
-      "count": 30,
+      "count": 26,
       "onChain": true,
       "claudePattern": "tests/flash-trade-integration.ts` (%d tests)"
     },
@@ -32,7 +32,7 @@
     },
     {
       "name": "Instruction constraints (generic enforcement)",
-      "count": 50,
+      "count": 55,
       "onChain": true,
       "claudePattern": "tests/instruction-constraints.ts` (ts-mocha + LiteSVM, %d tests)"
     },
@@ -79,13 +79,13 @@
     },
     {
       "name": "Kit-native SDK (`@usesigil/kit` — includes merged core + dashboard)",
-      "count": 1099,
+      "count": 1180,
       "ciStepName": "Kit SDK tests",
       "claudePattern": "sdk/kit/tests/` (mocha + tsx, %d tests — 948 kit + 66 core + 85 dashboard)"
     },
     {
       "name": "Kit SDK devnet tests (`@usesigil/kit` devnet)",
-      "count": 26,
+      "count": 34,
       "devnet": true,
       "claudePattern": "sdk/kit/tests/devnet/` (mocha + tsx, %d tests — lifecycle, composed-tx, dashboard-integration)"
     },
@@ -97,9 +97,21 @@
     },
     {
       "name": "Rust unit tests (cargo test)",
-      "count": 103,
+      "count": 121,
       "onChain": true,
       "claudePattern": "cargo test --manifest-path programs/sigil/Cargo.toml` (%d tests)"
+    },
+    {
+      "name": "Devnet extended scenarios (flash-trade + stress)",
+      "count": 45,
+      "devnet": true,
+      "claudePattern": "tests/devnet/` (flash-trade-devnet + stress-test, %d tests)"
+    },
+    {
+      "name": "Trident fuzz tests (1K iterations)",
+      "count": 16,
+      "onChain": true,
+      "claudePattern": "trident-tests/fuzz_tests/` (cargo-trident, %d flows/invariants)"
     }
   ]
 }

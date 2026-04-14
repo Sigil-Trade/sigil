@@ -3,9 +3,9 @@
 # Runs on every push to main and on pull requests.
 # Eight jobs (1 detection + 6 parallel + 1 gate):
 #   0. changes                — Detect which file groups changed (package-level path filtering)
-#   1. build-lint-test        — TypeScript builds, Prettier, 1218 TS tests (conditional: any-ts or push)
+#   1. build-lint-test        — TypeScript builds, Prettier, 1299 TS tests (conditional: any-ts or push)
 #   2. rust-checks            — cargo fmt + cargo clippy (conditional: rust changes or push)
-#   3. on-chain-tests         — Anchor build + LiteSVM 454 tests (conditional: rust changes or push)
+#   3. on-chain-tests         — Anchor build + LiteSVM 532 tests (conditional: rust changes or push)
 #  3b. build-verification     — Feature flag safety net (conditional: rust changes or push)
 #  3c. surfpool-integration   — Surfpool integration tests, 59 tests (conditional: rust changes or push)
 #   4. security-scan          — Sec3 X-Ray static analysis (always, BLOCKING)
@@ -23,7 +23,7 @@
 #   sdk/custody → Custody adapter tests (96 tests)
 #   packages/plugins → Plugin tests (6 tests)
 #
-# Total: ~1,826 tests across 17 suites (1218 TS + 454 on-chain + 59 Surfpool + 95 devnet)
+# Total: ~2,038 tests across 19 suites (1299 TS + 532 on-chain + 59 Surfpool + 148 devnet)
 # All security checks are BLOCKING — zero tolerance for known issues.
 
 name: CI
@@ -93,7 +93,7 @@ jobs:
               - 'tsconfig*.json'
 
   # ──────────────────────────────────────────────────────────────
-  # Job 1: TypeScript build, lint, and tests (4 suites, 1218 tests)
+  # Job 1: TypeScript build, lint, and tests (4 suites, 1299 tests)
   # ──────────────────────────────────────────────────────────────
   build-lint-test:
     name: Build, Lint & TS Tests
@@ -147,7 +147,7 @@ jobs:
             "sdk/platform/src/**/*.ts" \
             "sdk/custody/src/**/*.ts"
 
-      - name: Kit SDK tests (1099 tests)
+      - name: Kit SDK tests (1180 tests)
         if: >-
           needs.changes.outputs.sdk-kit == 'true' ||
           github.event_name == 'push'
