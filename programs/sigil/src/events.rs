@@ -200,6 +200,9 @@ pub struct ConstraintsChangeQueued {
 #[event]
 pub struct ConstraintsChangeApplied {
     pub vault: Pubkey,
+    /// Per-entry discriminator format (0=Anchor8, 1=Spl1) from the applied entries.
+    /// Emitted at apply time so monitors see the active format when it takes effect.
+    pub discriminator_formats: Vec<u8>,
     pub applied_at: i64,
 }
 

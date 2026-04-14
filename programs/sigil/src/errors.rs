@@ -271,4 +271,7 @@ pub enum SigilError {
 
     #[msg("Cannot pack entries: entry count exceeds MAX_CONSTRAINT_ENTRIES")]
     ConstraintEntryCountExceeded,
+
+    #[msg("SPL opcode is blocked at runtime and cannot be used in constraints")]
+    BlockedSplOpcode,
 }

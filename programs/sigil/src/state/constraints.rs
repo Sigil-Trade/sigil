@@ -275,12 +275,14 @@ impl InstructionConstraints {
                 // never match a real instruction because the instruction gets
                 // blocked first. Blocked: Transfer(3), Approve(4), SetAuthority(6),
                 // Burn(8), CloseAccount(9), TransferChecked(12), ApproveChecked(13),
-                // BurnChecked(15).
+                // BurnChecked(15), TransferCheckedWithFee(26, Token-2022 only).
+                // Opcode 26 is safe to block universally — it doesn't exist on
+                // base SPL Token and will never be submitted for that program.
                 // first.value.len() >= 1 guaranteed by min_discriminator_len check above
-                const BLOCKED_SPL_OPCODES: [u8; 8] = [3, 4, 6, 8, 9, 12, 13, 15];
+                const BLOCKED_SPL_OPCODES: [u8; 9] = [3, 4, 6, 8, 9, 12, 13, 15, 26];
                 require!(
                     !BLOCKED_SPL_OPCODES.contains(&first.value[0]),
-                    SigilError::InvalidConstraintConfig
+                    SigilError::BlockedSplOpcode
                 );
             }
 

@@ -64,6 +64,12 @@ pub fn handler(ctx: Context<ApplyConstraintsUpdate>) -> Result<()> {
     // Direct raw byte copy between account data buffers to avoid 35KB stack allocation.
     // Both accounts are zero-copy with identical entries layout at the same offset.
     // entries starts at byte offset 8 (disc) + 32 (vault) = 40 in both structs.
+    //
+    // NOTE: No re-validation of entries here. Entries were validated during queue_constraints_update.
+    // If a program upgrade changes validation rules between queue and apply, previously-queued
+    // entries are applied unchanged. This is a known tradeoff in timelocked update systems —
+    // the alternative (re-validation on apply) would add ~50K CU and could reject entries that
+    // were valid when the owner queued them, breaking the timelock contract.
     {
         let pending_info = ctx.accounts.pending_constraints.to_account_info();
         let constraints_info = ctx.accounts.constraints.to_account_info();
@@ -96,8 +102,19 @@ pub fn handler(ctx: Context<ApplyConstraintsUpdate>) -> Result<()> {
         .checked_add(1)
         .ok_or(error!(SigilError::Overflow))?;
 
+    // Collect discriminator formats from the freshly-applied entries for the event.
+    // Read from constraints (not pending — pending is closed by Anchor after this handler).
+    let discriminator_formats = {
+        let constraints = ctx.accounts.constraints.load()?;
+        let count = constraints.entry_count as usize;
+        (0..count)
+            .map(|i| constraints.entries[i].discriminator_format)
+            .collect::<Vec<u8>>()
+    };
+
     emit!(ConstraintsChangeApplied {
         vault: vault_key,
+        discriminator_formats,
         applied_at: clock.unix_timestamp,
     });
 
