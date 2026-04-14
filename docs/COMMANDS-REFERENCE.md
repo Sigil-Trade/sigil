@@ -26,13 +26,28 @@ cargo fmt --check --manifest-path programs/sigil/Cargo.toml
 
 ## Testing
 
-```bash
-# On-chain tests (LiteSVM — no validator needed)
-npx ts-mocha -p ./tsconfig.json -t 300000 tests/<file>.ts
+| Command | What runs | External deps |
+|---|---|---|
+| `pnpm test` | 3 LiteSVM files (sigil, jupiter, flash-trade) via `anchor test` | anchor |
+| `pnpm test:onchain` | 4 LiteSVM files (above + security-exploits) | ts-mocha |
+| `pnpm test:onchain:full` | **All 9** LiteSVM files | ts-mocha |
+| `pnpm test:sdk` | All SDK + plugin package tests (kit, custody, platform, plugins) | pnpm workspaces |
+| `pnpm test:rust` | `cargo test` on `programs/sigil` | rust toolchain |
+| **`pnpm test:all`** | **`test:onchain:full` + `test:sdk` + `test:rust`** — every local-runnable suite | all of the above |
+| `pnpm test:surfpool` | 59 Surfpool integration tests | `surfpool start` running (see below) |
+| `pnpm count:check` | Drift check: actual test count vs `scripts/test-counts.json` | node |
 
-# Package-specific tests (from package directory)
-pnpm --filter <package> test
+Devnet and Trident fuzz suites are not included in `pnpm test:all` because they require external setup (devnet RPC + funded keypair, or `cargo trident` and multiple minutes). Run them separately:
+
+```bash
+# Devnet (requires ANCHOR_PROVIDER_URL + funded ANCHOR_WALLET)
+npx ts-mocha -p ./tsconfig.json -t 300000 tests/devnet-*.ts tests/devnet/*.ts
+
+# Trident fuzz (1K iterations)
+pnpm security:fuzz
 ```
+
+**Use `pnpm test:all` before opening a PR** — `pnpm test` alone runs only ~140 out of ~2,012 tests.
 
 ## Surfpool (Integration Testing)
 
