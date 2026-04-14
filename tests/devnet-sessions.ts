@@ -4,7 +4,7 @@
  * With the composed TX model (validate + finalize in same atomic transaction),
  * sessions are now transient — created and closed within a single TX.
  * Session expiry and permissionless cleanup are no longer testable because
- * the MissingFinalizeInstruction check (6035) prevents standalone validate.
+ * the MissingFinalizeInstruction check (6034) prevents standalone validate.
  *
  * Tests cover composed TX success/failure paths, access control, and
  * sequential same-mint reuse.
