@@ -58,18 +58,16 @@ export interface BalancePnL {
 // ─── On-chain P&L (lifetime) ────────────────────────────────────────────────
 
 /**
- * Compute lifetime P&L for a vault from on-chain cumulative counters.
- * Single RPC call via resolveVaultStateForOwner. O(1) — no event parsing needed.
+ * Pure P&L computation from an already-resolved vault state. No RPC.
  *
- * P&L = current_stablecoin_balance - (total_deposited_usd - total_withdrawn_usd)
+ * Use this variant when you already have `ResolvedVaultStateForOwner` in hand
+ * (e.g. from a shared `getOverview` context) to avoid a duplicate
+ * `resolveVaultStateForOwner` call.
  */
-export async function getVaultPnL(
-  rpc: Rpc<SolanaRpcApi>,
-  vault: Address,
-  network: Network = "mainnet-beta",
-): Promise<VaultPnL> {
-  const state = await resolveVaultStateForOwner(rpc, vault, undefined, network);
-
+export function getVaultPnLFromState(state: {
+  vault: { totalDepositedUsd: bigint; totalWithdrawnUsd: bigint };
+  stablecoinBalances: { usdc: bigint; usdt: bigint };
+}): VaultPnL {
   const totalDeposited = state.vault.totalDepositedUsd;
   const totalWithdrawn = state.vault.totalWithdrawnUsd;
   const currentBalance =
@@ -87,6 +85,24 @@ export async function getVaultPnL(
     pnl,
     pnlPercent,
   };
+}
+
+/**
+ * Compute lifetime P&L for a vault from on-chain cumulative counters.
+ * Single RPC call via resolveVaultStateForOwner. O(1) — no event parsing needed.
+ *
+ * P&L = current_stablecoin_balance - (total_deposited_usd - total_withdrawn_usd)
+ *
+ * When you already have resolved state, prefer {@link getVaultPnLFromState} to
+ * skip the duplicate RPC.
+ */
+export async function getVaultPnL(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  network: Network = "mainnet-beta",
+): Promise<VaultPnL> {
+  const state = await resolveVaultStateForOwner(rpc, vault, undefined, network);
+  return getVaultPnLFromState(state);
 }
 
 // ─── Token balance query ────────────────────────────────────────────────────

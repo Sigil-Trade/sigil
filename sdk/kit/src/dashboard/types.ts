@@ -10,6 +10,12 @@
 import type { Address, TransactionSigner } from "@solana/kit";
 import type { Rpc, SolanaRpcApi } from "@solana/kit";
 import type { ConstraintEntryArgs } from "../generated/types/constraintEntry.js";
+import type { ResolvedVaultStateForOwner } from "../state-resolver.js";
+import type { VaultPnL } from "../balance-tracker.js";
+import type { VaultActivityItem } from "../event-analytics.js";
+import type { PendingPolicyUpdate } from "../generated/accounts/pendingPolicyUpdate.js";
+import type { SecurityPosture, Alert } from "../security-analytics.js";
+import type { SpendingBreakdown } from "../spending-analytics.js";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -262,6 +268,106 @@ export interface PolicyData {
   toJSON(): SerializedPolicyData;
 }
 
+// ─── Overview (S14) ──────────────────────────────────────────────────────────
+
+/**
+ * Shared context passed to the `build*` composition helpers.
+ *
+ * Contains the pre-fetched raw data needed to derive any of the five view
+ * types (vault, agents, spending, health, policy) plus the raw activity list.
+ *
+ * `getOverview()` resolves state once, derives PnL from it via
+ * `getVaultPnLFromState`, fetches activity and pending-policy in parallel,
+ * then passes the same context to every `build*` helper so state-derived
+ * values (posture, breakdown, alerts) are computed exactly once.
+ *
+ * Most consumers should use {@link OwnerClient.getOverview} or the individual
+ * read methods; this interface is exposed for advanced composition (custom
+ * dashboards, test harnesses that need to inject fixtures).
+ *
+ * @experimental The field shape of `OverviewContext` — particularly the three
+ * memoized derivations (`posture`, `breakdown`, `alerts`) — is considered
+ * experimental and may change without a major bump while the build* helpers
+ * are iterated on. If you depend on this surface, pin your SDK version and
+ * watch the changeset.
+ */
+export interface OverviewContext {
+  /** Vault PDA (needed for fields that reference the vault address directly). */
+  vault: Address;
+  state: ResolvedVaultStateForOwner;
+  /** From `getVaultPnL`. When absent, `buildVaultState` returns zero P&L. */
+  pnl?: VaultPnL;
+  /** 100 most recent raw events. When absent, `buildAgents` returns empty last-action fields. */
+  activity?: VaultActivityItem[];
+  /** `null` when no pending update exists. When absent, `buildPolicy` returns no pending update. */
+  pendingPolicy?: PendingPolicyUpdate | null;
+  /**
+   * Memoized `getSecurityPosture(state)` — pre-populated by `getOverview` so
+   * `buildVaultState` and `buildHealth` share one computation. When absent,
+   * each helper derives it from `state` on demand.
+   */
+  posture?: SecurityPosture;
+  /**
+   * Memoized `getSpendingBreakdown(state)` — pre-populated by `getOverview`.
+   * When absent, `buildSpending` derives it from `state` on demand.
+   */
+  breakdown?: SpendingBreakdown;
+  /**
+   * Memoized `evaluateAlertConditions(state, vault)` — pre-populated by
+   * `getOverview`. When absent, `buildHealth` derives it on demand.
+   */
+  alerts?: Alert[];
+}
+
+/**
+ * Single-call overview bundle for a vault.
+ *
+ * Returns the same five view types as the individual read methods plus the
+ * raw 100-most-recent activity rows (configurable via
+ * `GetOverviewOptions.activityLimit`). The five reads called separately each
+ * re-resolve vault state; `getOverview` resolves it once and derives PnL
+ * from that resolved state — saves one full state resolution vs. the
+ * previous implementation. The activity fetch (`getSignaturesForAddress` +
+ * sequential `getTransaction` × activityLimit) dominates wall time when
+ * `includeActivity: true`.
+ *
+ * Activity is returned **unfiltered**. To filter, call
+ * {@link OwnerClient.getActivity} with explicit `ActivityFilters`.
+ */
+export interface OverviewData {
+  vault: VaultState;
+  agents: AgentData[];
+  spending: SpendingData;
+  health: HealthData;
+  policy: PolicyData;
+  /** 100 most recent rows, unfiltered. Apply filters via `getActivity(filters)`. */
+  activity: ActivityRow[];
+  toJSON(): SerializedOverviewData;
+}
+
+/** Options controlling what `getOverview` fetches. */
+export interface GetOverviewOptions {
+  /**
+   * When `false`, skip the `getVaultActivity` RPC and return `activity: []`.
+   * Default: `true`. Useful for headless agents that only need policy/health.
+   *
+   * ⚠️ **Side effect on `agents[*]`.** Per-agent last-action enrichment
+   * (lastActionType / lastActionProtocol / lastActionTimestamp /
+   * blockedCount24h) is derived from the same activity fetch. When
+   * `includeActivity: false`, those fields return empty-string / 0 on every
+   * agent. If you need the agent last-action fields, keep activity enabled
+   * (or lower cost with `activityLimit`).
+   */
+  includeActivity?: boolean;
+  /**
+   * Override the activity fetch size. Defaults to 100 (see
+   * `DEFAULT_OVERVIEW_ACTIVITY_LIMIT`). `getVaultActivity` issues one
+   * `getSignaturesForAddress` followed by up to `activityLimit` sequential
+   * `getTransaction` calls — this is the only lever on activity RPC cost.
+   */
+  activityLimit?: number;
+}
+
 // ─── Mutation Inputs ─────────────────────────────────────────────────────────
 
 /**
@@ -444,4 +550,14 @@ export interface SerializedDiscoveredVault {
   vaultId: string;
   status: string;
   agentCount: number;
+}
+
+/** @internal */
+export interface SerializedOverviewData {
+  vault: SerializedVaultState;
+  agents: SerializedAgentData[];
+  spending: SerializedSpendingData;
+  health: SerializedHealthData;
+  policy: SerializedPolicyData;
+  activity: SerializedActivityRow[];
 }

@@ -3,6 +3,12 @@
  *
  * Each function is stateless (fetches fresh from RPC), composes existing
  * SDK functions, and returns raw values with toJSON() for MCP serialization.
+ *
+ * S14: the five view types are composed by pure `build*` helpers that take a
+ * shared {@link OverviewContext}. The existing reads each assemble their own
+ * context with minimal fetches; `getOverview` fetches once and shares the
+ * context across all helpers so derived values (security posture etc.) are
+ * computed exactly once.
  */
 
 import { isSome } from "@solana/kit";
@@ -12,9 +18,8 @@ import {
   resolveVaultStateForOwner,
   getSpendingHistory,
   getPendingPolicyForVault,
-  resolveVaultBudget,
 } from "../state-resolver.js";
-import { getVaultPnL } from "../balance-tracker.js";
+import { getVaultPnL, getVaultPnLFromState } from "../balance-tracker.js";
 import { getSecurityPosture } from "../security-analytics.js";
 import { evaluateAlertConditions } from "../security-analytics.js";
 import type { SecurityCheck, Alert } from "../security-analytics.js";
@@ -22,6 +27,7 @@ import { getAgentProfile } from "../agent-analytics.js";
 import { getSpendingBreakdown } from "../spending-analytics.js";
 import type { SpendingBreakdown } from "../spending-analytics.js";
 import { getVaultActivity } from "../event-analytics.js";
+import type { VaultActivityItem } from "../event-analytics.js";
 import { resolveProtocolName } from "../protocol-names.js";
 import type { Network } from "../types.js";
 import type { ResolvedVaultState } from "../state-resolver.js";
@@ -49,6 +55,9 @@ import type {
   PolicyData,
   ChartPoint,
   PolicyChanges,
+  OverviewContext,
+  OverviewData,
+  GetOverviewOptions,
 } from "./types.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -74,6 +83,468 @@ function serializeBigints(obj: unknown): unknown {
   return obj;
 }
 
+/**
+ * Default size of the activity window included in `getOverview`. Consumers
+ * may override via `GetOverviewOptions.activityLimit`.
+ *
+ * The value matches `getAgents`' existing per-agent enrichment window so one
+ * fetch serves both the overview's activity feed and the agents' last-action
+ * fields without inflating RPC cost.
+ */
+export const DEFAULT_OVERVIEW_ACTIVITY_LIMIT = 100;
+
+/**
+ * Shared "is this an account-not-found error?" predicate.
+ *
+ * Both `getPolicy` and `getOverview` treat a missing `PendingPolicyUpdate`
+ * account as "no pending update" (not an error). The current Kit doesn't
+ * expose a typed `AccountNotFound` SolanaError at this call site, so both
+ * paths fall back to substring matching. Extracting it here means the
+ * fragility lives in one place and only one site needs to update if Kit
+ * ever surfaces a typed variant.
+ */
+function isAccountNotFoundError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return (
+    message.includes("could not find") ||
+    message.includes("Account does not exist")
+  );
+}
+
+// ─── Build helpers (pure composition — no RPC) ───────────────────────────────
+// Each helper accepts an OverviewContext and returns one view type. `getOverview`
+// pre-populates memoized derivations (posture/breakdown/alerts) so repeat calls
+// share one computation; existing reads pass a minimal ctx and the helper
+// derives what it needs from `ctx.state`.
+
+/**
+ * Guard for state fields that `resolveVaultStateForOwner` normally guarantees.
+ *
+ * `state.vault` and `state.policy` are non-null on any success path from the
+ * resolver, but consumers that hand-construct an {@link OverviewContext} for
+ * testing or custom composition could pass a partial shape. Fail fast with a
+ * labeled error instead of a cryptic "cannot read properties of null".
+ */
+function requireCtxField<T>(value: T | null | undefined, field: string): T {
+  if (value === null || value === undefined) {
+    throw new Error(
+      `[dashboard/reads] OverviewContext.state.${field} is required but missing`,
+    );
+  }
+  return value;
+}
+
+/**
+ * Compose {@link VaultState} from a pre-fetched {@link OverviewContext}.
+ *
+ * Requires `ctx.state`. Uses `ctx.pnl` when present; otherwise defaults to
+ * zero P&L. Uses `ctx.posture` when memoized; otherwise computes from state.
+ */
+export function buildVaultState(ctx: OverviewContext): VaultState {
+  const v = requireCtxField(ctx.state.vault, "vault") as AgentVault;
+  const posture = ctx.posture ?? getSecurityPosture(asVaultState(ctx.state));
+  const pnlPercent =
+    ctx.pnl && Number.isFinite(ctx.pnl.pnlPercent) ? ctx.pnl.pnlPercent : 0;
+  const pnlAbsolute = ctx.pnl ? ctx.pnl.pnl : 0n;
+
+  const bal = ctx.state.stablecoinBalances;
+  const total = bal.usdc + bal.usdt;
+
+  const tokens = [
+    ...(bal.usdc > 0n ? [{ mint: "USDC", amount: bal.usdc, decimals: 6 }] : []),
+    ...(bal.usdt > 0n ? [{ mint: "USDT", amount: bal.usdt, decimals: 6 }] : []),
+  ];
+
+  const checks = posture.checks.map((c: SecurityCheck) => ({
+    name: c.id,
+    passed: c.passed,
+  }));
+  const level =
+    posture.criticalFailures.length > 0
+      ? ("critical" as const)
+      : posture.failCount > 0
+        ? ("elevated" as const)
+        : ("healthy" as const);
+
+  const vaultAddr = ctx.vault;
+  const status = (
+    v.status === 0 ? "active" : v.status === 1 ? "frozen" : "closed"
+  ) as VaultState["vault"]["status"];
+
+  return {
+    vault: {
+      address: vaultAddr,
+      status,
+      owner: v.owner as string,
+      agentCount: v.agents?.length ?? 0,
+      openPositions: v.openPositions,
+      totalVolume: v.totalVolume,
+      totalFees: v.totalFeesCollected,
+    },
+    balance: { total, tokens },
+    pnl: { percent: pnlPercent, absolute: pnlAbsolute },
+    health: { level, alertCount: posture.failCount, checks },
+    toJSON: () => ({
+      vault: {
+        address: vaultAddr,
+        status,
+        owner: v.owner as string,
+        agentCount: v.agents?.length ?? 0,
+        openPositions: v.openPositions,
+        totalVolume: bs(v.totalVolume),
+        totalFees: bs(v.totalFeesCollected),
+      },
+      balance: {
+        total: bs(total),
+        tokens: tokens.map((t) => ({ ...t, amount: bs(t.amount) })),
+      },
+      pnl: { percent: pnlPercent, absolute: bs(pnlAbsolute) },
+      health: { level, alertCount: posture.failCount, checks },
+    }),
+  };
+}
+
+/**
+ * Compose {@link AgentData}[] from a pre-fetched {@link OverviewContext}.
+ *
+ * Requires `ctx.state`. Uses `ctx.activity` to populate per-agent last-action
+ * and blocked-count fields; when absent, those fields default to empty/zero.
+ */
+export function buildAgents(ctx: OverviewContext): AgentData[] {
+  const state = ctx.state;
+  const v = requireCtxField(state.vault, "vault") as AgentVault;
+  const vaultAgents = v.agents;
+  if (!vaultAgents || vaultAgents.length === 0) return [];
+
+  const activity = ctx.activity ?? [];
+  const blockedCutoffMs = Date.now() - 24 * 3600 * 1000;
+
+  return vaultAgents.map((entry) => {
+    const addr = entry.pubkey;
+    const profile = getAgentProfile(asVaultState(state), addr);
+    const budget = state.allAgentBudgets.get(addr);
+
+    const spentAmt = budget?.spent24h ?? 0n;
+    const capAmt = budget?.cap ?? 0n;
+    const pct = capAmt > 0n ? Number((spentAmt * 10000n) / capAmt) / 100 : 0;
+
+    // Items are newest-first (getSignaturesForAddress ordering).
+    const agentActivity = activity.filter(
+      (item) => item.agent !== null && item.agent === addr,
+    );
+    const last = agentActivity[0];
+    const lastActionType: string = last
+      ? mapCategory(
+          (last.category as string) ?? "unknown",
+          (last.eventType as string) ?? "",
+          last.actionType ?? undefined,
+        )
+      : "";
+    const lastActionProtocol = last?.protocolName ?? "";
+    const lastActionTimestamp = last ? last.timestamp * 1000 : 0;
+    const blockedCount24h = agentActivity.filter(
+      (item) => !item.success && item.timestamp * 1000 >= blockedCutoffMs,
+    ).length;
+
+    return {
+      address: addr,
+      status: (profile?.paused ? "paused" : "active") as "active" | "paused",
+      capabilityLabel: profile?.capabilityLabel ?? "Disabled",
+      capability: profile?.capability ?? 0,
+      spending: { amount: spentAmt, limit: capAmt, percent: pct },
+      lastActionType,
+      lastActionProtocol,
+      lastActionTimestamp,
+      blockedCount24h,
+      toJSON: () => ({
+        address: addr,
+        status: profile?.paused ? "paused" : "active",
+        capabilityLabel: profile?.capabilityLabel ?? "Disabled",
+        capability: profile?.capability ?? 0,
+        spending: { amount: bs(spentAmt), limit: bs(capAmt), percent: pct },
+        lastActionType,
+        lastActionProtocol,
+        lastActionTimestamp,
+        blockedCount24h,
+      }),
+    };
+  });
+}
+
+/**
+ * Compose {@link SpendingData} from a pre-fetched {@link OverviewContext}.
+ *
+ * Requires `ctx.state`. Uses `ctx.breakdown` when memoized.
+ */
+export function buildSpending(ctx: OverviewContext): SpendingData {
+  const state = ctx.state;
+  const breakdown = ctx.breakdown ?? getSpendingBreakdown(asVaultState(state));
+  const nowUnix = BigInt(Math.floor(Date.now() / 1000));
+  const epochs = getSpendingHistory(state.tracker, nowUnix);
+
+  const chart: ChartPoint[] = epochs.map((e) => ({
+    time: new Date(e.timestamp * 1000).toISOString(),
+    amount: Number(e.usdAmount) / 1_000_000,
+  }));
+
+  const { spent24h: spent, cap, remaining } = state.globalBudget;
+  const percent = cap > 0n ? Number((spent * 10000n) / cap) / 100 : 0;
+  const velocityPerMs = spent > 0n ? Number(spent) / (24 * 3600 * 1000) : 0;
+  const rundown =
+    velocityPerMs > 0 && remaining > 0n
+      ? Math.floor(Number(remaining) / velocityPerMs)
+      : 0;
+
+  const protoBreak = breakdown.byProtocol.map(
+    (p: SpendingBreakdown["byProtocol"][number]) => ({
+      name: resolveProtocolName(p.protocol),
+      programId: p.protocol as string,
+      amount: p.spent24h,
+      percent: p.utilization,
+    }),
+  );
+
+  return {
+    global: { today: spent, cap, remaining, percent, rundownMs: rundown },
+    chart,
+    protocolBreakdown: protoBreak,
+    toJSON: () => ({
+      global: {
+        today: bs(spent),
+        cap: bs(cap),
+        remaining: bs(remaining),
+        percent,
+        rundownMs: rundown,
+      },
+      chart,
+      protocolBreakdown: protoBreak.map((p) => ({
+        ...p,
+        amount: bs(p.amount),
+      })),
+    }),
+  };
+}
+
+/**
+ * Compose {@link HealthData} from a pre-fetched {@link OverviewContext}.
+ *
+ * Requires `ctx.state` + `ctx.vault` (for alert evaluation). Uses `ctx.posture`
+ * and `ctx.alerts` when memoized.
+ */
+export function buildHealth(ctx: OverviewContext): HealthData {
+  const posture = ctx.posture ?? getSecurityPosture(asVaultState(ctx.state));
+  const alerts = ctx.alerts ?? evaluateAlertConditions(ctx.state, ctx.vault);
+
+  const level =
+    posture.criticalFailures.length > 0
+      ? ("critical" as const)
+      : posture.failCount > 0
+        ? ("elevated" as const)
+        : ("healthy" as const);
+
+  const critAlerts = alerts.filter((a: Alert) => a.severity === "critical");
+  const lastBlock =
+    critAlerts.length > 0
+      ? {
+          agent: (critAlerts[0].agentAddress as string) || "",
+          reason: critAlerts[0].title as string,
+          amount: 0n,
+          timestamp: Date.now(),
+        }
+      : undefined;
+
+  const checks = posture.checks.map((c: SecurityCheck) => ({
+    name: c.id,
+    passed: c.passed,
+  }));
+
+  return {
+    level,
+    blockedCount24h: critAlerts.length,
+    checks,
+    lastBlock,
+    toJSON: () => ({
+      level,
+      blockedCount24h: critAlerts.length,
+      checks,
+      lastBlock: lastBlock
+        ? { ...lastBlock, amount: bs(lastBlock.amount) }
+        : undefined,
+    }),
+  };
+}
+
+/**
+ * Compose {@link PolicyData} from a pre-fetched {@link OverviewContext}.
+ *
+ * Requires `ctx.state`. Uses `ctx.pendingPolicy` (which may be `null` to mean
+ * "confirmed no pending update"); when `undefined` treats as no pending update.
+ */
+export function buildPolicy(ctx: OverviewContext): PolicyData {
+  const state = ctx.state;
+  const pendingPolicy = ctx.pendingPolicy ?? null;
+
+  const p = requireCtxField(state.policy, "policy") as PolicyConfig;
+  const protocols = (p.protocols || []) as Address[];
+
+  const approvedApps = protocols.map((addr: Address) => ({
+    name: resolveProtocolName(addr),
+    programId: addr as string,
+  }));
+
+  const modeMap: Record<number, PolicyData["protocolMode"]> = {
+    0: "unrestricted",
+    1: "whitelist",
+    2: "blacklist",
+  };
+
+  const dailyCap = p.dailySpendingCapUsd as bigint;
+  const maxPerTrade = p.maxTransactionSizeUsd ?? 0n;
+  const protocolCaps = (p.protocolCaps || []) as bigint[];
+  const sessionExpiry = p.sessionExpirySlots as bigint;
+  const policyVer = (p.policyVersion ?? 0n) as bigint;
+  const timelockSec = Number(p.timelockDuration);
+
+  let pendingUpdate: PolicyData["pendingUpdate"];
+  if (pendingPolicy) {
+    const pp = pendingPolicy as PendingPolicyUpdate;
+    const executesAtSec = Number(pp.executesAt ?? 0);
+    const appliesAt = Number.isFinite(executesAtSec) ? executesAtSec * 1000 : 0;
+    const nowSec = Math.floor(Date.now() / 1000);
+
+    // Decode each Option<T> field from PendingPolicyUpdate. Only Some fields
+    // land in `changes`. 14 fields total — every timelockable PolicyConfig field.
+    // Source: programs/sigil/src/state/pending_policy.rs
+    const changes: Partial<PolicyChanges> = {};
+    if (isSome(pp.dailySpendingCapUsd))
+      changes.dailyCap = pp.dailySpendingCapUsd.value;
+    if (isSome(pp.maxTransactionAmountUsd))
+      changes.maxPerTrade = pp.maxTransactionAmountUsd.value;
+    if (isSome(pp.protocols)) changes.approvedApps = pp.protocols.value;
+    if (isSome(pp.protocolMode))
+      changes.protocolMode = modeMap[pp.protocolMode.value] || "unrestricted";
+    if (isSome(pp.hasProtocolCaps))
+      changes.hasProtocolCaps = pp.hasProtocolCaps.value;
+    if (isSome(pp.protocolCaps)) changes.protocolCaps = pp.protocolCaps.value;
+    if (isSome(pp.canOpenPositions))
+      changes.canOpenPositions = pp.canOpenPositions.value;
+    if (isSome(pp.maxConcurrentPositions))
+      changes.maxConcurrentPositions = pp.maxConcurrentPositions.value;
+    if (isSome(pp.maxSlippageBps))
+      changes.maxSlippageBps = pp.maxSlippageBps.value;
+    if (isSome(pp.maxLeverageBps))
+      changes.leverageLimit = pp.maxLeverageBps.value;
+    if (isSome(pp.allowedDestinations))
+      changes.allowedDestinations = pp.allowedDestinations.value;
+    if (isSome(pp.developerFeeRate))
+      changes.developerFeeRate = pp.developerFeeRate.value;
+    if (isSome(pp.sessionExpirySlots))
+      changes.sessionExpirySlots = pp.sessionExpirySlots.value;
+    if (isSome(pp.timelockDuration))
+      changes.timelock = Number(pp.timelockDuration.value);
+
+    pendingUpdate = {
+      changes,
+      appliesAt,
+      canApply: executesAtSec > 0 && executesAtSec <= nowSec,
+      canCancel: true,
+    };
+  }
+
+  return {
+    dailyCap,
+    maxPerTrade,
+    approvedApps,
+    protocolMode: modeMap[p.protocolMode] || "unrestricted",
+    hasProtocolCaps: p.hasProtocolCaps as boolean,
+    protocolCaps,
+    canOpenPositions: p.canOpenPositions as boolean,
+    maxConcurrentPositions: p.maxConcurrentPositions as number,
+    maxSlippageBps: p.maxSlippageBps as number,
+    leverageLimitBps: p.maxLeverageBps as number,
+    allowedDestinations: (p.allowedDestinations || []) as string[],
+    developerFeeRate: p.developerFeeRate as number,
+    sessionExpirySlots: sessionExpiry,
+    timelockSeconds: timelockSec,
+    policyVersion: policyVer,
+    pendingUpdate,
+    toJSON: () => ({
+      dailyCap: bs(dailyCap),
+      maxPerTrade: bs(maxPerTrade),
+      approvedApps,
+      protocolMode: modeMap[p.protocolMode] || "unrestricted",
+      hasProtocolCaps: p.hasProtocolCaps,
+      protocolCaps: protocolCaps.map(bs),
+      canOpenPositions: p.canOpenPositions,
+      maxConcurrentPositions: p.maxConcurrentPositions,
+      maxSlippageBps: p.maxSlippageBps,
+      leverageLimitBps: p.maxLeverageBps,
+      allowedDestinations: (p.allowedDestinations || []) as string[],
+      developerFeeRate: p.developerFeeRate,
+      sessionExpirySlots: bs(sessionExpiry),
+      timelockSeconds: timelockSec,
+      policyVersion: bs(policyVer),
+      pendingUpdate: pendingUpdate
+        ? {
+            changes: serializeBigints(pendingUpdate.changes) as Record<
+              string,
+              unknown
+            >,
+            appliesAt: pendingUpdate.appliesAt,
+            canApply: pendingUpdate.canApply,
+            canCancel: pendingUpdate.canCancel,
+          }
+        : undefined,
+    }),
+  };
+}
+
+/**
+ * Map raw {@link VaultActivityItem}[] to {@link ActivityRow}[] with stable
+ * derived IDs and toJSON serializers. Pure — no filtering applied.
+ *
+ * Both `getActivity` (which then filters) and `getOverview` (which returns
+ * unfiltered) consume the output.
+ */
+export function buildActivityRows(
+  items: readonly VaultActivityItem[],
+): ActivityRow[] {
+  return items.map((item) => {
+    const cat = (item.category as string) ?? "unknown";
+    const evt = (item.eventType as string) ?? "";
+    const act = (item.actionType as string) ?? undefined;
+    const posEffect = (item.positionEffect as string | null) ?? undefined;
+    const type = mapCategory(cat, evt, act, posEffect);
+    const amt = item.amount ?? 0n;
+    const sig = item.txSignature || `evt-${item.timestamp}-${item.eventType}`;
+
+    return {
+      id: sig,
+      timestamp: item.timestamp * 1000,
+      type,
+      protocol: item.protocolName || "",
+      protocolId: (item.protocol as string) || "",
+      agent: (item.agent as string) || "",
+      amount: amt,
+      status: item.success ? ("approved" as const) : ("blocked" as const),
+      reason: item.success ? undefined : item.description,
+      txSignature: item.txSignature,
+      toJSON: () => ({
+        id: sig,
+        timestamp: item.timestamp * 1000,
+        type,
+        protocol: item.protocolName || "",
+        protocolId: (item.protocol as string) || "",
+        agent: (item.agent as string) || "",
+        amount: bs(amt),
+        status: item.success ? "approved" : "blocked",
+        reason: item.success ? undefined : item.description,
+        txSignature: item.txSignature,
+      }),
+    };
+  });
+}
+
 // ─── getVaultState ───────────────────────────────────────────────────────────
 
 export async function getVaultState(
@@ -86,74 +557,7 @@ export async function getVaultState(
       resolveVaultStateForOwner(rpc, vault, undefined, toNet(network)),
       getVaultPnL(rpc, vault, toNet(network)),
     ]);
-
-    const posture = getSecurityPosture(asVaultState(state));
-    const v = state.vault as AgentVault;
-    const bal = state.stablecoinBalances;
-    const total = bal.usdc + bal.usdt;
-
-    const tokens = [
-      ...(bal.usdc > 0n
-        ? [{ mint: "USDC", amount: bal.usdc, decimals: 6 }]
-        : []),
-      ...(bal.usdt > 0n
-        ? [{ mint: "USDT", amount: bal.usdt, decimals: 6 }]
-        : []),
-    ];
-
-    const checks = posture.checks.map((c: SecurityCheck) => ({
-      name: c.id,
-      passed: c.passed,
-    }));
-    const level =
-      posture.criticalFailures.length > 0
-        ? ("critical" as const)
-        : posture.failCount > 0
-          ? ("elevated" as const)
-          : ("healthy" as const);
-
-    return {
-      vault: {
-        address: vault,
-        status:
-          v.status === 0 ? "active" : v.status === 1 ? "frozen" : "closed",
-        owner: v.owner as string,
-        agentCount: v.agents?.length ?? 0,
-        openPositions: v.openPositions,
-        totalVolume: v.totalVolume,
-        totalFees: v.totalFeesCollected,
-      },
-      balance: { total, tokens },
-      pnl: {
-        percent: Number.isFinite(pnl.pnlPercent) ? pnl.pnlPercent : 0,
-        absolute: pnl.pnl,
-      },
-      health: { level, alertCount: posture.failCount, checks },
-      toJSON: () => ({
-        vault: {
-          address: vault,
-          status: (v.status === 0
-            ? "active"
-            : v.status === 1
-              ? "frozen"
-              : "closed") as VaultState["vault"]["status"],
-          owner: v.owner as string,
-          agentCount: v.agents?.length ?? 0,
-          openPositions: v.openPositions,
-          totalVolume: bs(v.totalVolume),
-          totalFees: bs(v.totalFeesCollected),
-        },
-        balance: {
-          total: bs(total),
-          tokens: tokens.map((t) => ({ ...t, amount: bs(t.amount) })),
-        },
-        pnl: {
-          percent: Number.isFinite(pnl.pnlPercent) ? pnl.pnlPercent : 0,
-          absolute: bs(pnl.pnl),
-        },
-        health: { level, alertCount: posture.failCount, checks },
-      }),
-    };
+    return buildVaultState({ vault, state, pnl });
   } catch (err) {
     throw toDxError(err, "OwnerClient.getVaultState");
   }
@@ -167,20 +571,20 @@ export async function getAgents(
   network: "devnet" | "mainnet",
 ): Promise<AgentData[]> {
   try {
-    // Fetch vault state and activity feed in parallel. Single getVaultActivity
-    // call is shared across all agents (N+1 prevention). Activity is enrichment,
-    // so a fetch failure degrades gracefully to empty last-action fields.
-    // Window: 100 most recent signatures — large enough to surface last action
-    // for low-volume agents without inflating RPC cost.
+    // Single getVaultActivity call is shared across all agents (N+1 prevention).
+    // Activity is enrichment, so a fetch failure degrades gracefully to empty
+    // last-action fields. Window: 100 most recent signatures — large enough to
+    // surface last action for low-volume agents without inflating RPC cost.
+    //
+    // Fix for docs/SECURITY-FINDINGS-2026-04-07.md Finding 5: the previous
+    // `.catch(() => [])` swallowed activity-fetch failures silently. If Helius
+    // started rate-limiting getSignaturesForAddress, every dashboard call would
+    // show "last action: never" for every agent forever and nobody would
+    // notice. Graceful degradation is still the right behavior (activity is
+    // enrichment, not core), but it must be observable — console.warn is the
+    // minimum bar.
     const [state, activity] = await Promise.all([
       resolveVaultStateForOwner(rpc, vault, undefined, toNet(network)),
-      // Fix for docs/SECURITY-FINDINGS-2026-04-07.md Finding 5: the
-      // previous `.catch(() => [])` swallowed activity-fetch failures
-      // silently. If Helius started rate-limiting getSignaturesForAddress,
-      // every dashboard call would show "last action: never" for every
-      // agent forever and nobody would notice. Graceful degradation is
-      // still the right behavior (activity is enrichment, not core), but
-      // it must be observable — console.warn is the minimum bar.
       getVaultActivity(rpc, vault, 100, toNet(network)).catch((err) => {
         // eslint-disable-next-line no-console
         console.warn(
@@ -190,62 +594,7 @@ export async function getAgents(
         return [];
       }),
     ]);
-    const vaultAgents = (state.vault as AgentVault).agents;
-    if (!vaultAgents || vaultAgents.length === 0) return [];
-
-    const blockedCutoffMs = Date.now() - 24 * 3600 * 1000;
-
-    return vaultAgents.map((entry) => {
-      const addr = entry.pubkey;
-      const profile = getAgentProfile(asVaultState(state), addr);
-      const budget = state.allAgentBudgets.get(addr);
-
-      const spentAmt = budget?.spent24h ?? 0n;
-      const capAmt = budget?.cap ?? 0n;
-      const pct = capAmt > 0n ? Number((spentAmt * 10000n) / capAmt) / 100 : 0;
-
-      // Derive last-action and blocked-count fields from the shared activity
-      // feed. Items are newest-first (getSignaturesForAddress ordering).
-      const agentActivity = activity.filter(
-        (item) => item.agent !== null && item.agent === addr,
-      );
-      const last = agentActivity[0];
-      const lastActionType: string = last
-        ? mapCategory(
-            (last.category as string) ?? "unknown",
-            (last.eventType as string) ?? "",
-            last.actionType ?? undefined,
-          )
-        : "";
-      const lastActionProtocol = last?.protocolName ?? "";
-      const lastActionTimestamp = last ? last.timestamp * 1000 : 0;
-      const blockedCount24h = agentActivity.filter(
-        (item) => !item.success && item.timestamp * 1000 >= blockedCutoffMs,
-      ).length;
-
-      return {
-        address: addr,
-        status: (profile?.paused ? "paused" : "active") as "active" | "paused",
-        capabilityLabel: profile?.capabilityLabel ?? "Disabled",
-        capability: profile?.capability ?? 0,
-        spending: { amount: spentAmt, limit: capAmt, percent: pct },
-        lastActionType,
-        lastActionProtocol,
-        lastActionTimestamp,
-        blockedCount24h,
-        toJSON: () => ({
-          address: addr,
-          status: profile?.paused ? "paused" : "active",
-          capabilityLabel: profile?.capabilityLabel ?? "Disabled",
-          capability: profile?.capability ?? 0,
-          spending: { amount: bs(spentAmt), limit: bs(capAmt), percent: pct },
-          lastActionType,
-          lastActionProtocol,
-          lastActionTimestamp,
-          blockedCount24h,
-        }),
-      };
-    });
+    return buildAgents({ vault, state, activity });
   } catch (err) {
     throw toDxError(err, "OwnerClient.getAgents");
   }
@@ -265,51 +614,7 @@ export async function getSpending(
       undefined,
       toNet(network),
     );
-    const breakdown = getSpendingBreakdown(asVaultState(state));
-    const nowUnix = BigInt(Math.floor(Date.now() / 1000));
-    const epochs = getSpendingHistory(state.tracker, nowUnix);
-
-    const chart: ChartPoint[] = epochs.map((e) => ({
-      time: new Date(e.timestamp * 1000).toISOString(),
-      amount: Number(e.usdAmount) / 1_000_000,
-    }));
-
-    const { spent24h: spent, cap, remaining } = state.globalBudget;
-    const percent = cap > 0n ? Number((spent * 10000n) / cap) / 100 : 0;
-    const velocityPerMs = spent > 0n ? Number(spent) / (24 * 3600 * 1000) : 0;
-    const rundown =
-      velocityPerMs > 0 && remaining > 0n
-        ? Math.floor(Number(remaining) / velocityPerMs)
-        : 0;
-
-    const protoBreak = breakdown.byProtocol.map(
-      (p: SpendingBreakdown["byProtocol"][number]) => ({
-        name: resolveProtocolName(p.protocol),
-        programId: p.protocol as string,
-        amount: p.spent24h,
-        percent: p.utilization,
-      }),
-    );
-
-    return {
-      global: { today: spent, cap, remaining, percent, rundownMs: rundown },
-      chart,
-      protocolBreakdown: protoBreak,
-      toJSON: () => ({
-        global: {
-          today: bs(spent),
-          cap: bs(cap),
-          remaining: bs(remaining),
-          percent,
-          rundownMs: rundown,
-        },
-        chart,
-        protocolBreakdown: protoBreak.map((p) => ({
-          ...p,
-          amount: bs(p.amount),
-        })),
-      }),
-    };
+    return buildSpending({ vault, state });
   } catch (err) {
     throw toDxError(err, "OwnerClient.getSpending");
   }
@@ -326,41 +631,7 @@ export async function getActivity(
   try {
     const limit = filters?.limit ?? 50;
     const items = await getVaultActivity(rpc, vault, limit, toNet(network));
-
-    let rows: ActivityRow[] = items.map((item, i) => {
-      const cat = (item.category as string) ?? "unknown";
-      const evt = (item.eventType as string) ?? "";
-      const act = (item.actionType as string) ?? undefined;
-      const posEffect = (item.positionEffect as string | null) ?? undefined;
-      const type = mapCategory(cat, evt, act, posEffect);
-      const amt = item.amount ?? 0n;
-      const sig = item.txSignature || `evt-${item.timestamp}-${item.eventType}`;
-
-      return {
-        id: sig,
-        timestamp: item.timestamp * 1000,
-        type,
-        protocol: item.protocolName || "",
-        protocolId: (item.protocol as string) || "",
-        agent: (item.agent as string) || "",
-        amount: amt,
-        status: item.success ? ("approved" as const) : ("blocked" as const),
-        reason: item.success ? undefined : item.description,
-        txSignature: item.txSignature,
-        toJSON: () => ({
-          id: sig,
-          timestamp: item.timestamp * 1000,
-          type,
-          protocol: item.protocolName || "",
-          protocolId: (item.protocol as string) || "",
-          agent: (item.agent as string) || "",
-          amount: bs(amt),
-          status: item.success ? "approved" : "blocked",
-          reason: item.success ? undefined : item.description,
-          txSignature: item.txSignature,
-        }),
-      };
-    });
+    let rows = buildActivityRows(items);
 
     if (filters?.agent) rows = rows.filter((r) => r.agent === filters.agent);
     if (filters?.protocol)
@@ -457,46 +728,7 @@ export async function getHealth(
       undefined,
       toNet(network),
     );
-    const posture = getSecurityPosture(asVaultState(state));
-    const alerts = evaluateAlertConditions(state, vault);
-
-    const level =
-      posture.criticalFailures.length > 0
-        ? ("critical" as const)
-        : posture.failCount > 0
-          ? ("elevated" as const)
-          : ("healthy" as const);
-
-    const critAlerts = alerts.filter((a: Alert) => a.severity === "critical");
-    const lastBlock =
-      critAlerts.length > 0
-        ? {
-            agent: (critAlerts[0].agentAddress as string) || "",
-            reason: critAlerts[0].title as string,
-            amount: 0n,
-            timestamp: Date.now(),
-          }
-        : undefined;
-
-    const checks = posture.checks.map((c: SecurityCheck) => ({
-      name: c.id,
-      passed: c.passed,
-    }));
-
-    return {
-      level,
-      blockedCount24h: critAlerts.length,
-      checks,
-      lastBlock,
-      toJSON: () => ({
-        level,
-        blockedCount24h: critAlerts.length,
-        checks,
-        lastBlock: lastBlock
-          ? { ...lastBlock, amount: bs(lastBlock.amount) }
-          : undefined,
-      }),
-    };
+    return buildHealth({ vault, state });
   } catch (err) {
     throw toDxError(err, "OwnerClient.getHealth");
   }
@@ -515,133 +747,126 @@ export async function getPolicy(
       getPendingPolicyForVault(rpc, vault).catch((err: unknown) => {
         // Account-not-found is expected (no pending update) — return null.
         // Re-throw RPC errors so they're not silently swallowed.
-        const message = err instanceof Error ? err.message : String(err);
-        if (
-          message.includes("could not find") ||
-          message.includes("Account does not exist")
-        ) {
-          return null;
-        }
+        if (isAccountNotFoundError(err)) return null;
+        throw err;
+      }),
+    ]);
+    return buildPolicy({ vault, state, pendingPolicy });
+  } catch (err) {
+    throw toDxError(err, "OwnerClient.getPolicy");
+  }
+}
+
+// ─── getOverview (S14) ───────────────────────────────────────────────────────
+
+/**
+ * Single-call overview bundle — resolves vault state once, composes all five
+ * view types (vault, agents, spending, health, policy) plus a raw activity
+ * list, with PnL derived from the resolved state (no duplicate resolve).
+ *
+ * **Actual RPC shape.** Calling the five individual reads duplicates the
+ * vault-state resolution up to five times. `getOverview` resolves state
+ * exactly once and computes PnL from it via {@link getVaultPnLFromState}.
+ * The activity fetch is independent: `getVaultActivity(limit)` issues one
+ * `getSignaturesForAddress` followed by up to `limit` sequential
+ * `getTransaction` calls, so the wall-time cost of the activity feed
+ * dominates regardless of this method. Net savings vs. five separate reads:
+ * state resolution count drops from ~5 → 1.
+ *
+ * Activity is **unfiltered**. For filtered activity, call {@link getActivity}
+ * with `ActivityFilters`.
+ *
+ * Graceful degradation: activity fetch failure degrades to empty activity
+ * (same observable pattern as `getAgents`, documented in
+ * `docs/SECURITY-FINDINGS-2026-04-07.md` Finding 5); pending-policy
+ * account-not-found is treated as "no pending update" (same as `getPolicy`).
+ * **PnL and state-resolution errors are NOT degraded** and propagate via
+ * `toDxError`. A pending-policy error that is NOT account-not-found (e.g.
+ * network failure) also propagates — it is NOT treated as "no pending
+ * update", even on the `includeActivity: false` lightweight path.
+ */
+export async function getOverview(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  network: "devnet" | "mainnet",
+  options?: GetOverviewOptions,
+): Promise<OverviewData> {
+  try {
+    const includeActivity = options?.includeActivity ?? true;
+    const activityLimit =
+      options?.activityLimit ?? DEFAULT_OVERVIEW_ACTIVITY_LIMIT;
+    const net = toNet(network);
+
+    // Fan out every independent fetch in one Promise.all. State resolution,
+    // activity, and pending-policy have no cross-dependency, so wall time
+    // collapses to the slowest of the three. PnL is derived from state
+    // synchronously after — one state resolve, zero duplication.
+    const [state, activity, pendingPolicy] = await Promise.all([
+      resolveVaultStateForOwner(rpc, vault, undefined, net),
+      includeActivity
+        ? getVaultActivity(rpc, vault, activityLimit, net).catch((err) => {
+            // Same graceful-degradation pattern as getAgents
+            // (docs/SECURITY-FINDINGS-2026-04-07.md Finding 5): activity is
+            // enrichment, not core, but the failure must be observable.
+            // eslint-disable-next-line no-console
+            console.warn(
+              "[OwnerClient.getOverview] activity fetch failed — falling back to empty:",
+              err instanceof Error ? err.message : String(err),
+            );
+            return [] as VaultActivityItem[];
+          })
+        : Promise.resolve<VaultActivityItem[] | undefined>(undefined),
+      getPendingPolicyForVault(rpc, vault).catch((err: unknown) => {
+        if (isAccountNotFoundError(err)) return null;
         throw err;
       }),
     ]);
 
-    const p = state.policy as PolicyConfig;
-    const protocols = (p.protocols || []) as Address[];
+    // PnL is pure from resolved state — no extra RPC.
+    const pnl = getVaultPnLFromState(state);
 
-    const approvedApps = protocols.map((addr: Address) => ({
-      name: resolveProtocolName(addr),
-      programId: addr as string,
-    }));
+    // Compute the three state-derived values exactly once and memoize on ctx.
+    // Every build* helper reads these via the `ctx.field ?? derive()` fallback
+    // so the memoized value short-circuits re-derivation.
+    const posture = getSecurityPosture(asVaultState(state));
+    const breakdown = getSpendingBreakdown(asVaultState(state));
+    const alerts = evaluateAlertConditions(state, vault);
 
-    const modeMap: Record<number, PolicyData["protocolMode"]> = {
-      0: "unrestricted",
-      1: "whitelist",
-      2: "blacklist",
+    const ctx: OverviewContext = {
+      vault,
+      state,
+      pnl,
+      activity,
+      pendingPolicy,
+      posture,
+      breakdown,
+      alerts,
     };
 
-    const dailyCap = p.dailySpendingCapUsd as bigint;
-    const maxPerTrade = p.maxTransactionSizeUsd ?? 0n;
-    const protocolCaps = (p.protocolCaps || []) as bigint[];
-    const sessionExpiry = p.sessionExpirySlots as bigint;
-    const policyVer = (p.policyVersion ?? 0n) as bigint;
-    const timelockSec = Number(p.timelockDuration);
-
-    let pendingUpdate: PolicyData["pendingUpdate"];
-    if (pendingPolicy) {
-      const pp = pendingPolicy as PendingPolicyUpdate;
-      const executesAtSec = Number(pp.executesAt ?? 0);
-      const appliesAt = Number.isFinite(executesAtSec)
-        ? executesAtSec * 1000
-        : 0;
-      const nowSec = Math.floor(Date.now() / 1000);
-
-      // Decode each Option<T> field from PendingPolicyUpdate. Only Some fields
-      // land in `changes`. 14 fields total — every timelockable PolicyConfig field.
-      // Source: programs/sigil/src/state/pending_policy.rs
-      const changes: Partial<PolicyChanges> = {};
-      if (isSome(pp.dailySpendingCapUsd))
-        changes.dailyCap = pp.dailySpendingCapUsd.value;
-      if (isSome(pp.maxTransactionAmountUsd))
-        changes.maxPerTrade = pp.maxTransactionAmountUsd.value;
-      if (isSome(pp.protocols)) changes.approvedApps = pp.protocols.value;
-      if (isSome(pp.protocolMode))
-        changes.protocolMode = modeMap[pp.protocolMode.value] || "unrestricted";
-      if (isSome(pp.hasProtocolCaps))
-        changes.hasProtocolCaps = pp.hasProtocolCaps.value;
-      if (isSome(pp.protocolCaps)) changes.protocolCaps = pp.protocolCaps.value;
-      if (isSome(pp.canOpenPositions))
-        changes.canOpenPositions = pp.canOpenPositions.value;
-      if (isSome(pp.maxConcurrentPositions))
-        changes.maxConcurrentPositions = pp.maxConcurrentPositions.value;
-      if (isSome(pp.maxSlippageBps))
-        changes.maxSlippageBps = pp.maxSlippageBps.value;
-      if (isSome(pp.maxLeverageBps))
-        changes.leverageLimit = pp.maxLeverageBps.value;
-      if (isSome(pp.allowedDestinations))
-        changes.allowedDestinations = pp.allowedDestinations.value;
-      if (isSome(pp.developerFeeRate))
-        changes.developerFeeRate = pp.developerFeeRate.value;
-      if (isSome(pp.sessionExpirySlots))
-        changes.sessionExpirySlots = pp.sessionExpirySlots.value;
-      if (isSome(pp.timelockDuration))
-        changes.timelock = Number(pp.timelockDuration.value);
-
-      pendingUpdate = {
-        changes,
-        appliesAt,
-        canApply: executesAtSec > 0 && executesAtSec <= nowSec,
-        canCancel: true,
-      };
-    }
+    const vaultView = buildVaultState(ctx);
+    const agentsView = buildAgents(ctx);
+    const spendingView = buildSpending(ctx);
+    const healthView = buildHealth(ctx);
+    const policyView = buildPolicy(ctx);
+    const activityRows = buildActivityRows(activity ?? []);
 
     return {
-      dailyCap,
-      maxPerTrade,
-      approvedApps,
-      protocolMode: modeMap[p.protocolMode] || "unrestricted",
-      hasProtocolCaps: p.hasProtocolCaps as boolean,
-      protocolCaps,
-      canOpenPositions: p.canOpenPositions as boolean,
-      maxConcurrentPositions: p.maxConcurrentPositions as number,
-      maxSlippageBps: p.maxSlippageBps as number,
-      leverageLimitBps: p.maxLeverageBps as number,
-      allowedDestinations: (p.allowedDestinations || []) as string[],
-      developerFeeRate: p.developerFeeRate as number,
-      sessionExpirySlots: sessionExpiry,
-      timelockSeconds: timelockSec,
-      policyVersion: policyVer,
-      pendingUpdate,
+      vault: vaultView,
+      agents: agentsView,
+      spending: spendingView,
+      health: healthView,
+      policy: policyView,
+      activity: activityRows,
       toJSON: () => ({
-        dailyCap: bs(dailyCap),
-        maxPerTrade: bs(maxPerTrade),
-        approvedApps,
-        protocolMode: modeMap[p.protocolMode] || "unrestricted",
-        hasProtocolCaps: p.hasProtocolCaps,
-        protocolCaps: protocolCaps.map(bs),
-        canOpenPositions: p.canOpenPositions,
-        maxConcurrentPositions: p.maxConcurrentPositions,
-        maxSlippageBps: p.maxSlippageBps,
-        leverageLimitBps: p.maxLeverageBps,
-        allowedDestinations: (p.allowedDestinations || []) as string[],
-        developerFeeRate: p.developerFeeRate,
-        sessionExpirySlots: bs(sessionExpiry),
-        timelockSeconds: timelockSec,
-        policyVersion: bs(policyVer),
-        pendingUpdate: pendingUpdate
-          ? {
-              changes: serializeBigints(pendingUpdate.changes) as Record<
-                string,
-                unknown
-              >,
-              appliesAt: pendingUpdate.appliesAt,
-              canApply: pendingUpdate.canApply,
-              canCancel: pendingUpdate.canCancel,
-            }
-          : undefined,
+        vault: vaultView.toJSON(),
+        agents: agentsView.map((a) => a.toJSON()),
+        spending: spendingView.toJSON(),
+        health: healthView.toJSON(),
+        policy: policyView.toJSON(),
+        activity: activityRows.map((r) => r.toJSON()),
       }),
     };
   } catch (err) {
-    throw toDxError(err, "OwnerClient.getPolicy");
+    throw toDxError(err, "OwnerClient.getOverview");
   }
 }
