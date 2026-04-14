@@ -277,7 +277,7 @@ describe("analytics-counters", () => {
   });
 
   // Test 4 (expired session) requires time travel between validate and finalize,
-  // but validate_and_authorize enforces MissingFinalizeInstruction (error 6035)
+  // but validate_and_authorize enforces MissingFinalizeInstruction (error 6034)
   // when finalize is not in the same TX. Expired session testing is covered
   // by Surfpool integration tests (tests/surfpool-integration.ts) which support
   // time travel between separate transactions.
