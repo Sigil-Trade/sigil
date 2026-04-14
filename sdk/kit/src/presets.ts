@@ -13,8 +13,6 @@ import type { Address } from "@solana/kit";
 import type { CreateVaultOptions } from "./create-vault.js";
 import {
   FULL_CAPABILITY,
-  SWAP_ONLY,
-  PERPS_FULL,
   PROTOCOL_MODE_ALL,
   PROTOCOL_MODE_ALLOWLIST,
   JUPITER_PROGRAM_ADDRESS,
@@ -29,10 +27,14 @@ const JUPITER_LEND_PROGRAM =
 const KAMINO_LEND_PROGRAM =
   "KLend2g3cP87ber8CzRaqeECGwNvLFM9acPVcRkRHvM" as Address;
 
-// ─── Permission Helpers ──────────────────────────────────────────────────────
-
-/** Swap (0) + Deposit (5) + Withdraw (6) — lending use case */
-const LENDING_PERMISSIONS = SWAP_ONLY | (1n << 5n) | (1n << 6n);
+// Preset capability is the on-chain 2-bit value (0 = Disabled, 1 = Observer,
+// 2 = Operator). All presets that execute trades need `FULL_CAPABILITY` (2n)
+// — the previous implementation used legacy 21-bit bitmasks
+// (`SWAP_ONLY = 1n`, `PERPS_FULL | SWAP_ONLY = 131071n`, etc.) which either
+// mis-registered agents as Observer (cannot execute anything) or exceeded the
+// on-chain `capability <= 2` invariant and were rejected with
+// `InvalidArgument`. Every preset configures a policy that permits spending,
+// so every preset needs Operator.
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -42,9 +44,17 @@ export interface VaultPreset {
   label: string;
   /** One-sentence description for the wizard card. */
   description: string;
-  /** Agent capability bitmask. */
+  /**
+   * Agent capability — on-chain enum (0 = Disabled, 1 = Observer,
+   * 2 = Operator). NOT a bitmask; do not OR with other values. Exceeding
+   * `2n` is rejected on-chain with `InvalidArgument`.
+   */
   capability: bigint;
-  /** @deprecated Use capability instead. Alias for backward compatibility. */
+  /**
+   * @deprecated Use `capability` instead. Alias for backward compatibility
+   * with pre-v6 vault creation flows; the on-chain program no longer treats
+   * this as a bitmask.
+   */
   permissions: bigint;
   /** Rolling 24h spending cap in USD base units (6 decimals). */
   dailySpendingCapUsd: bigint;
@@ -68,9 +78,9 @@ export const VAULT_PRESETS = {
   "jupiter-swap-bot": {
     label: "Jupiter Swap Bot",
     description:
-      "Simple swap bot using Jupiter. Swap capability only, conservative caps.",
-    capability: SWAP_ONLY,
-    permissions: SWAP_ONLY,
+      "Simple swap bot using Jupiter. Operator capability, conservative caps and Jupiter-only allowlist.",
+    capability: FULL_CAPABILITY,
+    permissions: FULL_CAPABILITY,
     dailySpendingCapUsd: 500_000_000n, // $500
     maxTransactionSizeUsd: 100_000_000n, // $100
     maxSlippageBps: 200, // 2%
@@ -82,9 +92,9 @@ export const VAULT_PRESETS = {
   "perps-trader": {
     label: "Perps Trader",
     description:
-      "Leveraged trading on Flash Trade and Jupiter. Full order management with position limits.",
-    capability: PERPS_FULL | SWAP_ONLY,
-    permissions: PERPS_FULL | SWAP_ONLY,
+      "Leveraged trading on Flash Trade and Jupiter. Operator capability with position limits.",
+    capability: FULL_CAPABILITY,
+    permissions: FULL_CAPABILITY,
     dailySpendingCapUsd: 5_000_000_000n, // $5,000
     maxTransactionSizeUsd: 1_000_000_000n, // $1,000
     maxSlippageBps: 500, // 5%
@@ -96,9 +106,9 @@ export const VAULT_PRESETS = {
   "lending-optimizer": {
     label: "Lending Optimizer",
     description:
-      "Deposit and withdraw across lending protocols. Low slippage, moderate caps.",
-    capability: LENDING_PERMISSIONS,
-    permissions: LENDING_PERMISSIONS,
+      "Deposit and withdraw across lending protocols. Operator capability, low slippage, moderate caps.",
+    capability: FULL_CAPABILITY,
+    permissions: FULL_CAPABILITY,
     dailySpendingCapUsd: 2_000_000_000n, // $2,000
     maxTransactionSizeUsd: 500_000_000n, // $500
     maxSlippageBps: 100, // 1%

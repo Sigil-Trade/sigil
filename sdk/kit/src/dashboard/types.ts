@@ -333,6 +333,10 @@ export interface OverviewContext {
  *
  * Activity is returned **unfiltered**. To filter, call
  * {@link OwnerClient.getActivity} with explicit `ActivityFilters`.
+ *
+ * @experimental Introduced by S14 alongside the `build*` composition helpers.
+ * Field shape (and the memoized-context pipeline beneath it) may change before
+ * v1.0. Pin your SDK version if you depend on this surface.
  */
 export interface OverviewData {
   vault: VaultState;
@@ -345,7 +349,13 @@ export interface OverviewData {
   toJSON(): SerializedOverviewData;
 }
 
-/** Options controlling what `getOverview` fetches. */
+/**
+ * Options controlling what `getOverview` fetches.
+ *
+ * @experimental Introduced by S14. Additional options (filtered activity,
+ * partial posture derivation, per-section skip flags) may be added before
+ * v1.0 without a major bump.
+ */
 export interface GetOverviewOptions {
   /**
    * When `false`, skip the `getVaultActivity` RPC and return `activity: []`.

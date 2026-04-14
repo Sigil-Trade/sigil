@@ -8,14 +8,10 @@ import {
   getPreset,
   listPresets,
   presetToCreateVaultFields,
-  type VaultPreset,
   type PresetName,
 } from "../src/presets.js";
 import {
   FULL_CAPABILITY,
-  FULL_PERMISSIONS,
-  SWAP_ONLY,
-  PERPS_FULL,
   PROTOCOL_MODE_ALL,
   PROTOCOL_MODE_ALLOWLIST,
   JUPITER_PROGRAM_ADDRESS,
@@ -90,8 +86,16 @@ describe("VAULT_PRESETS", () => {
 // ─── Specific Preset Values ──────────────────────────────────────────────────
 
 describe("preset values", () => {
-  it("jupiter-swap-bot has SWAP_ONLY capability", () => {
-    expect(VAULT_PRESETS["jupiter-swap-bot"].capability).to.equal(SWAP_ONLY);
+  // Post-v6 the on-chain capability field is a 2-bit value (0 = Disabled,
+  // 1 = Observer, 2 = Operator). Every preset configures a policy that
+  // permits spending, so every preset's capability is FULL_CAPABILITY (2n).
+  // Per-preset variation lives in the policy fields (caps, protocols,
+  // slippage, leverage), not in the capability bitmask.
+
+  it("jupiter-swap-bot has FULL_CAPABILITY (Operator)", () => {
+    expect(VAULT_PRESETS["jupiter-swap-bot"].capability).to.equal(
+      FULL_CAPABILITY,
+    );
   });
 
   it("jupiter-swap-bot includes Jupiter in allowlist", () => {
@@ -100,27 +104,32 @@ describe("preset values", () => {
     );
   });
 
-  it("perps-trader has perps + swap capability", () => {
-    const perms = VAULT_PRESETS["perps-trader"].capability;
-    // Should include both PERPS_FULL and SWAP_ONLY
-    expect(perms & SWAP_ONLY).to.equal(SWAP_ONLY);
-    expect(perms & PERPS_FULL).to.equal(PERPS_FULL);
+  it("perps-trader has FULL_CAPABILITY (Operator)", () => {
+    expect(VAULT_PRESETS["perps-trader"].capability).to.equal(FULL_CAPABILITY);
+  });
+
+  it("perps-trader allowlist includes both Jupiter and Flash Trade", () => {
+    const protocols = VAULT_PRESETS["perps-trader"].protocols;
+    expect(protocols).to.include(JUPITER_PROGRAM_ADDRESS);
+    expect(protocols.length).to.be.greaterThan(1);
   });
 
   it("perps-trader has non-zero leverage", () => {
     expect(VAULT_PRESETS["perps-trader"].maxLeverageBps).to.be.greaterThan(0);
   });
 
-  it("lending-optimizer has deposit + withdraw capability", () => {
-    const perms = VAULT_PRESETS["lending-optimizer"].capability;
-    const DEPOSIT = 1n << 5n;
-    const WITHDRAW = 1n << 6n;
-    expect(perms & DEPOSIT).to.equal(DEPOSIT);
-    expect(perms & WITHDRAW).to.equal(WITHDRAW);
+  it("lending-optimizer has FULL_CAPABILITY (Operator)", () => {
+    expect(VAULT_PRESETS["lending-optimizer"].capability).to.equal(
+      FULL_CAPABILITY,
+    );
+  });
+
+  it("lending-optimizer allowlist includes Jupiter Lend", () => {
+    const protocols = VAULT_PRESETS["lending-optimizer"].protocols as string[];
+    expect(protocols).to.include("JLend2fEim9xUFcaHsyGePEoBzFLvkjMi3MnPcSuCdu");
   });
 
   it("full-access has FULL_CAPABILITY", () => {
-    expect(VAULT_PRESETS["full-access"].capability).to.equal(FULL_CAPABILITY);
     expect(VAULT_PRESETS["full-access"].capability).to.equal(FULL_CAPABILITY);
   });
 
@@ -128,6 +137,20 @@ describe("preset values", () => {
     expect(VAULT_PRESETS["full-access"].protocolMode).to.equal(
       PROTOCOL_MODE_ALL,
     );
+  });
+
+  it("every preset's capability is within the on-chain invariant (<= 2n)", () => {
+    for (const name of listPresets()) {
+      const preset = VAULT_PRESETS[name];
+      expect(
+        preset.capability <= 2n,
+        `${name}.capability = ${preset.capability}`,
+      ).to.be.true;
+      expect(
+        preset.permissions <= 2n,
+        `${name}.permissions = ${preset.permissions}`,
+      ).to.be.true;
+    }
   });
 });
 
@@ -167,7 +190,7 @@ describe("listPresets()", () => {
 describe("presetToCreateVaultFields()", () => {
   it("returns fields compatible with CreateVaultOptions", () => {
     const fields = presetToCreateVaultFields("jupiter-swap-bot");
-    expect(fields.permissions).to.equal(SWAP_ONLY);
+    expect(fields.permissions).to.equal(FULL_CAPABILITY);
     expect(fields.dailySpendingCapUsd).to.equal(500_000_000n);
     expect(fields.maxTransactionSizeUsd).to.equal(100_000_000n);
     expect(fields.maxSlippageBps).to.equal(200);

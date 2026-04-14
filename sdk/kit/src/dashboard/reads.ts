@@ -139,6 +139,13 @@ function requireCtxField<T>(value: T | null | undefined, field: string): T {
  *
  * Requires `ctx.state`. Uses `ctx.pnl` when present; otherwise defaults to
  * zero P&L. Uses `ctx.posture` when memoized; otherwise computes from state.
+ *
+ * @experimental Part of the `build*` composition surface introduced alongside
+ * `getOverview` (S14). Signature and JSON shape may shift before v1.0; if you
+ * depend on it, pin your SDK version and watch the changeset.
+ *
+ * @see OwnerClient.getOverview — the stable single-call alternative that
+ * pre-populates a full {@link OverviewContext} for you.
  */
 export function buildVaultState(ctx: OverviewContext): VaultState {
   const v = requireCtxField(ctx.state.vault, "vault") as AgentVault;
@@ -209,6 +216,12 @@ export function buildVaultState(ctx: OverviewContext): VaultState {
  *
  * Requires `ctx.state`. Uses `ctx.activity` to populate per-agent last-action
  * and blocked-count fields; when absent, those fields default to empty/zero.
+ *
+ * @experimental Part of the `build*` composition surface (S14). Signature and
+ * JSON shape may shift before v1.0.
+ *
+ * @see OwnerClient.getOverview — the stable single-call alternative that
+ * pre-populates a full {@link OverviewContext} for you.
  */
 export function buildAgents(ctx: OverviewContext): AgentData[] {
   const state = ctx.state;
@@ -275,6 +288,12 @@ export function buildAgents(ctx: OverviewContext): AgentData[] {
  * Compose {@link SpendingData} from a pre-fetched {@link OverviewContext}.
  *
  * Requires `ctx.state`. Uses `ctx.breakdown` when memoized.
+ *
+ * @experimental Part of the `build*` composition surface (S14). Signature and
+ * JSON shape may shift before v1.0.
+ *
+ * @see OwnerClient.getOverview — the stable single-call alternative that
+ * pre-populates a full {@link OverviewContext} for you.
  */
 export function buildSpending(ctx: OverviewContext): SpendingData {
   const state = ctx.state;
@@ -328,10 +347,23 @@ export function buildSpending(ctx: OverviewContext): SpendingData {
 /**
  * Compose {@link HealthData} from a pre-fetched {@link OverviewContext}.
  *
- * Requires `ctx.state` + `ctx.vault` (for alert evaluation). Uses `ctx.posture`
- * and `ctx.alerts` when memoized.
+ * Requires `ctx.state.vault` when neither `ctx.posture` nor `ctx.alerts` is
+ * memoized (downstream `getSecurityPosture` / `evaluateAlertConditions`
+ * dereference it). Fully memoized callers can pass a minimal state shape.
+ *
+ * @experimental Part of the `build*` composition surface (S14). Signature and
+ * JSON shape may shift before v1.0.
+ *
+ * @see OwnerClient.getOverview — the stable single-call alternative that
+ * pre-populates a full {@link OverviewContext} for you.
  */
 export function buildHealth(ctx: OverviewContext): HealthData {
+  // When both posture and alerts are memoized, the helpers below never run
+  // and state.vault is untouched — the memoized path is the whole point of
+  // OverviewContext. Guard only when at least one derivation will execute.
+  if (ctx.posture === undefined || ctx.alerts === undefined) {
+    requireCtxField(ctx.state.vault, "vault");
+  }
   const posture = ctx.posture ?? getSecurityPosture(asVaultState(ctx.state));
   const alerts = ctx.alerts ?? evaluateAlertConditions(ctx.state, ctx.vault);
 
@@ -379,6 +411,12 @@ export function buildHealth(ctx: OverviewContext): HealthData {
  *
  * Requires `ctx.state`. Uses `ctx.pendingPolicy` (which may be `null` to mean
  * "confirmed no pending update"); when `undefined` treats as no pending update.
+ *
+ * @experimental Part of the `build*` composition surface (S14). Signature and
+ * JSON shape may shift before v1.0.
+ *
+ * @see OwnerClient.getOverview — the stable single-call alternative that
+ * pre-populates a full {@link OverviewContext} for you.
  */
 export function buildPolicy(ctx: OverviewContext): PolicyData {
   const state = ctx.state;
@@ -505,6 +543,12 @@ export function buildPolicy(ctx: OverviewContext): PolicyData {
  *
  * Both `getActivity` (which then filters) and `getOverview` (which returns
  * unfiltered) consume the output.
+ *
+ * @experimental Part of the `build*` composition surface (S14). Signature and
+ * JSON shape may shift before v1.0.
+ *
+ * @see OwnerClient.getOverview — the stable single-call alternative that
+ * pre-populates a full {@link OverviewContext} for you.
  */
 export function buildActivityRows(
   items: readonly VaultActivityItem[],

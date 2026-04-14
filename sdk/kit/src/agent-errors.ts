@@ -702,14 +702,15 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   },
   6044: {
     name: "InvalidPermissions",
-    message: "Permission bitmask contains invalid bits (only 21 bits valid)",
+    message:
+      "Capability exceeds the on-chain maximum (valid values: 0 = Disabled, 1 = Observer, 2 = Operator)",
     category: "INPUT_VALIDATION",
     retryable: false,
     recovery_actions: [
       {
         action: "fix_permissions",
         description:
-          "Use valid permission constants (FULL_PERMISSIONS, SWAP_ONLY, etc.)",
+          "Pass FULL_CAPABILITY (2n) — the Operator enum value — when the agent needs spending authority.",
       },
     ],
   },

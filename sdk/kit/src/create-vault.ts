@@ -71,6 +71,31 @@ export async function createVault(
     );
   }
 
+  // Validate capability fits the on-chain 2-bit enum.
+  //
+  // The v6 on-chain program enforces `capability <= 2` (0 = Disabled,
+  // 1 = Observer, 2 = Operator). A consumer passing a legacy 21-bit bitmask
+  // (`SWAP_ONLY = 1n`, `PERPS_FULL = ~131070n`, etc.) would silently truncate
+  // in the `Number(...)` coercion below and then fail `InvalidPermissions`
+  // on-chain after paying compute budget. Catching it client-side turns a
+  // one-RTT-late devnet rejection into an immediate, descriptive error and
+  // prevents the common migration mistake of treating `capability` as a
+  // bitmask. Granular per-action restriction now lives in
+  // `InstructionConstraints`, not on the capability field.
+  if (options.permissions !== undefined) {
+    const cap = options.permissions;
+    if (cap < 0n || cap > 2n) {
+      throw new Error(
+        `Invalid capability ${cap}. The on-chain program expects a 2-bit enum ` +
+          `(0 = Disabled, 1 = Observer, 2 = Operator) — not a bitmask. ` +
+          `Use FULL_CAPABILITY (2n) for an agent that needs spending authority. ` +
+          `If you are migrating from pre-v6 bitmask presets (SWAP_ONLY, PERPS_FULL, ` +
+          `TRANSFER_ONLY, ESCROW_ONLY), use FULL_CAPABILITY and move granular ` +
+          `per-action restriction into InstructionConstraints.`,
+      );
+    }
+  }
+
   // Step 1: Resolve vault ID
   const vaultId =
     options.vaultId ??

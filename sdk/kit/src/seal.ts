@@ -41,6 +41,7 @@ import { getSessionPDA, getAgentOverlayPDA } from "./resolve-accounts.js";
 import { composeSigilTransaction, measureTransactionSize } from "./composer.js";
 import {
   BlockhashCache,
+  getBlockhashCache,
   signAndEncode,
   sendAndConfirmTransaction,
   type Blockhash,
@@ -202,9 +203,9 @@ export function replaceAgentAtas(
 // ACTION_TYPE_KEYS removed — ActionType enum eliminated in v6.
 // Spending is now determined by amount > 0n.
 
-// ─── Shared caches (module-level singletons) ────────────────────────────────
-
-const blockhashCache = new BlockhashCache();
+// ─── Shared caches ──────────────────────────────────────────────────────────
+// Per-RPC blockhash cache lives in `rpc-helpers.getBlockhashCache(rpc)`; see
+// its JSDoc for why we no longer hold a module-level singleton.
 const altCache = new AltCache();
 
 // ─── seal() ─────────────────────────────────────────────────────────────────
@@ -330,7 +331,8 @@ export async function seal(params: SealParams): Promise<SealResult> {
       ) {
         throw new Error(
           "Top-level SPL Token Transfer not allowed in sealed transactions. " +
-            "Use the Transfer ActionType instead.",
+            "Token movement from the vault must route through an approved DeFi program's CPI (the policy engine validates the program + instruction). " +
+            "Vault withdrawals to the owner are an owner-only operation and cannot be performed by an agent via seal().",
         );
       }
       if (disc === 6 || disc === 9) {
@@ -550,7 +552,8 @@ export async function seal(params: SealParams): Promise<SealResult> {
   });
 
   // Step 10: Compose + compile + measure
-  const blockhash = params.blockhash ?? (await blockhashCache.get(params.rpc));
+  const blockhash =
+    params.blockhash ?? (await getBlockhashCache(params.rpc).get(params.rpc));
 
   // Resolve ALTs — Sigil ALT + protocol ALTs (e.g. Jupiter route-specific)
   let addressLookupTables = params.addressLookupTables;
@@ -721,6 +724,14 @@ export interface ExecuteResult {
  * - Blockhash and ALT caches are isolated per client instance
  * - invalidateCaches() clears instance caches that are actually used
  * - Convenience methods delegate to existing stateless functions
+ *
+ * Cache scoping: SigilClient keeps its own per-instance `BlockhashCache`
+ * (configurable via `config.blockhashTtlMs`) so TTL can differ per client.
+ * Stateless helpers (`seal()`, `buildOwnerTransaction()`, dashboard
+ * mutations) use the process-wide `getBlockhashCache(rpc)` registry
+ * instead. Calling `invalidateCaches()` on this client does NOT flush the
+ * registry entry for the same RPC, and vice versa — keep the two paths
+ * isolated or call `.invalidate()` on both if you need a full flush.
  */
 export class SigilClient {
   private readonly blockhashCacheInstance: BlockhashCache;

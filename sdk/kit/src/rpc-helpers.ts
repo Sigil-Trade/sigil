@@ -41,6 +41,53 @@ export interface SendAndConfirmOptions {
 
 const DEFAULT_BLOCKHASH_TTL_MS = 30_000;
 
+/**
+ * Per-RPC blockhash cache registry, keyed by RPC-client identity.
+ *
+ * Module-level `new BlockhashCache()` singletons poisoned multi-network
+ * consumers: a dashboard that switches `devnet ↔ mainnet`, a CLI with a
+ * `--network` flag, or an MCP server multiplexing tenants all pulled a
+ * blockhash fetched against one RPC and sent it against another, producing
+ * intermittent `BlockhashNotFound` the 30s TTL then hid.
+ *
+ * `getBlockhashCache(rpc)` hands out a cache scoped to the supplied RPC so
+ * distinct endpoints stay isolated while a consumer reusing one RPC keeps
+ * the perf win. `WeakMap` lets entries be reclaimed when the RPC is dropped
+ * — no unbounded growth for short-lived handles.
+ */
+const blockhashCacheRegistry = new WeakMap<Rpc<SolanaRpcApi>, BlockhashCache>();
+
+/**
+ * Get (or create) the blockhash cache scoped to a specific RPC client.
+ *
+ * **You normally do not need to call this directly.** `seal()`,
+ * `buildOwnerTransaction()`, `composeSigilTransaction()`, and the dashboard
+ * mutation helpers all call it internally — the returned blockhash is
+ * already cached with per-RPC isolation.
+ *
+ * Reach for it only when you need to:
+ * - Force a fresh blockhash via `.invalidate()` (e.g. after a
+ *   `BlockhashNotFound` from a partitioned RPC).
+ * - Inspect cache state in a test harness.
+ * - Pre-warm the cache before a latency-sensitive call.
+ *
+ * `SigilClient` instances keep their own private cache (configurable TTL);
+ * `.invalidate()` on the value returned here does NOT flush that instance
+ * cache and vice versa.
+ *
+ * Keying is by `Rpc` object identity: two `createSolanaRpc(...)` calls
+ * against the same URL produce two caches. A `Proxy`-wrapped RPC gets a
+ * fresh cache entry (intentional — identity, not endpoint).
+ */
+export function getBlockhashCache(rpc: Rpc<SolanaRpcApi>): BlockhashCache {
+  let cache = blockhashCacheRegistry.get(rpc);
+  if (!cache) {
+    cache = new BlockhashCache();
+    blockhashCacheRegistry.set(rpc, cache);
+  }
+  return cache;
+}
+
 export class BlockhashCache {
   private cached: Blockhash | null = null;
   private fetchedAt = 0;

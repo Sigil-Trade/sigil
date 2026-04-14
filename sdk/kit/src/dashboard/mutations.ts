@@ -28,7 +28,10 @@ import {
   getSetComputeUnitLimitInstruction,
   getSetComputeUnitPriceInstruction,
 } from "@solana-program/compute-budget";
-import { sendAndConfirmTransaction, BlockhashCache } from "../rpc-helpers.js";
+import {
+  sendAndConfirmTransaction,
+  getBlockhashCache,
+} from "../rpc-helpers.js";
 import { AccountRole } from "@solana/kit";
 import {
   getAgentOverlayPDA,
@@ -78,7 +81,6 @@ import { toDxError } from "./errors.js";
 // ─── Shared Helper ───────────────────────────────────────────────────────────
 
 const CU_OWNER_ACTION = 200_000;
-const blockhashCache = new BlockhashCache();
 
 async function run(
   rpc: Rpc<SolanaRpcApi>,
@@ -103,7 +105,8 @@ async function run(
       ...(instructions as unknown as KitInstruction[]),
     ];
 
-    const blockhash = await blockhashCache.get(rpc);
+    const cache = getBlockhashCache(rpc);
+    const blockhash = await cache.get(rpc);
     const txMessage = pipe(
       createTransactionMessage({ version: 0 }),
       (tx) => setTransactionMessageFeePayer(owner.address, tx),

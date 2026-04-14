@@ -487,35 +487,50 @@ export async function resolveVaultState(
     }
   }
 
-  // 8. Parse stablecoin ATA balances (fail-open: 0n if ATA doesn't exist)
+  // 8. Parse stablecoin ATA balances.
+  //
+  // The previous implementation wrapped each parse in a bare `try/catch`,
+  // which swallowed any error produced by the block — both the normal
+  // "account missing" case (handled cleanly by the `.exists` / length
+  // guards below) and anything the SPL-data handling might throw in the
+  // future. The catch was effectively dead code: no currently-reachable
+  // branch inside the `.exists` guard throws. But it was a latent trap —
+  // any future change that DID start throwing (a stricter codec, a new
+  // encoding variant, a malformed-RPC fallback) would have been silently
+  // absorbed and downstream drain detection (seal.ts:611-643 reads
+  // `stablecoinBalances` as the drain baseline) would quietly see a zero
+  // balance and disable the LARGE_OUTFLOW / FULL_DRAIN gates.
+  //
+  // Removing the catch preserves the current behaviour (the guards return
+  // 0n on missing accounts) while leaving the door open for a future
+  // "state unknown, refuse to transact" path instead of silently
+  // substituting zero.
   let usdcBalance = 0n;
   let usdtBalance = 0n;
-  try {
-    const usdcEncoded = encoded[5];
-    if (usdcEncoded.exists) {
-      const usdcData = (usdcEncoded as { data: Uint8Array }).data;
-      if (usdcData && usdcData.length >= 72) {
-        // SPL Token amount at offset 64 (u64 LE)
-        for (let i = 0; i < 8; i++) {
-          usdcBalance |= BigInt(usdcData[64 + i]) << BigInt(i * 8);
-        }
+
+  const usdcEncoded = encoded[5];
+  if (usdcEncoded?.exists) {
+    const usdcData = (usdcEncoded as { data: Uint8Array }).data;
+    if (usdcData && usdcData.length >= 72) {
+      // SPL Token amount at offset 64 (u64 LE). `data` is cast as
+      // Uint8Array by the batch fetcher; if a future RPC layer ever hands
+      // back a different shape (e.g. base64 string), `BigInt(undefined)` /
+      // `BigInt(char)` will throw inside the loop — that propagation is
+      // what C2 wants, don't add an `instanceof` guard that silently skips.
+      for (let i = 0; i < 8; i++) {
+        usdcBalance |= BigInt(usdcData[64 + i]) << BigInt(i * 8);
       }
     }
-  } catch {
-    // Fail-open: ATA may not exist
   }
-  try {
-    const usdtEncoded = encoded[6];
-    if (usdtEncoded.exists) {
-      const usdtData = (usdtEncoded as { data: Uint8Array }).data;
-      if (usdtData && usdtData.length >= 72) {
-        for (let i = 0; i < 8; i++) {
-          usdtBalance |= BigInt(usdtData[64 + i]) << BigInt(i * 8);
-        }
+
+  const usdtEncoded = encoded[6];
+  if (usdtEncoded?.exists) {
+    const usdtData = (usdtEncoded as { data: Uint8Array }).data;
+    if (usdtData && usdtData.length >= 72) {
+      for (let i = 0; i < 8; i++) {
+        usdtBalance |= BigInt(usdtData[64 + i]) << BigInt(i * 8);
       }
     }
-  } catch {
-    // Fail-open: ATA may not exist
   }
 
   return {

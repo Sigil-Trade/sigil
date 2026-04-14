@@ -32,7 +32,7 @@ import {
   getSetComputeUnitPriceInstruction,
 } from "@solana-program/compute-budget";
 import { measureTransactionSize, MAX_TX_SIZE } from "./composer.js";
-import { BlockhashCache, type Blockhash } from "./rpc-helpers.js";
+import { getBlockhashCache, type Blockhash } from "./rpc-helpers.js";
 import { AltCache } from "./alt-loader.js";
 import { getSigilAltAddress } from "./alt-config.js";
 import { CU_OWNER_ACTION } from "./priority-fees.js";
@@ -68,9 +68,11 @@ export interface OwnerTransactionResult {
   wireBase64: string;
 }
 
-// ─── Module-level caches (same pattern as wrap.ts) ──────────────────────────
+// ─── Module-level caches ────────────────────────────────────────────────────
+// Per-RPC blockhash cache lives in `rpc-helpers.getBlockhashCache(rpc)`; see
+// its JSDoc for why we no longer hold a module-level singleton. `AltCache`
+// stays module-level — ALTs are address-keyed and safe to share.
 
-const blockhashCache = new BlockhashCache();
 const altCache = new AltCache();
 
 // ─── buildOwnerTransaction ──────────────────────────────────────────────────
@@ -88,7 +90,7 @@ export async function buildOwnerTransaction(
   const [blockhash, addressLookupTables] = await Promise.all([
     params.blockhash
       ? Promise.resolve(params.blockhash)
-      : blockhashCache.get(params.rpc),
+      : getBlockhashCache(params.rpc).get(params.rpc),
     params.addressLookupTables
       ? Promise.resolve(params.addressLookupTables)
       : altCache.resolve(params.rpc, [getSigilAltAddress(net)]),

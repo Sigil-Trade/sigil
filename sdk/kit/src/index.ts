@@ -5,6 +5,18 @@
 export * from "./generated/index.js";
 
 // ─── Type Constants + Permissions ─────────────────────────────────────────────
+//
+// The legacy 21-bit permission bitmasks (`SWAP_ONLY`, `PERPS_ONLY`,
+// `TRANSFER_ONLY`, `ESCROW_ONLY`, `PERPS_FULL`), the `ACTION_PERMISSION_MAP`
+// table, and the permission helpers built on top of them (`hasPermission`,
+// `permissionsToStrings`, `stringsToPermissions`, `PermissionBuilder`) are no
+// longer re-exported here. They encode a pre-v6 permission model that the
+// on-chain program replaced with a 2-bit capability enum (`0 = Disabled`,
+// `1 = Observer`, `2 = Operator`), and the presets that previously used those
+// bitmasks now register agents with invalid capability values (either
+// silently Observer or rejected with `InvalidArgument`). Use
+// {@link FULL_CAPABILITY} / {@link FULL_PERMISSIONS} (both equal `2n`) for
+// any preset or vault-creation flow that needs spending authority.
 export {
   // Program
   SIGIL_PROGRAM_ADDRESS,
@@ -20,11 +32,6 @@ export {
   MAX_ALLOWED_PROTOCOLS,
   FULL_CAPABILITY,
   FULL_PERMISSIONS,
-  SWAP_ONLY,
-  PERPS_ONLY,
-  TRANSFER_ONLY,
-  ESCROW_ONLY,
-  PERPS_FULL,
   // Escrow
   MAX_ESCROW_DURATION,
   // Slippage
@@ -45,19 +52,12 @@ export {
   RECOGNIZED_DEFI_PROGRAMS,
   // Functions
   isStablecoinMint,
-  hasPermission,
-  permissionsToStrings,
-  stringsToPermissions,
   parseActionType,
   isSpendingAction,
   getPositionEffect,
   validateNetwork,
   normalizeNetwork,
   toInstruction,
-  // Permission builder
-  PermissionBuilder,
-  // Types
-  ACTION_PERMISSION_MAP,
   // Overlay constants
   OVERLAY_EPOCH_DURATION,
   OVERLAY_NUM_EPOCHS,
@@ -481,6 +481,7 @@ export type {
 // ─── RPC Helpers ───────────────────────────────────────────────────────────
 export {
   BlockhashCache,
+  getBlockhashCache,
   signAndEncode,
   sendAndConfirmTransaction,
 } from "./rpc-helpers.js";
