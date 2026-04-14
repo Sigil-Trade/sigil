@@ -18,4 +18,14 @@ Phase 1 safety lockdown (PR 1.A — quick wins) — 6 targeted fixes addressing 
 
 - **Fix misleading SPL-Token-Transfer error message in `seal.ts`.** The top-level Transfer block no longer advises consumers to "Use the Transfer ActionType instead" (`ActionType` was removed in v6). The message now reflects the current API: transfers must route through an approved DeFi program's CPI; for owner-initiated withdrawals, use `OwnerClient.withdraw()`.
 
-**Breaking:** removal of the legacy permission re-exports from the package root. Migration: import `FULL_CAPABILITY` (= `2n`) instead of any `SWAP_ONLY` / `PERPS_FULL` / `ACTION_PERMISSION_MAP` reference, or keep the old symbols internally by importing from `@usesigil/kit` subpaths or the generated client. Third-party consumers of `OwnerClient` / `SigilClient` / presets / vault-creation are unaffected — the only outward change is that agents registered via presets now actually execute.
+**Breaking:** removal of the legacy permission re-exports from the package root. Third-party consumers of `OwnerClient` / `SigilClient` / presets / vault-creation are unaffected — the only outward change is that agents registered via presets now actually execute.
+
+**Migration guidance — do NOT treat `FULL_CAPABILITY` as a drop-in for `SWAP_ONLY`.** The v6 on-chain model replaced the 21-bit permission bitmask with a 2-bit capability enum:
+
+- `0` = Disabled (no execution)
+- `1` = Observer (read-only, cannot sign anything)
+- `2` = Operator (full spending authority) — exported as `FULL_CAPABILITY`
+
+There is **no middle ground**. Granular per-action restriction ("can swap but cannot transfer", "can open positions but cannot add collateral") no longer lives on the capability field — it moved to on-chain `InstructionConstraints`. If your previous code imported `SWAP_ONLY` (= `1n`) intending "agent can swap," the faithful replacement is `FULL_CAPABILITY` (= `2n`) *combined with* a constraints policy that only allows your chosen DeFi programs. Using `FULL_CAPABILITY` alone gives the agent full spending authority bounded only by the vault's spending caps and protocol allowlist.
+
+`createVault()` now validates this client-side: passing any `permissions` value outside `[0n, 2n]` throws a descriptive error before any RPC roundtrip, catching the common "I imported `PERPS_FULL | SWAP_ONLY` and things look fine" mistake immediately.

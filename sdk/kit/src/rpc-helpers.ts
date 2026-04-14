@@ -60,9 +60,24 @@ const blockhashCacheRegistry = new WeakMap<Rpc<SolanaRpcApi>, BlockhashCache>();
 /**
  * Get (or create) the blockhash cache scoped to a specific RPC client.
  *
- * Use this from any SDK code path that previously held a module-level
- * `BlockhashCache` singleton. Consumers that need forced invalidation can
- * call `.invalidate()` on the returned cache directly.
+ * **You normally do not need to call this directly.** `seal()`,
+ * `buildOwnerTransaction()`, `composeSigilTransaction()`, and the dashboard
+ * mutation helpers all call it internally — the returned blockhash is
+ * already cached with per-RPC isolation.
+ *
+ * Reach for it only when you need to:
+ * - Force a fresh blockhash via `.invalidate()` (e.g. after a
+ *   `BlockhashNotFound` from a partitioned RPC).
+ * - Inspect cache state in a test harness.
+ * - Pre-warm the cache before a latency-sensitive call.
+ *
+ * `SigilClient` instances keep their own private cache (configurable TTL);
+ * `.invalidate()` on the value returned here does NOT flush that instance
+ * cache and vice versa.
+ *
+ * Keying is by `Rpc` object identity: two `createSolanaRpc(...)` calls
+ * against the same URL produce two caches. A `Proxy`-wrapped RPC gets a
+ * fresh cache entry (intentional — identity, not endpoint).
  */
 export function getBlockhashCache(rpc: Rpc<SolanaRpcApi>): BlockhashCache {
   let cache = blockhashCacheRegistry.get(rpc);

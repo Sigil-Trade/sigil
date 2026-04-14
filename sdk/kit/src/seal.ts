@@ -331,7 +331,8 @@ export async function seal(params: SealParams): Promise<SealResult> {
       ) {
         throw new Error(
           "Top-level SPL Token Transfer not allowed in sealed transactions. " +
-            "Transfers must happen via an approved DeFi program's CPI. For owner-initiated withdrawals, use OwnerClient.withdraw().",
+            "Token movement from the vault must route through an approved DeFi program's CPI (the policy engine validates the program + instruction). " +
+            "Vault withdrawals to the owner are an owner-only operation and cannot be performed by an agent via seal().",
         );
       }
       if (disc === 6 || disc === 9) {
@@ -723,6 +724,14 @@ export interface ExecuteResult {
  * - Blockhash and ALT caches are isolated per client instance
  * - invalidateCaches() clears instance caches that are actually used
  * - Convenience methods delegate to existing stateless functions
+ *
+ * Cache scoping: SigilClient keeps its own per-instance `BlockhashCache`
+ * (configurable via `config.blockhashTtlMs`) so TTL can differ per client.
+ * Stateless helpers (`seal()`, `buildOwnerTransaction()`, dashboard
+ * mutations) use the process-wide `getBlockhashCache(rpc)` registry
+ * instead. Calling `invalidateCaches()` on this client does NOT flush the
+ * registry entry for the same RPC, and vice versa — keep the two paths
+ * isolated or call `.invalidate()` on both if you need a full flush.
  */
 export class SigilClient {
   private readonly blockhashCacheInstance: BlockhashCache;

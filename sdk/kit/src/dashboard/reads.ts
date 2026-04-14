@@ -143,6 +143,9 @@ function requireCtxField<T>(value: T | null | undefined, field: string): T {
  * @experimental Part of the `build*` composition surface introduced alongside
  * `getOverview` (S14). Signature and JSON shape may shift before v1.0; if you
  * depend on it, pin your SDK version and watch the changeset.
+ *
+ * @see OwnerClient.getOverview — the stable single-call alternative that
+ * pre-populates a full {@link OverviewContext} for you.
  */
 export function buildVaultState(ctx: OverviewContext): VaultState {
   const v = requireCtxField(ctx.state.vault, "vault") as AgentVault;
@@ -216,6 +219,9 @@ export function buildVaultState(ctx: OverviewContext): VaultState {
  *
  * @experimental Part of the `build*` composition surface (S14). Signature and
  * JSON shape may shift before v1.0.
+ *
+ * @see OwnerClient.getOverview — the stable single-call alternative that
+ * pre-populates a full {@link OverviewContext} for you.
  */
 export function buildAgents(ctx: OverviewContext): AgentData[] {
   const state = ctx.state;
@@ -285,6 +291,9 @@ export function buildAgents(ctx: OverviewContext): AgentData[] {
  *
  * @experimental Part of the `build*` composition surface (S14). Signature and
  * JSON shape may shift before v1.0.
+ *
+ * @see OwnerClient.getOverview — the stable single-call alternative that
+ * pre-populates a full {@link OverviewContext} for you.
  */
 export function buildSpending(ctx: OverviewContext): SpendingData {
   const state = ctx.state;
@@ -344,6 +353,9 @@ export function buildSpending(ctx: OverviewContext): SpendingData {
  *
  * @experimental Part of the `build*` composition surface (S14). Signature and
  * JSON shape may shift before v1.0.
+ *
+ * @see OwnerClient.getOverview — the stable single-call alternative that
+ * pre-populates a full {@link OverviewContext} for you.
  */
 export function buildHealth(ctx: OverviewContext): HealthData {
   // When both posture and alerts are memoized, the helpers below never run
@@ -402,6 +414,9 @@ export function buildHealth(ctx: OverviewContext): HealthData {
  *
  * @experimental Part of the `build*` composition surface (S14). Signature and
  * JSON shape may shift before v1.0.
+ *
+ * @see OwnerClient.getOverview — the stable single-call alternative that
+ * pre-populates a full {@link OverviewContext} for you.
  */
 export function buildPolicy(ctx: OverviewContext): PolicyData {
   const state = ctx.state;
@@ -531,6 +546,9 @@ export function buildPolicy(ctx: OverviewContext): PolicyData {
  *
  * @experimental Part of the `build*` composition surface (S14). Signature and
  * JSON shape may shift before v1.0.
+ *
+ * @see OwnerClient.getOverview — the stable single-call alternative that
+ * pre-populates a full {@link OverviewContext} for you.
  */
 export function buildActivityRows(
   items: readonly VaultActivityItem[],
