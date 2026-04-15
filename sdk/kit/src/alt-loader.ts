@@ -13,6 +13,8 @@ import {
   fetchAddressesForLookupTables,
   type AddressesByLookupTableAddress,
 } from "@solana/kit";
+import { SigilSdkDomainError } from "./errors/sdk.js";
+import { SIGIL_ERROR__SDK__ALT_INTEGRITY } from "./errors/codes.js";
 
 // ─── AltCache ─────────────────────────────────────────────────────────────────
 
@@ -178,10 +180,12 @@ export function verifySigilAlt(
   }
 
   if (missing.length > 0) {
-    throw new Error(
+    throw new SigilSdkDomainError(
+      SIGIL_ERROR__SDK__ALT_INTEGRITY,
       `Sigil ALT ${sigilAltAddress} is missing ${missing.length} expected address(es): ` +
         `${missing.join(", ")}. ` +
         `ALT may need extension — run scripts/extend-sigil-alt.ts.`,
+      { context: { altAddress: sigilAltAddress, missing: missing.length } },
     );
   }
 }

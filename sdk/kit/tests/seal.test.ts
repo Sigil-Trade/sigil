@@ -783,7 +783,8 @@ describe("seal() pre-flight checks", () => {
       );
       expect.fail("should throw");
     } catch (e: any) {
-      expect(e.message).to.equal(
+      // PR 2.A: SigilError base appends a Version footer; assert via .include.
+      expect(e.message).to.include(
         "Exactly 1 recognized DeFi instruction required for non-stablecoin input.",
       );
     }
@@ -848,7 +849,8 @@ describe("seal() pre-flight checks", () => {
       );
       expect.fail("should throw");
     } catch (e: any) {
-      expect(e.message).to.equal(
+      // PR 2.A: SigilError base appends a Version footer; assert via .include.
+      expect(e.message).to.include(
         "Exactly 1 recognized DeFi instruction required for non-stablecoin input.",
       );
     }

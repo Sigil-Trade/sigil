@@ -20,6 +20,9 @@ import type {
   TransactionSigner,
 } from "@solana/kit";
 
+import { SigilSdkDomainError } from "../errors/sdk.js";
+import { SIGIL_ERROR__SDK__INVALID_CONFIG } from "../errors/codes.js";
+
 import type {
   OwnerClientConfig,
   TxResult,
@@ -114,11 +117,30 @@ export class OwnerClient {
   readonly network: "devnet" | "mainnet";
 
   constructor(config: OwnerClientConfig) {
-    if (!config.rpc) throw new Error("OwnerClientConfig.rpc is required");
-    if (!config.vault) throw new Error("OwnerClientConfig.vault is required");
-    if (!config.owner) throw new Error("OwnerClientConfig.owner is required");
+    if (!config.rpc)
+      throw new SigilSdkDomainError(
+        SIGIL_ERROR__SDK__INVALID_CONFIG,
+        "OwnerClientConfig.rpc is required",
+        { context: { field: "rpc", expected: "Rpc<SolanaRpcApi>" } },
+      );
+    if (!config.vault)
+      throw new SigilSdkDomainError(
+        SIGIL_ERROR__SDK__INVALID_CONFIG,
+        "OwnerClientConfig.vault is required",
+        { context: { field: "vault", expected: "Address" } },
+      );
+    if (!config.owner)
+      throw new SigilSdkDomainError(
+        SIGIL_ERROR__SDK__INVALID_CONFIG,
+        "OwnerClientConfig.owner is required",
+        { context: { field: "owner", expected: "TransactionSigner" } },
+      );
     if (!config.network)
-      throw new Error("OwnerClientConfig.network is required");
+      throw new SigilSdkDomainError(
+        SIGIL_ERROR__SDK__INVALID_CONFIG,
+        "OwnerClientConfig.network is required",
+        { context: { field: "network", expected: "'devnet' | 'mainnet'" } },
+      );
 
     this.rpc = config.rpc;
     this.vault = config.vault;

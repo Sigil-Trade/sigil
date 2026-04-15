@@ -25,13 +25,19 @@ const TEST_ADDRESS = "11111111111111111111111111111111" as Address;
 describe("ComposeError", () => {
   it("formats message with protocol prefix and code", () => {
     const e = new ComposeError("flash-trade", "missing_param", "amount");
-    expect(e.message).to.equal("[flash-trade] missing_param: amount");
+    // PR 2.A: SigilError base appends a Version footer; assert via .include
+    // and verify the verbatim short message via .shortMessage.
+    expect(e.message).to.include("[flash-trade] missing_param: amount");
+    expect(e.shortMessage).to.equal("[flash-trade] missing_param: amount");
   });
 
-  it("preserves protocol and code as readonly fields", () => {
+  it("preserves protocol and legacy code (deprecated) + carries SigilErrorCode", () => {
     const e = new ComposeError("jupiter", "invalid_bigint", "value");
     expect(e.protocol).to.equal("jupiter");
-    expect(e.code).to.equal("invalid_bigint");
+    // Legacy ComposeErrorCode preserved on .legacyComposeCode getter.
+    expect(e.legacyComposeCode).to.equal("invalid_bigint");
+    // New canonical SigilErrorCode on .code per UD1.
+    expect(e.code).to.equal("SIGIL_ERROR__COMPOSE__INVALID_BIGINT");
   });
 
   it("is an Error subclass", () => {

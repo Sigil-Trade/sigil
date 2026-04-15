@@ -37,6 +37,12 @@ import { AltCache } from "./alt-loader.js";
 import { getSigilAltAddress } from "./alt-config.js";
 import { CU_OWNER_ACTION } from "./priority-fees.js";
 import { normalizeNetwork, type Network } from "./types.js";
+import { SigilSdkDomainError } from "./errors/sdk.js";
+import { SigilRpcError } from "./errors/rpc.js";
+import {
+  SIGIL_ERROR__RPC__INSTRUCTION_REQUIRED,
+  SIGIL_ERROR__RPC__TX_TOO_LARGE,
+} from "./errors/codes.js";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -82,7 +88,10 @@ export async function buildOwnerTransaction(
 ): Promise<OwnerTransactionResult> {
   // 1. Validate inputs
   if (!params.instructions.length) {
-    throw new Error("At least one instruction is required.");
+    throw new SigilSdkDomainError(
+      SIGIL_ERROR__RPC__INSTRUCTION_REQUIRED as never,
+      "At least one instruction is required.",
+    );
   }
 
   // 2. Resolve blockhash + ALTs in parallel (independent RPC calls)
@@ -148,9 +157,11 @@ export async function buildOwnerTransaction(
     measureTransactionSize(compiledTx);
 
   if (!withinLimit) {
-    throw new Error(
+    throw new SigilRpcError(
+      SIGIL_ERROR__RPC__TX_TOO_LARGE,
       `Owner transaction size ${byteLength} bytes exceeds limit of ${MAX_TX_SIZE} bytes. ` +
         `Reduce instruction count or use address lookup tables.`,
+      { context: { byteLength, limit: MAX_TX_SIZE } },
     );
   }
 

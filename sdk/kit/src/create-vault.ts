@@ -25,6 +25,11 @@ import { FULL_PERMISSIONS, toInstruction } from "./types.js";
 import { buildOwnerTransaction } from "./owner-transaction.js";
 import { signAndEncode, sendAndConfirmTransaction } from "./rpc-helpers.js";
 import type { SendAndConfirmOptions } from "./rpc-helpers.js";
+import { SigilSdkDomainError } from "./errors/sdk.js";
+import {
+  SIGIL_ERROR__SDK__OWNER_AGENT_COLLISION,
+  SIGIL_ERROR__SDK__INVALID_CAPABILITY,
+} from "./errors/codes.js";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -65,9 +70,16 @@ export async function createVault(
 ): Promise<CreateVaultResult> {
   // Validate owner ≠ agent
   if (options.owner.address === options.agent.address) {
-    throw new Error(
+    throw new SigilSdkDomainError(
+      SIGIL_ERROR__SDK__OWNER_AGENT_COLLISION,
       "Owner and agent must be different keys. " +
         "The owner has full vault authority; the agent has constrained execution only.",
+      {
+        context: {
+          owner: options.owner.address,
+          agent: options.agent.address,
+        },
+      },
     );
   }
 
@@ -85,7 +97,8 @@ export async function createVault(
   if (options.permissions !== undefined) {
     const cap = options.permissions;
     if (cap < 0n || cap > 2n) {
-      throw new Error(
+      throw new SigilSdkDomainError(
+        SIGIL_ERROR__SDK__INVALID_CAPABILITY,
         `Invalid capability ${cap}. The on-chain program expects a 2-bit enum ` +
           `(0 = Disabled, 1 = Observer, 2 = Operator) — not a bitmask. ` +
           `Use FULL_CAPABILITY (2n) for an agent that needs spending authority. ` +

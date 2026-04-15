@@ -7,6 +7,12 @@
 
 import type { Address, Instruction } from "@solana/kit";
 
+import { SigilSdkDomainError } from "./errors/sdk.js";
+import {
+  SIGIL_ERROR__SDK__INVALID_NETWORK,
+  SIGIL_ERROR__SDK__INVALID_ACTION_TYPE,
+} from "./errors/codes.js";
+
 // Re-export the program address from generated code
 export { SIGIL_PROGRAM_ADDRESS } from "./generated/programs/sigil.js";
 
@@ -135,8 +141,15 @@ export type Network = "devnet" | "mainnet-beta";
 export function validateNetwork(network: string): asserts network is Network {
   const normalized = network === "mainnet" ? "mainnet-beta" : network;
   if (normalized !== "devnet" && normalized !== "mainnet-beta") {
-    throw new Error(
+    throw new SigilSdkDomainError(
+      SIGIL_ERROR__SDK__INVALID_NETWORK,
       `Invalid network: "${network}". Must be "devnet", "mainnet", or "mainnet-beta".`,
+      {
+        context: {
+          received: network,
+          valid: ["devnet", "mainnet", "mainnet-beta"],
+        },
+      },
     );
   }
 }
@@ -234,7 +247,13 @@ export function stringsToPermissions(strings: string[]): bigint {
   for (const s of strings) {
     if (!Object.prototype.hasOwnProperty.call(ACTION_PERMISSION_MAP, s)) {
       const valid = Object.keys(ACTION_PERMISSION_MAP).join(", ");
-      throw new Error(`Unknown action type: "${s}". Valid types: ${valid}`);
+      throw new SigilSdkDomainError(
+        SIGIL_ERROR__SDK__INVALID_ACTION_TYPE,
+        `Unknown action type: "${s}". Valid types: ${valid}`,
+        {
+          context: { received: s, valid: Object.keys(ACTION_PERMISSION_MAP) },
+        },
+      );
     }
     const bit = ACTION_PERMISSION_MAP[s];
     result |= bit;

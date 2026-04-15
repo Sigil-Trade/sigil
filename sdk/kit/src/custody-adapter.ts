@@ -11,6 +11,8 @@
 
 import type { Address, TransactionSigner } from "@solana/kit";
 import type { AttestationResult } from "./tee/types.js";
+import { SigilSdkDomainError } from "./errors/sdk.js";
+import { SIGIL_ERROR__SDK__SIGNATURE_INVALID } from "./errors/codes.js";
 
 // ─── Interface ──────────────────────────────────────────────────────────────
 
@@ -74,13 +76,17 @@ export function custodyAdapterToTransactionSigner(
       for (const tx of transactions) {
         const sig = await adapter.sign(tx.messageBytes);
         if (!(sig instanceof Uint8Array)) {
-          throw new Error(
+          throw new SigilSdkDomainError(
+            SIGIL_ERROR__SDK__SIGNATURE_INVALID,
             `Custody adapter signature must be Uint8Array, got ${typeof sig}`,
+            { context: { reason: `wrong-type:${typeof sig}` } },
           );
         }
         if (sig.length !== 64) {
-          throw new Error(
+          throw new SigilSdkDomainError(
+            SIGIL_ERROR__SDK__SIGNATURE_INVALID,
             `Custody adapter returned invalid signature: expected 64 bytes, got ${sig.length}`,
+            { context: { reason: `wrong-length:${sig.length}` } },
           );
         }
         results.push({ [address]: sig });

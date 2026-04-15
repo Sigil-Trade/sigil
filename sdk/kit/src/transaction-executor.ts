@@ -41,6 +41,11 @@ import {
   type SendAndConfirmOptions,
 } from "./rpc-helpers.js";
 import { estimateComposedCU } from "./priority-fees.js";
+import { SigilRpcError } from "./errors/rpc.js";
+import {
+  SIGIL_ERROR__RPC__SIMULATION_FAILED,
+  SIGIL_ERROR__RPC__DRAIN_DETECTED,
+} from "./errors/codes.js";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -307,14 +312,19 @@ export class TransactionExecutor {
           simulation.error?.suggestion ??
           simulation.error?.message ??
           "Simulation failed";
-        throw new Error(`Simulation failed: ${errMsg}`);
+        throw new SigilRpcError(
+          SIGIL_ERROR__RPC__SIMULATION_FAILED,
+          `Simulation failed: ${errMsg}`,
+        );
       }
 
       // Drain detection: FULL_DRAIN blocks TX, others are warnings
       if (simulation.riskFlags.length > 0) {
         if (simulation.riskFlags.includes(RISK_FLAG_FULL_DRAIN)) {
-          throw new Error(
+          throw new SigilRpcError(
+            SIGIL_ERROR__RPC__DRAIN_DETECTED,
             `Transaction blocked: drain detection triggered (${simulation.riskFlags.join(", ")})`,
+            { context: { reason: simulation.riskFlags.join(",") } },
           );
         }
         riskWarnings.push(...simulation.riskFlags);

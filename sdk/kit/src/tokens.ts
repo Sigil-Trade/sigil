@@ -13,6 +13,8 @@ import {
   USDT_MINT_MAINNET,
   type Network,
 } from "./types.js";
+import { SigilSdkDomainError } from "./errors/sdk.js";
+import { SIGIL_ERROR__SDK__INVALID_AMOUNT } from "./errors/codes.js";
 
 export interface ResolvedToken {
   mint: Address;
@@ -165,8 +167,10 @@ export function resolveToken(
 export function toBaseUnits(amount: number | string, decimals: number): bigint {
   const num = typeof amount === "string" ? parseFloat(amount) : amount;
   if (!Number.isFinite(num) || num < 0) {
-    throw new Error(
+    throw new SigilSdkDomainError(
+      SIGIL_ERROR__SDK__INVALID_AMOUNT,
       `Invalid amount: ${amount}. Must be a finite non-negative number.`,
+      { context: { received: amount } },
     );
   }
   const multiplier = Math.pow(10, decimals);

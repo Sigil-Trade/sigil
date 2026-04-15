@@ -9,6 +9,7 @@
 import type { Address, Instruction } from "@solana/kit";
 import { AccountRole, getProgramDerivedAddress } from "@solana/kit";
 import type { InspectableInstruction } from "../inspector.js";
+import { X402ParseError } from "./errors.js";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -131,7 +132,7 @@ function base58Decode(str: string): Uint8Array {
   for (const char of str) {
     const value = BASE58_ALPHABET.indexOf(char);
     if (value === -1) {
-      throw new Error(`Invalid base58 character: ${char}`);
+      throw new X402ParseError(`Invalid base58 character: ${char}`);
     }
 
     let carry = value;

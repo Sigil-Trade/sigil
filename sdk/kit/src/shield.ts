@@ -47,24 +47,19 @@ import { isStablecoinMint, validateNetwork, type Network } from "./types.js";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export interface PolicyViolation {
-  rule: string;
-  message: string;
-  suggestion?: string;
-}
+// Per UD2 (Engineer-reorder via Council): canonical ShieldDeniedError +
+// PolicyViolation definitions live in `core/errors.ts`. Imported and
+// re-exported here for backwards compatibility with existing import paths.
+// The `code?: number` 2nd constructor argument from the historical
+// shield.ts version is REMOVED — see changeset for migration notes.
+import { ShieldDeniedError, type PolicyViolation } from "./core/errors.js";
+export { ShieldDeniedError, type PolicyViolation };
 
-export class ShieldDeniedError extends Error {
-  public code?: number;
-  constructor(
-    public readonly violations: PolicyViolation[],
-    code?: number,
-  ) {
-    const msgs = violations.map((v) => v.message).join("; ");
-    super(`Shield denied: ${msgs}`);
-    this.name = "ShieldDeniedError";
-    this.code = code;
-  }
-}
+import { SigilSdkDomainError } from "./errors/sdk.js";
+import {
+  SIGIL_ERROR__SDK__INVALID_CONFIG,
+  SIGIL_ERROR__SDK__SIGNER_INVALID,
+} from "./errors/codes.js";
 
 export interface ShieldCheckResult {
   allowed: boolean;
@@ -367,6 +362,8 @@ export function evaluateInstructions(
       violations.push({
         rule: "custom",
         message: customResult.reason ?? "Custom policy check failed",
+        suggestion:
+          "Review the custom policy callback and the rejected transaction inputs; adjust the policy or the transaction to satisfy the predicate.",
       });
     }
   }
@@ -702,8 +699,10 @@ export function shield(
 
     async sync(): Promise<void> {
       if (!syncConfig) {
-        throw new Error(
+        throw new SigilSdkDomainError(
+          SIGIL_ERROR__SDK__INVALID_CONFIG,
           "Cannot sync: onChainSync not configured in ShieldOptions",
+          { context: { field: "onChainSync", expected: "OnChainSyncConfig" } },
         );
       }
       const resolved = await resolveVaultState(
@@ -885,8 +884,10 @@ export function createShieldedSigner(
           },
         }));
       }
-      throw new Error(
+      throw new SigilSdkDomainError(
+        SIGIL_ERROR__SDK__SIGNER_INVALID,
         "Unsupported signer type: must implement signTransactions or modifyAndSignTransactions",
+        { context: { reason: "missing-sign-method" } },
       );
     },
   } as TransactionSigner;
@@ -1016,7 +1017,14 @@ function checkSessionBinding(
     const message =
       "[ShieldedSigner] Cannot verify session binding: no compiled message";
     if (severity === "hard") {
-      throw new ShieldDeniedError([{ rule: "session_binding", message }]);
+      throw new ShieldDeniedError([
+        {
+          rule: "session_binding",
+          message,
+          suggestion:
+            "Compose the transaction with seal()/SigilClient so the validate-and-authorize and finalize-session instructions sandwich the DeFi instruction; do not invoke the program manually.",
+        },
+      ]);
     }
     console.warn(message);
     return;
@@ -1030,7 +1038,14 @@ function checkSessionBinding(
     const message =
       "[ShieldedSigner] No Sigil instructions found in transaction";
     if (severity === "hard") {
-      throw new ShieldDeniedError([{ rule: "session_binding", message }]);
+      throw new ShieldDeniedError([
+        {
+          rule: "session_binding",
+          message,
+          suggestion:
+            "Compose the transaction with seal()/SigilClient so the validate-and-authorize and finalize-session instructions sandwich the DeFi instruction; do not invoke the program manually.",
+        },
+      ]);
     }
     console.warn(message);
     return;
@@ -1051,7 +1066,14 @@ function checkSessionBinding(
   if (!hasValidate || !hasFinalize) {
     const message = `[ShieldedSigner] Session binding incomplete: validate=${!!hasValidate}, finalize=${!!hasFinalize}`;
     if (severity === "hard") {
-      throw new ShieldDeniedError([{ rule: "session_binding", message }]);
+      throw new ShieldDeniedError([
+        {
+          rule: "session_binding",
+          message,
+          suggestion:
+            "Compose the transaction with seal()/SigilClient so the validate-and-authorize and finalize-session instructions sandwich the DeFi instruction; do not invoke the program manually.",
+        },
+      ]);
     }
     console.warn(message);
   }

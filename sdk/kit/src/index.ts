@@ -527,6 +527,134 @@ export {
 } from "./core/index.js";
 export type { ShieldStorage, SpendEntry, TxEntry } from "./core/index.js";
 
+// ─── Unified Error Taxonomy (PR 2.A) ─────────────────────────────────────────
+// SigilError base class + four domain classes + canonical SigilErrorCode
+// constants + per-domain code unions + SigilErrorContext map + walk helper.
+// All error classes (ShieldDeniedError, TeeAttestationError, X402ParseError,
+// ComposeError, etc.) extend a domain class which extends SigilError.
+// Exception: SigilSdkError — see its JSDoc for the deferral note (UD3 + R4).
+//
+// Aliased to `SigilKitError` publicly to avoid a name collision with the
+// generated on-chain Anchor error enum (`SigilError` from generated/errors/sigil.ts).
+// Internally the class is still called `SigilError`; the rename happens at
+// the public export boundary. Internal code in sdk/kit/src/ continues to
+// use `SigilError`. Targeted full rename for a follow-up cleanup PR.
+export {
+  SigilError as SigilKitError,
+  SigilShieldError,
+  SigilTeeError,
+  SigilX402Error,
+  SigilComposeError,
+  SigilSdkDomainError,
+  SigilRpcError,
+  SIGIL_KIT_VERSION,
+  walk as walkSigilCause,
+  type SigilErrorParameters,
+  type SigilErrorCode,
+  type SigilShieldErrorCode,
+  type SigilTeeErrorCode,
+  type SigilComposeErrorCode,
+  type SigilX402ErrorCode,
+  type SigilSdkErrorCode,
+  type SigilRpcErrorCode,
+  type SigilProgramErrorCode,
+  type SigilErrorContext,
+  // Code constants — all 47.
+  SIGIL_ERROR__SHIELD__POLICY_DENIED,
+  SIGIL_ERROR__SHIELD__CONFIG_INVALID,
+  SIGIL_ERROR__SHIELD__RATE_LIMIT_EXCEEDED,
+  SIGIL_ERROR__SHIELD__SESSION_BINDING,
+  SIGIL_ERROR__TEE__ATTESTATION_FAILED,
+  SIGIL_ERROR__TEE__CERT_CHAIN_INVALID,
+  SIGIL_ERROR__TEE__PCR_MISMATCH,
+  SIGIL_ERROR__COMPOSE__MISSING_PARAM,
+  SIGIL_ERROR__COMPOSE__INVALID_BIGINT,
+  SIGIL_ERROR__COMPOSE__UNSUPPORTED_ACTION,
+  SIGIL_ERROR__X402__HEADER_MALFORMED,
+  SIGIL_ERROR__X402__PAYMENT_FAILED,
+  SIGIL_ERROR__X402__UNSUPPORTED,
+  SIGIL_ERROR__X402__DESTINATION_BLOCKED,
+  SIGIL_ERROR__X402__REPLAY,
+  SIGIL_ERROR__SDK__INVALID_CONFIG,
+  SIGIL_ERROR__SDK__INVALID_PARAMS,
+  SIGIL_ERROR__SDK__INVALID_NETWORK,
+  SIGIL_ERROR__SDK__INVALID_AMOUNT,
+  SIGIL_ERROR__SDK__INVALID_CAPABILITY,
+  SIGIL_ERROR__SDK__INVALID_ACTION_TYPE,
+  SIGIL_ERROR__SDK__OWNER_AGENT_COLLISION,
+  SIGIL_ERROR__SDK__VAULT_NOT_FOUND,
+  SIGIL_ERROR__SDK__VAULT_INACTIVE,
+  SIGIL_ERROR__SDK__VAULT_SLOTS_EXHAUSTED,
+  SIGIL_ERROR__SDK__POLICY_NOT_FOUND,
+  SIGIL_ERROR__SDK__AGENT_NOT_REGISTERED,
+  SIGIL_ERROR__SDK__AGENT_PAUSED,
+  SIGIL_ERROR__SDK__AGENT_ZERO_CAPABILITY,
+  SIGIL_ERROR__SDK__SIGNER_INVALID,
+  SIGIL_ERROR__SDK__SIGNATURE_INVALID,
+  SIGIL_ERROR__SDK__SPL_TOKEN_OP_BLOCKED,
+  SIGIL_ERROR__SDK__PROTOCOL_NOT_ALLOWED,
+  SIGIL_ERROR__SDK__PROTOCOL_NOT_TARGETED,
+  SIGIL_ERROR__SDK__INSTRUCTION_COUNT,
+  SIGIL_ERROR__SDK__CAP_EXCEEDED,
+  SIGIL_ERROR__SDK__ATA_NON_CANONICAL,
+  SIGIL_ERROR__SDK__ALT_INTEGRITY,
+  SIGIL_ERROR__SDK__ALT_NOT_DEPLOYED,
+  SIGIL_ERROR__SDK__SEAL_FAILED,
+  SIGIL_ERROR__SDK__UNKNOWN,
+  SIGIL_ERROR__RPC__TX_FAILED,
+  SIGIL_ERROR__RPC__CONFIRMATION_TIMEOUT,
+  SIGIL_ERROR__RPC__SIMULATION_FAILED,
+  SIGIL_ERROR__RPC__DRAIN_DETECTED,
+  SIGIL_ERROR__RPC__TX_TOO_LARGE,
+  SIGIL_ERROR__RPC__RATE_LIMITED,
+  SIGIL_ERROR__RPC__INSTRUCTION_REQUIRED,
+  SIGIL_ERROR__PROGRAM__GENERIC,
+} from "./errors/index.js";
+
+/** Per-module discriminated union of x402 errors (viem ErrorType pattern). */
+export type X402ErrorType =
+  | import("./x402/errors.js").X402ParseError
+  | import("./x402/errors.js").X402PaymentError
+  | import("./x402/errors.js").X402UnsupportedError
+  | import("./x402/errors.js").X402DestinationBlockedError
+  | import("./x402/errors.js").X402ReplayError;
+
+/** Per-module discriminated union of TEE errors. */
+export type TeeErrorType =
+  | import("./tee/wallet-types.js").TeeAttestationError
+  | import("./tee/wallet-types.js").AttestationCertChainError
+  | import("./tee/wallet-types.js").AttestationPcrMismatchError;
+
+/** Per-module discriminated union of compose errors. */
+export type ComposeErrorType =
+  import("./integrations/compose-errors.js").ComposeError;
+
+/** Per-module discriminated union of shield errors. */
+export type ShieldErrorType =
+  | import("./core/errors.js").ShieldDeniedError
+  | import("./core/errors.js").ShieldConfigError;
+
+/**
+ * Per-module discriminated union for `seal()` / `SigilClient.executeAndConfirm`.
+ *
+ * NOTE on `SigilSdkError`: per UD3 + R4 deferral, that class extends `Error`
+ * directly (not `SigilError`). It IS in this union, so consumers narrowing
+ * via `SealErrorType` catch it correctly. The `| Error` tail is honest:
+ * raw `@solana/kit` `SolanaError` instances also propagate through `seal()`
+ * unwrapped today (a follow-up PR will introduce `SigilRpcError` wrapping).
+ */
+export type SealErrorType =
+  | import("./agent-errors.js").SigilSdkError
+  | import("./core/errors.js").ShieldDeniedError
+  | import("./tee/wallet-types.js").TeeAttestationError
+  | Error;
+
+/** Per-module discriminated union for OwnerClient (dashboard reads + mutations). */
+export type DashboardErrorType =
+  | import("./agent-errors.js").SigilSdkError
+  | import("./core/errors.js").ShieldDeniedError
+  | Error;
+
 // ─── Balance Tracker / P&L ──────────────────────────────────────────────────
 export {
   getVaultPnL,

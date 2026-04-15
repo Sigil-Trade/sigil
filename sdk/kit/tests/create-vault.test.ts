@@ -31,9 +31,9 @@ describe("createAndSendVault", () => {
       });
       expect.fail("should have thrown");
     } catch (err) {
-      expect((err as Error).message).to.equal(
-        "Owner and agent must be different keys. " +
-          "The owner has full vault authority; the agent has constrained execution only.",
+      // PR 2.A: SigilError base appends a Version footer; assert via .include.
+      expect((err as Error).message).to.include(
+        "Owner and agent must be different keys.",
       );
     }
   });

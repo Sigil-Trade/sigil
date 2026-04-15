@@ -27,6 +27,11 @@ import { findVaultsByOwner } from "./state-resolver.js";
 import { fetchMaybeAgentVault } from "./generated/accounts/agentVault.js";
 import { SIGIL_PROGRAM_ADDRESS } from "./generated/programs/sigil.js";
 import { validateNetwork, type Network } from "./types.js";
+import { SigilSdkDomainError } from "./errors/sdk.js";
+import {
+  SIGIL_ERROR__SDK__VAULT_SLOTS_EXHAUSTED,
+  SIGIL_ERROR__SDK__OWNER_AGENT_COLLISION,
+} from "./errors/codes.js";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -199,7 +204,11 @@ export async function findNextVaultId(
   }
   const nextId = maxId + 1n;
   if (nextId >= 256n) {
-    throw new Error("All 256 vault slots are in use for this owner.");
+    throw new SigilSdkDomainError(
+      SIGIL_ERROR__SDK__VAULT_SLOTS_EXHAUSTED,
+      "All 256 vault slots are in use for this owner.",
+      { context: { owner } },
+    );
   }
   return nextId;
 }
@@ -227,9 +236,11 @@ export async function inscribe(
 
   // Validate owner ≠ agent
   if (owner.address === agent.address) {
-    throw new Error(
+    throw new SigilSdkDomainError(
+      SIGIL_ERROR__SDK__OWNER_AGENT_COLLISION,
       "Owner and agent must be different keys. " +
         "The owner has full vault authority; the agent has constrained execution only.",
+      { context: { owner: owner.address, agent: agent.address } },
     );
   }
 

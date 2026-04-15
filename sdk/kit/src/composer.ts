@@ -22,6 +22,8 @@ import {
   getSetComputeUnitPriceInstruction,
 } from "@solana-program/compute-budget";
 import { estimateComposedCU, CU_DEFAULT_COMPOSED } from "./priority-fees.js";
+import { SigilRpcError } from "./errors/rpc.js";
+import { SIGIL_ERROR__RPC__TX_TOO_LARGE } from "./errors/codes.js";
 
 /** Maximum Solana transaction size in bytes */
 const MAX_TX_SIZE = 1_232;
@@ -135,9 +137,11 @@ export function validateTransactionSize(
   const wireBytes = getBase64EncodedWireTransaction(compiledTx);
   const byteLength = base64ByteLength(wireBytes);
   if (byteLength > MAX_TX_SIZE) {
-    throw new Error(
+    throw new SigilRpcError(
+      SIGIL_ERROR__RPC__TX_TOO_LARGE,
       `Transaction size ${byteLength} bytes exceeds limit of ${MAX_TX_SIZE} bytes. ` +
         `Use address lookup tables or reduce instruction count.`,
+      { context: { byteLength, limit: MAX_TX_SIZE } },
     );
   }
   return wireBytes;

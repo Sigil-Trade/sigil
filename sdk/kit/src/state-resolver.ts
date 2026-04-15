@@ -57,6 +57,11 @@ import {
   type PendingConstraintsUpdate,
 } from "./generated/accounts/pendingConstraintsUpdate.js";
 import type { AgentContributionEntry } from "./generated/types/agentContributionEntry.js";
+import { SigilSdkDomainError } from "./errors/sdk.js";
+import {
+  SIGIL_ERROR__SDK__VAULT_NOT_FOUND,
+  SIGIL_ERROR__SDK__POLICY_NOT_FOUND,
+} from "./errors/codes.js";
 import {
   getVaultPDA,
   getPolicyPDA,
@@ -395,12 +400,20 @@ export async function resolveVaultState(
   // 3. Decode — vault and policy are required, others are optional
   const decodedVault = decodeAgentVault(encoded[0]);
   if (!decodedVault.exists) {
-    throw new Error(`Vault account ${vault} does not exist`);
+    throw new SigilSdkDomainError(
+      SIGIL_ERROR__SDK__VAULT_NOT_FOUND,
+      `Vault account ${vault} does not exist`,
+      { context: { vault } },
+    );
   }
 
   const decodedPolicy = decodePolicyConfig(encoded[1]);
   if (!decodedPolicy.exists) {
-    throw new Error(`PolicyConfig for vault ${vault} does not exist`);
+    throw new SigilSdkDomainError(
+      SIGIL_ERROR__SDK__POLICY_NOT_FOUND,
+      `PolicyConfig for vault ${vault} does not exist`,
+      { context: { vault } },
+    );
   }
 
   const decodedTracker = decodeSpendTracker(encoded[2]);
@@ -625,12 +638,20 @@ export async function resolveVaultBudget(
 
   const decodedVault = decodeAgentVault(encoded[0]);
   if (!decodedVault.exists) {
-    throw new Error(`Vault account ${vault} does not exist`);
+    throw new SigilSdkDomainError(
+      SIGIL_ERROR__SDK__VAULT_NOT_FOUND,
+      `Vault account ${vault} does not exist`,
+      { context: { vault } },
+    );
   }
 
   const decodedPolicy = decodePolicyConfig(encoded[1]);
   if (!decodedPolicy.exists) {
-    throw new Error(`PolicyConfig for vault ${vault} does not exist`);
+    throw new SigilSdkDomainError(
+      SIGIL_ERROR__SDK__POLICY_NOT_FOUND,
+      `PolicyConfig for vault ${vault} does not exist`,
+      { context: { vault } },
+    );
   }
 
   const decodedTracker = decodeSpendTracker(encoded[2]);

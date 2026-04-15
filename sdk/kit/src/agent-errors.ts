@@ -2357,6 +2357,24 @@ const SDK_ERROR_PATTERNS: SdkErrorPattern[] = [
 /**
  * Error class that is BOTH an Error instance AND an AgentError.
  * Critical: extends Error so `instanceof Error` checks work in consumer code.
+ *
+ * **PR 2.A — DEFERRED rebasing on `SigilError`.** Per UD3 (defer AgentError
+ * class promotion) and architect's R4: AgentError's `.code: string` is wider
+ * than SigilError's `SigilErrorCode` union. TypeScript's property variance
+ * blocks shadowing the base `.code` with a wider type. The proper fix is to
+ * promote `AgentError` from interface to `SigilAgentError` class — that
+ * change is out of scope for PR 2.A and tracked for a follow-up PR.
+ *
+ * Until then, `SigilSdkError` extends `Error` directly. Consequences:
+ *
+ * - `instanceof SigilSdkError` and `instanceof Error` work as before.
+ * - `instanceof SigilError` returns FALSE for `SigilSdkError` instances.
+ * - Consumers writing `catch (e) { if (e instanceof SigilError) ... }` will
+ *   NOT catch SigilSdkError — they should fall through to a separate
+ *   `if (e instanceof Error)` branch or use the `AgentError` interface check
+ *   (`isAgentError(e)`).
+ *
+ * Documented in the PR 2.A changeset under BREAKING / Limitations.
  */
 export class SigilSdkError extends Error implements AgentError {
   readonly code: string;

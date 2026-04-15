@@ -3,9 +3,21 @@
  *
  * Error class and helper factories for protocol compose functions.
  * Generated {proto}-compose.ts files import from "./compose-errors.js".
+ *
+ * PR 2.A: Re-homed under SigilComposeError per UD1 (single canonical .code).
+ * The historical ComposeErrorCode string-literal union is preserved as
+ * .legacyComposeCode for one-minor migration ramp; deletion targeted at
+ * v1.0. New .code is the canonical SigilErrorCode string-literal.
  */
 
 import { AccountRole, type Address } from "@solana/kit";
+import { SigilComposeError } from "../errors/compose.js";
+import {
+  SIGIL_ERROR__COMPOSE__MISSING_PARAM,
+  SIGIL_ERROR__COMPOSE__INVALID_BIGINT,
+  SIGIL_ERROR__COMPOSE__UNSUPPORTED_ACTION,
+  type SigilComposeErrorCode,
+} from "../errors/codes.js";
 
 // ─── Error Codes ────────────────────────────────────────────────────────────
 
@@ -15,21 +27,32 @@ export const COMPOSE_ERROR_CODES = {
   UNSUPPORTED_ACTION: "unsupported_action",
 } as const;
 
-/** Union literal type of all valid compose error codes. */
+/** Union literal type of all valid compose error codes (legacy). */
 export type ComposeErrorCode =
   (typeof COMPOSE_ERROR_CODES)[keyof typeof COMPOSE_ERROR_CODES];
 
+const COMPOSE_LEGACY_TO_SIGIL: Record<ComposeErrorCode, SigilComposeErrorCode> =
+  {
+    missing_param: SIGIL_ERROR__COMPOSE__MISSING_PARAM,
+    invalid_bigint: SIGIL_ERROR__COMPOSE__INVALID_BIGINT,
+    unsupported_action: SIGIL_ERROR__COMPOSE__UNSUPPORTED_ACTION,
+  };
+
 // ─── Base Error Class ───────────────────────────────────────────────────────
 
-export class ComposeError extends Error {
+export class ComposeError extends SigilComposeError<SigilComposeErrorCode> {
   readonly protocol: string;
-  readonly code: ComposeErrorCode;
+  /** @deprecated Use `err.code` (SigilErrorCode). Removed at v1.0. */
+  readonly legacyComposeCode: ComposeErrorCode;
 
   constructor(protocol: string, code: ComposeErrorCode, message: string) {
-    super(`[${protocol}] ${code}: ${message}`);
+    const sigilCode = COMPOSE_LEGACY_TO_SIGIL[code];
+    super(sigilCode, `[${protocol}] ${code}: ${message}`, {
+      context: { protocol, fieldName: "" } as never,
+    });
     this.name = "ComposeError";
     this.protocol = protocol;
-    this.code = code;
+    this.legacyComposeCode = code;
   }
 }
 

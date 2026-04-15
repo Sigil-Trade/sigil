@@ -15,6 +15,15 @@ import type {
 } from "@solana/kit";
 import { getBase64EncodedWireTransaction } from "@solana/kit";
 
+import { SigilSdkDomainError } from "./errors/sdk.js";
+import { SigilRpcError } from "./errors/rpc.js";
+import {
+  SIGIL_ERROR__SDK__SIGNER_INVALID,
+  SIGIL_ERROR__SDK__SIGNATURE_INVALID,
+  SIGIL_ERROR__RPC__TX_FAILED,
+  SIGIL_ERROR__RPC__CONFIRMATION_TIMEOUT,
+} from "./errors/codes.js";
+
 /** Typed shape of a getSignatureStatuses value entry. */
 interface SignatureStatusValue {
   err: unknown;
@@ -155,14 +164,18 @@ export async function signAndEncode(
   const signFn =
     signerTyped.modifyAndSignTransactions ?? signerTyped.signTransactions;
   if (typeof signFn !== "function") {
-    throw new Error(
+    throw new SigilSdkDomainError(
+      SIGIL_ERROR__SDK__SIGNER_INVALID,
       "Signer must implement signTransactions() or modifyAndSignTransactions()",
+      { context: { reason: "missing-sign-method" } },
     );
   }
   const results = await signFn.call(signerTyped, [compiledTx]);
   if (!Array.isArray(results) || results.length === 0) {
-    throw new Error(
+    throw new SigilSdkDomainError(
+      SIGIL_ERROR__SDK__SIGNATURE_INVALID,
       "signTransactions returned invalid result: expected non-empty array",
+      { context: { reason: "empty-or-non-array" } },
     );
   }
   const [signedTx] = results;
@@ -212,8 +225,10 @@ export async function sendAndConfirmTransaction(
 
       // Check for error
       if (status.err) {
-        throw new Error(
+        throw new SigilRpcError(
+          SIGIL_ERROR__RPC__TX_FAILED,
           `Transaction ${signature} failed: ${JSON.stringify(status.err)}`,
+          { context: { signature: signature as string } },
         );
       }
 
@@ -233,8 +248,10 @@ export async function sendAndConfirmTransaction(
     delay = Math.min(delay * (1.3 + Math.random() * 0.4), 5_000);
   }
 
-  throw new Error(
+  throw new SigilRpcError(
+    SIGIL_ERROR__RPC__CONFIRMATION_TIMEOUT,
     `Transaction ${signature} confirmation timed out after ${timeoutMs}ms`,
+    { context: { signature: signature as string, timeoutMs } },
   );
 }
 
