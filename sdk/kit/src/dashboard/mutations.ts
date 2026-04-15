@@ -39,6 +39,7 @@ import {
   getPendingCloseConstraintsPDA,
 } from "../resolve-accounts.js";
 import { resolveVaultStateForOwner } from "../state-resolver.js";
+import { redactCause } from "../network-errors.js";
 import { SIGIL_PROGRAM_ADDRESS, MAX_ALLOWED_PROTOCOLS } from "../types.js";
 import type { Network } from "../types.js";
 import type { AgentVault } from "../generated/accounts/agentVault.js";
@@ -300,7 +301,15 @@ export async function closeVault(
           .getAccountInfo(pda, { encoding: "base64" })
           .send();
         return info?.value ? pda : null;
-      } catch {
+      } catch (err: unknown) {
+        // RPC failure is NOT the same as "account absent" — logging it
+        // here makes a transient outage observable rather than silently
+        // omitting the PDA from remaining_accounts, which would surface
+        // downstream as an opaque "AccountMissing" from close_vault.
+        const cause = redactCause(err);
+        console.warn(
+          `[close_vault] existence check failed for ${pda} — treating as absent: ${cause.message ?? cause.name ?? cause.code ?? "unknown"}`,
+        );
         return null;
       }
     }),

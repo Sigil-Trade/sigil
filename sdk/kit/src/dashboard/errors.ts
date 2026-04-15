@@ -5,7 +5,20 @@
  * map any thrown error into the DxError type defined in types.ts. The optional
  * `context` argument prepends an "OwnerClient.<method>: " prefix to the message
  * so callers can tell which read/mutation produced the error.
+ *
+ * Also exports {@link isAccountNotFoundError}, the shared predicate for
+ * "this error means the account was missing, treat as null rather than
+ * re-throw." Used by `getPolicy`, `getOverview`, and `getVaultSummary`.
  */
+
+import {
+  isSolanaError,
+  SOLANA_ERROR__NONCE_ACCOUNT_NOT_FOUND,
+  SOLANA_ERROR__ACCOUNTS__ACCOUNT_NOT_FOUND,
+  SOLANA_ERROR__TRANSACTION_ERROR__ACCOUNT_NOT_FOUND,
+  SOLANA_ERROR__TRANSACTION_ERROR__PROGRAM_ACCOUNT_NOT_FOUND,
+  type SolanaError,
+} from "@solana/errors";
 
 import { SDK_ERROR_CODES, toAgentError } from "../agent-errors.js";
 import type { DxError } from "./types.js";
@@ -52,6 +65,78 @@ function resolveDxCode(rawCode: unknown): number {
   }
   return DX_ERROR_CODE_UNMAPPED;
 }
+
+// ─── isAccountNotFoundError ────────────────────────────────────────────────
+
+/**
+ * Typed account-not-found codes from `@solana/errors`. Covers the four
+ * distinct "account missing" shapes Kit may surface:
+ *
+ *   - {@link SOLANA_ERROR__NONCE_ACCOUNT_NOT_FOUND} (3) — nonce account.
+ *   - {@link SOLANA_ERROR__ACCOUNTS__ACCOUNT_NOT_FOUND} (3230000) — the
+ *     canonical Accounts-subsystem code thrown by `assertAccountExists`.
+ *   - {@link SOLANA_ERROR__TRANSACTION_ERROR__ACCOUNT_NOT_FOUND} (7050003).
+ *   - {@link SOLANA_ERROR__TRANSACTION_ERROR__PROGRAM_ACCOUNT_NOT_FOUND}
+ *     (7050004).
+ */
+const ACCOUNT_NOT_FOUND_CODES = [
+  SOLANA_ERROR__NONCE_ACCOUNT_NOT_FOUND,
+  SOLANA_ERROR__ACCOUNTS__ACCOUNT_NOT_FOUND,
+  SOLANA_ERROR__TRANSACTION_ERROR__ACCOUNT_NOT_FOUND,
+  SOLANA_ERROR__TRANSACTION_ERROR__PROGRAM_ACCOUNT_NOT_FOUND,
+] as const;
+
+type AccountNotFoundCode = (typeof ACCOUNT_NOT_FOUND_CODES)[number];
+
+/**
+ * Is this error a Solana "account not found" error?
+ *
+ * Primary path: typed `SolanaError` matching any of the four
+ * {@link ACCOUNT_NOT_FOUND_CODES} — narrows to `SolanaError<C>` so callers
+ * can destructure `err.context` inside the matched branch without casts.
+ *
+ * Fallback path: legacy substring match on `"could not find"` or
+ * `"Account does not exist"`. Retained because `@solana/web3.js` 1.x
+ * `Connection.getAccountInfo` throws plain `Error` with these messages
+ * and may still be reachable through transitive Connection usage. If
+ * this project fully retires web3.js 1.x, the substring branch becomes
+ * dead code and should be removed in a follow-up.
+ */
+// Note: unlike `isTransportError` in `network-errors.ts`, this predicate
+// does NOT walk `AggregateError.errors`. "Any of these errors is a
+// transport problem" is a useful retry signal; "any of these errors is
+// an account-not-found" is not actionable without knowing WHICH account.
+// A caller who needs fine-grained aggregate semantics should iterate
+// `.errors` explicitly.
+export function isAccountNotFoundError(
+  err: unknown,
+): err is SolanaError<AccountNotFoundCode> {
+  for (const code of ACCOUNT_NOT_FOUND_CODES) {
+    // `isSolanaError` probes `err.context.__code`; a hostile Proxy with
+    // a throwing `get` trap would propagate out of this predicate and
+    // re-introduce the silent-failure class. The try/catch lets the
+    // classifier fall through to substring matching and ultimately false.
+    try {
+      if (isSolanaError(err, code)) return true;
+    } catch {
+      // Proxy trap / throwing getter — treat this code as a non-match
+      // and continue to the next.
+    }
+  }
+  let message = "";
+  try {
+    if (err instanceof Error) message = err.message;
+  } catch {
+    // instanceof itself can throw through Proxy traps; fall through to
+    // empty-message substring check, which cannot match.
+  }
+  return (
+    message.includes("could not find") ||
+    message.includes("Account does not exist")
+  );
+}
+
+// ─── toDxError ─────────────────────────────────────────────────────────────
 
 /** Normalize any error into a DxError with code, message, and recovery actions. */
 export function toDxError(err: unknown, context?: string): DxError {

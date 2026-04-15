@@ -6,6 +6,7 @@
  */
 
 import type { Instruction, Rpc, SolanaRpcApi } from "@solana/kit";
+import { redactCause } from "./network-errors.js";
 
 // ─── Known Protocol Program Addresses ────────────────────────────────────────
 
@@ -191,7 +192,15 @@ export class PriorityFeeEstimator {
       }
 
       return null;
-    } catch {
+    } catch (err: unknown) {
+      // Previously a silent null — if Helius renames a response field or
+      // changes their endpoint, every user quietly falls through to the
+      // default fee with no visibility. A warn is cheap and makes API
+      // shape drift detectable in production.
+      const cause = redactCause(err);
+      console.warn(
+        `[priority-fees] Helius estimate failed — falling back: ${cause.message ?? cause.name ?? cause.code ?? "unknown"}`,
+      );
       return null;
     }
   }
@@ -217,7 +226,13 @@ export class PriorityFeeEstimator {
       );
 
       return sorted[index];
-    } catch {
+    } catch (err: unknown) {
+      // Same rationale as the Helius path — log so a failing RPC doesn't
+      // silently push users to the fallback fee without trace.
+      const cause = redactCause(err);
+      console.warn(
+        `[priority-fees] RPC getRecentPrioritizationFees failed — falling back: ${cause.message ?? cause.name ?? cause.code ?? "unknown"}`,
+      );
       return null;
     }
   }

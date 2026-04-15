@@ -189,12 +189,22 @@ describe("tee-attestation", () => {
   });
 
   describe("verifyTeeAttestation", () => {
-    it("non-TEE wallet returns Unavailable", async () => {
-      const result = await verifyTeeAttestation(mockWallet());
-      expect(result.status).to.equal(AttestationStatus.Unavailable);
+    it("non-TEE wallet throws under safe-by-default (result.status = Unavailable)", async () => {
+      // PR 1.B default changed from `requireAttestation: false` to `true`.
+      // A non-TEE wallet no longer silently returns Unavailable — it throws
+      // TeeAttestationError carrying the full result for observability.
+      try {
+        await verifyTeeAttestation(mockWallet());
+        expect.fail("Should have thrown — default is requireAttestation: true");
+      } catch (err) {
+        expect(err).to.be.instanceOf(TeeAttestationError);
+        expect((err as TeeAttestationError).result?.status).to.equal(
+          AttestationStatus.Unavailable,
+        );
+      }
     });
 
-    it("requireAttestation + Failed throws TeeAttestationError", async () => {
+    it("requireAttestation + Failed throws TeeAttestationError carrying result", async () => {
       try {
         await verifyTeeAttestation(mockWallet(), {
           requireAttestation: true,
@@ -202,19 +212,111 @@ describe("tee-attestation", () => {
         expect.fail("Should have thrown");
       } catch (err) {
         expect(err).to.be.instanceOf(TeeAttestationError);
+        expect((err as TeeAttestationError).result).to.exist;
+        expect((err as TeeAttestationError).result?.status).to.equal(
+          AttestationStatus.Unavailable,
+        );
       }
     });
 
-    it("minAttestationLevel enforcement", async () => {
-      // Non-TEE wallet gets Unavailable, which doesn't meet any level
+    it("minAttestationLevel enforcement (requireAttestation: false + onDegraded)", async () => {
+      // Opt out of safe-default so the level check path runs. `onDegraded`
+      // is mandatory in the forgiving mode — omitting it throws before
+      // the level check ever fires (see separate test below).
       try {
         await verifyTeeAttestation(mockWallet(), {
+          requireAttestation: false,
+          onDegraded: () => {},
           minAttestationLevel: "provider_trusted",
         });
         expect.fail("Should have thrown");
       } catch (err) {
         expect(err).to.be.instanceOf(TeeAttestationError);
         expect((err as Error).message).to.include("does not meet minimum");
+      }
+    });
+
+    it("requireAttestation: false WITHOUT onDegraded throws immediately", async () => {
+      // Core safety invariant of PR 1.B: the forgiving path cannot be
+      // entered silently. Omitting `onDegraded` is treated as the
+      // silent-degradation vector this default was introduced to prevent.
+      try {
+        await verifyTeeAttestation(mockWallet(), { requireAttestation: false });
+        expect.fail("Should have thrown — onDegraded is required");
+      } catch (err) {
+        expect(err).to.be.instanceOf(TeeAttestationError);
+        expect((err as Error).message).to.include("onDegraded");
+      }
+    });
+
+    it("onDegraded fires when requireAttestation: false and status is non-verified", async () => {
+      let degradedResult: { status?: string } | undefined;
+      const result = await verifyTeeAttestation(mockWallet(), {
+        requireAttestation: false,
+        onDegraded: (r) => {
+          degradedResult = r as unknown as { status?: string };
+        },
+      });
+      expect(result.status).to.equal(AttestationStatus.Unavailable);
+      expect(degradedResult?.status).to.equal(AttestationStatus.Unavailable);
+    });
+
+    it("onDegraded callback errors are non-fatal", async () => {
+      // A broken observability wire-up must not re-throw and mask the
+      // underlying degraded status — the dispatcher still returns the
+      // result to the caller (who opted into the forgiving path).
+      const result = await verifyTeeAttestation(mockWallet(), {
+        requireAttestation: false,
+        onDegraded: () => {
+          throw new Error("telemetry broken");
+        },
+      });
+      expect(result.status).to.equal(AttestationStatus.Unavailable);
+    });
+
+    it("throwing `publicKey` getter throws TeeAttestationError, does not leak raw", async () => {
+      // Hunter H1: a hostile wallet with a throwing `publicKey` getter
+      // must NOT escape the dispatcher with the raw getter exception —
+      // that would let a buggy wallet adapter dodge the
+      // TeeAttestationError contract the caller wired up.
+      const hostileWallet = {
+        get publicKey(): string {
+          throw new Error("hostile getter, contains SECRET_TOKEN");
+        },
+      } as unknown as Parameters<typeof verifyTeeAttestation>[0];
+      try {
+        await verifyTeeAttestation(hostileWallet);
+        expect.fail("Should have thrown TeeAttestationError");
+      } catch (err) {
+        expect(err).to.be.instanceOf(TeeAttestationError);
+        expect((err as TeeAttestationError).result?.status).to.equal(
+          AttestationStatus.Failed,
+        );
+        // The raw getter message (and its secret) must NOT appear in
+        // the thrown error's message — redactCause is applied internally.
+        expect((err as Error).message).to.not.include("SECRET_TOKEN");
+      }
+    });
+
+    it("throwing `provider` getter throws TeeAttestationError, does not leak raw", async () => {
+      // Hunter H3: same contract for a hostile `provider` getter
+      // (reached via `isTeeWallet` inside `detectProvider`).
+      const hostileWallet = {
+        publicKey: "11111111111111111111111111111111" as unknown as ReturnType<
+          () => string
+        >,
+        get provider(): string {
+          throw new Error("hostile provider getter");
+        },
+      } as unknown as Parameters<typeof verifyTeeAttestation>[0];
+      try {
+        await verifyTeeAttestation(hostileWallet);
+        expect.fail("Should have thrown TeeAttestationError");
+      } catch (err) {
+        expect(err).to.be.instanceOf(TeeAttestationError);
+        expect((err as TeeAttestationError).result?.status).to.equal(
+          AttestationStatus.Failed,
+        );
       }
     });
   });

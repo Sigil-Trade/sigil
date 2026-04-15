@@ -112,12 +112,37 @@ export type AttestationLevel =
 
 /** Configuration for TEE attestation verification. */
 export interface AttestationConfig {
-  /** Require attestation to pass — throws on failure. Default: false */
+  /**
+   * Require attestation to pass — throws `TeeAttestationError` on failure.
+   *
+   * **Default: `true`** (changed from `false` in the PR 1.B safety lockdown).
+   * The thrown error carries the full `AttestationResult` via `.result`, so
+   * `Sentry.captureException(err)` auto-serializes the diagnostic payload.
+   *
+   * Set `false` ONLY if you also pass `onDegraded` — otherwise you are
+   * explicitly re-introducing the silent-degradation vector this default
+   * exists to prevent, and the dispatcher will throw to signal that.
+   */
   requireAttestation?: boolean;
   /** Cache TTL in milliseconds. Default: 3_600_000 (1 hour). Set to 0 to disable caching. */
   cacheTtlMs?: number;
   /** Callback fired after successful verification. */
   onVerified?: (result: AttestationResult) => void;
+  /**
+   * Callback fired when attestation returns a non-verified status
+   * (`Failed`, `Unavailable`, or `ProviderTrusted`) AND
+   * `requireAttestation` is explicitly `false`.
+   *
+   * **Required** when `requireAttestation: false`. Without it, the SDK
+   * cannot surface the degraded status and the caller silently treats the
+   * wallet as fine — the exact bug this callback exists to prevent. The
+   * dispatcher enforces: if `requireAttestation === false` and `onDegraded`
+   * is not set, `verifyTeeAttestation` throws.
+   *
+   * Wire this to your observability stack, e.g.:
+   * `(r) => Sentry.captureMessage("tee-degraded", { extra: r })`.
+   */
+  onDegraded?: (result: AttestationResult) => void;
   /** Expected PCR3 value for Turnkey (SHA-384 hash of IAM role ARN). */
   expectedPcr3?: string;
   /** Minimum acceptable verification level. Default: "provider_trusted" (backward-compatible). */

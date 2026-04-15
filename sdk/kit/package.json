@@ -60,7 +60,8 @@
     "@solana-program/compute-budget": "^0.15.0"
   },
   "peerDependencies": {
-    "@solana/kit": "^6.2.0"
+    "@solana/kit": "^6.2.0",
+    "@solana/errors": "^6.2.0"
   },
   "optionalDependencies": {
     "cbor-x": "^1.6.0"
@@ -68,6 +69,7 @@
   "devDependencies": {
     "@codama/nodes-from-anchor": "1.3.9",
     "@codama/renderers-js": "2.0.3",
+    "@solana/errors": "^6.2.0",
     "@types/chai": "^5.2.3",
     "@types/mocha": "^10.0.6",
     "chai": "^6.2.2",

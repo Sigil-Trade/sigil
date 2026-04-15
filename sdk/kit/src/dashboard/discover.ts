@@ -7,6 +7,7 @@
 import type { Address, Rpc, SolanaRpcApi } from "@solana/kit";
 import { findVaultsByOwner } from "../state-resolver.js";
 import { fetchMaybeAgentVault } from "../generated/accounts/agentVault.js";
+import { redactCause } from "../network-errors.js";
 import type { DiscoveredVault } from "./types.js";
 
 /**
@@ -57,7 +58,17 @@ export async function discoverVaults(
             agentCount: data.agents?.length ?? 0,
           }),
         } satisfies DiscoveredVault;
-      } catch {
+      } catch (err: unknown) {
+        // Decode or parse failure — the vault's on-chain data didn't
+        // match the expected layout. Previously this silently dropped
+        // the vault from discovery results, hiding data corruption
+        // from the owner. Log the redacted cause so operators can
+        // correlate "missing vault in dashboard" with a real decode
+        // error.
+        const cause = redactCause(err);
+        console.warn(
+          `[discoverVaults] vault ${v.vaultAddress} decode failed — omitting from results: ${cause.message ?? cause.name ?? cause.code ?? "unknown"}`,
+        );
         return null;
       }
     }),

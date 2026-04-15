@@ -13,6 +13,7 @@ import {
   type AttestationResult,
   type AttestationConfig,
 } from "../types.js";
+import { isTransportError, redactCause } from "../../network-errors.js";
 
 export async function verifyCrossmint(
   wallet: WalletLike,
@@ -48,23 +49,28 @@ export async function verifyCrossmint(
         metadata: { provider: "crossmint", verifiedAt: Date.now() },
         message: "Crossmint custody verification failed: address mismatch.",
       };
-    } catch {
-      // API call failed — return ProviderTrusted with distinct message.
-      // rawAttestation.custodyCheckFailed signals to the dispatcher that this
-      // downgraded result should not be cached (allows retry on next call).
+    } catch (err: unknown) {
+      // API call failed. Previously this path silently downgraded to
+      // ProviderTrusted (a transport error would pass any consumer with
+      // `minAttestationLevel: "provider_trusted"`). We now fail closed:
+      // return Failed with structural transport classification and a
+      // redacted cause so downstream logging can diagnose without leaking
+      // raw `err.message`, `err.stack`, or upstream request identifiers.
+      const transport = isTransportError(err);
+      const cause = redactCause(err);
       return {
-        status: AttestationStatus.ProviderTrusted,
+        status: AttestationStatus.Failed,
         provider: "crossmint",
         publicKey,
         metadata: {
           provider: "crossmint",
           enclaveType: "tdx",
           verifiedAt: Date.now(),
-          rawAttestation: { custodyCheckFailed: true },
+          rawAttestation: { transport, cause },
         },
-        message:
-          "Crossmint wallet trusted via managed Intel TDX infrastructure. " +
-          "Custody verification API call failed — falling back to ProviderTrusted.",
+        message: transport
+          ? "Crossmint custody verification failed: transport error reaching the custody API. Retry after network recovery."
+          : `Crossmint custody verification failed: unexpected error from custody API. Cause: ${cause.message ?? cause.name ?? cause.code ?? "unknown"}`,
       };
     }
   }

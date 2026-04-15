@@ -18,6 +18,7 @@ import {
   resolveVaultStateForOwner,
   getPendingPolicyForVault,
 } from "./state-resolver.js";
+import { isAccountNotFoundError } from "./dashboard/errors.js";
 import {
   getVaultPnL,
   getVaultTokenBalances,
@@ -247,7 +248,14 @@ export async function getVaultSummary(
     resolveVaultStateForOwner(rpc, vault, undefined, network),
     getVaultPnL(rpc, vault, network),
     getVaultTokenBalances(rpc, vault, network),
-    getPendingPolicyForVault(rpc, vault).catch(() => null),
+    getPendingPolicyForVault(rpc, vault).catch((err: unknown) => {
+      // Account-not-found is expected (no pending update) — return null.
+      // Re-throw everything else (RPC transport, decode failures) so the
+      // caller surfaces real errors rather than silently seeing
+      // `pendingPolicy: null` on an unrelated outage.
+      if (isAccountNotFoundError(err)) return null;
+      throw err;
+    }),
   ]);
 
   const nowUnix = state.resolvedAtTimestamp;

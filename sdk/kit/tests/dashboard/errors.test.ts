@@ -17,7 +17,16 @@
 
 import { expect } from "chai";
 import {
+  SolanaError,
+  SOLANA_ERROR__NONCE_ACCOUNT_NOT_FOUND,
+  SOLANA_ERROR__ACCOUNTS__ACCOUNT_NOT_FOUND,
+  SOLANA_ERROR__TRANSACTION_ERROR__ACCOUNT_NOT_FOUND,
+  SOLANA_ERROR__TRANSACTION_ERROR__PROGRAM_ACCOUNT_NOT_FOUND,
+  SOLANA_ERROR__RPC__TRANSPORT_HTTP_ERROR,
+} from "@solana/errors";
+import {
   DX_ERROR_CODE_UNMAPPED,
+  isAccountNotFoundError,
   toDxError,
 } from "../../src/dashboard/errors.js";
 
@@ -95,5 +104,149 @@ describe("toDxError — code fidelity (Finding 4 regression)", () => {
     expect(dx.code).to.satisfy(
       (c: number) => typeof c === "number" && Number.isFinite(c),
     );
+  });
+});
+
+// ─── isAccountNotFoundError predicate (PR 1.B canary + regression) ──────────
+//
+// The predicate has two paths: typed primary (`isSolanaError` with one of
+// four ACCOUNT_NOT_FOUND codes) and substring fallback (web3.js 1.x legacy
+// "could not find" / "Account does not exist"). These tests lock the
+// invariants:
+//
+//  - All four typed codes match → critical for future Kit evolution.
+//  - A non-account-not-found typed code does NOT match → ensures we don't
+//    swallow unrelated SolanaErrors as "missing."
+//  - Legacy substrings still match → preserves backward compat with
+//    transitive web3.js 1.x Connection usage until we confirm it's gone.
+//  - Adversarial shapes (null, undefined, Proxy, frozen, throwing getters)
+//    do NOT throw through the predicate itself.
+describe("isAccountNotFoundError — typed primary + substring fallback", () => {
+  describe("typed SolanaError path (primary)", () => {
+    it("matches SOLANA_ERROR__NONCE_ACCOUNT_NOT_FOUND (3)", () => {
+      // Some SolanaError codes have required context shapes; the constructor
+      // enforces this at the type level. For the predicate tests we care
+      // about the code-matching behavior, so we construct via `as any` to
+      // sidestep per-code context requirements without losing runtime
+      // realism (isSolanaError inspects the error's `.context.__code`).
+      const err = new (SolanaError as unknown as new (code: number) => Error)(
+        SOLANA_ERROR__NONCE_ACCOUNT_NOT_FOUND,
+      );
+      expect(isAccountNotFoundError(err)).to.equal(true);
+    });
+
+    it("matches SOLANA_ERROR__ACCOUNTS__ACCOUNT_NOT_FOUND (3230000)", () => {
+      const err = new SolanaError(SOLANA_ERROR__ACCOUNTS__ACCOUNT_NOT_FOUND, {
+        address:
+          "11111111111111111111111111111111" as unknown as `${string}${string}`,
+      });
+      expect(isAccountNotFoundError(err)).to.equal(true);
+    });
+
+    it("matches SOLANA_ERROR__TRANSACTION_ERROR__ACCOUNT_NOT_FOUND (7050003)", () => {
+      const err = new (SolanaError as unknown as new (code: number) => Error)(
+        SOLANA_ERROR__TRANSACTION_ERROR__ACCOUNT_NOT_FOUND,
+      );
+      expect(isAccountNotFoundError(err)).to.equal(true);
+    });
+
+    it("matches SOLANA_ERROR__TRANSACTION_ERROR__PROGRAM_ACCOUNT_NOT_FOUND (7050004)", () => {
+      const err = new (SolanaError as unknown as new (code: number) => Error)(
+        SOLANA_ERROR__TRANSACTION_ERROR__PROGRAM_ACCOUNT_NOT_FOUND,
+      );
+      expect(isAccountNotFoundError(err)).to.equal(true);
+    });
+
+    it("does NOT match an unrelated SolanaError (transport HTTP error)", () => {
+      // Any non-account-not-found SolanaError must be rejected — mis-
+      // classifying as "not found" was the silent-swallow vector.
+      const err = new (SolanaError as unknown as new (
+        code: number,
+        ctx: object,
+      ) => Error)(SOLANA_ERROR__RPC__TRANSPORT_HTTP_ERROR, {
+        headers: {},
+        message: "HTTP 500",
+        statusCode: 500,
+      });
+      expect(isAccountNotFoundError(err)).to.equal(false);
+    });
+  });
+
+  describe("substring fallback path (legacy web3.js 1.x)", () => {
+    it("matches plain Error with 'could not find'", () => {
+      const err = new Error("Error: could not find account");
+      expect(isAccountNotFoundError(err)).to.equal(true);
+    });
+
+    it("matches plain Error with 'Account does not exist'", () => {
+      const err = new Error("Account does not exist ABC...");
+      expect(isAccountNotFoundError(err)).to.equal(true);
+    });
+
+    it("does NOT match an unrelated plain Error", () => {
+      const err = new Error("Insufficient funds for rent");
+      expect(isAccountNotFoundError(err)).to.equal(false);
+    });
+  });
+
+  describe("defensive type-narrowing (no throw-through)", () => {
+    it("returns false for null", () => {
+      expect(isAccountNotFoundError(null)).to.equal(false);
+    });
+
+    it("returns false for undefined", () => {
+      expect(isAccountNotFoundError(undefined)).to.equal(false);
+    });
+
+    it("returns false for empty object", () => {
+      expect(isAccountNotFoundError({})).to.equal(false);
+    });
+
+    it("returns false for a string", () => {
+      expect(isAccountNotFoundError("some string")).to.equal(false);
+    });
+
+    it("returns false for a number", () => {
+      expect(isAccountNotFoundError(42)).to.equal(false);
+    });
+
+    it("does not throw on frozen error objects", () => {
+      const err = Object.freeze(new Error("could not find"));
+      expect(() => isAccountNotFoundError(err)).to.not.throw();
+      expect(isAccountNotFoundError(err)).to.equal(true);
+    });
+
+    it("does not throw on a Proxy error with get traps", () => {
+      // A hostile error that throws on property access must not
+      // propagate through the predicate — otherwise the "silent
+      // failure elimination" reintroduces itself via the predicate.
+      const proxied = new Proxy(new Error("test"), {
+        get() {
+          throw new Error("proxy trap");
+        },
+      });
+      // Behavior: predicate must not throw. Return value can be
+      // either true/false depending on how isSolanaError probes the
+      // object — we assert it doesn't crash, which is the invariant.
+      expect(() => isAccountNotFoundError(proxied)).to.not.throw();
+    });
+
+    it("returns false for an AggregateError wrapping account-not-found", () => {
+      // AggregateError semantics: the outer error itself isn't shaped
+      // as account-not-found, so the predicate returns false. This
+      // documents current non-walking behavior — if future callers
+      // want to walk `.errors`, they should do so explicitly.
+      // AggregateError is ES2021, universally present on Node >= 15 —
+      // all runtimes `@usesigil/kit` supports (Node >= 18) include it,
+      // so no runtime guard is necessary.
+      const inner = new (SolanaError as unknown as new (
+        code: number,
+        ctx: object,
+      ) => Error)(SOLANA_ERROR__ACCOUNTS__ACCOUNT_NOT_FOUND, {
+        address: "11111111111111111111111111111111",
+      });
+      const agg = new globalThis.AggregateError([inner], "multiple");
+      expect(isAccountNotFoundError(agg)).to.equal(false);
+    });
   });
 });

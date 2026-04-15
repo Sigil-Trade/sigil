@@ -13,7 +13,8 @@
 
 import { isSome } from "@solana/kit";
 import type { Address, Rpc, SolanaRpcApi } from "@solana/kit";
-import { toDxError } from "./errors.js";
+import { toDxError, isAccountNotFoundError } from "./errors.js";
+import { redactCause } from "../network-errors.js";
 import {
   resolveVaultStateForOwner,
   getSpendingHistory,
@@ -93,23 +94,9 @@ function serializeBigints(obj: unknown): unknown {
  */
 export const DEFAULT_OVERVIEW_ACTIVITY_LIMIT = 100;
 
-/**
- * Shared "is this an account-not-found error?" predicate.
- *
- * Both `getPolicy` and `getOverview` treat a missing `PendingPolicyUpdate`
- * account as "no pending update" (not an error). The current Kit doesn't
- * expose a typed `AccountNotFound` SolanaError at this call site, so both
- * paths fall back to substring matching. Extracting it here means the
- * fragility lives in one place and only one site needs to update if Kit
- * ever surfaces a typed variant.
- */
-function isAccountNotFoundError(err: unknown): boolean {
-  const message = err instanceof Error ? err.message : String(err);
-  return (
-    message.includes("could not find") ||
-    message.includes("Account does not exist")
-  );
-}
+// Shared account-not-found predicate now lives in `./errors.js` — see
+// `isAccountNotFoundError` for the typed-primary + substring-fallback
+// implementation covering four Solana error codes.
 
 // ─── Build helpers (pure composition — no RPC) ───────────────────────────────
 // Each helper accepts an OverviewContext and returns one view type. `getOverview`
@@ -621,22 +608,27 @@ export async function getAgents(
     // surface last action for low-volume agents without inflating RPC cost.
     //
     // Fix for docs/SECURITY-FINDINGS-2026-04-07.md Finding 5: the previous
-    // `.catch(() => [])` swallowed activity-fetch failures silently. If Helius
-    // started rate-limiting getSignaturesForAddress, every dashboard call would
-    // show "last action: never" for every agent forever and nobody would
-    // notice. Graceful degradation is still the right behavior (activity is
-    // enrichment, not core), but it must be observable — console.warn is the
-    // minimum bar.
+    // Graceful degradation with observable failure (activity is enrichment,
+    // not core). Previously used a bare `.catch(() => [])` that silently
+    // returned empty on any Helius rate-limit or outage; now logs a
+    // redacted cause so operators can correlate "last action: never" with
+    // an actual upstream error.
     const [state, activity] = await Promise.all([
       resolveVaultStateForOwner(rpc, vault, undefined, toNet(network)),
-      getVaultActivity(rpc, vault, 100, toNet(network)).catch((err) => {
-        // eslint-disable-next-line no-console
-        console.warn(
-          "[OwnerClient.getAgents] activity enrichment failed — falling back to empty last-action fields:",
-          err instanceof Error ? err.message : String(err),
-        );
-        return [];
-      }),
+      getVaultActivity(rpc, vault, 100, toNet(network)).catch(
+        (err: unknown) => {
+          // Redact via `redactCause` (PR 1.B discipline) — a Helius URL
+          // carrying an API key in the path would otherwise leak into
+          // the console.warn.
+          const cause = redactCause(err);
+          // eslint-disable-next-line no-console
+          console.warn(
+            "[OwnerClient.getAgents] activity enrichment failed — falling back to empty last-action fields:",
+            cause.message ?? cause.name ?? cause.code ?? "unknown",
+          );
+          return [];
+        },
+      ),
     ]);
     return buildAgents({ vault, state, activity });
   } catch (err) {
@@ -848,17 +840,20 @@ export async function getOverview(
     const [state, activity, pendingPolicy] = await Promise.all([
       resolveVaultStateForOwner(rpc, vault, undefined, net),
       includeActivity
-        ? getVaultActivity(rpc, vault, activityLimit, net).catch((err) => {
-            // Same graceful-degradation pattern as getAgents
-            // (docs/SECURITY-FINDINGS-2026-04-07.md Finding 5): activity is
-            // enrichment, not core, but the failure must be observable.
-            // eslint-disable-next-line no-console
-            console.warn(
-              "[OwnerClient.getOverview] activity fetch failed — falling back to empty:",
-              err instanceof Error ? err.message : String(err),
-            );
-            return [] as VaultActivityItem[];
-          })
+        ? getVaultActivity(rpc, vault, activityLimit, net).catch(
+            (err: unknown) => {
+              // Same graceful-degradation pattern as getAgents. Redacted
+              // via the PR 1.B `redactCause` discipline so upstream
+              // request URLs / tokens don't end up in stdout.
+              const cause = redactCause(err);
+              // eslint-disable-next-line no-console
+              console.warn(
+                "[OwnerClient.getOverview] activity fetch failed — falling back to empty:",
+                cause.message ?? cause.name ?? cause.code ?? "unknown",
+              );
+              return [] as VaultActivityItem[];
+            },
+          )
         : Promise.resolve<VaultActivityItem[] | undefined>(undefined),
       getPendingPolicyForVault(rpc, vault).catch((err: unknown) => {
         if (isAccountNotFoundError(err)) return null;
