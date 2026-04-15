@@ -102,6 +102,12 @@ type AccountNotFoundCode = (typeof ACCOUNT_NOT_FOUND_CODES)[number];
  * this project fully retires web3.js 1.x, the substring branch becomes
  * dead code and should be removed in a follow-up.
  */
+// Note: unlike `isTransportError` in `network-errors.ts`, this predicate
+// does NOT walk `AggregateError.errors`. "Any of these errors is a
+// transport problem" is a useful retry signal; "any of these errors is
+// an account-not-found" is not actionable without knowing WHICH account.
+// A caller who needs fine-grained aggregate semantics should iterate
+// `.errors` explicitly.
 export function isAccountNotFoundError(
   err: unknown,
 ): err is SolanaError<AccountNotFoundCode> {

@@ -273,6 +273,52 @@ describe("tee-attestation", () => {
       });
       expect(result.status).to.equal(AttestationStatus.Unavailable);
     });
+
+    it("throwing `publicKey` getter throws TeeAttestationError, does not leak raw", async () => {
+      // Hunter H1: a hostile wallet with a throwing `publicKey` getter
+      // must NOT escape the dispatcher with the raw getter exception —
+      // that would let a buggy wallet adapter dodge the
+      // TeeAttestationError contract the caller wired up.
+      const hostileWallet = {
+        get publicKey(): string {
+          throw new Error("hostile getter, contains SECRET_TOKEN");
+        },
+      } as unknown as Parameters<typeof verifyTeeAttestation>[0];
+      try {
+        await verifyTeeAttestation(hostileWallet);
+        expect.fail("Should have thrown TeeAttestationError");
+      } catch (err) {
+        expect(err).to.be.instanceOf(TeeAttestationError);
+        expect((err as TeeAttestationError).result?.status).to.equal(
+          AttestationStatus.Failed,
+        );
+        // The raw getter message (and its secret) must NOT appear in
+        // the thrown error's message — redactCause is applied internally.
+        expect((err as Error).message).to.not.include("SECRET_TOKEN");
+      }
+    });
+
+    it("throwing `provider` getter throws TeeAttestationError, does not leak raw", async () => {
+      // Hunter H3: same contract for a hostile `provider` getter
+      // (reached via `isTeeWallet` inside `detectProvider`).
+      const hostileWallet = {
+        publicKey: "11111111111111111111111111111111" as unknown as ReturnType<
+          () => string
+        >,
+        get provider(): string {
+          throw new Error("hostile provider getter");
+        },
+      } as unknown as Parameters<typeof verifyTeeAttestation>[0];
+      try {
+        await verifyTeeAttestation(hostileWallet);
+        expect.fail("Should have thrown TeeAttestationError");
+      } catch (err) {
+        expect(err).to.be.instanceOf(TeeAttestationError);
+        expect((err as TeeAttestationError).result?.status).to.equal(
+          AttestationStatus.Failed,
+        );
+      }
+    });
   });
 
   describe("DEFAULT_CACHE_TTL_MS", () => {

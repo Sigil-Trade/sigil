@@ -20,6 +20,40 @@ import {
 import { verifyCrossmint } from "./providers/crossmint.js";
 import { verifyPrivy } from "./providers/privy.js";
 import { verifyTurnkey } from "./providers/turnkey.js";
+import { redactCause } from "../network-errors.js";
+
+/**
+ * Cache-key delimiter. `|` is chosen over `:` because base58 cannot
+ * contain `|` (or `:`), but `:` looks like part of a URL scheme and
+ * `deleteByPrefix(\`${publicKey}:\`)` would ambiguously match any
+ * future suffix scheme. `|` eliminates that fragility.
+ */
+const CACHE_KEY_DELIMITER = "|";
+
+/**
+ * Guarded introspection — a hostile wallet can expose `publicKey` or
+ * `provider` as throwing getters and bypass the entire `TeeAttestationError`
+ * contract by making the raw getter error escape `verifyTeeAttestation`.
+ * Returns `undefined` on any throw; caller treats that as a synthetic
+ * Failed result.
+ */
+function readWalletIdentity(
+  wallet: WalletLike,
+): { publicKey: string; detected: TeeProvider | null } | { error: unknown } {
+  try {
+    const publicKey = wallet.publicKey;
+    if (typeof publicKey !== "string" || publicKey.length === 0) {
+      return { error: new Error("wallet.publicKey is not a non-empty string") };
+    }
+    // `detectProvider` touches `isTeeWallet` which reads `wallet.provider`
+    // — include it in the same guard so a provider-getter throw doesn't
+    // bypass the contract either.
+    const detected = detectProvider(wallet);
+    return { publicKey, detected };
+  } catch (err: unknown) {
+    return { error: err };
+  }
+}
 
 /** Module-level singleton cache. */
 const globalCache = new AttestationCache(DEFAULT_CACHE_TTL_MS);
@@ -98,15 +132,49 @@ export async function verifyTeeAttestation(
     );
   }
 
-  // Kit Address is already base58 — no conversion needed
-  const publicKey = wallet.publicKey;
+  // Guarded introspection — a throwing `publicKey` or `provider` getter
+  // would otherwise bypass every safety check below by escaping with a
+  // raw exception the caller didn't contract for.
+  const identity = readWalletIdentity(wallet);
+  if ("error" in identity) {
+    const syntheticResult: AttestationResult = {
+      status: AttestationStatus.Failed,
+      provider: "crossmint" as TeeProvider, // placeholder — real provider unreadable
+      publicKey: "<unreadable>",
+      metadata: {
+        provider: "crossmint" as TeeProvider,
+        verifiedAt: Date.now(),
+        rawAttestation: {
+          introspectionFailed: true,
+          cause: redactCause(identity.error),
+        },
+      },
+      message:
+        "Wallet rejected attestation introspection — `publicKey` or `provider` getter threw. " +
+        "This indicates a hostile or buggy wallet adapter.",
+    };
+    if (requireAttestation) {
+      throw new TeeAttestationError(syntheticResult.message, syntheticResult);
+    }
+    try {
+      config?.onDegraded?.(syntheticResult);
+    } catch {
+      // Degraded callback errors are non-fatal.
+    }
+    return syntheticResult;
+  }
+  const publicKey = identity.publicKey;
+  const detectedProvider = identity.detected;
+
   const cacheTtlMs = config?.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
   const useCache = Number.isFinite(cacheTtlMs) && cacheTtlMs > 0;
 
   // H3: Include config-sensitive params in cache key so different configs
-  // don't share results (e.g., different expectedPcr3 values).
+  // don't share results (e.g., different expectedPcr3 values). Delimiter
+  // is `|` so `deleteByPrefix(\`${publicKey}${DELIMITER}\`)` is unambiguous
+  // — base58 cannot contain `|`.
   const cacheKey = config?.expectedPcr3
-    ? `${publicKey}:pcr3=${config.expectedPcr3}`
+    ? `${publicKey}${CACHE_KEY_DELIMITER}pcr3=${config.expectedPcr3}`
     : publicKey;
 
   // Step 1: Cache check
@@ -117,7 +185,7 @@ export async function verifyTeeAttestation(
 
   // Step 2-3: Verify if not cached
   if (!result) {
-    const provider = detectProvider(wallet);
+    const provider = detectedProvider;
 
     if (!provider) {
       // TeeProvider is required by AttestationResult — "crossmint" used as
@@ -169,35 +237,21 @@ export async function verifyTeeAttestation(
     }
   }
 
-  // Step 5: Fire onVerified / onDegraded callbacks.
-  // Both are wrapped in try/catch so a consumer exception in their
-  // telemetry wire-up cannot abort an otherwise valid verification.
-  const isVerified =
+  // Classification.
+  const isVerifiedStatus =
     result.status === AttestationStatus.CryptographicallyVerified ||
     result.status === AttestationStatus.ProviderVerified ||
     result.status === AttestationStatus.ProviderTrusted;
 
-  if (isVerified) {
-    try {
-      config?.onVerified?.(result);
-    } catch {
-      // Attestation succeeded — callback errors are non-fatal
-    }
-  } else {
+  // Step 5a: Enforce requireAttestation. Default `true` after PR 1.B.
+  // This fires BEFORE the success callback so `onVerified` never fires
+  // on a result the dispatcher is about to reject.
+  if (requireAttestation && !isVerifiedStatus) {
     try {
       config?.onDegraded?.(result);
     } catch {
-      // Degraded callback errors are non-fatal — we still throw below
-      // if `requireAttestation` is true, so the caller's observability
-      // wire-up being broken doesn't cascade into a silent pass.
+      // Degraded callback errors are non-fatal — we still throw below.
     }
-  }
-
-  // Step 6: Enforce requireAttestation. Default `true` after PR 1.B.
-  // Throws carry the full result so Sentry-style tooling deserializes
-  // `err.result.status`, `.provider`, `.metadata.verifiedAt` without
-  // callsite instrumentation.
-  if (requireAttestation && !isVerified) {
     throw new TeeAttestationError(
       `TEE attestation required but verification ${result.status}: ${result.message} ` +
         `Set \`requireAttestation: false\` with an \`onDegraded\` callback to proceed without verification.`,
@@ -205,18 +259,48 @@ export async function verifyTeeAttestation(
     );
   }
 
-  // Step 7: Enforce minAttestationLevel. Defaults to ProviderVerified when
-  // requireAttestation is true and no explicit level is set — prevents
+  // Step 5b: Enforce minAttestationLevel. Defaults to "provider_verified"
+  // when requireAttestation is true and no explicit level is set — prevents
   // ProviderTrusted from passing silently under the safe-by-default path.
-  const effectiveMinLevel =
+  //
+  // Note the literal string: `AttestationLevel` and `AttestationStatus` are
+  // distinct union/enum types whose values overlap for `provider_trusted`
+  // and `provider_verified` but diverge for the cryptographic tier
+  // (`"cryptographic"` vs `"cryptographically_verified"`). Using the
+  // literal here ensures a future maintainer raising the default bar
+  // cannot accidentally pass an enum value that fails level lookup.
+  const effectiveMinLevel: AttestationLevel | undefined =
     config?.minAttestationLevel ??
-    (requireAttestation ? AttestationStatus.ProviderVerified : undefined);
+    (requireAttestation ? "provider_verified" : undefined);
   if (effectiveMinLevel) {
     if (!attestationStatusMeetsLevel(result.status, effectiveMinLevel)) {
+      try {
+        config?.onDegraded?.(result);
+      } catch {
+        // Non-fatal.
+      }
       throw new TeeAttestationError(
         `Attestation level ${result.status} does not meet minimum required level: ${effectiveMinLevel}`,
         result,
       );
+    }
+  }
+
+  // Step 5c: Level checks passed (or were skipped). Only fire `onVerified`
+  // now — never on a result the dispatcher is about to throw over.
+  // `onDegraded` for the "returns Failed without throwing" path fires
+  // here too, since the caller opted into the forgiving mode.
+  if (isVerifiedStatus) {
+    try {
+      config?.onVerified?.(result);
+    } catch {
+      // Attestation succeeded — callback errors are non-fatal.
+    }
+  } else {
+    try {
+      config?.onDegraded?.(result);
+    } catch {
+      // Non-fatal.
     }
   }
 

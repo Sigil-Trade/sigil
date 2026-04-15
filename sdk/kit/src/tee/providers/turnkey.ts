@@ -35,6 +35,7 @@ import {
   AttestationPcrMismatchError,
 } from "../wallet-types.js";
 import type { TeeWallet } from "../wallet-types.js";
+import { isTransportError, redactCause } from "../../network-errors.js";
 
 // Allow overriding the root CA for testing
 let rootCaPem = AWS_NITRO_ROOT_CA_PEM;
@@ -357,12 +358,23 @@ export async function verifyTurnkey(
     ]);
   } catch (err) {
     if (err instanceof TeeAttestationError) throw err;
+    // Redact the cause before logging — matches the hardening discipline
+    // applied to the Crossmint/Privy catch paths (see crossmint.ts:52–75).
+    const transport = isTransportError(err);
+    const cause = redactCause(err);
     return {
       status: AttestationStatus.Failed,
       provider: "turnkey",
       publicKey,
-      metadata: { provider: "turnkey", verifiedAt: Date.now() },
-      message: `Failed to fetch attestation bundle: ${(err as Error).message ?? err}`,
+      metadata: {
+        provider: "turnkey",
+        enclaveType: "nitro",
+        verifiedAt: Date.now(),
+        rawAttestation: { transport, cause },
+      },
+      message: transport
+        ? "Turnkey attestation fetch failed: transport error reaching the attestation API. Retry after network recovery."
+        : `Turnkey attestation fetch failed: ${cause.message ?? cause.name ?? cause.code ?? "unknown"}`,
     };
   }
 
@@ -561,8 +573,12 @@ export async function verifyTurnkey(
   } catch (err) {
     // F8: Only base class check needed — subclasses extend TeeAttestationError
     if (err instanceof TeeAttestationError) throw err;
+    // Redact before interpolation — an upstream SDK may pack API URLs,
+    // request IDs, or bearer-token fragments into `err.message` which
+    // would otherwise leak into downstream logs / Sentry payloads.
+    const cause = redactCause(err);
     throw new TeeAttestationError(
-      `Turnkey attestation verification failed: ${(err as Error).message ?? err}`,
+      `Turnkey attestation verification failed: ${cause.message ?? cause.name ?? cause.code ?? "unknown"}`,
     );
   }
 }

@@ -267,22 +267,41 @@ export function isTransportError(err: unknown): boolean {
 // ─── redactCause ───────────────────────────────────────────────────────────
 
 /**
+ * Soft cap on cause-chain walks. Pure defense-in-depth against a hostile
+ * error whose `.cause` getter returns a freshly-allocated wrapper on every
+ * access — the WeakSet cycle-detection sees a new object each time and
+ * would otherwise loop until the runtime's memory/stack limit. 16 is
+ * deeper than any realistic middleware error-wrapper chain (4–6 is
+ * typical for serverless + framework + SDK combinations).
+ */
+const MAX_CAUSE_WALK_DEPTH = 16;
+
+/**
  * Safe, log-friendly projection of an error's identifying fields.
  *
  * Returned shape:
  *   - `name?` — string, from `err.name`, if accessible and a string.
- *   - `message?` — string, from `err.message`, sliced to at most 200 chars.
- *   - `code?` — string, from `err.code` OR `err.cause.code`, coerced from
- *     number/bigint if needed.
+ *   - `message?` — string, from `err.message`, sliced to at most 200
+ *     chars. If `.message` is present but not a string (Symbol, BigInt,
+ *     object), returns `"<non-string <typeof>>"` so the diagnostic
+ *     distinguishes "we couldn't read" from "there was no message." This
+ *     matters at every consumer site that does
+ *     `cause.message ?? cause.name ?? cause.code ?? "unknown"` — without
+ *     the non-string projection, `"unknown"` collapses across real gaps
+ *     and hostile shapes.
+ *   - `code?` — string, from `err.code` OR `err.cause.code` (walked),
+ *     coerced from number/bigint if needed.
  *
  * Guarantees:
- *   - Never throws. Every property access is `try`-guarded. A hostile error
- *     with a throwing getter, Proxy `get` trap, or null-prototype object
- *     yields `{}` rather than re-introducing a silent failure.
+ *   - Never throws. Every property access is `try`-guarded. A hostile
+ *     error with a throwing getter, Proxy `get` trap, or null-prototype
+ *     object yields `{}` rather than re-introducing a silent failure.
  *   - Never reads `.stack` (may embed API keys, auth headers, or request
  *     bodies from upstream SDK wrappers).
- *   - Cycles in the cause chain are broken via {@link WeakSet} — no fixed
- *     depth cap, so deeply-wrapped middleware errors retain useful info.
+ *   - Cycles in the cause chain are broken via {@link WeakSet}, and a
+ *     soft depth cap of {@link MAX_CAUSE_WALK_DEPTH} protects against
+ *     hostile causes that allocate a fresh wrapper per access (identity-
+ *     based cycle detection alone cannot catch that pattern).
  *   - Non-Error inputs (null, undefined, string, number, Symbol, BigInt,
  *     Proxy, null-prototype) return a sensible projection or `{}`.
  */
@@ -311,6 +330,10 @@ export function redactCause(err: unknown): {
       const m = (err as { message: unknown }).message;
       if (typeof m === "string") {
         out.message = m.slice(0, 200);
+      } else if (m !== undefined && m !== null) {
+        // Present but non-string — preserve the distinguishability
+        // signal at consumer sites (see doc-comment rationale).
+        out.message = `<non-string ${typeof m}>`;
       }
     }
   } catch {
@@ -321,10 +344,13 @@ export function redactCause(err: unknown): {
   if (directCode !== undefined) {
     out.code = directCode;
   } else {
-    // Walk the cause chain for a code, breaking cycles via WeakSet.
+    // Walk the cause chain for a code, breaking cycles via WeakSet AND
+    // capping depth so a hostile getter that allocates fresh objects on
+    // every access can't drive the loop into a memory wall.
     const visited = new WeakSet<object>();
     let current: unknown = err;
-    while (current !== null && current !== undefined) {
+    for (let depth = 0; depth < MAX_CAUSE_WALK_DEPTH; depth++) {
+      if (current === null || current === undefined) break;
       if (typeof current !== "object") break;
       if (visited.has(current as object)) break;
       visited.add(current as object);

@@ -71,4 +71,11 @@ import {
 pnpm add @usesigil/kit @solana/kit @solana/errors
 ```
 
-Inside a pnpm workspace, the transitive copy of `@solana/errors` installed by `@solana/kit` will satisfy the new peer automatically. External consumers must add the package explicitly — declaring it as peer (rather than a direct dep of kit) is the only configuration where duplicate `SolanaError` classes across installs is mathematically impossible, preserving `instanceof` narrowing across the call graph.
+Inside a pnpm workspace, the transitive copy of `@solana/errors` installed by `@solana/kit` will satisfy the new peer automatically. External consumers must add the package explicitly. The peer declaration expresses a **contract** — "this package expects `@solana/errors` to resolve alongside `@solana/kit`" — it does NOT guarantee deduplication. A consumer whose transitive graph pins `@solana/errors` to a different version than `@solana/kit`'s exact pin can still end up with duplicate `SolanaError` classes across the install tree, breaking `instanceof` narrowing.
+
+To preserve the narrowing guarantee, install `@solana/errors` at the same version `@solana/kit` pins (inspect `pnpm view @solana/kit@<version> dependencies`), or use a package-manager resolution override if you have conflicting transitive constraints. `isAccountNotFoundError`'s substring fallback keeps the function working when class identity is lost, but the typed narrowing branch relies on a single `SolanaError` copy.
+
+### Additional notes for migrators
+
+- `SealResult.warnings` gained a new warning class for the output-stablecoin ATA RPC-failure path (distinct from the pre-existing "ATA does not exist" warning, which meant "create the ATA"). The two warnings carry **inverted remediations** — if you pattern-match on warning text, treat the new "existence check failed due to RPC error" warning as "retry later," not as "create the ATA." Text-matching is advisory; a future release may introduce a structured `warning.kind` discriminator.
+- `getVaultSummary` now re-throws non-account-not-found errors from `getPendingPolicyForVault` instead of collapsing every failure to `pendingPolicy: null`. Callers that weren't catching from `getVaultSummary` will now see RPC transport errors surface — wrap in try/catch if you were previously relying on the silent-null behavior.
