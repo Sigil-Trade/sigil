@@ -545,6 +545,8 @@ export {
   SigilTeeError,
   SigilX402Error,
   SigilComposeError,
+  SigilSdkDomainError,
+  SigilRpcError,
   SIGIL_KIT_VERSION,
   walk as walkSigilCause,
   type SigilErrorParameters,

@@ -14,6 +14,8 @@ export { SigilShieldError } from "./shield.js";
 export { SigilTeeError } from "./tee.js";
 export { SigilX402Error } from "./x402.js";
 export { SigilComposeError } from "./compose.js";
+export { SigilSdkDomainError } from "./sdk.js";
+export { SigilRpcError } from "./rpc.js";
 export { walk } from "./walk.js";
 
 export type {
