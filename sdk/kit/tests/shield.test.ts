@@ -7,6 +7,11 @@ import {
   _extractInstructionsFromCompiled,
   createShieldedSigner,
 } from "../src/shield.js";
+import {
+  SIGIL_ERROR__SHIELD__POLICY_DENIED,
+  SigilError,
+  SigilShieldError,
+} from "../src/errors/index.js";
 import type { InspectableInstruction } from "../src/inspector.js";
 import type { Address } from "@solana/kit";
 import { AltCache } from "../src/alt-loader.js";
@@ -112,20 +117,34 @@ describe("shield", () => {
 
   describe("ShieldDeniedError", () => {
     it("includes violations in message", () => {
-      const err = new ShieldDeniedError([{ rule: "test", message: "blocked" }]);
+      const err = new ShieldDeniedError([
+        { rule: "test", message: "blocked", suggestion: "fix it" },
+      ]);
       expect(err.message).to.include("blocked");
       expect(err.violations).to.have.length(1);
       expect(err.name).to.equal("ShieldDeniedError");
     });
 
-    it("accepts optional error code", () => {
-      const err = new ShieldDeniedError([{ rule: "test", message: "x" }], 7021);
-      expect(err.code).to.equal(7021);
+    it("carries the canonical SigilErrorCode", () => {
+      // PR 2.A migration: the legacy `code?: number` 2nd constructor argument
+      // was removed. Discriminate via the typed `SIGIL_ERROR__SHIELD__POLICY_DENIED`
+      // string-literal code on the SigilError base instead.
+      const err = new ShieldDeniedError([
+        { rule: "test", message: "x", suggestion: "y" },
+      ]);
+      expect(err.code).to.equal(SIGIL_ERROR__SHIELD__POLICY_DENIED);
     });
 
-    it("code is undefined when not provided", () => {
-      const err = new ShieldDeniedError([{ rule: "test", message: "x" }]);
-      expect(err.code).to.equal(undefined);
+    it("is an instance of the unified Sigil error hierarchy", () => {
+      // PR 2.A: ShieldDeniedError now extends SigilShieldError → SigilError → Error.
+      // All three instanceof checks must pass.
+      const err = new ShieldDeniedError([
+        { rule: "test", message: "x", suggestion: "y" },
+      ]);
+      expect(err).to.be.instanceOf(ShieldDeniedError);
+      expect(err).to.be.instanceOf(SigilShieldError);
+      expect(err).to.be.instanceOf(SigilError);
+      expect(err).to.be.instanceOf(Error);
     });
   });
 
