@@ -27,6 +27,7 @@
     "test:all": "pnpm test:onchain:full && pnpm test:sdk && pnpm test:rust",
     "update-readme": "node scripts/update-test-counts.js",
     "count:check": "node scripts/verify-test-counts.js",
+    "pr:check": "pnpm count:check && pnpm test:all",
     "prepare": "husky"
   },
   "dependencies": {
