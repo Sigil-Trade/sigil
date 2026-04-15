@@ -79,6 +79,25 @@ import {
   type CreateVaultOptions,
   type CreateVaultResult,
 } from "./create-vault.js";
+import { SigilSdkDomainError } from "./errors/sdk.js";
+import { SigilRpcError } from "./errors/rpc.js";
+import {
+  SIGIL_ERROR__SDK__VAULT_INACTIVE,
+  SIGIL_ERROR__SDK__AGENT_NOT_REGISTERED,
+  SIGIL_ERROR__SDK__AGENT_PAUSED,
+  SIGIL_ERROR__SDK__AGENT_ZERO_CAPABILITY,
+  SIGIL_ERROR__SDK__INVALID_AMOUNT,
+  SIGIL_ERROR__SDK__INVALID_CONFIG,
+  SIGIL_ERROR__SDK__INVALID_PARAMS,
+  SIGIL_ERROR__SDK__SPL_TOKEN_OP_BLOCKED,
+  SIGIL_ERROR__SDK__PROTOCOL_NOT_ALLOWED,
+  SIGIL_ERROR__SDK__PROTOCOL_NOT_TARGETED,
+  SIGIL_ERROR__SDK__INSTRUCTION_COUNT,
+  SIGIL_ERROR__SDK__CAP_EXCEEDED,
+  SIGIL_ERROR__SDK__ATA_NON_CANONICAL,
+  SIGIL_ERROR__SDK__SEAL_FAILED,
+  SIGIL_ERROR__RPC__TX_TOO_LARGE,
+} from "./errors/codes.js";
 
 // ─── Well-known program addresses to strip ──────────────────────────────────
 
@@ -259,8 +278,17 @@ export async function seal(params: SealParams): Promise<SealResult> {
 
   // Verify vault is active
   if (state.vault.status !== VaultStatus.Active) {
-    throw new Error(
+    throw new SigilSdkDomainError(
+      SIGIL_ERROR__SDK__VAULT_INACTIVE,
       `Vault is not active (status: ${VaultStatus[state.vault.status] ?? state.vault.status})`,
+      {
+        context: {
+          vault: params.vault,
+          status:
+            String(VaultStatus[state.vault.status]) ??
+            String(state.vault.status),
+        },
+      },
     );
   }
 
@@ -269,13 +297,17 @@ export async function seal(params: SealParams): Promise<SealResult> {
     (a) => a.pubkey === params.agent.address,
   );
   if (!agentEntry) {
-    throw new Error(
+    throw new SigilSdkDomainError(
+      SIGIL_ERROR__SDK__AGENT_NOT_REGISTERED,
       `Agent ${params.agent.address} is not registered in vault ${params.vault}`,
+      { context: { vault: params.vault, agent: params.agent.address } },
     );
   }
   if (agentEntry.paused) {
-    throw new Error(
+    throw new SigilSdkDomainError(
+      SIGIL_ERROR__SDK__AGENT_PAUSED,
       `Agent ${params.agent.address} is paused in vault ${params.vault}`,
+      { context: { vault: params.vault, agent: params.agent.address } },
     );
   }
 
@@ -283,15 +315,19 @@ export async function seal(params: SealParams): Promise<SealResult> {
   const spending = params.amount > 0n;
   const U64_MAX = 18446744073709551615n;
   if (params.amount < 0n) {
-    throw new Error(
+    throw new SigilSdkDomainError(
+      SIGIL_ERROR__SDK__INVALID_AMOUNT,
       `Amount must be non-negative, got ${params.amount}. ` +
         `Sigil amounts are unsigned 64-bit integers (0 to ${U64_MAX}).`,
+      { context: { received: params.amount.toString() } },
     );
   }
   if (params.amount > U64_MAX) {
-    throw new Error(
+    throw new SigilSdkDomainError(
+      SIGIL_ERROR__SDK__INVALID_AMOUNT,
       `Amount exceeds u64 maximum, got ${params.amount}. ` +
         `Sigil amounts are unsigned 64-bit integers (0 to ${U64_MAX}).`,
+      { context: { received: params.amount.toString() } },
     );
   }
 
@@ -314,15 +350,19 @@ export async function seal(params: SealParams): Promise<SealResult> {
     ) {
       const disc = ix.data[0];
       if (disc === 4) {
-        throw new Error(
+        throw new SigilSdkDomainError(
+          SIGIL_ERROR__SDK__SPL_TOKEN_OP_BLOCKED,
           "Top-level SPL Token Approve not allowed in sealed transactions. " +
             "DeFi programs handle approvals via CPI.",
+          { context: { operation: "Approve", vault: params.vault } },
         );
       }
       if (disc === 13) {
-        throw new Error(
+        throw new SigilSdkDomainError(
+          SIGIL_ERROR__SDK__SPL_TOKEN_OP_BLOCKED,
           "Top-level SPL Token ApproveChecked not allowed in sealed transactions. " +
             "DeFi programs handle approvals via CPI.",
+          { context: { operation: "ApproveChecked", vault: params.vault } },
         );
       }
       if (
@@ -330,22 +370,33 @@ export async function seal(params: SealParams): Promise<SealResult> {
         disc === 12 ||
         (ix.programAddress === TOKEN_2022_PROGRAM && disc === 26)
       ) {
-        throw new Error(
+        throw new SigilSdkDomainError(
+          SIGIL_ERROR__SDK__SPL_TOKEN_OP_BLOCKED,
           "Top-level SPL Token Transfer not allowed in sealed transactions. " +
             "Token movement from the vault must route through an approved DeFi program's CPI (the policy engine validates the program + instruction). " +
             "Vault withdrawals to the owner are an owner-only operation and cannot be performed by an agent via seal().",
+          { context: { operation: "Transfer", vault: params.vault } },
         );
       }
       if (disc === 6 || disc === 9) {
-        throw new Error(
+        throw new SigilSdkDomainError(
+          SIGIL_ERROR__SDK__SPL_TOKEN_OP_BLOCKED,
           "Top-level SPL Token SetAuthority/CloseAccount not allowed in sealed transactions. " +
             "These operations could damage or destroy vault token accounts.",
+          {
+            context: {
+              operation: "SetAuthority/CloseAccount",
+              vault: params.vault,
+            },
+          },
         );
       }
       if (disc === 8 || disc === 15) {
-        throw new Error(
+        throw new SigilSdkDomainError(
+          SIGIL_ERROR__SDK__SPL_TOKEN_OP_BLOCKED,
           "Top-level SPL Token Burn/BurnChecked not allowed in sealed transactions. " +
             "Delegate burn authority could destroy vault funds.",
+          { context: { operation: "Burn/BurnChecked", vault: params.vault } },
         );
       }
     }
@@ -355,7 +406,8 @@ export async function seal(params: SealParams): Promise<SealResult> {
   const targetProtocol =
     params.targetProtocol ?? defiInstructions[0]?.programAddress;
   if (!targetProtocol) {
-    throw new Error(
+    throw new SigilSdkDomainError(
+      SIGIL_ERROR__SDK__PROTOCOL_NOT_TARGETED,
       "No target protocol: provide targetProtocol or include DeFi instructions",
     );
   }
@@ -363,15 +415,19 @@ export async function seal(params: SealParams): Promise<SealResult> {
   // Step 6: Pre-flight checks
   // 6a: Permission check — capability-based (v6: agent must have non-zero capability)
   if (agentEntry.capability === 0) {
-    throw new Error(
+    throw new SigilSdkDomainError(
+      SIGIL_ERROR__SDK__AGENT_ZERO_CAPABILITY,
       `Agent ${params.agent.address} has zero capability in vault ${params.vault}`,
+      { context: { vault: params.vault, agent: params.agent.address } },
     );
   }
 
   // 6b: Protocol allowlist (hard error)
   if (!isProtocolAllowed(targetProtocol, state.policy)) {
-    throw new Error(
+    throw new SigilSdkDomainError(
+      SIGIL_ERROR__SDK__PROTOCOL_NOT_ALLOWED,
       `Protocol ${targetProtocol} is not allowed by vault policy`,
+      { context: { protocol: targetProtocol, vault: params.vault } },
     );
   }
 
@@ -382,14 +438,18 @@ export async function seal(params: SealParams): Promise<SealResult> {
     ).length;
     const isStablecoinInput = isStablecoinMint(params.tokenMint, net);
     if (isStablecoinInput && defiCount > 1) {
-      throw new Error(
+      throw new SigilSdkDomainError(
+        SIGIL_ERROR__SDK__INSTRUCTION_COUNT,
         "At most 1 recognized DeFi instruction for stablecoin input " +
           "(prevents round-trip fee avoidance).",
+        { context: { expected: 1, got: defiCount } },
       );
     }
     if (!isStablecoinInput && defiCount !== 1) {
-      throw new Error(
+      throw new SigilSdkDomainError(
+        SIGIL_ERROR__SDK__INSTRUCTION_COUNT,
         "Exactly 1 recognized DeFi instruction required for non-stablecoin input.",
+        { context: { expected: 1, got: defiCount } },
       );
     }
   }
@@ -410,10 +470,19 @@ export async function seal(params: SealParams): Promise<SealResult> {
     const totalWithFees = params.amount + protocolFee + devFee;
     const headroom = state.globalBudget.remaining;
     if (totalWithFees > headroom) {
-      throw new Error(
+      throw new SigilSdkDomainError(
+        SIGIL_ERROR__SDK__CAP_EXCEEDED,
         `Amount ${params.amount} + fees (protocol: ${protocolFee}, dev: ${devFee}) = ${totalWithFees} ` +
           `exceeds remaining daily cap headroom ${headroom}. ` +
           `Reduce amount or wait for rolling window to free capacity.`,
+        {
+          context: {
+            vault: params.vault,
+            agent: params.agent.address,
+            cap: headroom,
+            attempted: totalWithFees,
+          },
+        },
       );
     }
   }
@@ -441,10 +510,17 @@ export async function seal(params: SealParams): Promise<SealResult> {
     const stableMint = net === "devnet" ? USDC_MINT_DEVNET : USDC_MINT_MAINNET;
     const canonicalAta = await deriveAta(params.vault, stableMint);
     if (params.outputStablecoinAccount !== canonicalAta) {
-      throw new Error(
+      throw new SigilSdkDomainError(
+        SIGIL_ERROR__SDK__ATA_NON_CANONICAL,
         `Non-canonical output stablecoin ATA. Expected ${canonicalAta}, ` +
           `got ${params.outputStablecoinAccount}. ` +
           `Use the vault's canonical ATA for balance tracking consistency.`,
+        {
+          context: {
+            expected: canonicalAta,
+            got: params.outputStablecoinAccount,
+          },
+        },
       );
     }
   }
@@ -520,9 +596,11 @@ export async function seal(params: SealParams): Promise<SealResult> {
   if (params.additionalAtaReplacements) {
     for (const [agentAta, vaultAta] of params.additionalAtaReplacements) {
       if (ataReplacements.has(agentAta)) {
-        throw new Error(
+        throw new SigilSdkDomainError(
+          SIGIL_ERROR__SDK__INVALID_PARAMS,
           `additionalAtaReplacements key ${agentAta} conflicts with canonical ` +
             `ATA replacement. Cannot override vault token account mappings.`,
+          { context: { field: "additionalAtaReplacements", received: agentAta } },
         );
       }
       ataReplacements.set(agentAta, vaultAta);
@@ -606,11 +684,13 @@ export async function seal(params: SealParams): Promise<SealResult> {
   if (!withinLimit) {
     const hasProtocolAlts =
       params.protocolAltAddresses && params.protocolAltAddresses.length > 0;
-    throw new Error(
+    throw new SigilRpcError(
+      SIGIL_ERROR__RPC__TX_TOO_LARGE,
       `Transaction size ${byteLength} bytes exceeds 1232 byte limit. ` +
         (hasProtocolAlts
           ? `Even with ${params.protocolAltAddresses!.length} protocol ALT(s), the transaction is too large. Reduce instruction count.`
           : `Pass protocolAltAddresses from your DeFi API response (e.g. Jupiter swap-instructions addressLookupTableAddresses).`),
+      { context: { byteLength, limit: 1232 } },
     );
   }
 
@@ -751,11 +831,30 @@ export class SigilClient {
   readonly network: "devnet" | "mainnet";
 
   constructor(config: SigilClientConfig) {
-    if (!config.rpc) throw new Error("SigilClientConfig.rpc is required");
-    if (!config.vault) throw new Error("SigilClientConfig.vault is required");
-    if (!config.agent) throw new Error("SigilClientConfig.agent is required");
+    if (!config.rpc)
+      throw new SigilSdkDomainError(
+        SIGIL_ERROR__SDK__INVALID_CONFIG,
+        "SigilClientConfig.rpc is required",
+        { context: { field: "rpc", expected: "Rpc<SolanaRpcApi>" } },
+      );
+    if (!config.vault)
+      throw new SigilSdkDomainError(
+        SIGIL_ERROR__SDK__INVALID_CONFIG,
+        "SigilClientConfig.vault is required",
+        { context: { field: "vault", expected: "Address" } },
+      );
+    if (!config.agent)
+      throw new SigilSdkDomainError(
+        SIGIL_ERROR__SDK__INVALID_CONFIG,
+        "SigilClientConfig.agent is required",
+        { context: { field: "agent", expected: "TransactionSigner" } },
+      );
     if (!config.network)
-      throw new Error("SigilClientConfig.network is required");
+      throw new SigilSdkDomainError(
+        SIGIL_ERROR__SDK__INVALID_CONFIG,
+        "SigilClientConfig.network is required",
+        { context: { field: "network", expected: "'devnet' | 'mainnet'" } },
+      );
 
     this.rpc = config.rpc;
     this.vault = config.vault;
