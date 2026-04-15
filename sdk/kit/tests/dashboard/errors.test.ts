@@ -236,19 +236,16 @@ describe("isAccountNotFoundError — typed primary + substring fallback", () => 
       // as account-not-found, so the predicate returns false. This
       // documents current non-walking behavior — if future callers
       // want to walk `.errors`, they should do so explicitly.
-      const AggCtor = (globalThis as { AggregateError?: typeof AggregateError })
-        .AggregateError;
-      if (!AggCtor) {
-        // Node < 15 — skip the test; the shape doesn't exist on this runtime.
-        return;
-      }
+      // AggregateError is ES2021, universally present on Node >= 15 —
+      // all runtimes `@usesigil/kit` supports (Node >= 18) include it,
+      // so no runtime guard is necessary.
       const inner = new (SolanaError as unknown as new (
         code: number,
         ctx: object,
       ) => Error)(SOLANA_ERROR__ACCOUNTS__ACCOUNT_NOT_FOUND, {
         address: "11111111111111111111111111111111",
       });
-      const agg = new AggCtor([inner], "multiple");
+      const agg = new globalThis.AggregateError([inner], "multiple");
       expect(isAccountNotFoundError(agg)).to.equal(false);
     });
   });

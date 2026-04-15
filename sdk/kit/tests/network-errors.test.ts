@@ -167,13 +167,13 @@ describe("isTransportError — structural transport classifier", () => {
   describe("AggregateError (Happy Eyeballs)", () => {
     it("AggregateError wrapping ECONNREFUSED → transport via recursion", () => {
       const inner = errWithCause("connect failed", { code: "ECONNREFUSED" });
-      const agg = new AggregateError([inner], "all IPs failed");
+      const agg = new globalThis.AggregateError([inner], "all IPs failed");
       expect(isTransportError(agg)).to.equal(true);
     });
 
     it("AggregateError wrapping only logic errors → NOT transport", () => {
       const inner = new Error("logic bug");
-      const agg = new AggregateError([inner], "all failed");
+      const agg = new globalThis.AggregateError([inner], "all failed");
       expect(isTransportError(agg)).to.equal(false);
     });
   });
