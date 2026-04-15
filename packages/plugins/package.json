@@ -1,6 +1,6 @@
 {
   "name": "@usesigil/plugins",
-  "version": "3.0.0",
+  "version": "4.0.0",
   "type": "module",
   "description": "Agent framework adapters for Sigil",
   "exports": {
