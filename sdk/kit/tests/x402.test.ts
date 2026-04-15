@@ -757,12 +757,26 @@ describe("x402/security", () => {
     expect(summary.rateLimit.count).to.equal(1);
   });
 
-  it("error classes have correct SDK codes", () => {
-    expect(new X402ParseError("test").code).to.equal(7024);
-    expect(new X402PaymentError("test").code).to.equal(7025);
-    expect(new X402UnsupportedError("test").code).to.equal(7026);
-    expect(new X402DestinationBlockedError(ATTACKER_PAYTO).code).to.equal(7027);
-    expect(new X402ReplayError("key").code).to.equal(7028);
+  it("error classes have correct legacy numeric codes (deprecated)", () => {
+    // PR 2.A migration: `.code` is now the canonical SigilErrorCode string.
+    // Numeric codes 7024-7028 are preserved as `.legacyNumericCode` for one
+    // minor's migration ramp; targeted for deletion at v1.0.
+    expect(new X402ParseError("test").legacyNumericCode).to.equal(7024);
+    expect(new X402PaymentError("test").legacyNumericCode).to.equal(7025);
+    expect(new X402UnsupportedError("test").legacyNumericCode).to.equal(7026);
+    expect(new X402DestinationBlockedError(ATTACKER_PAYTO).legacyNumericCode).to.equal(7027);
+    expect(new X402ReplayError("key").legacyNumericCode).to.equal(7028);
+  });
+
+  it("error classes have correct canonical SigilErrorCode (.code)", () => {
+    // PR 2.A: typed string-literal codes are the new programmatic discriminant.
+    expect(new X402ParseError("test").code).to.equal("SIGIL_ERROR__X402__HEADER_MALFORMED");
+    expect(new X402PaymentError("test").code).to.equal("SIGIL_ERROR__X402__PAYMENT_FAILED");
+    expect(new X402UnsupportedError("test").code).to.equal("SIGIL_ERROR__X402__UNSUPPORTED");
+    expect(new X402DestinationBlockedError(ATTACKER_PAYTO).code).to.equal(
+      "SIGIL_ERROR__X402__DESTINATION_BLOCKED",
+    );
+    expect(new X402ReplayError("key").code).to.equal("SIGIL_ERROR__X402__REPLAY");
   });
 
   it("codec validates accepts entry field types", () => {
