@@ -65,15 +65,39 @@ function attestationStatusMeetsLevel(
  * 1. Check cache (unless cacheTtlMs === 0)
  * 2. Detect provider from wallet
  * 3. Route to provider-specific verifier
- * 4. Cache result
- * 5. Fire onVerified callback on success
- * 6. If requireAttestation is true and verification failed, throw
- * 7. If minAttestationLevel is set and not met, throw
+ * 4. Cache successful results only (`Failed` and `Unavailable` never cache)
+ * 5. Fire `onVerified` on success; fire `onDegraded` on non-verified status
+ * 6. Enforce `requireAttestation` — throws `TeeAttestationError` with
+ *    `.result` attached when verification didn't reach a verified status
+ * 7. Enforce `minAttestationLevel`
+ *
+ * **Safe-by-default behavior (changed in PR 1.B safety lockdown).**
+ * `requireAttestation` now defaults to `true`, so a call like
+ * `verifyTeeAttestation(wallet)` with no config throws on any degraded
+ * outcome instead of silently returning a Failed/Unavailable result.
+ * Consumers that want the old forgiving behavior must pass
+ * `{ requireAttestation: false, onDegraded: ... }` — the callback is
+ * mandatory under the forgiving path; omitting it is treated as the
+ * silent-failure vector this default was introduced to prevent and
+ * yields an immediate throw.
  */
 export async function verifyTeeAttestation(
   wallet: WalletLike,
   config?: AttestationConfig,
 ): Promise<AttestationResult> {
+  // Safe-by-default: `requireAttestation` implicitly true when unset.
+  // Consumers who want the forgiving path must say so explicitly AND
+  // supply `onDegraded` — otherwise we would silently re-introduce the
+  // vulnerability this default fixes.
+  const requireAttestation = config?.requireAttestation ?? true;
+  if (!requireAttestation && typeof config?.onDegraded !== "function") {
+    throw new TeeAttestationError(
+      "verifyTeeAttestation called with `requireAttestation: false` but no `onDegraded` callback. " +
+        "Omitting the callback is a silent-degradation vector — supply `onDegraded` to observe degraded results, " +
+        "or remove `requireAttestation: false` to fail closed.",
+    );
+  }
+
   // Kit Address is already base58 — no conversion needed
   const publicKey = wallet.publicKey;
   const cacheTtlMs = config?.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
@@ -131,17 +155,12 @@ export async function verifyTeeAttestation(
       }
     }
 
-    // M6: Only cache successful results — failed/unavailable should allow retry.
-    // Also skip caching ProviderTrusted results from API failures (custodyCheckFailed)
-    // so the next call can retry the custody API and potentially get ProviderVerified.
-    const isCustodyFallback =
-      result.metadata.rawAttestation &&
-      typeof result.metadata.rawAttestation === "object" &&
-      (result.metadata.rawAttestation as Record<string, unknown>)
-        .custodyCheckFailed === true;
+    // Cache only verified outcomes — `Failed` and `Unavailable` should
+    // allow the next call to retry. The previous `isCustodyFallback`
+    // guard is unnecessary now that custody-API errors surface as
+    // `Failed` (which is excluded from this allowlist).
     if (
       useCache &&
-      !isCustodyFallback &&
       (result.status === AttestationStatus.CryptographicallyVerified ||
         result.status === AttestationStatus.ProviderVerified ||
         result.status === AttestationStatus.ProviderTrusted)
@@ -150,45 +169,53 @@ export async function verifyTeeAttestation(
     }
   }
 
-  // Step 5: onVerified callback
-  // H5: Wrap in try-catch to prevent user callback errors from aborting vault creation
-  if (
+  // Step 5: Fire onVerified / onDegraded callbacks.
+  // Both are wrapped in try/catch so a consumer exception in their
+  // telemetry wire-up cannot abort an otherwise valid verification.
+  const isVerified =
     result.status === AttestationStatus.CryptographicallyVerified ||
     result.status === AttestationStatus.ProviderVerified ||
-    result.status === AttestationStatus.ProviderTrusted
-  ) {
+    result.status === AttestationStatus.ProviderTrusted;
+
+  if (isVerified) {
     try {
       config?.onVerified?.(result);
     } catch {
       // Attestation succeeded — callback errors are non-fatal
     }
-  }
-
-  // C3: Enforce requireAttestation ALWAYS — including on cache hits.
-  // Previously, the early cache return bypassed this check entirely.
-  if (config?.requireAttestation) {
-    if (
-      result.status !== AttestationStatus.CryptographicallyVerified &&
-      result.status !== AttestationStatus.ProviderVerified &&
-      result.status !== AttestationStatus.ProviderTrusted
-    ) {
-      throw new TeeAttestationError(
-        `TEE attestation required but verification ${result.status}: ${result.message}`,
-      );
+  } else {
+    try {
+      config?.onDegraded?.(result);
+    } catch {
+      // Degraded callback errors are non-fatal — we still throw below
+      // if `requireAttestation` is true, so the caller's observability
+      // wire-up being broken doesn't cascade into a silent pass.
     }
   }
 
-  // Enforce minAttestationLevel — defaults to ProviderVerified when requireAttestation
-  // is true but no explicit level is set (prevents ProviderTrusted from passing silently)
+  // Step 6: Enforce requireAttestation. Default `true` after PR 1.B.
+  // Throws carry the full result so Sentry-style tooling deserializes
+  // `err.result.status`, `.provider`, `.metadata.verifiedAt` without
+  // callsite instrumentation.
+  if (requireAttestation && !isVerified) {
+    throw new TeeAttestationError(
+      `TEE attestation required but verification ${result.status}: ${result.message} ` +
+        `Set \`requireAttestation: false\` with an \`onDegraded\` callback to proceed without verification.`,
+      result,
+    );
+  }
+
+  // Step 7: Enforce minAttestationLevel. Defaults to ProviderVerified when
+  // requireAttestation is true and no explicit level is set — prevents
+  // ProviderTrusted from passing silently under the safe-by-default path.
   const effectiveMinLevel =
     config?.minAttestationLevel ??
-    (config?.requireAttestation
-      ? AttestationStatus.ProviderVerified
-      : undefined);
+    (requireAttestation ? AttestationStatus.ProviderVerified : undefined);
   if (effectiveMinLevel) {
     if (!attestationStatusMeetsLevel(result.status, effectiveMinLevel)) {
       throw new TeeAttestationError(
         `Attestation level ${result.status} does not meet minimum required level: ${effectiveMinLevel}`,
+        result,
       );
     }
   }

@@ -57,18 +57,41 @@ export function isTeeWallet(wallet: WalletLike): wallet is TeeWallet {
   );
 }
 
-/** Error class for TEE attestation failures. */
+// NOTE: `AttestationResult` is imported as a type via forward-reference to
+// avoid a circular import between `wallet-types.ts` and `types.ts`
+// (`types.ts` imports from `wallet-types.ts` for `WalletLike`/`TeeWallet`
+// in practice via `verify.ts`). `result` is optional so existing callers
+// that throw without a result continue to compile during the migration.
+import type { AttestationResult } from "./types.js";
+
+/**
+ * Error class for TEE attestation failures.
+ *
+ * Carries the full {@link AttestationResult} (when available) so structured
+ * observability tooling — Sentry's `captureException`, Datadog's custom
+ * error metrics — picks up `err.result.status`, `.provider`, and
+ * `.metadata.verifiedAt` automatically without callsite instrumentation.
+ * Prefer this over a separate `onDegraded` callback when throwing.
+ */
 export class TeeAttestationError extends Error {
-  constructor(message: string) {
+  /**
+   * The attestation result that triggered this error, when available.
+   * `undefined` for subclasses thrown before a result is constructed
+   * (certificate-chain parse failure, PCR mismatch on an incomplete result).
+   */
+  public readonly result?: AttestationResult;
+
+  constructor(message: string, result?: AttestationResult) {
     super(message);
     this.name = "TeeAttestationError";
+    this.result = result;
   }
 }
 
 /** Error class for certificate chain validation failures. */
 export class AttestationCertChainError extends TeeAttestationError {
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, result?: AttestationResult) {
+    super(message, result);
     this.name = "AttestationCertChainError";
   }
 }
@@ -79,8 +102,16 @@ export class AttestationPcrMismatchError extends TeeAttestationError {
   readonly expected: string;
   readonly actual: string;
 
-  constructor(pcrIndex: number, expected: string, actual: string) {
-    super(`PCR${pcrIndex} mismatch: expected ${expected}, got ${actual}`);
+  constructor(
+    pcrIndex: number,
+    expected: string,
+    actual: string,
+    result?: AttestationResult,
+  ) {
+    super(
+      `PCR${pcrIndex} mismatch: expected ${expected}, got ${actual}`,
+      result,
+    );
     this.name = "AttestationPcrMismatchError";
     this.pcrIndex = pcrIndex;
     this.expected = expected;

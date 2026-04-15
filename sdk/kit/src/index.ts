@@ -487,6 +487,19 @@ export {
 } from "./rpc-helpers.js";
 export type { Blockhash, SendAndConfirmOptions } from "./rpc-helpers.js";
 
+// ─── Error Classification (typed predicates + transport classifier) ─────────
+//
+// Shared helpers used across `seal`, `shielded-fetch`, `facilitator-verify`,
+// and the dashboard reads. Consumers building their own retry/backoff or
+// observability layers should reach for these before rolling their own.
+export { isAccountNotFoundError } from "./dashboard/errors.js";
+export {
+  isTransportError,
+  redactCause,
+  PROVIDER_DENIAL_NAMES,
+  TRANSPORT_CODES,
+} from "./network-errors.js";
+
 // ─── VelocityTracker ──────────────────────────────────────────────────────
 export { VelocityTracker } from "./velocity-tracker.js";
 export type { VelocityConfig, SpendStatus } from "./velocity-tracker.js";

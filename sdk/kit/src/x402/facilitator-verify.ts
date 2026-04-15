@@ -7,6 +7,7 @@
 
 import type { Rpc, SolanaRpcApi } from "@solana/kit";
 import type { SettleResponse } from "./types.js";
+import { redactCause } from "../network-errors.js";
 
 /** Base58 character set for validation */
 const BASE58_REGEX = /^[1-9A-HJ-NP-Za-km-z]{64,88}$/;
@@ -82,9 +83,12 @@ export async function validateSettlement(
           `Settlement TX ${settlement.transaction.slice(0, 12)}... not confirmed on-chain within ${timeoutMs ?? 10_000}ms`,
         );
       }
-    } catch {
+    } catch (err: unknown) {
+      // Attach a redacted cause so consumers can distinguish RPC outage
+      // from genuine settlement-not-found without parsing the raw error.
+      const cause = redactCause(err);
       warnings.push(
-        `Failed to verify settlement TX on-chain: ${settlement.transaction.slice(0, 12)}...`,
+        `Failed to verify settlement TX on-chain: ${settlement.transaction.slice(0, 12)}... (${cause.message ?? cause.name ?? cause.code ?? "unknown"})`,
       );
     }
   }

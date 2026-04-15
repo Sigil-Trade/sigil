@@ -13,7 +13,7 @@
 
 import { isSome } from "@solana/kit";
 import type { Address, Rpc, SolanaRpcApi } from "@solana/kit";
-import { toDxError } from "./errors.js";
+import { toDxError, isAccountNotFoundError } from "./errors.js";
 import {
   resolveVaultStateForOwner,
   getSpendingHistory,
@@ -93,23 +93,9 @@ function serializeBigints(obj: unknown): unknown {
  */
 export const DEFAULT_OVERVIEW_ACTIVITY_LIMIT = 100;
 
-/**
- * Shared "is this an account-not-found error?" predicate.
- *
- * Both `getPolicy` and `getOverview` treat a missing `PendingPolicyUpdate`
- * account as "no pending update" (not an error). The current Kit doesn't
- * expose a typed `AccountNotFound` SolanaError at this call site, so both
- * paths fall back to substring matching. Extracting it here means the
- * fragility lives in one place and only one site needs to update if Kit
- * ever surfaces a typed variant.
- */
-function isAccountNotFoundError(err: unknown): boolean {
-  const message = err instanceof Error ? err.message : String(err);
-  return (
-    message.includes("could not find") ||
-    message.includes("Account does not exist")
-  );
-}
+// Shared account-not-found predicate now lives in `./errors.js` — see
+// `isAccountNotFoundError` for the typed-primary + substring-fallback
+// implementation covering four Solana error codes.
 
 // ─── Build helpers (pure composition — no RPC) ───────────────────────────────
 // Each helper accepts an OverviewContext and returns one view type. `getOverview`

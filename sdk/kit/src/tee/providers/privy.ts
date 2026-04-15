@@ -13,6 +13,7 @@ import {
   type AttestationResult,
   type AttestationConfig,
 } from "../types.js";
+import { isTransportError, redactCause } from "../../network-errors.js";
 
 export async function verifyPrivy(
   wallet: WalletLike,
@@ -48,23 +49,26 @@ export async function verifyPrivy(
         metadata: { provider: "privy", verifiedAt: Date.now() },
         message: "Privy custody verification failed: address mismatch.",
       };
-    } catch {
-      // API call failed — return ProviderTrusted with distinct message.
-      // rawAttestation.custodyCheckFailed signals to the dispatcher that this
-      // downgraded result should not be cached (allows retry on next call).
+    } catch (err: unknown) {
+      // API call failed. Previously this path silently downgraded to
+      // ProviderTrusted. Now fail closed with Failed + structural
+      // transport classification and a redacted cause. See crossmint.ts
+      // for the full rationale.
+      const transport = isTransportError(err);
+      const cause = redactCause(err);
       return {
-        status: AttestationStatus.ProviderTrusted,
+        status: AttestationStatus.Failed,
         provider: "privy",
         publicKey,
         metadata: {
           provider: "privy",
           enclaveType: "nitro",
           verifiedAt: Date.now(),
-          rawAttestation: { custodyCheckFailed: true },
+          rawAttestation: { transport, cause },
         },
-        message:
-          "Privy wallet trusted via managed AWS Nitro Enclave infrastructure. " +
-          "Custody verification API call failed — falling back to ProviderTrusted.",
+        message: transport
+          ? "Privy custody verification failed: transport error reaching the custody API. Retry after network recovery."
+          : `Privy custody verification failed: unexpected error from custody API. Cause: ${cause.message ?? cause.name ?? cause.code ?? "unknown"}`,
       };
     }
   }

@@ -66,6 +66,7 @@ import {
 } from "./types.js";
 import { isProtocolAllowed } from "./protocol-resolver.js";
 import { toSigilAgentError, type AgentError } from "./agent-errors.js";
+import { redactCause } from "./network-errors.js";
 import {
   getVaultPnL,
   getVaultTokenBalances,
@@ -479,8 +480,15 @@ export async function seal(params: SealParams): Promise<SealResult> {
                   `Create it first with createAssociatedTokenAccount.`,
               );
             }
-          } catch {
-            // RPC error — proceed with derived address (on-chain will catch)
+          } catch (err: unknown) {
+            // Previously silent. Surfacing a warning here makes a transient
+            // RPC outage distinguishable from an actually-missing ATA, so
+            // the user isn't puzzled when on-chain validation fails with an
+            // opaque message a second later.
+            const cause = redactCause(err);
+            warnings.push(
+              `Output stablecoin ATA ${ata} existence check failed due to RPC error (${cause.message ?? cause.name ?? cause.code ?? "unknown"}). Proceeding with derived address — on-chain will reject if missing.`,
+            );
           }
           return ata;
         })
@@ -795,7 +803,15 @@ export class SigilClient {
       const expected = getExpectedAltContents(net);
       try {
         verifySigilAlt(addressLookupTables, sigilAlt, expected);
-      } catch {
+      } catch (err: unknown) {
+        // Cache-corruption self-healing — evict and retry once. Log the
+        // redacted cause so the "why did this retry" signal isn't lost
+        // silently; if we see this in telemetry, it means the ALT on
+        // chain was updated or the cache was serving stale data.
+        const cause = redactCause(err);
+        console.debug(
+          `[seal] ALT cache verify failed — invalidating and retrying: ${cause.message ?? cause.name ?? cause.code ?? "unknown"}`,
+        );
         this.altCacheInstance.invalidate();
         const allAlts = mergeAltAddresses(sigilAlt, opts.protocolAltAddresses);
         addressLookupTables = await this.altCacheInstance.resolve(
