@@ -6,6 +6,16 @@
 
 set -e
 
+# Skip in CI. The dedicated `Lint`, `Rust Lint`, and `verify-test-counts` jobs
+# already run these same checks, and the changesets release action fires two
+# parallel `git push` invocations (commit + per-package tag) that then race on
+# `~/.rustup/downloads/` when cargo fmt triggers a clippy component fetch —
+# one push wins, the other fails with a rename ENOENT, and a tag gets dropped
+# (this is how @usesigil/plugins@3.0.0 never reached the remote on 2026-04-15).
+# The gate's purpose is a developer-workstation tripwire; skipping it in CI
+# removes a false-positive failure mode without losing any real coverage.
+[ -n "$CI" ] && exit 0
+
 echo "→ [pre-push] test-count drift + untracked location sentinel..."
 pnpm count:check
 
