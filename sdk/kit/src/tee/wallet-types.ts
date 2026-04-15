@@ -63,6 +63,13 @@ export function isTeeWallet(wallet: WalletLike): wallet is TeeWallet {
 // in practice via `verify.ts`). `result` is optional so existing callers
 // that throw without a result continue to compile during the migration.
 import type { AttestationResult } from "./types.js";
+import { SigilTeeError } from "../errors/tee.js";
+import {
+  SIGIL_ERROR__TEE__ATTESTATION_FAILED,
+  SIGIL_ERROR__TEE__CERT_CHAIN_INVALID,
+  SIGIL_ERROR__TEE__PCR_MISMATCH,
+  type SigilTeeErrorCode,
+} from "../errors/codes.js";
 
 /**
  * Error class for TEE attestation failures.
@@ -72,8 +79,14 @@ import type { AttestationResult } from "./types.js";
  * error metrics — picks up `err.result.status`, `.provider`, and
  * `.metadata.verifiedAt` automatically without callsite instrumentation.
  * Prefer this over a separate `onDegraded` callback when throwing.
+ *
+ * Per UD2 (PR 2.A): rebased on `SigilTeeError`, which extends `SigilError`.
+ * `instanceof TeeAttestationError` checks survive (class name + .result
+ * preserved); `instanceof SigilTeeError` and `instanceof SigilError` checks
+ * now also work. The two re-throw guards in `tee/providers/turnkey.ts:359`
+ * and `:563` continue to work because the class identity is unchanged.
  */
-export class TeeAttestationError extends Error {
+export class TeeAttestationError extends SigilTeeError<SigilTeeErrorCode> {
   /**
    * The attestation result that triggered this error, when available.
    * `undefined` for subclasses thrown before a result is constructed
@@ -81,8 +94,15 @@ export class TeeAttestationError extends Error {
    */
   public readonly result?: AttestationResult;
 
-  constructor(message: string, result?: AttestationResult) {
-    super(message);
+  constructor(
+    message: string,
+    result?: AttestationResult,
+    code: SigilTeeErrorCode = SIGIL_ERROR__TEE__ATTESTATION_FAILED,
+  ) {
+    // The context shape varies per code (PCR_MISMATCH carries pcrIndex /
+    // expected / actual via the subclass). Cast is safe because subclass
+    // constructors pass a complete context that satisfies the per-code shape.
+    super(code, message, { context: { result } as never });
     this.name = "TeeAttestationError";
     this.result = result;
   }
@@ -91,7 +111,7 @@ export class TeeAttestationError extends Error {
 /** Error class for certificate chain validation failures. */
 export class AttestationCertChainError extends TeeAttestationError {
   constructor(message: string, result?: AttestationResult) {
-    super(message, result);
+    super(message, result, SIGIL_ERROR__TEE__CERT_CHAIN_INVALID);
     this.name = "AttestationCertChainError";
   }
 }
@@ -111,6 +131,7 @@ export class AttestationPcrMismatchError extends TeeAttestationError {
     super(
       `PCR${pcrIndex} mismatch: expected ${expected}, got ${actual}`,
       result,
+      SIGIL_ERROR__TEE__PCR_MISMATCH,
     );
     this.name = "AttestationPcrMismatchError";
     this.pcrIndex = pcrIndex;

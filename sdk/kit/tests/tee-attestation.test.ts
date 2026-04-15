@@ -68,7 +68,11 @@ describe("tee-attestation", () => {
   describe("Error classes", () => {
     it("TeeAttestationError has correct message and name", () => {
       const err = new TeeAttestationError("test error");
-      expect(err.message).to.equal("test error");
+      // PR 2.A: SigilError base appends a Version footer to .message (viem
+      // pattern). The original `shortMessage` is preserved verbatim on the
+      // .shortMessage field; .message includes the short message plus footer.
+      expect(err.message).to.include("test error");
+      expect(err.shortMessage).to.equal("test error");
       expect(err.name).to.equal("TeeAttestationError");
       expect(err).to.be.instanceOf(Error);
     });
