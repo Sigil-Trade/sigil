@@ -33,14 +33,18 @@ export interface SigilErrorParameters<TContext = unknown> {
   context?: TContext;
 }
 
-export class SigilError<TCode extends SigilErrorCode = SigilErrorCode> extends Error {
+export class SigilError<
+  TCode extends SigilErrorCode = SigilErrorCode,
+> extends Error {
   readonly code: TCode;
   readonly shortMessage: string;
   readonly details: string;
   readonly version: string;
   readonly metaMessages?: string[];
   readonly docsPath?: string;
-  readonly context?: TCode extends keyof SigilErrorContext ? SigilErrorContext[TCode] : undefined;
+  readonly context?: TCode extends keyof SigilErrorContext
+    ? SigilErrorContext[TCode]
+    : undefined;
   override cause?: Error | unknown;
   override name: string = "SigilError";
 
@@ -48,12 +52,19 @@ export class SigilError<TCode extends SigilErrorCode = SigilErrorCode> extends E
     code: TCode,
     shortMessage: string,
     args: SigilErrorParameters<
-      TCode extends keyof SigilErrorContext ? SigilErrorContext[TCode] : undefined
+      TCode extends keyof SigilErrorContext
+        ? SigilErrorContext[TCode]
+        : undefined
     > = {},
   ) {
     const details = extractDetails(args.cause);
     const docsPath = args.docsPath ?? extractDocsPath(args.cause);
-    const formatted = formatMessage(shortMessage, args.metaMessages, docsPath, details);
+    const formatted = formatMessage(
+      shortMessage,
+      args.metaMessages,
+      docsPath,
+      details,
+    );
     super(formatted);
     this.code = code;
     this.shortMessage = shortMessage;

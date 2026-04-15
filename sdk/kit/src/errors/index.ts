@@ -9,7 +9,11 @@
  * for backwards compatibility.
  */
 
-export { SigilError, SIGIL_KIT_VERSION, type SigilErrorParameters } from "./base.js";
+export {
+  SigilError,
+  SIGIL_KIT_VERSION,
+  type SigilErrorParameters,
+} from "./base.js";
 export { SigilShieldError } from "./shield.js";
 export { SigilTeeError } from "./tee.js";
 export { SigilX402Error } from "./x402.js";

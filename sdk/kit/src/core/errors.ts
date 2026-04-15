@@ -65,9 +65,13 @@ export class ShieldDeniedError extends SigilShieldError<
 
   constructor(violations: PolicyViolation[]) {
     const summary = violations.map((v) => v.message).join("; ");
-    super(SIGIL_ERROR__SHIELD__POLICY_DENIED, `Transaction denied by Sigil: ${summary}`, {
-      context: { violations },
-    });
+    super(
+      SIGIL_ERROR__SHIELD__POLICY_DENIED,
+      `Transaction denied by Sigil: ${summary}`,
+      {
+        context: { violations },
+      },
+    );
     this.name = "ShieldDeniedError";
     this.violations = violations;
   }

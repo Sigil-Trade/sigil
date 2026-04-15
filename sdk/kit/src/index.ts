@@ -626,7 +626,8 @@ export type TeeErrorType =
   | import("./tee/wallet-types.js").AttestationPcrMismatchError;
 
 /** Per-module discriminated union of compose errors. */
-export type ComposeErrorType = import("./integrations/compose-errors.js").ComposeError;
+export type ComposeErrorType =
+  import("./integrations/compose-errors.js").ComposeError;
 
 /** Per-module discriminated union of shield errors. */
 export type ShieldErrorType =

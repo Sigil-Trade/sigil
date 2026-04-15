@@ -95,8 +95,14 @@ export interface SigilErrorContext {
   };
   [SIGIL_ERROR__SHIELD__SESSION_BINDING]: { violations: PolicyViolationLike[] };
 
-  [SIGIL_ERROR__TEE__ATTESTATION_FAILED]: { result?: AttestationResultLike; provider?: string };
-  [SIGIL_ERROR__TEE__CERT_CHAIN_INVALID]: { result?: AttestationResultLike; provider?: string };
+  [SIGIL_ERROR__TEE__ATTESTATION_FAILED]: {
+    result?: AttestationResultLike;
+    provider?: string;
+  };
+  [SIGIL_ERROR__TEE__CERT_CHAIN_INVALID]: {
+    result?: AttestationResultLike;
+    provider?: string;
+  };
   [SIGIL_ERROR__TEE__PCR_MISMATCH]: {
     pcrIndex: number;
     expected: string;
@@ -105,26 +111,44 @@ export interface SigilErrorContext {
     provider?: string;
   };
 
-  [SIGIL_ERROR__COMPOSE__MISSING_PARAM]: { protocol: string; fieldName: string };
+  [SIGIL_ERROR__COMPOSE__MISSING_PARAM]: {
+    protocol: string;
+    fieldName: string;
+  };
   [SIGIL_ERROR__COMPOSE__INVALID_BIGINT]: {
     protocol: string;
     fieldName: string;
     receivedValue: unknown;
   };
-  [SIGIL_ERROR__COMPOSE__UNSUPPORTED_ACTION]: { protocol: string; action: string };
+  [SIGIL_ERROR__COMPOSE__UNSUPPORTED_ACTION]: {
+    protocol: string;
+    action: string;
+  };
 
   [SIGIL_ERROR__X402__HEADER_MALFORMED]: { legacyNumericCode: 7024 };
   [SIGIL_ERROR__X402__PAYMENT_FAILED]: { legacyNumericCode: 7025 };
   [SIGIL_ERROR__X402__UNSUPPORTED]: { legacyNumericCode: 7026 };
-  [SIGIL_ERROR__X402__DESTINATION_BLOCKED]: { payTo: string; legacyNumericCode: 7027 };
+  [SIGIL_ERROR__X402__DESTINATION_BLOCKED]: {
+    payTo: string;
+    legacyNumericCode: 7027;
+  };
   [SIGIL_ERROR__X402__REPLAY]: { nonceKey: string; legacyNumericCode: 7028 };
 
   [SIGIL_ERROR__SDK__INVALID_CONFIG]: { field: string; expected?: string };
   [SIGIL_ERROR__SDK__INVALID_PARAMS]: { field?: string; received?: unknown };
-  [SIGIL_ERROR__SDK__INVALID_NETWORK]: { received: string; valid: readonly string[] };
+  [SIGIL_ERROR__SDK__INVALID_NETWORK]: {
+    received: string;
+    valid: readonly string[];
+  };
   [SIGIL_ERROR__SDK__INVALID_AMOUNT]: { received: unknown };
-  [SIGIL_ERROR__SDK__INVALID_CAPABILITY]: { capability: number; valid: readonly number[] };
-  [SIGIL_ERROR__SDK__INVALID_ACTION_TYPE]: { received: string; valid: readonly string[] };
+  [SIGIL_ERROR__SDK__INVALID_CAPABILITY]: {
+    capability: number;
+    valid: readonly number[];
+  };
+  [SIGIL_ERROR__SDK__INVALID_ACTION_TYPE]: {
+    received: string;
+    valid: readonly string[];
+  };
   [SIGIL_ERROR__SDK__OWNER_AGENT_COLLISION]: { owner: Address; agent: Address };
   [SIGIL_ERROR__SDK__VAULT_NOT_FOUND]: { vault: Address };
   [SIGIL_ERROR__SDK__VAULT_INACTIVE]: { vault: Address; status: string };
@@ -135,8 +159,14 @@ export interface SigilErrorContext {
   [SIGIL_ERROR__SDK__AGENT_ZERO_CAPABILITY]: { vault: Address; agent: Address };
   [SIGIL_ERROR__SDK__SIGNER_INVALID]: { reason: string };
   [SIGIL_ERROR__SDK__SIGNATURE_INVALID]: { reason: string };
-  [SIGIL_ERROR__SDK__SPL_TOKEN_OP_BLOCKED]: { operation: string; vault?: Address };
-  [SIGIL_ERROR__SDK__PROTOCOL_NOT_ALLOWED]: { protocol: Address; vault: Address };
+  [SIGIL_ERROR__SDK__SPL_TOKEN_OP_BLOCKED]: {
+    operation: string;
+    vault?: Address;
+  };
+  [SIGIL_ERROR__SDK__PROTOCOL_NOT_ALLOWED]: {
+    protocol: Address;
+    vault: Address;
+  };
   [SIGIL_ERROR__SDK__PROTOCOL_NOT_TARGETED]: undefined;
   [SIGIL_ERROR__SDK__INSTRUCTION_COUNT]: { expected: number; got: number };
   [SIGIL_ERROR__SDK__CAP_EXCEEDED]: {
@@ -152,8 +182,14 @@ export interface SigilErrorContext {
   [SIGIL_ERROR__SDK__UNKNOWN]: { rawCode?: string; rawMessage?: string };
 
   [SIGIL_ERROR__RPC__TX_FAILED]: { signature?: string; logs?: string[] };
-  [SIGIL_ERROR__RPC__CONFIRMATION_TIMEOUT]: { signature: string; timeoutMs: number };
-  [SIGIL_ERROR__RPC__SIMULATION_FAILED]: { signature?: string; logs?: string[] };
+  [SIGIL_ERROR__RPC__CONFIRMATION_TIMEOUT]: {
+    signature: string;
+    timeoutMs: number;
+  };
+  [SIGIL_ERROR__RPC__SIMULATION_FAILED]: {
+    signature?: string;
+    logs?: string[];
+  };
   [SIGIL_ERROR__RPC__DRAIN_DETECTED]: { reason: string };
   [SIGIL_ERROR__RPC__TX_TOO_LARGE]: { byteLength: number; limit: number };
   [SIGIL_ERROR__RPC__RATE_LIMITED]: { statusCode?: number };

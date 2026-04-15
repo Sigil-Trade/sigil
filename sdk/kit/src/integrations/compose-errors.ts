@@ -31,11 +31,12 @@ export const COMPOSE_ERROR_CODES = {
 export type ComposeErrorCode =
   (typeof COMPOSE_ERROR_CODES)[keyof typeof COMPOSE_ERROR_CODES];
 
-const COMPOSE_LEGACY_TO_SIGIL: Record<ComposeErrorCode, SigilComposeErrorCode> = {
-  missing_param: SIGIL_ERROR__COMPOSE__MISSING_PARAM,
-  invalid_bigint: SIGIL_ERROR__COMPOSE__INVALID_BIGINT,
-  unsupported_action: SIGIL_ERROR__COMPOSE__UNSUPPORTED_ACTION,
-};
+const COMPOSE_LEGACY_TO_SIGIL: Record<ComposeErrorCode, SigilComposeErrorCode> =
+  {
+    missing_param: SIGIL_ERROR__COMPOSE__MISSING_PARAM,
+    invalid_bigint: SIGIL_ERROR__COMPOSE__INVALID_BIGINT,
+    unsupported_action: SIGIL_ERROR__COMPOSE__UNSUPPORTED_ACTION,
+  };
 
 // ─── Base Error Class ───────────────────────────────────────────────────────
 

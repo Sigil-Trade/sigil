@@ -23,7 +23,9 @@ import {
 } from "../errors/codes.js";
 
 /** Malformed PAYMENT-REQUIRED header. Legacy numeric code: 7024. */
-export class X402ParseError extends SigilX402Error<typeof SIGIL_ERROR__X402__HEADER_MALFORMED> {
+export class X402ParseError extends SigilX402Error<
+  typeof SIGIL_ERROR__X402__HEADER_MALFORMED
+> {
   /** @deprecated Use `err.code === SIGIL_ERROR__X402__HEADER_MALFORMED`. Removed at v1.0. */
   readonly legacyNumericCode = 7024 as const;
   constructor(message: string) {
@@ -35,7 +37,9 @@ export class X402ParseError extends SigilX402Error<typeof SIGIL_ERROR__X402__HEA
 }
 
 /** General x402 payment failure. Legacy numeric code: 7025. */
-export class X402PaymentError extends SigilX402Error<typeof SIGIL_ERROR__X402__PAYMENT_FAILED> {
+export class X402PaymentError extends SigilX402Error<
+  typeof SIGIL_ERROR__X402__PAYMENT_FAILED
+> {
   /** @deprecated Use `err.code === SIGIL_ERROR__X402__PAYMENT_FAILED`. Removed at v1.0. */
   readonly legacyNumericCode = 7025 as const;
   constructor(message: string) {
@@ -47,7 +51,9 @@ export class X402PaymentError extends SigilX402Error<typeof SIGIL_ERROR__X402__P
 }
 
 /** No compatible Solana payment option. Legacy numeric code: 7026. */
-export class X402UnsupportedError extends SigilX402Error<typeof SIGIL_ERROR__X402__UNSUPPORTED> {
+export class X402UnsupportedError extends SigilX402Error<
+  typeof SIGIL_ERROR__X402__UNSUPPORTED
+> {
   /** @deprecated Use `err.code === SIGIL_ERROR__X402__UNSUPPORTED`. Removed at v1.0. */
   readonly legacyNumericCode = 7026 as const;
   constructor(message: string) {
@@ -79,7 +85,9 @@ export class X402DestinationBlockedError extends SigilX402Error<
 }
 
 /** Duplicate payment detected within replay window. Legacy numeric code: 7028. */
-export class X402ReplayError extends SigilX402Error<typeof SIGIL_ERROR__X402__REPLAY> {
+export class X402ReplayError extends SigilX402Error<
+  typeof SIGIL_ERROR__X402__REPLAY
+> {
   /** @deprecated Use `err.code === SIGIL_ERROR__X402__REPLAY`. Removed at v1.0. */
   readonly legacyNumericCode = 7028 as const;
   constructor(
