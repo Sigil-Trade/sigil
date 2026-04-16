@@ -1,5 +1,11 @@
 # @usesigil/kit
 
+## 0.8.1
+
+### Patch Changes
+
+- [#232](https://github.com/Sigil-Trade/sigil/pull/232) [`29a1385`](https://github.com/Sigil-Trade/sigil/commit/29a1385ebc7d72b74d698d2e4e3704d09da2bf20) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - Complete audit follow-up: shield.ts import ordering, createOwnerClient + SUPPORTED_PROTOCOLS root barrel exports, priority-fees.ts registry-driven CU estimation, branded-types tests, README sections for Branded Types and MCP Round-Trip.
+
 ## 0.8.0
 
 ### Minor Changes
