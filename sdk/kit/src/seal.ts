@@ -827,10 +827,7 @@ export interface SigilClientApi {
   readonly network: "devnet" | "mainnet";
 
   /** Seal DeFi instructions with Sigil security (uses instance caches). */
-  seal(
-    instructions: Instruction[],
-    opts: ClientSealOpts,
-  ): Promise<SealResult>;
+  seal(instructions: Instruction[], opts: ClientSealOpts): Promise<SealResult>;
 
   /** Seal + sign + send + confirm in one call. */
   executeAndConfirm(
@@ -911,68 +908,74 @@ export function createSigilClient(config: SigilClientConfig): SigilClientApi {
   const networkFull: Network =
     network === "mainnet" ? "mainnet-beta" : "devnet";
 
+  // H3 fix: define seal as a standalone closure-captured function so
+  // executeAndConfirm can call it WITHOUT `this`. This prevents
+  // `const { executeAndConfirm } = createSigilClient(cfg)` from
+  // crashing with TypeError (destructuring loses `this` binding).
+  async function clientSeal(
+    instructions: Instruction[],
+    opts: ClientSealOpts,
+  ): Promise<SealResult> {
+    // Pre-resolve blockhash + ALTs from instance caches (parallel)
+    const altPromise = opts.addressLookupTables
+      ? Promise.resolve(opts.addressLookupTables)
+      : localAltCache.resolve(
+          rpc,
+          mergeAltAddresses(
+            getSigilAltAddress(normalizeNetwork(network)),
+            opts.protocolAltAddresses,
+          ),
+        );
+
+    let [resolvedBlockhash, addressLookupTables] = await Promise.all([
+      blockhashCache.get(rpc),
+      altPromise,
+    ]);
+
+    // ALT verify-evict-retry (self-healing cache)
+    if (!opts.addressLookupTables) {
+      const net = normalizeNetwork(network);
+      const sigilAlt = getSigilAltAddress(net);
+      const expected = getExpectedAltContents(net);
+      try {
+        verifySigilAlt(addressLookupTables, sigilAlt, expected);
+      } catch (err: unknown) {
+        const cause = redactCause(err);
+        console.debug(
+          `[seal] ALT cache verify failed — invalidating and retrying: ${cause.message ?? cause.name ?? cause.code ?? "unknown"}`,
+        );
+        localAltCache.invalidate();
+        const allAlts = mergeAltAddresses(sigilAlt, opts.protocolAltAddresses);
+        addressLookupTables = await localAltCache.resolve(rpc, allAlts);
+        verifySigilAlt(addressLookupTables, sigilAlt, expected);
+      }
+    }
+
+    return seal({
+      rpc,
+      vault,
+      agent,
+      network,
+      instructions,
+      ...opts,
+      blockhash: resolvedBlockhash,
+      addressLookupTables,
+    });
+  }
+
   return {
     rpc,
     vault,
     agent,
     network,
 
-    async seal(instructions, opts) {
-      // Pre-resolve blockhash + ALTs from instance caches (parallel)
-      const altPromise = opts.addressLookupTables
-        ? Promise.resolve(opts.addressLookupTables)
-        : localAltCache.resolve(
-            rpc,
-            mergeAltAddresses(
-              getSigilAltAddress(normalizeNetwork(network)),
-              opts.protocolAltAddresses,
-            ),
-          );
-
-      let [resolvedBlockhash, addressLookupTables] = await Promise.all([
-        blockhashCache.get(rpc),
-        altPromise,
-      ]);
-
-      // ALT verify-evict-retry (self-healing cache)
-      if (!opts.addressLookupTables) {
-        const net = normalizeNetwork(network);
-        const sigilAlt = getSigilAltAddress(net);
-        const expected = getExpectedAltContents(net);
-        try {
-          verifySigilAlt(addressLookupTables, sigilAlt, expected);
-        } catch (err: unknown) {
-          const cause = redactCause(err);
-          console.debug(
-            `[seal] ALT cache verify failed — invalidating and retrying: ${cause.message ?? cause.name ?? cause.code ?? "unknown"}`,
-          );
-          localAltCache.invalidate();
-          const allAlts = mergeAltAddresses(
-            sigilAlt,
-            opts.protocolAltAddresses,
-          );
-          addressLookupTables = await localAltCache.resolve(rpc, allAlts);
-          verifySigilAlt(addressLookupTables, sigilAlt, expected);
-        }
-      }
-
-      return seal({
-        rpc,
-        vault,
-        agent,
-        network,
-        instructions,
-        ...opts,
-        blockhash: resolvedBlockhash,
-        addressLookupTables,
-      });
-    },
+    seal: clientSeal,
 
     async executeAndConfirm(instructions, opts) {
       try {
-        // Use this.seal through closure — NOT this.seal (no `this`)
-        const sealFn = this.seal.bind(this);
-        const result = await sealFn(instructions, opts);
+        // Calls the closure-captured clientSeal — no `this` dependency.
+        // Safe to destructure: `const { executeAndConfirm } = client`.
+        const result = await clientSeal(instructions, opts);
         const encoded = await signAndEncode(agent, result.transaction);
         const signature = await sendAndConfirmTransaction(
           rpc,

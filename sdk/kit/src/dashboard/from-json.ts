@@ -36,12 +36,27 @@ import type {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-/** Safe bigint parse — returns 0n for empty/undefined/null values. */
+/**
+ * Safe bigint parse — returns 0n for empty/undefined/null values.
+ *
+ * C2 fix (silent-failure-hunter): logs a warning on parse failure instead
+ * of silently returning 0n. AI agents receiving corrupted MCP data (e.g.,
+ * "$500" instead of "500000000") will see the warning in logs rather than
+ * silently operating on zeroed financial data.
+ */
+let biWarnCount = 0;
 function bi(s: string | undefined | null): bigint {
   if (!s) return 0n;
   try {
     return BigInt(s);
   } catch {
+    if (biWarnCount < 10) {
+      biWarnCount++;
+      console.warn(
+        `[@usesigil/kit/fromJSON] Failed to parse bigint from "${s.slice(0, 50)}" — returning 0n. ` +
+          `This may indicate corrupted MCP data.`,
+      );
+    }
     return 0n;
   }
 }
