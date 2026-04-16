@@ -6,11 +6,14 @@
  */
 
 import type { Address } from "./kit-adapter.js";
+import { getProgramDerivedAddress, getAddressEncoder } from "./kit-adapter.js";
 import {
   USDC_MINT_DEVNET,
   USDC_MINT_MAINNET,
   USDT_MINT_DEVNET,
   USDT_MINT_MAINNET,
+  TOKEN_PROGRAM_ADDRESS,
+  ATA_PROGRAM_ADDRESS,
   type Network,
 } from "./types.js";
 import { SigilSdkDomainError } from "./errors/sdk.js";
@@ -185,4 +188,31 @@ export function toBaseUnits(amount: number | string, decimals: number): bigint {
 export function fromBaseUnits(amount: bigint, decimals: number): number {
   const divisor = Math.pow(10, decimals);
   return Number(amount) / divisor;
+}
+
+// ─── ATA Derivation (PR 3.B F062 — moved from x402/transfer-builder.ts) ────
+
+/**
+ * Derive an Associated Token Account address.
+ *
+ * Seeds: [owner, TOKEN_PROGRAM, mint] hashed against the ATA program.
+ * This is a generic SPL utility used by seal(), state-resolver, and the
+ * x402 transfer builder. Previously lived in x402/transfer-builder.ts
+ * (coupling inversion — core seal.ts depended on x402 experimental module).
+ */
+const addressEncoder = getAddressEncoder();
+
+export async function deriveAta(
+  owner: Address,
+  mint: Address,
+): Promise<Address> {
+  const [ata] = await getProgramDerivedAddress({
+    programAddress: ATA_PROGRAM_ADDRESS,
+    seeds: [
+      addressEncoder.encode(owner),
+      addressEncoder.encode(TOKEN_PROGRAM_ADDRESS),
+      addressEncoder.encode(mint),
+    ],
+  });
+  return ata;
 }

@@ -49,7 +49,7 @@ import {
 } from "./rpc-helpers.js";
 import { AltCache, mergeAltAddresses, verifySigilAlt } from "./alt-loader.js";
 import { getSigilAltAddress, getExpectedAltContents } from "./alt-config.js";
-import { deriveAta } from "./x402/transfer-builder.js";
+import { deriveAta } from "./tokens.js";
 import {
   type Network,
   isStablecoinMint,

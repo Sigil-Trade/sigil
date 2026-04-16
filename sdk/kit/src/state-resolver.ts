@@ -88,7 +88,7 @@ import {
   USDT_MINT_MAINNET,
   type Network,
 } from "./types.js";
-import { deriveAta } from "./x402/transfer-builder.js";
+import { deriveAta } from "./tokens.js";
 import { formatUsd } from "./formatting.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────

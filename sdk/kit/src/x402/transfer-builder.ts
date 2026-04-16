@@ -7,7 +7,7 @@
  */
 
 import type { Address, Instruction } from "../kit-adapter.js";
-import { AccountRole, getProgramDerivedAddress } from "../kit-adapter.js";
+import { AccountRole } from "../kit-adapter.js";
 import type { InspectableInstruction } from "../inspector.js";
 import { X402ParseError } from "./errors.js";
 
@@ -26,42 +26,13 @@ export const ATA_PROGRAM_ID = ATA_PROGRAM_ADDRESS;
 const TRANSFER_CHECKED_DISCRIMINATOR = 12;
 
 // ─── ATA Derivation ─────────────────────────────────────────────────────────
+// PR 3.B F062: deriveAta moved to tokens.ts (correct home — generic SPL utility,
+// not x402-specific). Imported for local use + re-exported for backwards compat
+// with consumers importing from "@usesigil/kit/x402".
+import { deriveAta } from "../tokens.js";
+export { deriveAta };
 
-/**
- * Derive an Associated Token Account address.
- * Seeds: [owner, TOKEN_PROGRAM_ID, mint]
- */
-export async function deriveAta(
-  owner: Address,
-  mint: Address,
-): Promise<Address> {
-  const [ata] = await getProgramDerivedAddress({
-    programAddress: ATA_PROGRAM_ID,
-    seeds: [
-      // owner
-      getAddressBytes(owner),
-      // token program
-      getAddressBytes(TOKEN_PROGRAM_ID),
-      // mint
-      getAddressBytes(mint),
-    ],
-  });
-  return ata;
-}
-
-/**
- * Convert a base58 Address to exactly 32 bytes for PDA seeds.
- * Uses base58 decode (no external dependency).
- */
-function getAddressBytes(address: Address): Uint8Array {
-  const decoded = base58Decode(address);
-  if (decoded.length === 32) return decoded;
-  // Pad or truncate to exactly 32 bytes
-  if (decoded.length > 32) return decoded.slice(decoded.length - 32);
-  const result = new Uint8Array(32);
-  result.set(decoded, 32 - decoded.length);
-  return result;
-}
+// getAddressBytes removed — was only used by deriveAta (now in tokens.ts).
 
 // ─── Instruction Builder ────────────────────────────────────────────────────
 
