@@ -205,15 +205,73 @@ export const SYSTEM_PROGRAM_ADDRESS =
 export const JUPITER_PROGRAM_ADDRESS =
   "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" as Address;
 
-/** The 5 recognized DeFi programs for instruction count enforcement.
- *  Must stay in sync with on-chain validate_and_authorize.rs:325-329. */
-export const RECOGNIZED_DEFI_PROGRAMS: ReadonlySet<string> = new Set([
-  "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4", // Jupiter V6
-  "FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn", // Flash Trade
-  "JLend2fEim9xUFcaHsyGePEoBzFLvkjMi3MnPcSuCdu", // Jupiter Lend
-  "jup3YeL8QhtSx1e253b2FDvsMNC87fDrgQZivbrndc9", // Jupiter Earn
-  "jupr81YtYssSyPt8jbnGuiWon5f6x9TcDEFxYe3Bdzi", // Jupiter Borrow
-]);
+// ─── Supported Protocol Registry (PR 3.B — F042 single source of truth) ─────
+//
+// Previously duplicated across 3 files (types.ts, protocol-names.ts,
+// priority-fees.ts) with divergent entries. Now a single registry.
+
+export interface ProtocolMeta {
+  /** Human-readable protocol name. */
+  name: string;
+  /** Whether this protocol is instruction-count-limited by on-chain
+   * validate_and_authorize.rs:325-329. Only programs in this set
+   * are counted for the "exactly 1 DeFi instruction" enforcement. */
+  instructionCountLimited: boolean;
+  /** Default CU estimate for composed transactions with this protocol. */
+  defaultCU: number;
+}
+
+/**
+ * Single source of truth for all supported DeFi protocols.
+ *
+ * Unifies RECOGNIZED_DEFI_PROGRAMS (instruction count enforcement),
+ * PROTOCOL_NAMES (analytics display), and priority-fees constants.
+ * Adding a new protocol requires ONE entry here.
+ */
+export const SUPPORTED_PROTOCOLS: Record<string, ProtocolMeta> = {
+  JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4: {
+    name: "Jupiter",
+    instructionCountLimited: true,
+    defaultCU: 600_000,
+  },
+  FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn: {
+    name: "Flash Trade",
+    instructionCountLimited: true,
+    defaultCU: 800_000,
+  },
+  JLend2fEim9xUFcaHsyGePEoBzFLvkjMi3MnPcSuCdu: {
+    name: "Jupiter Lend",
+    instructionCountLimited: true,
+    defaultCU: 400_000,
+  },
+  jup3YeL8QhtSx1e253b2FDvsMNC87fDrgQZivbrndc9: {
+    name: "Jupiter Earn",
+    instructionCountLimited: true,
+    defaultCU: 400_000,
+  },
+  jupr81YtYssSyPt8jbnGuiWon5f6x9TcDEFxYe3Bdzi: {
+    name: "Jupiter Borrow",
+    instructionCountLimited: true,
+    defaultCU: 400_000,
+  },
+  dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH: {
+    name: "Drift",
+    instructionCountLimited: false,
+    defaultCU: 800_000,
+  },
+  KLend2g3cP87ber8CzRaqeECGwNvLFM9acPVcRkRHvM: {
+    name: "Kamino",
+    instructionCountLimited: false,
+    defaultCU: 400_000,
+  },
+};
+
+/** The programs that are instruction-count-limited (derived from registry). */
+export const RECOGNIZED_DEFI_PROGRAMS: ReadonlySet<string> = new Set(
+  Object.entries(SUPPORTED_PROTOCOLS)
+    .filter(([, meta]) => meta.instructionCountLimited)
+    .map(([addr]) => addr),
+);
 
 export type Network = "devnet" | "mainnet-beta";
 

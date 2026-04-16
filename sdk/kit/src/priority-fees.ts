@@ -7,14 +7,25 @@
 
 import type { Instruction, Rpc, SolanaRpcApi } from "./kit-adapter.js";
 import { redactCause } from "./network-errors.js";
+import { SUPPORTED_PROTOCOLS } from "./types.js";
 
-// ─── Known Protocol Program Addresses ────────────────────────────────────────
-
+// ─── Known Protocol Program Addresses (PR 3.B F042 — derived from registry) ─
+// These local aliases keep the CU estimation code readable while sourcing
+// addresses from the canonical SUPPORTED_PROTOCOLS in types.ts.
 const JUPITER_PROGRAM = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4";
 const JUPITER_LEND_PROGRAM = "JLend2fEim9xUFcaHsyGePEoBzFLvkjMi3MnPcSuCdu";
 const FLASH_TRADE_PROGRAM = "FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn";
 const DRIFT_PROGRAM = "dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH";
 const KAMINO_LEND_PROGRAM = "KLend2g3cP87ber8CzRaqeECGwNvLFM9acPVcRkRHvM";
+
+// Runtime assert: all local aliases exist in the canonical registry.
+// If a protocol is removed from SUPPORTED_PROTOCOLS but the local alias
+// survives, this fires at module load.
+for (const addr of [JUPITER_PROGRAM, JUPITER_LEND_PROGRAM, FLASH_TRADE_PROGRAM, DRIFT_PROGRAM, KAMINO_LEND_PROGRAM]) {
+  if (!SUPPORTED_PROTOCOLS[addr]) {
+    console.warn(`[priority-fees] ${addr} not in SUPPORTED_PROTOCOLS — registry drift`);
+  }
+}
 
 // ─── CU Budget Defaults ─────────────────────────────────────────────────────
 

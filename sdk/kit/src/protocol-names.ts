@@ -6,14 +6,14 @@
  */
 
 import { formatAddress } from "./formatting.js";
+import { SUPPORTED_PROTOCOLS } from "./types.js";
 
-export const PROTOCOL_NAMES: Record<string, string> = {
-  JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4: "Jupiter",
-  FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn: "Flash Trade",
-  dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH: "Drift",
-  KLend2g3cP87ber8CzRaqeECGwNvLFM9acPVcRkRHvM: "Kamino",
-  JLend2fEim9xUFcaHsyGePEoBzFLvkjMi3MnPcSuCdu: "Jupiter Lend",
-};
+// PR 3.B F042: derived from the canonical SUPPORTED_PROTOCOLS registry.
+// No longer a standalone map — adding a protocol to types.ts automatically
+// makes it resolvable here.
+export const PROTOCOL_NAMES: Record<string, string> = Object.fromEntries(
+  Object.entries(SUPPORTED_PROTOCOLS).map(([addr, meta]) => [addr, meta.name]),
+);
 
 export function resolveProtocolName(protocol: string): string {
   return PROTOCOL_NAMES[protocol] ?? formatAddress(protocol);
