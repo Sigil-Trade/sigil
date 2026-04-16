@@ -1,5 +1,13 @@
 # @usesigil/kit
 
+## 0.7.1
+
+### Patch Changes
+
+- [#223](https://github.com/Sigil-Trade/sigil/pull/223) [`84163f8`](https://github.com/Sigil-Trade/sigil/commit/84163f83c07b1454afc0f7dd0a9bef27cae3ae97) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - Kit adapter barrel — centralize @solana/kit imports (PR 2.C).
+
+  Internal refactor: all 52 source files now import from `src/kit-adapter.ts` instead of directly from `@solana/kit`. No public API changes. Future Kit v7/v8 migration is now a 1-file diff.
+
 ## 0.7.0
 
 ### Minor Changes
