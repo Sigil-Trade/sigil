@@ -21,8 +21,8 @@ import type {
   Rpc,
   SolanaRpcApi,
   TransactionSigner,
-} from "@solana/kit";
-import { compileTransaction, AccountRole } from "@solana/kit";
+} from "./kit-adapter.js";
+import { compileTransaction, AccountRole } from "./kit-adapter.js";
 
 import { VaultStatus } from "./generated/types/vaultStatus.js";
 import { getValidateAndAuthorizeInstructionAsync } from "./generated/instructions/validateAndAuthorize.js";

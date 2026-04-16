@@ -15,8 +15,8 @@ import type {
   SolanaRpcApi,
   TransactionSigner,
   AddressesByLookupTableAddress,
-} from "@solana/kit";
-import { getBase64EncodedWireTransaction } from "@solana/kit";
+} from "./kit-adapter.js";
+import { getBase64EncodedWireTransaction } from "./kit-adapter.js";
 
 import {
   composeSigilTransaction,

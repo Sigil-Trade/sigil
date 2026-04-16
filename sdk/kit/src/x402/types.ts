@@ -10,7 +10,7 @@ import type {
   Rpc,
   SolanaRpcApi,
   TransactionSigner,
-} from "@solana/kit";
+} from "../kit-adapter.js";
 import type { ShieldedContext } from "../shield.js";
 
 // ─── x402 Protocol Types ────────────────────────────────────────────────────

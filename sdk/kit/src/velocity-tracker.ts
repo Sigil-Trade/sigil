@@ -7,7 +7,7 @@
  * Integrates with ShieldState for unified spending tracking.
  */
 
-import type { Address } from "@solana/kit";
+import type { Address } from "./kit-adapter.js";
 import type { ShieldState } from "./shield.js";
 import { ShieldDeniedError, type PolicyViolation } from "./shield.js";
 

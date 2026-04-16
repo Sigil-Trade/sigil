@@ -8,11 +8,11 @@
  * - Deduplication when merging Sigil + protocol ALTs
  */
 
-import type { Address, Rpc, SolanaRpcApi } from "@solana/kit";
+import type { Address, Rpc, SolanaRpcApi } from "./kit-adapter.js";
 import {
   fetchAddressesForLookupTables,
   type AddressesByLookupTableAddress,
-} from "@solana/kit";
+} from "./kit-adapter.js";
 import { SigilSdkDomainError } from "./errors/sdk.js";
 import { SIGIL_ERROR__SDK__ALT_INTEGRITY } from "./errors/codes.js";
 

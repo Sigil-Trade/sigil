@@ -19,7 +19,7 @@
  */
 
 import * as crypto from "node:crypto";
-import { getAddressEncoder } from "@solana/kit";
+import { getAddressEncoder } from "../../kit-adapter.js";
 import {
   AttestationStatus,
   type AttestationResult,

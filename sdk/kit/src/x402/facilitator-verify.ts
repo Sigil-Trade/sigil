@@ -5,7 +5,7 @@
  * Non-fatal — logs warnings on suspicious responses.
  */
 
-import type { Rpc, SolanaRpcApi } from "@solana/kit";
+import type { Rpc, SolanaRpcApi } from "../kit-adapter.js";
 import type { SettleResponse } from "./types.js";
 import { redactCause } from "../network-errors.js";
 

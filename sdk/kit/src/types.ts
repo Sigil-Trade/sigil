@@ -5,7 +5,7 @@
  * and `bigint` instead of `BN`.
  */
 
-import type { Address, Instruction } from "@solana/kit";
+import type { Address, Instruction } from "./kit-adapter.js";
 
 import { SigilSdkDomainError } from "./errors/sdk.js";
 import {

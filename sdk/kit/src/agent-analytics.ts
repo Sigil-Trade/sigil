@@ -5,7 +5,7 @@
  * vault state. The dashboard Agents tab and Agent Detail page use these.
  */
 
-import type { Address } from "@solana/kit";
+import type { Address } from "./kit-adapter.js";
 import type { DecodedSigilEvent } from "./events.js";
 import type { ResolvedVaultState, EffectiveBudget } from "./state-resolver.js";
 import { bytesToAddress } from "./state-resolver.js";

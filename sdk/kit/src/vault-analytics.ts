@@ -8,7 +8,7 @@
  * balances, pending policy. Returns everything a vault detail page needs.
  */
 
-import type { Address, Rpc, SolanaRpcApi } from "@solana/kit";
+import type { Address, Rpc, SolanaRpcApi } from "./kit-adapter.js";
 import type {
   ResolvedVaultState,
   ResolvedVaultStateForOwner,

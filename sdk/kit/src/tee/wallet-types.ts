@@ -5,7 +5,7 @@
  * Zero dependency on @solana/web3.js.
  */
 
-import type { Address } from "@solana/kit";
+import type { Address } from "../kit-adapter.js";
 
 /**
  * A wallet-like object with a Kit Address public key.

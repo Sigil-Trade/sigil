@@ -12,7 +12,7 @@
  * - getAgentSpendingHistory() — per-agent hourly time series from overlay
  */
 
-import type { Address } from "@solana/kit";
+import type { Address } from "./kit-adapter.js";
 import type { SpendTracker, AgentSpendOverlay } from "./generated/index.js";
 import type {
   ResolvedVaultState,

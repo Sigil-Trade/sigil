@@ -5,7 +5,7 @@
  * vaults for an owner. The dashboard caches this with 30s stale time.
  */
 
-import type { Address, Rpc, SolanaRpcApi } from "@solana/kit";
+import type { Address, Rpc, SolanaRpcApi } from "./kit-adapter.js";
 import {
   findVaultsByOwner,
   bytesToAddress,
