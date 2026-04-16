@@ -27,7 +27,7 @@ import {
   type KeyPairSigner,
   type Rpc,
   type SolanaRpcApi,
-} from "@solana/kit";
+} from "../kit-adapter.js";
 import { getSetComputeUnitLimitInstruction } from "@solana-program/compute-budget";
 import { readFileSync } from "node:fs";
 

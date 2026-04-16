@@ -5,7 +5,7 @@
  * 3-layer fallback: Helius → Kit RPC → static.
  */
 
-import type { Instruction, Rpc, SolanaRpcApi } from "@solana/kit";
+import type { Instruction, Rpc, SolanaRpcApi } from "./kit-adapter.js";
 import { redactCause } from "./network-errors.js";
 
 // ─── Known Protocol Program Addresses ────────────────────────────────────────

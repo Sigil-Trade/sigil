@@ -5,7 +5,7 @@
  * The Activity tab is the second most-used dashboard feature after Overview.
  */
 
-import type { Address, Rpc, SolanaRpcApi } from "@solana/kit";
+import type { Address, Rpc, SolanaRpcApi } from "./kit-adapter.js";
 import type { DecodedSigilEvent, SigilEventName } from "./events.js";
 import { parseAndDecodeSigilEvents } from "./events.js";
 import { formatUsd, formatAddress, formatTokenAmount } from "./formatting.js";

@@ -13,7 +13,7 @@
  * - getInstructionCoverageRatio() — session sandwich completeness
  */
 
-import type { Address } from "@solana/kit";
+import type { Address } from "./kit-adapter.js";
 import type { DecodedSigilEvent } from "./events.js";
 import type { SpendTracker } from "./generated/index.js";
 import type { EffectiveBudget } from "./state-resolver.js";

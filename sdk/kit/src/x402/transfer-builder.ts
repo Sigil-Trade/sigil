@@ -6,8 +6,8 @@
  * of data + 4 accounts, trivial to encode directly.
  */
 
-import type { Address, Instruction } from "@solana/kit";
-import { AccountRole, getProgramDerivedAddress } from "@solana/kit";
+import type { Address, Instruction } from "../kit-adapter.js";
+import { AccountRole, getProgramDerivedAddress } from "../kit-adapter.js";
 import type { InspectableInstruction } from "../inspector.js";
 import { X402ParseError } from "./errors.js";
 

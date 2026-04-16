@@ -5,8 +5,8 @@
  * [ComputeBudget, PriorityFee?, ValidateAndAuthorize, ...defiIxs, FinalizeSession]
  */
 
-import type { Address, Instruction } from "@solana/kit";
-import type { AddressesByLookupTableAddress } from "@solana/kit";
+import type { Address, Instruction } from "./kit-adapter.js";
+import type { AddressesByLookupTableAddress } from "./kit-adapter.js";
 import {
   pipe,
   createTransactionMessage,
@@ -16,7 +16,7 @@ import {
   compressTransactionMessageUsingAddressLookupTables,
   compileTransaction,
   getBase64EncodedWireTransaction,
-} from "@solana/kit";
+} from "./kit-adapter.js";
 import {
   getSetComputeUnitLimitInstruction,
   getSetComputeUnitPriceInstruction,

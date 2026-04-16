@@ -10,8 +10,8 @@ import type {
   Rpc,
   SolanaRpcApi,
   TransactionSigner,
-} from "@solana/kit";
-import type { Instruction } from "@solana/kit";
+} from "./kit-adapter.js";
+import type { Instruction } from "./kit-adapter.js";
 
 import { getInitializeVaultInstructionAsync } from "./generated/instructions/initializeVault.js";
 import { getRegisterAgentInstruction } from "./generated/instructions/registerAgent.js";

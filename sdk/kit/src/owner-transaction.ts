@@ -17,7 +17,7 @@ import type {
   SolanaRpcApi,
   TransactionSigner,
   AddressesByLookupTableAddress,
-} from "@solana/kit";
+} from "./kit-adapter.js";
 import {
   pipe,
   createTransactionMessage,
@@ -26,7 +26,7 @@ import {
   setTransactionMessageLifetimeUsingBlockhash,
   compressTransactionMessageUsingAddressLookupTables,
   compileTransaction,
-} from "@solana/kit";
+} from "./kit-adapter.js";
 import {
   getSetComputeUnitLimitInstruction,
   getSetComputeUnitPriceInstruction,

@@ -5,8 +5,8 @@
  * seed encoding. All 9 PDA types are derivable.
  */
 
-import type { Address, ReadonlyUint8Array } from "@solana/kit";
-import { getAddressEncoder, getProgramDerivedAddress } from "@solana/kit";
+import type { Address, ReadonlyUint8Array } from "./kit-adapter.js";
+import { getAddressEncoder, getProgramDerivedAddress } from "./kit-adapter.js";
 import { SIGIL_PROGRAM_ADDRESS } from "./generated/programs/sigil.js";
 
 // ─── PDA Derivation ──────────────────────────────────────────────────────────

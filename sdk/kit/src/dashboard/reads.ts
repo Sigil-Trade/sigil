@@ -11,8 +11,8 @@
  * computed exactly once.
  */
 
-import { isSome } from "@solana/kit";
-import type { Address, Rpc, SolanaRpcApi } from "@solana/kit";
+import { isSome } from "../kit-adapter.js";
+import type { Address, Rpc, SolanaRpcApi } from "../kit-adapter.js";
 import { toDxError, isAccountNotFoundError } from "./errors.js";
 import { redactCause } from "../network-errors.js";
 import {

@@ -11,8 +11,8 @@ import type {
   Rpc,
   SolanaRpcApi,
   TransactionSigner,
-} from "@solana/kit";
-import { getProgramDerivedAddress, getAddressEncoder } from "@solana/kit";
+} from "../kit-adapter.js";
+import { getProgramDerivedAddress, getAddressEncoder } from "../kit-adapter.js";
 import type { CapabilityTier, UsdBaseUnits } from "../types.js";
 import {
   pipe,
@@ -24,7 +24,7 @@ import {
   signTransactionMessageWithSigners,
   getBase64EncodedWireTransaction,
   type Instruction as KitInstruction,
-} from "@solana/kit";
+} from "../kit-adapter.js";
 import {
   getSetComputeUnitLimitInstruction,
   getSetComputeUnitPriceInstruction,
@@ -33,7 +33,7 @@ import {
   sendAndConfirmTransaction,
   getBlockhashCache,
 } from "../rpc-helpers.js";
-import { AccountRole } from "@solana/kit";
+import { AccountRole } from "../kit-adapter.js";
 import {
   getAgentOverlayPDA,
   getPendingPolicyPDA,
