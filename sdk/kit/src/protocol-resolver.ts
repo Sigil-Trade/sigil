@@ -7,7 +7,7 @@
  *   NOT_ALLOWED: Blocked by policy
  */
 
-import type { Address } from "@solana/kit";
+import type { Address } from "./kit-adapter.js";
 import * as Core from "./core/index.js";
 
 // ---------------------------------------------------------------------------

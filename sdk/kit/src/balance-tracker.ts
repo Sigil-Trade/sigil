@@ -6,7 +6,7 @@
  * - `BalanceSnapshotStore` + `getBalancePnL()`: Session-scoped P&L from balance snapshots (for charts)
  */
 
-import type { Address, Rpc, SolanaRpcApi } from "@solana/kit";
+import type { Address, Rpc, SolanaRpcApi } from "./kit-adapter.js";
 import { isStablecoinMint, type Network } from "./types.js";
 import { computePnlPercent } from "./math-utils.js";
 import { resolveVaultStateForOwner } from "./state-resolver.js";
@@ -107,8 +107,7 @@ export async function getVaultPnL(
 
 // ─── Token balance query ────────────────────────────────────────────────────
 
-const TOKEN_PROGRAM_ADDRESS =
-  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address;
+import { TOKEN_PROGRAM_ADDRESS } from "./types.js";
 
 /** Parsed token account data shape from jsonParsed encoding. */
 interface ParsedTokenAccountData {

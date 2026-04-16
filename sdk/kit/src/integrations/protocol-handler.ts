@@ -6,7 +6,7 @@
  * import from "./protocol-handler.js".
  */
 
-import type { Address, Instruction } from "@solana/kit";
+import type { Address, Instruction } from "../kit-adapter.js";
 
 // ─── Handler Metadata ───────────────────────────────────────────────────────
 

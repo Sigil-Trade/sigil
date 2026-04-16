@@ -5,7 +5,7 @@
  * from wrap.test.ts, shield.test.ts, velocity-tracker.test.ts, etc.
  */
 
-import type { Address } from "@solana/kit";
+import type { Address } from "../kit-adapter.js";
 import { VaultStatus } from "../generated/types/vaultStatus.js";
 import type { ResolvedVaultState } from "../state-resolver.js";
 import { FULL_CAPABILITY } from "../types.js";

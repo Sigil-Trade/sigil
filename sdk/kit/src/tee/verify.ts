@@ -322,7 +322,6 @@ export function clearAttestationCache(): void {
   globalCache.clear();
 }
 
-/** Delete a single entry from the global cache. */
 /** Delete all cache entries for a wallet (including PCR3-suffixed variants). */
 export function deleteFromAttestationCache(publicKey: string): boolean {
   const directDeleted = globalCache.delete(publicKey);

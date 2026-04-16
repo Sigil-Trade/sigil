@@ -5,12 +5,13 @@
  * vault state. The dashboard Agents tab and Agent Detail page use these.
  */
 
-import type { Address } from "@solana/kit";
+import type { Address } from "./kit-adapter.js";
 import type { DecodedSigilEvent } from "./events.js";
 import type { ResolvedVaultState, EffectiveBudget } from "./state-resolver.js";
-import { bytesToAddress } from "./state-resolver.js";
+import { bytesToAddress, findAgentOverlaySlot } from "./state-resolver.js";
 import { FULL_CAPABILITY } from "./types.js";
 import { computeHerfindahl } from "./math-utils.js";
+import { computeUtilizationPercent } from "./math-utils.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -76,26 +77,12 @@ export function getAgentProfile(
     remaining: 0n,
   };
 
-  let lifetimeSpend = 0n;
-  let lifetimeTxCount = 0n;
-  if (overlay) {
-    const slotIdx = overlay.entries.findIndex((e) => {
-      try {
-        return bytesToAddress(e.agent) === agentAddress;
-      } catch {
-        return false;
-      }
-    });
-    if (slotIdx >= 0 && slotIdx < overlay.lifetimeSpend.length) {
-      lifetimeSpend = overlay.lifetimeSpend[slotIdx];
-    }
-    if (slotIdx >= 0 && slotIdx < (overlay.lifetimeTxCount?.length ?? 0)) {
-      lifetimeTxCount = overlay.lifetimeTxCount[slotIdx];
-    }
-  }
+  // PR 3.B F038: use extracted helper instead of inline overlay lookup
+  const overlaySlot = findAgentOverlaySlot(overlay, agentAddress);
+  const lifetimeSpend = overlaySlot?.lifetimeSpend ?? 0n;
+  const lifetimeTxCount = overlaySlot?.lifetimeTxCount ?? 0n;
 
-  const capUtilization =
-    budget.cap > 0n ? Number((budget.spent24h * 10000n) / budget.cap) / 100 : 0;
+  const capUtilization = computeUtilizationPercent(budget.spent24h, budget.cap);
 
   return {
     address: agentAddress,
@@ -144,10 +131,10 @@ export function getAgentLeaderboard(state: ResolvedVaultState): AgentRanking[] {
       }
     }
 
-    const capUtilization =
-      budget.cap > 0n
-        ? Number((budget.spent24h * 10000n) / budget.cap) / 100
-        : 0;
+    const capUtilization = computeUtilizationPercent(
+      budget.spent24h,
+      budget.cap,
+    );
 
     return {
       address: agentEntry.pubkey,

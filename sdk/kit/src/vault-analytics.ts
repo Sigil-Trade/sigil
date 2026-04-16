@@ -8,7 +8,8 @@
  * balances, pending policy. Returns everything a vault detail page needs.
  */
 
-import type { Address, Rpc, SolanaRpcApi } from "@solana/kit";
+import type { Address, Rpc, SolanaRpcApi } from "./kit-adapter.js";
+import { computeUtilizationPercent } from "./math-utils.js";
 import type {
   ResolvedVaultState,
   ResolvedVaultStateForOwner,
@@ -123,10 +124,10 @@ export function getVaultHealth(
   const pausedAgentCount = vault.agents.filter((a) => a.paused).length;
 
   // Cap utilization
-  const capUtilization =
-    globalBudget.cap > 0n
-      ? Number((globalBudget.spent24h * 10000n) / globalBudget.cap) / 100
-      : 0;
+  const capUtilization = computeUtilizationPercent(
+    globalBudget.spent24h,
+    globalBudget.cap,
+  );
 
   // Cap reset time: when does the oldest epoch in the window roll off?
   let capResetsIn = 0;

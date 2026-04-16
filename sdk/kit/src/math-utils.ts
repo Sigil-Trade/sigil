@@ -1,6 +1,24 @@
 /**
  * Shared math utilities for analytics modules.
+ *
+ * PR 3.B F037: computeUtilizationPercent extracted from 18 duplicate sites
+ * across agent-analytics, spending-analytics, protocol-analytics, balance-
+ * tracker, and dashboard/reads.
  */
+
+/**
+ * Calculate utilization as a percentage (0–100) with 2-decimal precision.
+ *
+ * Uses bigint-safe computation: `(spent * 10000) / cap` in bigint space,
+ * then divides by 100 in Number space for the percentage. Returns 0 when
+ * cap is zero (no budget = no utilization, not division-by-zero).
+ *
+ * @example computeUtilizationPercent(250_000_000n, 500_000_000n) // → 50
+ * @example computeUtilizationPercent(0n, 0n)                     // → 0
+ */
+export function computeUtilizationPercent(spent: bigint, cap: bigint): number {
+  return cap > 0n ? Number((spent * 10000n) / cap) / 100 : 0;
+}
 
 /**
  * Herfindahl-Hirschman Index (0-1) for concentration analysis.

@@ -5,7 +5,7 @@
  * x402 payments share the SAME spending state as DeFi operations.
  */
 
-import type { Address } from "@solana/kit";
+import type { Address } from "../kit-adapter.js";
 import type { ShieldedContext } from "../shield.js";
 import type { InspectableInstruction } from "../inspector.js";
 import type { PaymentRequirements, X402Config } from "./types.js";

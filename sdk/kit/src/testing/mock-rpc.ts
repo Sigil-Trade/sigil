@@ -5,7 +5,7 @@
  * No real network calls — everything returns predictable data.
  */
 
-import type { Address, Rpc, SolanaRpcApi } from "@solana/kit";
+import type { Address, Rpc, SolanaRpcApi } from "../kit-adapter.js";
 import { VaultStatus } from "../generated/types/vaultStatus.js";
 
 // ─── Constants ──────────────────────────────────────────────────────────────

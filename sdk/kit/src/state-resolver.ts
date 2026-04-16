@@ -19,7 +19,7 @@ import {
   type ReadonlyUint8Array,
   type Rpc,
   type SolanaRpcApi,
-} from "@solana/kit";
+} from "./kit-adapter.js";
 import {
   decodeAgentSpendOverlay,
   type AgentSpendOverlay,
@@ -88,7 +88,7 @@ import {
   USDT_MINT_MAINNET,
   type Network,
 } from "./types.js";
-import { deriveAta } from "./x402/transfer-builder.js";
+import { deriveAta } from "./tokens.js";
 import { formatUsd } from "./formatting.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -159,6 +159,39 @@ function bytesMatchAddress(bytes: ReadonlyUint8Array, addr: Address): boolean {
  */
 export function bytesToAddress(bytes: ReadonlyUint8Array): Address {
   return addressDecoder.decode(bytes);
+}
+
+/**
+ * Find an agent's slot index + lifetime metrics from an AgentSpendOverlay.
+ *
+ * PR 3.B F038: extracted from 5 duplicate sites across agent-analytics,
+ * portfolio-analytics, and spending-analytics.
+ *
+ * @returns `{ slotIdx, lifetimeSpend, lifetimeTxCount }` or `null` if the
+ * agent is not found in the overlay entries.
+ */
+export function findAgentOverlaySlot(
+  overlay: AgentSpendOverlay | null | undefined,
+  agentAddress: Address,
+): { slotIdx: number; lifetimeSpend: bigint; lifetimeTxCount: bigint } | null {
+  if (!overlay) return null;
+  const slotIdx = overlay.entries.findIndex((e) => {
+    try {
+      return bytesToAddress(e.agent) === agentAddress;
+    } catch {
+      return false;
+    }
+  });
+  if (slotIdx < 0) return null;
+  const lifetimeSpend =
+    slotIdx < overlay.lifetimeSpend.length
+      ? overlay.lifetimeSpend[slotIdx]
+      : 0n;
+  const lifetimeTxCount =
+    slotIdx < (overlay.lifetimeTxCount?.length ?? 0)
+      ? overlay.lifetimeTxCount[slotIdx]
+      : 0n;
+  return { slotIdx, lifetimeSpend, lifetimeTxCount };
 }
 
 /**

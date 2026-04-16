@@ -10,7 +10,7 @@
  * v1.0. New .code is the canonical SigilErrorCode string-literal.
  */
 
-import { AccountRole, type Address } from "@solana/kit";
+import { AccountRole, type Address } from "../kit-adapter.js";
 import { SigilComposeError } from "../errors/compose.js";
 import {
   SIGIL_ERROR__COMPOSE__MISSING_PARAM,

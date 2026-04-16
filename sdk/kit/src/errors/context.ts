@@ -8,7 +8,7 @@
  * Pattern matches `@solana/kit`'s `SolanaErrorContext` map.
  */
 
-import type { Address } from "@solana/kit";
+import type { Address } from "../kit-adapter.js";
 import type {
   SIGIL_ERROR__SHIELD__POLICY_DENIED,
   SIGIL_ERROR__SHIELD__CONFIG_INVALID,

@@ -144,6 +144,30 @@ const preset = getPreset("jupiter-swap-bot");
 const fields = presetToCreateVaultFields(preset);
 ```
 
+### HTTP 402 Payments (x402)
+
+Sigil supports the [x402 standard](https://www.x402.org/) for automatic HTTP 402 payment negotiation on Solana. Use `shieldedFetch()` to handle payment-required responses transparently — spending limits and vault policies are enforced on every payment.
+
+```typescript
+import { shieldedFetch, createShieldedFetch } from "@usesigil/kit/x402";
+
+// One-shot: fetch a paywalled URL, auto-negotiate payment
+const response = await shieldedFetch(url, {
+  vault, agent, rpc, network: "devnet",
+  maxPaymentUsd: 1_000_000n, // $1 max per request
+});
+
+if (response.x402?.paid) {
+  console.log(`Paid ${response.x402.amount} to ${response.x402.payTo}`);
+}
+
+// Reusable: create a pre-configured fetch function
+const fetch402 = createShieldedFetch({ vault, agent, rpc, network: "devnet" });
+const res = await fetch402("https://api.example.com/premium-data");
+```
+
+The x402 subpath exports codec functions (header parsing), payment selectors, nonce tracking, amount validation, and 5 typed error classes (`X402ParseError`, `X402PaymentError`, `X402UnsupportedError`, `X402DestinationBlockedError`, `X402ReplayError`). See [INSTRUCTIONS.md](../docs/INSTRUCTIONS.md) for the full 12-step `shieldedFetch()` flow.
+
 ## Error Handling
 
 All errors from `wrap()` and `executeAndConfirm()` convert to structured `AgentError`:

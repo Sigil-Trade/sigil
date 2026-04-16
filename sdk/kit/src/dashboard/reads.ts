@@ -11,10 +11,11 @@
  * computed exactly once.
  */
 
-import { isSome } from "@solana/kit";
-import type { Address, Rpc, SolanaRpcApi } from "@solana/kit";
+import { isSome } from "../kit-adapter.js";
+import type { Address, Rpc, SolanaRpcApi } from "../kit-adapter.js";
 import { toDxError, isAccountNotFoundError } from "./errors.js";
 import { redactCause } from "../network-errors.js";
+import { computeUtilizationPercent } from "../math-utils.js";
 import {
   resolveVaultStateForOwner,
   getSpendingHistory,
@@ -226,7 +227,7 @@ export function buildAgents(ctx: OverviewContext): AgentData[] {
 
     const spentAmt = budget?.spent24h ?? 0n;
     const capAmt = budget?.cap ?? 0n;
-    const pct = capAmt > 0n ? Number((spentAmt * 10000n) / capAmt) / 100 : 0;
+    const pct = computeUtilizationPercent(spentAmt, capAmt);
 
     // Items are newest-first (getSignaturesForAddress ordering).
     const agentActivity = activity.filter(
@@ -294,7 +295,7 @@ export function buildSpending(ctx: OverviewContext): SpendingData {
   }));
 
   const { spent24h: spent, cap, remaining } = state.globalBudget;
-  const percent = cap > 0n ? Number((spent * 10000n) / cap) / 100 : 0;
+  const percent = computeUtilizationPercent(spent, cap);
   const velocityPerMs = spent > 0n ? Number(spent) / (24 * 3600 * 1000) : 0;
   const rundown =
     velocityPerMs > 0 && remaining > 0n
@@ -433,8 +434,10 @@ export function buildPolicy(ctx: OverviewContext): PolicyData {
   let pendingUpdate: PolicyData["pendingUpdate"];
   if (pendingPolicy) {
     const pp = pendingPolicy as PendingPolicyUpdate;
+    // pp.executesAt is a Solana timestamp (seconds since epoch) — always within
+    // Number.MAX_SAFE_INTEGER for realistic chain state, so Number() is safe.
     const executesAtSec = Number(pp.executesAt ?? 0);
-    const appliesAt = Number.isFinite(executesAtSec) ? executesAtSec * 1000 : 0;
+    const appliesAt = executesAtSec * 1000;
     const nowSec = Math.floor(Date.now() / 1000);
 
     // Decode each Option<T> field from PendingPolicyUpdate. Only Some fields

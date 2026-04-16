@@ -9,7 +9,7 @@
  * agent and perfect everything else would get "90/100" — dangerously misleading.
  */
 
-import { getAddressEncoder, type Address } from "@solana/kit";
+import { getAddressEncoder, type Address } from "./kit-adapter.js";
 import type {
   ResolvedVaultState,
   ResolvedVaultStateForOwner,

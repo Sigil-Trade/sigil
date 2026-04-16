@@ -4,7 +4,7 @@
  * These run before constructing an OwnerClient — they help find vaults.
  */
 
-import type { Address, Rpc, SolanaRpcApi } from "@solana/kit";
+import type { Address, Rpc, SolanaRpcApi } from "../kit-adapter.js";
 import { findVaultsByOwner } from "../state-resolver.js";
 import { fetchMaybeAgentVault } from "../generated/accounts/agentVault.js";
 import { redactCause } from "../network-errors.js";

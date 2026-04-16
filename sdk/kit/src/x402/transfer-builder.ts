@@ -6,58 +6,30 @@
  * of data + 4 accounts, trivial to encode directly.
  */
 
-import type { Address, Instruction } from "@solana/kit";
-import { AccountRole, getProgramDerivedAddress } from "@solana/kit";
+import type { Address, Instruction } from "../kit-adapter.js";
+import { AccountRole } from "../kit-adapter.js";
 import type { InspectableInstruction } from "../inspector.js";
 import { X402ParseError } from "./errors.js";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-export const TOKEN_PROGRAM_ID =
-  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address;
-export const ATA_PROGRAM_ID =
-  "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" as Address;
+// PR 3.B F036: use canonical constants from types.ts.
+// Re-exported here for backwards compat with consumers importing from x402/.
+import { TOKEN_PROGRAM_ADDRESS, ATA_PROGRAM_ADDRESS } from "../types.js";
+export const TOKEN_PROGRAM_ID = TOKEN_PROGRAM_ADDRESS;
+export const ATA_PROGRAM_ID = ATA_PROGRAM_ADDRESS;
 
 /** SPL TransferChecked instruction discriminator */
 const TRANSFER_CHECKED_DISCRIMINATOR = 12;
 
 // ─── ATA Derivation ─────────────────────────────────────────────────────────
+// PR 3.B F062: deriveAta moved to tokens.ts (correct home — generic SPL utility,
+// not x402-specific). Imported for local use + re-exported for backwards compat
+// with consumers importing from "@usesigil/kit/x402".
+import { deriveAta } from "../tokens.js";
+export { deriveAta };
 
-/**
- * Derive an Associated Token Account address.
- * Seeds: [owner, TOKEN_PROGRAM_ID, mint]
- */
-export async function deriveAta(
-  owner: Address,
-  mint: Address,
-): Promise<Address> {
-  const [ata] = await getProgramDerivedAddress({
-    programAddress: ATA_PROGRAM_ID,
-    seeds: [
-      // owner
-      getAddressBytes(owner),
-      // token program
-      getAddressBytes(TOKEN_PROGRAM_ID),
-      // mint
-      getAddressBytes(mint),
-    ],
-  });
-  return ata;
-}
-
-/**
- * Convert a base58 Address to exactly 32 bytes for PDA seeds.
- * Uses base58 decode (no external dependency).
- */
-function getAddressBytes(address: Address): Uint8Array {
-  const decoded = base58Decode(address);
-  if (decoded.length === 32) return decoded;
-  // Pad or truncate to exactly 32 bytes
-  if (decoded.length > 32) return decoded.slice(decoded.length - 32);
-  const result = new Uint8Array(32);
-  result.set(decoded, 32 - decoded.length);
-  return result;
-}
+// getAddressBytes removed — was only used by deriveAta (now in tokens.ts).
 
 // ─── Instruction Builder ────────────────────────────────────────────────────
 

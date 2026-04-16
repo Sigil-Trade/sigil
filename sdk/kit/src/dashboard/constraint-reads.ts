@@ -16,7 +16,7 @@ import {
   type SolanaRpcApi,
   getProgramDerivedAddress,
   getAddressEncoder,
-} from "@solana/kit";
+} from "../kit-adapter.js";
 
 import { SIGIL_PROGRAM_ADDRESS } from "../generated/programs/sigil.js";
 

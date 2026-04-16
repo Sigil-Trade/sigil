@@ -13,7 +13,7 @@ import type {
   Rpc,
   SolanaRpcApi,
   TransactionSigner,
-} from "@solana/kit";
+} from "../kit-adapter.js";
 import {
   pipe,
   createTransactionMessage,
@@ -22,7 +22,7 @@ import {
   appendTransactionMessageInstruction,
   compileTransaction,
   getBase58Decoder,
-} from "@solana/kit";
+} from "../kit-adapter.js";
 import type { ShieldedContext } from "../shield.js";
 import type {
   X402Config,

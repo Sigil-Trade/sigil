@@ -9,7 +9,7 @@
  * TransactionPartialSigner usable anywhere Kit expects a signer.
  */
 
-import type { Address, TransactionSigner } from "@solana/kit";
+import type { Address, TransactionSigner } from "./kit-adapter.js";
 import type { AttestationResult } from "./tee/types.js";
 import { SigilSdkDomainError } from "./errors/sdk.js";
 import { SIGIL_ERROR__SDK__SIGNATURE_INVALID } from "./errors/codes.js";

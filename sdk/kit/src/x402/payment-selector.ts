@@ -5,7 +5,7 @@
  * Includes SECURITY-CRITICAL payTo destination allowlisting.
  */
 
-import type { Address } from "@solana/kit";
+import type { Address } from "../kit-adapter.js";
 import type {
   PaymentRequired,
   PaymentRequirements,
