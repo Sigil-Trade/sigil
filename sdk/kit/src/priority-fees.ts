@@ -9,31 +9,8 @@ import type { Instruction, Rpc, SolanaRpcApi } from "./kit-adapter.js";
 import { redactCause } from "./network-errors.js";
 import { SUPPORTED_PROTOCOLS } from "./types.js";
 
-// ─── Known Protocol Program Addresses (PR 3.B F042 — derived from registry) ─
-// These local aliases keep the CU estimation code readable while sourcing
-// addresses from the canonical SUPPORTED_PROTOCOLS in types.ts.
+// Jupiter multi-hop needs special handling (>2 instructions = multi-hop)
 const JUPITER_PROGRAM = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4";
-const JUPITER_LEND_PROGRAM = "JLend2fEim9xUFcaHsyGePEoBzFLvkjMi3MnPcSuCdu";
-const FLASH_TRADE_PROGRAM = "FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn";
-const DRIFT_PROGRAM = "dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH";
-const KAMINO_LEND_PROGRAM = "KLend2g3cP87ber8CzRaqeECGwNvLFM9acPVcRkRHvM";
-
-// Runtime assert: all local aliases exist in the canonical registry.
-// If a protocol is removed from SUPPORTED_PROTOCOLS but the local alias
-// survives, this fires at module load.
-for (const addr of [
-  JUPITER_PROGRAM,
-  JUPITER_LEND_PROGRAM,
-  FLASH_TRADE_PROGRAM,
-  DRIFT_PROGRAM,
-  KAMINO_LEND_PROGRAM,
-]) {
-  if (!SUPPORTED_PROTOCOLS[addr]) {
-    console.warn(
-      `[priority-fees] ${addr} not in SUPPORTED_PROTOCOLS — registry drift`,
-    );
-  }
-}
 
 // ─── CU Budget Defaults ─────────────────────────────────────────────────────
 
@@ -51,6 +28,9 @@ export const CU_OWNER_ACTION = 200_000;
 /**
  * Detect CU budget based on the DeFi instructions in a composed transaction.
  * Uses `programAddress` (Kit convention, not `programId`).
+ *
+ * Derives CU estimates from SUPPORTED_PROTOCOLS.defaultCU when available,
+ * with special-case handling for Jupiter multi-hop (>2 instructions).
  */
 export function estimateComposedCU(defiInstructions: Instruction[]): number {
   if (defiInstructions.length === 0) return CU_AGENT_TRANSFER;
@@ -59,24 +39,15 @@ export function estimateComposedCU(defiInstructions: Instruction[]): number {
     (ix) => ix.programAddress as string,
   );
 
+  // Jupiter multi-hop special case: >2 instructions = higher CU
   const hasJupiter = programAddresses.some((id) => id === JUPITER_PROGRAM);
-  const hasJupiterLend = programAddresses.some(
-    (id) => id === JUPITER_LEND_PROGRAM,
-  );
-  const hasFlashTrade = programAddresses.some(
-    (id) => id === FLASH_TRADE_PROGRAM,
-  );
-  const hasDrift = programAddresses.some((id) => id === DRIFT_PROGRAM);
-  const hasKaminoLend = programAddresses.some(
-    (id) => id === KAMINO_LEND_PROGRAM,
-  );
-
   if (hasJupiter && defiInstructions.length > 2) return CU_JUPITER_MULTI_HOP;
-  if (hasJupiter) return CU_JUPITER_SWAP;
-  if (hasJupiterLend) return CU_JUPITER_LEND;
-  if (hasFlashTrade) return CU_FLASH_TRADE;
-  if (hasDrift) return CU_DRIFT;
-  if (hasKaminoLend) return CU_KAMINO_LEND;
+
+  // Look up CU from the canonical registry
+  for (const addr of programAddresses) {
+    const meta = SUPPORTED_PROTOCOLS[addr];
+    if (meta) return meta.defaultCU;
+  }
 
   return CU_DEFAULT_COMPOSED;
 }

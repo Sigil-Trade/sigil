@@ -71,58 +71,58 @@ Sigil wraps arbitrary DeFi instructions from any source (Jupiter API, Solana Age
 
 ### Core — Create vaults, wrap instructions, execute
 
-| Export | Description |
-|--------|-------------|
-| `SigilClient` | Stateful client — holds vault/agent/network, manages caches. Recommended for production. |
-| `wrap()` | Stateless wrapping function — takes DeFi instructions, returns a composed transaction. |
-| `createVault()` | Build vault creation instructions (caller signs and sends). |
-| `createAndSendVault()` | One-call vault creation — build, sign, send, confirm. |
-| `buildOwnerTransaction()` | Compose owner-only transactions (policy updates, agent management). |
-| `withVault()` | Policy-guided vault creation — policies in, wrapped client out. |
+| Export                    | Description                                                                              |
+| ------------------------- | ---------------------------------------------------------------------------------------- |
+| `SigilClient`             | Stateful client — holds vault/agent/network, manages caches. Recommended for production. |
+| `wrap()`                  | Stateless wrapping function — takes DeFi instructions, returns a composed transaction.   |
+| `createVault()`           | Build vault creation instructions (caller signs and sends).                              |
+| `createAndSendVault()`    | One-call vault creation — build, sign, send, confirm.                                    |
+| `buildOwnerTransaction()` | Compose owner-only transactions (policy updates, agent management).                      |
+| `withVault()`             | Policy-guided vault creation — policies in, wrapped client out.                          |
 
 ### State — Query vaults, budgets, spending
 
-| Export | Description |
-|--------|-------------|
-| `resolveVaultState()` | Fetch complete vault state (accounts, policy, tracker, overlay, constraints). |
-| `resolveVaultBudget()` | Per-agent budget: rolling 24h spend, cap, remaining headroom. |
-| `getSpendingHistory()` | 144-epoch circular buffer to chart-ready time series. |
-| `findVaultsByOwner()` | Enumerate all vaults owned by an address. |
-| `resolveVaultStateForOwner()` | Vault state with pending policy/constraint updates for dashboards. |
+| Export                        | Description                                                                   |
+| ----------------------------- | ----------------------------------------------------------------------------- |
+| `resolveVaultState()`         | Fetch complete vault state (accounts, policy, tracker, overlay, constraints). |
+| `resolveVaultBudget()`        | Per-agent budget: rolling 24h spend, cap, remaining headroom.                 |
+| `getSpendingHistory()`        | 144-epoch circular buffer to chart-ready time series.                         |
+| `findVaultsByOwner()`         | Enumerate all vaults owned by an address.                                     |
+| `resolveVaultStateForOwner()` | Vault state with pending policy/constraint updates for dashboards.            |
 
 ### Analytics — Security checks, agent metrics, portfolio
 
-| Export | Description |
-|--------|-------------|
-| `getSecurityPosture()` | 13-point security assessment with pass/fail, severity, remediation. |
-| `getVaultHealth()` | Risk score, liquidity, utilization. |
-| `getAgentProfile()` | Single agent stats — spend, tx count, errors. |
-| `getAgentLeaderboard()` | Top agents by spend or profit. |
-| `getPortfolioOverview()` | Cross-vault summary for multi-vault operators. |
-| `getAuditTrail()` | Chronological audit log filtered by category, actor, or time range. |
-| `getSpendingVelocity()` | Rate of spend over configurable time windows. |
+| Export                   | Description                                                         |
+| ------------------------ | ------------------------------------------------------------------- |
+| `getSecurityPosture()`   | 13-point security assessment with pass/fail, severity, remediation. |
+| `getVaultHealth()`       | Risk score, liquidity, utilization.                                 |
+| `getAgentProfile()`      | Single agent stats — spend, tx count, errors.                       |
+| `getAgentLeaderboard()`  | Top agents by spend or profit.                                      |
+| `getPortfolioOverview()` | Cross-vault summary for multi-vault operators.                      |
+| `getAuditTrail()`        | Chronological audit log filtered by category, actor, or time range. |
+| `getSpendingVelocity()`  | Rate of spend over configurable time windows.                       |
 
 7 analytics modules with 42 functions total — see source for the full list.
 
 ### Safety — Pre-flight checks, error handling
 
-| Export | Description |
-|--------|-------------|
-| `shield()` | Client-side policy gate — evaluate instructions before signing. |
-| `simulateBeforeSend()` | RPC simulation with error extraction. |
-| `detectDrainAttempt()` | Heuristic drain detection from balance deltas. |
-| `toAgentError()` | Convert any error to structured `AgentError` with category, retryable flag, and recovery actions. |
+| Export                 | Description                                                                                       |
+| ---------------------- | ------------------------------------------------------------------------------------------------- |
+| `shield()`             | Client-side policy gate — evaluate instructions before signing.                                   |
+| `simulateBeforeSend()` | RPC simulation with error extraction.                                                             |
+| `detectDrainAttempt()` | Heuristic drain detection from balance deltas.                                                    |
+| `toAgentError()`       | Convert any error to structured `AgentError` with category, retryable flag, and recovery actions. |
 
 ### Formatting — Display helpers (11 functions)
 
-| Export | Description |
-|--------|-------------|
-| `formatUsd()` | `$1,234.56` with full precision |
-| `formatUsdCompact()` | `$1.2M`, `$500K` |
-| `formatPercent()` | `12.34%` |
-| `formatDuration()` | `1d 2h 3m` |
-| `formatAddress()` | `4ZeV...wrHL` |
-| `formatTokenAmount()` | `1,000.000000 USDC` |
+| Export                | Description                     |
+| --------------------- | ------------------------------- |
+| `formatUsd()`         | `$1,234.56` with full precision |
+| `formatUsdCompact()`  | `$1.2M`, `$500K`                |
+| `formatPercent()`     | `12.34%`                        |
+| `formatDuration()`    | `1d 2h 3m`                      |
+| `formatAddress()`     | `4ZeV...wrHL`                   |
+| `formatTokenAmount()` | `1,000.000000 USDC`             |
 
 Plus: `formatUsdSigned`, `formatPercentSigned`, `formatRelativeTime`, `formatTimeUntil`, `formatTokenAmountCompact`.
 
@@ -130,12 +130,12 @@ Plus: `formatUsdSigned`, `formatPercentSigned`, `formatRelativeTime`, `formatTim
 
 4 pre-configured vault templates for common use cases:
 
-| Preset | Permissions | Daily Cap | Slippage |
-|--------|------------|-----------|----------|
-| `jupiter-swap-bot` | Swap only | $500 | 2% |
-| `perps-trader` | Perps + Swap | $5,000 | 5% |
-| `lending-optimizer` | Deposit/Withdraw | $2,000 | 1% |
-| `full-access` | All 21 actions | $10,000 | 5% |
+| Preset              | Permissions      | Daily Cap | Slippage |
+| ------------------- | ---------------- | --------- | -------- |
+| `jupiter-swap-bot`  | Swap only        | $500      | 2%       |
+| `perps-trader`      | Perps + Swap     | $5,000    | 5%       |
+| `lending-optimizer` | Deposit/Withdraw | $2,000    | 1%       |
+| `full-access`       | All 21 actions   | $10,000   | 5%       |
 
 ```typescript
 import { getPreset, presetToCreateVaultFields } from "@usesigil/kit";
@@ -153,7 +153,10 @@ import { shieldedFetch, createShieldedFetch } from "@usesigil/kit/x402";
 
 // One-shot: fetch a paywalled URL, auto-negotiate payment
 const response = await shieldedFetch(url, {
-  vault, agent, rpc, network: "devnet",
+  vault,
+  agent,
+  rpc,
+  network: "devnet",
   maxPaymentUsd: 1_000_000n, // $1 max per request
 });
 
@@ -168,6 +171,43 @@ const res = await fetch402("https://api.example.com/premium-data");
 
 The x402 subpath exports codec functions (header parsing), payment selectors, nonce tracking, amount validation, and 5 typed error classes (`X402ParseError`, `X402PaymentError`, `X402UnsupportedError`, `X402DestinationBlockedError`, `X402ReplayError`). See [INSTRUCTIONS.md](../docs/INSTRUCTIONS.md) for the full 12-step `shieldedFetch()` flow.
 
+## Branded Types
+
+All USD amounts, capability tiers, and slot numbers are branded bigint types that prevent accidental misuse at compile time:
+
+```typescript
+import {
+  usd,
+  capability,
+  slot,
+  type UsdBaseUnits,
+  type CapabilityTier,
+} from "@usesigil/kit";
+
+const cap: UsdBaseUnits = usd(500_000_000n); // $500
+const tier: CapabilityTier = capability(2n); // Operator
+
+// TypeScript ERROR — these types are not interchangeable:
+// addAgent(agent, cap, tier);  // cap and tier swapped → compile error
+addAgent(agent, tier, cap); // correct order → compiles
+```
+
+Zero runtime cost — the brand is a phantom type that TypeScript erases at compile time.
+
+## MCP Round-Trip (fromJSON)
+
+When AI agents consume Sigil via MCP, they receive JSON from tool responses and pass data back to subsequent calls. The `fromJSON` functions rehydrate bigints, typed addresses, and `toJSON()` methods:
+
+```typescript
+import { overviewDataFromJSON } from "@usesigil/kit/dashboard";
+
+// MCP tool response → JSON → rehydrated live types
+const overview = overviewDataFromJSON(toolResponse.data);
+console.log(overview.spending.global.today); // bigint, not string
+```
+
+10 fromJSON functions cover all dashboard types. Available from `@usesigil/kit/dashboard`.
+
 ## Error Handling
 
 All errors from `wrap()` and `executeAndConfirm()` convert to structured `AgentError`:
@@ -179,9 +219,9 @@ try {
   await client.executeAndConfirm(instructions, opts);
 } catch (err) {
   const e = toAgentError(err);
-  console.log(e.category);          // "PERMISSION" | "SPENDING_CAP" | "INPUT_VALIDATION" | ...
-  console.log(e.retryable);         // boolean
-  console.log(e.recovery_actions);  // [{ action, description, tool? }]
+  console.log(e.category); // "PERMISSION" | "SPENDING_CAP" | "INPUT_VALIDATION" | ...
+  console.log(e.retryable); // boolean
+  console.log(e.recovery_actions); // [{ action, description, tool? }]
 }
 ```
 

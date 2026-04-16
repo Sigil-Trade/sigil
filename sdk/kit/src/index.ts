@@ -47,6 +47,9 @@ export {
   ATA_PROGRAM_ADDRESS,
   COMPUTE_BUDGET_PROGRAM_ADDRESS,
   SYSTEM_PROGRAM_ADDRESS,
+  // Protocol registry (PR 3.B — F042 unified registry)
+  SUPPORTED_PROTOCOLS,
+  type ProtocolMeta,
   // Slippage
   MAX_SLIPPAGE_BPS,
   // SpendTracker
@@ -676,6 +679,13 @@ export type DashboardErrorType =
   | import("./agent-errors.js").SigilSdkError
   | import("./core/errors.js").ShieldDeniedError
   | Error;
+
+// ─── Dashboard / Owner Client ────────────────────────────────────────────────
+// Re-exported from the dashboard subpath for convenience. Consumers preferring
+// a single import path can use these; the dashboard subpath remains the
+// canonical source with additional exports (fromJSON, overview builders).
+export { createOwnerClient, OwnerClient } from "./dashboard/index.js";
+export type { OwnerClientConfig } from "./dashboard/types.js";
 
 // ─── Balance Tracker / P&L ──────────────────────────────────────────────────
 export {

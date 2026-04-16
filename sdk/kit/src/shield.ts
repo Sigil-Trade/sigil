@@ -44,22 +44,20 @@ import {
   type ResolvedVaultState,
 } from "./state-resolver.js";
 import { isStablecoinMint, validateNetwork, type Network } from "./types.js";
-
-// ─── Types ──────────────────────────────────────────────────────────────────
-
 // Per UD2 (Engineer-reorder via Council): canonical ShieldDeniedError +
 // PolicyViolation definitions live in `core/errors.ts`. Imported and
 // re-exported here for backwards compatibility with existing import paths.
 // The `code?: number` 2nd constructor argument from the historical
 // shield.ts version is REMOVED — see changeset for migration notes.
 import { ShieldDeniedError, type PolicyViolation } from "./core/errors.js";
-export { ShieldDeniedError, type PolicyViolation };
-
 import { SigilSdkDomainError } from "./errors/sdk.js";
 import {
   SIGIL_ERROR__SDK__INVALID_CONFIG,
   SIGIL_ERROR__SDK__SIGNER_INVALID,
 } from "./errors/codes.js";
+
+// ─── Re-exports ─────────────────────────────────────────────────────────────
+export { ShieldDeniedError, type PolicyViolation };
 
 export interface ShieldCheckResult {
   allowed: boolean;
