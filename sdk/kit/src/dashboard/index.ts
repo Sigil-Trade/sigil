@@ -74,6 +74,20 @@ export type {
   GetOverviewOptions,
 } from "./types.js";
 
+// ─── fromJSON — MCP round-trip deserialization (PR 3.A) ─────────────────────
+export {
+  txResultFromJSON,
+  vaultStateFromJSON,
+  agentDataFromJSON,
+  spendingDataFromJSON,
+  activityRowFromJSON,
+  activityDataFromJSON,
+  healthDataFromJSON,
+  policyDataFromJSON,
+  discoveredVaultFromJSON,
+  overviewDataFromJSON,
+} from "./from-json.js";
+
 // ─── Overview composition helpers (S14) ──────────────────────────────────────
 // Exported for advanced consumers (custom dashboards, MCP servers, test
 // harnesses) that want to pre-fetch raw state once and compose views
