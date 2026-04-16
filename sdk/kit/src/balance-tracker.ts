@@ -238,26 +238,45 @@ export class BalanceSnapshotStore {
     });
   }
 
+  /**
+   * Reconstruct a BalanceSnapshotStore from its JSON serialization.
+   *
+   * F12 fix (type-design-analyzer): wraps BigInt() calls in try/catch so
+   * corrupted JSON surfaces a domain-relevant error instead of raw
+   * SyntaxError from BigInt("not-a-number").
+   */
   static fromJSON(json: string): BalanceSnapshotStore {
     const data = JSON.parse(json);
     const maxEntries = Number.isInteger(data.maxEntries)
       ? data.maxEntries
       : 144;
     const store = new BalanceSnapshotStore(maxEntries);
+
+    const safeBigInt = (val: unknown, field: string): bigint => {
+      try {
+        return BigInt(val as string);
+      } catch {
+        console.warn(
+          `[@usesigil/kit/BalanceSnapshotStore.fromJSON] Failed to parse bigint for "${field}": ${String(val).slice(0, 50)} — using 0n`,
+        );
+        return 0n;
+      }
+    };
+
     if (data.baseline) {
       store.baseline = {
-        timestamp: BigInt(data.baseline.timestamp),
+        timestamp: safeBigInt(data.baseline.timestamp, "baseline.timestamp"),
         balances: data.baseline.balances.map((b: Record<string, unknown>) => ({
           ...b,
-          balance: BigInt(b.balance as string),
+          balance: safeBigInt(b.balance, "baseline.balance"),
         })),
       };
     }
-    for (const snap of data.snapshots) {
-      const ts = BigInt(snap.timestamp);
-      const bals = snap.balances.map((b: Record<string, unknown>) => ({
+    for (const snap of data.snapshots ?? []) {
+      const ts = safeBigInt(snap.timestamp, "snapshot.timestamp");
+      const bals = (snap.balances ?? []).map((b: Record<string, unknown>) => ({
         ...b,
-        balance: BigInt(b.balance as string),
+        balance: safeBigInt(b.balance, "snapshot.balance"),
       }));
       store.snapshots.set(ts, bals);
       store.orderedTimestamps.push(ts);

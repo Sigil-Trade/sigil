@@ -158,8 +158,10 @@ export async function verifyTeeAttestation(
     }
     try {
       config?.onDegraded?.(syntheticResult);
-    } catch {
-      // Degraded callback errors are non-fatal.
+    } catch (cbErr: unknown) {
+      console.debug(
+        `[@usesigil/kit/tee] onDegraded callback threw (non-fatal): ${cbErr instanceof Error ? cbErr.message : String(cbErr)}`,
+      );
     }
     return syntheticResult;
   }
@@ -249,8 +251,10 @@ export async function verifyTeeAttestation(
   if (requireAttestation && !isVerifiedStatus) {
     try {
       config?.onDegraded?.(result);
-    } catch {
-      // Degraded callback errors are non-fatal — we still throw below.
+    } catch (cbErr: unknown) {
+      console.debug(
+        `[@usesigil/kit/tee] onDegraded callback threw (non-fatal): ${cbErr instanceof Error ? cbErr.message : String(cbErr)}`,
+      );
     }
     throw new TeeAttestationError(
       `TEE attestation required but verification ${result.status}: ${result.message} ` +
@@ -276,8 +280,10 @@ export async function verifyTeeAttestation(
     if (!attestationStatusMeetsLevel(result.status, effectiveMinLevel)) {
       try {
         config?.onDegraded?.(result);
-      } catch {
-        // Non-fatal.
+      } catch (cbErr: unknown) {
+        console.debug(
+          `[@usesigil/kit/tee] onDegraded callback threw (non-fatal): ${cbErr instanceof Error ? cbErr.message : String(cbErr)}`,
+        );
       }
       throw new TeeAttestationError(
         `Attestation level ${result.status} does not meet minimum required level: ${effectiveMinLevel}`,
@@ -293,14 +299,18 @@ export async function verifyTeeAttestation(
   if (isVerifiedStatus) {
     try {
       config?.onVerified?.(result);
-    } catch {
-      // Attestation succeeded — callback errors are non-fatal.
+    } catch (cbErr: unknown) {
+      console.debug(
+        `[@usesigil/kit/tee] onVerified callback threw (non-fatal): ${cbErr instanceof Error ? cbErr.message : String(cbErr)}`,
+      );
     }
   } else {
     try {
       config?.onDegraded?.(result);
-    } catch {
-      // Non-fatal.
+    } catch (cbErr: unknown) {
+      console.debug(
+        `[@usesigil/kit/tee] onDegraded callback threw (non-fatal): ${cbErr instanceof Error ? cbErr.message : String(cbErr)}`,
+      );
     }
   }
 

@@ -18,6 +18,17 @@
 const MAX_WALK_DEPTH = 32;
 let depthFuseWarned = false;
 
+/**
+ * Reset the depth-fuse warning flag. Call in test `beforeEach` to ensure
+ * each test can independently verify fuse behavior without cross-test
+ * suppression. (H2 audit fix — silent-failure-hunter.)
+ *
+ * @internal Exported for testing only. Not part of the public API.
+ */
+export function resetWalkFuse(): void {
+  depthFuseWarned = false;
+}
+
 function warnFuseTrip(): void {
   if (depthFuseWarned) return;
   depthFuseWarned = true;
