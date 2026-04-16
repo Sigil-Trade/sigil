@@ -6,7 +6,7 @@
  * - `BalanceSnapshotStore` + `getBalancePnL()`: Session-scoped P&L from balance snapshots (for charts)
  */
 
-import type { Address, Rpc, SolanaRpcApi } from "@solana/kit";
+import type { Address, Rpc, SolanaRpcApi } from "./kit-adapter.js";
 import { isStablecoinMint, type Network } from "./types.js";
 import { resolveVaultStateForOwner } from "./state-resolver.js";
 import { resolveToken } from "./tokens.js";

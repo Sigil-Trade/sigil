@@ -2,7 +2,7 @@
  * Kit-native policy engine for Sigil.
  */
 
-import type { Address } from "@solana/kit";
+import type { Address } from "./kit-adapter.js";
 import * as Core from "./core/index.js";
 import { isStablecoinMint, type Network } from "./types.js";
 

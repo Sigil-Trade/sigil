@@ -8,7 +8,7 @@
  *
  */
 
-import type { Address } from "@solana/kit";
+import type { Address } from "./kit-adapter.js";
 import type { ConstraintEntry } from "./generated/types/constraintEntry.js";
 import { resolveProtocolName } from "./protocol-names.js";
 

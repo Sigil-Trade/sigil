@@ -12,7 +12,7 @@
  * to eliminate overlap. Every other analytics module depends on these formatters.
  */
 
-import type { Address } from "@solana/kit";
+import type { Address } from "./kit-adapter.js";
 import { STABLECOIN_USD_FACTOR } from "./types.js";
 
 // ─── Cached Intl Formatters ─────────────────────────────────────────────────

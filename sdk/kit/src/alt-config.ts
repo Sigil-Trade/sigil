@@ -10,7 +10,7 @@
  * Protocol ALTs (Jupiter, Flash Trade) rotate per-route and are NOT verified.
  */
 
-import type { Address } from "@solana/kit";
+import type { Address } from "./kit-adapter.js";
 import type { Network } from "./types.js";
 import {
   USDC_MINT_DEVNET,

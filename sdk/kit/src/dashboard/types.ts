@@ -7,8 +7,8 @@
  * - No UI concerns: no colors, icons, labels, or locale-specific strings.
  */
 
-import type { Address, TransactionSigner } from "@solana/kit";
-import type { Rpc, SolanaRpcApi } from "@solana/kit";
+import type { Address, TransactionSigner } from "../kit-adapter.js";
+import type { Rpc, SolanaRpcApi } from "../kit-adapter.js";
 import type { ConstraintEntryArgs } from "../generated/types/constraintEntry.js";
 import type { ResolvedVaultStateForOwner } from "../state-resolver.js";
 import type { VaultPnL } from "../balance-tracker.js";

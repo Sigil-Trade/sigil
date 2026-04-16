@@ -12,8 +12,8 @@ import type {
   Commitment,
   Base64EncodedWireTransaction,
   TransactionSigner,
-} from "@solana/kit";
-import { getBase64EncodedWireTransaction } from "@solana/kit";
+} from "./kit-adapter.js";
+import { getBase64EncodedWireTransaction } from "./kit-adapter.js";
 
 import { SigilSdkDomainError } from "./errors/sdk.js";
 import { SigilRpcError } from "./errors/rpc.js";

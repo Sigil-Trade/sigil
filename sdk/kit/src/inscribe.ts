@@ -13,7 +13,7 @@ import type {
   Rpc,
   SolanaRpcApi,
   TransactionSigner,
-} from "@solana/kit";
+} from "./kit-adapter.js";
 
 import type { ResolvedPolicies } from "./policies.js";
 import { shield, type ShieldedContext, type ShieldOptions } from "./shield.js";

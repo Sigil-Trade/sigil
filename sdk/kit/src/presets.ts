@@ -9,7 +9,7 @@
  * before the custom configuration step.
  */
 
-import type { Address } from "@solana/kit";
+import type { Address } from "./kit-adapter.js";
 import type { CreateVaultOptions } from "./create-vault.js";
 import { usd, type UsdBaseUnits } from "./types.js";
 import {

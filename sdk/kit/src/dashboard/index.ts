@@ -18,7 +18,7 @@ import type {
   Rpc,
   SolanaRpcApi,
   TransactionSigner,
-} from "@solana/kit";
+} from "../kit-adapter.js";
 
 import { SigilSdkDomainError } from "../errors/sdk.js";
 import { SIGIL_ERROR__SDK__INVALID_CONFIG } from "../errors/codes.js";

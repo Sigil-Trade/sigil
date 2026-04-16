@@ -19,7 +19,7 @@ import {
   type ReadonlyUint8Array,
   type Rpc,
   type SolanaRpcApi,
-} from "@solana/kit";
+} from "./kit-adapter.js";
 import {
   decodeAgentSpendOverlay,
   type AgentSpendOverlay,

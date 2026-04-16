@@ -8,7 +8,7 @@ import type {
   Rpc,
   SolanaRpcApi,
   Base64EncodedWireTransaction,
-} from "@solana/kit";
+} from "./kit-adapter.js";
 
 // ─── Risk Flags ──────────────────────────────────────────────────────────────
 

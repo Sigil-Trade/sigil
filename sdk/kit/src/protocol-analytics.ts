@@ -5,7 +5,7 @@
  * getProtocolUsageAcrossVaults(): Async — aggregated protocol usage across all vaults.
  */
 
-import type { Address, Rpc, SolanaRpcApi } from "@solana/kit";
+import type { Address, Rpc, SolanaRpcApi } from "./kit-adapter.js";
 import type { ResolvedVaultState } from "./state-resolver.js";
 import {
   findVaultsByOwner,

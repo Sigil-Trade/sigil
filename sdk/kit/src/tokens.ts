@@ -5,7 +5,7 @@
  * base58 parse → (caller can add Jupiter API) → error.
  */
 
-import type { Address } from "@solana/kit";
+import type { Address } from "./kit-adapter.js";
 import {
   USDC_MINT_DEVNET,
   USDC_MINT_MAINNET,
