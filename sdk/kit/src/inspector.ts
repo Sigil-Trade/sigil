@@ -14,8 +14,10 @@ import { resolveProtocolName } from "./protocol-names.js";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
-const TOKEN_2022_PROGRAM_ID = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+import {
+  TOKEN_PROGRAM_ADDRESS as TOKEN_PROGRAM_ID,
+  TOKEN_2022_PROGRAM_ADDRESS as TOKEN_2022_PROGRAM_ID,
+} from "./types.js";
 
 /** SPL Token instruction discriminators */
 const SPL_TRANSFER_DISCRIMINATOR = 3;

@@ -184,6 +184,24 @@ export const USDT_MINT_DEVNET =
 export const USDT_MINT_MAINNET =
   "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB" as Address;
 
+// ─── Well-Known Program Addresses (PR 3.B — F036 constant dedup) ────────────
+// Single source of truth. Previously duplicated across 4+ files.
+
+export const TOKEN_PROGRAM_ADDRESS =
+  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address;
+
+export const TOKEN_2022_PROGRAM_ADDRESS =
+  "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" as Address;
+
+export const ATA_PROGRAM_ADDRESS =
+  "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" as Address;
+
+export const COMPUTE_BUDGET_PROGRAM_ADDRESS =
+  "ComputeBudget111111111111111111111111111111" as Address;
+
+export const SYSTEM_PROGRAM_ADDRESS =
+  "11111111111111111111111111111111" as Address;
+
 export const JUPITER_PROGRAM_ADDRESS =
   "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" as Address;
 

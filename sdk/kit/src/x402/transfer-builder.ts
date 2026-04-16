@@ -13,10 +13,14 @@ import { X402ParseError } from "./errors.js";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-export const TOKEN_PROGRAM_ID =
-  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address;
-export const ATA_PROGRAM_ID =
-  "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" as Address;
+// PR 3.B F036: use canonical constants from types.ts.
+// Re-exported here for backwards compat with consumers importing from x402/.
+import {
+  TOKEN_PROGRAM_ADDRESS,
+  ATA_PROGRAM_ADDRESS,
+} from "../types.js";
+export const TOKEN_PROGRAM_ID = TOKEN_PROGRAM_ADDRESS;
+export const ATA_PROGRAM_ID = ATA_PROGRAM_ADDRESS;
 
 /** SPL TransferChecked instruction discriminator */
 const TRANSFER_CHECKED_DISCRIMINATOR = 12;

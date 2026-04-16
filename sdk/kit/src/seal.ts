@@ -101,12 +101,13 @@ import {
 
 // ─── Well-known program addresses to strip ──────────────────────────────────
 
-const COMPUTE_BUDGET_PROGRAM =
-  "ComputeBudget111111111111111111111111111111" as Address;
-const SYSTEM_PROGRAM = "11111111111111111111111111111111" as Address;
-const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address;
-const TOKEN_2022_PROGRAM =
-  "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" as Address;
+// PR 3.B F036: use canonical constants from types.ts instead of local dupes.
+import {
+  TOKEN_PROGRAM_ADDRESS as TOKEN_PROGRAM,
+  TOKEN_2022_PROGRAM_ADDRESS as TOKEN_2022_PROGRAM,
+  COMPUTE_BUDGET_PROGRAM_ADDRESS as COMPUTE_BUDGET_PROGRAM,
+  SYSTEM_PROGRAM_ADDRESS as SYSTEM_PROGRAM,
+} from "./types.js";
 
 /** Sentinel balance for drain detection when RPC fails to fetch actual balance.
  *  1n makes any outflow trigger percentage-based flags (conservative). */

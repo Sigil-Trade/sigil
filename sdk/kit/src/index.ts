@@ -41,6 +41,12 @@ export {
   FULL_PERMISSIONS,
   // Escrow
   MAX_ESCROW_DURATION,
+  // Well-known program addresses (PR 3.B — F036 constant dedup)
+  TOKEN_PROGRAM_ADDRESS,
+  TOKEN_2022_PROGRAM_ADDRESS,
+  ATA_PROGRAM_ADDRESS,
+  COMPUTE_BUDGET_PROGRAM_ADDRESS,
+  SYSTEM_PROGRAM_ADDRESS,
   // Slippage
   MAX_SLIPPAGE_BPS,
   // SpendTracker

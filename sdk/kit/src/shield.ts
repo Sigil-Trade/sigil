@@ -415,10 +415,17 @@ export function evaluateInstructions(
   return { violations, analysis };
 }
 
+import {
+  SYSTEM_PROGRAM_ADDRESS,
+  COMPUTE_BUDGET_PROGRAM_ADDRESS,
+  ATA_PROGRAM_ADDRESS,
+} from "./types.js";
+
+// PR 3.B F036: use canonical constants instead of inline strings.
 const SYSTEM_PROGRAMS = new Set<string>([
-  "11111111111111111111111111111111",
-  "ComputeBudget111111111111111111111111111111",
-  "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+  SYSTEM_PROGRAM_ADDRESS,
+  COMPUTE_BUDGET_PROGRAM_ADDRESS,
+  ATA_PROGRAM_ADDRESS,
 ]);
 
 /**

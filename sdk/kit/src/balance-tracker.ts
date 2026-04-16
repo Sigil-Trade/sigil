@@ -107,8 +107,7 @@ export async function getVaultPnL(
 
 // ─── Token balance query ────────────────────────────────────────────────────
 
-const TOKEN_PROGRAM_ADDRESS =
-  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address;
+import { TOKEN_PROGRAM_ADDRESS } from "./types.js";
 
 /** Parsed token account data shape from jsonParsed encoding. */
 interface ParsedTokenAccountData {
