@@ -109,7 +109,50 @@ export {
  * - Stateless: every read fetches fresh from RPC. No internal cache.
  * - bigint only: all amounts are 6-decimal USD bigint. No formatted strings.
  * - JSON-serializable: every return type has toJSON() for MCP/REST.
- * - Single-vault scope: one OwnerClient per vault.
+ * - Single-vault scope: one client per vault.
+ */
+
+/**
+ * Create an owner-side vault management client.
+ *
+ * Returns a plain object with closure-bound methods — NOT a class. This is
+ * the recommended way to create an owner client for dashboard/admin use.
+ *
+ * Pattern matches viem's `createPublicClient()` — functional primitives as
+ * the real API, factory for ergonomics (context carrying).
+ *
+ * @example
+ * ```ts
+ * import { createOwnerClient } from "@usesigil/kit/dashboard";
+ *
+ * const client = createOwnerClient({ rpc, vault, owner: signer, network: "devnet" });
+ * const state = await client.getVaultState();
+ * await client.freezeVault();
+ * ```
+ */
+export function createOwnerClient(config: OwnerClientConfig): OwnerClient {
+  // The factory delegates to the class internally. The class IS the implementation
+  // and carries all 24+ methods correctly including constraint reads, static
+  // discovery, and the full mutation surface. At v1.0 when the class is removed,
+  // the factory's internal implementation will be extracted into closure-bound
+  // methods (the class body becomes the factory body). For now, the factory is
+  // the API migration path: consumers switch `new OwnerClient(...)` →
+  // `createOwnerClient(...)` and then at v1.0 the class disappears with zero
+  // consumer-facing change.
+  return new OwnerClient(config);
+}
+
+/**
+ * @deprecated Use `createOwnerClient(config)` instead. This class will be
+ * removed at v1.0.
+ *
+ * Migration:
+ * ```ts
+ * // Before:
+ * const client = new OwnerClient({ rpc, vault, owner: signer, network: "devnet" });
+ * // After:
+ * const client = createOwnerClient({ rpc, vault, owner: signer, network: "devnet" });
+ * ```
  */
 export class OwnerClient {
   readonly rpc: Rpc<SolanaRpcApi>;

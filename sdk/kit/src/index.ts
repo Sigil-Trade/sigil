@@ -431,7 +431,14 @@ export type {
 } from "./shield.js";
 
 // ─── Seal ──────────────────────────────────────────────────────────────────
-export { seal, SigilClient, replaceAgentAtas } from "./seal.js";
+export {
+  seal,
+  createSigilClient,
+  /** @deprecated Use createSigilClient(). Removed at v1.0. */
+  SigilClient,
+  replaceAgentAtas,
+} from "./seal.js";
+export type { SigilClientApi } from "./seal.js";
 export type {
   SealParams,
   SealResult,

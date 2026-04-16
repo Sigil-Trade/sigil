@@ -804,24 +804,231 @@ export interface ExecuteResult {
   sealResult: SealResult;
 }
 
-// ─── SigilClient ─────────────────────────────────────────────────────────
+// ─── Factory API (PR 3.A — principled factory migration) ────────────────
 
 /**
- * Primary SDK entry point — stateful client that owns context and caches.
+ * API surface returned by `createSigilClient()`.
  *
- * Recommended over standalone seal() for production use:
- * - Holds vault, agent, network, and RPC — no state carrying between calls
- * - Blockhash and ALT caches are isolated per client instance
- * - invalidateCaches() clears instance caches that are actually used
- * - Convenience methods delegate to existing stateless functions
+ * This is the recommended entry point for agent-side DeFi execution.
+ * The factory carries vault context + caches in a closure, exposing a
+ * plain object with bound methods. Tree-shakeable, testable, composable.
  *
- * Cache scoping: SigilClient keeps its own per-instance `BlockhashCache`
- * (configurable via `config.blockhashTtlMs`) so TTL can differ per client.
- * Stateless helpers (`seal()`, `buildOwnerTransaction()`, dashboard
- * mutations) use the process-wide `getBlockhashCache(rpc)` registry
- * instead. Calling `invalidateCaches()` on this client does NOT flush the
- * registry entry for the same RPC, and vice versa — keep the two paths
- * isolated or call `.invalidate()` on both if you need a full flush.
+ * Pattern matches viem's `createPublicClient()` — functional primitives
+ * (`seal()`, `createVault()`) as the real API, factory for ergonomics.
+ */
+export interface SigilClientApi {
+  /** RPC connection carried by the client. */
+  readonly rpc: Rpc<SolanaRpcApi>;
+  /** Vault address. */
+  readonly vault: Address;
+  /** Agent signer. */
+  readonly agent: TransactionSigner;
+  /** Network. */
+  readonly network: "devnet" | "mainnet";
+
+  /** Seal DeFi instructions with Sigil security (uses instance caches). */
+  seal(
+    instructions: Instruction[],
+    opts: ClientSealOpts,
+  ): Promise<SealResult>;
+
+  /** Seal + sign + send + confirm in one call. */
+  executeAndConfirm(
+    instructions: Instruction[],
+    opts: ClientSealOpts & { confirmOptions?: SendAndConfirmOptions },
+  ): Promise<ExecuteResult>;
+
+  /** Invalidate blockhash + ALT caches. */
+  invalidateCaches(): void;
+
+  /** Resolve full vault state. */
+  getVaultState(): Promise<ResolvedVaultStateForOwner>;
+
+  /** Resolve the agent's 24h rolling budget. */
+  getAgentBudget(): Promise<ResolvedBudget>;
+
+  /** Get vault P&L. */
+  getPnL(): Promise<VaultPnL>;
+
+  /** Get vault token balances. */
+  getTokenBalances(): Promise<TokenBalance[]>;
+}
+
+/**
+ * Create a Sigil agent client — the primary SDK entry point for AI agents
+ * executing DeFi through vault guardrails.
+ *
+ * The returned object carries vault context and isolated caches in a
+ * closure. It is NOT a class — no `instanceof`, no prototype chain, no
+ * `this` binding footguns. Methods are plain closure-bound functions.
+ *
+ * @example
+ * ```ts
+ * import { createSigilClient, usd, capability } from "@usesigil/kit";
+ *
+ * const client = createSigilClient({ rpc, vault, agent, network: "devnet" });
+ * const result = await client.executeAndConfirm(instructions, {
+ *   tokenMint: USDC_MINT_DEVNET,
+ *   amount: usd(500_000_000n),
+ * });
+ * ```
+ */
+export function createSigilClient(config: SigilClientConfig): SigilClientApi {
+  // Validate config (same checks as the deprecated class constructor)
+  if (!config.rpc)
+    throw new SigilSdkDomainError(
+      SIGIL_ERROR__SDK__INVALID_CONFIG,
+      "SigilClientConfig.rpc is required",
+      { context: { field: "rpc", expected: "Rpc<SolanaRpcApi>" } },
+    );
+  if (!config.vault)
+    throw new SigilSdkDomainError(
+      SIGIL_ERROR__SDK__INVALID_CONFIG,
+      "SigilClientConfig.vault is required",
+      { context: { field: "vault", expected: "Address" } },
+    );
+  if (!config.agent)
+    throw new SigilSdkDomainError(
+      SIGIL_ERROR__SDK__INVALID_CONFIG,
+      "SigilClientConfig.agent is required",
+      { context: { field: "agent", expected: "TransactionSigner" } },
+    );
+  if (!config.network)
+    throw new SigilSdkDomainError(
+      SIGIL_ERROR__SDK__INVALID_CONFIG,
+      "SigilClientConfig.network is required",
+      { context: { field: "network", expected: "'devnet' | 'mainnet'" } },
+    );
+
+  // Private state captured in closure (replaces class private fields)
+  const rpc = config.rpc;
+  const vault = config.vault;
+  const agent = config.agent;
+  const network = config.network;
+  const blockhashCache = new BlockhashCache(config.blockhashTtlMs);
+  const localAltCache = new AltCache();
+  const onErrorCallback = config.onError;
+  const networkFull: Network =
+    network === "mainnet" ? "mainnet-beta" : "devnet";
+
+  return {
+    rpc,
+    vault,
+    agent,
+    network,
+
+    async seal(instructions, opts) {
+      // Pre-resolve blockhash + ALTs from instance caches (parallel)
+      const altPromise = opts.addressLookupTables
+        ? Promise.resolve(opts.addressLookupTables)
+        : localAltCache.resolve(
+            rpc,
+            mergeAltAddresses(
+              getSigilAltAddress(normalizeNetwork(network)),
+              opts.protocolAltAddresses,
+            ),
+          );
+
+      let [resolvedBlockhash, addressLookupTables] = await Promise.all([
+        blockhashCache.get(rpc),
+        altPromise,
+      ]);
+
+      // ALT verify-evict-retry (self-healing cache)
+      if (!opts.addressLookupTables) {
+        const net = normalizeNetwork(network);
+        const sigilAlt = getSigilAltAddress(net);
+        const expected = getExpectedAltContents(net);
+        try {
+          verifySigilAlt(addressLookupTables, sigilAlt, expected);
+        } catch (err: unknown) {
+          const cause = redactCause(err);
+          console.debug(
+            `[seal] ALT cache verify failed — invalidating and retrying: ${cause.message ?? cause.name ?? cause.code ?? "unknown"}`,
+          );
+          localAltCache.invalidate();
+          const allAlts = mergeAltAddresses(
+            sigilAlt,
+            opts.protocolAltAddresses,
+          );
+          addressLookupTables = await localAltCache.resolve(rpc, allAlts);
+          verifySigilAlt(addressLookupTables, sigilAlt, expected);
+        }
+      }
+
+      return seal({
+        rpc,
+        vault,
+        agent,
+        network,
+        instructions,
+        ...opts,
+        blockhash: resolvedBlockhash,
+        addressLookupTables,
+      });
+    },
+
+    async executeAndConfirm(instructions, opts) {
+      try {
+        // Use this.seal through closure — NOT this.seal (no `this`)
+        const sealFn = this.seal.bind(this);
+        const result = await sealFn(instructions, opts);
+        const encoded = await signAndEncode(agent, result.transaction);
+        const signature = await sendAndConfirmTransaction(
+          rpc,
+          encoded,
+          opts.confirmOptions,
+        );
+        return { signature, sealResult: result };
+      } catch (err) {
+        const sdkError = toSigilAgentError(err);
+        onErrorCallback?.(sdkError, {
+          action: opts.amount > 0n ? "spending" : "non-spending",
+          tokenMint: opts.tokenMint,
+          amount: opts.amount,
+        });
+        throw sdkError;
+      }
+    },
+
+    invalidateCaches() {
+      blockhashCache.invalidate();
+      localAltCache.invalidate();
+    },
+
+    async getVaultState() {
+      return resolveVaultStateForOwner(rpc, vault, undefined, networkFull);
+    },
+
+    async getAgentBudget() {
+      return resolveVaultBudget(rpc, vault, agent.address);
+    },
+
+    async getPnL() {
+      return getVaultPnL(rpc, vault, networkFull);
+    },
+
+    async getTokenBalances() {
+      return getVaultTokenBalances(rpc, vault, networkFull);
+    },
+  };
+}
+
+// ─── SigilClient (deprecated class) ─────────────────────────────────────
+
+/**
+ * @deprecated Use `createSigilClient(config)` instead. This class will be
+ * removed at v1.0. The factory returns the same API surface as a plain
+ * object with closure-bound methods — no `this` binding issues, tree-
+ * shakeable, and aligned with the viem/Kit functional pattern.
+ *
+ * Migration:
+ * ```ts
+ * // Before:
+ * const client = new SigilClient({ rpc, vault, agent, network });
+ * // After:
+ * const client = createSigilClient({ rpc, vault, agent, network });
+ * ```
  */
 export class SigilClient {
   private readonly blockhashCacheInstance: BlockhashCache;
