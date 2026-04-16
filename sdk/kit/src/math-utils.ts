@@ -27,3 +27,11 @@ export function computeHerfindahl(values: bigint[]): number {
 
   return sumSquares;
 }
+
+/**
+ * Calculate P&L as a percentage with 2-decimal precision.
+ * C1 audit fix: handles SIGNED numerators (negative P&L → negative %).
+ */
+export function computePnlPercent(pnl: bigint, investment: bigint): number {
+  return investment > 0n ? Number((pnl * 10000n) / investment) / 100 : 0;
+}

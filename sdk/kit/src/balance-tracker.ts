@@ -8,6 +8,7 @@
 
 import type { Address, Rpc, SolanaRpcApi } from "@solana/kit";
 import { isStablecoinMint, type Network } from "./types.js";
+import { computePnlPercent } from "./math-utils.js";
 import { resolveVaultStateForOwner } from "./state-resolver.js";
 import { resolveToken } from "./tokens.js";
 
@@ -74,8 +75,7 @@ export function getVaultPnLFromState(state: {
     state.stablecoinBalances.usdc + state.stablecoinBalances.usdt;
   const netInvestment = totalDeposited - totalWithdrawn;
   const pnl = currentBalance - netInvestment;
-  const pnlPercent =
-    netInvestment > 0n ? Number((pnl * 10000n) / netInvestment) / 100 : 0;
+  const pnlPercent = computePnlPercent(pnl, netInvestment);
 
   return {
     totalDeposited,
@@ -316,8 +316,7 @@ export function getBalancePnL(
   const startBalance = sumStablecoins(baseline.balances);
   const currentBalance = sumStablecoins(latest.balances);
   const delta = currentBalance - startBalance;
-  const percentChange =
-    startBalance > 0n ? Number((delta * 10000n) / startBalance) / 100 : 0;
+  const percentChange = computePnlPercent(delta, startBalance);
 
   return { startBalance, currentBalance, delta, percentChange };
 }
