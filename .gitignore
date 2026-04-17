@@ -57,6 +57,7 @@ scripts/extend-sigil-alt.ts
 /Plans
 **/Plans
 programs/sigil/archived-oracle
+tests/archived-oracle
 skills-lock.json
 
 # Working documents (not production code)
@@ -69,8 +70,9 @@ docs/YIELD-XYZ-PARTNERSHIP.md
 FULL-SYSTEM-AUDIT-2026-04-03.md
 CONSTRAINT-BUILDER-PLAN.md
 DX-CONVENIENCE-LAYER-PLAN.md
-agent-middleware/docs/RFC-ACTIONTYPE-ELIMINATION.md
-agent-middleware/docs/SECURITY-FINDINGS-2026-04-07.md
+docs/RFC-ACTIONTYPE-ELIMINATION.md
+docs/SECURITY-FINDINGS-2026-04-07.md
+docs/SDK-REDESIGN-PLAN.md
 
 # Internal development docs
 CLAUDE.md
