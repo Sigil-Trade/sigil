@@ -24,6 +24,7 @@ import {
   getBase58Decoder,
 } from "../kit-adapter.js";
 import type { ShieldedContext } from "../shield.js";
+import { getSigilModuleLogger } from "../logger.js";
 import type {
   X402Config,
   ShieldedFetchOptions,
@@ -131,7 +132,7 @@ export async function shieldedFetch(
 
   // Step 0: Config warnings
   if (!config?.allowedDestinations || config.allowedDestinations.size === 0) {
-    console.warn(
+    getSigilModuleLogger().warn(
       "[x402] No allowedDestinations configured — accepting all payTo destinations. " +
         "Set X402Config.allowedDestinations for production use.",
     );
@@ -349,7 +350,9 @@ export async function shieldedFetch(
       settlement = decodePaymentResponseHeader(paymentResponseHeader);
       const verification = await validateSettlement(settlement);
       if (verification.warnings.length > 0) {
-        console.warn("[x402] Settlement warnings:", verification.warnings);
+        getSigilModuleLogger().warn("[x402] Settlement warnings", {
+          warnings: verification.warnings,
+        });
       }
     } catch {
       // Non-fatal — settlement data is optional
@@ -402,11 +405,11 @@ export async function shieldedFetch(
       );
       if (status === "failed") {
         shouldRecordSpend = false;
-        console.warn(
+        getSigilModuleLogger().warn(
           `[x402] Payment TX ${settlement.transaction} failed on-chain — spend NOT recorded`,
         );
       } else if (status === "timeout") {
-        console.warn(
+        getSigilModuleLogger().warn(
           `[x402] Payment TX ${settlement.transaction} not confirmed within ${timeout}ms — recording spend (defense-in-depth)`,
         );
       }

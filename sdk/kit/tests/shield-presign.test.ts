@@ -18,6 +18,11 @@ import type { InspectableInstruction } from "../src/inspector.js";
 import { SIGIL_PROGRAM_ADDRESS } from "../src/generated/programs/sigil.js";
 import { VALIDATE_AND_AUTHORIZE_DISCRIMINATOR } from "../src/generated/instructions/validateAndAuthorize.js";
 import { FINALIZE_SESSION_DISCRIMINATOR } from "../src/generated/instructions/finalizeSession.js";
+import {
+  setSigilModuleLogger,
+  NOOP_LOGGER,
+  type SigilLogger,
+} from "../src/logger.js";
 
 // ─── Test Constants ────────────────────────────────────────────────────────
 
@@ -239,16 +244,26 @@ function createFailingRpc() {
   } as any;
 }
 
-// Capture console.warn for SOFT check tests
+// Capture module-logger warnings for SOFT check tests. shield.ts now
+// routes warnings through setSigilModuleLogger (A6 migration) — tests
+// install a capture logger, run the body, reset to NOOP.
+function makeCapture(warnings: string[]): SigilLogger {
+  return {
+    debug: () => {},
+    info: () => {},
+    warn: (msg, ctx) => warnings.push(ctx ? `${msg} ${JSON.stringify(ctx)}` : msg),
+    error: () => {},
+  };
+}
+
 function captureWarns(fn: () => any): { warnings: string[]; result: any } {
   const warnings: string[] = [];
-  const origWarn = console.warn;
-  console.warn = (...args: any[]) => warnings.push(args.join(" "));
+  setSigilModuleLogger(makeCapture(warnings));
   let result: any;
   try {
     result = fn();
   } finally {
-    console.warn = origWarn;
+    setSigilModuleLogger(NOOP_LOGGER);
   }
   return { warnings, result };
 }
@@ -257,13 +272,12 @@ async function captureWarnsAsync(
   fn: () => Promise<any>,
 ): Promise<{ warnings: string[]; result: any }> {
   const warnings: string[] = [];
-  const origWarn = console.warn;
-  console.warn = (...args: any[]) => warnings.push(args.join(" "));
+  setSigilModuleLogger(makeCapture(warnings));
   let result: any;
   try {
     result = await fn();
   } finally {
-    console.warn = origWarn;
+    setSigilModuleLogger(NOOP_LOGGER);
   }
   return { warnings, result };
 }

@@ -13,6 +13,7 @@ import type {
   TransactionSigner,
 } from "../kit-adapter.js";
 import { getProgramDerivedAddress, getAddressEncoder } from "../kit-adapter.js";
+import { getSigilModuleLogger } from "../logger.js";
 import type { CapabilityTier, UsdBaseUnits } from "../types.js";
 import {
   pipe,
@@ -308,7 +309,7 @@ export async function closeVault(
         // omitting the PDA from remaining_accounts, which would surface
         // downstream as an opaque "AccountMissing" from close_vault.
         const cause = redactCause(err);
-        console.warn(
+        getSigilModuleLogger().warn(
           `[close_vault] existence check failed for ${pda} — treating as absent: ${cause.message ?? cause.name ?? cause.code ?? "unknown"}`,
         );
         return null;

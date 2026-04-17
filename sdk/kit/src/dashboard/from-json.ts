@@ -8,10 +8,12 @@
  *
  * Pattern: standalone functions (not static methods) for tree-shaking.
  * Each function accepts a Serialized* object and returns the live type
+ * (unchanged from A6 — logger import lives below).
  * with bigints, typed addresses, and full toJSON() methods restored.
  */
 
 import type { Address } from "@solana/kit";
+import { getSigilModuleLogger } from "../logger.js";
 import type {
   VaultState,
   AgentData,
@@ -52,7 +54,7 @@ function bi(s: string | undefined | null): bigint {
   } catch {
     if (biWarnCount < 10) {
       biWarnCount++;
-      console.warn(
+      getSigilModuleLogger().warn(
         `[@usesigil/kit/fromJSON] Failed to parse bigint from "${s.slice(0, 50)}" — returning 0n. ` +
           `This may indicate corrupted MCP data.`,
       );

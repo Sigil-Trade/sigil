@@ -8,6 +8,7 @@ import type { Address, Rpc, SolanaRpcApi } from "../kit-adapter.js";
 import { findVaultsByOwner } from "../state-resolver.js";
 import { fetchMaybeAgentVault } from "../generated/accounts/agentVault.js";
 import { redactCause } from "../network-errors.js";
+import { getSigilModuleLogger } from "../logger.js";
 import type { DiscoveredVault } from "./types.js";
 
 /**
@@ -66,7 +67,7 @@ export async function discoverVaults(
         // correlate "missing vault in dashboard" with a real decode
         // error.
         const cause = redactCause(err);
-        console.warn(
+        getSigilModuleLogger().warn(
           `[discoverVaults] vault ${v.vaultAddress} decode failed — omitting from results: ${cause.message ?? cause.name ?? cause.code ?? "unknown"}`,
         );
         return null;

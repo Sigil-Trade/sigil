@@ -21,6 +21,7 @@ import { verifyCrossmint } from "./providers/crossmint.js";
 import { verifyPrivy } from "./providers/privy.js";
 import { verifyTurnkey } from "./providers/turnkey.js";
 import { redactCause } from "../network-errors.js";
+import { getSigilModuleLogger } from "../logger.js";
 
 /**
  * Cache-key delimiter. `|` is chosen over `:` because base58 cannot
@@ -159,7 +160,7 @@ export async function verifyTeeAttestation(
     try {
       config?.onDegraded?.(syntheticResult);
     } catch (cbErr: unknown) {
-      console.debug(
+      getSigilModuleLogger().debug(
         `[@usesigil/kit/tee] onDegraded callback threw (non-fatal): ${cbErr instanceof Error ? cbErr.message : String(cbErr)}`,
       );
     }
@@ -252,7 +253,7 @@ export async function verifyTeeAttestation(
     try {
       config?.onDegraded?.(result);
     } catch (cbErr: unknown) {
-      console.debug(
+      getSigilModuleLogger().debug(
         `[@usesigil/kit/tee] onDegraded callback threw (non-fatal): ${cbErr instanceof Error ? cbErr.message : String(cbErr)}`,
       );
     }
@@ -281,7 +282,7 @@ export async function verifyTeeAttestation(
       try {
         config?.onDegraded?.(result);
       } catch (cbErr: unknown) {
-        console.debug(
+        getSigilModuleLogger().debug(
           `[@usesigil/kit/tee] onDegraded callback threw (non-fatal): ${cbErr instanceof Error ? cbErr.message : String(cbErr)}`,
         );
       }
@@ -300,7 +301,7 @@ export async function verifyTeeAttestation(
     try {
       config?.onVerified?.(result);
     } catch (cbErr: unknown) {
-      console.debug(
+      getSigilModuleLogger().debug(
         `[@usesigil/kit/tee] onVerified callback threw (non-fatal): ${cbErr instanceof Error ? cbErr.message : String(cbErr)}`,
       );
     }
@@ -308,7 +309,7 @@ export async function verifyTeeAttestation(
     try {
       config?.onDegraded?.(result);
     } catch (cbErr: unknown) {
-      console.debug(
+      getSigilModuleLogger().debug(
         `[@usesigil/kit/tee] onDegraded callback threw (non-fatal): ${cbErr instanceof Error ? cbErr.message : String(cbErr)}`,
       );
     }

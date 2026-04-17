@@ -23,6 +23,7 @@ import type {
   TransactionSigner,
 } from "./kit-adapter.js";
 import { compileTransaction, AccountRole } from "./kit-adapter.js";
+import { getSigilModuleLogger } from "./logger.js";
 
 import { VaultStatus } from "./generated/types/vaultStatus.js";
 import { getValidateAndAuthorizeInstructionAsync } from "./generated/instructions/validateAndAuthorize.js";
@@ -942,7 +943,7 @@ export function createSigilClient(config: SigilClientConfig): SigilClientApi {
         verifySigilAlt(addressLookupTables, sigilAlt, expected);
       } catch (err: unknown) {
         const cause = redactCause(err);
-        console.debug(
+        getSigilModuleLogger().debug(
           `[seal] ALT cache verify failed — invalidating and retrying: ${cause.message ?? cause.name ?? cause.code ?? "unknown"}`,
         );
         localAltCache.invalidate();
@@ -1121,7 +1122,7 @@ export class SigilClient {
         // silently; if we see this in telemetry, it means the ALT on
         // chain was updated or the cache was serving stale data.
         const cause = redactCause(err);
-        console.debug(
+        getSigilModuleLogger().debug(
           `[seal] ALT cache verify failed — invalidating and retrying: ${cause.message ?? cause.name ?? cause.code ?? "unknown"}`,
         );
         this.altCacheInstance.invalidate();

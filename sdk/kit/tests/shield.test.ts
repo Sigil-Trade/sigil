@@ -16,6 +16,34 @@ import type { InspectableInstruction } from "../src/inspector.js";
 import type { Address } from "@solana/kit";
 import { AltCache } from "../src/alt-loader.js";
 import type { ResolvedVaultState } from "../src/state-resolver.js";
+import {
+  setSigilModuleLogger,
+  NOOP_LOGGER,
+  type SigilLogger,
+} from "../src/logger.js";
+
+/**
+ * Shared capture-logger factory. Previously these tests monkey-patched
+ * `console.warn` directly; shield.ts now routes warnings through
+ * `getSigilModuleLogger()` (A6 migration), so tests must install a
+ * capture logger via `setSigilModuleLogger` and reset to NOOP_LOGGER
+ * when done.
+ */
+function installCaptureLogger(warnings: string[]): SigilLogger {
+  const capture: SigilLogger = {
+    debug: () => {},
+    info: () => {},
+    warn: (msg) => {
+      warnings.push(msg);
+    },
+    error: () => {},
+  };
+  setSigilModuleLogger(capture);
+  return capture;
+}
+function resetCaptureLogger(): void {
+  setSigilModuleLogger(NOOP_LOGGER);
+}
 
 const SIGNER = "SignerAddr1111111111111111111111111111111" as Address;
 const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address;
@@ -785,10 +813,7 @@ describe("shield", () => {
   describe("S-7: enforce/ShieldedSigner mutual exclusivity", () => {
     it("enforce() sets enforceUsed flag", () => {
       const warnings: string[] = [];
-      const origWarn = console.warn;
-      console.warn = (msg: string) => {
-        warnings.push(msg);
-      };
+      installCaptureLogger(warnings);
       try {
         const ctx = shield();
         expect(ctx.state.enforceUsed).to.be.false;
@@ -798,16 +823,13 @@ describe("shield", () => {
         );
         expect(ctx.state.enforceUsed).to.be.true;
       } finally {
-        console.warn = origWarn;
+        resetCaptureLogger();
       }
     });
 
     it("ShieldedSigner warns when enforce was already used", async () => {
       const warnings: string[] = [];
-      const origWarn = console.warn;
-      console.warn = (msg: string) => {
-        warnings.push(msg);
-      };
+      installCaptureLogger(warnings);
       try {
         const ctx = shield();
         // First enforce
@@ -841,16 +863,13 @@ describe("shield", () => {
         expect(warnings.some((w) => w.includes("double-count spending"))).to.be
           .true;
       } finally {
-        console.warn = origWarn;
+        resetCaptureLogger();
       }
     });
 
     it("reset() clears enforceUsed flag", () => {
       const warnings: string[] = [];
-      const origWarn = console.warn;
-      console.warn = (msg: string) => {
-        warnings.push(msg);
-      };
+      installCaptureLogger(warnings);
       try {
         const ctx = shield();
         ctx.enforce(
@@ -861,7 +880,7 @@ describe("shield", () => {
         ctx.resetState();
         expect(ctx.state.enforceUsed).to.be.false;
       } finally {
-        console.warn = origWarn;
+        resetCaptureLogger();
       }
     });
   });
@@ -870,25 +889,19 @@ describe("shield", () => {
   describe("S-1: ephemeral warning", () => {
     it("warns when shield created without onChainSync", () => {
       const warnings: string[] = [];
-      const origWarn = console.warn;
-      console.warn = (msg: string) => {
-        warnings.push(msg);
-      };
+      installCaptureLogger(warnings);
       try {
         shield();
         expect(warnings.some((w) => w.includes("[Shield] No onChainSync"))).to
           .be.true;
       } finally {
-        console.warn = origWarn;
+        resetCaptureLogger();
       }
     });
 
     it("does not warn when onChainSync is configured", () => {
       const warnings: string[] = [];
-      const origWarn = console.warn;
-      console.warn = (msg: string) => {
-        warnings.push(msg);
-      };
+      installCaptureLogger(warnings);
       try {
         shield(undefined, {
           onChainSync: {
@@ -902,7 +915,7 @@ describe("shield", () => {
         expect(warnings.some((w) => w.includes("[Shield] No onChainSync"))).to
           .be.false;
       } finally {
-        console.warn = origWarn;
+        resetCaptureLogger();
       }
     });
   });
@@ -935,10 +948,7 @@ describe("shield", () => {
 
     it("warns when resolved state is older than threshold", () => {
       const warnings: string[] = [];
-      const origWarn = console.warn;
-      console.warn = (msg: string) => {
-        warnings.push(msg);
-      };
+      installCaptureLogger(warnings);
       try {
         const ctx = shield(undefined, {
           onChainSync: {
@@ -966,16 +976,13 @@ describe("shield", () => {
           ),
         ).to.be.true;
       } finally {
-        console.warn = origWarn;
+        resetCaptureLogger();
       }
     });
 
     it("does not warn when state is fresh", () => {
       const warnings: string[] = [];
-      const origWarn = console.warn;
-      console.warn = (msg: string) => {
-        warnings.push(msg);
-      };
+      installCaptureLogger(warnings);
       try {
         const ctx = shield(undefined, {
           onChainSync: {
@@ -998,16 +1005,13 @@ describe("shield", () => {
           ),
         ).to.be.false;
       } finally {
-        console.warn = origWarn;
+        resetCaptureLogger();
       }
     });
 
     it("custom threshold works", () => {
       const warnings: string[] = [];
-      const origWarn = console.warn;
-      console.warn = (msg: string) => {
-        warnings.push(msg);
-      };
+      installCaptureLogger(warnings);
       try {
         const ctx = shield(undefined, {
           onChainSync: {
@@ -1031,7 +1035,7 @@ describe("shield", () => {
         );
         expect(warnings.some((w) => w.includes("threshold: 10s"))).to.be.true;
       } finally {
-        console.warn = origWarn;
+        resetCaptureLogger();
       }
     });
   });
@@ -1084,10 +1088,7 @@ describe("shield", () => {
 
     it("soft mode warns without throwing", async () => {
       const warnings: string[] = [];
-      const origWarn = console.warn;
-      console.warn = (msg: string) => {
-        warnings.push(msg);
-      };
+      installCaptureLogger(warnings);
       try {
         const ctx = shield();
         const signer = createShieldedSigner(mockBaseSigner(), ctx, {
@@ -1099,7 +1100,7 @@ describe("shield", () => {
         expect(warnings.some((w) => w.includes("No Sigil instructions"))).to.be
           .true;
       } finally {
-        console.warn = origWarn;
+        resetCaptureLogger();
       }
     });
 

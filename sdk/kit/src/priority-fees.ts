@@ -7,6 +7,7 @@
 
 import type { Instruction, Rpc, SolanaRpcApi } from "./kit-adapter.js";
 import { redactCause } from "./network-errors.js";
+import { getSigilModuleLogger } from "./logger.js";
 import { SUPPORTED_PROTOCOLS } from "./types.js";
 
 // Jupiter multi-hop needs special handling (>2 instructions = multi-hop)
@@ -188,7 +189,7 @@ export class PriorityFeeEstimator {
       // default fee with no visibility. A warn is cheap and makes API
       // shape drift detectable in production.
       const cause = redactCause(err);
-      console.warn(
+      getSigilModuleLogger().warn(
         `[priority-fees] Helius estimate failed — falling back: ${cause.message ?? cause.name ?? cause.code ?? "unknown"}`,
       );
       return null;
@@ -220,7 +221,7 @@ export class PriorityFeeEstimator {
       // Same rationale as the Helius path — log so a failing RPC doesn't
       // silently push users to the fallback fee without trace.
       const cause = redactCause(err);
-      console.warn(
+      getSigilModuleLogger().warn(
         `[priority-fees] RPC getRecentPrioritizationFees failed — falling back: ${cause.message ?? cause.name ?? cause.code ?? "unknown"}`,
       );
       return null;

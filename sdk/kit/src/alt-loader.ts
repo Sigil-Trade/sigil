@@ -13,6 +13,7 @@ import {
   fetchAddressesForLookupTables,
   type AddressesByLookupTableAddress,
 } from "./kit-adapter.js";
+import { getSigilModuleLogger } from "./logger.js";
 import { SigilSdkDomainError } from "./errors/sdk.js";
 import { SIGIL_ERROR__SDK__ALT_INTEGRITY } from "./errors/codes.js";
 
@@ -91,9 +92,9 @@ export class AltCache {
       } catch (e) {
         // S-4: Graceful degradation — return whatever we have from cache
         // The composer works without ALTs; transactions just may be larger
-        console.warn(
-          "[AltCache] ALT fetch failed, proceeding without:",
-          e instanceof Error ? e.message : e,
+        getSigilModuleLogger().warn(
+          "[AltCache] ALT fetch failed, proceeding without",
+          { error: e instanceof Error ? e.message : String(e) },
         );
       }
     }

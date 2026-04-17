@@ -15,6 +15,8 @@
  *     `cause: { code: "ECONNRESET" }` shape) by passing them to fn before
  *     bailing. Previously these were silently dropped from the search.
  */
+import { getSigilModuleLogger } from "../logger.js";
+
 const MAX_WALK_DEPTH = 32;
 let depthFuseWarned = false;
 
@@ -32,7 +34,7 @@ export function resetWalkFuse(): void {
 function warnFuseTrip(): void {
   if (depthFuseWarned) return;
   depthFuseWarned = true;
-  console.warn(
+  getSigilModuleLogger().warn(
     `[@usesigil/kit/walk] cause-chain depth exceeded ${MAX_WALK_DEPTH} levels — ` +
       `chain truncated. If this is a real chain (not a cycle), file an issue at ` +
       `https://github.com/Sigil-Trade/sigil/issues with reproduction.`,

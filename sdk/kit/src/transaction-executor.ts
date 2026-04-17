@@ -24,6 +24,7 @@ import {
   MAX_TX_SIZE,
 } from "./composer.js";
 import { AltCache } from "./alt-loader.js";
+import { getSigilModuleLogger } from "./logger.js";
 import {
   simulateBeforeSend,
   adjustCU,
@@ -140,13 +141,13 @@ export class TransactionExecutor {
         options?.skipSimulation === true &&
         !options?.dangerouslySkipSimulation
       ) {
-        console.warn(
-          "[Phalnx] DEPRECATION: skipSimulation is deprecated. " +
+        getSigilModuleLogger().warn(
+          "[Sigil] DEPRECATION: skipSimulation is deprecated. " +
             'Use dangerouslySkipSimulation: "I_UNDERSTAND_DRAIN_DETECTION_IS_DISABLED" instead.',
         );
       }
-      console.warn(
-        "[Phalnx] WARNING: Simulation and drain detection are DISABLED. " +
+      getSigilModuleLogger().warn(
+        "[Sigil] WARNING: Simulation and drain detection are DISABLED. " +
           "This should only be used in testing environments, never in production.",
       );
     }

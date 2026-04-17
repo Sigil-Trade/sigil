@@ -11,6 +11,7 @@ import { isStablecoinMint, type Network } from "./types.js";
 import { computePnlPercent } from "./math-utils.js";
 import { resolveVaultStateForOwner } from "./state-resolver.js";
 import { resolveToken } from "./tokens.js";
+import { getSigilModuleLogger } from "./logger.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -255,7 +256,7 @@ export class BalanceSnapshotStore {
       try {
         return BigInt(val as string);
       } catch {
-        console.warn(
+        getSigilModuleLogger().warn(
           `[@usesigil/kit/BalanceSnapshotStore.fromJSON] Failed to parse bigint for "${field}": ${String(val).slice(0, 50)} — using 0n`,
         );
         return 0n;

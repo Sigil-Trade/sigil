@@ -13,6 +13,7 @@
 
 import { isSome } from "../kit-adapter.js";
 import type { Address, Rpc, SolanaRpcApi } from "../kit-adapter.js";
+import { getSigilModuleLogger } from "../logger.js";
 import { toDxError, isAccountNotFoundError } from "./errors.js";
 import { redactCause } from "../network-errors.js";
 import { computeUtilizationPercent } from "../math-utils.js";
@@ -624,10 +625,9 @@ export async function getAgents(
           // carrying an API key in the path would otherwise leak into
           // the console.warn.
           const cause = redactCause(err);
-          // eslint-disable-next-line no-console
-          console.warn(
-            "[OwnerClient.getAgents] activity enrichment failed — falling back to empty last-action fields:",
-            cause.message ?? cause.name ?? cause.code ?? "unknown",
+          getSigilModuleLogger().warn(
+            "[OwnerClient.getAgents] activity enrichment failed — falling back to empty last-action fields",
+            { cause: cause.message ?? cause.name ?? cause.code ?? "unknown" },
           );
           return [];
         },
@@ -849,10 +849,12 @@ export async function getOverview(
               // via the PR 1.B `redactCause` discipline so upstream
               // request URLs / tokens don't end up in stdout.
               const cause = redactCause(err);
-              // eslint-disable-next-line no-console
-              console.warn(
-                "[OwnerClient.getOverview] activity fetch failed — falling back to empty:",
-                cause.message ?? cause.name ?? cause.code ?? "unknown",
+              getSigilModuleLogger().warn(
+                "[OwnerClient.getOverview] activity fetch failed — falling back to empty",
+                {
+                  cause:
+                    cause.message ?? cause.name ?? cause.code ?? "unknown",
+                },
               );
               return [] as VaultActivityItem[];
             },

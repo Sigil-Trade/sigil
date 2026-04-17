@@ -134,3 +134,44 @@ export function createConsoleLogger(): SigilLogger {
 export function resolveLogger(logger: SigilLogger | undefined): SigilLogger {
   return logger ?? NOOP_LOGGER;
 }
+
+// ---------------------------------------------------------------------------
+// Module-level logger — leaf-utility fallback
+// ---------------------------------------------------------------------------
+//
+// Some SDK internals (walk(), alt-loader, balance-tracker, dashboard
+// reads, etc.) are called from deep in the stack where threading a
+// per-call `logger` argument would require signature changes across
+// many consumers. For these sites, the SDK uses a module-level logger
+// that SigilClient / OwnerClient constructors set from config.logger
+// during initialization.
+//
+// Default: NOOP_LOGGER — nothing is emitted until a consumer opts in.
+//
+// Trade-off: this is module-local mutable state. Tests that want to
+// observe warnings should call `setSigilModuleLogger` in `beforeEach`
+// and reset with `setSigilModuleLogger(NOOP_LOGGER)` in `afterEach`.
+// The state is process-wide, so parallel test suites must NOT share a
+// worker unless all cooperate on the reset.
+
+let _sigilModuleLogger: SigilLogger = NOOP_LOGGER;
+
+/**
+ * Set the module-level logger used by leaf SDK utilities that don't
+ * accept a per-call logger parameter.
+ *
+ * Called by `SigilClient.create()` / `new SigilClient()` / `OwnerClient`
+ * constructors when `config.logger` is provided, so an application's
+ * chosen logger reaches every corner of the SDK.
+ */
+export function setSigilModuleLogger(logger: SigilLogger): void {
+  _sigilModuleLogger = logger;
+}
+
+/**
+ * Read the current module-level logger. Internal SDK sites that cannot
+ * thread a per-call logger should call this to emit warnings/errors.
+ */
+export function getSigilModuleLogger(): SigilLogger {
+  return _sigilModuleLogger;
+}

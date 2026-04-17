@@ -28,6 +28,7 @@ import {
   type InstructionAnalysis,
   type TokenTransferInfo,
 } from "./inspector.js";
+import { getSigilModuleLogger } from "./logger.js";
 import {
   resolvePolicies,
   type ShieldPolicies,
@@ -529,7 +530,7 @@ export function shield(
 
   // S-1: Warn when no onChainSync — spend tracking is ephemeral
   if (!syncConfig) {
-    console.warn(
+    getSigilModuleLogger().warn(
       "[Shield] No onChainSync configured — spend tracking is client-side only " +
         "and will reset on process restart.",
     );
@@ -842,7 +843,7 @@ export function createShieldedSigner(
 
         // S-7: Warn about double-counting risk if enforce() was already used
         if (shieldCtx.state.enforceUsed) {
-          console.warn(
+          getSigilModuleLogger().warn(
             "[ShieldedSigner] enforce() was already called on this ShieldState — " +
               "using ShieldedSigner after enforce() may double-count spending",
           );
@@ -955,7 +956,7 @@ export function _extractInstructionsFromCompiled(
       }
     }
   } else if (msg.addressTableLookups?.length) {
-    console.warn(
+    getSigilModuleLogger().warn(
       "[ShieldedSigner] ALT-compressed accounts cannot be resolved without AltCache",
     );
   }
@@ -1031,7 +1032,7 @@ function checkSessionBinding(
         },
       ]);
     }
-    console.warn(message);
+    getSigilModuleLogger().warn(message);
     return;
   }
 
@@ -1052,7 +1053,7 @@ function checkSessionBinding(
         },
       ]);
     }
-    console.warn(message);
+    getSigilModuleLogger().warn(message);
     return;
   }
 
@@ -1080,7 +1081,7 @@ function checkSessionBinding(
         },
       ]);
     }
-    console.warn(message);
+    getSigilModuleLogger().warn(message);
   }
 }
 
@@ -1093,7 +1094,7 @@ function _warnIfStale(state: ShieldState, thresholdSec: number): void {
     Math.floor(Date.now() / 1000) -
     Number(state.resolvedState.resolvedAtTimestamp);
   if (age > thresholdSec) {
-    console.warn(
+    getSigilModuleLogger().warn(
       `[Shield] Resolved state is ${age}s old (threshold: ${thresholdSec}s) — call sync() for fresh data`,
     );
   }
