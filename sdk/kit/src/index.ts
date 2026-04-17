@@ -2,7 +2,15 @@
 // ESM-only, zero web3.js dependency
 
 // ─── Generated Client ─────────────────────────────────────────────────────────
-export * from "./generated/index.js";
+//
+// v0.9.0 barrel surgery (A12): was `export * from "./generated/index.js"`
+// which pulled ~500 Codama exports (37 instruction builders + 60+ event/
+// struct types + 82 hex error constants) into the root barrel. Consumers
+// should go through `seal()` / `createSigilClient()` / `createVault()` for
+// instruction building, and `SIGIL_PROGRAM_ADDRESS` (re-exported from
+// `types.js` below) for the program ID. Account decoders stay public —
+// they're the supported way to parse vault state fetched from an RPC.
+export * from "./generated/accounts/index.js";
 
 // ─── Type Constants + Permissions ─────────────────────────────────────────────
 //
@@ -471,8 +479,48 @@ export {
   getPreset,
   listPresets,
   presetToCreateVaultFields,
+  // v0.9.0 A10: orthogonal SAFETY_PRESETS for timelock + cap defaults.
+  SAFETY_PRESETS,
+  applySafetyPreset,
+  requireResolvedSafetyPreset,
 } from "./presets.js";
-export type { VaultPreset, PresetName } from "./presets.js";
+export type {
+  VaultPreset,
+  PresetName,
+  SafetyPresetFields,
+  SafetyPresetName,
+} from "./presets.js";
+
+// ─── v0.9.0 helpers (A3, A4, A9) ────────────────────────────────────────────
+// Strict USD parser, policy-gated ATA builder, aggregate cap validator.
+export { parseUsd } from "./helpers/parse-usd.js";
+export {
+  initializeVaultAtas,
+  type InitializeVaultAtasParams,
+} from "./helpers/ata.js";
+export {
+  validateAgentCapAggregate,
+  type ValidateAgentCapAggregateParams,
+} from "./helpers/validate-cap-aggregate.js";
+
+// ─── v0.9.0 logger (A5) ─────────────────────────────────────────────────────
+// SigilLogger interface + NOOP_LOGGER default + createConsoleLogger opt-in.
+// setSigilModuleLogger / getSigilModuleLogger are for SDK internals; the
+// consumer-facing install point is SigilClient.create(config.logger).
+export {
+  NOOP_LOGGER,
+  createConsoleLogger,
+  resolveLogger,
+  setSigilModuleLogger,
+  getSigilModuleLogger,
+  type SigilLogger,
+} from "./logger.js";
+
+// ─── v0.9.0 genesis hash constants (A7) ─────────────────────────────────────
+export {
+  SOLANA_DEVNET_GENESIS_HASH,
+  SOLANA_MAINNET_GENESIS_HASH,
+} from "./seal.js";
 
 // ─── Owner Transaction ───────────────────────────────────────────────────────
 export { buildOwnerTransaction } from "./owner-transaction.js";
@@ -564,6 +612,10 @@ export type { ShieldStorage, SpendEntry, TxEntry } from "./core/index.js";
 // Internally the class is still called `SigilError`; the rename happens at
 // the public export boundary. Internal code in sdk/kit/src/ continues to
 // use `SigilError`. Targeted full rename for a follow-up cleanup PR.
+// v0.9.0 A12: the 49 `SIGIL_ERROR__*` code constants are no longer
+// re-exported from the root barrel — import them from the `./errors`
+// subpath: `import { SIGIL_ERROR__SDK__CAP_EXCEEDED } from "@usesigil/kit/errors"`.
+// Error classes + domain-union types stay at root for catch-block narrowing.
 export {
   SigilError as SigilKitError,
   SigilShieldError,
@@ -584,56 +636,6 @@ export {
   type SigilRpcErrorCode,
   type SigilProgramErrorCode,
   type SigilErrorContext,
-  // Code constants — all 47.
-  SIGIL_ERROR__SHIELD__POLICY_DENIED,
-  SIGIL_ERROR__SHIELD__CONFIG_INVALID,
-  SIGIL_ERROR__SHIELD__RATE_LIMIT_EXCEEDED,
-  SIGIL_ERROR__SHIELD__SESSION_BINDING,
-  SIGIL_ERROR__TEE__ATTESTATION_FAILED,
-  SIGIL_ERROR__TEE__CERT_CHAIN_INVALID,
-  SIGIL_ERROR__TEE__PCR_MISMATCH,
-  SIGIL_ERROR__COMPOSE__MISSING_PARAM,
-  SIGIL_ERROR__COMPOSE__INVALID_BIGINT,
-  SIGIL_ERROR__COMPOSE__UNSUPPORTED_ACTION,
-  SIGIL_ERROR__X402__HEADER_MALFORMED,
-  SIGIL_ERROR__X402__PAYMENT_FAILED,
-  SIGIL_ERROR__X402__UNSUPPORTED,
-  SIGIL_ERROR__X402__DESTINATION_BLOCKED,
-  SIGIL_ERROR__X402__REPLAY,
-  SIGIL_ERROR__SDK__INVALID_CONFIG,
-  SIGIL_ERROR__SDK__INVALID_PARAMS,
-  SIGIL_ERROR__SDK__INVALID_NETWORK,
-  SIGIL_ERROR__SDK__INVALID_AMOUNT,
-  SIGIL_ERROR__SDK__INVALID_CAPABILITY,
-  SIGIL_ERROR__SDK__INVALID_ACTION_TYPE,
-  SIGIL_ERROR__SDK__OWNER_AGENT_COLLISION,
-  SIGIL_ERROR__SDK__VAULT_NOT_FOUND,
-  SIGIL_ERROR__SDK__VAULT_INACTIVE,
-  SIGIL_ERROR__SDK__VAULT_SLOTS_EXHAUSTED,
-  SIGIL_ERROR__SDK__POLICY_NOT_FOUND,
-  SIGIL_ERROR__SDK__AGENT_NOT_REGISTERED,
-  SIGIL_ERROR__SDK__AGENT_PAUSED,
-  SIGIL_ERROR__SDK__AGENT_ZERO_CAPABILITY,
-  SIGIL_ERROR__SDK__SIGNER_INVALID,
-  SIGIL_ERROR__SDK__SIGNATURE_INVALID,
-  SIGIL_ERROR__SDK__SPL_TOKEN_OP_BLOCKED,
-  SIGIL_ERROR__SDK__PROTOCOL_NOT_ALLOWED,
-  SIGIL_ERROR__SDK__PROTOCOL_NOT_TARGETED,
-  SIGIL_ERROR__SDK__INSTRUCTION_COUNT,
-  SIGIL_ERROR__SDK__CAP_EXCEEDED,
-  SIGIL_ERROR__SDK__ATA_NON_CANONICAL,
-  SIGIL_ERROR__SDK__ALT_INTEGRITY,
-  SIGIL_ERROR__SDK__ALT_NOT_DEPLOYED,
-  SIGIL_ERROR__SDK__SEAL_FAILED,
-  SIGIL_ERROR__SDK__UNKNOWN,
-  SIGIL_ERROR__RPC__TX_FAILED,
-  SIGIL_ERROR__RPC__CONFIRMATION_TIMEOUT,
-  SIGIL_ERROR__RPC__SIMULATION_FAILED,
-  SIGIL_ERROR__RPC__DRAIN_DETECTED,
-  SIGIL_ERROR__RPC__TX_TOO_LARGE,
-  SIGIL_ERROR__RPC__RATE_LIMITED,
-  SIGIL_ERROR__RPC__INSTRUCTION_REQUIRED,
-  SIGIL_ERROR__PROGRAM__GENERIC,
 } from "./errors/index.js";
 
 /** Per-module discriminated union of x402 errors (viem ErrorType pattern). */
