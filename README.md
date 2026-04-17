@@ -80,36 +80,59 @@ All instructions succeed or all revert atomically. The agent's signing key is va
 | **PendingConstraintsUpdate** | `[b"pending_constraints", vault]`                  | Queued constraint changes with timelock                                 |
 | **AgentSpendOverlay**        | `[b"agent_spend", vault, shard_index]`             | Per-agent rolling 24h spend tracking (10 agent slots)                   |
 
-### On-Chain Instructions (26)
+### On-Chain Instructions (35)
 
-| Instruction                       | Signer | Description                                                 |
-| --------------------------------- | ------ | ----------------------------------------------------------- |
-| `initialize_vault`                | Owner  | Create vault, policy, tracker, and overlay PDAs             |
-| `deposit_funds`                   | Owner  | Transfer SPL tokens into vault                              |
-| `register_agent`                  | Owner  | Register agent with permission bitmask and spending limit   |
-| `update_policy`                   | Owner  | Modify policy (direct if no timelock)                       |
-| `update_agent_permissions`        | Owner  | Update agent permissions and spending limit                 |
-| `validate_and_authorize`          | Agent  | Check policy, collect fees, create session, delegate tokens |
-| `finalize_session`                | Agent  | Revoke delegation, close session PDA                        |
-| `revoke_agent`                    | Owner  | Kill switch — freeze vault                                  |
-| `reactivate_vault`                | Owner  | Unfreeze vault, optionally rotate agent key                 |
-| `withdraw_funds`                  | Owner  | Withdraw tokens to owner                                    |
-| `close_vault`                     | Owner  | Close all PDAs, reclaim rent                                |
-| `queue_policy_update`             | Owner  | Queue timelocked policy change                              |
-| `apply_pending_policy`            | Owner  | Apply queued change after timelock expires                  |
-| `cancel_pending_policy`           | Owner  | Cancel queued policy change                                 |
-| `agent_transfer`                  | Agent  | Transfer stablecoins to allowlisted destination             |
-| `sync_positions`                  | Owner  | Correct open position counter if out of sync                |
-| `create_escrow`                   | Agent  | Create cross-vault stablecoin escrow                        |
-| `settle_escrow`                   | Agent  | Settle escrow to destination vault                          |
-| `refund_escrow`                   | Agent  | Refund expired escrow to source vault                       |
-| `close_settled_escrow`            | Owner  | Close settled/refunded escrow PDA, reclaim rent             |
-| `create_instruction_constraints`  | Owner  | Create per-program instruction constraints                  |
-| `close_instruction_constraints`   | Owner  | Close instruction constraints PDA                           |
-| `update_instruction_constraints`  | Owner  | Update constraints (direct if no timelock)                  |
-| `queue_constraints_update`        | Owner  | Queue timelocked constraint change                          |
-| `apply_constraints_update`        | Owner  | Apply queued constraint change after timelock               |
-| `cancel_constraints_update`       | Owner  | Cancel queued constraint change                             |
+> Policy-level mutations are timelock-guarded (minimum 1800s). The "direct"
+> `update_policy`, `update_agent_permissions`, `update_instruction_constraints`,
+> and `close_instruction_constraints` handlers were removed — all such changes
+> now go through queue/apply/cancel flows for TOCTOU protection.
+
+| Instruction                               | Signer | Description                                                 |
+| ----------------------------------------- | ------ | ----------------------------------------------------------- |
+| **Vault Lifecycle**                       |        |                                                             |
+| `initialize_vault`                        | Owner  | Create vault, policy, tracker, overlay PDAs (mandatory timelock) |
+| `freeze_vault`                            | Owner  | Protective freeze — blocks agent execution, preserves agents |
+| `reactivate_vault` (resume)               | Owner  | Unfreeze vault, optionally add new agent                    |
+| `close_vault`                             | Owner  | Close all PDAs, reclaim rent. Requires zero open positions. |
+| `sync_positions`                          | Owner  | Correct open position counter drift                          |
+| **Fund Management**                       |        |                                                             |
+| `deposit_funds`                           | Owner  | Transfer SPL tokens into vault (SPL Token only, no Token-2022) |
+| `withdraw_funds`                          | Owner  | Withdraw tokens to owner                                    |
+| **Agent Execution**                       |        |                                                             |
+| `validate_and_authorize`                  | Agent  | Check policy + constraints, collect fees, create session, delegate tokens |
+| `finalize_session`                        | Agent  | Outcome-based spend measurement, revoke delegation, close session PDA |
+| `agent_transfer`                          | Agent  | Stablecoin transfer to allowlisted destination (bypasses DeFi sandwich) |
+| **Agent Management**                      |        |                                                             |
+| `register_agent` (addAgent)               | Owner  | Register agent with capability tier + spending limit (max 10 agents) |
+| `revoke_agent`                            | Owner  | Remove agent from vault                                     |
+| `pause_agent`                             | Owner  | Temporarily block agent without revoking                    |
+| `unpause_agent`                           | Owner  | Restore paused agent                                        |
+| `queue_agent_permissions_update`          | Owner  | Queue timelocked capability/limit change for agent          |
+| `apply_agent_permissions_update`          | Owner  | Apply queued agent permission change after timelock         |
+| `cancel_agent_permissions_update`         | Owner  | Cancel queued agent permission change                       |
+| **Policy**                                |        |                                                             |
+| `queue_policy_update`                     | Owner  | Queue timelocked policy change (min 1800s)                  |
+| `apply_pending_policy`                    | Owner  | Apply queued change after timelock expires                  |
+| `cancel_pending_policy`                   | Owner  | Cancel queued policy change                                 |
+| **Escrow**                                |        |                                                             |
+| `create_escrow`                           | Agent  | Cross-vault stablecoin escrow (max 30 days)                 |
+| `settle_escrow`                           | Agent  | Settle escrow to destination vault                          |
+| `refund_escrow`                           | Owner/Agent | Refund expired escrow to source vault                  |
+| `close_settled_escrow`                    | Owner  | Close settled/refunded escrow PDA, reclaim rent             |
+| **Instruction Constraints**               |        |                                                             |
+| `allocate_constraints_pda`                | Owner  | Allocate InstructionConstraints PDA (35,888 bytes)          |
+| `allocate_pending_constraints_pda`        | Owner  | Allocate PendingConstraintsUpdate PDA                       |
+| `extend_pda`                              | Owner  | Extend PDA in multiple transactions (large-account bootstrap) |
+| `create_instruction_constraints`          | Owner  | Populate constraints after allocation                       |
+| `queue_constraints_update`                | Owner  | Queue timelocked constraint change                          |
+| `apply_constraints_update`                | Owner  | Apply queued constraint change after timelock               |
+| `cancel_constraints_update`               | Owner  | Cancel queued constraint change                             |
+| `queue_close_constraints`                 | Owner  | Queue timelocked constraint deletion                        |
+| `apply_close_constraints`                 | Owner  | Apply close after timelock, close PDA                       |
+| `cancel_close_constraints`                | Owner  | Cancel queued close                                         |
+| **Post-Execution Assertions (Phase B)**   |        |                                                             |
+| `create_post_assertions`                  | Owner  | Create PostExecutionAssertions PDA (leverage, balance delta checks) |
+| `close_post_assertions`                   | Owner  | Remove post-execution assertions                            |
 
 ## Packages
 
@@ -192,8 +215,8 @@ cargo fmt --check --manifest-path programs/sigil/Cargo.toml
 ## Security
 
 - [Vulnerability Disclosure Policy](./SECURITY.md)
-- [Security Tools & Scanning](./docs/SECURITY-TOOLS.md)
-- [Published Audit Reports](./docs/audits/)
+- [Security Findings Log](./docs/SECURITY-FINDINGS-2026-04-07.md) — Phase 1.5 findings + closures
+- [Published audit reports](./SECURITY.md) — disclosure policy + public reports (when available)
 
 Raw scan output is stored as private CI artifacts (accessible to repo collaborators only). Published audit reports are added to `docs/audits/` after auditor release.
 

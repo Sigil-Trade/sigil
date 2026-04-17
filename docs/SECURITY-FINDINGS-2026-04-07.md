@@ -993,6 +993,11 @@ observable via `console.warn`.
 
 **Commit:** `3403518` `fix(dashboard): close RPC proxy HIGH findings (X-Real-IP + body DOS)`
 
+**Current location (post-refactor):** `getClientIp()` moved from inline in
+`route.ts:93-103` to `sigil-dashboard/src/lib/rate-limit.ts:162-169` and is
+imported by the route via `import { checkRateLimit, getClientIp } from "@/lib/rate-limit"`.
+The fix is intact — only the file location changed.
+
 `getClientIp()` now trusts ONLY `x-vercel-forwarded-for` (platform-set,
 stripped from incoming client traffic). When absent (non-Vercel deploy,
 dev, preview), all callers share a single `"global"` rate-limit bucket —

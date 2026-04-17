@@ -38,7 +38,8 @@ Save the returned ALT address.
 
 ### 1b. Extend with Sigil Shared Accounts
 
-The Sigil ALT stores 5 non-program accounts shared across composed transactions:
+The Sigil ALT stores 7 non-program accounts shared across composed transactions
+(updated 2026-03-24 to add treasury ATAs for fee collection):
 
 | # | Account | Devnet | Mainnet |
 |---|---------|--------|---------|
@@ -47,13 +48,19 @@ The Sigil ALT stores 5 non-program accounts shared across composed transactions:
 | 2 | Protocol Treasury | `ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT` | `ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT` |
 | 3 | Instructions Sysvar | `Sysvar1nstructions1111111111111111111111111` | `Sysvar1nstructions1111111111111111111111111` |
 | 4 | Clock Sysvar | `SysvarC1ock11111111111111111111111111111111` | `SysvarC1ock11111111111111111111111111111111` |
+| 5 | Treasury USDC ATA | `J2SCySRvXFFQc6DdbRqnnmEz7kmtEtpM2FP37fz9R4Vt` | _(pending mainnet deployment)_ |
+| 6 | Treasury USDT ATA | `81RyRPBpxR5QK6ZBtjNDBSknid1qMHsrCcWF6w5NHKD6` | _(pending mainnet deployment)_ |
+
+Source of truth: `sdk/kit/src/alt-config.ts` — `EXPECTED_ALT_CONTENTS_DEVNET` /
+`EXPECTED_ALT_CONTENTS_MAINNET` arrays. Any ALT-contents change must be
+reflected in that file so integrity verification passes.
 
 ```bash
 solana address-lookup-table extend <ALT_ADDRESS> \
   --keypair <authority-keypair> \
   --url <network> \
   --addresses \
-    <USDC_MINT>,<USDT_MINT>,<TREASURY>,Sysvar1nstructions1111111111111111111111111,SysvarC1ock11111111111111111111111111111111
+    <USDC_MINT>,<USDT_MINT>,<TREASURY>,Sysvar1nstructions1111111111111111111111111,SysvarC1ock11111111111111111111111111111111,<TREASURY_USDC_ATA>,<TREASURY_USDT_ATA>
 ```
 
 ### 1c. Wait for Finality
@@ -141,7 +148,7 @@ solana program deploy target/deploy/sigil.so --url devnet --keypair <deploy-auth
 ```
 
 ### 5b. Devnet ALT
-ALT deployed and populated with 5 shared accounts (USDC/USDT mints, protocol treasury, instruction sysvar, clock sysvar). Address stored in `sdk/kit/src/alt-config.ts` as `SIGIL_ALT_DEVNET`.
+ALT deployed and populated with 7 shared accounts (USDC/USDT mints, protocol treasury, instruction sysvar, clock sysvar, treasury USDC ATA, treasury USDT ATA). Address stored in `sdk/kit/src/alt-config.ts` as `SIGIL_ALT_DEVNET`.
 
 ### 5c. Treasury USDC ATA
 Protocol treasury requires a USDC ATA on devnet to receive protocol fees. Created via:

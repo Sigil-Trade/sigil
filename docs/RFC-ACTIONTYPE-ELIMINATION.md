@@ -1,8 +1,13 @@
 # RFC: ActionType Elimination
 
-> **Status:** APPROVED (council-reviewed, adversarially validated)
+> **Status:** IMPLEMENTED (2026-04-17 verification pass). The three design decisions — tri-state `is_spending`, 2-bit capability field, `leverage_bps` removal with post-execution assertions — all shipped in production code.
+>
+> **Migration shortcut:** The three-phase rollout described below (Phase 1 backward-compatible coexistence → Phase 2 deprecation → Phase 3 removal) was collapsed into a single breaking change. `validate_and_authorize` no longer takes ActionType; `permissions: u64` was replaced by `capability: u8` directly. No `validate_and_authorize_v2` shim exists. The `constraint_version` field (`state/constraints.rs:170`) is present but dormant — `ConstraintsMigrationRequired` error was never implemented because there was no v0 production data to migrate from. Phase B (post-execution assertions) is live: B1 absolute value, B2 delta via SessionAuthority snapshots, and B3 `CrossFieldLte` operator are all implemented (`state/post_assertions.rs`, `finalize_session.rs`).
+>
+> Original RFC follows for design context and audit record.
+>
 > **Author:** Kaleb Rupe
-> **Date:** 2026-04-11
+> **Date:** 2026-04-11 (design) — IMPLEMENTED
 > **Scope:** On-chain program upgrade + SDK + Dashboard
 > **Council review:** 3 questions × 7-round debates × 3 perspectives + 3 adversarial researchers
 > **Leverage research:** 4 parallel agents — Flash Trade byte layouts, 7-protocol survey, post-execution feasibility, cross-chain patterns

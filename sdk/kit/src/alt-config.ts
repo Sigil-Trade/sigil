@@ -79,10 +79,12 @@ export const EXPECTED_ALT_CONTENTS_DEVNET: Address[] = [
 /**
  * Expected contents of the mainnet Sigil ALT.
  * Uses mainnet mints; treasury is the same across networks.
- * TODO: Add TREASURY_USDC_ATA_MAINNET and TREASURY_USDT_ATA_MAINNET
- * after deploying and extending the mainnet ALT. Derive from:
+ *
+ * Pre-mainnet task: extend this array with TREASURY_USDC_ATA_MAINNET and
+ * TREASURY_USDT_ATA_MAINNET after deploying the mainnet ALT. Derive via:
  *   getAssociatedTokenAddress(USDC_MINT_MAINNET, PROTOCOL_TREASURY, true)
  *   getAssociatedTokenAddress(USDT_MINT_MAINNET, PROTOCOL_TREASURY, true)
+ * Tracked alongside mainnet deployment checklist (D3 — upgrade authority transfer).
  */
 export const EXPECTED_ALT_CONTENTS_MAINNET: Address[] = [
   USDC_MINT_MAINNET,

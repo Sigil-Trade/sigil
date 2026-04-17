@@ -26,7 +26,6 @@ import {
 import { TransactionExecutor } from "../../src/transaction-executor.js";
 import { getValidateAndAuthorizeInstructionAsync } from "../../src/generated/instructions/validateAndAuthorize.js";
 import { getFinalizeSessionInstructionAsync } from "../../src/generated/instructions/finalizeSession.js";
-// ActionType import removed — v6 elimination. Pass 0 as wire-compat placeholder.
 import { resolveVaultState } from "../../src/state-resolver.js";
 import { deriveAta } from "../../src/x402/transfer-builder.js";
 import {

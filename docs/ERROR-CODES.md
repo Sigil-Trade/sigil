@@ -1,6 +1,8 @@
-# Error Codes (6000-6071)
+# Error Codes (6000-6085)
 
-All 72 custom errors defined in `programs/sigil/src/errors.rs`. Use `require!(condition, SigilError::Name)`.
+All 85+ custom errors defined in `programs/sigil/src/errors.rs`. Use `require!(condition, SigilError::Name)`.
+
+> **Source of truth:** `programs/sigil/src/errors.rs` — Anchor assigns codes sequentially from 6000 based on enum position. Always verify against the actual enum before relying on a specific numeric code (there was a transitional period where code-to-position mapping drifted in older docs).
 
 | Code | Name | Category | Invoked In |
 |------|------|----------|------------|
@@ -76,6 +78,20 @@ All 72 custom errors defined in `programs/sigil/src/errors.rs`. Use `require!(co
 | 6069 | AgentNotPaused | Emergency | unpause_agent |
 | 6070 | UnauthorizedPostFinalizeInstruction | Validation | finalize_session |
 | 6071 | UnexpectedBalanceDecrease | Security | finalize_session |
+| 6072 | TimelockTooShort | Timelock | initialize_vault, queue_policy_update, apply_pending_policy (MIN_TIMELOCK_DURATION = 1800s) |
+| 6073 | PolicyVersionMismatch | TOCTOU | validate_and_authorize, agent_transfer (expected_policy_version check) |
+| 6074 | PendingAgentPermsExists | Multi-agent | queue_agent_permissions_update |
+| 6075 | PendingCloseConstraintsExists | Constraints | queue_close_constraints |
+| 6076 | ActiveSessionsExist | Vault state | close_vault (blocks close if any SessionAuthority PDA open) |
+| 6077 | PostAssertionFailed | Post-execution | finalize_session (Phase B assertion verification) |
+| 6078 | InvalidPostAssertionIndex | Post-execution | finalize_session (assertion entry index out of bounds) |
+| 6079 | UnauthorizedPreValidateInstruction | Validation | validate_and_authorize (non-infrastructure instruction before validate) |
+| 6080 | SnapshotNotCaptured | Post-execution | finalize_session (delta assertion missing snapshot) |
+| 6081 | ConstraintIndexOutOfBounds | Constraints | pack_entries, verify_against_entries_zc (zero-copy bounds) |
+| 6082 | InvalidConstraintOperator | Constraints | validate_entries (ConstraintOperator discriminant check) |
+| 6083 | ConstraintsVaultMismatch | Constraints | verify_against_entries_zc (zero-copy vault field mismatch) |
+| 6084 | ConstraintEntryCountExceeded | Constraints | pack_entries (> MAX_CONSTRAINT_ENTRIES=64) |
+| 6085 | BlockedSplOpcode | Security | validate_entries (Spl1 format blocks runtime-enforced SPL opcodes) |
 
 ## Changes from Previous (77 codes → 72 codes)
 

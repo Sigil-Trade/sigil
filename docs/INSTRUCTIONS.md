@@ -71,7 +71,7 @@ You are building Sigil, a Solana on-chain program that provides permission contr
 
 ### Fee Collection Rules
 
-21. **Fee calculation uses checked math with truncation toward zero.** The formula is `fee = amount.checked_mul(fee_bps as u64).ok_or(Overflow)?.checked_div(10_000).ok_or(Overflow)?`. This truncates fractional lamports toward zero (floor division), which is safe — the protocol never overcharges. Never use floating point. Never round up.
+21. **Fee calculation uses checked math with ceiling rounding.** Helper: `ceil_fee(amount, rate)` at `state/mod.rs:71`. Formula: `ceil((amount × rate) / FEE_RATE_DENOMINATOR)`. Implemented as `amount.checked_mul(rate)?.checked_add(FEE_RATE_DENOMINATOR - 1)?.checked_div(FEE_RATE_DENOMINATOR)?`. `FEE_RATE_DENOMINATOR = 1_000_000`. Rate is per-million units where `1_000_000 = 100%`, so `200 = 0.02%` (protocol fee), `500 = 0.05%` (max developer fee). Ceiling rounding guarantees a non-zero fee for any non-zero amount with non-zero rate — protocol cannot be dust-attacked by sub-threshold amounts. Never use floating point.
 
 22. **developer_fee_rate is capped at 500 (5 BPS = 0.05%).** The program must reject any `initialize_vault` or `update_policy` call that sets `developer_fee_rate > 500`. This is a hardcoded constant (`MAX_DEVELOPER_FEE_RATE`), not a configurable parameter. It protects users from predatory fee configurations and provides a clear guarantee.
 

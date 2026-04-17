@@ -5,9 +5,11 @@
 > control model, PDA derivation paths, error catalog, and trust assumptions.
 >
 > Program: `programs/sigil/` — Anchor 0.32.1, Rust 1.89.0
-> 29 instruction handlers, 9 PDA account types, 70 error codes, 31 events.
+> 36 instruction handlers, 12 PDA account types, 85 error codes, 38 events.
 >
-> Cross-reference: See `docs/ARCHITECTURE.md` for account model and `sdk/kit/src/agent-errors.ts` for error mappings.
+> Cross-reference: See `docs/ARCHITECTURE.md` for account model,
+> `docs/RFC-ACTIONTYPE-ELIMINATION.md` for the capability model migration,
+> and `sdk/kit/src/agent-errors.ts` for error mappings.
 
 ---
 
@@ -50,20 +52,22 @@ All instructions succeed or all revert atomically. Token delegation (SPL `approv
 The following properties must hold at all times:
 
 ### INV-1: Checked Arithmetic
-All arithmetic on `u64`/`u128`/`i128` uses `.checked_add()`, `.checked_sub()`, `.checked_mul()`, `.checked_div()`. Overflow returns `SigilError::Overflow` (error 6025). No raw `+`, `-`, `*`, `/` on numeric types.
+All arithmetic on `u64`/`u128`/`i128` uses `.checked_add()`, `.checked_sub()`, `.checked_mul()`, `.checked_div()`. Overflow returns `SigilError::Overflow` (error 6025). No raw `+`, `-`, `*`, `/` on numeric types. Source: `programs/sigil/src/errors.rs`.
 
 ### INV-2: Bounded Data Structures
 No unbounded `Vec<T>` in on-chain accounts. All vectors and arrays have compile-time maximums:
 - `protocols`: max 10 (`MAX_ALLOWED_PROTOCOLS`)
 - `allowed_destinations`: max 10 (`MAX_ALLOWED_DESTINATIONS`)
 - `agents`: max 10 (`MAX_AGENTS_PER_VAULT`)
-- `constraint_entries`: max 16, each with max 8 data constraints + 5 account constraints
+- `constraint_entries`: max 64 (`MAX_CONSTRAINT_ENTRIES`), each with max 8 data constraints + 5 account constraints. Source: `state/constraints.rs:7`.
 - `SpendTracker.buckets`: fixed 144-element array of `EpochBucket` (zero-copy, 10-minute epochs, 24h rolling window)
 - `SpendTracker.protocol_counters`: fixed 10-element array of `ProtocolSpendCounter`
-- `AgentSpendOverlay.entries`: fixed 10-element array of `AgentContributionEntry`, no shards
+- `AgentSpendOverlay.entries`: fixed 10-element array of `AgentContributionEntry` (24 hourly epochs per entry)
 
 ### INV-3: Owner-Only Admin
-Only the vault owner can: `update_policy`, `revoke_agent`, `withdraw_funds`, `close_vault`, `register_agent`, `reactivate_vault`, `queue_policy_update`, `apply_pending_policy`, `cancel_pending_policy`, `deposit_funds`, `sync_positions`, `update_agent_permissions`, `create_instruction_constraints`, `update_instruction_constraints`, `close_instruction_constraints`, `queue_constraints_update`, `apply_constraints_update`, `cancel_constraints_update`. Enforced by Anchor `has_one = owner` and PDA seed re-derivation.
+Only the vault owner can call: `deposit_funds`, `register_agent`, `revoke_agent`, `withdraw_funds`, `close_vault`, `reactivate_vault`, `queue_policy_update`, `apply_pending_policy`, `cancel_pending_policy`, `sync_positions`, `create_instruction_constraints`, `queue_constraints_update`, `apply_constraints_update`, `cancel_constraints_update`, `queue_close_constraints`, `apply_close_constraints`, `cancel_close_constraints`, `allocate_constraints_pda`, `allocate_pending_constraints_pda`, `extend_pda`, `create_post_assertions`, `close_post_assertions`, `freeze_vault`, `pause_agent`, `unpause_agent`, `queue_agent_permissions_update`, `apply_agent_permissions_update`, `cancel_agent_permissions_update`. Enforced by Anchor `has_one = owner` and PDA seed re-derivation.
+
+Source: `programs/sigil/src/lib.rs`.
 
 ### INV-4: Immutable Fee Destination
 `AgentVault.fee_destination` is written only in `initialize_vault` and never modified by any other instruction. This prevents a compromised owner key from redirecting developer fees.
@@ -77,11 +81,22 @@ Only the vault owner can: `update_policy`, `revoke_agent`, `withdraw_funds`, `cl
 ### INV-6: Spending Caps Are Aggregate-Only
 The `daily_spending_cap_usd` is an aggregate rolling 24-hour cap across all tokens — stablecoin amounts are treated as 1:1 USD (USDC/USDT amount / 10^6 = USD). No oracles. There are no per-token caps in V2 — all enforcement is done at the aggregate USD level using epoch-bucketed tracking.
 
-### INV-7: Multi-Agent Vaults with Permission Bitmasks
-`AgentVault.agents` stores up to 10 `AgentEntry` structs (pubkey + permissions bitmask + per-agent spending limit). `register_agent` fails with `MaxAgentsReached` (error 6046) if 10 agents are already registered, or `AgentAlreadyRegistered` (error 6014) if the same pubkey is already registered. Each agent has a 21-bit permission bitmask controlling which `ActionType` variants it can execute. Per-agent spending limits are tracked via `AgentSpendOverlay` zero-copy PDAs (10 agent slots, no shards).
+### INV-7: Multi-Agent Vaults with 2-Bit Capability Model
+`AgentVault.agents` stores up to 10 `AgentEntry` structs (pubkey + 1-byte capability + 8-byte spending_limit_usd + 1-byte paused + 7 reserved bytes = 49 bytes per entry). `register_agent` fails with `MaxAgentsReached` (error 6046) if 10 agents are already registered, or `AgentAlreadyRegistered` (error 6014) if the same pubkey is already registered.
 
-### INV-8: Timelocked Policy Changes
-When `PolicyConfig.timelock_duration > 0`, direct `update_policy` calls are blocked (`TimelockActive`, error 6027). Policy changes must go through `queue_policy_update` → (wait `timelock_duration` seconds) → `apply_pending_policy`. The owner can cancel at any time via `cancel_pending_policy`.
+Each agent has a 2-bit capability field:
+- `CAPABILITY_DISABLED (0)` — Agent entry exists but all actions blocked.
+- `CAPABILITY_OBSERVER (1)` — Non-spending actions only (amount == 0).
+- `CAPABILITY_OPERATOR (2)` — Full access including spending actions (amount > 0). Also `FULL_CAPABILITY`.
+
+The former 21-bit `permissions: u64` bitmask controlling `ActionType` variants has been replaced. The `ActionType` enum is entirely eliminated. Spending classification at runtime uses `amount > 0` in `validate_and_authorize`. The `ConstraintEntryZC.is_spending` field (1=Spending, 2=NonSpending) in the matched constraint entry is stored in the session and reported in events. Per-agent spending limits are tracked via `AgentSpendOverlay` zero-copy PDAs (10 agent slots, 24 hourly epochs, no shards).
+
+Source: `state/vault.rs:4-8` (capability constants), `state/mod.rs:31-32` (FULL_CAPABILITY), `state/mod.rs:255-259` (ActionType elimination note), `instructions/validate_and_authorize.rs:135` (is_spending = amount > 0), `docs/RFC-ACTIONTYPE-ELIMINATION.md`.
+
+### INV-8: Timelocked Policy Changes (Mandatory)
+The timelock is **mandatory** at vault creation. `initialize_vault` requires `timelock_duration >= MIN_TIMELOCK_DURATION` (1,800 seconds = 30 minutes), enforced with `SigilError::TimelockTooShort` (error 6072). There is no zero-timelock path. All policy, constraint, constraint-closure, and agent-permissions changes are queued (creating a pending PDA) and apply only after `timelock_duration` seconds elapse. The `queue_*` instructions enforce the 1,800-second minimum on any timelock update.
+
+Source: `state/mod.rs:62` (MIN_TIMELOCK_DURATION = 1800), `instructions/initialize_vault.rs:101` (require! enforcement), `instructions/queue_policy_update.rs:105` (queue path enforcement).
 
 ### INV-9: Outcome-Based Spending Enforcement
 Spending caps are enforced in `finalize_session` based on **actual stablecoin balance delta**, not declared intent. `validate_and_authorize` snapshots the vault's stablecoin balance before fees/DeFi execution. `finalize_session` measures the current balance and computes `actual_spend = total_decrease - fees_collected`. Only when `actual_spend > 0` are caps checked (daily rolling cap, per-agent cap, per-protocol cap, per-transaction max). This prevents agents from under-declaring amounts to bypass caps — the program measures reality, not promises. Standalone instructions (`agentTransfer`, `createEscrow`) retain inline cap checks since they move tokens directly.
@@ -92,25 +107,34 @@ Spending caps are enforced in `finalize_session` based on **actual stablecoin ba
 
 All PDAs use canonical bump (highest valid bump found by `findProgramAddressSync`). Bump is stored on-chain and re-verified via Anchor `seeds` + `bump` constraints.
 
-| Account | Seeds | Bump Storage |
-|---------|-------|-------------|
-| `AgentVault` | `[b"vault", owner.key(), vault_id.to_le_bytes()]` | `vault.bump` |
-| `PolicyConfig` | `[b"policy", vault.key()]` | `policy.bump` |
-| `SpendTracker` | `[b"tracker", vault.key()]` | `tracker.bump` |
-| `SessionAuthority` | `[b"session", vault.key(), agent.key()]` | `session.bump` |
-| `PendingPolicyUpdate` | `[b"pending_policy", vault.key()]` | `pending_policy.bump` |
-| `EscrowDeposit` | `[b"escrow", source_vault.key(), escrow_id.to_le_bytes()]` | `escrow.bump` |
-| `InstructionConstraints` | `[b"constraints", vault.key()]` | `constraints.bump` |
-| `PendingConstraintsUpdate` | `[b"pending_constraints", vault.key()]` | `pending_constraints.bump` |
-| `AgentSpendOverlay` | `[b"agent_spend", vault.key()]` | `overlay.bump` |
+| Account | Seeds | Bump Storage | Size (bytes) |
+|---------|-------|-------------|-------------|
+| `AgentVault` | `[b"vault", owner.key(), vault_id.to_le_bytes()]` | `vault.bump` | 635 |
+| `PolicyConfig` | `[b"policy", vault.key()]` | `policy.bump` | 826 |
+| `SpendTracker` | `[b"tracker", vault.key()]` | `tracker.bump` | 2,840 |
+| `SessionAuthority` | `[b"session", vault.key(), agent.key(), token_mint.as_ref()]` | `session.bump` | 339 |
+| `PendingPolicyUpdate` | `[b"pending_policy", vault.key()]` | `pending_policy.bump` | 845 |
+| `EscrowDeposit` | `[b"escrow", source_vault.key(), dest_vault.key(), escrow_id.to_le_bytes()]` | `escrow.bump` | 170 |
+| `InstructionConstraints` | `[b"constraints", vault.key()]` | `constraints.bump` | 35,888 |
+| `PendingConstraintsUpdate` | `[b"pending_constraints", vault.key()]` | `pending_constraints.bump` | 35,904 |
+| `AgentSpendOverlay` | `[b"agent_spend", vault.key(), &[0u8]]` | `overlay.bump` | 2,528 |
+| `PostExecutionAssertions` | `[b"post_assertions", vault.key()]` | `pea.bump` | 352 |
+| `PendingAgentPermissionsUpdate` | `[b"pending_agent_perms", vault.key(), agent.as_ref()]` | `pending.bump` | 105 |
+| `PendingCloseConstraints` | `[b"pending_close_constraints", vault.key()]` | `pcc.bump` | 57 |
+
+Sources: seeds verified in instruction handlers. Sizes from `pub const SIZE` in each state module.
 
 ### Session PDA Design
+Session seeds include vault, agent, and token_mint keys (4 seeds). The `init` constraint prevents double-authorization — only one session can exist per vault+agent+token_mint triple at a time.
 
-Session seeds include vault and agent keys. The `init` constraint on session creation prevents double-authorization. One session at a time per vault-agent pair.
+### EscrowDeposit PDA Design
+Escrow seeds include source vault, destination vault, and escrow_id (4 seeds). This scopes each escrow to its vault pair and prevents ID collisions across unrelated vaults.
+
+### PendingAgentPermissionsUpdate PDA Design
+The per-agent PDA (seeds include agent pubkey) allows concurrent pending updates for different agents in the same vault. Only one pending update per agent at a time (`PendingAgentPermsExists`, error 6074).
 
 ### Vault PDA Design
-
-Vault seeds include `vault_id` (a `u64`) to allow one owner to create multiple independent vaults, each with its own policy, tracker, and agent.
+Vault seeds include `vault_id` (a `u64`) to allow one owner to create multiple independent vaults, each with its own policy, tracker, and agent roster.
 
 ---
 
@@ -118,56 +142,80 @@ Vault seeds include `vault_id` (a `u64`) to allow one owner to create multiple i
 
 | Instruction | Required Signer | Additional Constraints |
 |-------------|----------------|----------------------|
-| `initialize_vault` | `owner` (payer) | PDA seeds enforce owner ownership. `fee_destination ≠ Pubkey::default()`. `developer_fee_rate ≤ 500`. Bounded vectors. |
+| `initialize_vault` | `owner` (payer) | PDA seeds enforce owner ownership. `fee_destination ≠ Pubkey::default()`. `developer_fee_rate ≤ 500`. `timelock_duration ≥ 1800`. Bounded vectors. |
 | `deposit_funds` | `owner` | `has_one = owner` on vault. Token transfer CPI from owner ATA to vault ATA. |
-| `register_agent` | `owner` | `has_one = owner`. `agent ≠ Pubkey::default()`. `agent ≠ owner`. Max 10 agents. `permissions` bitmask validated. |
-| `update_policy` | `owner` | `has_one = owner`. `vault.status ≠ Closed`. `policy.timelock_duration == 0`. Bounded vectors. `developer_fee_rate ≤ 500`. |
-| `validate_and_authorize` | `agent` | `vault.is_agent(agent)`. Agent permission bitmask checked for action type. Per-agent spending limit checked (if set). `vault.is_active()`. CPI guard rejects nested calls. Token is recognized stablecoin (USDC/USDT) or non-stablecoin with stablecoin output. Protocol allowed by policy (protocolMode). USD caps enforced. Leverage check. Position count check. Instruction scan verifies DeFi programs + blocks SPL Token transfers. Finalize guard verifies finalize_session follows. Session PDA `init` prevents double-auth. |
-| `finalize_session` | `payer` (any for expired) | Non-expired: `payer == session.agent`. `session_rent_recipient == session.agent`. Session closed (rent to agent). |
-| `revoke_agent` | `owner` | `has_one = owner`. `vault.status ≠ Closed`. Sets status to Frozen, clears agent key. |
-| `reactivate_vault` | `owner` | `has_one = owner`. `vault.status == Frozen` (else `VaultNotFrozen`). `vault.agent ≠ default` after update (else `NoAgentRegistered`). |
+| `register_agent` | `owner` | `has_one = owner`. `agent ≠ Pubkey::default()`. `agent ≠ owner`. Max 10 agents. `capability` must be 0, 1, or 2. |
+| `validate_and_authorize` | `agent` | `vault.is_agent(agent)`. Agent not paused. Capability sufficient (`amount > 0` requires OPERATOR). `expected_policy_version` matches. `vault.is_active()`. CPI guard. Protocol allowed. USD caps. Leverage check. Position count check. Instruction scan. Finalize guard. Session PDA `init` prevents double-auth. Generic constraint check if `has_constraints`. |
+| `finalize_session` | `payer` (any for expired) | Non-expired: `payer == session.agent`. Session closed (rent to agent). Post-assertion check if `has_post_assertions`. |
+| `revoke_agent` | `owner` | `has_one = owner`. `vault.status ≠ Closed`. Removes agent from Vec. Releases overlay slot. |
+| `reactivate_vault` | `owner` | `has_one = owner`. `vault.status == Frozen`. Optional new agent + capability. |
 | `withdraw_funds` | `owner` | `has_one = owner`. `vault.status ≠ Closed`. `amount ≤ vault_token_account.amount`. |
-| `close_vault` | `owner` | `has_one = owner`. Closes vault + policy + tracker PDAs. Rent to owner. |
-| `queue_policy_update` | `owner` | `has_one = owner`. `vault.status ≠ Closed`. `policy.timelock_duration > 0`. Bounded vectors. |
-| `apply_pending_policy` | `owner` | `has_one = owner`. `pending_policy.is_ready(now)` (timelock expired). Closes PendingPolicyUpdate PDA. |
+| `close_vault` | `owner` | `has_one = owner`. Active escrows == 0. Active sessions == 0. Instruction constraints closed. Pending policy resolved. Closes vault + policy + tracker + overlay PDAs. |
+| `queue_policy_update` | `owner` | `has_one = owner`. `vault.status ≠ Closed`. New `timelock_duration ≥ 1800` if changing. Bounded vectors. Creates PendingPolicyUpdate PDA. |
+| `apply_pending_policy` | `owner` | `has_one = owner`. `pending_policy.is_ready(now)`. Closes PendingPolicyUpdate PDA. Bumps `policy_version`. |
 | `cancel_pending_policy` | `owner` | `has_one = owner`. Closes PendingPolicyUpdate PDA. |
-| `agent_transfer` | `agent` | `vault.is_agent(agent)`. `vault.is_active()`. Stablecoin-only (USDC/USDT via is_stablecoin_mint check). Destination allowed. USD caps enforced. Fees deducted inline. Typed Mint account validation. |
-| `sync_positions` | `owner` | `has_one = owner`. Corrects open_positions counter after keeper-executed orders. |
-| `create_instruction_constraints` | `owner` | `has_one = owner`. Max 10 entries, each max 5 data constraints + 5 account constraints. Sets `policy.has_constraints = true`. |
-| `update_instruction_constraints` | `owner` | `has_one = owner`. `policy.timelock_duration == 0`. Replaces constraint entries. |
-| `close_instruction_constraints` | `owner` | `has_one = owner`. Closes PDA. Sets `policy.has_constraints = false`. |
-| `queue_constraints_update` | `owner` | `has_one = owner`. `policy.timelock_duration > 0`. Creates PendingConstraintsUpdate PDA. |
-| `apply_constraints_update` | `owner` | `has_one = owner`. Timelock expired. Merges entries. Closes pending PDA. |
+| `allocate_constraints_pda` | `owner` | `has_one = owner`. Allocates InstructionConstraints PDA at 10,240 bytes. Must be followed by `extend_pda` + `create_instruction_constraints`. |
+| `allocate_pending_constraints_pda` | `owner` | `has_one = owner`. Allocates PendingConstraintsUpdate PDA at 10,240 bytes. Must be followed by `extend_pda` + `queue_constraints_update`. |
+| `extend_pda` | `owner` | `has_one = owner`. Grows a program-owned PDA by up to 10,240 bytes per call to reach full SIZE. |
+| `create_instruction_constraints` | `owner` | `has_one = owner`. PDA pre-allocated at full SIZE. Max 64 entries. Validates discriminator anchor (A5 invariant), Bitmask non-zero (A3), is_spending 1 or 2. Sets `policy.has_constraints = true`. Bumps `policy_version`. |
+| `queue_constraints_update` | `owner` | `has_one = owner`. PDA pre-allocated. Creates PendingConstraintsUpdate PDA. |
+| `apply_constraints_update` | `owner` | `has_one = owner`. Timelock expired. Merges entries. Closes pending PDA. Bumps `policy_version`. |
 | `cancel_constraints_update` | `owner` | `has_one = owner`. Closes PendingConstraintsUpdate PDA. |
-| `update_agent_permissions` | `owner` | `has_one = owner`. Agent must exist in vault. Validates permissions bitmask. |
-| `create_escrow` | `agent` | `vault.is_agent(agent)`. Agent permission check (CreateEscrow bit). Spending caps + fees apply. Max duration 30 days. |
+| `queue_close_constraints` | `owner` | `has_one = owner`. Creates PendingCloseConstraints PDA. Fails if already queued (`PendingCloseConstraintsExists`). |
+| `apply_close_constraints` | `owner` | `has_one = owner`. Timelock expired. Closes InstructionConstraints PDA. Sets `policy.has_constraints = false`. Closes PendingCloseConstraints PDA. Bumps `policy_version`. |
+| `cancel_close_constraints` | `owner` | `has_one = owner`. Closes PendingCloseConstraints PDA. |
+| `create_post_assertions` | `owner` | `has_one = owner`. Max 4 assertion entries. Validates modes (0-3), operators (0-6), CrossFieldLte constraints. Sets `policy.has_post_assertions`. |
+| `close_post_assertions` | `owner` | `has_one = owner`. Closes PostExecutionAssertions PDA. Clears `policy.has_post_assertions`. |
+| `agent_transfer` | `agent` | `vault.is_agent(agent)`. Agent not paused. `vault.is_active()`. Stablecoin-only (USDC/USDT). Destination in allowed list. USD caps enforced. Fees deducted inline. `expected_policy_version` check. |
+| `queue_agent_permissions_update` | `owner` | `has_one = owner`. Agent must exist in vault. Creates PendingAgentPermissionsUpdate PDA (per-agent). Fails if already queued (`PendingAgentPermsExists`). |
+| `apply_agent_permissions_update` | `owner` | `has_one = owner`. Timelock expired. Applies new capability + spending limit. Closes PendingAgentPermissionsUpdate PDA. |
+| `cancel_agent_permissions_update` | `owner` | `has_one = owner`. Closes PendingAgentPermissionsUpdate PDA. |
+| `sync_positions` | `owner` | `has_one = owner`. Corrects `open_positions` counter after keeper-executed orders. |
+| `create_escrow` | `agent` | `vault.is_agent(agent)`. Agent not paused. OPERATOR capability (spending action). Spending caps + fees apply. Max duration 30 days. |
 | `settle_escrow` | `dest_owner/agent` | Escrow status == Active. Not expired. SHA-256 proof verified (if condition_hash set). |
-| `refund_escrow` | `source_owner` | Escrow status == Active. Expired (`now >= expires_at`). |
+| `refund_escrow` | `source_owner` | Escrow status == Active. Expired (`now >= expires_at`). Cap NOT reversed (prevents cap-washing). |
 | `close_settled_escrow` | `source_owner` | Escrow status == Settled or Refunded. Closes PDA, reclaims rent. |
+| `freeze_vault` | `owner` | `has_one = owner`. `vault.status ≠ Closed`. Sets status to Frozen. Preserves all agent entries (use `reactivate_vault` to unfreeze). Emits `VaultFrozen`. |
+| `pause_agent` | `owner` | `has_one = owner`. Agent must exist and not already be paused (`AgentAlreadyPaused`). Sets `agent.paused = true`. Emits `AgentPausedEvent`. |
+| `unpause_agent` | `owner` | `has_one = owner`. Agent must exist and be paused (`AgentNotPaused`). Sets `agent.paused = false`. Emits `AgentUnpausedEvent`. |
 
 ---
 
 ## 5. Error Code Catalog
 
-70 error codes (6000–6069) using Anchor's `#[error_code]`. See `docs/ERROR-CODES.md` for the full table with categories. Source of truth: `programs/sigil/src/errors.rs`.
+85 error codes (6000–6084) using Anchor's `#[error_code]`. See `docs/ERROR-CODES.md` for the full table with categories. Source of truth: `programs/sigil/src/errors.rs`.
 
-**Categories:** Vault state (7), Access control (2), Stablecoin (2), Policy (5), Spending (1), Session (2), Fee (3), Validation (6), Timelock (3), Security (5), Integration (4), Multi-agent (6), Escrow (6), Constraints (8), Arithmetic (1).
+**New categories beyond original 70 codes:**
+- Timelock (new): TimelockTooShort, PolicyVersionMismatch
+- Pending state (new): PendingAgentPermsExists, PendingCloseConstraintsExists, ActiveSessionsExist
+- Post-assertions (new): PostAssertionFailed, InvalidPostAssertionIndex, SnapshotNotCaptured, UnauthorizedPreValidateInstruction
+- Constraints (new): ConstraintIndexOutOfBounds, InvalidConstraintOperator, ConstraintsVaultMismatch, ConstraintEntryCountExceeded, BlockedSplOpcode
 
 ---
 
 ## 6. Event Catalog
 
-31 events using Anchor's `#[event]` attribute, emitted via `emit!()`. See `docs/PROJECT.md` for the full table with all field listings. Source of truth: `programs/sigil/src/events.rs`.
+38 events using Anchor's `#[event]` attribute, emitted via `emit!()`. Source of truth: `programs/sigil/src/events.rs`.
 
-**Core events:** VaultCreated, FundsDeposited, AgentRegistered, AgentSpendLimitChecked, PolicyUpdated, ActionAuthorized, SessionFinalized, DelegationRevoked, AgentRevoked, VaultReactivated, FundsWithdrawn, FeesCollected, VaultClosed, AgentTransferExecuted, PositionsSynced.
+**Core vault lifecycle:** VaultCreated, FundsDeposited, AgentRegistered, AgentSpendLimitChecked, ActionAuthorized, SessionFinalized, DelegationRevoked, AgentRevoked, VaultReactivated, FundsWithdrawn, FeesCollected, VaultClosed, AgentTransferExecuted, PositionsSynced.
 
-**Policy timelock events:** PolicyChangeQueued, PolicyChangeApplied, PolicyChangeCancelled.
+**Policy timelock:** PolicyChangeQueued, PolicyChangeApplied, PolicyChangeCancelled.
 
-**Multi-agent events:** AgentPermissionsUpdated.
+**Constraints lifecycle:** InstructionConstraintsCreated, ConstraintsChangeQueued, ConstraintsChangeApplied, ConstraintsChangeCancelled.
 
-**Constraints events:** InstructionConstraintsCreated, InstructionConstraintsUpdated, InstructionConstraintsClosed, ConstraintsChangeQueued, ConstraintsChangeApplied, ConstraintsChangeCancelled.
+**PDA lifecycle:** PdaAllocated, PdaExtended.
 
-**Escrow events:** EscrowCreated, EscrowSettled, EscrowRefunded.
+**Constraint closure:** CloseConstraintsQueued, CloseConstraintsApplied, CloseConstraintsCancelled.
+
+**Escrow:** EscrowCreated, EscrowSettled, EscrowRefunded.
+
+**Emergency response:** VaultFrozen, AgentPausedEvent, AgentUnpausedEvent.
+
+**Agent permissions (queued):** AgentPermissionsChangeQueued, AgentPermissionsChangeApplied, AgentPermissionsChangeCancelled.
+
+**Post-assertions:** PostAssertionsCreated, PostAssertionsClosed, PostAssertionChecked.
+
+**Removed events (no longer emitted):** PolicyUpdated (replaced by PolicyChangeApplied), AgentPermissionsUpdated (replaced by AgentPermissionsChangeApplied), InstructionConstraintsUpdated (replaced by ConstraintsChangeApplied), InstructionConstraintsClosed (replaced by CloseConstraintsApplied).
 
 ---
 
@@ -177,21 +225,26 @@ Vault seeds include `vault_id` (a `u64`) to allow one owner to create multiple i
 |----------|-------|-------------|
 | `MAX_ALLOWED_PROTOCOLS` | 10 | Maximum protocols in policy |
 | `MAX_ALLOWED_DESTINATIONS` | 10 | Maximum destinations for agent transfers |
+| `MAX_AGENTS_PER_VAULT` | 10 | Maximum agents per vault |
+| `MAX_CONSTRAINT_ENTRIES` | 64 | Maximum constraint entries in InstructionConstraints PDA. Source: `state/constraints.rs:7`. |
+| `MAX_OVERLAY_ENTRIES` | 10 | Agent slots in AgentSpendOverlay. Source: `state/agent_spend_overlay.rs:19`. |
+| `OVERLAY_NUM_EPOCHS` | 24 | Hourly epochs in per-agent overlay rolling window. Source: `state/agent_spend_overlay.rs:11`. |
 | `NUM_BUCKETS` | 144 | SpendTracker epoch bucket count |
 | `EPOCH_SECONDS` | 600 | SpendTracker epoch duration (10 minutes) |
 | `ROLLING_WINDOW_SECONDS` | 86,400 | 24-hour rolling window |
 | `SESSION_EXPIRY_SLOTS` | 20 | ~8 seconds at 400ms/slot |
-| `FEE_RATE_DENOMINATOR` | 1,000,000 | Fee rate divisor |
+| `MIN_TIMELOCK_DURATION` | 1,800 | Minimum timelock in seconds (30 min). Mandatory at vault creation. Source: `state/mod.rs:62`. |
+| `FEE_RATE_DENOMINATOR` | 1,000,000 | Fee divisor. `ceil_fee()` uses ceiling division: `ceil(amount * rate / 1_000_000)`. Source: `state/mod.rs:71-79`. |
 | `PROTOCOL_FEE_RATE` | 200 | 0.02% = 2 BPS (hardcoded) |
 | `MAX_DEVELOPER_FEE_RATE` | 500 | 0.05% = 5 BPS (maximum) |
 | `USD_DECIMALS` | 6 | USD uses 6 decimal places ($1 = 1,000,000) |
 | `USD_BASE` | 1,000,000 | 10^6 multiplier |
-| `MAX_AGENTS_PER_VAULT` | 10 | Maximum agents per vault |
-| `FULL_PERMISSIONS` | `(1u64 << 21) - 1` | All 21 permission bits set |
+| `FULL_CAPABILITY` | 2 | `CAPABILITY_OPERATOR` — full access. Source: `state/mod.rs:32`. |
+| `CAPABILITY_DISABLED` | 0 | Agent disabled. Source: `state/vault.rs:6`. |
+| `CAPABILITY_OBSERVER` | 1 | Non-spending actions only. Source: `state/vault.rs:7`. |
+| `CAPABILITY_OPERATOR` | 2 | Full access including spending. Source: `state/vault.rs:8`. |
 | `MAX_SLIPPAGE_BPS` | 5,000 | 50% hard cap on slippage tolerance |
 | `MAX_ESCROW_DURATION` | 2,592,000 | 30 days in seconds |
-| `AGENT_OVERLAY_ENTRIES_PER_SHARD` | 7 | Agents tracked per overlay shard |
-| `NUM_TREASURY_SHARDS` | 1 | Treasury shard count |
 | `USDC_MINT` | (feature-flagged) | Hardcoded USDC mint address (devnet/mainnet) |
 | `USDT_MINT` | (feature-flagged) | Hardcoded USDT mint address (devnet/mainnet) |
 | `JUPITER_PROGRAM` | (hardcoded) | Jupiter V6 program ID |
@@ -200,6 +253,8 @@ Vault seeds include `vault_id` (a `u64`) to allow one owner to create multiple i
 | `JUPITER_EARN_PROGRAM` | (hardcoded) | Jupiter Earn program ID |
 | `JUPITER_BORROW_PROGRAM` | (hardcoded) | Jupiter Borrow program ID |
 | `FINALIZE_SESSION_DISCRIMINATOR` | (computed) | 8-byte discriminator for finalize_session check |
+
+**Removed constants:** `FULL_PERMISSIONS` (`(1u64 << 21) - 1`) — eliminated with ActionType enum. `AGENT_OVERLAY_ENTRIES_PER_SHARD` — sharding removed; single overlay with 10 slots. `NUM_TREASURY_SHARDS` — no shards.
 
 ### Protocol Treasury
 
@@ -229,7 +284,7 @@ The client-side wrapper SDK is purely client-side and is intended for developmen
 
 ### 8.5 Session Window
 
-Sessions expire after 20 slots (~8 seconds). During this window, the agent has a token delegation (`approve`) on the vault's token account. A compromised agent could drain the delegated amount within this window. The delegation amount equals the authorized transaction amount (not the full vault balance).
+Sessions expire after 20 slots (~8 seconds). During this window, the agent has a token delegation (`approve`) on the vault's token account. A compromised agent could drain the delegated amount within this window. The delegation amount equals the authorized transaction amount minus fees (not the full vault balance).
 
 ### 8.6 Permissionless Session Cleanup
 
@@ -241,7 +296,7 @@ Expired sessions can be finalized by anyone (permissionless crank). This is by d
 
 ### 8.8 Epoch Bucket Granularity
 
-SpendTracker uses 144 epoch buckets (10 minutes each) for the 24-hour rolling window. The oldest bucket may include spend from up to 10 minutes before the window boundary, introducing a worst-case ~$0.000001 rounding error via proportional boundary correction. This is negligible for practical cap enforcement.
+SpendTracker uses 144 epoch buckets (10 minutes each) for the 24-hour rolling window. The oldest bucket may include spend from up to 10 minutes before the window boundary, introducing a worst-case ~$0.000001 rounding error via proportional boundary correction. This is negligible for practical cap enforcement. Per-protocol counters use a simpler window model that resets entirely at expiry — see §8.12.
 
 ### 8.9 No Reentrancy Risk
 
@@ -249,23 +304,38 @@ The program does not perform CPI calls to untrusted programs. All CPI calls are 
 
 ### 8.10 Account Size Limits
 
-`PolicyConfig` has a fixed maximum size of 817 bytes (10 protocols × 32 bytes + 10 destinations × 32 bytes + fields). `SpendTracker` is a zero-copy account of 2,840 bytes (144 epoch buckets + 10 protocol counters). `AgentSpendOverlay` is a zero-copy account of 2,528 bytes (10 agent slots, no shards). `InstructionConstraints` is up to 8,318 bytes (16 constraint entries). All sizes are within Solana's 10MB account limit.
+`PolicyConfig` is 826 bytes at max capacity (10 protocols, 10 destinations, 10 protocol caps — includes `policy_version: u64` and `has_post_assertions: u8` fields). Source: `state/policy.rs:104-124`.
+
+`SpendTracker` is a zero-copy account of 2,840 bytes (144 epoch buckets × 16 bytes + 10 protocol counters × 48 bytes + `last_write_epoch: i64` + bump + padding). Source: `state/tracker.rs:70`.
+
+`AgentSpendOverlay` is a zero-copy account of 2,528 bytes (10 × 232-byte contribution entries + 80-byte `lifetime_spend` + 80-byte `lifetime_tx_count`). Source: `state/agent_spend_overlay.rs:82-89`.
+
+`InstructionConstraints` is a zero-copy account of 35,888 bytes (64 entries × 560 bytes each). `PendingConstraintsUpdate` is 35,904 bytes. Both exceed Solana's 10,240-byte CPI allocation limit — they require pre-allocation via `allocate_constraints_pda`/`allocate_pending_constraints_pda` + multiple `extend_pda` calls. Source: `state/constraints.rs:177`, `state/pending_constraints.rs:42`.
+
+`AgentVault` is 635 bytes. `SessionAuthority` is 339 bytes (includes `assertion_snapshots: [[u8;32];4]` = 128 bytes and `snapshot_lens: [u8;4]` for Phase B post-assertion delta modes). `PostExecutionAssertions` is 352 bytes.
+
+All sizes are within Solana's 10MB account limit.
 
 ### 8.11 RPC Trust Boundary
 
 The SDK trusts RPC account data for client-side precheck. A malicious RPC can suppress precheck rejections but CANNOT bypass on-chain enforcement. The on-chain program independently validates all spending caps, permissions, and constraints regardless of what the client-side precheck reported. For production deployments: use multiple independent RPC providers and configure `stalenessWarnThresholdSec` in Shield options to detect stale state.
+
+### 8.12 Per-Protocol Cap Reset Behavior
+
+Per-protocol spend counters (`SpendTracker.protocol_counters`) use a simple 24-hour window that resets entirely on expiry, rather than the proportional boundary correction used by the global rolling cap. At the window boundary, accumulated per-protocol spend resets to 0, creating a brief window where a determined agent could exceed the per-protocol cap. The global rolling cap (`get_rolling_24h_usd`) provides the primary enforcement and is not subject to this reset behavior. Source: `state/tracker.rs:get_protocol_spend()` documentation.
 
 ---
 
 ## 9. Audit Scope
 
 ### In Scope
-- All 29 instruction handlers in `programs/sigil/src/instructions/`
-- All 9 PDA account types in `programs/sigil/src/state/`
+- All 36 instruction handlers in `programs/sigil/src/instructions/`
+- All 12 PDA account types in `programs/sigil/src/state/`
 - DeFi integration verifiers in `programs/sigil/src/instructions/integrations/`
-- Error definitions in `programs/sigil/src/errors.rs` (70 codes)
-- Event definitions in `programs/sigil/src/events.rs` (31 events)
+- Error definitions in `programs/sigil/src/errors.rs` (85 codes, 6000–6084)
+- Event definitions in `programs/sigil/src/events.rs` (38 events)
 - Program entrypoint in `programs/sigil/src/lib.rs`
+- Capability model design rationale: `docs/RFC-ACTIONTYPE-ELIMINATION.md`
 
 ### Out of Scope
 - Kit SDK (`sdk/kit/`) — off-chain code
@@ -458,3 +528,61 @@ The program uses a **blocklist** approach (block known-dangerous discriminators)
 2. **ConfidentialTransfer (disc 27):** Not blocked because it's not currently used with USDC/USDT. If stablecoin issuers adopt confidential transfers, the instruction scan should add disc 27 to the blocklist. The CPI balance audit already catches balance decreases.
 
 3. **Token-2022 mint spoofing:** An attacker cannot create a Token-2022 mint at the same address as USDC/USDT (pubkey collision is computationally infeasible). The hardcoded mint check is cryptographically secure.
+
+---
+
+## 12. Capability Model
+
+This section documents the 2-bit capability field that replaced the former 21-bit `ActionType` permission bitmask.
+
+### 12.1 Migration Summary
+
+The `permissions: u64` field on `AgentEntry` (a 21-bit `ActionType` bitmask) has been replaced by `capability: u8`. The `ActionType` enum has been eliminated entirely. The byte layout of `AgentEntry` is preserved at 49 bytes (32 pubkey + 1 capability + 8 spending_limit_usd + 1 paused + 7 reserved) to maintain `AgentVault` account stability on existing deployments.
+
+Source: `state/vault.rs:4-20`, `state/mod.rs:255-259`, `docs/RFC-ACTIONTYPE-ELIMINATION.md`.
+
+### 12.2 Capability Levels
+
+| Value | Constant | Meaning |
+|-------|----------|---------|
+| 0 | `CAPABILITY_DISABLED` | Entry exists but agent is fully blocked. |
+| 1 | `CAPABILITY_OBSERVER` | Non-spending actions only (`amount == 0`). |
+| 2 | `CAPABILITY_OPERATOR` | Full access (spending + non-spending). Also `FULL_CAPABILITY`. |
+| 3+ | Reserved | Rejected at registration and update time. |
+
+Source: `state/vault.rs:6-8`, `state/mod.rs:32`.
+
+### 12.3 Enforcement in validate_and_authorize
+
+Spending classification at runtime uses `is_spending = amount > 0`. The capability check immediately follows:
+
+```
+vault.has_capability(&agent, is_spending) → SigilError::InsufficientPermissions (error 6047) if fails
+```
+
+`has_capability` (`state/vault.rs:148-158`):
+- `is_spending == true`: requires `agent.capability >= CAPABILITY_OPERATOR (2)`
+- `is_spending == false`: requires `agent.capability >= CAPABILITY_OBSERVER (1)`
+- `CAPABILITY_DISABLED (0)` fails both checks unconditionally.
+
+### 12.4 ConstraintEntryZC.is_spending (Session Classification)
+
+`ConstraintEntryZC.is_spending` (1=Spending, 2=NonSpending, 0=Unset rejected at creation) is configured by the vault owner at constraint creation time. When a DeFi instruction matches a constraint entry, the matched entry's `is_spending` and `position_effect` values are stored in the `SessionAuthority` PDA and emitted in the `SessionFinalized` event. This replaces the old `ActionType.is_spending()` and `ActionType.position_effect()` methods.
+
+Constraint entries with `is_spending == 0` are rejected at creation time. Source: `state/constraints.rs:313-317`.
+
+### 12.5 Queued Agent Permissions Updates
+
+Agent capability changes are timelock-gated: `queue_agent_permissions_update` → (wait `timelock_duration` seconds) → `apply_agent_permissions_update`. The direct `update_agent_permissions` instruction has been deleted. A per-agent `PendingAgentPermissionsUpdate` PDA (105 bytes, seeds `[b"pending_agent_perms", vault, agent]`) tracks the queued change. Only one pending update per agent is allowed at a time (`PendingAgentPermsExists`, error 6074).
+
+Source: `state/pending_agent_perms.rs`, `instructions/queue_agent_permissions_update.rs`.
+
+### 12.6 Constraint-Level Spending Classification vs. Capability
+
+For auditors: spending classification has two distinct purposes in the program.
+
+1. **Capability gate** (validate_and_authorize): `is_spending = amount > 0`. This determines whether the agent needs OPERATOR capability. It runs before constraint matching.
+
+2. **Session/event classification** (ConstraintEntryZC.is_spending, matched entry): Stored in SessionAuthority and emitted in SessionFinalized. Enables off-chain analytics to distinguish spending vs non-spending actions. Does not affect on-chain cap enforcement (caps use the outcome-based balance delta from finalize_session).
+
+These two mechanisms are complementary, not redundant.
