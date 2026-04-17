@@ -55,6 +55,10 @@ describe("parseUsd — malformed input", () => {
     { input: "$1234567890123456", reason: "more than 15 whole digits" },
     { input: "", reason: "empty string" },
     { input: "$1.5.2", reason: "multiple decimal points not allowed" },
+    { input: "$00", reason: "leading-zero whole (H4 fix)" },
+    { input: "$01", reason: "leading-zero whole (H4 fix)" },
+    { input: "$007", reason: "leading-zero whole (H4 fix)" },
+    { input: "$0100.5", reason: "leading-zero whole (H4 fix)" },
   ];
 
   for (const { input, reason } of cases) {

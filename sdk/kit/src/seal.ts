@@ -89,6 +89,7 @@ import {
   SIGIL_ERROR__SDK__AGENT_ZERO_CAPABILITY,
   SIGIL_ERROR__SDK__INVALID_AMOUNT,
   SIGIL_ERROR__SDK__INVALID_CONFIG,
+  SIGIL_ERROR__SDK__INVALID_NETWORK,
   SIGIL_ERROR__SDK__INVALID_PARAMS,
   SIGIL_ERROR__SDK__SPL_TOKEN_OP_BLOCKED,
   SIGIL_ERROR__SDK__PROTOCOL_NOT_ALLOWED,
@@ -97,6 +98,7 @@ import {
   SIGIL_ERROR__SDK__CAP_EXCEEDED,
   SIGIL_ERROR__SDK__ATA_NON_CANONICAL,
   SIGIL_ERROR__SDK__SEAL_FAILED,
+  SIGIL_ERROR__RPC__TX_FAILED,
   SIGIL_ERROR__RPC__TX_TOO_LARGE,
 } from "./errors/codes.js";
 
@@ -930,6 +932,14 @@ export function createSigilClient(config: SigilClientConfig): SigilClientApi {
       { context: { field: "network", expected: "'devnet' | 'mainnet'" } },
     );
 
+  // C3 fix: install the consumer-supplied logger so leaf utilities (alt-
+  // loader, shield, dashboard, tee/verify, etc.) route their warnings
+  // through it. Without this call the factory silently drops
+  // `config.logger` while the deprecated class constructor installs it.
+  if (config.logger) {
+    setSigilModuleLogger(config.logger);
+  }
+
   // Private state captured in closure (replaces class private fields)
   const rpc = config.rpc;
   const vault = config.vault;
@@ -1068,18 +1078,23 @@ export const SOLANA_MAINNET_GENESIS_HASH =
   "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d";
 
 /**
- * Module-level cache of observed genesis hashes keyed by RPC "identity".
- * Keyed by a stable proxy — we use the RPC's `toString()` if it surfaces
- * a URL, or an inline-reference sentinel otherwise. The cache lasts for
- * the process lifetime; tests reset with `_resetGenesisHashCache()`.
+ * Module-level cache of observed genesis hashes, keyed by RPC object
+ * identity. Lives for the process lifetime; tests reset with
+ * `_resetGenesisHashCache()`. Kept as a `let` binding so the reset
+ * helper can swap in a fresh WeakMap — `Map`/`WeakMap` don't support
+ * per-instance clearing in ways that would let us keep a const.
+ *
+ * NOTE on caching key (M3 from review): WeakMap uses object identity,
+ * so two independent `rpc = await createRpc(url)` calls (e.g., module
+ * reload in tests) each pay one `getGenesisHash()` RTT before hitting
+ * the cache. Acceptable for long-lived agent processes; documented
+ * here so production readers know to hold a single rpc instance.
  */
-const _genesisHashCache = new WeakMap<object, string>();
+let _genesisHashCache = new WeakMap<object, string>();
 
 /** @internal — exposed for test resets only. */
 export function _resetGenesisHashCache(): void {
-  // WeakMap has no clear() — swap in a fresh instance by reassigning the
-  // `_genesisHashCache` module binding via this indirect helper.
-  // Internal cache is cleared by referencing fresh keys in assertGenesisHash.
+  _genesisHashCache = new WeakMap();
 }
 
 /**
@@ -1129,8 +1144,11 @@ async function assertGenesisHash(
     try {
       observed = await withRetry(() => rpc.getGenesisHash().send());
     } catch (err) {
+      // RPC transport failure (retries exhausted) → RPC domain error.
+      // This is different from C-review C1: the cluster mismatch below
+      // is an SDK-domain configuration error, not an RPC transport error.
       throw new SigilRpcError(
-        "SIGIL_ERROR__RPC__TX_FAILED" as never, // typed-string unions reuse codes.ts
+        SIGIL_ERROR__RPC__TX_FAILED,
         `getGenesisHash() failed after 3 attempts — cannot verify RPC cluster ` +
           `matches configured network "${network}". Set skipGenesisAssertion: true ` +
           `only if you are using a local validator (Surfpool/LiteSVM) whose ` +
@@ -1138,12 +1156,27 @@ async function assertGenesisHash(
         { cause: err, context: { network, attempts: 3 } as never },
       );
     }
+    // M7 fix: reject non-string / wrong-length responses — don't cache
+    // a malformed hash that would permanently poison subsequent .create()
+    // calls for this rpc instance.
+    if (typeof observed !== "string" || observed.length < 32) {
+      throw new SigilRpcError(
+        SIGIL_ERROR__RPC__TX_FAILED,
+        `getGenesisHash() returned a malformed response — expected a 44-char ` +
+          `base58 string, got ${observed === null ? "null" : typeof observed}. ` +
+          `Check that your RPC provider implements the getGenesisHash method.`,
+        { context: { network, observed: String(observed) } as never },
+      );
+    }
     _genesisHashCache.set(rpcKey, observed);
   }
 
   if (observed !== expected) {
-    throw new SigilRpcError(
-      "SIGIL_ERROR__RPC__TX_FAILED" as never,
+    // Cluster mismatch is an SDK-domain config error, not an RPC error.
+    // Consumers narrow on `SigilSdkDomainError + SIGIL_ERROR__SDK__INVALID_NETWORK`
+    // to catch this specifically.
+    throw new SigilSdkDomainError(
+      SIGIL_ERROR__SDK__INVALID_NETWORK,
       `Genesis hash mismatch — RPC is on a different cluster than configured. ` +
         `Expected "${network}" (${expected}) but RPC returned ${observed}. ` +
         `A common cause: the SDK was built with --features devnet but the RPC URL ` +
@@ -1197,11 +1230,16 @@ export class SigilClient {
    * otherwise identical.
    *
    * Sync construction remains functional for back-compat and for tests
-   * using stubbed RPCs that don't honor `getGenesisHash()`. When called,
-   * this constructor emits a warning via the injected logger so the
-   * bypass is observable.
+   * using stubbed RPCs that don't honor `getGenesisHash()`. When called
+   * directly (not via `.create()`), emits a warning via the injected
+   * logger so the bypass is observable.
+   *
+   * @param _skipDeprecationWarning — internal flag used by
+   *   `SigilClient.create()` to suppress the warning on the async path
+   *   (the async factory IS the recommended path; warning there would
+   *   be misleading log spam). Not part of the public API.
    */
-  constructor(config: SigilClientConfig) {
+  constructor(config: SigilClientConfig, _skipDeprecationWarning = false) {
     if (!config.rpc)
       throw new SigilSdkDomainError(
         SIGIL_ERROR__SDK__INVALID_CONFIG,
@@ -1241,13 +1279,16 @@ export class SigilClient {
     if (config.logger) {
       setSigilModuleLogger(config.logger);
     }
-    // Emit deprecation warning: sync construction bypasses genesis
-    // hash assertion. Prefer SigilClient.create().
-    getSigilModuleLogger().warn(
-      "[SigilClient] sync constructor bypasses genesis-hash assertion. " +
-        "Use `await SigilClient.create(config)` in production to verify the " +
-        "RPC matches the configured network.",
-    );
+    // Emit deprecation warning only when called directly (not via
+    // the `.create()` async factory, which already performs the
+    // genesis assertion the deprecation warning warns about).
+    if (!_skipDeprecationWarning) {
+      getSigilModuleLogger().warn(
+        "[SigilClient] sync constructor bypasses genesis-hash assertion. " +
+          "Use `await SigilClient.create(config)` in production to verify the " +
+          "RPC matches the configured network.",
+      );
+    }
   }
 
   /**
@@ -1289,17 +1330,11 @@ export class SigilClient {
       await assertGenesisHash(config.rpc, config.network);
     }
 
-    // Sync constructor also installs logger and emits its deprecation
-    // warning — suppress the deprecation warning for the .create() path
-    // since that path is the NEW way. We do this by calling setSigil-
-    // ModuleLogger with the config.logger BEFORE the constructor runs
-    // (already done above) and passing a marker through config. But
-    // simpler: directly construct without routing through the deprecated
-    // ctor's warning path. For A7 we accept the one-time warning cost on
-    // `.create()` — it documents that sync ctor exists and is NOT the
-    // recommended path; callers who see the warning once via create()
-    // will understand the intent.
-    return new SigilClient(config);
+    // Pass `_skipDeprecationWarning: true` so the sync constructor
+    // doesn't emit its "sync bypasses genesis assertion" warning — we
+    // just performed the assertion above, so the warning would be
+    // misleading log spam on every .create() call (C-review C4).
+    return new SigilClient(config, true);
   }
 
   /**

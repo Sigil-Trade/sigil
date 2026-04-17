@@ -215,9 +215,35 @@ describe("SigilClient.create — config.logger injection", () => {
       network: "devnet",
       logger,
     });
-    // Sync ctor runs inside .create() and emits its deprecation warning.
-    // That warning must flow through the injected logger.
-    expect(events.some((e) => e.includes("sync constructor bypasses"))).to.be
-      .true;
+    // .create() suppresses the sync-ctor deprecation warning (C-review C4)
+    // so there should be NO "sync constructor bypasses" warning on the
+    // async path. The presence of that warning would be misleading spam.
+    expect(
+      events.some((e) => e.includes("sync constructor bypasses")),
+      "create() must NOT emit the sync-ctor deprecation warning",
+    ).to.be.false;
+    // The logger was still installed — follow-up leaf warnings would
+    // flow through it. Nothing to assert here without triggering a warn.
+  });
+
+  it("direct new SigilClient(config) DOES emit the sync-ctor deprecation warning", () => {
+    const events: string[] = [];
+    setSigilModuleLogger({
+      debug: () => {},
+      info: () => {},
+      warn: (msg) => events.push(msg),
+      error: () => {},
+    });
+    const { rpc } = makeStubRpc(SOLANA_DEVNET_GENESIS_HASH);
+    new SigilClient({
+      rpc,
+      vault: VAULT,
+      agent: AGENT,
+      network: "devnet",
+    });
+    expect(
+      events.some((e) => e.includes("sync constructor bypasses")),
+      "direct sync ctor must emit deprecation warning",
+    ).to.be.true;
   });
 });

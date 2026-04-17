@@ -1,21 +1,28 @@
 /**
- * initializeVaultAtas — policy-gated ATA creation for a Sigil vault.
+ * initializeVaultAtas — build ATA `CreateIdempotent` instructions for a
+ * Sigil vault with a caller-asserted allowlist check.
  *
- * Rationale: D17 closes Pentester finding F8. Before this helper, a
- * consumer could call into generic ATA-creation code with *any* SPL mint,
- * and the vault would end up with token accounts for assets that the
- * on-chain policy never approved. That breaks the mental model — the
- * vault's footprint should match its policy's protocol and destination
- * surface, not a superset of it.
+ * **This is not a security gate.** The real security surface is the
+ * on-chain program: Sigil's `validate_and_authorize` path checks the
+ * vault-policy allowlist against every mint touched by the DeFi
+ * instructions that actually execute. `initializeVaultAtas` is a
+ * thin authoring helper — it builds correct ATA-program instructions
+ * AND performs a client-side sanity check that each `mint` is in the
+ * `allowedMints` list the caller already decided is valid.
  *
- * This helper enforces a hard client-side allowlist on which mints may
- * get ATAs: any mint not in `allowedMints` is rejected with
- * `SigilSdkDomainError(SIGIL_ERROR__SDK__SPL_TOKEN_OP_BLOCKED)` before
- * any network round-trip. The allowlist is caller-supplied so this helper
- * has no dependency on RPC-backed `PolicyConfig` reads — callers that
- * already have resolved policy can pass in `policy.allowedDestinations`
- * plus known stablecoin mints; callers building a vault for the first
- * time can pass in the mints they just wrote into the policy.
+ * The allowlist is **caller-supplied** on purpose: this helper has no
+ * RPC dependency, so it can be used inside `createVault` pipelines
+ * where the policy object is in memory but not yet on-chain. Callers
+ * who already have a resolved `PolicyConfig` should pass
+ * `allowedMints: policy.allowedDestinations` (plus any stablecoin mints
+ * the owner is wiring up). Callers who pass `allowedMints: mints`
+ * (tautological) get no safety value from this helper — they're only
+ * using it for the manual instruction-building.
+ *
+ * The historical naming tied this helper to "F8 closure"; that framing
+ * was misleading. F8 is closed by the on-chain protocol, not by this
+ * function. Keep the name for API stability; the docstring is the
+ * contract.
  *
  * ATA instructions are built manually (following the pattern in
  * `src/x402/transfer-builder.ts`) rather than via `@solana-program/token`
@@ -26,11 +33,16 @@
  * without throwing — a vault that needs no ATAs is a valid configuration.
  *
  * @example
+ *   // Typical usage: allowedMints derived from the vault's policy.
  *   const ixs = await initializeVaultAtas({
  *     vault: vaultPda,
  *     payer: ownerSigner.address,
  *     mints: [USDC_MINT_DEVNET, USDT_MINT_DEVNET],
- *     allowedMints: [USDC_MINT_DEVNET, USDT_MINT_DEVNET],
+ *     allowedMints: [
+ *       ...policy.allowedDestinations,
+ *       USDC_MINT_DEVNET,
+ *       USDT_MINT_DEVNET,
+ *     ],
  *   });
  *   // → [ createIdempotent(USDC ATA), createIdempotent(USDT ATA) ]
  */

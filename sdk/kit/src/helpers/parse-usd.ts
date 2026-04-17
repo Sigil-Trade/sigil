@@ -8,9 +8,11 @@
  * uses a strict regex and BigInt arithmetic only — no floating-point path
  * exists at any step.
  *
- * Grammar (regex `^\$(\d{1,15})(\.\d{1,6})?$`):
+ * Grammar (regex `^\$(0|[1-9]\d{0,14})(\.\d{1,6})?$`):
  *   - Leading literal `$` is required
- *   - 1–15 whole digits (15 digits × 10^6 = 10^21, well within BigInt range)
+ *   - Whole part: `0` alone, OR a 1-15 digit number with no leading zero
+ *     (`$01` / `$007` are rejected as typos; `$0` / `$0.5` are valid)
+ *   - 15 digits max × 10^6 scale = 10^21, well within BigInt range
  *   - Optional fractional part: `.` + 1–6 digits (matches USD_DECIMALS = 6)
  *   - No thousands separators, no exponent notation, no sign, no whitespace
  *
@@ -49,9 +51,11 @@ const USD_BASE = 1_000_000n; // 10 ** USD_DECIMALS
 
 // Strict format:
 //   - Leading literal `$`
-//   - 1–15 whole digits (capture group 1)
+//   - Whole part: either "0" OR a 1-15 digit number that doesn't start with 0.
+//     Prevents `$00`, `$01`, `$007` from silently parsing — those are almost
+//     always typos, never intentional amounts.
 //   - Optional `.` + 1–6 decimal digits (capture group 2 includes the dot)
-const USD_REGEX = /^\$(\d{1,15})(\.\d{1,6})?$/;
+const USD_REGEX = /^\$(0|[1-9]\d{0,14})(\.\d{1,6})?$/;
 
 export function parseUsd(input: string): bigint {
   if (typeof input !== "string") {
