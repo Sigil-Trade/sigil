@@ -18,10 +18,12 @@ overrides:
   brace-expansion: '>=2.0.3'
   serialize-javascript: '>=7.0.5'
   path-to-regexp: '>=8.4.0'
-  langsmith: '>=0.4.6'
+  langsmith: '>=0.5.19'
   jsondiffpatch: '>=0.7.2'
   ai: '>=5.0.52'
   yaml: '>=2.8.3'
+  hono: '>=4.12.14'
+  '@hono/node-server': '>=1.19.13'
 
 importers:
 
@@ -620,11 +622,11 @@ packages:
     resolution: {integrity: sha512-AaVNVLBl7N9Fun7QDnb00YDubAFjB9ICi5U6kmzcJSnnQTQGRMsuBBRupQV5ERdMMFt71zjSDym7Z+gLVe8m3A==}
     deprecated: Starting with v0.73.0, this package is bundled directly inside @hey-api/openapi-ts.
 
-  '@hono/node-server@1.19.11':
-    resolution: {integrity: sha512-dr8/3zEaB+p0D2n/IUrlPF1HZm586qgJNXK1a9fhg/PzdtkK7Ksd5l312tJX2yBuALqDYBlG20QEbayqPyxn+g==}
+  '@hono/node-server@1.19.14':
+    resolution: {integrity: sha512-GwtvgtXxnWsucXvbQXkRgqksiH2Qed37H9xHZocE5sA3N8O8O8/8FA3uclQXxXVzc9XBZuEOMK7+r02FmSpHtw==}
     engines: {node: '>=18.14.1'}
     peerDependencies:
-      hono: ^4
+      hono: '>=4.12.14'
 
   '@hpke/common@1.10.1':
     resolution: {integrity: sha512-moJwhmtLtuxiUzzNp1jpfBfx8yefKoO9D/RCR9dmwrnc7qjJqId1rEtQz+lSlU5cabX8daToMSx/7HayXOiaFw==}
@@ -1671,9 +1673,6 @@ packages:
   commander@2.20.3:
     resolution: {integrity: sha512-GpVkmM8vF2vQUkj2LvZmD35JxeJOLCwJ9cUkugyk2nuhbv3+mJvpLYYt+0+USMxE+oj+ey/lJEnhZw75x/OMcQ==}
 
-  console-table-printer@2.15.0:
-    resolution: {integrity: sha512-SrhBq4hYVjLCkBVOWaTzceJalvn5K1Zq5aQA6wXC/cYjI3frKWNPEMK3sZsJfNNQApvCQmgBcc13ZKmFj8qExw==}
-
   content-disposition@1.0.1:
     resolution: {integrity: sha512-oIXISMynqSqm241k6kcQ5UwttDILMK4BiurCfGEREw6+X9jkkpEe5T9FZaApyLGGOnFuyMWZpdolTXMtvEJ08Q==}
     engines: {node: '>=18'}
@@ -2043,8 +2042,8 @@ packages:
     resolution: {integrity: sha512-F/1DnUGPopORZi0ni+CvrCgHQ5FyEAHRLSApuYWMmrbSwoN2Mn/7k+Gl38gJnR7yyDZk6WLXwiGod1JOWNDKGw==}
     hasBin: true
 
-  hono@4.12.9:
-    resolution: {integrity: sha512-wy3T8Zm2bsEvxKZM5w21VdHDDcwVS1yUFFY6i8UobSsKfFceT7TOwhbhfKsDyx7tYQlmRM5FLpIuYvNFyjctiA==}
+  hono@4.12.14:
+    resolution: {integrity: sha512-am5zfg3yu6sqn5yjKBNqhnTX7Cv+m00ox+7jbaKkrLMRJ4rAdldd1xPd/JzbBWspqaQv6RSTrgFN95EsfhC+7w==}
     engines: {node: '>=16.9.0'}
 
   http-errors@2.0.1:
@@ -2203,8 +2202,8 @@ packages:
     resolution: {integrity: sha512-eTIzlVOSUR+JxdDFepEYcBMtZ9Qqdef+rnzWdRZuMbOywu5tO2w2N7rqjoANZ5k9vywhL6Br1VRjUIgTQx4E8w==}
     engines: {node: '>=6'}
 
-  langsmith@0.5.15:
-    resolution: {integrity: sha512-S20JnYmIgqGBjA/WEn12ZZJjqd03O5wd8K9KgGBvsKXQBn0bYuFrr1w20L37PpcMmX3/cftpgJ6g2y8KoEmHLw==}
+  langsmith@0.5.20:
+    resolution: {integrity: sha512-ULhLM8RswvQDXufLtNtvclHrWCBx8Cb5UPI6lAZC+8Dq59iHsVPz/3Ac9khWNm1VIvChRsuykixD/WrmzuuA3Q==}
     peerDependencies:
       '@opentelemetry/api': '*'
       '@opentelemetry/exporter-trace-otlp-proto': '*'
@@ -2667,9 +2666,6 @@ packages:
   signal-exit@4.1.0:
     resolution: {integrity: sha512-bzyZ1e88w9O1iNJbKnOlvYTrWPDl46O1bG0D3XInv+9tkPrxrN8jUUTiFlDkkmKWgn1M6CfIA13SuGqOa9Korw==}
     engines: {node: '>=14'}
-
-  simple-wcswidth@1.1.2:
-    resolution: {integrity: sha512-j7piyCjAeTDSjzTSQ7DokZtMNwNlEAyxqSZeCS+CXH7fJ4jx3FuJ/mTW3mE+6JLs4VJBbcll0Kjn+KXI5t21Iw==}
 
   sinon@21.0.2:
     resolution: {integrity: sha512-VHV4UaoxIe5jrMd89Y9duI76T5g3Lp+ET+ctLhLDaZtSznDPah1KKpRElbdBV4RwqWSw2vadFiVs9Del7MbVeQ==}
@@ -3537,9 +3533,9 @@ snapshots:
 
   '@hey-api/client-fetch@0.8.1': {}
 
-  '@hono/node-server@1.19.11(hono@4.12.9)':
+  '@hono/node-server@1.19.14(hono@4.12.14)':
     dependencies:
-      hono: 4.12.9
+      hono: 4.12.14
     optional: true
 
   '@hpke/common@1.10.1': {}
@@ -3580,7 +3576,7 @@ snapshots:
       camelcase: 6.3.0
       decamelize: 1.2.0
       js-tiktoken: 1.0.21
-      langsmith: 0.5.15(@opentelemetry/api@1.9.0)(openai@5.23.2(ws@8.20.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod@4.3.6))(ws@8.20.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))
+      langsmith: 0.5.20(@opentelemetry/api@1.9.0)(openai@5.23.2(ws@8.20.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod@4.3.6))(ws@8.20.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))
       mustache: 4.2.0
       p-queue: 6.6.2
       p-retry: 4.6.2
@@ -3612,7 +3608,7 @@ snapshots:
 
   '@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@3.25.76)':
     dependencies:
-      '@hono/node-server': 1.19.11(hono@4.12.9)
+      '@hono/node-server': 1.19.14(hono@4.12.14)
       ajv: 8.18.0
       ajv-formats: 3.0.1(ajv@8.18.0)
       content-type: 1.0.5
@@ -3622,7 +3618,7 @@ snapshots:
       eventsource-parser: 3.0.6
       express: 5.2.1
       express-rate-limit: 8.3.1(express@5.2.1)
-      hono: 4.12.9
+      hono: 4.12.14
       jose: 6.2.2
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
@@ -4828,10 +4824,6 @@ snapshots:
 
   commander@2.20.3: {}
 
-  console-table-printer@2.15.0:
-    dependencies:
-      simple-wcswidth: 1.1.2
-
   content-disposition@1.0.1:
     optional: true
 
@@ -5254,7 +5246,7 @@ snapshots:
 
   he@1.2.0: {}
 
-  hono@4.12.9:
+  hono@4.12.14:
     optional: true
 
   http-errors@2.0.1:
@@ -5429,13 +5421,9 @@ snapshots:
 
   kleur@3.0.3: {}
 
-  langsmith@0.5.15(@opentelemetry/api@1.9.0)(openai@5.23.2(ws@8.20.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod@4.3.6))(ws@8.20.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)):
+  langsmith@0.5.20(@opentelemetry/api@1.9.0)(openai@5.23.2(ws@8.20.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(zod@4.3.6))(ws@8.20.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)):
     dependencies:
-      '@types/uuid': 10.0.0
-      chalk: 5.6.2
-      console-table-printer: 2.15.0
       p-queue: 6.6.2
-      semver: 7.7.4
       uuid: 10.0.0
     optionalDependencies:
       '@opentelemetry/api': 1.9.0
@@ -5928,8 +5916,6 @@ snapshots:
     optional: true
 
   signal-exit@4.1.0: {}
-
-  simple-wcswidth@1.1.2: {}
 
   sinon@21.0.2:
     dependencies:

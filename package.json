@@ -70,10 +70,12 @@
       "brace-expansion": ">=2.0.3",
       "serialize-javascript": ">=7.0.5",
       "path-to-regexp": ">=8.4.0",
-      "langsmith": ">=0.4.6",
+      "langsmith": ">=0.5.19",
       "jsondiffpatch": ">=0.7.2",
       "ai": ">=5.0.52",
-      "yaml": ">=2.8.3"
+      "yaml": ">=2.8.3",
+      "hono": ">=4.12.14",
+      "@hono/node-server": ">=1.19.13"
     }
   },
   "workspaces": [
