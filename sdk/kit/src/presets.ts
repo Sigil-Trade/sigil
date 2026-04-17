@@ -1,12 +1,16 @@
 /**
- * Vault creation presets — safe defaults for common use cases.
+ * Vault creation presets — two axes:
  *
- * Presets provide the policy/permission fields for CreateVaultOptions.
+ *   1. VAULT_PRESETS: use-case templates (jupiter-swap-bot, perps-trader,
+ *      lending-optimizer, full-access). Policy + capability configuration
+ *      for a specific agent role. Used by the dashboard "Quick Setup" cards.
+ *
+ *   2. SAFETY_PRESETS: timelock + cap defaults (development, production).
+ *      Orthogonal to use-case — either preset can be composed with any
+ *      VAULT_PRESET to produce a complete CreateVaultOptions.
+ *
  * Runtime fields (rpc, network, owner, agent, feeDestination, vaultId)
- * are NOT included — the caller supplies those.
- *
- * Dashboard "Create Vault" wizard uses these as "Quick Setup" cards
- * before the custom configuration step.
+ * are NOT included in either axis — the caller supplies those.
  */
 
 import type { Address } from "./kit-adapter.js";
@@ -193,5 +197,108 @@ export function presetToCreateVaultFields(
     protocols: [...preset.protocols],
     maxLeverageBps: preset.maxLeverageBps,
     maxConcurrentPositions: preset.maxConcurrentPositions,
+  };
+}
+
+// ─── Safety Presets ─────────────────────────────────────────────────────────
+//
+// Orthogonal to VAULT_PRESETS. SAFETY_PRESETS configure timelock + caps,
+// not capability or protocol surface. Compose with a VAULT_PRESETS entry
+// (or custom fields) to produce a complete CreateVaultOptions.
+
+/**
+ * Fields a safety preset can fill. `null` means "caller must supply" —
+ * the production preset leaves caps explicit on purpose to force thought
+ * about the vault's blast radius before deployment.
+ */
+export interface SafetyPresetFields {
+  /** Timelock duration in seconds — owner-initiated policy changes wait this long. */
+  timelockDuration: number;
+  /** Per-agent spending cap in USD base units, or null if caller must supply. */
+  spendingLimitUsd: UsdBaseUnits | null;
+  /** Vault-wide daily cap in USD base units, or null if caller must supply. */
+  dailySpendingCapUsd: UsdBaseUnits | null;
+}
+
+/**
+ * SAFETY_PRESETS — timelock + cap bundles for common deployment contexts.
+ *
+ * `development` — short timelock and small caps for throwaway devnet
+ * vaults. The low caps keep a compromised agent's blast radius under
+ * $500/day, and the 30-min timelock keeps iteration fast. Suitable for
+ * CI runs and live testing.
+ *
+ * `production` — a 24-hour timelock to give operators time to notice
+ * and cancel unexpected policy changes. Caps are deliberately left as
+ * `null` — the consumer must supply them explicitly, which forces a
+ * conversation about the vault's blast radius before the first real tx.
+ */
+export const SAFETY_PRESETS = {
+  development: {
+    timelockDuration: 1800, // 30 min
+    spendingLimitUsd: usd(100_000_000n), // $100/agent
+    dailySpendingCapUsd: usd(500_000_000n), // $500/day vault-wide
+  },
+  production: {
+    timelockDuration: 86400, // 24 hours
+    spendingLimitUsd: null,
+    dailySpendingCapUsd: null,
+  },
+} as const satisfies Record<string, SafetyPresetFields>;
+
+export type SafetyPresetName = keyof typeof SAFETY_PRESETS;
+
+/**
+ * Compose a safety preset with explicit overrides. Overrides win on
+ * every field, so callers of `applySafetyPreset("production", { ... })`
+ * can narrow the `null` caps with real values while keeping the
+ * production timelock.
+ *
+ * @example
+ *   const fields = applySafetyPreset("production", {
+ *     spendingLimitUsd: usd(1_000_000_000n),
+ *     dailySpendingCapUsd: usd(10_000_000_000n),
+ *   });
+ *   // → { timelockDuration: 86400, spendingLimitUsd: 1_000_000_000n, dailySpendingCapUsd: 10_000_000_000n }
+ */
+export function applySafetyPreset(
+  name: SafetyPresetName,
+  overrides: Partial<SafetyPresetFields> = {},
+): SafetyPresetFields {
+  const preset = SAFETY_PRESETS[name];
+  return {
+    timelockDuration: overrides.timelockDuration ?? preset.timelockDuration,
+    spendingLimitUsd:
+      overrides.spendingLimitUsd ?? preset.spendingLimitUsd,
+    dailySpendingCapUsd:
+      overrides.dailySpendingCapUsd ?? preset.dailySpendingCapUsd,
+  };
+}
+
+/**
+ * Ergonomic guard: if a safety preset has `null` caps (production), the
+ * consumer must resolve them before calling createVault. This helper
+ * narrows the preset type to its fully-resolved form or throws.
+ */
+export function requireResolvedSafetyPreset(
+  preset: SafetyPresetFields,
+): {
+  timelockDuration: number;
+  spendingLimitUsd: UsdBaseUnits;
+  dailySpendingCapUsd: UsdBaseUnits;
+} {
+  if (preset.spendingLimitUsd === null || preset.dailySpendingCapUsd === null) {
+    throw new Error(
+      `Safety preset has unresolved caps. The "production" preset ` +
+        `intentionally leaves spendingLimitUsd and dailySpendingCapUsd ` +
+        `null so the caller supplies them explicitly. Pass both to ` +
+        `applySafetyPreset("production", { ... }) before using the ` +
+        `result with createVault.`,
+    );
+  }
+  return {
+    timelockDuration: preset.timelockDuration,
+    spendingLimitUsd: preset.spendingLimitUsd,
+    dailySpendingCapUsd: preset.dailySpendingCapUsd,
   };
 }

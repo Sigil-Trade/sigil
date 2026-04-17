@@ -8,6 +8,9 @@ import {
   getPreset,
   listPresets,
   presetToCreateVaultFields,
+  SAFETY_PRESETS,
+  applySafetyPreset,
+  requireResolvedSafetyPreset,
   type PresetName,
 } from "../src/presets.js";
 import {
@@ -205,5 +208,90 @@ describe("presetToCreateVaultFields()", () => {
     const fields2 = presetToCreateVaultFields("jupiter-swap-bot");
     expect(fields1.protocols).to.not.equal(fields2.protocols);
     expect(fields1.protocols).to.deep.equal(fields2.protocols);
+  });
+});
+
+// ─── SAFETY_PRESETS ─────────────────────────────────────────────────────────
+
+describe("SAFETY_PRESETS", () => {
+  it("development has 30-minute timelock", () => {
+    expect(SAFETY_PRESETS.development.timelockDuration).to.equal(1800);
+  });
+
+  it("development has $100 per-agent cap in base units", () => {
+    expect(SAFETY_PRESETS.development.spendingLimitUsd).to.equal(
+      100_000_000n,
+    );
+  });
+
+  it("development has $500 daily vault cap in base units", () => {
+    expect(SAFETY_PRESETS.development.dailySpendingCapUsd).to.equal(
+      500_000_000n,
+    );
+  });
+
+  it("production has 24-hour timelock", () => {
+    expect(SAFETY_PRESETS.production.timelockDuration).to.equal(86_400);
+  });
+
+  it("production leaves caps as null — caller must supply", () => {
+    expect(SAFETY_PRESETS.production.spendingLimitUsd).to.be.null;
+    expect(SAFETY_PRESETS.production.dailySpendingCapUsd).to.be.null;
+  });
+});
+
+describe("applySafetyPreset", () => {
+  it("returns preset unchanged when no overrides", () => {
+    const fields = applySafetyPreset("development");
+    expect(fields.timelockDuration).to.equal(1800);
+    expect(fields.spendingLimitUsd).to.equal(100_000_000n);
+    expect(fields.dailySpendingCapUsd).to.equal(500_000_000n);
+  });
+
+  it("overrides win on every field", () => {
+    const fields = applySafetyPreset("development", {
+      timelockDuration: 7200,
+      spendingLimitUsd: 50_000_000n as never,
+      dailySpendingCapUsd: 200_000_000n as never,
+    });
+    expect(fields.timelockDuration).to.equal(7200);
+    expect(fields.spendingLimitUsd).to.equal(50_000_000n);
+    expect(fields.dailySpendingCapUsd).to.equal(200_000_000n);
+  });
+
+  it("production caps can be filled via overrides", () => {
+    const fields = applySafetyPreset("production", {
+      spendingLimitUsd: 1_000_000_000n as never,
+      dailySpendingCapUsd: 10_000_000_000n as never,
+    });
+    expect(fields.timelockDuration).to.equal(86_400);
+    expect(fields.spendingLimitUsd).to.equal(1_000_000_000n);
+    expect(fields.dailySpendingCapUsd).to.equal(10_000_000_000n);
+  });
+});
+
+describe("requireResolvedSafetyPreset", () => {
+  it("returns a fully-resolved preset when all fields are set", () => {
+    const resolved = requireResolvedSafetyPreset(SAFETY_PRESETS.development);
+    expect(resolved.timelockDuration).to.equal(1800);
+    expect(resolved.spendingLimitUsd).to.equal(100_000_000n);
+    expect(resolved.dailySpendingCapUsd).to.equal(500_000_000n);
+  });
+
+  it("throws when production preset is used without caps filled in", () => {
+    expect(() =>
+      requireResolvedSafetyPreset(SAFETY_PRESETS.production),
+    ).to.throw(/unresolved caps/i);
+  });
+
+  it("narrows type after applySafetyPreset('production', { ... })", () => {
+    const filled = applySafetyPreset("production", {
+      spendingLimitUsd: 1n as never,
+      dailySpendingCapUsd: 1n as never,
+    });
+    const resolved = requireResolvedSafetyPreset(filled);
+    expect(resolved.timelockDuration).to.equal(86_400);
+    expect(resolved.spendingLimitUsd).to.equal(1n);
+    expect(resolved.dailySpendingCapUsd).to.equal(1n);
   });
 });
