@@ -177,28 +177,15 @@ describe("SigilClient.create — genesis hash assertion", () => {
     expect(counters.calls).to.equal(1); // still just once after second call
   });
 
-  it("sync constructor works but emits deprecation warning via logger", () => {
-    const warnings: string[] = [];
-    setSigilModuleLogger({
-      debug: () => {},
-      info: () => {},
-      warn: (msg) => warnings.push(msg),
-      error: () => {},
-    });
-    const { rpc, counters: _unused_counters } = makeStubRpc(
-      SOLANA_DEVNET_GENESIS_HASH,
-    );
-    const client = new SigilClient({
-      rpc,
-      vault: VAULT,
-      agent: AGENT,
-      network: "devnet",
-    });
-    expect(client).to.be.instanceOf(SigilClient);
+  it("sync constructor is private — direct `new SigilClient()` throws (Sprint 2 carryover)", () => {
+    const { rpc } = makeStubRpc(SOLANA_DEVNET_GENESIS_HASH);
+    // TS would reject this at compile time; cast through any to simulate
+    // a JS consumer that bypasses the TS visibility rule.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const Ctor = SigilClient as any;
     expect(
-      warnings.some((w) => w.includes("sync constructor bypasses")),
-      "expected deprecation warning",
-    ).to.be.true;
+      () => new Ctor({ rpc, vault: VAULT, agent: AGENT, network: "devnet" }),
+    ).to.throw(/direct construction is not allowed/);
   });
 });
 
@@ -236,24 +223,7 @@ describe("SigilClient.create — config.logger injection", () => {
     // flow through it. Nothing to assert here without triggering a warn.
   });
 
-  it("direct new SigilClient(config) DOES emit the sync-ctor deprecation warning", () => {
-    const events: string[] = [];
-    setSigilModuleLogger({
-      debug: () => {},
-      info: () => {},
-      warn: (msg) => events.push(msg),
-      error: () => {},
-    });
-    const { rpc } = makeStubRpc(SOLANA_DEVNET_GENESIS_HASH);
-    new SigilClient({
-      rpc,
-      vault: VAULT,
-      agent: AGENT,
-      network: "devnet",
-    });
-    expect(
-      events.some((e) => e.includes("sync constructor bypasses")),
-      "direct sync ctor must emit deprecation warning",
-    ).to.be.true;
-  });
+  // Sprint 2 carryover: the "DOES emit deprecation warning" test is no
+  // longer relevant — the sync ctor now throws rather than warns. The
+  // "is private — throws" assertion lives in the preceding describe block.
 });

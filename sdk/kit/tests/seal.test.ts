@@ -5,6 +5,7 @@ import {
   seal,
   replaceAgentAtas,
   SigilClient,
+  createSigilClient,
   type SealParams,
   type SigilClientConfig,
 } from "../src/seal.js";
@@ -414,7 +415,7 @@ function clientConfig(
 describe("SigilClient", () => {
   it("constructor stores vault, agent, network, and creates caches", () => {
     const agent = mockAgent();
-    const client = new SigilClient({
+    const client = createSigilClient({
       rpc: {} as any,
       vault: VAULT,
       agent,
@@ -430,7 +431,7 @@ describe("SigilClient", () => {
   });
 
   it("client.seal() produces SealResult via delegation to standalone seal()", async () => {
-    const client = new SigilClient(clientConfig());
+    const client = createSigilClient(clientConfig());
     const result = await client.seal([makeInstruction(JUPITER)], {
       tokenMint: USDC_DEVNET,
       amount: 100_000_000n,
@@ -460,7 +461,7 @@ describe("SigilClient", () => {
       }),
     );
 
-    const client = new SigilClient(clientConfig());
+    const client = createSigilClient(clientConfig());
     const clientResult = await client.seal([makeInstruction(JUPITER)], {
       tokenMint: USDC_DEVNET,
       amount: 0n,
@@ -475,7 +476,7 @@ describe("SigilClient", () => {
 
   it("executeAndConfirm() throws if agent signer lacks signTransactions", async () => {
     const brokenAgent = { address: AGENT_ADDR } as any; // no signTransactions
-    const client = new SigilClient(clientConfig({ agent: brokenAgent }));
+    const client = createSigilClient(clientConfig({ agent: brokenAgent }));
 
     try {
       await client.executeAndConfirm([makeInstruction(JUPITER)], {
@@ -492,7 +493,7 @@ describe("SigilClient", () => {
 
   it("constructor throws if rpc is missing", () => {
     try {
-      new SigilClient({
+      createSigilClient({
         rpc: undefined as any,
         vault: VAULT,
         agent: mockAgent(),
@@ -506,7 +507,7 @@ describe("SigilClient", () => {
 
   it("constructor throws if vault is missing", () => {
     try {
-      new SigilClient({
+      createSigilClient({
         rpc: {} as any,
         vault: undefined as any,
         agent: mockAgent(),
@@ -520,7 +521,7 @@ describe("SigilClient", () => {
 
   it("constructor throws if agent is missing", () => {
     try {
-      new SigilClient({
+      createSigilClient({
         rpc: {} as any,
         vault: VAULT,
         agent: undefined as any,
@@ -534,7 +535,7 @@ describe("SigilClient", () => {
 
   it("constructor throws if network is missing", () => {
     try {
-      new SigilClient({
+      createSigilClient({
         rpc: {} as any,
         vault: VAULT,
         agent: mockAgent(),

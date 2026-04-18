@@ -112,7 +112,11 @@ async function main() {
   //
   // SigilClient holds vault/agent/network context and manages caches.
   // executeAndConfirm() does: seal() → sign → send → confirm in one call.
-  const client = new SigilClient({
+  // Sprint 2 carryover: sync `new SigilClient(...)` is now a private
+  // constructor. Use the async factory `SigilClient.create()` which
+  // runs the genesis-hash assertion, or the lightweight
+  // `createSigilClient()` factory for test/mock harnesses.
+  const client = await SigilClient.create({
     rpc,
     vault: VAULT_ADDRESS,
     agent,

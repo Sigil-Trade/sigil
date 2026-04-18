@@ -1,12 +1,12 @@
 import { z } from "zod";
-import type { SigilClient } from "@usesigil/kit";
+import type { SigilClientApi } from "@usesigil/kit";
 import { formatUsd, toAgentError } from "@usesigil/kit";
 
 const schema = z
   .object({})
   .describe("No input required — queries the configured vault.");
 
-export function statusAction(client: SigilClient) {
+export function statusAction(client: SigilClientApi) {
   return {
     description:
       "Query Sigil vault budget and status. Returns global and agent spending limits, remaining budget, and vault health.",

@@ -67,10 +67,10 @@ import {
 
 // 1. Owner provisions the vault on devnet.
 const { vaultAddress } = await createAndSendVault({
-  rpc,                     // Rpc<SolanaRpcApi> from @solana/kit
+  rpc, // Rpc<SolanaRpcApi> from @solana/kit
   network: "devnet",
-  owner: ownerSigner,      // TransactionSigner
-  agent: agentSigner,      // TransactionSigner — separate key from owner
+  owner: ownerSigner, // TransactionSigner
+  agent: agentSigner, // TransactionSigner — separate key from owner
   // Required safety posture (v0.9.0 — no silent defaults):
   ...SAFETY_PRESETS.development,
 });
@@ -96,9 +96,196 @@ The agent's signing key is never enough on its own — Sigil's validate instruct
 
 ---
 
+## Sigil Facade (v0.11.0)
+
+The six-step quickstart above is fine, but v0.11.0 ships a single-call facade that wraps it. `Sigil.quickstart()` provisions the vault + returns a handle; `Sigil.fromVault()` binds a handle to an existing vault:
+
+```ts
+import {
+  Sigil,
+  SAFETY_PRESETS,
+  parseUsd,
+  USDC_MINT_DEVNET,
+} from "@usesigil/kit";
+
+// Provision + get a handle in one call.
+const { vault, funded, signatures } = await Sigil.quickstart({
+  rpc,
+  network: "devnet",
+  owner: ownerSigner,
+  agent: agentSigner,
+  ...SAFETY_PRESETS.development,
+  initialFundingUsd: parseUsd("$100"), // optional — zero or omit to skip
+  fundingMint: USDC_MINT_DEVNET, // defaults to USDC on target network
+});
+
+if (!funded.funded) {
+  console.warn("Vault live but not funded:", funded.reason, funded.error);
+}
+
+// Use the handle directly — no separate SigilClient / OwnerClient to wire.
+const result = await vault.execute(jupiterInstructions, {
+  tokenMint: USDC_MINT_DEVNET,
+  amount: parseUsd("$10"),
+});
+
+const overview = await vault.overview(); // owner-only — throws OWNER_REQUIRED without owner
+const budget = await vault.budget(); // cheapest read — agent-only works
+```
+
+Bind a handle to an existing vault:
+
+```ts
+const vault = await Sigil.fromVault({
+  rpc,
+  network: "devnet",
+  address: existingVaultAddress,
+  agent: agentSigner,
+  owner: ownerSigner, // optional — required by vault.freeze() / vault.fund() / vault.overview()
+});
+```
+
+Enumerate an owner's vaults:
+
+```ts
+const vaults = await Sigil.discoverVaults(rpc, ownerAddress, "devnet");
+```
+
+Presets are reachable through the same namespace:
+
+```ts
+Sigil.presets.safety.development; // { timelockDuration: 1800, ... }
+Sigil.presets.safety.production; // null caps — caller supplies
+Sigil.presets.vault["perps-trader"]; // VAULT_PRESETS entry
+Sigil.presets.applySafetyPreset("production", {
+  spendingLimitUsd,
+  dailySpendingCapUsd,
+});
+```
+
+`Sigil` is a frozen namespace object — no instance state, no `new Sigil()`, tree-shakeable.
+
+---
+
+## Lifecycle hooks (v0.11.0)
+
+`SealHooks` observe the transaction lifecycle. Pass hooks at client-config level (fire on every call) or per-call (compose on top of client-level hooks):
+
+```ts
+import type { SealHooks } from "@usesigil/kit";
+
+const hooks: SealHooks = {
+  onBeforeBuild(ctx, params) {
+    // Runs before any RPC. Return { skipSeal: true, reason } to abort cleanly.
+    if (isDryRunMode()) return { skipSeal: true, reason: "dry-run" };
+  },
+  onBeforeSign(ctx, tx) {
+    // Observational — fires after build + size check, before signing.
+  },
+  onAfterSend(ctx, signature) {
+    // Fires as soon as the signature is obtained — good for starting traces.
+    startTrace(ctx.correlationId, signature);
+  },
+  onFinalize(ctx, result) {
+    // Fires on the success path after confirmation.
+    closeTrace(ctx.correlationId, result.signature);
+  },
+  onError(ctx, err) {
+    // Fires in every failure path. Error is always rethrown after the hook.
+  },
+};
+
+// Register at client level — fire on every vault.execute()
+const vault = await Sigil.fromVault({ ..., hooks });
+
+// Or per-call — composes with client-level hooks (client runs first, then per-call)
+await vault.execute(instructions, { ..., hooks: perCallHooks });
+```
+
+**Semantics:**
+
+- **Observe-only by default.** A hook that throws is caught, logged via the injected logger, and swallowed. Hook exceptions never corrupt `seal()`'s atomic-transaction guarantee.
+- **`onBeforeBuild` is the only hook that may abort.** Returning `{ skipSeal: true, reason }` throws `SigilSdkDomainError(SIGIL_ERROR__SDK__HOOK_ABORTED)` before any RPC round-trip. Use for consent flows, feature flags, or dry-run mode.
+- **`ctx.correlationId`** is stable across every hook for a single seal invocation — use it to correlate `onBeforeBuild` → `onAfterSend` → `onFinalize` in distributed traces.
+
+---
+
+## Policy plugins (v0.11.0)
+
+`SigilPolicyPlugin` is the rejection surface — distinct from `SealHooks` which observe. Plugins run after state resolution; the first rejection short-circuits `seal()` with `SigilSdkDomainError(SIGIL_ERROR__SDK__PLUGIN_REJECTED)`:
+
+```ts
+import type { SigilPolicyPlugin } from "@usesigil/kit";
+
+const maxAmountPlugin: SigilPolicyPlugin = {
+  name: "max-amount-plugin",
+  check(ctx) {
+    if (ctx.amount > 1_000_000_000n) {
+      return {
+        allow: false,
+        reason: "Amount exceeds $1,000 safety threshold",
+      };
+    }
+    return { allow: true };
+  },
+};
+
+const vault = await Sigil.fromVault({ ..., plugins: [maxAmountPlugin] });
+// Calls to vault.execute() with amount > $1,000 throw PLUGIN_REJECTED.
+```
+
+Plugin semantics:
+
+- **Enforce, not observe.** First `{ allow: false }` short-circuits the chain — downstream plugins don't run.
+- **Async `check()` allowed** — plugins can call feature-flag servers or compliance APIs. A plugin that takes >1 second logs a warning (target is sub-second).
+- **Plugin throws become hard rejects.** The runner catches them and treats the message as the rejection reason.
+- **Plugin names must be unique per client.** Config validation at handle construction rejects duplicates.
+
+---
+
+## React hooks (v0.11.0, optional subpath)
+
+Install React + TanStack Query as optional peer dependencies, then import from `@usesigil/kit/react`:
+
+```bash
+npm install react @tanstack/react-query
+```
+
+```tsx
+import { useVaultBudget, useOverview, useExecute } from "@usesigil/kit/react";
+
+function VaultDashboard({ vault }: { vault: SigilVault }) {
+  const budget = useVaultBudget(vault); // { data, isLoading, error }
+  const overview = useOverview(vault); // owner-only
+  const execute = useExecute(vault); // { mutate, mutateAsync, isPending }
+
+  if (budget.isLoading) return <div>Loading...</div>;
+  return (
+    <button
+      onClick={() =>
+        execute.mutate({
+          instructions: myJupiterInstructions,
+          opts: { tokenMint: USDC_MINT_DEVNET, amount: parseUsd("$10") },
+        })
+      }
+      disabled={execute.isPending}
+    >
+      Swap $10
+    </button>
+  );
+}
+```
+
+Query keys are namespaced under `"sigil"` so they never collide with the consumer app's TanStack cache. Cache invalidation is the consumer's responsibility — wrap `useExecute` with a custom `onSuccess` that invalidates the specific vault keys you want refetched.
+
+Consumers who don't use React never install the peer deps and never see a warning.
+
+---
+
 ## Security boundary
 
 **What the on-chain program enforces:**
+
 - Daily and per-transaction spending caps (`dailySpendingCapUsd`, `maxTransactionSizeUsd`)
 - Per-agent spending limits (`spendingLimitUsd`)
 - Protocol allowlist / denylist (`protocols`, `protocolMode`)
@@ -107,6 +294,7 @@ The agent's signing key is never enough on its own — Sigil's validate instruct
 - Owner timelock on policy changes (`timelockDuration`)
 
 **What the SDK enforces pre-submission:**
+
 - Agent capability check (2-bit enum: Disabled / Observer / Operator)
 - Genesis-hash assertion on `SigilClient.create()` — prevents cluster mismatch
 - Strict USD parsing (`parseUsd`) — no `parseFloat` rounding
@@ -114,6 +302,7 @@ The agent's signing key is never enough on its own — Sigil's validate instruct
 - SPL token-operation detection — blocks non-whitelisted transfer patterns
 
 **What the SDK does NOT attempt:**
+
 - Key custody — bring your own `TransactionSigner` (Turnkey, Crossmint, Privy, or a local keypair)
 - Transaction simulation outcome trust — simulation is a hint, not a guarantee; on-chain enforcement is the source of truth
 - Replay prevention outside a session — agents must start a new session per transaction
@@ -147,11 +336,14 @@ import { createVault, VAULT_PRESETS, applySafetyPreset } from "@usesigil/kit";
 
 const presetFields = VAULT_PRESETS["jupiter-swap-bot"];
 const safety = applySafetyPreset("production", {
-  spendingLimitUsd: 1_000_000_000n,        // $1,000 per agent
-  dailySpendingCapUsd: 10_000_000_000n,    // $10,000 vault-wide
+  spendingLimitUsd: 1_000_000_000n, // $1,000 per agent
+  dailySpendingCapUsd: 10_000_000_000n, // $10,000 vault-wide
 });
 await createVault({
-  rpc, network: "mainnet", owner, agent,
+  rpc,
+  network: "mainnet",
+  owner,
+  agent,
   ...presetFields,
   ...safety,
 });
@@ -178,11 +370,13 @@ const { swapTransaction, addressLookupTableAddresses } = await jupiter.swapPost(
 const jupiterIxs: Instruction[] = decodeSwapInstructions(swapTransaction);
 
 const sealed = await seal({
-  rpc, network: "devnet",
-  vault, agent: agentSigner,
+  rpc,
+  network: "devnet",
+  vault,
+  agent: agentSigner,
   instructions: jupiterIxs,
   tokenMint: USDC_MINT_DEVNET,
-  amount: 10_000_000n,                               // $10 in base units
+  amount: 10_000_000n, // $10 in base units
   protocolAltAddresses: addressLookupTableAddresses, // rotate per-route
 });
 ```
@@ -193,14 +387,33 @@ Any Jupiter-supported protocol flows through the same path; Sigil treats the ins
 
 ## Subpath imports
 
-| Import | Use for |
-|--------|---------|
-| `@usesigil/kit` | Main API: `seal`, `SigilClient`, `createVault`, analytics, presets |
-| `@usesigil/kit/errors` | The 49 `SIGIL_ERROR__*` code constants for `catch`-block narrowing |
-| `@usesigil/kit/dashboard` | `OwnerClient` for vault management (reads + owner mutations) |
-| `@usesigil/kit/x402` | HTTP 402 Payment Required helpers (`shieldedFetch`, payment parsing) |
-| `@usesigil/kit/testing` | Mock RPCs and fixtures for unit tests |
-| `@usesigil/kit/testing/devnet` | Devnet test harness (browser-incompatible — Node only) |
+| Import                         | Use for                                                              |
+| ------------------------------ | -------------------------------------------------------------------- |
+| `@usesigil/kit`                | Main API: `seal`, `SigilClient`, `createVault`, analytics, presets   |
+| `@usesigil/kit/errors`         | The 52 `SIGIL_ERROR__*` code constants for `catch`-block narrowing   |
+| `@usesigil/kit/dashboard`      | `OwnerClient` for vault management (reads + owner mutations)         |
+| `@usesigil/kit/x402`           | HTTP 402 Payment Required helpers (`shieldedFetch`, payment parsing) |
+| `@usesigil/kit/react`          | TanStack Query hooks (v0.11.0) — optional React peer deps            |
+| `@usesigil/kit/testing`        | Mock RPCs and fixtures for unit tests                                |
+| `@usesigil/kit/testing/devnet` | Devnet test harness (browser-incompatible — Node only)               |
+
+---
+
+## v0.10 → v0.11 migration
+
+v0.11.0 is additive. Existing v0.10.0 consumers do not need to change code to upgrade — `Sigil` facade, `SigilVault`, hooks, plugins, and the `/react` subpath all sit on top of the existing `createSigilClient` / `createOwnerClient` / `seal()` primitives.
+
+Recommended migration path:
+
+1. Replace bespoke `createAndSendVault` + `SigilClient.create` + `createOwnerClient` plumbing with `Sigil.quickstart()` / `Sigil.fromVault()` for new call sites.
+2. Add lifecycle hooks to your existing `SigilClientConfig` or `SigilVault.execute()` options for telemetry.
+3. Move React consumers off ad-hoc `useEffect` loops onto `@usesigil/kit/react` hooks.
+
+v0.11.0 also added three new error codes to `/errors` (for a total of 52):
+
+- `SIGIL_ERROR__SDK__HOOK_ABORTED` — onBeforeBuild returned `{ skipSeal: true }`
+- `SIGIL_ERROR__SDK__PLUGIN_REJECTED` — a plugin returned `{ allow: false }`
+- `SIGIL_ERROR__SDK__OWNER_REQUIRED` — an owner-only SigilVault method was called on an agent-only handle
 
 ---
 

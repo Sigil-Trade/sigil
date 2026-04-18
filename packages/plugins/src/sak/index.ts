@@ -1,5 +1,5 @@
 import {
-  SigilClient,
+  createSigilClient,
   custodyAdapterToTransactionSigner,
   type CustodyAdapter,
 } from "@usesigil/kit";
@@ -24,7 +24,13 @@ export function createSigilPlugin(config: SigilSakConfig) {
     ? custodyAdapterToTransactionSigner(config.agent)
     : config.agent;
 
-  const client = new SigilClient({
+  // Sprint 2 (v0.11.0) privatized the sync `new SigilClient(...)` constructor.
+  // `createSigilClient()` is the lightweight factory that skips the async
+  // genesis-hash assertion — suitable here because `createSigilPlugin()` is
+  // a sync factory and SAK callers typically run their own network checks.
+  // Callers who want the genesis assertion can use `SigilClient.create()`
+  // directly and wire it into a different plugin shape.
+  const client = createSigilClient({
     rpc: config.rpc,
     vault: config.vault,
     agent: signer,

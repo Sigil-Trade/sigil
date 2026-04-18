@@ -50,6 +50,9 @@ import type {
   SIGIL_ERROR__SDK__ALT_INTEGRITY,
   SIGIL_ERROR__SDK__ALT_NOT_DEPLOYED,
   SIGIL_ERROR__SDK__SEAL_FAILED,
+  SIGIL_ERROR__SDK__HOOK_ABORTED,
+  SIGIL_ERROR__SDK__PLUGIN_REJECTED,
+  SIGIL_ERROR__SDK__OWNER_REQUIRED,
   SIGIL_ERROR__SDK__UNKNOWN,
   SIGIL_ERROR__RPC__TX_FAILED,
   SIGIL_ERROR__RPC__CONFIRMATION_TIMEOUT,
@@ -179,6 +182,19 @@ export interface SigilErrorContext {
   [SIGIL_ERROR__SDK__ALT_INTEGRITY]: { altAddress: Address; missing: number };
   [SIGIL_ERROR__SDK__ALT_NOT_DEPLOYED]: { network: string };
   [SIGIL_ERROR__SDK__SEAL_FAILED]: { vault: Address; agent: Address };
+  [SIGIL_ERROR__SDK__HOOK_ABORTED]: {
+    hook: string;
+    reason: string;
+    correlationId?: string;
+  };
+  [SIGIL_ERROR__SDK__PLUGIN_REJECTED]: {
+    plugin: string;
+    reason?: string;
+    code?: string;
+    correlationId?: string;
+    metadata?: Readonly<Record<string, unknown>>;
+  };
+  [SIGIL_ERROR__SDK__OWNER_REQUIRED]: { method: string; vault: Address };
   [SIGIL_ERROR__SDK__UNKNOWN]: { rawCode?: string; rawMessage?: string };
 
   [SIGIL_ERROR__RPC__TX_FAILED]: { signature?: string; logs?: string[] };

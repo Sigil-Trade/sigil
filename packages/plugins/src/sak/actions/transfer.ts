@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { SigilClient } from "@usesigil/kit";
+import type { SigilClientApi } from "@usesigil/kit";
 
 const schema = z.object({
   destination: z
@@ -15,7 +15,7 @@ const schema = z.object({
     .describe("Token mint address or symbol (defaults to USDC)"),
 });
 
-export function transferAction(_client: SigilClient) {
+export function transferAction(_client: SigilClientApi) {
   return {
     description:
       "Execute a Sigil-secured agent-to-agent stablecoin transfer. Enforces vault spending caps. " +

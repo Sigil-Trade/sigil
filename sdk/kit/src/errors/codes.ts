@@ -98,6 +98,15 @@ export const SIGIL_ERROR__SDK__ALT_NOT_DEPLOYED =
   "SIGIL_ERROR__SDK__ALT_NOT_DEPLOYED" as const;
 export const SIGIL_ERROR__SDK__SEAL_FAILED =
   "SIGIL_ERROR__SDK__SEAL_FAILED" as const;
+/** SealHooks#onBeforeBuild returned `{ skipSeal: true }` — clean abort before any RPC. */
+export const SIGIL_ERROR__SDK__HOOK_ABORTED =
+  "SIGIL_ERROR__SDK__HOOK_ABORTED" as const;
+/** A SigilPolicyPlugin rejected the operation via `{ allow: false, reason }`. */
+export const SIGIL_ERROR__SDK__PLUGIN_REJECTED =
+  "SIGIL_ERROR__SDK__PLUGIN_REJECTED" as const;
+/** A SigilVault method that requires an owner signer was called on an agent-only handle. */
+export const SIGIL_ERROR__SDK__OWNER_REQUIRED =
+  "SIGIL_ERROR__SDK__OWNER_REQUIRED" as const;
 export const SIGIL_ERROR__SDK__UNKNOWN = "SIGIL_ERROR__SDK__UNKNOWN" as const;
 
 // RPC domain — network + transaction lifecycle
@@ -162,6 +171,9 @@ export type SigilErrorCode =
   | typeof SIGIL_ERROR__SDK__ALT_INTEGRITY
   | typeof SIGIL_ERROR__SDK__ALT_NOT_DEPLOYED
   | typeof SIGIL_ERROR__SDK__SEAL_FAILED
+  | typeof SIGIL_ERROR__SDK__HOOK_ABORTED
+  | typeof SIGIL_ERROR__SDK__PLUGIN_REJECTED
+  | typeof SIGIL_ERROR__SDK__OWNER_REQUIRED
   | typeof SIGIL_ERROR__SDK__UNKNOWN
   | typeof SIGIL_ERROR__RPC__TX_FAILED
   | typeof SIGIL_ERROR__RPC__CONFIRMATION_TIMEOUT
@@ -222,6 +234,9 @@ export type SigilSdkErrorCode =
   | typeof SIGIL_ERROR__SDK__ALT_INTEGRITY
   | typeof SIGIL_ERROR__SDK__ALT_NOT_DEPLOYED
   | typeof SIGIL_ERROR__SDK__SEAL_FAILED
+  | typeof SIGIL_ERROR__SDK__HOOK_ABORTED
+  | typeof SIGIL_ERROR__SDK__PLUGIN_REJECTED
+  | typeof SIGIL_ERROR__SDK__OWNER_REQUIRED
   | typeof SIGIL_ERROR__SDK__UNKNOWN;
 
 export type SigilRpcErrorCode =
