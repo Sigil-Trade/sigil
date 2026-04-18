@@ -16,6 +16,14 @@ no-log-ix-name = []
 cpi = ["no-entrypoint"]
 default = []
 idl-build = ["anchor-lang/idl-build"]
+# Mirror sigil's network / certora feature surface so workspace-wide
+# `cargo build --features mainnet|devnet|certora` doesn't fail with "none
+# of the selected packages contains these features". All no-ops for the
+# mock program — it has no network-specific constants and is not proved.
+mainnet = []
+devnet = []
+devnet-testing = []
+certora = []
 
 [dependencies]
 anchor-lang = { version = "0.32.1" }
