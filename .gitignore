@@ -10,6 +10,9 @@ target/*
 !target/idl/
 !target/types/
 *.so
+# tests/fixtures/*.so are committed test-program binaries — see root
+# Cargo.toml and scripts/rebuild-mock-defi.sh for rebuild procedure.
+!tests/fixtures/*.so
 *.ll
 *.log
 *.tsbuildinfo

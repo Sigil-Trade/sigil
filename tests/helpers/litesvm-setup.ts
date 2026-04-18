@@ -51,6 +51,19 @@ const PROGRAM_ID = new PublicKey(
 );
 const PROGRAM_SO_PATH = path.resolve(__dirname, "../../target/deploy/sigil.so");
 
+// Mock DeFi test program — gives tests a real Anchor program with stable
+// 8-byte discriminators so InstructionConstraints can route open/close
+// position instructions to the correct position_effect. See
+// tests/helpers/mock-defi.ts for the program ID + discriminator constants.
+const MOCK_DEFI_PROGRAM_ID = new PublicKey(
+  "2pB26qKW73sToF7ETcdhXQTj8biYwAk9TCArVwgHBe24",
+);
+// Mock-defi's compiled .so is a committed fixture at tests/fixtures/.
+// Root Cargo.toml explains why it is not a workspace member (CI tool
+// compatibility — cargo-certora-sbf and feature-flag builds). Rebuild
+// procedure in scripts/rebuild-mock-defi.sh.
+const MOCK_DEFI_SO_PATH = path.resolve(__dirname, "../fixtures/mock-defi.so");
+
 // ─── Connection proxy ────────────────────────────────────────────────────────
 class LiteSVMConnectionProxy {
   constructor(private client: LiteSVM) {}
@@ -293,6 +306,7 @@ export function createTestEnv(): TestEnv {
   );
 
   svm.addProgramFromFile(PROGRAM_ID, PROGRAM_SO_PATH);
+  svm.addProgramFromFile(MOCK_DEFI_PROGRAM_ID, MOCK_DEFI_SO_PATH);
 
   const provider = new LiteSVMProvider(svm);
   anchor.setProvider(provider as unknown as Provider);

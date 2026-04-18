@@ -10,6 +10,10 @@ sigil = "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL"
 
 [programs.localnet]
 sigil = "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL"
+# mock_defi is not registered here because it is not built by anchor build.
+# Its compiled .so lives as a committed fixture (tests/fixtures/mock-defi.so)
+# and is loaded directly by LiteSVM via addProgramFromFile. See root
+# Cargo.toml for the CI-compatibility rationale.
 
 [registry]
 url = "https://api.apr.dev"

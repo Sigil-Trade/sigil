@@ -1,7 +1,23 @@
 [workspace]
-members = [
-    "programs/*"
-]
+members = ["programs/sigil"]
+# The mock-defi test-fixture Anchor program lives at
+# tests/fixtures/mock-defi-src/ — NOT under programs/. Two CI failure
+# modes drove it fully out of the main workspace AND out of Anchor's
+# programs/ scan path:
+#
+#   1. cargo-certora-sbf v0.3.5 refuses to proceed when it finds more
+#      than one cdylib in workspace metadata ("error: more than one
+#      cdylib package found"). It has no -p / --manifest-path hook in
+#      the Certora .conf schema.
+#   2. `anchor build --features mainnet|devnet|certora` recurses into
+#      every programs/* Cargo.toml it finds (workspace membership
+#      doesn't gate this), forcing mock-defi to mirror sigil's full
+#      feature surface. Moving the source out of programs/ removes it
+#      from Anchor's scan entirely.
+#
+# The compiled binary is committed at tests/fixtures/mock-defi.so and
+# loaded by tests/helpers/litesvm-setup.ts. Rebuild procedure:
+# scripts/rebuild-mock-defi.sh (rare — source is a 35-line no-op).
 resolver = "2"
 
 [workspace.package]
