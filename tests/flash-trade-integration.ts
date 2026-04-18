@@ -349,7 +349,7 @@ describe("flash-trade-integration", () => {
   // =========================================================================
   // Open leveraged long within policy
   // =========================================================================
-  describe.skip("open position -- requires constraint entries with position_effect", () => {
+  describe("open position", () => {
     it("opens a leveraged long position within policy limits", async () => {
       const amount = new BN(100_000_000); // 100 USDC collateral
 
@@ -380,8 +380,8 @@ describe("flash-trade-integration", () => {
   // =========================================================================
   // Exceeds max concurrent positions
   // =========================================================================
-  describe.skip("max concurrent positions -- requires constraint entries with position_effect", () => {
-    it("rejects when exceeding max concurrent positions", async () => {
+  describe("max concurrent positions", () => {
+    it.skip("rejects when exceeding max concurrent positions -- blocked: position counter updates require InstructionConstraints with matching discriminator for SystemProgram.transfer mock (see #209)", async () => {
       // Already have 1 open position from the first test.
       // Open 2 more (max is 3).
       await sendComposedAction(
@@ -436,8 +436,8 @@ describe("flash-trade-integration", () => {
   // =========================================================================
   // Close position decrements counter
   // =========================================================================
-  describe.skip("close position -- requires constraint entries with position_effect", () => {
-    it("closes a position and decrements open_positions counter", async () => {
+  describe("close position", () => {
+    it.skip("closes a position and decrements open_positions counter -- blocked: position counter updates require InstructionConstraints with matching discriminator for SystemProgram.transfer mock (see #209)", async () => {
       const vaultBefore = await program.account.agentVault.fetch(vaultPda);
       const positionsBefore = vaultBefore.openPositions;
 
@@ -459,7 +459,7 @@ describe("flash-trade-integration", () => {
   // =========================================================================
   // Increase position
   // =========================================================================
-  describe.skip("increase position -- requires constraint entries with position_effect", () => {
+  describe("increase position", () => {
     // P2 #25: Verify vault state changes on IncreasePosition (not just signature)
     it("increases a position within policy limits", async () => {
       const vaultBefore = await program.account.agentVault.fetch(vaultPda);
@@ -487,7 +487,7 @@ describe("flash-trade-integration", () => {
   // =========================================================================
   // Decrease position
   // =========================================================================
-  describe.skip("decrease position -- requires constraint entries with position_effect", () => {
+  describe("decrease position", () => {
     // P2 #25: Verify vault state changes on DecreasePosition
     it("decreases a position within policy limits", async () => {
       const vaultBefore = await program.account.agentVault.fetch(vaultPda);
@@ -628,7 +628,7 @@ describe("flash-trade-integration", () => {
   // =========================================================================
   // Position opening disabled
   // =========================================================================
-  describe.skip("position opening disabled -- requires constraint entries with position_effect", () => {
+  describe("position opening disabled", () => {
     const disabledVaultId = new BN(302);
     let disabledVault: PublicKey;
     let disabledPolicy: PublicKey;
@@ -771,7 +771,7 @@ describe("flash-trade-integration", () => {
       }
     });
 
-    it("rejects open position when can_open_positions is false", async () => {
+    it.skip("rejects open position when can_open_positions is false -- blocked: position counter updates require InstructionConstraints with matching discriminator for SystemProgram.transfer mock (see #209)", async () => {
       try {
         await sendComposedAction(
           disabledVault,
@@ -979,7 +979,7 @@ describe("flash-trade-integration", () => {
       expect(vault.openPositions).to.equal(1);
     });
 
-    it.skip("ClosePosition at daily cap succeeds — non-spending bypasses cap -- requires constraint entries with position_effect", async () => {
+    it.skip("ClosePosition at daily cap succeeds — non-spending bypasses cap -- blocked: position counter updates require InstructionConstraints with matching discriminator for SystemProgram.transfer mock (see #209)", async () => {
       // At 200/200 cap. Close with amount=0 (non-spending, risk-reducing).
       // Risk-reducing actions bypass cap entirely — no spending tracked.
       // P1 #14: Verify vault balance unchanged (cap-exempt = no balance movement)
@@ -1133,7 +1133,7 @@ describe("flash-trade-integration", () => {
     });
   });
 
-  describe.skip("limit orders -- requires constraint entries with position_effect", () => {
+  describe("limit orders", () => {
     it("should authorize placeLimitOrder with spending + position increment", async () => {
       const vaultBefore = await program.account.agentVault.fetch(vaultPda);
       const positionsBefore = vaultBefore.openPositions;
@@ -1156,7 +1156,7 @@ describe("flash-trade-integration", () => {
       expect(vaultAfter.openPositions).to.equal(positionsBefore + 1);
     });
 
-    it("should authorize cancelLimitOrder with position decrement", async () => {
+    it.skip("should authorize cancelLimitOrder with position decrement -- blocked: position counter updates require InstructionConstraints with matching discriminator for SystemProgram.transfer mock (see #209)", async () => {
       const vaultBefore = await program.account.agentVault.fetch(vaultPda);
       const positionsBefore = vaultBefore.openPositions;
       expect(positionsBefore).to.be.greaterThan(0);
@@ -1190,7 +1190,7 @@ describe("flash-trade-integration", () => {
     });
   });
 
-  describe.skip("swap-and-open / close-and-swap -- requires constraint entries with position_effect", () => {
+  describe("swap-and-open / close-and-swap", () => {
     it("should authorize swapAndOpenPosition with spending + position increment", async () => {
       const vaultBefore = await program.account.agentVault.fetch(vaultPda);
       const positionsBefore = vaultBefore.openPositions;
@@ -1213,7 +1213,7 @@ describe("flash-trade-integration", () => {
       expect(vaultAfter.openPositions).to.equal(positionsBefore + 1);
     });
 
-    it("should authorize closeAndSwapPosition with non-spending + position decrement", async () => {
+    it.skip("should authorize closeAndSwapPosition with non-spending + position decrement -- blocked: position counter updates require InstructionConstraints with matching discriminator for SystemProgram.transfer mock (see #209)", async () => {
       const vaultBefore = await program.account.agentVault.fetch(vaultPda);
       const positionsBefore = vaultBefore.openPositions;
       expect(positionsBefore).to.be.greaterThan(0);
@@ -1234,7 +1234,7 @@ describe("flash-trade-integration", () => {
     });
   });
 
-  describe.skip("sync_positions (owner-only) -- requires constraint entries with position_effect", () => {
+  describe("sync_positions (owner-only)", () => {
     it("should allow owner to sync positions", async () => {
       // Set up: ensure vault has some open positions
       await sendComposedAction(
@@ -1282,8 +1282,8 @@ describe("flash-trade-integration", () => {
     });
   });
 
-  describe.skip("position limit enforcement (new action types) -- requires constraint entries with position_effect", () => {
-    it("should reject placeLimitOrder at max positions", async () => {
+  describe("position limit enforcement (new action types)", () => {
+    it.skip("should reject placeLimitOrder at max positions -- blocked: position counter updates require InstructionConstraints with matching discriminator for SystemProgram.transfer mock (see #209)", async () => {
       // Sync to max positions - 1 to set up the test
       const policy = await program.account.policyConfig.fetch(policyPda);
       const maxPos = policy.maxConcurrentPositions;
@@ -1322,7 +1322,7 @@ describe("flash-trade-integration", () => {
         .rpc();
     });
 
-    it("should reject cancelLimitOrder with 0 positions", async () => {
+    it.skip("should reject cancelLimitOrder with 0 positions -- blocked: position counter updates require InstructionConstraints with matching discriminator for SystemProgram.transfer mock (see #209)", async () => {
       // Ensure 0 positions
       await program.methods
         .syncPositions(0)
@@ -1348,7 +1348,7 @@ describe("flash-trade-integration", () => {
       }
     });
 
-    it("should reject swapAndOpenPosition at max positions", async () => {
+    it.skip("should reject swapAndOpenPosition at max positions -- blocked: position counter updates require InstructionConstraints with matching discriminator for SystemProgram.transfer mock (see #209)", async () => {
       const policy = await program.account.policyConfig.fetch(policyPda);
       await program.methods
         .syncPositions(policy.maxConcurrentPositions)
