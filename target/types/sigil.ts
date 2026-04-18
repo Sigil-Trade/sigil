@@ -5842,7 +5842,7 @@ export type Sigil = {
     {
       "code": 6051,
       "name": "invalidConstraintConfig",
-      "msg": "Invalid constraint configuration"
+      "msg": "Invalid constraint configuration: bounds exceeded"
     },
     {
       "code": 6052,
@@ -5976,26 +5976,36 @@ export type Sigil = {
     },
     {
       "code": 6078,
+      "name": "unauthorizedPreValidateInstruction",
+      "msg": "Non-infrastructure instruction detected before validate_and_authorize"
+    },
+    {
+      "code": 6079,
+      "name": "snapshotNotCaptured",
+      "msg": "Delta assertion snapshot was not captured in validate_and_authorize"
+    },
+    {
+      "code": 6080,
       "name": "constraintIndexOutOfBounds",
       "msg": "Constraint entry index out of bounds for zero-copy array"
     },
     {
-      "code": 6079,
+      "code": 6081,
       "name": "invalidConstraintOperator",
       "msg": "Constraint operator value is not a valid ConstraintOperator discriminant"
     },
     {
-      "code": 6080,
+      "code": 6082,
       "name": "constraintsVaultMismatch",
       "msg": "Zero-copy constraints account has wrong vault"
     },
     {
-      "code": 6081,
+      "code": 6083,
       "name": "constraintEntryCountExceeded",
       "msg": "Cannot pack entries: entry count exceeds MAX_CONSTRAINT_ENTRIES"
     },
     {
-      "code": 6082,
+      "code": 6084,
       "name": "blockedSplOpcode",
       "msg": "SPL opcode is blocked at runtime and cannot be used in constraints"
     }
@@ -6732,6 +6742,11 @@ export type Sigil = {
           },
           {
             "name": "discriminatorFormat",
+            "docs": [
+              "Discriminator format for this entry's target program. Controls the",
+              "minimum byte length of the first DataConstraint (the A5 anchor).",
+              "Default: Anchor8 (0). Use Spl1 (1) for SPL Token / Token-2022."
+            ],
             "type": {
               "defined": {
                 "name": "discriminatorFormat"
@@ -6743,6 +6758,21 @@ export type Sigil = {
     },
     {
       "name": "constraintEntryZc",
+      "docs": [
+        "BYTE LAYOUT REGISTRY — Canonical assignment of padding bytes.",
+        "",
+        "Both `feat/multi-format-discriminator` and `feat/actiontype-elimination`",
+        "branches carve fields from the original 6-byte `_padding`. This registry",
+        "is the single source of truth. When merging, the layout MUST be:",
+        "",
+        "byte 554: discriminator_format  (this branch)",
+        "byte 555: is_spending           (actiontype-elimination branch)",
+        "byte 556: position_effect       (actiontype-elimination branch)",
+        "bytes 557-559: _padding[3]      (reserved for future use)",
+        "",
+        "Total: 32+320+200+1+1+1+1+1+3 = 560 (unchanged).",
+        "The branch that merges second MUST rebase and adjust its slot to match."
+      ],
       "serialization": "bytemuck",
       "repr": {
         "kind": "c"
@@ -6811,11 +6841,20 @@ export type Sigil = {
             "type": "u8"
           },
           {
+            "name": "discriminatorFormat",
+            "docs": [
+              "DiscriminatorFormat discriminant (0=Anchor8, 1=Spl1). Write-time only —",
+              "verify_data_constraints_zc() does not read this field at runtime.",
+              "Zero-initialized on existing V1 PDAs → 0 → Anchor8 (backward compatible)."
+            ],
+            "type": "u8"
+          },
+          {
             "name": "padding",
             "type": {
               "array": [
                 "u8",
-                4
+                3
               ]
             }
           }
@@ -6862,9 +6901,11 @@ export type Sigil = {
           },
           {
             "name": "discriminatorFormats",
-            "type": {
-              "vec": "u8"
-            }
+            "docs": [
+              "Per-entry discriminator format (0=Anchor8, 1=Spl1) from the applied entries.",
+              "Emitted at apply time so monitors see the active format when it takes effect."
+            ],
+            "type": "bytes"
           },
           {
             "name": "appliedAt",
@@ -6896,9 +6937,11 @@ export type Sigil = {
           },
           {
             "name": "discriminatorFormats",
-            "type": {
-              "vec": "u8"
-            }
+            "docs": [
+              "Per-entry discriminator format (0=Anchor8, 1=Spl1).",
+              "Enables off-chain monitors to detect format changes/downgrades."
+            ],
+            "type": "bytes"
           },
           {
             "name": "executesAt",
@@ -6989,6 +7032,28 @@ export type Sigil = {
           {
             "name": "timestamp",
             "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "discriminatorFormat",
+      "docs": [
+        "Discriminator format for the first DataConstraint in a ConstraintEntry.",
+        "Controls the minimum byte length required for the instruction discriminator",
+        "anchor (A5 invariant). Different Solana programs use different discriminator",
+        "widths — Anchor uses 8-byte SHA-256 prefixes, SPL Token uses 1-byte enum",
+        "indices. The format is checked at constraint creation time only; runtime",
+        "verification in verify_data_constraints_zc() uses value_len directly."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "anchor8"
+          },
+          {
+            "name": "spl1"
           }
         ]
       }
@@ -7379,9 +7444,11 @@ export type Sigil = {
           },
           {
             "name": "discriminatorFormats",
-            "type": {
-              "vec": "u8"
-            }
+            "docs": [
+              "Per-entry discriminator format (0=Anchor8, 1=Spl1).",
+              "Enables off-chain monitors to detect format changes/downgrades."
+            ],
+            "type": "bytes"
           },
           {
             "name": "timestamp",
@@ -8042,6 +8109,27 @@ export type Sigil = {
           {
             "name": "assertionMode",
             "type": "u8"
+          },
+          {
+            "name": "crossFieldOffsetB",
+            "docs": [
+              "Phase B3: second field offset for CrossFieldLte (0 if unused)"
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "crossFieldMultiplierBps",
+            "docs": [
+              "Phase B3: multiplier in BPS for CrossFieldLte (0 if unused)"
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "crossFieldFlags",
+            "docs": [
+              "Phase B3: flags byte — bit 0 = enable CrossFieldLte (0 if unused)"
+            ],
+            "type": "u8"
           }
         ]
       }
@@ -8118,25 +8206,52 @@ export type Sigil = {
               "Assertion mode:",
               "0 = Absolute: check current value against expected_value",
               "1 = MaxDecrease: check (snapshot - current) ≤ expected_value (Phase B2)",
+              "NOTE: If value increases (current > snapshot), check ALWAYS PASSES (saturating sub = 0).",
+              "For bidirectional protection, pair with MaxIncrease or use NoChange.",
               "2 = MaxIncrease: check (current - snapshot) ≤ expected_value (Phase B2)",
-              "3 = NoChange: check current == snapshot (Phase B2)"
+              "NOTE: If value decreases, check ALWAYS PASSES.",
+              "3 = NoChange: check current == snapshot — byte-for-byte equality (Phase B2)"
             ],
             "type": "u8"
           },
           {
-            "name": "padding",
+            "name": "crossFieldOffsetB",
             "docs": [
-              "Padding to align to 8 bytes. Total: 32 + 2 + 1 + 1 + 32 + 1 + 7 = 76",
-              "Future: 4 bytes for cross-field offset_b (Phase B3 CrossFieldLte)",
-              "Future: 2 bytes for cross-field multiplier (Phase B3)",
-              "Future: 1 byte for cross-field flags"
+              "Phase B3: Second field offset for CrossFieldLte (little-endian u16).",
+              "When cross_field_flags & 0x01: read field_B at offset_b (value_len bytes) from same target.",
+              "Check: field_A × 10000 ≤ multiplier_bps × field_B (using u128 arithmetic).",
+              "Stored as [u8; 2] for zero-copy Pod alignment compatibility."
             ],
             "type": {
               "array": [
                 "u8",
-                7
+                2
               ]
             }
+          },
+          {
+            "name": "crossFieldMultiplierBps",
+            "docs": [
+              "Phase B3: Multiplier in basis points for CrossFieldLte (little-endian u32).",
+              "10000 = 1.0x, 100000 = 10x, 5000000 = 500x.",
+              "Must be > 0 when cross_field_flags is enabled.",
+              "Stored as [u8; 4] for zero-copy Pod alignment compatibility."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                4
+              ]
+            }
+          },
+          {
+            "name": "crossFieldFlags",
+            "docs": [
+              "Phase B3: Flags byte. Bit 0 = enable CrossFieldLte.",
+              "When enabled, assertion_mode MUST be 0 (Absolute).",
+              "Unknown bits (1-7) must be 0."
+            ],
+            "type": "u8"
           }
         ]
       }
@@ -8408,6 +8523,39 @@ export type Sigil = {
               "Bump seed for PDA"
             ],
             "type": "u8"
+          },
+          {
+            "name": "assertionSnapshots",
+            "docs": [
+              "Phase B2: Snapshots of target account bytes captured in validate_and_authorize",
+              "before DeFi instruction executes. Index i corresponds to PostAssertionEntry i.",
+              "Used by delta assertion modes (1=MaxDecrease, 2=MaxIncrease, 3=NoChange)."
+            ],
+            "type": {
+              "array": [
+                {
+                  "array": [
+                    "u8",
+                    32
+                  ]
+                },
+                4
+              ]
+            }
+          },
+          {
+            "name": "snapshotLens",
+            "docs": [
+              "Phase B2: Actual value_len captured for each snapshot.",
+              "0 = no snapshot captured (mode 0 entries). Non-zero = snapshot was captured.",
+              "finalize_session cross-checks snapshot_lens[i] == entry.value_len."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                4
+              ]
+            }
           }
         ]
       }
@@ -8666,20 +8814,6 @@ export type Sigil = {
           },
           {
             "name": "closed"
-          }
-        ]
-      }
-    },
-    {
-      "name": "discriminatorFormat",
-      "type": {
-        "kind": "enum",
-        "variants": [
-          {
-            "name": "anchor8"
-          },
-          {
-            "name": "spl1"
           }
         ]
       }
