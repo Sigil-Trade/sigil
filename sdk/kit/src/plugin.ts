@@ -12,11 +12,15 @@
  *   1. Parameter validation (basic shape checks)
  *   2. `hooks.onBeforeBuild` — may abort cleanly via `{ skipSeal: true }`
  *   3. `resolveVaultState` — fetches AgentVault + PolicyConfig + SpendTracker + Overlay
- *   4. Vault-status + agent-capability + agent-paused gates
+ *   4. Vault-active + agent-registered + agent-not-paused gates
  *   5. **Plugin checks** — first `{ allow: false }` throws. Plugins see
- *      the resolved on-chain state via `PluginContext.state`.
- *   6. Constraint check + transaction assembly
- *   7. `hooks.onBeforeSign` — final observe-only point before return
+ *      the resolved on-chain state via `PluginContext.state`. NOTE: the
+ *      zero-capability check runs AFTER plugins (step 7), so a plugin
+ *      MAY observe `state.capabilityTier === 0`; plugins relying on a
+ *      non-zero capability must assert it themselves before allowing.
+ *   6. Amount/protocol/constraint checks (spending gates, allowlist, max)
+ *   7. Agent-capability zero-check + transaction assembly
+ *   8. `hooks.onBeforeSign` — final observe-only point before return
  *
  * Plugins run AFTER state resolution by design — 2 of 3 real plugin
  * categories (rate limiting, compliance) need state input. Consumers who

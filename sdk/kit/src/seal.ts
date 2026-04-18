@@ -1266,6 +1266,43 @@ export function createSigilClient(config: SigilClientConfig): SigilClientApi {
   };
 }
 
+/**
+ * Async factory: run the genesis-hash assertion + delegate to
+ * {@link createSigilClient}. Returns the factory's `SigilClientApi`
+ * (which properly wires plugins, hooks, and caches) — NOT the
+ * deprecated `SigilClient` class (which does not wire plugins/hooks).
+ *
+ * This is what `Sigil.quickstart()` / `Sigil.fromVault()` use under
+ * the hood to get both:
+ *   - genesis-hash cluster safety (previously only on the class path)
+ *   - working plugin + hook wiring (only on the factory path)
+ *
+ * @param config - Full client config. All fields (plugins, hooks,
+ *   logger) are forwarded to the factory after the assertion passes.
+ * @throws `SigilRpcError` if `getGenesisHash()` fails after retries.
+ * @throws `SigilSdkDomainError(INVALID_CONFIG)` if the cluster hash
+ *   does not match `config.network`.
+ */
+export async function createSigilClientAsync(
+  config: SigilClientConfig,
+): Promise<SigilClientApi> {
+  // Install logger FIRST so `assertGenesisHash` diagnostics route
+  // through it. createSigilClient will re-install it (idempotent).
+  if (config.logger) {
+    setSigilModuleLogger(config.logger);
+  }
+  if (config.skipGenesisAssertion === true) {
+    getSigilModuleLogger().warn(
+      "[createSigilClientAsync] skipGenesisAssertion=true — RPC cluster " +
+        `is NOT verified against configured network "${config.network}". ` +
+        "Only safe for local test harnesses.",
+    );
+  } else {
+    await assertGenesisHash(config.rpc, config.network);
+  }
+  return createSigilClient(config);
+}
+
 // ─── Genesis-hash assertion (D18 — closes F10 cluster mismatch) ─────────────
 //
 // Every @ usesigil / kit transaction assumes the RPC is on the cluster the

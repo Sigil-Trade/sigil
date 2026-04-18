@@ -35,7 +35,7 @@ import type { DiscoveredVault } from "./dashboard/types.js";
 import { SigilVault } from "./vault-handle.js";
 import type { SigilVaultInternalState } from "./vault-handle.js";
 import { createAndSendVault } from "./create-vault.js";
-import { SigilClient } from "./seal.js";
+import { createSigilClientAsync, type SigilClientApi } from "./seal.js";
 import { createOwnerClient } from "./dashboard/index.js";
 import { discoverVaults } from "./dashboard/discover.js";
 import { validatePluginList } from "./plugin.js";
@@ -160,16 +160,21 @@ async function buildInternalState(args: {
   if (args.plugins) validatePluginList(args.plugins);
   const logger = resolveLogger(args.logger) ?? NOOP_LOGGER;
 
-  // SigilClient.create() runs the genesis-hash assertion (unless
-  // skipped), installs the logger on the module, and returns a
-  // SigilClientApi-shaped class instance.
-  //
-  // `hooks` and `plugins` flow through here so the underlying client's
-  // clientSeal closure can thread them into bare seal(). Without this
-  // forwarding, `SigilVault.execute()` → `client.executeAndConfirm()` →
-  // clientSeal → seal() would silently no-op plugins registered on the
-  // facade — which is exactly the Sprint 2 gap this PR closes.
-  const client = await SigilClient.create({
+  // createSigilClientAsync runs the genesis-hash assertion + delegates
+  // to `createSigilClient` (the factory). The factory is the ONLY code
+  // path that wires `plugins` + `hooks` through `clientSeal` into bare
+  // `seal()`. If we used `SigilClient.create()` (the deprecated class
+  // static) both fields would be silently dropped because:
+  //   - The class constructor reads neither `config.plugins` nor
+  //     `config.hooks` — they have no class fields at all.
+  //   - The class's own `executeAndConfirm()` has no `composeHooks`,
+  //     no `invokeHook`, no `runPlugins`. It's a legacy path kept alive
+  //     only for backward-compatibility with pre-Sprint-2 consumers
+  //     (none of which exist in practice — @usesigil/kit is pre-1.0
+  //     with no external consumers per docs/SDK-REDESIGN-PLAN.md V1).
+  // Flagged CRITICAL by two independent review agents; this fix is the
+  // Sprint 2 finish actually closing.
+  const client: SigilClientApi = await createSigilClientAsync({
     rpc: args.rpc,
     vault: args.vault,
     agent: args.agent,

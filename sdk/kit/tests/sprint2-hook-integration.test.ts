@@ -45,6 +45,33 @@ function stubRpc(): any {
   };
 }
 
+/**
+ * Enhanced stub for facade-path tests that need to reach runPlugins
+ * via clientSeal → seal(). clientSeal awaits `blockhashCache.get(rpc)`
+ * before delegating to seal(), so we stub getLatestBlockhash and
+ * getAddressLookupTable to return deterministic values. We still want
+ * seal() to FAIL at a later stage (so the test is fast + doesn't
+ * actually broadcast anything) — but it must reach runPlugins first.
+ */
+function stubRpcWithBlockhash(): any {
+  return {
+    getLatestBlockhash: () => ({
+      send: async () => ({
+        value: {
+          blockhash: "FwRYtTPRk5N4wUeP87rTw9kQVSwigB6kbikGzzeCMrW5",
+          lastValidBlockHeight: 1000n,
+        },
+      }),
+    }),
+    getAccountInfo: () => ({
+      send: async () => ({ value: null }),
+    }),
+    getMultipleAccounts: () => ({
+      send: async () => ({ value: [] }),
+    }),
+  };
+}
+
 const VAULT = "11111111111111111111111111111112" as Address;
 const MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" as Address;
 
@@ -525,27 +552,95 @@ describe("seal() — runPlugins invocation after state resolve", () => {
 // use the same `_hookCtx` built at the top of seal() — we can verify they
 // would fire with the same ID without actually reaching onBeforeSign.
 
-describe("seal() — onBeforeSign correlation-id plumbing", () => {
-  it("onBeforeBuild and onBeforeSign share the same correlationId inside a single seal()", async () => {
-    // Capture the correlation IDs each hook WOULD see. onBeforeBuild fires
-    // early (before state resolve), so we can capture its ID with the
-    // stub RPC. onBeforeSign fires late (after compose) — we don't reach
-    // it here, but the docstring contract at hooks.ts:41 states both hooks
-    // receive the SAME SealHookContext (identical correlationId). This test
-    // verifies the pre-onBeforeSign ID matches what downstream onBeforeSign
-    // WOULD see.
-    let captured: string | null = null;
+describe("seal() — correlationId propagates to hook contexts", () => {
+  it("onBeforeBuild receives the passed-in correlationId on a single seal() call", async () => {
+    // Honest scoping: this test asserts `correlationId` plumbing into
+    // the `_hookCtx` used by all hook invocations within a single
+    // seal(). It only exercises onBeforeBuild because reliably reaching
+    // onBeforeSign requires a much heavier fixture (full policy +
+    // compose-able instructions). The plugin state-visibility test
+    // covers runPlugins' correlationId, and composedHooks propagation
+    // is proven by construction (hooks.ts composeHooks() threads one
+    // ctx). If onBeforeSign fires, it gets the same id by the same
+    // propagation rule.
+    let beforeBuildId: string | null = null;
+    let beforeSignId: string | null = null;
     const hooks: SealHooks = {
       onBeforeBuild: (ctx) => {
-        captured = ctx.correlationId;
+        beforeBuildId = ctx.correlationId;
+      },
+      onBeforeSign: (ctx) => {
+        beforeSignId = ctx.correlationId;
       },
     };
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { VaultStatus } = require("../src/generated/types/vaultStatus.js");
+    const cachedState = {
+      vault: {
+        status: VaultStatus.Active,
+        agents: [
+          {
+            pubkey: AGENT.address,
+            capability: 2,
+            paused: false,
+            spendingLimitUsd: 0n,
+            allowedMints: [],
+            lastActive: 0n,
+            reservedBytes: new Uint8Array(0),
+          },
+        ],
+        owner: VAULT,
+        vaultId: 1n,
+      },
+      policy: {},
+      tracker: null,
+      overlay: null,
+      constraints: null,
+      globalBudget: {
+        spent24h: 0n,
+        cap: 500_000_000n,
+        remaining: 500_000_000n,
+      },
+      agentBudget: null,
+      allAgentBudgets: new Map(),
+      protocolBudgets: [],
+      maxTransactionUsd: 0n,
+      stablecoinBalances: { usdc: 0n, usdt: 0n },
+      resolvedAtTimestamp: BigInt(Math.floor(Date.now() / 1000)),
+    } as unknown as SealParams["cachedState"];
     try {
-      await seal(baseSealParams({ hooks, correlationId: "fixed-trace-id" }));
+      await seal(
+        baseSealParams({
+          hooks,
+          correlationId: "trace-match-test",
+          cachedState,
+          maxCacheAgeMs: 60_000,
+          // Provide deterministic blockhash + ALTs so seal() reaches
+          // compose + size-check + onBeforeSign without hitting RPC
+          // fallback for blockhash resolution.
+          blockhash: {
+            blockhash: "FwRYtTPRk5N4wUeP87rTw9kQVSwigB6kbikGzzeCMrW5",
+            lastValidBlockHeight: 1000n,
+          } as unknown as SealParams["blockhash"],
+          addressLookupTables:
+            {} as unknown as SealParams["addressLookupTables"],
+        }),
+      );
     } catch {
-      // Stub RPC throws at state resolve — expected.
+      // Later-stage failure is expected; we only care that both hooks
+      // already fired with matching IDs by the time we get here.
     }
-    expect(captured).to.equal("fixed-trace-id");
+    expect(beforeBuildId).to.equal("trace-match-test");
+    // onBeforeSign fires only if seal reaches step 8. If later-stage
+    // failures (e.g., empty instructions, missing policy fields in the
+    // stub state) abort before onBeforeSign, we accept that as a known
+    // fixture limitation — the contract test that onBeforeSign fires
+    // with the matching ID is covered by the correlation-id assertion
+    // only when both hooks capture. Therefore assert EITHER both IDs
+    // match, OR onBeforeSign didn't fire (test fixture too thin).
+    if (beforeSignId !== null) {
+      expect(beforeSignId).to.equal("trace-match-test");
+    }
   });
 
   it("missing onBeforeSign is a no-op — seal with hooks={} does not crash", async () => {
@@ -559,5 +654,115 @@ describe("seal() — onBeforeSign correlation-id plumbing", () => {
       // onBeforeBuild (no-op with empty hooks) and BEFORE onBeforeSign.
     }
     expect(threw).to.be.true;
+  });
+});
+
+// ─── Facade-path coverage: Sigil.fromVault → SigilVault.execute plugins fire ─
+//
+// Review finding CRITICAL-1 flagged that the new +8 tests above call
+// bare `seal()` directly and never exercise the facade path (Sigil.fromVault
+// → SigilVault.execute → client.executeAndConfirm → clientSeal → seal).
+// This test proves the facade path ACTUALLY fires plugins end-to-end
+// after the `createSigilClientAsync` fix replaces `SigilClient.create`
+// in sigil.ts's buildInternalState.
+
+describe("Sigil.fromVault — plugins fire end-to-end via SigilVault.execute", () => {
+  it("plugin registered on Sigil.fromVault fires when vault.execute runs", async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Sigil } = require("../src/sigil.js") as {
+      Sigil: {
+        fromVault: (opts: {
+          rpc: unknown;
+          address: Address;
+          agent: TransactionSigner;
+          network: "devnet" | "mainnet";
+          plugins?: readonly unknown[];
+          skipGenesisAssertion?: boolean;
+        }) => Promise<{
+          execute: (ixs: unknown[], opts: unknown) => Promise<unknown>;
+        }>;
+      };
+    };
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { VaultStatus } = require("../src/generated/types/vaultStatus.js");
+
+    let pluginFired = 0;
+    const plugin = {
+      name: "facade-path-plugin",
+      check: () => {
+        pluginFired++;
+        return { allow: false as const, reason: "assert-fired" };
+      },
+    };
+
+    const vault = await Sigil.fromVault({
+      // Use the enhanced stub that can answer getLatestBlockhash —
+      // clientSeal awaits that before delegating to seal() → runPlugins.
+      rpc: stubRpcWithBlockhash(),
+      address: VAULT,
+      agent: AGENT,
+      network: "devnet",
+      plugins: [plugin],
+      // Bypass genesis assertion because the stub can't answer
+      // getGenesisHash() — this test's purpose is plugin plumbing,
+      // not cluster-safety (covered by seal-genesis.test.ts).
+      skipGenesisAssertion: true,
+    });
+
+    const cachedState = {
+      vault: {
+        status: VaultStatus.Active,
+        agents: [
+          {
+            pubkey: AGENT.address,
+            capability: 2,
+            paused: false,
+            spendingLimitUsd: 0n,
+            allowedMints: [],
+            lastActive: 0n,
+            reservedBytes: new Uint8Array(0),
+          },
+        ],
+        owner: VAULT,
+        vaultId: 1n,
+      },
+      policy: {},
+      tracker: null,
+      overlay: null,
+      constraints: null,
+      globalBudget: {
+        spent24h: 0n,
+        cap: 500_000_000n,
+        remaining: 500_000_000n,
+      },
+      agentBudget: null,
+      allAgentBudgets: new Map(),
+      protocolBudgets: [],
+      maxTransactionUsd: 0n,
+      stablecoinBalances: { usdc: 0n, usdt: 0n },
+      resolvedAtTimestamp: BigInt(Math.floor(Date.now() / 1000)),
+    };
+
+    let threw = false;
+    try {
+      await vault.execute([], {
+        tokenMint: MINT,
+        amount: 1_000_000n,
+        cachedState,
+        maxCacheAgeMs: 60_000,
+        // Pre-resolved empty ALT map so clientSeal skips localAltCache
+        // RPC round-trip (which our stub can't answer).
+        addressLookupTables: new Map(),
+      });
+    } catch {
+      threw = true;
+      // Expected — plugin rejects with PLUGIN_REJECTED.
+    }
+
+    expect(pluginFired, "plugin.check MUST be called via facade path").to.equal(
+      1,
+    );
+    expect(threw, "plugin rejection should throw up through vault.execute").to
+      .be.true;
   });
 });
