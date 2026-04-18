@@ -16,6 +16,40 @@ Your policies are enforced by Solana validators, not software promises.
 
 ---
 
+## Mental Model
+
+Sigil is three layers. The security boundary is the **bottom** layer — the Solana program — not the SDK.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  SDK (TypeScript) — convenient transaction builder              │
+│  - createSigilClient + seal()                                   │
+│  - createOwnerClient + reads/mutations                          │
+│  - shield() — client-side pre-flight (advisory, fast-deny)      │
+└─────────────────────────────────────────────────────────────────┘
+                              │ builds
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Solana Transaction                                             │
+│  [ validate_and_authorize ]  ← reads PolicyConfig PDA           │
+│  [ DeFi instruction       ]  ← Jupiter / Flash Trade / etc.     │
+│  [ finalize_session       ]  ← measures spend, updates tracker  │
+└─────────────────────────────────────────────────────────────────┘
+                              │ submits
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  ON-CHAIN PROGRAM (Anchor) — the security boundary              │
+│  - Enforces spending caps (rejects tx if over)                  │
+│  - Enforces protocol allowlist (rejects tx if not allowed)      │
+│  - Enforces agent permissions (rejects tx if no rights)         │
+│  - Vault PDA holds funds; agent has NO direct authority         │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Key insight:** A developer cannot bypass on-chain enforcement by skipping the SDK. The agent's signing key has zero authority over vault funds. Only the on-chain Sigil program can authorize spending, and only after `validate_and_authorize` succeeds against the vault's on-chain policy. The SDK is the convenient way to construct transactions the on-chain program will accept — it is not where the rules live.
+
+For the SDK-level detail (caches, hooks, plugins, owner vs. agent paths), see [`sdk/kit/README.md`](sdk/kit/README.md#mental-model).
+
 ## The Problem
 
 Every AI agent on Solana today operates with unrestricted wallet access. Frameworks like Solana Agent Kit give agents raw keypair signing authority with zero spending limits, asset restrictions, or kill switches. There is no way for an agent owner to say "this agent can spend up to 500 USDC/day on Jupiter swaps, nothing else."
