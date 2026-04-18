@@ -753,11 +753,13 @@ const SIGIL_ERROR_CODES: Record<string, number> = {
   ActiveSessionsExist: 6075,
   PostAssertionFailed: 6076,
   InvalidPostAssertionIndex: 6077,
-  ConstraintIndexOutOfBounds: 6078,
-  InvalidConstraintOperator: 6079,
-  ConstraintsVaultMismatch: 6080,
-  ConstraintEntryCountExceeded: 6081,
-  BlockedSplOpcode: 6082,
+  UnauthorizedPreValidateInstruction: 6078,
+  SnapshotNotCaptured: 6079,
+  ConstraintIndexOutOfBounds: 6080,
+  InvalidConstraintOperator: 6081,
+  ConstraintsVaultMismatch: 6082,
+  ConstraintEntryCountExceeded: 6083,
+  BlockedSplOpcode: 6084,
 };
 
 /**

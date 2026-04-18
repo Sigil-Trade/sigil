@@ -46,6 +46,7 @@ import {
 } from "./generated/accounts/escrowDeposit.js";
 import {
   getSessionAuthorityDecoder,
+  getSessionAuthoritySize,
   type SessionAuthority,
 } from "./generated/accounts/sessionAuthority.js";
 import {
@@ -960,8 +961,8 @@ export async function findEscrowsByVault(
 
 // ─── Session Discovery ─────────────────────────────────────────────────────
 
-/** SessionAuthority account size (bytes). */
-const SESSION_AUTHORITY_SIZE = 244;
+/** SessionAuthority account size (bytes) — sourced from generated code to avoid drift. */
+const SESSION_AUTHORITY_SIZE = getSessionAuthoritySize();
 
 /**
  * Find all active sessions for a vault.
