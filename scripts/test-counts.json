@@ -26,7 +26,7 @@
     },
     {
       "name": "Security exploit scenarios",
-      "count": 163,
+      "count": 158,
       "onChain": true,
       "claudePattern": "tests/security-exploits.ts` (ts-mocha + LiteSVM, %d tests)"
     },
@@ -50,7 +50,7 @@
     },
     {
       "name": "Analytics counters (failed TX + per-agent TX count)",
-      "count": 8,
+      "count": 7,
       "onChain": true,
       "claudePattern": "tests/analytics-counters.ts` (ts-mocha + LiteSVM, %d tests)"
     },

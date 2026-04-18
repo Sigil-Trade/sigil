@@ -276,14 +276,8 @@ describe("analytics-counters", () => {
     expect(after.totalFailedTransactions.toNumber()).to.equal(failBefore);
   });
 
-  // Test 4 (expired session) requires time travel between validate and finalize,
-  // but validate_and_authorize enforces MissingFinalizeInstruction (error 6034)
-  // when finalize is not in the same TX. Expired session testing is covered
-  // by Surfpool integration tests (tests/surfpool-integration.ts) which support
-  // time travel between separate transactions.
-  it.skip(
-    "4: expired session increments total_failed_transactions (requires Surfpool)",
-  );
+  // Test 4 was moved to Surfpool — expired-session coverage lives in
+  // tests/surfpool-integration.ts (time-travel tests at lines ~1507, 3121, 3935).
 
   it("5: multiple sessions accumulate correctly", async () => {
     const before = await program.account.agentVault.fetch(vaultPda);
