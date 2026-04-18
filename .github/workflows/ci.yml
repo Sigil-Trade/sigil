@@ -220,19 +220,24 @@ jobs:
           path: test-summary.txt
           retention-days: 90
 
-      - name: Update README test counts
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: node scripts/update-test-counts.js
-
-      - name: Commit updated README
+      - name: Verify test counts are up to date
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
-          git config user.name "sigil-ci-bot[bot]"
-          git config user.email "${{ vars.CI_APP_ID }}+sigil-ci-bot[bot]@users.noreply.github.com"
-          git diff --quiet README.md || \
-            (git add README.md && \
-             git commit -m "chore: update test counts [skip ci]" && \
-             git push)
+          # `update-test-counts.js` is the single source of truth for test
+          # counts across README / CI / release workflows. Run it here in
+          # check mode — if it produces any diff, the contributing PR
+          # missed running the script. Fail loudly so the drift is fixed
+          # in a PR (where branch-protection checks still apply) instead
+          # of attempting an auto-push that the "Security Gate required"
+          # rule will always reject.
+          node scripts/update-test-counts.js
+          FILES="README.md .github/workflows/ci.yml .github/workflows/release.yml .github/workflows/devnet-test.yml"
+          if ! git diff --quiet $FILES; then
+            echo "::error::Test counts are stale. Run 'node scripts/update-test-counts.js' locally and commit the result."
+            git --no-pager diff $FILES
+            exit 1
+          fi
+          echo "Test counts are up to date."
 
   # ──────────────────────────────────────────────────────────────
   # Job 2: Rust formatting and linting

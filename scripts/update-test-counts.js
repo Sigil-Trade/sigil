@@ -101,17 +101,37 @@ updateFile("README.md", "root README", (content) => {
     `Run on-chain tests (${onChainCount} LiteSVM tests`,
   );
 
-  // Rebuild table between "### Test Suites" and "## Security"
-  const tableHeader = `| Suite                                                | Tests   |
-| ---------------------------------------------------- | ------- |`;
+  // Rebuild table between "### Test Suites" and "## Security".
+  //
+  // Column widths are computed dynamically from the actual row content so
+  // the generated markdown matches Prettier's table-alignment output. A
+  // hard-coded padding width (e.g. 52 chars) breaks when any suite name
+  // exceeds it — Prettier then widens the column on its next pass and the
+  // diff from the next `update-test-counts.js` run ping-pongs forever.
+  // See: https://github.com/Sigil-Trade/sigil/pull/244 CI loop.
+  const totalCountStr = `**${total}**`;
+  const nameWidth = Math.max(
+    "Suite".length,
+    "**Total**".length,
+    ...data.suites.map((s) => s.name.length),
+  );
+  const countWidth = Math.max(
+    "Tests".length,
+    totalCountStr.length,
+    ...data.suites.map((s) => String(s.count).length),
+  );
+  const pad = (s, w) => s + " ".repeat(Math.max(0, w - s.length));
+  const tableHeader =
+    `| ${pad("Suite", nameWidth)} | ${pad("Tests", countWidth)} |\n` +
+    `| ${"-".repeat(nameWidth)} | ${"-".repeat(countWidth)} |`;
   const rows = data.suites
     .map((s) => {
-      const name = s.name.padEnd(52);
-      const count = String(s.count).padStart(7);
+      const name = pad(s.name, nameWidth);
+      const count = pad(String(s.count), countWidth);
       return `| ${name} | ${count} |`;
     })
     .join("\n");
-  const totalRow = `| **Total**                                            | **${total}** |`;
+  const totalRow = `| ${pad("**Total**", nameWidth)} | ${pad(totalCountStr, countWidth)} |`;
   const newTable = `${tableHeader}\n${rows}\n${totalRow}`;
 
   content = content.replace(

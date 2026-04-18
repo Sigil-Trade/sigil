@@ -1,0 +1,31 @@
+[package]
+name = "mock-defi"
+version = "0.1.0"
+description = "Test-only mock DeFi program. Two no-op instructions (open_position, close_position) with stable 8-byte Anchor discriminators. Loaded by LiteSVM in on-chain tests to exercise Sigil's constraint matching + position counter flow end-to-end. Not deployed to devnet or mainnet."
+edition = "2021"
+license = "Apache-2.0"
+
+# Intentionally standalone — NOT part of the top-level workspace. See root
+# Cargo.toml for the detailed rationale (cargo-certora-sbf and feature-flag
+# build compatibility). This empty [workspace] table declares this package
+# as its own workspace root.
+#
+# The compiled binary lives as a committed fixture at
+# tests/fixtures/mock-defi.so. To rebuild (rare — only when source in
+# src/lib.rs changes): scripts/rebuild-mock-defi.sh
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "mock_defi"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+idl-build = ["anchor-lang/idl-build"]
+
+[dependencies]
+anchor-lang = { version = "0.32.1" }
