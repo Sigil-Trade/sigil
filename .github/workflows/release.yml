@@ -116,7 +116,7 @@ jobs:
       - name: Build all packages
         run: pnpm -r run build
 
-      - name: Run Kit SDK tests (1413 tests)
+      - name: Run Kit SDK tests (1415 tests)
         working-directory: sdk/kit
         run: pnpm test
 

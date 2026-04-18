@@ -125,7 +125,7 @@ export const SIGIL_ERROR__RPC__RATE_LIMITED =
 export const SIGIL_ERROR__RPC__INSTRUCTION_REQUIRED =
   "SIGIL_ERROR__RPC__INSTRUCTION_REQUIRED" as const;
 
-// Program domain — placeholder for full Anchor 6000-6081 mapping (deferred to follow-up PR)
+// Program domain — placeholder for full Anchor 6000-6084 mapping (deferred to follow-up PR)
 export const SIGIL_ERROR__PROGRAM__GENERIC =
   "SIGIL_ERROR__PROGRAM__GENERIC" as const;
 

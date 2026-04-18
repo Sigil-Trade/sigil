@@ -9,7 +9,7 @@
 Your policies are enforced by Solana validators, not software promises.
 
 [![CI](https://github.com/Sigil-Trade/sigil/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Sigil-Trade/sigil/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-2265-brightgreen)
+![Tests](https://img.shields.io/badge/tests-2267-brightgreen)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 
 </div>
@@ -238,13 +238,13 @@ cargo fmt --check --manifest-path programs/sigil/Cargo.toml
 | Surfpool integration tests (local Surfnet)                          | 59       |
 | Platform client tests (`@usesigil/platform`)                        | 17       |
 | Custody adapters (`@usesigil/custody`)                              | 96       |
-| Kit-native SDK (`@usesigil/kit` — includes merged core + dashboard) | 1413     |
+| Kit-native SDK (`@usesigil/kit` — includes merged core + dashboard) | 1415     |
 | Kit SDK devnet tests (`@usesigil/kit` devnet)                       | 34       |
 | Plugins (`@usesigil/plugins`)                                       | 6        |
 | Rust unit tests (cargo test)                                        | 121      |
 | Devnet extended scenarios (flash-trade + stress)                    | 45       |
 | Trident fuzz tests (1K iterations)                                  | 16       |
-| **Total**                                                           | **2265** |
+| **Total**                                                           | **2267** |
 
 ## Security
 
