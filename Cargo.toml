@@ -1,16 +1,25 @@
 [workspace]
-members = [
-    "programs/*"
-]
-# Default-members filters cargo operations (without `--workspace` or explicit
-# `-p`) to sigil only. mock-defi is a test-only Anchor program that ships no
-# production binary and is not formally verified — excluding it from default
-# operations keeps `anchor build --features mainnet|certora` and
-# `cargo certora-sbf` from tripping on unknown features or "more than one
-# cdylib package found" errors. mock-defi is still built by `anchor build
-# --no-idl` (which targets all members) and loaded by LiteSVM tests from
-# target/deploy/mock_defi.so.
-default-members = ["programs/sigil"]
+members = ["programs/sigil"]
+# programs/mock-defi is intentionally NOT a workspace member. It's a
+# test-only Anchor program whose compiled binary is checked in as a
+# committed fixture at tests/fixtures/mock-defi.so. Two reasons this lives
+# outside the workspace:
+#
+#   1. cargo-certora-sbf v0.3.5 refuses to proceed when it finds more than
+#      one cdylib package in workspace metadata ("error: more than one
+#      cdylib package found") and does not accept -p / --manifest-path
+#      selection via the Certora config file.
+#   2. `anchor build -- --features mainnet|devnet|certora` applies feature
+#      selection to every workspace member, forcing mock-defi to mirror
+#      sigil's full feature surface even though it has no network-specific
+#      behavior and is not formally verified.
+#
+# To rebuild the committed .so (rare, only when mock-defi source changes):
+#   cd programs/mock-defi && anchor build --no-idl
+#   cp target/deploy/mock_defi.so ../../tests/fixtures/mock-defi.so
+# The source in programs/mock-defi/ is preserved for reference and manual
+# rebuilds. It has its own [workspace] table so `anchor build` from inside
+# it resolves as its own project.
 resolver = "2"
 
 [workspace.package]

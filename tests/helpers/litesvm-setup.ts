@@ -58,10 +58,11 @@ const PROGRAM_SO_PATH = path.resolve(__dirname, "../../target/deploy/sigil.so");
 const MOCK_DEFI_PROGRAM_ID = new PublicKey(
   "2pB26qKW73sToF7ETcdhXQTj8biYwAk9TCArVwgHBe24",
 );
-const MOCK_DEFI_SO_PATH = path.resolve(
-  __dirname,
-  "../../target/deploy/mock_defi.so",
-);
+// Mock-defi's compiled .so is a committed fixture at tests/fixtures/.
+// Root Cargo.toml explains why it is not a workspace member (CI tool
+// compatibility — cargo-certora-sbf and feature-flag builds). Rebuild
+// procedure in scripts/rebuild-mock-defi.sh.
+const MOCK_DEFI_SO_PATH = path.resolve(__dirname, "../fixtures/mock-defi.so");
 
 // ─── Connection proxy ────────────────────────────────────────────────────────
 class LiteSVMConnectionProxy {

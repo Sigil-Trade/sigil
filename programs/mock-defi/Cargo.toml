@@ -5,6 +5,16 @@ description = "Test-only mock DeFi program. Two no-op instructions (open_positio
 edition = "2021"
 license = "Apache-2.0"
 
+# Intentionally standalone — NOT part of the top-level workspace. See root
+# Cargo.toml for the detailed rationale (cargo-certora-sbf and feature-flag
+# build compatibility). This empty [workspace] table declares this package
+# as its own workspace root.
+#
+# The compiled binary lives as a committed fixture at
+# tests/fixtures/mock-defi.so. To rebuild (rare — only when source in
+# src/lib.rs changes): scripts/rebuild-mock-defi.sh
+[workspace]
+
 [lib]
 crate-type = ["cdylib", "lib"]
 name = "mock_defi"
@@ -16,14 +26,6 @@ no-log-ix-name = []
 cpi = ["no-entrypoint"]
 default = []
 idl-build = ["anchor-lang/idl-build"]
-# Mirror sigil's network / certora feature surface so workspace-wide
-# `cargo build --features mainnet|devnet|certora` doesn't fail with "none
-# of the selected packages contains these features". All no-ops for the
-# mock program — it has no network-specific constants and is not proved.
-mainnet = []
-devnet = []
-devnet-testing = []
-certora = []
 
 [dependencies]
 anchor-lang = { version = "0.32.1" }
