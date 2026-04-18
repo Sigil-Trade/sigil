@@ -21,3 +21,53 @@ When the PR merges to `main`, the release workflow opens a **Version Packages** 
 - Deletes the consumed changeset files
 
 Merging the Version Packages PR triggers npm publishing with provenance.
+
+## Version-bump discipline (pre-1.0)
+
+**Do not create a changeset for every PR.** Pre-1.0 semver is flexible, and we've been publishing too
+aggressively — `@usesigil/kit` hit `0.8.0` with weekly-or-faster minor bumps, and `@usesigil/plugins`
+hit `7.0.0` as a cascade side-effect (every kit bump made the plugins peer-dep range fall out of
+compatibility and changesets treated each one as a breaking change to plugins).
+
+The rules going forward:
+
+1. **Accumulate changesets before releasing.** Multiple PRs can land without changesets; batch
+   feature work into a single changeset added to the last PR in a group, or add a standalone
+   "release" PR that introduces the changeset after the features have merged.
+
+2. **Don't use `pnpm changeset` for internal refactors, docs, CI, test-only changes, or chores.**
+   If consumers can't tell the difference, don't burn a version.
+
+3. **Patch for non-breaking, minor for anything that would change consumer behavior (pre-1.0 only),
+   major after 1.0.** Pre-1.0, a minor bump (e.g., `0.8.0 → 0.9.0`) is also the signal for
+   potentially breaking changes — use it sparingly so `0.9`, `0.10`, `0.11` doesn't get exhausted
+   inside a quarter.
+
+4. **The Version Packages PR waits for a human merge.** You control release cadence — if the
+   Version Packages PR is open for two weeks while more changesets accumulate, that's fine and in
+   fact encouraged. The PR auto-updates on every new changeset that lands on `main`.
+
+5. **Cross-package cascades are managed by explicit dep ranges, not `workspace:^`.** The plugins
+   package declares `"@usesigil/kit": ">=0.8.0 <1.0.0"` rather than `workspace:^` so kit bumps
+   within the 0.x range do NOT force a plugins major bump. Bump the plugins range manually when
+   kit ships something that actually breaks plugins — which should be rare during Sprint 1-4 since
+   plugins is a thin wrapper.
+
+## When to release
+
+Good reasons to open + merge the Version Packages PR:
+
+- A PR implementing an API the ecosystem has been waiting for (or promised publicly).
+- An accumulated set of bug fixes that external consumers have flagged.
+- A sprint boundary where a coherent feature set is complete (e.g., end of Sprint 1, end of Sprint
+  2). This is the typical case.
+- A security fix that affects consumers.
+
+Bad reasons:
+
+- "Every PR should ship to npm." No.
+- "Docs got better, let's release." No.
+- "Fixed a typo in a test assertion." No.
+
+When in doubt, hold the release. Aggregating changes produces better CHANGELOG entries and gives
+downstream consumers fewer versions to track.
