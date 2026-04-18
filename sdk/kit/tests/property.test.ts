@@ -1,22 +1,19 @@
 /**
- * Property-based + fuzz tests for the Phalnx SDK.
+ * Property-based + fuzz tests for the Sigil SDK.
  *
  * Uses fast-check (v3) for property-based testing to exhaustively explore edge cases
  * that hand-written tests miss. Three categories:
- *   A — Exported function properties (isSpendingAction, hasPermission, getRolling24hUsd)
+ *   A — Exported function properties (isSpendingAction, getRolling24hUsd)
  *   B — Cross-validation (ceilFee formula)
  *   C — Fuzz testing (detectDrainAttempt, replaceAgentAtas)
+ *
+ * Note: `hasPermission`, `stringsToPermissions`, `PermissionBuilder` property
+ * tests were deleted in the A11 cleanup — the underlying 21-bit bitmask is gone.
  */
 
 import * as fc from "fast-check";
 import { expect } from "chai";
-import {
-  isSpendingAction,
-  hasPermission,
-  stringsToPermissions,
-  PermissionBuilder,
-  FULL_PERMISSIONS,
-} from "../src/types.js";
+import { isSpendingAction } from "../src/types.js";
 import {
   detectDrainAttempt,
   RISK_FLAG_LARGE_OUTFLOW,
@@ -90,29 +87,10 @@ const NON_SPENDING_ACTIONS = [
 
 const ALL_ACTIONS = [...SPENDING_ACTIONS, ...NON_SPENDING_ACTIONS];
 
-const ACTION_KEYS: readonly string[] = [
-  "swap",
-  "openPosition",
-  "closePosition",
-  "increasePosition",
-  "decreasePosition",
-  "deposit",
-  "withdraw",
-  "transfer",
-  "addCollateral",
-  "removeCollateral",
-  "placeTriggerOrder",
-  "editTriggerOrder",
-  "cancelTriggerOrder",
-  "placeLimitOrder",
-  "editLimitOrder",
-  "cancelLimitOrder",
-  "swapAndOpenPosition",
-  "closeAndSwapPosition",
-  "createEscrow",
-  "settleEscrow",
-  "refundEscrow",
-];
+// `ACTION_KEYS` array was used by the deleted `hasPermission` / bitmask
+// property tests (A11). Kept removed — every surviving test either
+// references `SPENDING_ACTIONS` / `NON_SPENDING_ACTIONS` or builds its
+// own inline list.
 
 const EPOCH_DURATION = 600;
 const NUM_EPOCHS = 144;
@@ -228,124 +206,11 @@ describe("Property Tests — Category A: Exported Function Properties", () => {
     });
   });
 
-  // ── hasPermission ─────────────────────────────────────────────────────
-
-  describe("hasPermission", () => {
-    it("FULL_CAPABILITY = 2n (backward-compat alias FULL_PERMISSIONS)", () => {
-      expect(FULL_PERMISSIONS).to.equal(2n);
-    });
-
-    it("legacy all-bits grants all 21 action types", () => {
-      const ALL_BITS = (1n << 21n) - 1n;
-      for (const key of ACTION_KEYS) {
-        expect(hasPermission(ALL_BITS, key)).to.equal(
-          true,
-          `ALL_BITS should grant ${key}`,
-        );
-      }
-    });
-
-    it("zero permissions grants no action types", () => {
-      for (const key of ACTION_KEYS) {
-        expect(hasPermission(0n, key)).to.equal(
-          false,
-          `0n should not grant ${key}`,
-        );
-      }
-    });
-
-    it("single bit grants exactly one action and no others", () => {
-      for (let i = 0; i < ACTION_KEYS.length; i++) {
-        const singleBit = 1n << BigInt(i);
-        expect(hasPermission(singleBit, ACTION_KEYS[i])).to.equal(
-          true,
-          `bit ${i} should grant ${ACTION_KEYS[i]}`,
-        );
-        for (let j = 0; j < ACTION_KEYS.length; j++) {
-          if (j === i) continue;
-          expect(hasPermission(singleBit, ACTION_KEYS[j])).to.equal(
-            false,
-            `bit ${i} should not grant ${ACTION_KEYS[j]}`,
-          );
-        }
-      }
-    });
-
-    it("bitwise OR composes permissions correctly", () => {
-      fc.assert(
-        fc.property(
-          fc.uniqueArray(fc.integer({ min: 0, max: 20 }), {
-            minLength: 1,
-            maxLength: 21,
-          }),
-          (indices) => {
-            const combined = indices.reduce(
-              (acc, i) => acc | (1n << BigInt(i)),
-              0n,
-            );
-            for (let i = 0; i < ACTION_KEYS.length; i++) {
-              const expected = indices.includes(i);
-              expect(hasPermission(combined, ACTION_KEYS[i])).to.equal(
-                expected,
-                `Combined bitmask should ${expected ? "" : "not "}grant ${ACTION_KEYS[i]}`,
-              );
-            }
-          },
-        ),
-        { numRuns: NUM_RUNS },
-      );
-    });
-
-    it("unknown action keys always return false regardless of permissions", () => {
-      fc.assert(
-        fc.property(
-          fc.bigUintN(21),
-          fc
-            .string({ minLength: 1, maxLength: 30 })
-            .filter((s) => !ACTION_KEYS.includes(s)),
-          (permissions, unknownKey) => {
-            expect(hasPermission(permissions, unknownKey)).to.equal(false);
-          },
-        ),
-        { numRuns: NUM_RUNS },
-      );
-    });
-
-    it("Object.prototype keys return false, not throw (regression: P2 bug #2)", () => {
-      const protoKeys = [
-        "toString",
-        "constructor",
-        "hasOwnProperty",
-        "valueOf",
-        "isPrototypeOf",
-        "propertyIsEnumerable",
-        "__defineGetter__",
-        "__lookupGetter__",
-      ];
-      for (const key of protoKeys) {
-        expect(hasPermission(FULL_PERMISSIONS, key)).to.equal(false);
-        expect(hasPermission(0n, key)).to.equal(false);
-      }
-    });
-
-    it("adding a permission never removes existing permissions (monotonicity)", () => {
-      fc.assert(
-        fc.property(
-          fc.bigUintN(21),
-          fc.integer({ min: 0, max: 20 }),
-          (base, bitIndex) => {
-            const extended = base | (1n << BigInt(bitIndex));
-            for (let i = 0; i < ACTION_KEYS.length; i++) {
-              if (hasPermission(base, ACTION_KEYS[i])) {
-                expect(hasPermission(extended, ACTION_KEYS[i])).to.equal(true);
-              }
-            }
-          },
-        ),
-        { numRuns: NUM_RUNS },
-      );
-    });
-  });
+  // `hasPermission` property-test block deleted in A11 — the helper encoded
+  // the pre-v6 21-bit bitmask. The v6 program uses a 2-bit capability enum
+  // that is not bitmask-compositional, so there's no property-based
+  // analogue. Spending classification is property-tested through
+  // `isSpendingAction` above.
 
   // ── getRolling24hUsd ──────────────────────────────────────────────────
 
@@ -1131,31 +996,10 @@ describe("Property Tests — Category C: Fuzz Testing", () => {
 
 describe("Adversarial SDK Attack Tests", () => {
   describe("Type Coercion & Input Attacks", () => {
-    it("ISC-36: stringsToPermissions with Object.prototype keys throws", () => {
-      const protoKeys = [
-        "toString",
-        "constructor",
-        "hasOwnProperty",
-        "valueOf",
-      ];
-      for (const key of protoKeys) {
-        expect(() => stringsToPermissions([key])).to.throw(
-          /Unknown action type/,
-        );
-      }
-    });
-
-    it("ISC-36b: PermissionBuilder.add with Object.prototype keys returns 0n", () => {
-      const builder = new PermissionBuilder();
-      builder.add("toString").add("constructor").add("hasOwnProperty");
-      expect(builder.build()).to.equal(0n);
-    });
-
-    it("ISC-36c: PermissionBuilder.remove with Object.prototype keys doesn't crash", () => {
-      const builder = new PermissionBuilder();
-      builder.add("swap").remove("toString").remove("constructor");
-      expect(builder.build()).to.equal(1n); // swap bit still set
-    });
+    // ISC-36, ISC-36b, ISC-36c prototype-pollution tests for
+    // stringsToPermissions / PermissionBuilder were deleted in A11 along
+    // with the bitmask helpers themselves. The v6 capability field is a
+    // plain bigint 0/1/2 — no string-keyed dictionary to attack.
   });
 
   describe("Drain Detection Edge Cases", () => {
@@ -1254,105 +1098,13 @@ describe("Adversarial SDK Attack Tests", () => {
     });
   });
 
-  describe("Permission Bit Exhaustive Tests", () => {
-    it("all 21 action types have unique permission bits", () => {
-      const ACTION_KEYS = [
-        "swap",
-        "openPosition",
-        "closePosition",
-        "increasePosition",
-        "decreasePosition",
-        "deposit",
-        "withdraw",
-        "transfer",
-        "addCollateral",
-        "removeCollateral",
-        "placeTriggerOrder",
-        "editTriggerOrder",
-        "cancelTriggerOrder",
-        "placeLimitOrder",
-        "editLimitOrder",
-        "cancelLimitOrder",
-        "swapAndOpenPosition",
-        "closeAndSwapPosition",
-        "createEscrow",
-        "settleEscrow",
-        "refundEscrow",
-      ];
-      const bits = ACTION_KEYS.map((k) => stringsToPermissions([k]));
-      const uniqueBits = new Set(bits.map((b) => b.toString()));
-      expect(uniqueBits.size).to.equal(21);
-    });
-
-    it("stringsToPermissions round-trips through PermissionBuilder", () => {
-      const actions = ["swap", "deposit", "transfer"];
-      const fromStrings = stringsToPermissions(actions);
-      const fromBuilder = new PermissionBuilder()
-        .add("swap")
-        .add("deposit")
-        .add("transfer")
-        .build();
-      expect(fromStrings).to.equal(fromBuilder);
-    });
-
-    it("permission bits are contiguous from 0 to 20", () => {
-      const ACTION_KEYS = [
-        "swap",
-        "openPosition",
-        "closePosition",
-        "increasePosition",
-        "decreasePosition",
-        "deposit",
-        "withdraw",
-        "transfer",
-        "addCollateral",
-        "removeCollateral",
-        "placeTriggerOrder",
-        "editTriggerOrder",
-        "cancelTriggerOrder",
-        "placeLimitOrder",
-        "editLimitOrder",
-        "cancelLimitOrder",
-        "swapAndOpenPosition",
-        "closeAndSwapPosition",
-        "createEscrow",
-        "settleEscrow",
-        "refundEscrow",
-      ];
-      for (let i = 0; i < ACTION_KEYS.length; i++) {
-        const perm = stringsToPermissions([ACTION_KEYS[i]]);
-        expect(perm).to.equal(1n << BigInt(i));
-      }
-    });
-
-    it("legacy all-bits is exactly the OR of all 21 bits", () => {
-      const ACTION_KEYS = [
-        "swap",
-        "openPosition",
-        "closePosition",
-        "increasePosition",
-        "decreasePosition",
-        "deposit",
-        "withdraw",
-        "transfer",
-        "addCollateral",
-        "removeCollateral",
-        "placeTriggerOrder",
-        "editTriggerOrder",
-        "cancelTriggerOrder",
-        "placeLimitOrder",
-        "editLimitOrder",
-        "cancelLimitOrder",
-        "swapAndOpenPosition",
-        "closeAndSwapPosition",
-        "createEscrow",
-        "settleEscrow",
-        "refundEscrow",
-      ];
-      const combined = stringsToPermissions(ACTION_KEYS);
-      expect(combined).to.equal((1n << 21n) - 1n); // legacy all-bits value
-    });
-  });
+  // `Permission Bit Exhaustive Tests` block deleted in A11 — these three
+  // tests (unique-bits-per-action, stringsToPermissions↔PermissionBuilder
+  // round-trip, contiguous-0-to-20, all-bits-OR-equals-2^21-1) were all
+  // property-testing the deleted bitmask helpers. The v6 program's 2-bit
+  // capability enum has no bitmask structure to test; spending
+  // classification is covered by `isSpendingAction` property tests in
+  // Category A.
 
   describe("Threshold Property Tests (fuzz)", () => {
     it("drain thresholds are always integers after clamping", () => {

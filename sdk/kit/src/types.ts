@@ -8,10 +8,7 @@
 import type { Address, Instruction } from "./kit-adapter.js";
 
 import { SigilSdkDomainError } from "./errors/sdk.js";
-import {
-  SIGIL_ERROR__SDK__INVALID_NETWORK,
-  SIGIL_ERROR__SDK__INVALID_ACTION_TYPE,
-} from "./errors/codes.js";
+import { SIGIL_ERROR__SDK__INVALID_NETWORK } from "./errors/codes.js";
 
 // Re-export the program address from generated code
 export { SIGIL_PROGRAM_ADDRESS } from "./generated/programs/sigil.js";
@@ -120,26 +117,11 @@ export const MAX_ALLOWED_PROTOCOLS = 10;
 export const FULL_CAPABILITY: CapabilityTier = capability(2n);
 /** @deprecated Use FULL_CAPABILITY instead. Kept for backward compatibility. */
 export const FULL_PERMISSIONS: CapabilityTier = FULL_CAPABILITY;
-export const SWAP_ONLY = 1n << 0n;
-export const PERPS_ONLY = (1n << 1n) | (1n << 2n) | (1n << 3n) | (1n << 4n);
-export const TRANSFER_ONLY = 1n << 7n;
-export const ESCROW_ONLY = (1n << 18n) | (1n << 19n) | (1n << 20n);
-
-/** Full perps permission set: open, close, increase, decrease, deposit, withdraw, add/remove collateral, triggers, limits */
-export const PERPS_FULL =
-  PERPS_ONLY |
-  (1n << 5n) |
-  (1n << 6n) |
-  (1n << 8n) |
-  (1n << 9n) |
-  (1n << 10n) |
-  (1n << 11n) |
-  (1n << 12n) |
-  (1n << 13n) |
-  (1n << 14n) |
-  (1n << 15n) |
-  (1n << 16n) |
-  (1n << 17n);
+// Legacy 21-bit permission bitmasks (SWAP_ONLY, PERPS_ONLY, TRANSFER_ONLY,
+// ESCROW_ONLY, PERPS_FULL) were removed in the A11 cleanup — they encoded a
+// pre-v6 permission model the on-chain program no longer supports. Use
+// FULL_CAPABILITY (2n) for operator agents and put granular per-action
+// restrictions in InstructionConstraints.
 
 // ─── Escrow Constants ─────────────────────────────────────────────────────────
 
@@ -318,126 +300,58 @@ export function isStablecoinMint(mint: Address, network: Network): boolean {
   return mint === USDC_MINT_MAINNET || mint === USDT_MINT_MAINNET;
 }
 
-// ─── Permission System (Legacy) ──────────────────────────────────────────────
+// ─── ActionType Parsing ──────────────────────────────────────────────────────
+//
+// The v6 on-chain program eliminated per-action permission bits in favor of a
+// 2-bit capability enum. `parseActionType` is preserved because
+// `event-analytics.ts` still reads numeric ActionType values from on-chain
+// events and needs the string label for UI display. It does NOT grant or
+// check any permission — the v6 program enforces capability (0/1/2), not
+// ActionType.
 
 /**
- * @deprecated v6: Permission bits replaced by capability bitmask. Retained for backward compat.
- * Permission bit mapping for each legacy ActionType variant (21 total).
+ * Canonical action-type names indexed by the v6 on-chain ActionType enum
+ * variant. Index 0 = `Swap`, index 20 = `RefundEscrow`. This is the ONLY
+ * permission-related state still in this file post-A11 — it powers
+ * `parseActionType` for event decoding and nothing else.
  */
-export const ACTION_PERMISSION_MAP: Record<string, bigint> = {
-  swap: 1n << 0n,
-  openPosition: 1n << 1n,
-  closePosition: 1n << 2n,
-  increasePosition: 1n << 3n,
-  decreasePosition: 1n << 4n,
-  deposit: 1n << 5n,
-  withdraw: 1n << 6n,
-  transfer: 1n << 7n,
-  addCollateral: 1n << 8n,
-  removeCollateral: 1n << 9n,
-  placeTriggerOrder: 1n << 10n,
-  editTriggerOrder: 1n << 11n,
-  cancelTriggerOrder: 1n << 12n,
-  placeLimitOrder: 1n << 13n,
-  editLimitOrder: 1n << 14n,
-  cancelLimitOrder: 1n << 15n,
-  swapAndOpenPosition: 1n << 16n,
-  closeAndSwapPosition: 1n << 17n,
-  createEscrow: 1n << 18n,
-  settleEscrow: 1n << 19n,
-  refundEscrow: 1n << 20n,
-};
-
-/** Check if a permission bitmask includes the permission for a given action type */
-export function hasPermission(
-  permissions: bigint,
-  actionType: string,
-): boolean {
-  if (
-    !Object.prototype.hasOwnProperty.call(ACTION_PERMISSION_MAP, actionType)
-  ) {
-    return false;
-  }
-  const bit = ACTION_PERMISSION_MAP[actionType];
-  return (permissions & bit) !== 0n;
-}
-
-/** Convert a permission bitmask to an array of action type strings */
-export function permissionsToStrings(permissions: bigint): string[] {
-  const result: string[] = [];
-  for (const [name, bit] of Object.entries(ACTION_PERMISSION_MAP)) {
-    if ((permissions & bit) !== 0n) {
-      result.push(name);
-    }
-  }
-  return result;
-}
-
-/**
- * Convert an array of action type strings to a permission bitmask.
- * Inverse of permissionsToStrings().
- *
- * @throws Error if any string is not a recognized action type.
- * @example stringsToPermissions(["swap", "deposit"]) // => 33n (bit 0 + bit 5)
- */
-export function stringsToPermissions(strings: string[]): bigint {
-  let result = 0n;
-  for (const s of strings) {
-    if (!Object.prototype.hasOwnProperty.call(ACTION_PERMISSION_MAP, s)) {
-      const valid = Object.keys(ACTION_PERMISSION_MAP).join(", ");
-      throw new SigilSdkDomainError(
-        SIGIL_ERROR__SDK__INVALID_ACTION_TYPE,
-        `Unknown action type: "${s}". Valid types: ${valid}`,
-        {
-          context: { received: s, valid: Object.keys(ACTION_PERMISSION_MAP) },
-        },
-      );
-    }
-    const bit = ACTION_PERMISSION_MAP[s];
-    result |= bit;
-  }
-  return result;
-}
+const ACTION_TYPE_NAMES_BY_INDEX = [
+  "swap", // 0
+  "openPosition", // 1
+  "closePosition", // 2
+  "increasePosition", // 3
+  "decreasePosition", // 4
+  "deposit", // 5
+  "withdraw", // 6
+  "transfer", // 7
+  "addCollateral", // 8
+  "removeCollateral", // 9
+  "placeTriggerOrder", // 10
+  "editTriggerOrder", // 11
+  "cancelTriggerOrder", // 12
+  "placeLimitOrder", // 13
+  "editLimitOrder", // 14
+  "cancelLimitOrder", // 15
+  "swapAndOpenPosition", // 16
+  "closeAndSwapPosition", // 17
+  "createEscrow", // 18
+  "settleEscrow", // 19
+  "refundEscrow", // 20
+] as const;
 
 /**
  * Parse an action type to its string key.
- * Accepts either a numeric ActionType enum value or an Anchor-style { Swap: {} } object.
+ * Accepts either a numeric ActionType enum value (0-20) or an
+ * Anchor-style `{ Swap: {} }` object. Returns `undefined` for
+ * out-of-range numeric values or empty objects.
  */
 export function parseActionType(
   actionType: number | Record<string, unknown>,
 ): string | undefined {
   if (typeof actionType === "number") {
-    const entries = Object.entries(ACTION_PERMISSION_MAP);
-    return entries[actionType]?.[0];
+    return ACTION_TYPE_NAMES_BY_INDEX[actionType];
   }
   return Object.keys(actionType)[0];
-}
-
-/** Builder for constructing permission bitmasks */
-export class PermissionBuilder {
-  private permissions = 0n;
-
-  add(actionType: string): this {
-    if (
-      Object.prototype.hasOwnProperty.call(ACTION_PERMISSION_MAP, actionType)
-    ) {
-      this.permissions |= ACTION_PERMISSION_MAP[actionType];
-    }
-    return this;
-  }
-
-  remove(actionType: string): this {
-    if (
-      Object.prototype.hasOwnProperty.call(ACTION_PERMISSION_MAP, actionType)
-    ) {
-      this.permissions &= ~ACTION_PERMISSION_MAP[actionType];
-    }
-    return this;
-  }
-
-  build(): bigint {
-    return this.permissions;
-  }
 }
 
 // ─── Position Effect ──────────────────────────────────────────────────────────

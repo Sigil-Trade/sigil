@@ -14,26 +14,16 @@ import {
   PROTOCOL_MODE_DENYLIST,
   FULL_CAPABILITY,
   FULL_PERMISSIONS,
-  SWAP_ONLY,
-  PERPS_ONLY,
-  TRANSFER_ONLY,
-  ESCROW_ONLY,
-  PERPS_FULL,
   USDC_MINT_DEVNET,
   USDC_MINT_MAINNET,
   USDT_MINT_DEVNET,
   USDT_MINT_MAINNET,
   isStablecoinMint,
-  hasPermission,
-  permissionsToStrings,
   parseActionType,
   isSpendingAction,
   getPositionEffect,
-  PermissionBuilder,
-  ACTION_PERMISSION_MAP,
   normalizeNetwork,
   validateNetwork,
-  stringsToPermissions,
 } from "../src/types.js";
 import type { Address } from "@solana/kit";
 
@@ -97,41 +87,12 @@ describe("types", () => {
     });
   });
 
-  describe("Preset bitmasks", () => {
-    it("SWAP_ONLY has only bit 0", () => {
-      expect(SWAP_ONLY).to.equal(1n << 0n);
-      expect(permissionsToStrings(SWAP_ONLY)).to.deep.equal(["swap"]);
-    });
-
-    it("PERPS_ONLY has bits 1-4", () => {
-      expect(PERPS_ONLY).to.equal(
-        (1n << 1n) | (1n << 2n) | (1n << 3n) | (1n << 4n),
-      );
-    });
-
-    it("TRANSFER_ONLY has bit 7", () => {
-      expect(TRANSFER_ONLY).to.equal(1n << 7n);
-      expect(permissionsToStrings(TRANSFER_ONLY)).to.deep.equal(["transfer"]);
-    });
-
-    it("ESCROW_ONLY has bits 18-20", () => {
-      expect(ESCROW_ONLY).to.equal((1n << 18n) | (1n << 19n) | (1n << 20n));
-      const names = permissionsToStrings(ESCROW_ONLY);
-      expect(names).to.include("createEscrow");
-      expect(names).to.include("settleEscrow");
-      expect(names).to.include("refundEscrow");
-    });
-
-    it("PERPS_FULL covers positions, collateral, triggers, limits", () => {
-      const names = permissionsToStrings(PERPS_FULL);
-      expect(names).to.include("openPosition");
-      expect(names).to.include("closePosition");
-      expect(names).to.include("addCollateral");
-      expect(names).to.include("placeTriggerOrder");
-      expect(names).to.include("placeLimitOrder");
-      expect(names.length).to.be.greaterThan(10);
-    });
-  });
+  // Legacy preset bitmasks (SWAP_ONLY, PERPS_ONLY, TRANSFER_ONLY,
+  // ESCROW_ONLY, PERPS_FULL) + their helpers (hasPermission,
+  // permissionsToStrings, stringsToPermissions, PermissionBuilder,
+  // ACTION_PERMISSION_MAP) were DELETED in the A11 cleanup — the test
+  // blocks that covered them went with them. The v6 program uses a 2-bit
+  // capability enum, not a bitmask. See `FULL_CAPABILITY` tests above.
 
   describe("isStablecoinMint", () => {
     it("devnet USDC returns true", () => {
@@ -169,48 +130,9 @@ describe("types", () => {
     });
   });
 
-  describe("hasPermission", () => {
-    it("single bit set returns true", () => {
-      expect(hasPermission(SWAP_ONLY, "swap")).to.be.true;
-    });
-
-    it("legacy all-bits-set returns true for any type", () => {
-      const ALL_BITS = (1n << 21n) - 1n; // legacy full bitmask
-      expect(hasPermission(ALL_BITS, "transfer")).to.be.true;
-      expect(hasPermission(ALL_BITS, "createEscrow")).to.be.true;
-    });
-
-    it("no bits set returns false", () => {
-      expect(hasPermission(0n, "swap")).to.be.false;
-    });
-
-    it("unknown action type returns false", () => {
-      const ALL_BITS = (1n << 21n) - 1n;
-      expect(hasPermission(ALL_BITS, "unknownAction")).to.be.false;
-    });
-
-    it("each of 21 action types is correctly mapped", () => {
-      for (const [name, bit] of Object.entries(ACTION_PERMISSION_MAP)) {
-        expect(hasPermission(bit, name)).to.be.true;
-        expect(hasPermission(0n, name)).to.be.false;
-      }
-    });
-  });
-
-  describe("permissionsToStrings", () => {
-    it("legacy all-bits returns 21 strings", () => {
-      const ALL_BITS = (1n << 21n) - 1n;
-      expect(permissionsToStrings(ALL_BITS)).to.have.length(21);
-    });
-
-    it("0n returns empty array", () => {
-      expect(permissionsToStrings(0n)).to.deep.equal([]);
-    });
-
-    it("single bit returns single string", () => {
-      expect(permissionsToStrings(1n << 7n)).to.deep.equal(["transfer"]);
-    });
-  });
+  // `hasPermission` + `permissionsToStrings` blocks deleted in A11 — the
+  // underlying 21-bit bitmask was replaced by a 2-bit capability enum
+  // (see docstrings in `src/types.ts`). The helpers no longer exist.
 
   describe("parseActionType", () => {
     it("{ swap: {} } returns 'swap'", () => {
@@ -224,6 +146,24 @@ describe("types", () => {
     it("multi-key returns first key", () => {
       const result = parseActionType({ openPosition: {}, closePosition: {} });
       expect(result).to.be.a("string");
+    });
+
+    it("numeric enum 0 maps to 'swap' (A11 refactor — plain array instead of ACTION_PERMISSION_MAP)", () => {
+      expect(parseActionType(0)).to.equal("swap");
+    });
+
+    it("numeric enum 7 maps to 'transfer'", () => {
+      expect(parseActionType(7)).to.equal("transfer");
+    });
+
+    it("numeric enum 20 maps to 'refundEscrow' (last valid index)", () => {
+      expect(parseActionType(20)).to.equal("refundEscrow");
+    });
+
+    it("numeric enum out of range returns undefined", () => {
+      expect(parseActionType(21)).to.be.undefined;
+      expect(parseActionType(-1)).to.be.undefined;
+      expect(parseActionType(999)).to.be.undefined;
     });
   });
 
@@ -297,32 +237,8 @@ describe("types", () => {
     });
   });
 
-  describe("PermissionBuilder", () => {
-    it(".add('swap').build() = bit 0", () => {
-      const perms = new PermissionBuilder().add("swap").build();
-      expect(perms).to.equal(1n << 0n);
-    });
-
-    it("chained adds combine bits", () => {
-      const perms = new PermissionBuilder().add("swap").add("transfer").build();
-      expect(perms).to.equal((1n << 0n) | (1n << 7n));
-    });
-
-    it(".remove() unsets bit", () => {
-      const perms = new PermissionBuilder()
-        .add("swap")
-        .add("transfer")
-        .remove("swap")
-        .build();
-      expect(hasPermission(perms, "swap")).to.be.false;
-      expect(hasPermission(perms, "transfer")).to.be.true;
-    });
-
-    it("unknown action type silently ignored", () => {
-      const perms = new PermissionBuilder().add("nonexistent").build();
-      expect(perms).to.equal(0n);
-    });
-  });
+  // `PermissionBuilder` block deleted in A11 — see block comment above
+  // at the "Preset bitmasks" deletion for full rationale.
 
   describe("normalizeNetwork", () => {
     it("passes devnet through unchanged", () => {
@@ -348,31 +264,8 @@ describe("types", () => {
     });
   });
 
-  describe("stringsToPermissions", () => {
-    it("converts single action to bitmask", () => {
-      expect(stringsToPermissions(["swap"])).to.equal(1n);
-    });
-
-    it("converts multiple actions to combined bitmask", () => {
-      // swap = bit 0 (1n), deposit = bit 5 (32n) → 33n
-      expect(stringsToPermissions(["swap", "deposit"])).to.equal(33n);
-    });
-
-    it("round-trips with permissionsToStrings", () => {
-      const original = FULL_PERMISSIONS;
-      expect(stringsToPermissions(permissionsToStrings(original))).to.equal(
-        original,
-      );
-    });
-
-    it("throws on unknown action type", () => {
-      expect(() => stringsToPermissions(["nonexistent"])).to.throw(
-        /Unknown action type/,
-      );
-    });
-
-    it("returns 0n for empty array", () => {
-      expect(stringsToPermissions([])).to.equal(0n);
-    });
-  });
+  // `stringsToPermissions` block deleted in A11 — the helper encoded the
+  // pre-v6 21-bit bitmask and had no v6 equivalent (capability is a 2-bit
+  // enum, not a string list). See `parseActionType` above for the only
+  // surviving ActionType-name helper.
 });

@@ -33,13 +33,10 @@ const KAMINO_LEND_PROGRAM =
   "KLend2g3cP87ber8CzRaqeECGwNvLFM9acPVcRkRHvM" as Address;
 
 // Preset capability is the on-chain 2-bit value (0 = Disabled, 1 = Observer,
-// 2 = Operator). All presets that execute trades need `FULL_CAPABILITY` (2n)
-// — the previous implementation used legacy 21-bit bitmasks
-// (`SWAP_ONLY = 1n`, `PERPS_FULL | SWAP_ONLY = 131071n`, etc.) which either
-// mis-registered agents as Observer (cannot execute anything) or exceeded the
-// on-chain `capability <= 2` invariant and were rejected with
-// `InvalidArgument`. Every preset configures a policy that permits spending,
-// so every preset needs Operator.
+// 2 = Operator). All presets that execute trades need `FULL_CAPABILITY` (2n).
+// Every preset configures a policy that permits spending, so every preset
+// needs Operator. Per-action restriction lives in `InstructionConstraints`,
+// not in this capability value.
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
