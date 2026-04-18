@@ -67,10 +67,10 @@ import {
 
 // 1. Owner provisions the vault on devnet.
 const { vaultAddress } = await createAndSendVault({
-  rpc,                     // Rpc<SolanaRpcApi> from @solana/kit
+  rpc, // Rpc<SolanaRpcApi> from @solana/kit
   network: "devnet",
-  owner: ownerSigner,      // TransactionSigner
-  agent: agentSigner,      // TransactionSigner — separate key from owner
+  owner: ownerSigner, // TransactionSigner
+  agent: agentSigner, // TransactionSigner — separate key from owner
   // Required safety posture (v0.9.0 — no silent defaults):
   ...SAFETY_PRESETS.development,
 });
@@ -99,6 +99,7 @@ The agent's signing key is never enough on its own — Sigil's validate instruct
 ## Security boundary
 
 **What the on-chain program enforces:**
+
 - Daily and per-transaction spending caps (`dailySpendingCapUsd`, `maxTransactionSizeUsd`)
 - Per-agent spending limits (`spendingLimitUsd`)
 - Protocol allowlist / denylist (`protocols`, `protocolMode`)
@@ -107,6 +108,7 @@ The agent's signing key is never enough on its own — Sigil's validate instruct
 - Owner timelock on policy changes (`timelockDuration`)
 
 **What the SDK enforces pre-submission:**
+
 - Agent capability check (2-bit enum: Disabled / Observer / Operator)
 - Genesis-hash assertion on `SigilClient.create()` — prevents cluster mismatch
 - Strict USD parsing (`parseUsd`) — no `parseFloat` rounding
@@ -114,6 +116,7 @@ The agent's signing key is never enough on its own — Sigil's validate instruct
 - SPL token-operation detection — blocks non-whitelisted transfer patterns
 
 **What the SDK does NOT attempt:**
+
 - Key custody — bring your own `TransactionSigner` (Turnkey, Crossmint, Privy, or a local keypair)
 - Transaction simulation outcome trust — simulation is a hint, not a guarantee; on-chain enforcement is the source of truth
 - Replay prevention outside a session — agents must start a new session per transaction
@@ -147,11 +150,14 @@ import { createVault, VAULT_PRESETS, applySafetyPreset } from "@usesigil/kit";
 
 const presetFields = VAULT_PRESETS["jupiter-swap-bot"];
 const safety = applySafetyPreset("production", {
-  spendingLimitUsd: 1_000_000_000n,        // $1,000 per agent
-  dailySpendingCapUsd: 10_000_000_000n,    // $10,000 vault-wide
+  spendingLimitUsd: 1_000_000_000n, // $1,000 per agent
+  dailySpendingCapUsd: 10_000_000_000n, // $10,000 vault-wide
 });
 await createVault({
-  rpc, network: "mainnet", owner, agent,
+  rpc,
+  network: "mainnet",
+  owner,
+  agent,
   ...presetFields,
   ...safety,
 });
@@ -178,11 +184,13 @@ const { swapTransaction, addressLookupTableAddresses } = await jupiter.swapPost(
 const jupiterIxs: Instruction[] = decodeSwapInstructions(swapTransaction);
 
 const sealed = await seal({
-  rpc, network: "devnet",
-  vault, agent: agentSigner,
+  rpc,
+  network: "devnet",
+  vault,
+  agent: agentSigner,
   instructions: jupiterIxs,
   tokenMint: USDC_MINT_DEVNET,
-  amount: 10_000_000n,                               // $10 in base units
+  amount: 10_000_000n, // $10 in base units
   protocolAltAddresses: addressLookupTableAddresses, // rotate per-route
 });
 ```
@@ -193,14 +201,14 @@ Any Jupiter-supported protocol flows through the same path; Sigil treats the ins
 
 ## Subpath imports
 
-| Import | Use for |
-|--------|---------|
-| `@usesigil/kit` | Main API: `seal`, `SigilClient`, `createVault`, analytics, presets |
-| `@usesigil/kit/errors` | The 49 `SIGIL_ERROR__*` code constants for `catch`-block narrowing |
-| `@usesigil/kit/dashboard` | `OwnerClient` for vault management (reads + owner mutations) |
-| `@usesigil/kit/x402` | HTTP 402 Payment Required helpers (`shieldedFetch`, payment parsing) |
-| `@usesigil/kit/testing` | Mock RPCs and fixtures for unit tests |
-| `@usesigil/kit/testing/devnet` | Devnet test harness (browser-incompatible — Node only) |
+| Import                         | Use for                                                              |
+| ------------------------------ | -------------------------------------------------------------------- |
+| `@usesigil/kit`                | Main API: `seal`, `SigilClient`, `createVault`, analytics, presets   |
+| `@usesigil/kit/errors`         | The 49 `SIGIL_ERROR__*` code constants for `catch`-block narrowing   |
+| `@usesigil/kit/dashboard`      | `OwnerClient` for vault management (reads + owner mutations)         |
+| `@usesigil/kit/x402`           | HTTP 402 Payment Required helpers (`shieldedFetch`, payment parsing) |
+| `@usesigil/kit/testing`        | Mock RPCs and fixtures for unit tests                                |
+| `@usesigil/kit/testing/devnet` | Devnet test harness (browser-incompatible — Node only)               |
 
 ---
 

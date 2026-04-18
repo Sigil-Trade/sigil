@@ -135,7 +135,10 @@ describe("v0.9.0 /errors subpath smoke", () => {
     const codes = Object.keys(errorsSubpath).filter((k) =>
       k.startsWith("SIGIL_ERROR__"),
     );
-    expect(codes.length).to.equal(49);
+    // 49 codes post-Sprint-1; Sprint 2 added 3 new ones
+    // (HOOK_ABORTED, PLUGIN_REJECTED, OWNER_REQUIRED) bringing the total
+    // to 52. Future additions should bump this number intentionally.
+    expect(codes.length).to.equal(52);
   });
 });
 

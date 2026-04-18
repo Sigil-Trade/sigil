@@ -11,7 +11,18 @@ import { rootNodeFromAnchor } from "@codama/nodes-from-anchor";
 import { renderVisitor } from "@codama/renderers-js";
 import { createFromRoot } from "codama";
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync, mkdtempSync, cpSync, rmSync, existsSync, mkdirSync, renameSync, readdirSync, statSync } from "node:fs";
+import {
+  readFileSync,
+  writeFileSync,
+  mkdtempSync,
+  cpSync,
+  rmSync,
+  existsSync,
+  mkdirSync,
+  renameSync,
+  readdirSync,
+  statSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
@@ -31,13 +42,15 @@ const PROTOCOLS = {
     idlPath: join(__dirname, "idls", "perpetuals.json"),
     outputDir: join(__dirname, "generated-protocols", "flash-trade"),
     generateEventMap: false,
-    expectedHash: "66db991046f4c0029f0027a5a43ee11f58789cbc8276dd3108026ad2b4a24339",
+    expectedHash:
+      "66db991046f4c0029f0027a5a43ee11f58789cbc8276dd3108026ad2b4a24339",
   },
   kamino: {
     idlPath: join(__dirname, "idls", "kamino-lending.json"),
     outputDir: join(__dirname, "generated-protocols", "kamino"),
     generateEventMap: false,
-    expectedHash: "5958e26f571077a32f730382bb481ad2b138ca28a18067bfcb28c46586c3a783",
+    expectedHash:
+      "5958e26f571077a32f730382bb481ad2b138ca28a18067bfcb28c46586c3a783",
   },
 };
 
@@ -45,7 +58,9 @@ const PROTOCOLS = {
 
 const args = process.argv.slice(2);
 const allFlag = args.includes("--all");
-const protocolArg = args.find((a) => a.startsWith("--protocol="))?.split("=")[1];
+const protocolArg = args
+  .find((a) => a.startsWith("--protocol="))
+  ?.split("=")[1];
 const updateHashes = args.includes("--update-hashes");
 const skipHashCheck = args.includes("--skip-hash-check");
 
@@ -53,22 +68,31 @@ const skipHashCheck = args.includes("--skip-hash-check");
 
 function validateIdl(idl, protocol) {
   const errors = [];
-  if (typeof idl !== "object" || idl === null) errors.push("IDL root must be an object");
+  if (typeof idl !== "object" || idl === null)
+    errors.push("IDL root must be an object");
   // Support both top-level name/version and metadata.name/version (Anchor IDL spec variations)
-  const hasName = typeof idl.name === "string" || typeof idl.metadata?.name === "string";
-  const hasVersion = typeof idl.version === "string" || typeof idl.metadata?.version === "string";
+  const hasName =
+    typeof idl.name === "string" || typeof idl.metadata?.name === "string";
+  const hasVersion =
+    typeof idl.version === "string" ||
+    typeof idl.metadata?.version === "string";
   if (!hasName) errors.push("Missing 'name' field (checked root and metadata)");
-  if (!hasVersion) errors.push("Missing 'version' field (checked root and metadata)");
+  if (!hasVersion)
+    errors.push("Missing 'version' field (checked root and metadata)");
   if (!Array.isArray(idl.instructions)) {
     errors.push("Missing 'instructions' array");
   } else {
     for (const [i, ix] of idl.instructions.entries()) {
-      if (typeof ix.name !== "string") errors.push(`instructions[${i}] missing 'name'`);
-      if (!Array.isArray(ix.accounts)) errors.push(`instructions[${i}].${ix.name ?? i} missing 'accounts'`);
-      if (!Array.isArray(ix.args)) errors.push(`instructions[${i}].${ix.name ?? i} missing 'args'`);
+      if (typeof ix.name !== "string")
+        errors.push(`instructions[${i}] missing 'name'`);
+      if (!Array.isArray(ix.accounts))
+        errors.push(`instructions[${i}].${ix.name ?? i} missing 'accounts'`);
+      if (!Array.isArray(ix.args))
+        errors.push(`instructions[${i}].${ix.name ?? i} missing 'args'`);
     }
   }
-  if (idl.accounts && !Array.isArray(idl.accounts)) errors.push("'accounts' must be an array");
+  if (idl.accounts && !Array.isArray(idl.accounts))
+    errors.push("'accounts' must be an array");
   if (errors.length > 0) {
     console.error(`IDL validation failed for ${protocol}:`);
     errors.forEach((e) => console.error(`  - ${e}`));
@@ -81,7 +105,9 @@ if (allFlag) {
   protocolsToGenerate = Object.keys(PROTOCOLS);
 } else if (protocolArg) {
   if (!PROTOCOLS[protocolArg]) {
-    console.error(`Unknown protocol: ${protocolArg}. Available: ${Object.keys(PROTOCOLS).join(", ")}`);
+    console.error(
+      `Unknown protocol: ${protocolArg}. Available: ${Object.keys(PROTOCOLS).join(", ")}`,
+    );
     process.exit(1);
   }
   protocolsToGenerate = [protocolArg];
@@ -164,18 +190,27 @@ for (const protocolName of protocolsToGenerate) {
     } catch (err) {
       // Rollback — restore backup
       if (existsSync(backupDir)) {
-        if (existsSync(config.outputDir)) rmSync(config.outputDir, { recursive: true, force: true });
+        if (existsSync(config.outputDir))
+          rmSync(config.outputDir, { recursive: true, force: true });
         renameSync(backupDir, config.outputDir);
       }
-      throw new Error(`Generation failed for ${protocolName}, rolling back: ${err.message}`);
+      throw new Error(
+        `Generation failed for ${protocolName}, rolling back: ${err.message}`,
+      );
     }
   } finally {
-    try { rmSync(tempDir, { recursive: true, force: true }); } catch { /* ignore cleanup errors */ }
+    try {
+      rmSync(tempDir, { recursive: true, force: true });
+    } catch {
+      /* ignore cleanup errors */
+    }
   }
 
   const ixCount = anchorIdl.instructions?.length ?? 0;
   const acctCount = anchorIdl.accounts?.length ?? 0;
-  console.log(`  Generated: ${ixCount} instructions, ${acctCount} accounts → ${config.outputDir}`);
+  console.log(
+    `  Generated: ${ixCount} instructions, ${acctCount} accounts → ${config.outputDir}`,
+  );
 
   // ─── Event discriminator map (Sigil only) ──────────────────────────────
   if (config.generateEventMap) {
@@ -221,7 +256,13 @@ function fixBareDirectoryImports(dir) {
   //   from "./agentVault"       → from "./agentVault.js"  (sibling file)
   //   from "../accounts"        → from "../accounts/index.js"  (directory)
   //   from "../accounts/index.js" → unchanged (already has .js)
-  const KNOWN_DIRS = new Set(["accounts", "errors", "instructions", "programs", "types"]);
+  const KNOWN_DIRS = new Set([
+    "accounts",
+    "errors",
+    "instructions",
+    "programs",
+    "types",
+  ]);
   let fixedFiles = 0;
   let fixedImports = 0;
 
@@ -230,20 +271,29 @@ function fixBareDirectoryImports(dir) {
     let replaced = src;
 
     // Fix `from "."` → `from "./index.js"`
-    replaced = replaced.replace(/((?:from|import)\s+)(["'])\.(\2)/g, '$1$2./index.js$3');
+    replaced = replaced.replace(
+      /((?:from|import)\s+)(["'])\.(\2)/g,
+      "$1$2./index.js$3",
+    );
 
     // Fix `from ".."` → `from "../index.js"`
-    replaced = replaced.replace(/((?:from|import)\s+)(["'])\.\.(\2)/g, '$1$2../index.js$3');
+    replaced = replaced.replace(
+      /((?:from|import)\s+)(["'])\.\.(\2)/g,
+      "$1$2../index.js$3",
+    );
 
     // Fix relative path imports without .js extension
-    replaced = replaced.replace(/((?:from|import)\s+["'])(\.\.?\/[^"']+)(["'])/g, (match, prefix, path, suffix) => {
-      if (path.endsWith(".js") || path.endsWith(".json")) return match;
-      const lastSegment = path.split("/").pop();
-      if (KNOWN_DIRS.has(lastSegment)) {
-        return `${prefix}${path}/index.js${suffix}`;
-      }
-      return `${prefix}${path}.js${suffix}`;
-    });
+    replaced = replaced.replace(
+      /((?:from|import)\s+["'])(\.\.?\/[^"']+)(["'])/g,
+      (match, prefix, path, suffix) => {
+        if (path.endsWith(".js") || path.endsWith(".json")) return match;
+        const lastSegment = path.split("/").pop();
+        if (KNOWN_DIRS.has(lastSegment)) {
+          return `${prefix}${path}/index.js${suffix}`;
+        }
+        return `${prefix}${path}.js${suffix}`;
+      },
+    );
 
     if (replaced !== src) {
       writeFileSync(filePath, replaced, "utf-8");
@@ -264,7 +314,9 @@ function fixBareDirectoryImports(dir) {
 
   walk(dir);
   if (fixedImports > 0) {
-    console.log(`  ESM fix: ${fixedImports} bare imports → .js extensions in ${fixedFiles} files`);
+    console.log(
+      `  ESM fix: ${fixedImports} bare imports → .js extensions in ${fixedFiles} files`,
+    );
   }
 }
 

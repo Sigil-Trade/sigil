@@ -465,6 +465,40 @@ export type {
 } from "./seal.js";
 
 // ─── Create Vault ──────────────────────────────────────────────────────────
+// ─── Sprint 2: Sigil Facade + SigilVault + Hooks + Plugins ──────────────────
+export { Sigil } from "./sigil.js";
+export type {
+  SigilQuickstartOptions,
+  SigilQuickstartResult,
+  FundedOutcome,
+  FromVaultOptions,
+} from "./sigil.js";
+
+export { SigilVault } from "./vault-handle.js";
+export type {
+  SigilVaultExecuteOptions,
+  SigilVaultInternalState,
+  TxOpts as SigilVaultTxOpts,
+  TxResult as SigilVaultTxResult,
+} from "./vault-handle.js";
+
+export { composeHooks, invokeHook, newCorrelationId } from "./hooks.js";
+export type {
+  SealHooks,
+  SealHookContext,
+  SealHookAbort,
+  OnBeforeBuildResult,
+} from "./hooks.js";
+
+export { runPlugins, validatePluginList } from "./plugin.js";
+export type {
+  SigilPolicyPlugin,
+  PluginContext,
+  PluginResult,
+  PluginAllow,
+  PluginReject,
+} from "./plugin.js";
+
 export { createVault, createAndSendVault } from "./create-vault.js";
 export type {
   CreateVaultOptions,
