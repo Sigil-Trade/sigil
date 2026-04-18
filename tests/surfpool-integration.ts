@@ -2239,7 +2239,11 @@ describe("surfpool-integration", function () {
   // ═══════════════════════════════════════════════════════════════════════════
   describe("10. multi-agent permissions", () => {
     // Capability levels: 0=Disabled, 1=Observer (non-spending), 2=Operator (full)
-    const SWAP_ONLY = 2; // Operator — can do spending operations (swap)
+    // Renamed from `SWAP_ONLY` in the A11 cleanup — the SDK's historical
+    // `SWAP_ONLY` export was a 21-bit bitmask (`1n << 0n` = 1), not the
+    // v6 operator-capability value (2). Name changed to eliminate the
+    // cross-codebase shadow.
+    const OPERATOR_CAPABILITY = 2; // Operator — can do spending operations (swap)
     const NO_SWAP = 1; // Observer — non-spending only, swap (spending) blocked
     const OBSERVER_ONLY = 1; // Observer — can only do non-spending operations
     const ZERO_PERMISSIONS = 0; // Disabled — no operations
@@ -2250,7 +2254,7 @@ describe("surfpool-integration", function () {
     before(async () => {
       // Vault with swap-only agent (timelockDuration required for queue/apply)
       swapSetup = await setupVaultWithAgent(env, program, {
-        agentCapability: SWAP_ONLY,
+        agentCapability: OPERATOR_CAPABILITY,
         timelockDuration: new BN(1800),
       });
       // Vault with no-swap agent
@@ -2527,7 +2531,7 @@ describe("surfpool-integration", function () {
       );
 
       const transferSetup = await setupVaultWithAgent(env, program, {
-        agentCapability: SWAP_ONLY, // Operator (2) — transfers are spending actions
+        agentCapability: OPERATOR_CAPABILITY, // Operator (2) — transfers are spending actions
         allowedDestinations: [destWallet.publicKey],
       });
 

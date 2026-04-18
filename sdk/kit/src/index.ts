@@ -12,19 +12,15 @@
 // they're the supported way to parse vault state fetched from an RPC.
 export * from "./generated/accounts/index.js";
 
-// ─── Type Constants + Permissions ─────────────────────────────────────────────
+// ─── Type Constants + Capability ──────────────────────────────────────────────
 //
-// The legacy 21-bit permission bitmasks (`SWAP_ONLY`, `PERPS_ONLY`,
-// `TRANSFER_ONLY`, `ESCROW_ONLY`, `PERPS_FULL`), the `ACTION_PERMISSION_MAP`
-// table, and the permission helpers built on top of them (`hasPermission`,
-// `permissionsToStrings`, `stringsToPermissions`, `PermissionBuilder`) are no
-// longer re-exported here. They encode a pre-v6 permission model that the
-// on-chain program replaced with a 2-bit capability enum (`0 = Disabled`,
-// `1 = Observer`, `2 = Operator`), and the presets that previously used those
-// bitmasks now register agents with invalid capability values (either
-// silently Observer or rejected with `InvalidArgument`). Use
-// {@link FULL_CAPABILITY} / {@link FULL_PERMISSIONS} (both equal `2n`) for
-// any preset or vault-creation flow that needs spending authority.
+// Legacy 21-bit permission bitmasks and their helpers (`SWAP_ONLY`,
+// `PERPS_ONLY`, `TRANSFER_ONLY`, `ESCROW_ONLY`, `PERPS_FULL`,
+// `ACTION_PERMISSION_MAP`, `hasPermission`, `permissionsToStrings`,
+// `stringsToPermissions`, `PermissionBuilder`) were DELETED in the A11
+// cleanup — they encoded a pre-v6 permission model the on-chain program no
+// longer supports. Use {@link FULL_CAPABILITY} (2n) for operator agents and
+// put granular per-action restrictions in `InstructionConstraints`.
 export {
   // Program
   SIGIL_PROGRAM_ADDRESS,
