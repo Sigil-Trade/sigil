@@ -5,7 +5,7 @@
 #   0. changes                — Detect which file groups changed (package-level path filtering)
 #   1. build-lint-test        — TypeScript builds, Prettier, 1520 TS tests (conditional: any-ts or push)
 #   2. rust-checks            — cargo fmt + cargo clippy (conditional: rust changes or push)
-#   3. on-chain-tests         — Anchor build + LiteSVM 532 tests (conditional: rust changes or push)
+#   3. on-chain-tests         — Anchor build + LiteSVM 526 tests (conditional: rust changes or push)
 #  3b. build-verification     — Feature flag safety net (conditional: rust changes or push)
 #  3c. surfpool-integration   — Surfpool integration tests, 59 tests (conditional: rust changes or push)
 #   4. security-scan          — Sec3 X-Ray static analysis (always, BLOCKING)
@@ -23,7 +23,7 @@
 #   sdk/custody → Custody adapter tests (96 tests)
 #   packages/plugins → Plugin tests (6 tests)
 #
-# Total: ~2,259 tests across 19 suites (1520 TS + 532 on-chain + 59 Surfpool + 148 devnet)
+# Total: ~2,253 tests across 19 suites (1520 TS + 526 on-chain + 59 Surfpool + 148 devnet)
 # All security checks are BLOCKING — zero tolerance for known issues.
 
 name: CI
