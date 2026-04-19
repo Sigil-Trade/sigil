@@ -11,20 +11,21 @@ import {
   getAllSdkErrorCodes,
 } from "../src/agent-errors.js";
 import type { AgentError } from "../src/agent-errors.js";
+import * as generatedErrors from "../src/generated/errors/sigil.js";
 
 describe("agent-errors", () => {
   // ─── On-chain error map completeness ──────────────────────────────────────
 
   describe("ON_CHAIN_ERROR_MAP completeness", () => {
-    it("maps all 82 error codes (6000-6081)", () => {
+    it("maps all 85 error codes (6000-6084)", () => {
       const codes = getAllOnChainErrorCodes();
-      expect(codes).to.have.lengthOf(82);
+      expect(codes).to.have.lengthOf(85);
       expect(codes[0]).to.equal(6000);
-      expect(codes[codes.length - 1]).to.equal(6081);
+      expect(codes[codes.length - 1]).to.equal(6084);
     });
 
-    it("every code from 6000-6081 is present with no gaps", () => {
-      for (let code = 6000; code <= 6081; code++) {
+    it("every code from 6000-6084 is present with no gaps", () => {
+      for (let code = 6000; code <= 6084; code++) {
         const entry = ON_CHAIN_ERROR_MAP[code];
         expect(entry, `Missing error code ${code}`).to.exist;
         expect(entry.name).to.be.a("string").and.not.be.empty;
@@ -33,6 +34,42 @@ describe("agent-errors", () => {
         expect(entry.retryable).to.be.a("boolean");
         expect(entry.recovery_actions).to.be.an("array").and.not.be.empty;
       }
+    });
+
+    // Drift guard — catches the failure mode that required this PR.
+    // ON_CHAIN_ERROR_MAP is hand-maintained; generated/errors/sigil.ts is
+    // authoritative. If Rust adds a new error, the generated constants
+    // update but this map stays stale until manually synced. This test
+    // fails the moment those counts diverge, forcing the sync.
+    it("matches the count of SIGIL_ERROR__* constants in generated code", () => {
+      const generatedCodeCount = Object.keys(generatedErrors).filter(
+        (k) =>
+          k.startsWith("SIGIL_ERROR__") &&
+          typeof (generatedErrors as Record<string, unknown>)[k] === "number",
+      ).length;
+      const handMaintainedCount = getAllOnChainErrorCodes().length;
+      expect(handMaintainedCount).to.equal(
+        generatedCodeCount,
+        `ON_CHAIN_ERROR_MAP has ${handMaintainedCount} entries but generated code has ${generatedCodeCount} SIGIL_ERROR__* numeric constants — sync required`,
+      );
+    });
+
+    // Drift guard — ensures the highest numeric code in ON_CHAIN_ERROR_MAP
+    // matches the highest in generated. Catches the specific drift mode
+    // where Rust adds errors at the end of the enum but the hand map's
+    // upper-bound range check was not updated.
+    it("upper-bound code matches highest generated SIGIL_ERROR__* code", () => {
+      const generatedCodes = Object.entries(generatedErrors)
+        .filter(
+          ([k, v]) => k.startsWith("SIGIL_ERROR__") && typeof v === "number",
+        )
+        .map(([, v]) => v as number);
+      const maxGenerated = Math.max(...generatedCodes);
+      const codes = getAllOnChainErrorCodes();
+      expect(codes[codes.length - 1]).to.equal(
+        maxGenerated,
+        `ON_CHAIN_ERROR_MAP max is ${codes[codes.length - 1]} but generated max is ${maxGenerated}`,
+      );
     });
   });
 

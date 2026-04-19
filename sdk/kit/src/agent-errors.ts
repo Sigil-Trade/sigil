@@ -5,7 +5,7 @@
  * Every error includes a category, retryability flag, and
  * recovery actions that tell the agent exactly what to do next.
  *
- * Maps all 82 on-chain error codes (6000-6081) plus 34 SDK
+ * Maps all 85 on-chain error codes (6000-6084) plus 34 SDK
  * error codes (7000-7033) to AgentError with machine-readable metadata.
  *
  * Zero dependency on @solana/web3.js or @coral-xyz/anchor.
@@ -57,7 +57,7 @@ export interface AgentError {
 }
 
 // ---------------------------------------------------------------------------
-// On-chain error code mapping (6000-6081)
+// On-chain error code mapping (6000-6084)
 // ---------------------------------------------------------------------------
 
 interface ErrorMapping {
@@ -1214,6 +1214,34 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     ],
   },
   6078: {
+    name: "UnauthorizedPreValidateInstruction",
+    message:
+      "Non-infrastructure instruction detected before validate_and_authorize.",
+    category: "PERMISSION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "fix_instruction_order",
+        description:
+          "Place validate_and_authorize before any DeFi or program instruction.",
+      },
+    ],
+  },
+  6079: {
+    name: "SnapshotNotCaptured",
+    message:
+      "Delta assertion snapshot was not captured in validate_and_authorize.",
+    category: "INPUT_VALIDATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "fix_assertions",
+        description:
+          "Ensure validate_and_authorize captures a snapshot before finalize delta check.",
+      },
+    ],
+  },
+  6080: {
     name: "ConstraintIndexOutOfBounds",
     message: "Constraint entry index out of bounds for zero-copy array.",
     category: "INPUT_VALIDATION",
@@ -1225,7 +1253,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6079: {
+  6081: {
     name: "InvalidConstraintOperator",
     message:
       "Constraint operator value is not a valid ConstraintOperator discriminant.",
@@ -1238,7 +1266,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6080: {
+  6082: {
     name: "ConstraintsVaultMismatch",
     message: "Zero-copy constraints account has wrong vault.",
     category: "INPUT_VALIDATION",
@@ -1250,7 +1278,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6081: {
+  6083: {
     name: "ConstraintEntryCountExceeded",
     message:
       "Cannot pack entries: entry count exceeds MAX_CONSTRAINT_ENTRIES (64).",
@@ -1260,6 +1288,20 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       {
         action: "reduce_entries",
         description: "Reduce the number of constraint entries to 64 or fewer.",
+      },
+    ],
+  },
+  6084: {
+    name: "BlockedSplOpcode",
+    message:
+      "SPL opcode is blocked at runtime and cannot be used in constraints.",
+    category: "INPUT_VALIDATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "fix_constraints",
+        description:
+          "Remove blocked SPL opcode from the constraint entry — use allowlisted opcodes only.",
       },
     ],
   },
@@ -1784,7 +1826,7 @@ const SDK_ERRORS: Record<string, ErrorMapping> = {
  * Convert any error into a structured AgentError.
  *
  * Handles:
- * - On-chain Anchor errors (code 6000-6081)
+ * - On-chain Anchor errors (code 6000-6084)
  * - SDK errors (code 7000-7033)
  * - Network/RPC errors (from message patterns)
  * - Unknown errors (wrapped as FATAL)
@@ -2137,7 +2179,7 @@ function extractErrorCode(error: unknown): number | null {
   const e = error as Record<string, unknown>;
 
   // Direct code property
-  if (typeof e.code === "number" && e.code >= 6000 && e.code <= 6081)
+  if (typeof e.code === "number" && e.code >= 6000 && e.code <= 6084)
     return e.code;
 
   // Anchor error structure
@@ -2154,7 +2196,7 @@ function extractErrorCode(error: unknown): number | null {
     const match = e.message.match(/custom program error: 0x([0-9a-fA-F]+)/);
     if (match) {
       const code = parseInt(match[1], 16);
-      if (code >= 6000 && code <= 6081) return code;
+      if (code >= 6000 && code <= 6084) return code;
     }
   }
 
@@ -2404,7 +2446,7 @@ export class SigilSdkError extends Error implements AgentError {
  * Returns a SigilSdkError (extends Error) so instanceof Error checks still work.
  *
  * Processing order:
- * 1. Try on-chain error extraction via toAgentError() (numeric codes 6000-6081)
+ * 1. Try on-chain error extraction via toAgentError() (numeric codes 6000-6084)
  * 2. Pattern-match SDK error messages (11 patterns from seal.ts throw sites)
  * 3. Fallback to UNKNOWN/FATAL
  */
