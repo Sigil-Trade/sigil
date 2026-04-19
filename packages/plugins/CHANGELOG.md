@@ -1,5 +1,12 @@
 # @usesigil/plugins
 
+## 11.0.0
+
+### Patch Changes
+
+- Updated dependencies [[`f8e2869`](https://github.com/Sigil-Trade/sigil/commit/f8e2869166ac95570ebcb001882ff3e0c93601e3)]:
+  - @usesigil/kit@0.13.0
+
 ## 10.0.0
 
 ### Patch Changes
