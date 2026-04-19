@@ -330,6 +330,33 @@ mod tests {
     use super::*;
     use bytemuck::Zeroable;
 
+    /// LAYOUT INVARIANT — `ConstraintEntryZC` must remain exactly 560 bytes
+    /// across any field-deletion or field-shift refactor. The
+    /// `InstructionConstraints::SIZE` constant (35,888 bytes) and the
+    /// entries-array offsets cascade off this size; shrinking the struct
+    /// silently corrupts every existing on-chain `InstructionConstraints` PDA.
+    /// If this test fails, you have changed the layout — adjust `_padding`
+    /// to absorb the freed bytes BEFORE shipping.
+    #[test]
+    fn constraint_entry_zc_size_invariant() {
+        assert_eq!(
+            std::mem::size_of::<ConstraintEntryZC>(),
+            560,
+            "ConstraintEntryZC must be exactly 560 bytes — adjust _padding if shifting fields"
+        );
+    }
+
+    /// LAYOUT INVARIANT — `InstructionConstraints` zero-copy account size
+    /// must match the documented `SIZE` constant.
+    #[test]
+    fn instruction_constraints_size_invariant() {
+        assert_eq!(
+            InstructionConstraints::SIZE,
+            8 + 32 + (560 * MAX_CONSTRAINT_ENTRIES) + 1 + 1 + 1 + 1 + 4,
+            "InstructionConstraints::SIZE constant out of sync with computed layout"
+        );
+    }
+
     /// Standard 8-byte Anchor discriminator anchor used by valid test entries.
     fn discriminator_anchor() -> DataConstraint {
         DataConstraint {
