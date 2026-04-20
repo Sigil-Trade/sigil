@@ -104,7 +104,10 @@ const ANCHOR_ERROR_MAP: Record<number, { name: string; suggestion: string }> = {
     name: "UnauthorizedOwner",
     suggestion: "Only the vault owner can call this.",
   },
-  6003: { name: "UnsupportedToken", suggestion: "Use USDC or USDT." },
+  6003: {
+    name: "UnsupportedToken",
+    suggestion: "Use USDC or USDT.",
+  },
   6004: {
     name: "ProtocolNotAllowed",
     suggestion: "Protocol not in vault's allowlist.",
@@ -117,7 +120,10 @@ const ANCHOR_ERROR_MAP: Record<number, { name: string; suggestion: string }> = {
     name: "SpendingCapExceeded",
     suggestion: "Rolling 24h spending cap exceeded.",
   },
-  6007: { name: "LeverageTooHigh", suggestion: "Reduce leverage." },
+  6007: {
+    name: "LeverageTooHigh",
+    suggestion: "Reduce leverage.",
+  },
   6008: {
     name: "SessionNotAuthorized",
     suggestion: "Call validate_and_authorize first.",
@@ -134,12 +140,18 @@ const ANCHOR_ERROR_MAP: Record<number, { name: string; suggestion: string }> = {
     name: "AgentAlreadyRegistered",
     suggestion: "Agent is already registered for this vault.",
   },
-  6012: { name: "NoAgentRegistered", suggestion: "Register an agent first." },
+  6012: {
+    name: "NoAgentRegistered",
+    suggestion: "Register an agent first.",
+  },
   6013: {
     name: "VaultNotFrozen",
     suggestion: "Vault must be frozen to reactivate.",
   },
-  6014: { name: "VaultAlreadyClosed", suggestion: "Vault is already closed." },
+  6014: {
+    name: "VaultAlreadyClosed",
+    suggestion: "Vault is already closed.",
+  },
   6015: {
     name: "InsufficientBalance",
     suggestion: "Insufficient vault balance for withdrawal.",
@@ -177,164 +189,245 @@ const ANCHOR_ERROR_MAP: Record<number, { name: string; suggestion: string }> = {
     suggestion: "Wait for timelock period to expire.",
   },
   6024: {
-    name: "TimelockActive",
-    suggestion: "Use queue_policy_update instead.",
-  },
-  6025: {
     name: "NoTimelockConfigured",
     suggestion: "No timelock configured on this vault.",
   },
-  6026: {
+  6025: {
     name: "DestinationNotAllowed",
     suggestion: "Destination not in allowed list.",
   },
-  6027: {
+  6026: {
     name: "TooManyDestinations",
     suggestion: "Too many destinations (max 10).",
   },
-  6028: {
+  6027: {
     name: "InvalidProtocolMode",
     suggestion: "Protocol mode must be 0, 1, or 2.",
   },
-  6029: {
+  6028: {
     name: "InvalidNonSpendingAmount",
     suggestion: "Non-spending action must have amount = 0.",
   },
-  6030: {
+  6029: {
     name: "CpiCallNotAllowed",
     suggestion: "Must be top-level instruction (no CPI).",
   },
-  6031: {
+  6030: {
     name: "MissingFinalizeInstruction",
     suggestion: "Include finalize_session in transaction.",
   },
-  6032: {
+  6031: {
     name: "NonTrackedSwapMustReturnStablecoin",
     suggestion: "Non-stablecoin swap must return stablecoin.",
   },
-  6033: {
+  6032: {
     name: "SwapSlippageExceeded",
     suggestion: "Slippage exceeds policy max_slippage_bps.",
   },
-  6034: {
+  6033: {
     name: "InvalidJupiterInstruction",
     suggestion: "Cannot parse Jupiter swap instruction.",
   },
-  6035: {
+  6034: {
     name: "UnauthorizedTokenTransfer",
     suggestion:
       "Top-level SPL Token transfer not allowed between validate and finalize.",
   },
-  6036: {
+  6035: {
     name: "SlippageBpsTooHigh",
     suggestion: "Slippage BPS exceeds maximum (5000 = 50%).",
   },
-  6037: {
+  6036: {
     name: "ProtocolMismatch",
     suggestion:
       "DeFi instruction program doesn't match declared target_protocol.",
   },
-  6038: {
+  6037: {
     name: "TooManyDeFiInstructions",
     suggestion: "Non-stablecoin swap allows exactly one DeFi instruction.",
   },
-  6039: {
+  6038: {
     name: "MaxAgentsReached",
     suggestion: "Remove an agent first (max 10).",
   },
-  6040: {
+  6039: {
     name: "InsufficientPermissions",
     suggestion: "Agent lacks permission for this action type.",
   },
-  6041: {
+  6040: {
     name: "InvalidPermissions",
     suggestion: "Permission bitmask contains invalid bits.",
   },
-  6042: {
+  6041: {
     name: "EscrowNotActive",
     suggestion: "Escrow is not in Active status.",
   },
-  6043: { name: "EscrowExpired", suggestion: "Escrow has expired." },
-  6044: {
+  6042: {
+    name: "EscrowExpired",
+    suggestion: "Escrow has expired.",
+  },
+  6043: {
     name: "EscrowNotExpired",
     suggestion: "Escrow has not expired yet — wait for expiry.",
   },
-  6045: { name: "InvalidEscrowVault", suggestion: "Invalid escrow vault." },
-  6046: {
+  6044: {
+    name: "InvalidEscrowVault",
+    suggestion: "Invalid escrow vault.",
+  },
+  6045: {
     name: "EscrowConditionsNotMet",
     suggestion: "Escrow conditions not met.",
   },
-  6047: {
+  6046: {
     name: "EscrowDurationExceeded",
     suggestion: "Escrow duration exceeds max (30 days).",
   },
-  6048: {
+  6047: {
     name: "InvalidConstraintConfig",
     suggestion: "Constraint configuration exceeds bounds.",
   },
-  6049: {
+  6048: {
     name: "ConstraintViolated",
     suggestion: "Instruction violates a constraint.",
   },
-  6050: {
+  6049: {
     name: "InvalidConstraintsPda",
     suggestion: "Wrong constraints PDA owner or vault.",
   },
-  6051: {
+  6050: {
     name: "InvalidPendingConstraintsPda",
     suggestion: "Wrong pending constraints PDA.",
   },
-  6052: {
+  6051: {
     name: "AgentSpendLimitExceeded",
     suggestion: "Agent rolling 24h spend exceeds per-agent limit.",
   },
-  6053: {
+  6052: {
     name: "OverlaySlotExhausted",
     suggestion:
       "Per-agent overlay full — cannot register agent with spending limit.",
   },
-  6054: {
+  6053: {
     name: "AgentSlotNotFound",
     suggestion: "Agent has spending limit but no overlay tracking slot.",
   },
-  6055: {
+  6054: {
     name: "UnauthorizedTokenApproval",
     suggestion: "Unauthorized SPL Token Approve between validate and finalize.",
   },
-  6056: {
+  6055: {
     name: "InvalidSessionExpiry",
     suggestion: "Session expiry slots out of range (10-450).",
   },
-  6057: {
+  6056: {
     name: "UnconstrainedProgramBlocked",
     suggestion: "Program has no constraint entry and strict mode is enabled.",
   },
-  6058: {
+  6057: {
     name: "ProtocolCapExceeded",
     suggestion: "Per-protocol rolling 24h spending cap exceeded.",
   },
-  6059: {
+  6058: {
     name: "ProtocolCapsMismatch",
     suggestion: "protocol_caps length must match protocols length.",
   },
-  6060: {
+  6059: {
     name: "ActiveEscrowsExist",
     suggestion: "Close active escrow deposits before closing vault.",
   },
-  6061: {
+  6060: {
     name: "ConstraintsNotClosed",
     suggestion: "Close instruction constraints before closing vault.",
   },
-  6062: {
+  6061: {
     name: "PendingPolicyExists",
     suggestion: "Apply or cancel pending policy update before closing vault.",
   },
-  6063: {
+  6062: {
     name: "AgentPaused",
     suggestion: "Agent is paused — unpause before executing actions.",
   },
-  6064: { name: "AgentAlreadyPaused", suggestion: "Agent is already paused." },
-  6065: { name: "AgentNotPaused", suggestion: "Agent is not paused." },
+  6063: {
+    name: "AgentAlreadyPaused",
+    suggestion: "Agent is already paused.",
+  },
+  6064: {
+    name: "AgentNotPaused",
+    suggestion: "Agent is not paused.",
+  },
+  6065: {
+    name: "UnauthorizedPostFinalizeInstruction",
+    suggestion:
+      "UnauthorizedPostFinalizeInstruction — see Sigil error-code documentation.",
+  },
+  6066: {
+    name: "UnexpectedBalanceDecrease",
+    suggestion:
+      "UnexpectedBalanceDecrease — see Sigil error-code documentation.",
+  },
+  6067: {
+    name: "TimelockTooShort",
+    suggestion: "TimelockTooShort — see Sigil error-code documentation.",
+  },
+  6068: {
+    name: "PolicyVersionMismatch",
+    suggestion: "PolicyVersionMismatch — see Sigil error-code documentation.",
+  },
+  6069: {
+    name: "PendingAgentPermsExists",
+    suggestion: "PendingAgentPermsExists — see Sigil error-code documentation.",
+  },
+  6070: {
+    name: "PendingCloseConstraintsExists",
+    suggestion:
+      "PendingCloseConstraintsExists — see Sigil error-code documentation.",
+  },
+  6071: {
+    name: "ActiveSessionsExist",
+    suggestion: "ActiveSessionsExist — see Sigil error-code documentation.",
+  },
+  6072: {
+    name: "PostAssertionFailed",
+    suggestion: "PostAssertionFailed — see Sigil error-code documentation.",
+  },
+  6073: {
+    name: "InvalidPostAssertionIndex",
+    suggestion:
+      "InvalidPostAssertionIndex — see Sigil error-code documentation.",
+  },
+  6074: {
+    name: "UnauthorizedPreValidateInstruction",
+    suggestion:
+      "UnauthorizedPreValidateInstruction — see Sigil error-code documentation.",
+  },
+  6075: {
+    name: "SnapshotNotCaptured",
+    suggestion: "SnapshotNotCaptured — see Sigil error-code documentation.",
+  },
+  6076: {
+    name: "ConstraintIndexOutOfBounds",
+    suggestion:
+      "ConstraintIndexOutOfBounds — see Sigil error-code documentation.",
+  },
+  6077: {
+    name: "InvalidConstraintOperator",
+    suggestion:
+      "InvalidConstraintOperator — see Sigil error-code documentation.",
+  },
+  6078: {
+    name: "ConstraintsVaultMismatch",
+    suggestion:
+      "ConstraintsVaultMismatch — see Sigil error-code documentation.",
+  },
+  6079: {
+    name: "ConstraintEntryCountExceeded",
+    suggestion:
+      "ConstraintEntryCountExceeded — see Sigil error-code documentation.",
+  },
+  6080: {
+    name: "BlockedSplOpcode",
+    suggestion: "BlockedSplOpcode — see Sigil error-code documentation.",
+  },
 };
 
 // ─── Core Simulation ─────────────────────────────────────────────────────────

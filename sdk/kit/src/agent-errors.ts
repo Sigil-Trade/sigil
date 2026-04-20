@@ -1774,7 +1774,7 @@ const SDK_ERRORS: Record<string, ErrorMapping> = {
  * Convert any error into a structured AgentError.
  *
  * Handles:
- * - On-chain Anchor errors (code 6000-6084)
+ * - On-chain Anchor errors (code 6000-6080)
  * - SDK errors (code 7000-7033)
  * - Network/RPC errors (from message patterns)
  * - Unknown errors (wrapped as FATAL)
@@ -2282,17 +2282,8 @@ const SDK_ERROR_PATTERNS: SdkErrorPattern[] = [
       },
     ],
   },
-  {
-    pattern: /Position limit reached/,
-    category: "POLICY_VIOLATION",
-    retryable: true,
-    recovery_actions: [
-      {
-        action: "close_position",
-        description: "Close an existing position before opening a new one.",
-      },
-    ],
-  },
+  // "Position limit reached" pattern DELETED — position counter system removed
+  // per council decision (9-1 vote, 2026-04-19).
   {
     pattern: /Spending action .+ requires amount > 0/,
     category: "INPUT_VALIDATION",
