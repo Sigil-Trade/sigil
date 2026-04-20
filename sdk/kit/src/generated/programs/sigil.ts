@@ -103,7 +103,6 @@ import {
   getRegisterAgentInstruction,
   getRevokeAgentInstruction,
   getSettleEscrowInstructionAsync,
-  getSyncPositionsInstruction,
   getUnpauseAgentInstruction,
   getValidateAndAuthorizeInstructionAsync,
   getWithdrawFundsInstructionAsync,
@@ -139,7 +138,6 @@ import {
   parseRegisterAgentInstruction,
   parseRevokeAgentInstruction,
   parseSettleEscrowInstruction,
-  parseSyncPositionsInstruction,
   parseUnpauseAgentInstruction,
   parseValidateAndAuthorizeInstruction,
   parseWithdrawFundsInstruction,
@@ -197,7 +195,6 @@ import {
   type ParsedRegisterAgentInstruction,
   type ParsedRevokeAgentInstruction,
   type ParsedSettleEscrowInstruction,
-  type ParsedSyncPositionsInstruction,
   type ParsedUnpauseAgentInstruction,
   type ParsedValidateAndAuthorizeInstruction,
   type ParsedWithdrawFundsInstruction,
@@ -211,7 +208,6 @@ import {
   type RegisterAgentInput,
   type RevokeAgentInput,
   type SettleEscrowAsyncInput,
-  type SyncPositionsInput,
   type UnpauseAgentInput,
   type ValidateAndAuthorizeAsyncInput,
   type WithdrawFundsAsyncInput,
@@ -410,7 +406,6 @@ export enum SigilInstruction {
   RegisterAgent,
   RevokeAgent,
   SettleEscrow,
-  SyncPositions,
   UnpauseAgent,
   ValidateAndAuthorize,
   WithdrawFunds,
@@ -776,17 +771,6 @@ export function identifySigilInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([255, 102, 161, 80, 185, 74, 140, 60]),
-      ),
-      0,
-    )
-  ) {
-    return SigilInstruction.SyncPositions;
-  }
-  if (
-    containsBytes(
-      data,
-      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([46, 125, 165, 212, 241, 143, 190, 95]),
       ),
       0,
@@ -921,9 +905,6 @@ export type ParsedSigilInstruction<
   | ({
       instructionType: SigilInstruction.SettleEscrow;
     } & ParsedSettleEscrowInstruction<TProgram>)
-  | ({
-      instructionType: SigilInstruction.SyncPositions;
-    } & ParsedSyncPositionsInstruction<TProgram>)
   | ({
       instructionType: SigilInstruction.UnpauseAgent;
     } & ParsedUnpauseAgentInstruction<TProgram>)
@@ -1163,13 +1144,6 @@ export function parseSigilInstruction<TProgram extends string>(
         ...parseSettleEscrowInstruction(instruction),
       };
     }
-    case SigilInstruction.SyncPositions: {
-      assertIsInstructionWithAccounts(instruction);
-      return {
-        instructionType: SigilInstruction.SyncPositions,
-        ...parseSyncPositionsInstruction(instruction),
-      };
-    }
     case SigilInstruction.UnpauseAgent: {
       assertIsInstructionWithAccounts(instruction);
       return {
@@ -1362,10 +1336,6 @@ export type SigilPluginInstructions = {
   settleEscrow: (
     input: SettleEscrowAsyncInput,
   ) => ReturnType<typeof getSettleEscrowInstructionAsync> &
-    SelfPlanAndSendFunctions;
-  syncPositions: (
-    input: SyncPositionsInput,
-  ) => ReturnType<typeof getSyncPositionsInstruction> &
     SelfPlanAndSendFunctions;
   unpauseAgent: (
     input: UnpauseAgentInput,
@@ -1590,11 +1560,6 @@ export function sigilProgram() {
             addSelfPlanAndSendFunctions(
               client,
               getSettleEscrowInstructionAsync(input),
-            ),
-          syncPositions: (input) =>
-            addSelfPlanAndSendFunctions(
-              client,
-              getSyncPositionsInstruction(input),
             ),
           unpauseAgent: (input) =>
             addSelfPlanAndSendFunctions(

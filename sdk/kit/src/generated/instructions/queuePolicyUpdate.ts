@@ -106,8 +106,6 @@ export type QueuePolicyUpdateInstructionData = {
   protocolMode: Option<number>;
   protocols: Option<Array<Address>>;
   maxLeverageBps: Option<number>;
-  canOpenPositions: Option<boolean>;
-  maxConcurrentPositions: Option<number>;
   developerFeeRate: Option<number>;
   maxSlippageBps: Option<number>;
   timelockDuration: Option<bigint>;
@@ -123,8 +121,6 @@ export type QueuePolicyUpdateInstructionDataArgs = {
   protocolMode: OptionOrNullable<number>;
   protocols: OptionOrNullable<Array<Address>>;
   maxLeverageBps: OptionOrNullable<number>;
-  canOpenPositions: OptionOrNullable<boolean>;
-  maxConcurrentPositions: OptionOrNullable<number>;
   developerFeeRate: OptionOrNullable<number>;
   maxSlippageBps: OptionOrNullable<number>;
   timelockDuration: OptionOrNullable<number | bigint>;
@@ -143,8 +139,6 @@ export function getQueuePolicyUpdateInstructionDataEncoder(): Encoder<QueuePolic
       ["protocolMode", getOptionEncoder(getU8Encoder())],
       ["protocols", getOptionEncoder(getArrayEncoder(getAddressEncoder()))],
       ["maxLeverageBps", getOptionEncoder(getU16Encoder())],
-      ["canOpenPositions", getOptionEncoder(getBooleanEncoder())],
-      ["maxConcurrentPositions", getOptionEncoder(getU8Encoder())],
       ["developerFeeRate", getOptionEncoder(getU16Encoder())],
       ["maxSlippageBps", getOptionEncoder(getU16Encoder())],
       ["timelockDuration", getOptionEncoder(getU64Encoder())],
@@ -168,8 +162,6 @@ export function getQueuePolicyUpdateInstructionDataDecoder(): Decoder<QueuePolic
     ["protocolMode", getOptionDecoder(getU8Decoder())],
     ["protocols", getOptionDecoder(getArrayDecoder(getAddressDecoder()))],
     ["maxLeverageBps", getOptionDecoder(getU16Decoder())],
-    ["canOpenPositions", getOptionDecoder(getBooleanDecoder())],
-    ["maxConcurrentPositions", getOptionDecoder(getU8Decoder())],
     ["developerFeeRate", getOptionDecoder(getU16Decoder())],
     ["maxSlippageBps", getOptionDecoder(getU16Decoder())],
     ["timelockDuration", getOptionDecoder(getU64Decoder())],
@@ -210,8 +202,6 @@ export type QueuePolicyUpdateAsyncInput<
   protocolMode: QueuePolicyUpdateInstructionDataArgs["protocolMode"];
   protocols: QueuePolicyUpdateInstructionDataArgs["protocols"];
   maxLeverageBps: QueuePolicyUpdateInstructionDataArgs["maxLeverageBps"];
-  canOpenPositions: QueuePolicyUpdateInstructionDataArgs["canOpenPositions"];
-  maxConcurrentPositions: QueuePolicyUpdateInstructionDataArgs["maxConcurrentPositions"];
   developerFeeRate: QueuePolicyUpdateInstructionDataArgs["developerFeeRate"];
   maxSlippageBps: QueuePolicyUpdateInstructionDataArgs["maxSlippageBps"];
   timelockDuration: QueuePolicyUpdateInstructionDataArgs["timelockDuration"];
@@ -344,8 +334,6 @@ export type QueuePolicyUpdateInput<
   protocolMode: QueuePolicyUpdateInstructionDataArgs["protocolMode"];
   protocols: QueuePolicyUpdateInstructionDataArgs["protocols"];
   maxLeverageBps: QueuePolicyUpdateInstructionDataArgs["maxLeverageBps"];
-  canOpenPositions: QueuePolicyUpdateInstructionDataArgs["canOpenPositions"];
-  maxConcurrentPositions: QueuePolicyUpdateInstructionDataArgs["maxConcurrentPositions"];
   developerFeeRate: QueuePolicyUpdateInstructionDataArgs["developerFeeRate"];
   maxSlippageBps: QueuePolicyUpdateInstructionDataArgs["maxSlippageBps"];
   timelockDuration: QueuePolicyUpdateInstructionDataArgs["timelockDuration"];

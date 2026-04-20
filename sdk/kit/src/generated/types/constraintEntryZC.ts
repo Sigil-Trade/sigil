@@ -37,17 +37,17 @@ import {
 /**
  * BYTE LAYOUT REGISTRY — Canonical assignment of padding bytes.
  *
- * Both `feat/multi-format-discriminator` and `feat/actiontype-elimination`
- * branches carve fields from the original 6-byte `_padding`. This registry
- * is the single source of truth. When merging, the layout MUST be:
+ * Layout (post position-counter removal, council decision 2026-04-19):
  *
- * byte 554: discriminator_format  (this branch)
- * byte 555: is_spending           (actiontype-elimination branch)
- * byte 556: position_effect       (actiontype-elimination branch)
- * bytes 557-559: _padding[3]      (reserved for future use)
+ * byte 554: is_spending
+ * byte 555: discriminator_format
+ * bytes 556-559: _padding[4]  (reserved for future use)
  *
- * Total: 32+320+200+1+1+1+1+1+3 = 560 (unchanged).
- * The branch that merges second MUST rebase and adjust its slot to match.
+ * Total: 32+320+200+1+1+1+1+4 = 560 (unchanged).
+ * Position_effect (formerly byte 555) was deleted with the entire position
+ * counter system. The freed byte is absorbed by _padding to preserve the
+ * 560-byte total — shrinking the struct would corrupt every existing
+ * on-chain InstructionConstraints PDA (35,888-byte zero-copy account).
  */
 export type ConstraintEntryZC = {
   programId: ReadonlyUint8Array;
@@ -61,11 +61,6 @@ export type ConstraintEntryZC = {
    * this value when it matches an entry — replaces ActionType.is_spending().
    */
   isSpending: number;
-  /**
-   * Position tracking: 0=None, 1=Increment (opens position), 2=Decrement (closes position).
-   * Replaces ActionType.position_effect().
-   */
-  positionEffect: number;
   /**
    * DiscriminatorFormat discriminant (0=Anchor8, 1=Spl1). Write-time only —
    * verify_data_constraints_zc() does not read this field at runtime.
@@ -87,11 +82,6 @@ export type ConstraintEntryZCArgs = {
    * this value when it matches an entry — replaces ActionType.is_spending().
    */
   isSpending: number;
-  /**
-   * Position tracking: 0=None, 1=Increment (opens position), 2=Decrement (closes position).
-   * Replaces ActionType.position_effect().
-   */
-  positionEffect: number;
   /**
    * DiscriminatorFormat discriminant (0=Anchor8, 1=Spl1). Write-time only —
    * verify_data_constraints_zc() does not read this field at runtime.
@@ -115,9 +105,8 @@ export function getConstraintEntryZCEncoder(): FixedSizeEncoder<ConstraintEntryZ
     ["dataCount", getU8Encoder()],
     ["accountCount", getU8Encoder()],
     ["isSpending", getU8Encoder()],
-    ["positionEffect", getU8Encoder()],
     ["discriminatorFormat", getU8Encoder()],
-    ["padding", fixEncoderSize(getBytesEncoder(), 3)],
+    ["padding", fixEncoderSize(getBytesEncoder(), 4)],
   ]);
 }
 
@@ -135,9 +124,8 @@ export function getConstraintEntryZCDecoder(): FixedSizeDecoder<ConstraintEntryZ
     ["dataCount", getU8Decoder()],
     ["accountCount", getU8Decoder()],
     ["isSpending", getU8Decoder()],
-    ["positionEffect", getU8Decoder()],
     ["discriminatorFormat", getU8Decoder()],
-    ["padding", fixDecoderSize(getBytesDecoder(), 3)],
+    ["padding", fixDecoderSize(getBytesDecoder(), 4)],
   ]);
 }
 

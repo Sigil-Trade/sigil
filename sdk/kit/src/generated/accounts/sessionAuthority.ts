@@ -70,8 +70,6 @@ export type SessionAuthority = {
    * Derived from amount > 0 in validate_and_authorize.
    */
   isSpending: boolean;
-  /** Position effect from matched constraint entry (0=None, 1=Increment, 2=Decrement). */
-  positionEffect: number;
   /** Slot-based expiry: session is valid until this slot */
   expiresAtSlot: bigint;
   /** Whether token delegation was set up (approve CPI) */
@@ -131,8 +129,6 @@ export type SessionAuthorityArgs = {
    * Derived from amount > 0 in validate_and_authorize.
    */
   isSpending: boolean;
-  /** Position effect from matched constraint entry (0=None, 1=Increment, 2=Decrement). */
-  positionEffect: number;
   /** Slot-based expiry: session is valid until this slot */
   expiresAtSlot: number | bigint;
   /** Whether token delegation was set up (approve CPI) */
@@ -188,7 +184,6 @@ export function getSessionAuthorityEncoder(): FixedSizeEncoder<SessionAuthorityA
       ["authorizedToken", getAddressEncoder()],
       ["authorizedProtocol", getAddressEncoder()],
       ["isSpending", getBooleanEncoder()],
-      ["positionEffect", getU8Encoder()],
       ["expiresAtSlot", getU64Encoder()],
       ["delegated", getBooleanEncoder()],
       ["delegationTokenAccount", getAddressEncoder()],
@@ -218,7 +213,6 @@ export function getSessionAuthorityDecoder(): FixedSizeDecoder<SessionAuthority>
     ["authorizedToken", getAddressDecoder()],
     ["authorizedProtocol", getAddressDecoder()],
     ["isSpending", getBooleanDecoder()],
-    ["positionEffect", getU8Decoder()],
     ["expiresAtSlot", getU64Decoder()],
     ["delegated", getBooleanDecoder()],
     ["delegationTokenAccount", getAddressDecoder()],
@@ -310,5 +304,5 @@ export async function fetchAllMaybeSessionAuthority(
 }
 
 export function getSessionAuthoritySize(): number {
-  return 377;
+  return 376;
 }

@@ -42,8 +42,6 @@ export type ConstraintEntry = {
   accountConstraints: Array<AccountConstraint>;
   /** Spending classification: 1=Spending, 2=NonSpending. Required (0 rejected). */
   isSpending: number;
-  /** Position effect: 0=None, 1=Increment, 2=Decrement. */
-  positionEffect: number;
   /**
    * Discriminator format for this entry's target program. Controls the
    * minimum byte length of the first DataConstraint (the A5 anchor).
@@ -58,8 +56,6 @@ export type ConstraintEntryArgs = {
   accountConstraints: Array<AccountConstraintArgs>;
   /** Spending classification: 1=Spending, 2=NonSpending. Required (0 rejected). */
   isSpending: number;
-  /** Position effect: 0=None, 1=Increment, 2=Decrement. */
-  positionEffect: number;
   /**
    * Discriminator format for this entry's target program. Controls the
    * minimum byte length of the first DataConstraint (the A5 anchor).
@@ -74,7 +70,6 @@ export function getConstraintEntryEncoder(): Encoder<ConstraintEntryArgs> {
     ["dataConstraints", getArrayEncoder(getDataConstraintEncoder())],
     ["accountConstraints", getArrayEncoder(getAccountConstraintEncoder())],
     ["isSpending", getU8Encoder()],
-    ["positionEffect", getU8Encoder()],
     ["discriminatorFormat", getDiscriminatorFormatEncoder()],
   ]);
 }
@@ -85,7 +80,6 @@ export function getConstraintEntryDecoder(): Decoder<ConstraintEntry> {
     ["dataConstraints", getArrayDecoder(getDataConstraintDecoder())],
     ["accountConstraints", getArrayDecoder(getAccountConstraintDecoder())],
     ["isSpending", getU8Decoder()],
-    ["positionEffect", getU8Decoder()],
     ["discriminatorFormat", getDiscriminatorFormatDecoder()],
   ]);
 }
