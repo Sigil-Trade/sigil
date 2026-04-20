@@ -3273,17 +3273,17 @@ describe("surfpool-integration", function () {
         expect.fail("Should have failed on double-settle");
       } catch (err: any) {
         if (err.name === "AssertionError") throw err;
-        // Either EscrowNotActive (6046) or Anchor constraint (3012) if ATA closed
+        // Either EscrowNotActive (6041) or Anchor constraint (3012) if ATA closed
         const errStr = err.message || JSON.stringify(err);
         // P1 #19: Was matching on generic "failed" — now checks specific error codes
         expect(
           errStr.includes("EscrowNotActive") ||
-            errStr.includes("6046") ||
+            errStr.includes("6041") ||
             errStr.includes("3012") ||
             errStr.includes("failed"),
         ).to.equal(
           true,
-          `Expected EscrowNotActive (6046) or constraint (3012) but got: ${errStr.slice(0, 200)}`,
+          `Expected EscrowNotActive (6041) or constraint (3012) but got: ${errStr.slice(0, 200)}`,
         );
       }
     });

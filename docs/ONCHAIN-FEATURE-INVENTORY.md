@@ -5,14 +5,14 @@ Complete inventory of everything shipped in the Sigil on-chain program (`program
 **Sources of truth:**
 - Instructions: `programs/sigil/src/lib.rs` (35 `pub fn` entries)
 - Account sizes: `pub const SIZE` in each `programs/sigil/src/state/*.rs`
-- Errors: `programs/sigil/src/errors.rs` (85 `#[msg(...)]` variants)
-- Events: `programs/sigil/src/events.rs` (38 `#[event]` structs)
+- Errors: `programs/sigil/src/errors.rs` (81 `#[msg(...)]` variants)
+- Events: `programs/sigil/src/events.rs` (37 `#[event]` structs)
 - Feature flags: `programs/sigil/Cargo.toml`
 
 Cross-references (do not duplicate these here):
 - Access control matrix and invariants → `docs/SECURITY.md`
 - Account seed derivation and layout diagrams → `docs/ARCHITECTURE.md`
-- Full 85-error table with messages → `docs/ERROR-CODES.md`
+- Full 81-error table with messages → `docs/ERROR-CODES.md`
 - ActionType elimination design → `docs/RFC-ACTIONTYPE-ELIMINATION.md`
 
 ---

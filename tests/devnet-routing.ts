@@ -430,12 +430,12 @@ describe("devnet-routing", () => {
     } catch (err: any) {
       // The composed TX has validate+finalize but no DeFi instruction between them.
       // Non-stablecoin input path requires exactly one DeFi instruction, so validate
-      // rejects with TooManyDeFiInstructions (6042) — proves non-stablecoin input
+      // rejects with TooManyDeFiInstructions (6037) — proves non-stablecoin input
       // with stablecoin output enters the non-stablecoin code path (not rejected outright).
-      expectError(err, "TooManyDeFiInstructions", "6042");
+      expectError(err, "TooManyDeFiInstructions", "6037");
     }
     console.log(
-      "    Non-stablecoin input with stablecoin output: rejected without DeFi instruction (6042)",
+      "    Non-stablecoin input with stablecoin output: rejected without DeFi instruction (6037)",
     );
   });
 

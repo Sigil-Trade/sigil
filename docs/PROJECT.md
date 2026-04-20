@@ -63,11 +63,11 @@ The program ID is declared at `programs/sigil/src/lib.rs:16` (`declare_id!`) and
 
 ```
 agent-middleware/
-├── programs/sigil/         Anchor program source — 36 instruction handlers, 12 PDA types, 85 errors, 38 events
+├── programs/sigil/         Anchor program source — 36 instruction handlers, 12 PDA types, 81 errors, 37 events
 │   └── src/
 │       ├── instructions/   One .rs file per dispatchable instruction
 │       ├── state/          One .rs file per on-chain account type
-│       ├── errors.rs       All 85 custom SigilError variants (codes 6000-6084)
+│       ├── errors.rs       All 81 custom SigilError variants (codes 6000-6080)
 │       └── events.rs       All 38 Anchor event structs
 ├── sdk/
 │   ├── kit/                @usesigil/kit — primary TypeScript SDK (ESM, @solana/kit)
@@ -150,7 +150,7 @@ All files live in `agent-middleware/docs/`:
 | `PROJECT.md` | This file — top-level project orientation, tech stack, packages, test statistics |
 | `ARCHITECTURE.md` | Account model, seed derivation, instruction flow, composed-transaction anatomy, constants |
 | `INSTRUCTIONS.md` | Claude Code guardrails — Solana constraints, Anchor patterns, coding conventions, what never to do |
-| `ERROR-CODES.md` | Full table of all 85 custom `SigilError` variants (codes 6000-6084) with categories and invocation sites |
+| `ERROR-CODES.md` | Full table of all 81 custom `SigilError` variants (codes 6000-6080) with categories and invocation sites |
 | `SECURITY.md` | Formal security specification — access control matrix, trust model, invariants, threat model; intended for external auditors |
 | `ONCHAIN-FEATURE-INVENTORY.md` | Complete on-chain feature inventory — all 36 instructions, 12 account types, capability model, events; source-cited from actual .rs files |
 | `COMMANDS-REFERENCE.md` | Developer command reference — build, test, lint, deploy, security tooling |
