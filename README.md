@@ -9,7 +9,7 @@
 Your policies are enforced by Solana validators, not software promises.
 
 [![CI](https://github.com/Sigil-Trade/sigil/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Sigil-Trade/sigil/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-2274-brightgreen)
+![Tests](https://img.shields.io/badge/tests-2230-brightgreen)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 
 </div>
@@ -127,8 +127,7 @@ All instructions succeed or all revert atomically. The agent's signing key is va
 | `initialize_vault`                      | Owner       | Create vault, policy, tracker, overlay PDAs (mandatory timelock)          |
 | `freeze_vault`                          | Owner       | Protective freeze — blocks agent execution, preserves agents              |
 | `reactivate_vault` (resume)             | Owner       | Unfreeze vault, optionally add new agent                                  |
-| `close_vault`                           | Owner       | Close all PDAs, reclaim rent. Requires zero open positions.               |
-| `sync_positions`                        | Owner       | Correct open position counter drift                                       |
+| `close_vault`                           | Owner       | Close all PDAs, reclaim rent. Requires no active sessions.                |
 | **Fund Management**                     |             |                                                                           |
 | `deposit_funds`                         | Owner       | Transfer SPL tokens into vault (SPL Token only, no Token-2022)            |
 | `withdraw_funds`                        | Owner       | Withdraw tokens to owner                                                  |
@@ -207,7 +206,7 @@ anchor build --no-idl
 # Generate IDL separately (requires nightly Rust — anchor-syn 0.32.1 bug)
 RUSTUP_TOOLCHAIN=nightly anchor idl build -o target/idl/sigil.json
 
-# Run on-chain tests (526 LiteSVM tests — no validator needed)
+# Run on-chain tests (508 LiteSVM tests — no validator needed)
 npx ts-mocha -p ./tsconfig.json -t 300000 \
   tests/sigil.ts tests/jupiter-integration.ts \
   tests/flash-trade-integration.ts tests/security-exploits.ts \
@@ -228,23 +227,23 @@ cargo fmt --check --manifest-path programs/sigil/Cargo.toml
 | Core vault management & permission engine                           | 107      |
 | Jupiter integration (composed swaps)                                | 8        |
 | Jupiter Lend integration (deposit/withdraw)                         | 6        |
-| Flash Trade integration (leveraged perps)                           | 26       |
-| Security exploit scenarios                                          | 158      |
+| Flash Trade integration (leveraged perps)                           | 15       |
+| Security exploit scenarios                                          | 149      |
 | Instruction constraints (generic enforcement)                       | 55       |
 | Escrow integration (deposit/settle/refund)                          | 15       |
 | TOCTOU security (policy version + timelock)                         | 7        |
 | Analytics counters (failed TX + per-agent TX count)                 | 7        |
-| Devnet integration tests (real network)                             | 69       |
+| Devnet integration tests (real network)                             | 64       |
 | Surfpool integration tests (local Surfnet)                          | 59       |
 | Platform client tests (`@usesigil/platform`)                        | 17       |
 | Custody adapters (`@usesigil/custody`)                              | 96       |
-| Kit-native SDK (`@usesigil/kit` — includes merged core + dashboard) | 1414     |
-| Kit SDK devnet tests (`@usesigil/kit` devnet)                       | 34       |
+| Kit-native SDK (`@usesigil/kit` — includes merged core + dashboard) | 1394     |
+| Kit SDK devnet tests (`@usesigil/kit` devnet)                       | 33       |
 | Plugins (`@usesigil/plugins`)                                       | 14       |
-| Rust unit tests (cargo test)                                        | 121      |
+| Rust unit tests (cargo test)                                        | 123      |
 | Devnet extended scenarios (flash-trade + stress)                    | 45       |
 | Trident fuzz tests (1K iterations)                                  | 16       |
-| **Total**                                                           | **2274** |
+| **Total**                                                           | **2230** |
 
 ## Security
 

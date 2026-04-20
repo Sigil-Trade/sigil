@@ -20,13 +20,13 @@
     },
     {
       "name": "Flash Trade integration (leveraged perps)",
-      "count": 26,
+      "count": 15,
       "onChain": true,
       "claudePattern": "tests/flash-trade-integration.ts` (%d tests)"
     },
     {
       "name": "Security exploit scenarios",
-      "count": 158,
+      "count": 149,
       "onChain": true,
       "claudePattern": "tests/security-exploits.ts` (ts-mocha + LiteSVM, %d tests)"
     },
@@ -56,7 +56,7 @@
     },
     {
       "name": "Devnet integration tests (real network)",
-      "count": 69,
+      "count": 64,
       "devnet": true
     },
     {
@@ -79,13 +79,13 @@
     },
     {
       "name": "Kit-native SDK (`@usesigil/kit` — includes merged core + dashboard)",
-      "count": 1414,
+      "count": 1394,
       "ciStepName": "Kit SDK tests",
       "claudePattern": "sdk/kit/tests/` (mocha + tsx, %d tests — includes core + dashboard + errors)"
     },
     {
       "name": "Kit SDK devnet tests (`@usesigil/kit` devnet)",
-      "count": 34,
+      "count": 33,
       "devnet": true,
       "claudePattern": "sdk/kit/tests/devnet/` (mocha + tsx, %d tests — lifecycle, composed-tx, dashboard-integration)"
     },
