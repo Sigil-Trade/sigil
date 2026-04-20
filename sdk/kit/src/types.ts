@@ -354,9 +354,12 @@ export function parseActionType(
   return Object.keys(actionType)[0];
 }
 
-// ─── Position Effect ──────────────────────────────────────────────────────────
+// ─── Spending Classification ─────────────────────────────────────────────────
 
-export type PositionEffect = "increment" | "decrement" | "none";
+// PositionEffect type + getPositionEffect helper REMOVED — position counter
+// system deleted wholesale per council decision (9-1 vote, 2026-04-19).
+// Spending classification is authoritative via session.is_spending (set from
+// amount > 0 in validate_and_authorize) — not derived from position semantics.
 
 export function isSpendingAction(actionType: string): boolean {
   return [
@@ -370,22 +373,4 @@ export function isSpendingAction(actionType: string): boolean {
     "swapAndOpenPosition",
     "createEscrow",
   ].includes(actionType);
-}
-
-export function getPositionEffect(actionType: string): PositionEffect {
-  if (
-    ["openPosition", "swapAndOpenPosition", "placeLimitOrder"].includes(
-      actionType,
-    )
-  ) {
-    return "increment";
-  }
-  if (
-    ["closePosition", "closeAndSwapPosition", "cancelLimitOrder"].includes(
-      actionType,
-    )
-  ) {
-    return "decrement";
-  }
-  return "none";
 }

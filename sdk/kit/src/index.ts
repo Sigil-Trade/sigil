@@ -66,13 +66,12 @@ export {
   isStablecoinMint,
   parseActionType,
   isSpendingAction,
-  getPositionEffect,
   validateNetwork,
   normalizeNetwork,
   // u64 boundary
   U64_MAX,
 } from "./types.js";
-export type { Network, NetworkInput, PositionEffect } from "./types.js";
+export type { Network, NetworkInput } from "./types.js";
 
 // ─── State Resolver ──────────────────────────────────────────────────────────
 export {
