@@ -110,7 +110,6 @@ export type InitializeVaultInstructionData = {
   protocolMode: number;
   protocols: Array<Address>;
   maxLeverageBps: number;
-  maxConcurrentPositions: number;
   developerFeeRate: number;
   maxSlippageBps: number;
   timelockDuration: bigint;
@@ -125,7 +124,6 @@ export type InitializeVaultInstructionDataArgs = {
   protocolMode: number;
   protocols: Array<Address>;
   maxLeverageBps: number;
-  maxConcurrentPositions: number;
   developerFeeRate: number;
   maxSlippageBps: number;
   timelockDuration: number | bigint;
@@ -143,7 +141,6 @@ export function getInitializeVaultInstructionDataEncoder(): Encoder<InitializeVa
       ["protocolMode", getU8Encoder()],
       ["protocols", getArrayEncoder(getAddressEncoder())],
       ["maxLeverageBps", getU16Encoder()],
-      ["maxConcurrentPositions", getU8Encoder()],
       ["developerFeeRate", getU16Encoder()],
       ["maxSlippageBps", getU16Encoder()],
       ["timelockDuration", getU64Encoder()],
@@ -163,7 +160,6 @@ export function getInitializeVaultInstructionDataDecoder(): Decoder<InitializeVa
     ["protocolMode", getU8Decoder()],
     ["protocols", getArrayDecoder(getAddressDecoder())],
     ["maxLeverageBps", getU16Decoder()],
-    ["maxConcurrentPositions", getU8Decoder()],
     ["developerFeeRate", getU16Decoder()],
     ["maxSlippageBps", getU16Decoder()],
     ["timelockDuration", getU64Decoder()],
@@ -206,7 +202,6 @@ export type InitializeVaultAsyncInput<
   protocolMode: InitializeVaultInstructionDataArgs["protocolMode"];
   protocols: InitializeVaultInstructionDataArgs["protocols"];
   maxLeverageBps: InitializeVaultInstructionDataArgs["maxLeverageBps"];
-  maxConcurrentPositions: InitializeVaultInstructionDataArgs["maxConcurrentPositions"];
   developerFeeRate: InitializeVaultInstructionDataArgs["developerFeeRate"];
   maxSlippageBps: InitializeVaultInstructionDataArgs["maxSlippageBps"];
   timelockDuration: InitializeVaultInstructionDataArgs["timelockDuration"];
@@ -374,7 +369,6 @@ export type InitializeVaultInput<
   protocolMode: InitializeVaultInstructionDataArgs["protocolMode"];
   protocols: InitializeVaultInstructionDataArgs["protocols"];
   maxLeverageBps: InitializeVaultInstructionDataArgs["maxLeverageBps"];
-  maxConcurrentPositions: InitializeVaultInstructionDataArgs["maxConcurrentPositions"];
   developerFeeRate: InitializeVaultInstructionDataArgs["developerFeeRate"];
   maxSlippageBps: InitializeVaultInstructionDataArgs["maxSlippageBps"];
   timelockDuration: InitializeVaultInstructionDataArgs["timelockDuration"];

@@ -80,10 +80,6 @@ export type PolicyConfig = {
   protocols: Array<Address>;
   /** DEPRECATED: Not enforced on-chain. Kept for layout stability. See Phase B3 post-assertions. */
   maxLeverageBps: number;
-  /** Whether the agent can open new positions (vs only close existing) */
-  canOpenPositions: boolean;
-  /** Maximum number of concurrent open positions */
-  maxConcurrentPositions: number;
   /**
    * Developer fee rate (rate / 1,000,000). Applied to every finalized
    * transaction. Max MAX_DEVELOPER_FEE_RATE (500 = 5 BPS).
@@ -169,10 +165,6 @@ export type PolicyConfigArgs = {
   protocols: Array<Address>;
   /** DEPRECATED: Not enforced on-chain. Kept for layout stability. See Phase B3 post-assertions. */
   maxLeverageBps: number;
-  /** Whether the agent can open new positions (vs only close existing) */
-  canOpenPositions: boolean;
-  /** Maximum number of concurrent open positions */
-  maxConcurrentPositions: number;
   /**
    * Developer fee rate (rate / 1,000,000). Applied to every finalized
    * transaction. Max MAX_DEVELOPER_FEE_RATE (500 = 5 BPS).
@@ -245,8 +237,6 @@ export function getPolicyConfigEncoder(): Encoder<PolicyConfigArgs> {
       ["protocolMode", getU8Encoder()],
       ["protocols", getArrayEncoder(getAddressEncoder())],
       ["maxLeverageBps", getU16Encoder()],
-      ["canOpenPositions", getBooleanEncoder()],
-      ["maxConcurrentPositions", getU8Encoder()],
       ["developerFeeRate", getU16Encoder()],
       ["maxSlippageBps", getU16Encoder()],
       ["timelockDuration", getU64Encoder()],
@@ -274,8 +264,6 @@ export function getPolicyConfigDecoder(): Decoder<PolicyConfig> {
     ["protocolMode", getU8Decoder()],
     ["protocols", getArrayDecoder(getAddressDecoder())],
     ["maxLeverageBps", getU16Decoder()],
-    ["canOpenPositions", getBooleanDecoder()],
-    ["maxConcurrentPositions", getU8Decoder()],
     ["developerFeeRate", getU16Decoder()],
     ["maxSlippageBps", getU16Decoder()],
     ["timelockDuration", getU64Decoder()],

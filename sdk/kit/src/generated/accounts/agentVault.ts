@@ -84,16 +84,6 @@ export type AgentVault = {
   totalTransactions: bigint;
   /** Total volume processed in token base units */
   totalVolume: bigint;
-  /**
-   * Number of currently open positions (for perps tracking).
-   * DESIGN DECISION: Counter-only. Does not store per-position details
-   * (entry price, size, liquidation price). Individual position data is
-   * protocol-specific (Flash Trade vs Drift vs Jupiter perps have different
-   * layouts). The SDK reads position details via RPC. sync_positions
-   * corrects counter drift from auto-liquidation.
-   * Found by: Persona test (Perps Developer "Jake")
-   */
-  openPositions: number;
   /** Number of active (unsettled/unrefunded) escrow deposits from this vault */
   activeEscrowCount: number;
   /** Cumulative developer fees collected from this vault (token base units) */
@@ -147,16 +137,6 @@ export type AgentVaultArgs = {
   totalTransactions: number | bigint;
   /** Total volume processed in token base units */
   totalVolume: number | bigint;
-  /**
-   * Number of currently open positions (for perps tracking).
-   * DESIGN DECISION: Counter-only. Does not store per-position details
-   * (entry price, size, liquidation price). Individual position data is
-   * protocol-specific (Flash Trade vs Drift vs Jupiter perps have different
-   * layouts). The SDK reads position details via RPC. sync_positions
-   * corrects counter drift from auto-liquidation.
-   * Found by: Persona test (Perps Developer "Jake")
-   */
-  openPositions: number;
   /** Number of active (unsettled/unrefunded) escrow deposits from this vault */
   activeEscrowCount: number;
   /** Cumulative developer fees collected from this vault (token base units) */
@@ -202,7 +182,6 @@ export function getAgentVaultEncoder(): Encoder<AgentVaultArgs> {
       ["createdAt", getI64Encoder()],
       ["totalTransactions", getU64Encoder()],
       ["totalVolume", getU64Encoder()],
-      ["openPositions", getU8Encoder()],
       ["activeEscrowCount", getU8Encoder()],
       ["totalFeesCollected", getU64Encoder()],
       ["totalDepositedUsd", getU64Encoder()],
@@ -227,7 +206,6 @@ export function getAgentVaultDecoder(): Decoder<AgentVault> {
     ["createdAt", getI64Decoder()],
     ["totalTransactions", getU64Decoder()],
     ["totalVolume", getU64Decoder()],
-    ["openPositions", getU8Decoder()],
     ["activeEscrowCount", getU8Decoder()],
     ["totalFeesCollected", getU64Decoder()],
     ["totalDepositedUsd", getU64Decoder()],

@@ -38,7 +38,6 @@ export * from "./refundEscrow.js";
 export * from "./registerAgent.js";
 export * from "./revokeAgent.js";
 export * from "./settleEscrow.js";
-export * from "./syncPositions.js";
 export * from "./unpauseAgent.js";
 export * from "./validateAndAuthorize.js";
 export * from "./withdrawFunds.js";

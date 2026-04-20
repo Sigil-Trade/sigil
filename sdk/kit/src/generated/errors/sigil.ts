@@ -30,160 +30,152 @@ export const SIGIL_ERROR__TRANSACTION_TOO_LARGE = 0x1775; // 6005
 export const SIGIL_ERROR__SPENDING_CAP_EXCEEDED = 0x1776; // 6006
 /** LeverageTooHigh: Leverage exceeds maximum allowed */
 export const SIGIL_ERROR__LEVERAGE_TOO_HIGH = 0x1777; // 6007
-/** TooManyPositions: Maximum concurrent open positions reached */
-export const SIGIL_ERROR__TOO_MANY_POSITIONS = 0x1778; // 6008
-/** PositionOpeningDisallowed: Cannot open new positions (policy disallows) */
-export const SIGIL_ERROR__POSITION_OPENING_DISALLOWED = 0x1779; // 6009
 /** SessionNotAuthorized: Session not authorized */
-export const SIGIL_ERROR__SESSION_NOT_AUTHORIZED = 0x177a; // 6010
+export const SIGIL_ERROR__SESSION_NOT_AUTHORIZED = 0x1778; // 6008
 /** InvalidSession: Invalid session: does not belong to this vault */
-export const SIGIL_ERROR__INVALID_SESSION = 0x177b; // 6011
-/** OpenPositionsExist: Vault has open positions, cannot close */
-export const SIGIL_ERROR__OPEN_POSITIONS_EXIST = 0x177c; // 6012
+export const SIGIL_ERROR__INVALID_SESSION = 0x1779; // 6009
 /** TooManyAllowedProtocols: Policy configuration invalid: too many allowed protocols */
-export const SIGIL_ERROR__TOO_MANY_ALLOWED_PROTOCOLS = 0x177d; // 6013
+export const SIGIL_ERROR__TOO_MANY_ALLOWED_PROTOCOLS = 0x177a; // 6010
 /** AgentAlreadyRegistered: Agent already registered for this vault */
-export const SIGIL_ERROR__AGENT_ALREADY_REGISTERED = 0x177e; // 6014
+export const SIGIL_ERROR__AGENT_ALREADY_REGISTERED = 0x177b; // 6011
 /** NoAgentRegistered: No agent registered for this vault */
-export const SIGIL_ERROR__NO_AGENT_REGISTERED = 0x177f; // 6015
+export const SIGIL_ERROR__NO_AGENT_REGISTERED = 0x177c; // 6012
 /** VaultNotFrozen: Vault is not frozen (expected frozen for reactivation) */
-export const SIGIL_ERROR__VAULT_NOT_FROZEN = 0x1780; // 6016
+export const SIGIL_ERROR__VAULT_NOT_FROZEN = 0x177d; // 6013
 /** VaultAlreadyClosed: Vault is already closed */
-export const SIGIL_ERROR__VAULT_ALREADY_CLOSED = 0x1781; // 6017
+export const SIGIL_ERROR__VAULT_ALREADY_CLOSED = 0x177e; // 6014
 /** InsufficientBalance: Insufficient vault balance for withdrawal */
-export const SIGIL_ERROR__INSUFFICIENT_BALANCE = 0x1782; // 6018
+export const SIGIL_ERROR__INSUFFICIENT_BALANCE = 0x177f; // 6015
 /** DeveloperFeeTooHigh: Developer fee rate exceeds maximum (500 / 1,000,000 = 5 BPS) */
-export const SIGIL_ERROR__DEVELOPER_FEE_TOO_HIGH = 0x1783; // 6019
+export const SIGIL_ERROR__DEVELOPER_FEE_TOO_HIGH = 0x1780; // 6016
 /** InvalidFeeDestination: Fee destination account invalid */
-export const SIGIL_ERROR__INVALID_FEE_DESTINATION = 0x1784; // 6020
+export const SIGIL_ERROR__INVALID_FEE_DESTINATION = 0x1781; // 6017
 /** InvalidProtocolTreasury: Protocol treasury account does not match expected address */
-export const SIGIL_ERROR__INVALID_PROTOCOL_TREASURY = 0x1785; // 6021
+export const SIGIL_ERROR__INVALID_PROTOCOL_TREASURY = 0x1782; // 6018
 /** InvalidAgentKey: Invalid agent: cannot be the zero address */
-export const SIGIL_ERROR__INVALID_AGENT_KEY = 0x1786; // 6022
+export const SIGIL_ERROR__INVALID_AGENT_KEY = 0x1783; // 6019
 /** AgentIsOwner: Invalid agent: agent cannot be the vault owner */
-export const SIGIL_ERROR__AGENT_IS_OWNER = 0x1787; // 6023
+export const SIGIL_ERROR__AGENT_IS_OWNER = 0x1784; // 6020
 /** Overflow: Arithmetic overflow */
-export const SIGIL_ERROR__OVERFLOW = 0x1788; // 6024
+export const SIGIL_ERROR__OVERFLOW = 0x1785; // 6021
 /** InvalidTokenAccount: Token account does not belong to vault or has wrong mint */
-export const SIGIL_ERROR__INVALID_TOKEN_ACCOUNT = 0x1789; // 6025
+export const SIGIL_ERROR__INVALID_TOKEN_ACCOUNT = 0x1786; // 6022
 /** TimelockNotExpired: Timelock period has not expired yet */
-export const SIGIL_ERROR__TIMELOCK_NOT_EXPIRED = 0x178a; // 6026
+export const SIGIL_ERROR__TIMELOCK_NOT_EXPIRED = 0x1787; // 6023
 /** NoTimelockConfigured: No timelock configured on this vault */
-export const SIGIL_ERROR__NO_TIMELOCK_CONFIGURED = 0x178b; // 6027
+export const SIGIL_ERROR__NO_TIMELOCK_CONFIGURED = 0x1788; // 6024
 /** DestinationNotAllowed: Destination not in allowed list */
-export const SIGIL_ERROR__DESTINATION_NOT_ALLOWED = 0x178c; // 6028
+export const SIGIL_ERROR__DESTINATION_NOT_ALLOWED = 0x1789; // 6025
 /** TooManyDestinations: Too many destinations (max 10) */
-export const SIGIL_ERROR__TOO_MANY_DESTINATIONS = 0x178d; // 6029
+export const SIGIL_ERROR__TOO_MANY_DESTINATIONS = 0x178a; // 6026
 /** InvalidProtocolMode: Invalid protocol mode (must be 0, 1, or 2) */
-export const SIGIL_ERROR__INVALID_PROTOCOL_MODE = 0x178e; // 6030
+export const SIGIL_ERROR__INVALID_PROTOCOL_MODE = 0x178b; // 6027
 /** InvalidNonSpendingAmount: Non-spending action must have amount = 0 */
-export const SIGIL_ERROR__INVALID_NON_SPENDING_AMOUNT = 0x178f; // 6031
-/** NoPositionsToClose: No open positions to close or cancel */
-export const SIGIL_ERROR__NO_POSITIONS_TO_CLOSE = 0x1790; // 6032
+export const SIGIL_ERROR__INVALID_NON_SPENDING_AMOUNT = 0x178c; // 6028
 /** CpiCallNotAllowed: Instruction must be top-level (CPI calls not allowed) */
-export const SIGIL_ERROR__CPI_CALL_NOT_ALLOWED = 0x1791; // 6033
+export const SIGIL_ERROR__CPI_CALL_NOT_ALLOWED = 0x178d; // 6029
 /** MissingFinalizeInstruction: Transaction must include finalize_session after validate */
-export const SIGIL_ERROR__MISSING_FINALIZE_INSTRUCTION = 0x1792; // 6034
+export const SIGIL_ERROR__MISSING_FINALIZE_INSTRUCTION = 0x178e; // 6030
 /** NonTrackedSwapMustReturnStablecoin: Non-stablecoin swap must return stablecoin (balance did not increase) */
-export const SIGIL_ERROR__NON_TRACKED_SWAP_MUST_RETURN_STABLECOIN = 0x1793; // 6035
+export const SIGIL_ERROR__NON_TRACKED_SWAP_MUST_RETURN_STABLECOIN = 0x178f; // 6031
 /** SwapSlippageExceeded: Swap slippage exceeds policy max_slippage_bps or quoted output is zero */
-export const SIGIL_ERROR__SWAP_SLIPPAGE_EXCEEDED = 0x1794; // 6036
+export const SIGIL_ERROR__SWAP_SLIPPAGE_EXCEEDED = 0x1790; // 6032
 /** InvalidJupiterInstruction: Cannot parse Jupiter swap instruction data */
-export const SIGIL_ERROR__INVALID_JUPITER_INSTRUCTION = 0x1795; // 6037
+export const SIGIL_ERROR__INVALID_JUPITER_INSTRUCTION = 0x1791; // 6033
 /** UnauthorizedTokenTransfer: Top-level SPL Token transfer not allowed between validate and finalize */
-export const SIGIL_ERROR__UNAUTHORIZED_TOKEN_TRANSFER = 0x1796; // 6038
+export const SIGIL_ERROR__UNAUTHORIZED_TOKEN_TRANSFER = 0x1792; // 6034
 /** SlippageBpsTooHigh: Slippage BPS exceeds maximum (5000 = 50%) */
-export const SIGIL_ERROR__SLIPPAGE_BPS_TOO_HIGH = 0x1797; // 6039
+export const SIGIL_ERROR__SLIPPAGE_BPS_TOO_HIGH = 0x1793; // 6035
 /** ProtocolMismatch: DeFi instruction program does not match declared target_protocol */
-export const SIGIL_ERROR__PROTOCOL_MISMATCH = 0x1798; // 6040
+export const SIGIL_ERROR__PROTOCOL_MISMATCH = 0x1794; // 6036
 /** TooManyDeFiInstructions: Spending allows at most one DeFi instruction */
-export const SIGIL_ERROR__TOO_MANY_DE_FI_INSTRUCTIONS = 0x1799; // 6041
+export const SIGIL_ERROR__TOO_MANY_DE_FI_INSTRUCTIONS = 0x1795; // 6037
 /** MaxAgentsReached: Maximum agents per vault reached (limit: 10) */
-export const SIGIL_ERROR__MAX_AGENTS_REACHED = 0x179a; // 6042
+export const SIGIL_ERROR__MAX_AGENTS_REACHED = 0x1796; // 6038
 /** InsufficientPermissions: Agent lacks permission for this action type */
-export const SIGIL_ERROR__INSUFFICIENT_PERMISSIONS = 0x179b; // 6043
+export const SIGIL_ERROR__INSUFFICIENT_PERMISSIONS = 0x1797; // 6039
 /** InvalidPermissions: Permission bitmask contains invalid bits */
-export const SIGIL_ERROR__INVALID_PERMISSIONS = 0x179c; // 6044
+export const SIGIL_ERROR__INVALID_PERMISSIONS = 0x1798; // 6040
 /** EscrowNotActive: Escrow is not in Active status */
-export const SIGIL_ERROR__ESCROW_NOT_ACTIVE = 0x179d; // 6045
+export const SIGIL_ERROR__ESCROW_NOT_ACTIVE = 0x1799; // 6041
 /** EscrowExpired: Escrow has expired */
-export const SIGIL_ERROR__ESCROW_EXPIRED = 0x179e; // 6046
+export const SIGIL_ERROR__ESCROW_EXPIRED = 0x179a; // 6042
 /** EscrowNotExpired: Escrow has not expired yet */
-export const SIGIL_ERROR__ESCROW_NOT_EXPIRED = 0x179f; // 6047
+export const SIGIL_ERROR__ESCROW_NOT_EXPIRED = 0x179b; // 6043
 /** InvalidEscrowVault: Invalid escrow vault */
-export const SIGIL_ERROR__INVALID_ESCROW_VAULT = 0x17a0; // 6048
+export const SIGIL_ERROR__INVALID_ESCROW_VAULT = 0x179c; // 6044
 /** EscrowConditionsNotMet: Escrow conditions not met */
-export const SIGIL_ERROR__ESCROW_CONDITIONS_NOT_MET = 0x17a1; // 6049
+export const SIGIL_ERROR__ESCROW_CONDITIONS_NOT_MET = 0x179d; // 6045
 /** EscrowDurationExceeded: Escrow duration exceeds maximum (30 days) */
-export const SIGIL_ERROR__ESCROW_DURATION_EXCEEDED = 0x17a2; // 6050
+export const SIGIL_ERROR__ESCROW_DURATION_EXCEEDED = 0x179e; // 6046
 /** InvalidConstraintConfig: Invalid constraint configuration: bounds exceeded */
-export const SIGIL_ERROR__INVALID_CONSTRAINT_CONFIG = 0x17a3; // 6051
+export const SIGIL_ERROR__INVALID_CONSTRAINT_CONFIG = 0x179f; // 6047
 /** ConstraintViolated: Instruction constraint violated */
-export const SIGIL_ERROR__CONSTRAINT_VIOLATED = 0x17a4; // 6052
+export const SIGIL_ERROR__CONSTRAINT_VIOLATED = 0x17a0; // 6048
 /** InvalidConstraintsPda: Invalid constraints PDA: wrong owner or vault */
-export const SIGIL_ERROR__INVALID_CONSTRAINTS_PDA = 0x17a5; // 6053
+export const SIGIL_ERROR__INVALID_CONSTRAINTS_PDA = 0x17a1; // 6049
 /** InvalidPendingConstraintsPda: Invalid pending constraints PDA: wrong owner or vault */
-export const SIGIL_ERROR__INVALID_PENDING_CONSTRAINTS_PDA = 0x17a6; // 6054
+export const SIGIL_ERROR__INVALID_PENDING_CONSTRAINTS_PDA = 0x17a2; // 6050
 /** AgentSpendLimitExceeded: Agent rolling 24h spend exceeds per-agent spending limit */
-export const SIGIL_ERROR__AGENT_SPEND_LIMIT_EXCEEDED = 0x17a7; // 6055
+export const SIGIL_ERROR__AGENT_SPEND_LIMIT_EXCEEDED = 0x17a3; // 6051
 /** OverlaySlotExhausted: Per-agent overlay is full; cannot register agent with spending limit */
-export const SIGIL_ERROR__OVERLAY_SLOT_EXHAUSTED = 0x17a8; // 6056
+export const SIGIL_ERROR__OVERLAY_SLOT_EXHAUSTED = 0x17a4; // 6052
 /** AgentSlotNotFound: Agent has per-agent spending limit but no overlay tracking slot */
-export const SIGIL_ERROR__AGENT_SLOT_NOT_FOUND = 0x17a9; // 6057
+export const SIGIL_ERROR__AGENT_SLOT_NOT_FOUND = 0x17a5; // 6053
 /** UnauthorizedTokenApproval: Unauthorized SPL Token Approve between validate and finalize */
-export const SIGIL_ERROR__UNAUTHORIZED_TOKEN_APPROVAL = 0x17aa; // 6058
+export const SIGIL_ERROR__UNAUTHORIZED_TOKEN_APPROVAL = 0x17a6; // 6054
 /** InvalidSessionExpiry: Session expiry slots out of range (10-450) */
-export const SIGIL_ERROR__INVALID_SESSION_EXPIRY = 0x17ab; // 6059
+export const SIGIL_ERROR__INVALID_SESSION_EXPIRY = 0x17a7; // 6055
 /** UnconstrainedProgramBlocked: Program has no constraint entry and strict mode is enabled */
-export const SIGIL_ERROR__UNCONSTRAINED_PROGRAM_BLOCKED = 0x17ac; // 6060
+export const SIGIL_ERROR__UNCONSTRAINED_PROGRAM_BLOCKED = 0x17a8; // 6056
 /** ProtocolCapExceeded: Per-protocol rolling 24h spending cap would be exceeded */
-export const SIGIL_ERROR__PROTOCOL_CAP_EXCEEDED = 0x17ad; // 6061
+export const SIGIL_ERROR__PROTOCOL_CAP_EXCEEDED = 0x17a9; // 6057
 /** ProtocolCapsMismatch: protocol_caps length must match protocols length when has_protocol_caps is true */
-export const SIGIL_ERROR__PROTOCOL_CAPS_MISMATCH = 0x17ae; // 6062
+export const SIGIL_ERROR__PROTOCOL_CAPS_MISMATCH = 0x17aa; // 6058
 /** ActiveEscrowsExist: Cannot close vault with active escrow deposits */
-export const SIGIL_ERROR__ACTIVE_ESCROWS_EXIST = 0x17af; // 6063
+export const SIGIL_ERROR__ACTIVE_ESCROWS_EXIST = 0x17ab; // 6059
 /** ConstraintsNotClosed: Instruction constraints must be closed before closing vault */
-export const SIGIL_ERROR__CONSTRAINTS_NOT_CLOSED = 0x17b0; // 6064
+export const SIGIL_ERROR__CONSTRAINTS_NOT_CLOSED = 0x17ac; // 6060
 /** PendingPolicyExists: Pending policy update must be applied or cancelled before closing vault */
-export const SIGIL_ERROR__PENDING_POLICY_EXISTS = 0x17b1; // 6065
+export const SIGIL_ERROR__PENDING_POLICY_EXISTS = 0x17ad; // 6061
 /** AgentPaused: Agent is paused and cannot execute actions */
-export const SIGIL_ERROR__AGENT_PAUSED = 0x17b2; // 6066
+export const SIGIL_ERROR__AGENT_PAUSED = 0x17ae; // 6062
 /** AgentAlreadyPaused: Agent is already paused */
-export const SIGIL_ERROR__AGENT_ALREADY_PAUSED = 0x17b3; // 6067
+export const SIGIL_ERROR__AGENT_ALREADY_PAUSED = 0x17af; // 6063
 /** AgentNotPaused: Agent is not paused */
-export const SIGIL_ERROR__AGENT_NOT_PAUSED = 0x17b4; // 6068
+export const SIGIL_ERROR__AGENT_NOT_PAUSED = 0x17b0; // 6064
 /** UnauthorizedPostFinalizeInstruction: Instructions after finalize_session must be ComputeBudget or SystemProgram only */
-export const SIGIL_ERROR__UNAUTHORIZED_POST_FINALIZE_INSTRUCTION = 0x17b5; // 6069
+export const SIGIL_ERROR__UNAUTHORIZED_POST_FINALIZE_INSTRUCTION = 0x17b1; // 6065
 /** UnexpectedBalanceDecrease: Vault balance decreased more than delegated amount — potential CPI attack */
-export const SIGIL_ERROR__UNEXPECTED_BALANCE_DECREASE = 0x17b6; // 6070
+export const SIGIL_ERROR__UNEXPECTED_BALANCE_DECREASE = 0x17b2; // 6066
 /** TimelockTooShort: Timelock duration below minimum (1800 seconds / 30 minutes) */
-export const SIGIL_ERROR__TIMELOCK_TOO_SHORT = 0x17b7; // 6071
+export const SIGIL_ERROR__TIMELOCK_TOO_SHORT = 0x17b3; // 6067
 /** PolicyVersionMismatch: Policy version mismatch — policy changed since agent's last RPC read */
-export const SIGIL_ERROR__POLICY_VERSION_MISMATCH = 0x17b8; // 6072
+export const SIGIL_ERROR__POLICY_VERSION_MISMATCH = 0x17b4; // 6068
 /** PendingAgentPermsExists: A pending agent permissions update already exists for this agent */
-export const SIGIL_ERROR__PENDING_AGENT_PERMS_EXISTS = 0x17b9; // 6073
+export const SIGIL_ERROR__PENDING_AGENT_PERMS_EXISTS = 0x17b5; // 6069
 /** PendingCloseConstraintsExists: A pending close constraints operation already exists for this vault */
-export const SIGIL_ERROR__PENDING_CLOSE_CONSTRAINTS_EXISTS = 0x17ba; // 6074
+export const SIGIL_ERROR__PENDING_CLOSE_CONSTRAINTS_EXISTS = 0x17b6; // 6070
 /** ActiveSessionsExist: Cannot close vault with active sessions (finalize pending sessions first) */
-export const SIGIL_ERROR__ACTIVE_SESSIONS_EXIST = 0x17bb; // 6075
+export const SIGIL_ERROR__ACTIVE_SESSIONS_EXIST = 0x17b7; // 6071
 /** PostAssertionFailed: Post-execution assertion failed: account state did not satisfy constraint */
-export const SIGIL_ERROR__POST_ASSERTION_FAILED = 0x17bc; // 6076
+export const SIGIL_ERROR__POST_ASSERTION_FAILED = 0x17b8; // 6072
 /** InvalidPostAssertionIndex: Post-assertion constraint references invalid instruction index */
-export const SIGIL_ERROR__INVALID_POST_ASSERTION_INDEX = 0x17bd; // 6077
+export const SIGIL_ERROR__INVALID_POST_ASSERTION_INDEX = 0x17b9; // 6073
 /** UnauthorizedPreValidateInstruction: Non-infrastructure instruction detected before validate_and_authorize */
-export const SIGIL_ERROR__UNAUTHORIZED_PRE_VALIDATE_INSTRUCTION = 0x17be; // 6078
+export const SIGIL_ERROR__UNAUTHORIZED_PRE_VALIDATE_INSTRUCTION = 0x17ba; // 6074
 /** SnapshotNotCaptured: Delta assertion snapshot was not captured in validate_and_authorize */
-export const SIGIL_ERROR__SNAPSHOT_NOT_CAPTURED = 0x17bf; // 6079
+export const SIGIL_ERROR__SNAPSHOT_NOT_CAPTURED = 0x17bb; // 6075
 /** ConstraintIndexOutOfBounds: Constraint entry index out of bounds for zero-copy array */
-export const SIGIL_ERROR__CONSTRAINT_INDEX_OUT_OF_BOUNDS = 0x17c0; // 6080
+export const SIGIL_ERROR__CONSTRAINT_INDEX_OUT_OF_BOUNDS = 0x17bc; // 6076
 /** InvalidConstraintOperator: Constraint operator value is not a valid ConstraintOperator discriminant */
-export const SIGIL_ERROR__INVALID_CONSTRAINT_OPERATOR = 0x17c1; // 6081
+export const SIGIL_ERROR__INVALID_CONSTRAINT_OPERATOR = 0x17bd; // 6077
 /** ConstraintsVaultMismatch: Zero-copy constraints account has wrong vault */
-export const SIGIL_ERROR__CONSTRAINTS_VAULT_MISMATCH = 0x17c2; // 6082
+export const SIGIL_ERROR__CONSTRAINTS_VAULT_MISMATCH = 0x17be; // 6078
 /** ConstraintEntryCountExceeded: Cannot pack entries: entry count exceeds MAX_CONSTRAINT_ENTRIES */
-export const SIGIL_ERROR__CONSTRAINT_ENTRY_COUNT_EXCEEDED = 0x17c3; // 6083
+export const SIGIL_ERROR__CONSTRAINT_ENTRY_COUNT_EXCEEDED = 0x17bf; // 6079
 /** BlockedSplOpcode: SPL opcode is blocked at runtime and cannot be used in constraints */
-export const SIGIL_ERROR__BLOCKED_SPL_OPCODE = 0x17c4; // 6084
+export const SIGIL_ERROR__BLOCKED_SPL_OPCODE = 0x17c0; // 6080
 
 export type SigilError =
   | typeof SIGIL_ERROR__ACTIVE_ESCROWS_EXIST
@@ -232,16 +224,13 @@ export type SigilError =
   | typeof SIGIL_ERROR__MISSING_FINALIZE_INSTRUCTION
   | typeof SIGIL_ERROR__NO_AGENT_REGISTERED
   | typeof SIGIL_ERROR__NON_TRACKED_SWAP_MUST_RETURN_STABLECOIN
-  | typeof SIGIL_ERROR__NO_POSITIONS_TO_CLOSE
   | typeof SIGIL_ERROR__NO_TIMELOCK_CONFIGURED
-  | typeof SIGIL_ERROR__OPEN_POSITIONS_EXIST
   | typeof SIGIL_ERROR__OVERFLOW
   | typeof SIGIL_ERROR__OVERLAY_SLOT_EXHAUSTED
   | typeof SIGIL_ERROR__PENDING_AGENT_PERMS_EXISTS
   | typeof SIGIL_ERROR__PENDING_CLOSE_CONSTRAINTS_EXISTS
   | typeof SIGIL_ERROR__PENDING_POLICY_EXISTS
   | typeof SIGIL_ERROR__POLICY_VERSION_MISMATCH
-  | typeof SIGIL_ERROR__POSITION_OPENING_DISALLOWED
   | typeof SIGIL_ERROR__POST_ASSERTION_FAILED
   | typeof SIGIL_ERROR__PROTOCOL_CAP_EXCEEDED
   | typeof SIGIL_ERROR__PROTOCOL_CAPS_MISMATCH
@@ -257,7 +246,6 @@ export type SigilError =
   | typeof SIGIL_ERROR__TOO_MANY_ALLOWED_PROTOCOLS
   | typeof SIGIL_ERROR__TOO_MANY_DE_FI_INSTRUCTIONS
   | typeof SIGIL_ERROR__TOO_MANY_DESTINATIONS
-  | typeof SIGIL_ERROR__TOO_MANY_POSITIONS
   | typeof SIGIL_ERROR__TRANSACTION_TOO_LARGE
   | typeof SIGIL_ERROR__UNAUTHORIZED_AGENT
   | typeof SIGIL_ERROR__UNAUTHORIZED_OWNER
@@ -321,16 +309,13 @@ if (process.env.NODE_ENV !== "production") {
     [SIGIL_ERROR__MISSING_FINALIZE_INSTRUCTION]: `Transaction must include finalize_session after validate`,
     [SIGIL_ERROR__NO_AGENT_REGISTERED]: `No agent registered for this vault`,
     [SIGIL_ERROR__NON_TRACKED_SWAP_MUST_RETURN_STABLECOIN]: `Non-stablecoin swap must return stablecoin (balance did not increase)`,
-    [SIGIL_ERROR__NO_POSITIONS_TO_CLOSE]: `No open positions to close or cancel`,
     [SIGIL_ERROR__NO_TIMELOCK_CONFIGURED]: `No timelock configured on this vault`,
-    [SIGIL_ERROR__OPEN_POSITIONS_EXIST]: `Vault has open positions, cannot close`,
     [SIGIL_ERROR__OVERFLOW]: `Arithmetic overflow`,
     [SIGIL_ERROR__OVERLAY_SLOT_EXHAUSTED]: `Per-agent overlay is full; cannot register agent with spending limit`,
     [SIGIL_ERROR__PENDING_AGENT_PERMS_EXISTS]: `A pending agent permissions update already exists for this agent`,
     [SIGIL_ERROR__PENDING_CLOSE_CONSTRAINTS_EXISTS]: `A pending close constraints operation already exists for this vault`,
     [SIGIL_ERROR__PENDING_POLICY_EXISTS]: `Pending policy update must be applied or cancelled before closing vault`,
     [SIGIL_ERROR__POLICY_VERSION_MISMATCH]: `Policy version mismatch — policy changed since agent's last RPC read`,
-    [SIGIL_ERROR__POSITION_OPENING_DISALLOWED]: `Cannot open new positions (policy disallows)`,
     [SIGIL_ERROR__POST_ASSERTION_FAILED]: `Post-execution assertion failed: account state did not satisfy constraint`,
     [SIGIL_ERROR__PROTOCOL_CAP_EXCEEDED]: `Per-protocol rolling 24h spending cap would be exceeded`,
     [SIGIL_ERROR__PROTOCOL_CAPS_MISMATCH]: `protocol_caps length must match protocols length when has_protocol_caps is true`,
@@ -346,7 +331,6 @@ if (process.env.NODE_ENV !== "production") {
     [SIGIL_ERROR__TOO_MANY_ALLOWED_PROTOCOLS]: `Policy configuration invalid: too many allowed protocols`,
     [SIGIL_ERROR__TOO_MANY_DE_FI_INSTRUCTIONS]: `Spending allows at most one DeFi instruction`,
     [SIGIL_ERROR__TOO_MANY_DESTINATIONS]: `Too many destinations (max 10)`,
-    [SIGIL_ERROR__TOO_MANY_POSITIONS]: `Maximum concurrent open positions reached`,
     [SIGIL_ERROR__TRANSACTION_TOO_LARGE]: `Transaction exceeds maximum single transaction size`,
     [SIGIL_ERROR__UNAUTHORIZED_AGENT]: `Unauthorized: signer is not the registered agent`,
     [SIGIL_ERROR__UNAUTHORIZED_OWNER]: `Unauthorized: signer is not the vault owner`,

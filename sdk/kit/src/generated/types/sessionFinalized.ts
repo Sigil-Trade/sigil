@@ -18,8 +18,6 @@ import {
   getStructEncoder,
   getU64Decoder,
   getU64Encoder,
-  getU8Decoder,
-  getU8Encoder,
   type Address,
   type FixedSizeCodec,
   type FixedSizeDecoder,
@@ -38,8 +36,6 @@ export type SessionFinalized = {
   balanceAfterUsd: bigint;
   /** Whether this was a spending action. */
   isSpending: boolean;
-  /** Position effect: 0=None, 1=Increment, 2=Decrement. */
-  positionEffect: number;
 };
 
 export type SessionFinalizedArgs = {
@@ -54,8 +50,6 @@ export type SessionFinalizedArgs = {
   balanceAfterUsd: number | bigint;
   /** Whether this was a spending action. */
   isSpending: boolean;
-  /** Position effect: 0=None, 1=Increment, 2=Decrement. */
-  positionEffect: number;
 };
 
 export function getSessionFinalizedEncoder(): FixedSizeEncoder<SessionFinalizedArgs> {
@@ -68,7 +62,6 @@ export function getSessionFinalizedEncoder(): FixedSizeEncoder<SessionFinalizedA
     ["actualSpendUsd", getU64Encoder()],
     ["balanceAfterUsd", getU64Encoder()],
     ["isSpending", getBooleanEncoder()],
-    ["positionEffect", getU8Encoder()],
   ]);
 }
 
@@ -82,7 +75,6 @@ export function getSessionFinalizedDecoder(): FixedSizeDecoder<SessionFinalized>
     ["actualSpendUsd", getU64Decoder()],
     ["balanceAfterUsd", getU64Decoder()],
     ["isSpending", getBooleanDecoder()],
-    ["positionEffect", getU8Decoder()],
   ]);
 }
 
