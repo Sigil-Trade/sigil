@@ -493,7 +493,6 @@ export async function withdraw(
  *   - `dailyCap`, `maxPerTrade` > 0n
  *   - `developerFeeRate` <= 500 BPS
  *   - `approvedApps.length` <= MAX_ALLOWED_PROTOCOLS
- *   - `maxConcurrentPositions` within u8 (0-255) via requireU8
  *
  * On-chain-only (silent pass through SDK, may fail on-chain):
  *   - `allowedDestinations.length` (MAX_ALLOWED_DESTINATIONS on-chain)

@@ -14,7 +14,7 @@ import { SIGIL_ERROR__SDK__INVALID_NETWORK } from "./errors/codes.js";
 export { SIGIL_PROGRAM_ADDRESS } from "./generated/programs/sigil.js";
 
 // Re-export generated types
-/** @deprecated v6: ActionType eliminated. Use isSpending/positionEffect instead. */
+/** @deprecated v6: ActionType eliminated. Use isSpending instead. */
 export type ActionType = never;
 export type { VaultStatus } from "./generated/types/vaultStatus.js";
 export type { EscrowStatus } from "./generated/types/escrowStatus.js";

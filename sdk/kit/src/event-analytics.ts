@@ -53,7 +53,6 @@ const EVENT_CATEGORY_MAP: Record<string, EventCategory> = {
   DelegationRevoked: "trade",
   AgentTransferExecuted: "trade",
   AgentSpendLimitChecked: "trade",
-  PositionsSynced: "trade",
   FundsDeposited: "deposit",
   FundsWithdrawn: "withdrawal",
   PolicyUpdated: "policy",
@@ -191,9 +190,6 @@ export function describeEvent(
 
     case "DelegationRevoked":
       return "Token delegation revoked after session completion";
-
-    case "PositionsSynced":
-      return `Position count synced: ${f.oldCount} → ${f.newCount}`;
 
     case "InstructionConstraintsCreated":
       return "Instruction constraints configured for this vault";

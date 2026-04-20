@@ -282,8 +282,8 @@ export class OwnerClient {
 
   /**
    * Permanently closes vault and reclaims rent.
-   * Requires: all agents revoked, open_positions == 0.
-   * If OpenPositionsExist error, call syncPositions() first.
+   * Requires: all agents revoked, zero active escrows, zero active sessions,
+   * constraints closed, no pending policy update.
    * May need computeUnits: 400_000 for complex vaults (default applied).
    */
   async closeVault(opts?: TxOpts): Promise<TxResult> {

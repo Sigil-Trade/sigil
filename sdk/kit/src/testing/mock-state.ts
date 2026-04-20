@@ -28,8 +28,6 @@ export interface MockVaultStateOverrides {
   protocolMode?: number;
   protocols?: Address[];
   developerFeeRate?: number;
-  maxConcurrentPositions?: number;
-  openPositions?: number;
   feeDestination?: Address;
   totalDepositedUsd?: bigint;
   totalWithdrawnUsd?: bigint;
