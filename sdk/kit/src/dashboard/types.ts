@@ -54,7 +54,6 @@ export interface VaultState {
     status: "active" | "frozen" | "closed";
     owner: string;
     agentCount: number;
-    openPositions: number;
     /** Lifetime USD volume (6-decimal). */
     totalVolume: bigint;
     totalFees: bigint;
@@ -238,9 +237,6 @@ export interface PolicyData {
   hasProtocolCaps: boolean;
   /** Parallel array to approvedApps (6-decimal USD each). */
   protocolCaps: bigint[];
-  // Positions
-  canOpenPositions: boolean;
-  maxConcurrentPositions: number;
   /** Raw BPS. 50 = 0.5%. */
   maxSlippageBps: number;
   /** Raw BPS. 500 = 5x. */
@@ -393,8 +389,6 @@ export interface PolicyChanges {
   protocolMode?: "whitelist" | "blacklist" | "unrestricted";
   hasProtocolCaps?: boolean;
   protocolCaps?: bigint[];
-  canOpenPositions?: boolean;
-  maxConcurrentPositions?: number;
   maxSlippageBps?: number;
   /** BPS. */
   leverageLimit?: number;
@@ -453,7 +447,6 @@ export interface SerializedVaultState {
     status: "active" | "frozen" | "closed";
     owner: string;
     agentCount: number;
-    openPositions: number;
     totalVolume: string;
     totalFees: string;
   };
@@ -537,8 +530,6 @@ export interface SerializedPolicyData {
   protocolMode: string;
   hasProtocolCaps: boolean;
   protocolCaps: string[];
-  canOpenPositions: boolean;
-  maxConcurrentPositions: number;
   maxSlippageBps: number;
   leverageLimitBps: number;
   allowedDestinations: string[];

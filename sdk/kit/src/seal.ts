@@ -611,21 +611,10 @@ export async function seal(params: SealParams): Promise<SealResult> {
     }
   }
 
-  // 6d: Position limit check — if vault is at max positions, warn.
-  // Without ActionType, we cannot know if this is a position-opening action.
-  // On-chain enforces the hard limit; SDK provides a best-effort warning.
-  if (
-    spending &&
-    state.vault.openPositions >= state.policy.maxConcurrentPositions &&
-    state.policy.maxConcurrentPositions > 0
-  ) {
-    warnings.push(
-      `Position limit may be reached: ${state.vault.openPositions}/${state.policy.maxConcurrentPositions}. ` +
-        `On-chain will reject if this is a position-opening action.`,
-    );
-  }
-
-  // Step 6e: Non-canonical output stablecoin ATA rejection
+  // Step 6d (was 6e): Non-canonical output stablecoin ATA rejection
+  // Position-limit check removed — counter system deleted per council decision
+  // (9-1 vote, 2026-04-19). Spending caps + per-protocol caps are the
+  // load-bearing safety; position count is not tracked on-chain.
   if (
     params.outputStablecoinAccount &&
     spending &&

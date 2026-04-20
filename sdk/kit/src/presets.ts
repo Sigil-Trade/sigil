@@ -70,8 +70,6 @@ export interface VaultPreset {
   protocols: Address[];
   /** Max leverage in basis points (0 = no leverage). */
   maxLeverageBps: number;
-  /** Max concurrent open positions. */
-  maxConcurrentPositions: number;
 }
 
 // ─── Presets ────────────────────────────────────────────────────────────────
@@ -89,7 +87,6 @@ export const VAULT_PRESETS = {
     protocolMode: PROTOCOL_MODE_ALLOWLIST,
     protocols: [JUPITER_PROGRAM_ADDRESS],
     maxLeverageBps: 0,
-    maxConcurrentPositions: 0,
   },
   "perps-trader": {
     label: "Perps Trader",
@@ -103,7 +100,6 @@ export const VAULT_PRESETS = {
     protocolMode: PROTOCOL_MODE_ALLOWLIST,
     protocols: [JUPITER_PROGRAM_ADDRESS, FLASH_TRADE_PROGRAM],
     maxLeverageBps: 10_000, // 10x
-    maxConcurrentPositions: 5,
   },
   "lending-optimizer": {
     label: "Lending Optimizer",
@@ -121,7 +117,6 @@ export const VAULT_PRESETS = {
       KAMINO_LEND_PROGRAM,
     ],
     maxLeverageBps: 0,
-    maxConcurrentPositions: 0,
   },
   "full-access": {
     label: "Full Access",
@@ -135,7 +130,6 @@ export const VAULT_PRESETS = {
     protocolMode: PROTOCOL_MODE_ALL,
     protocols: [],
     maxLeverageBps: 20_000, // 20x
-    maxConcurrentPositions: 10,
   },
 } as const satisfies Record<string, VaultPreset>;
 
@@ -182,7 +176,6 @@ export function presetToCreateVaultFields(
   | "protocolMode"
   | "protocols"
   | "maxLeverageBps"
-  | "maxConcurrentPositions"
 > {
   const preset = VAULT_PRESETS[name];
   return {
@@ -193,7 +186,6 @@ export function presetToCreateVaultFields(
     protocolMode: preset.protocolMode,
     protocols: [...preset.protocols],
     maxLeverageBps: preset.maxLeverageBps,
-    maxConcurrentPositions: preset.maxConcurrentPositions,
   };
 }
 
