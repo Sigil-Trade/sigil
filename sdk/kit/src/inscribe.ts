@@ -57,8 +57,6 @@ export interface InscribeOptions {
   developerFeeRate?: number;
   /** Maximum leverage in basis points. Default: 0 */
   maxLeverageBps?: number;
-  /** Maximum concurrent positions. Default: 5 */
-  maxConcurrentPositions?: number;
   /** Maximum slippage in BPS for swap verification. Default: 100 (1%) */
   maxSlippageBps?: number;
   /** Timelock duration in seconds. 0 = disabled (default) */
@@ -119,7 +117,6 @@ export function mapPoliciesToVaultParams(
   opts?: {
     developerFeeRate?: number;
     maxLeverageBps?: number;
-    maxConcurrentPositions?: number;
     timelockDuration?: number;
     allowedDestinations?: Address[];
     maxSlippageBps?: number;
@@ -131,7 +128,6 @@ export function mapPoliciesToVaultParams(
   protocolMode: number;
   protocols: Address[];
   maxLeverageBps: number;
-  maxConcurrentPositions: number;
   feeDestination: Address;
   developerFeeRate: number;
   timelockDuration: number;
@@ -165,7 +161,6 @@ export function mapPoliciesToVaultParams(
     protocolMode,
     protocols,
     maxLeverageBps: opts?.maxLeverageBps ?? 0,
-    maxConcurrentPositions: opts?.maxConcurrentPositions ?? 5,
     feeDestination,
     developerFeeRate: opts?.developerFeeRate ?? 0,
     timelockDuration: opts?.timelockDuration ?? 0,

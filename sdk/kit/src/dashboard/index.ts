@@ -296,23 +296,8 @@ export class OwnerClient {
     );
   }
 
-  /**
-   * Resets position counter when positions drift (e.g., auto-liquidation).
-   * @param actualPositions — the real number of open positions (usually 0 after liquidation)
-   */
-  async syncPositions(
-    actualPositions: number = 0,
-    opts?: TxOpts,
-  ): Promise<TxResult> {
-    return mutations.syncPositions(
-      this.rpc,
-      this.vault,
-      this.owner,
-      this.network,
-      actualPositions,
-      opts,
-    );
-  }
+  // syncPositions method DELETED — position counter system removed per council
+  // decision (9-1 vote, 2026-04-19). See Plans/we-need-to-plan-serialized-summit.md.
 
   // ─── Fund Management ────────────────────────────────────────────────────────
 

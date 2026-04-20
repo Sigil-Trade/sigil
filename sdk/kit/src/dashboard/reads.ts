@@ -173,7 +173,6 @@ export function buildVaultState(ctx: OverviewContext): VaultState {
       status,
       owner: v.owner as string,
       agentCount: v.agents?.length ?? 0,
-      openPositions: v.openPositions,
       totalVolume: v.totalVolume,
       totalFees: v.totalFeesCollected,
     },
@@ -186,7 +185,6 @@ export function buildVaultState(ctx: OverviewContext): VaultState {
         status,
         owner: v.owner as string,
         agentCount: v.agents?.length ?? 0,
-        openPositions: v.openPositions,
         totalVolume: bs(v.totalVolume),
         totalFees: bs(v.totalFeesCollected),
       },
@@ -455,10 +453,6 @@ export function buildPolicy(ctx: OverviewContext): PolicyData {
     if (isSome(pp.hasProtocolCaps))
       changes.hasProtocolCaps = pp.hasProtocolCaps.value;
     if (isSome(pp.protocolCaps)) changes.protocolCaps = pp.protocolCaps.value;
-    if (isSome(pp.canOpenPositions))
-      changes.canOpenPositions = pp.canOpenPositions.value;
-    if (isSome(pp.maxConcurrentPositions))
-      changes.maxConcurrentPositions = pp.maxConcurrentPositions.value;
     if (isSome(pp.maxSlippageBps))
       changes.maxSlippageBps = pp.maxSlippageBps.value;
     if (isSome(pp.maxLeverageBps))
@@ -487,8 +481,6 @@ export function buildPolicy(ctx: OverviewContext): PolicyData {
     protocolMode: modeMap[p.protocolMode] || "unrestricted",
     hasProtocolCaps: p.hasProtocolCaps as boolean,
     protocolCaps,
-    canOpenPositions: p.canOpenPositions as boolean,
-    maxConcurrentPositions: p.maxConcurrentPositions as number,
     maxSlippageBps: p.maxSlippageBps as number,
     leverageLimitBps: p.maxLeverageBps as number,
     allowedDestinations: (p.allowedDestinations || []) as string[],
@@ -504,8 +496,6 @@ export function buildPolicy(ctx: OverviewContext): PolicyData {
       protocolMode: modeMap[p.protocolMode] || "unrestricted",
       hasProtocolCaps: p.hasProtocolCaps,
       protocolCaps: protocolCaps.map(bs),
-      canOpenPositions: p.canOpenPositions,
-      maxConcurrentPositions: p.maxConcurrentPositions,
       maxSlippageBps: p.maxSlippageBps,
       leverageLimitBps: p.maxLeverageBps,
       allowedDestinations: (p.allowedDestinations || []) as string[],
