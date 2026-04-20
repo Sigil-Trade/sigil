@@ -700,7 +700,7 @@ describe("instruction-constraints", () => {
         const errStr = err.toString();
         expect(
           errStr.includes("InvalidConstraintConfig") ||
-            errStr.includes("6051") ||
+            errStr.includes("6047") ||
             errStr.includes("RangeError") ||
             errStr.includes("out of range"),
           `Expected constraint or serialization error, got: ${errStr}`,
@@ -2485,7 +2485,7 @@ describe("instruction-constraints", () => {
           errStr.includes("already in use") ||
             errStr.includes("AccountNotInitialized") ||
             errStr.includes("InvalidConstraintConfig") ||
-            errStr.includes("6051") ||
+            errStr.includes("6047") ||
             errStr.includes("0x0"),
           `Expected already-in-use error, got: ${errStr}`,
         ).to.equal(true);
@@ -2799,7 +2799,7 @@ describe("instruction-constraints", () => {
         const errStr = err.toString();
         expect(
           errStr.includes("InvalidConstraintConfig") ||
-            errStr.includes("6051") ||
+            errStr.includes("6047") ||
             errStr.includes("already in use") ||
             errStr.includes("0x0"),
           `Expected constraint config or already-in-use error, got: ${errStr}`,
@@ -2952,7 +2952,7 @@ describe("instruction-constraints", () => {
         const errStr = err.toString();
         expect(
           errStr.includes("InvalidConstraintConfig") ||
-            errStr.includes("6051") ||
+            errStr.includes("6047") ||
             errStr.includes("already in use") ||
             errStr.includes("0x0"),
           `Expected constraint config or already-in-use error, got: ${errStr}`,

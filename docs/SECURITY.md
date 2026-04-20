@@ -5,7 +5,7 @@
 > control model, PDA derivation paths, error catalog, and trust assumptions.
 >
 > Program: `programs/sigil/` — Anchor 0.32.1, Rust 1.89.0
-> 36 instruction handlers, 12 PDA account types, 85 error codes, 38 events.
+> 36 instruction handlers, 12 PDA account types, 81 error codes, 37 events.
 >
 > Cross-reference: See `docs/ARCHITECTURE.md` for account model,
 > `docs/RFC-ACTIONTYPE-ELIMINATION.md` for the capability model migration,
@@ -182,7 +182,7 @@ Vault seeds include `vault_id` (a `u64`) to allow one owner to create multiple i
 
 ## 5. Error Code Catalog
 
-85 error codes (6000–6084) using Anchor's `#[error_code]`. See `docs/ERROR-CODES.md` for the full table with categories. Source of truth: `programs/sigil/src/errors.rs`.
+81 error codes (6000–6080) using Anchor's `#[error_code]`. See `docs/ERROR-CODES.md` for the full table with categories. Source of truth: `programs/sigil/src/errors.rs`.
 
 **New categories beyond original 70 codes:**
 - Timelock (new): TimelockTooShort, PolicyVersionMismatch
@@ -331,7 +331,7 @@ Per-protocol spend counters (`SpendTracker.protocol_counters`) use a simple 24-h
 - All 36 instruction handlers in `programs/sigil/src/instructions/`
 - All 12 PDA account types in `programs/sigil/src/state/`
 - DeFi integration verifiers in `programs/sigil/src/instructions/integrations/`
-- Error definitions in `programs/sigil/src/errors.rs` (85 codes, 6000–6084)
+- Error definitions in `programs/sigil/src/errors.rs` (81 codes, 6000–6080)
 - Event definitions in `programs/sigil/src/events.rs` (38 events)
 - Program entrypoint in `programs/sigil/src/lib.rs`
 - Capability model design rationale: `docs/RFC-ACTIONTYPE-ELIMINATION.md`

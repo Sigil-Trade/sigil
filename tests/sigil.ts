@@ -4737,7 +4737,7 @@ describe("sigil", () => {
       expect(vault.agents.length).to.equal(10);
     });
 
-    it("11th agent → MaxAgentsReached (6043)", async () => {
+    it("11th agent → MaxAgentsReached (6038)", async () => {
       const extra = Keypair.generate();
       try {
         await program.methods
@@ -4844,7 +4844,7 @@ describe("sigil", () => {
       expect(entry!.capability).to.equal(FULL_CAPABILITY);
     });
 
-    it("invalid capability value → InvalidPermissions (6045)", async () => {
+    it("invalid capability value → InvalidPermissions (6040)", async () => {
       const badAgent = Keypair.generate();
       try {
         await program.methods
