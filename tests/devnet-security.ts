@@ -701,13 +701,7 @@ describe("devnet-security", () => {
       // Non-stablecoin rejection: UnsupportedToken (6003) or InvalidTokenAccount
       // (6022) depending on failure mode (mint-check vs. ATA-check). Stale "6014"
       // removed — it was never the code for either (6014 is VaultAlreadyClosed).
-      expectError(
-        err,
-        "UnsupportedToken",
-        "InvalidTokenAccount",
-        "6003",
-        "6022",
-      );
+      expectError(err, "UnsupportedToken", "InvalidTokenAccount", "6003", "6022");
     }
     console.log("    Non-stablecoin mint rejected in validate_and_authorize");
   });
