@@ -37,9 +37,7 @@ export interface VaultActivityItem {
   tokenSymbol: string | null;
   /** Whether this was a spending action (amount > 0). */
   isSpending: boolean;
-  /** Position effect: "increment", "decrement", or "none". */
-  positionEffect: string | null;
-  /** @deprecated Use isSpending/positionEffect instead. Legacy field for backward compat. */
+  /** @deprecated Use isSpending instead. Legacy field for backward decode of pre-v6 events. */
   actionType: string | null;
   protocol: Address | null;
   protocolName: string | null;
@@ -244,18 +242,17 @@ export function buildActivityItem(
         ? formatUsd(amount, 2)
         : null;
 
-  // New v6 fields: isSpending + positionEffect
-  // Check for new-style event fields first, fall back to legacy actionType parsing.
+  // v6 events carry isSpending directly; legacy events derive it from actionType.
+  // positionEffect extraction removed — position counter system deleted per
+  // council decision (9-1 vote, 2026-04-19).
   let isSpending = false;
-  let positionEffect: string | null = null;
   let actionType: string | null = null;
 
   if (f?.isSpending != null) {
     // New v6 event format
     isSpending = f.isSpending as boolean;
-    positionEffect = (f.positionEffect as string) ?? null;
   } else if (f?.actionType != null) {
-    // Legacy event format — derive isSpending/positionEffect from actionType
+    // Legacy event format — derive isSpending from actionType for backward decode
     const at = f.actionType;
     if (typeof at === "object" && at !== null && "__kind" in at) {
       actionType = (at as { __kind: string }).__kind;
@@ -301,7 +298,6 @@ export function buildActivityItem(
     tokenMint,
     tokenSymbol: token?.symbol ?? null,
     isSpending,
-    positionEffect,
     actionType,
     protocol,
     protocolName: protocol ? resolveProtocolName(protocol) : null,

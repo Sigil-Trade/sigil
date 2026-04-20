@@ -150,12 +150,14 @@ export interface ProtocolBreakdownEntry {
 
 // ─── Activity Data ───────────────────────────────────────────────────────────
 
+// ActivityType: "open_position" and "close_position" literals removed with
+// position counter deletion (council 9-1 vote, 2026-04-19). All trade events
+// now categorize as "swap" by default; "lend" still discriminated for
+// deposit/withdraw flows.
 export type ActivityType =
   | "swap"
   | "lend"
   | "transfer"
-  | "open_position"
-  | "close_position"
   | "deposit"
   | "withdraw";
 

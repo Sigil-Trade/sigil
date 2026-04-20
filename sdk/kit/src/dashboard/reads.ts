@@ -538,8 +538,7 @@ export function buildActivityRows(
     const cat = (item.category as string) ?? "unknown";
     const evt = (item.eventType as string) ?? "";
     const act = (item.actionType as string) ?? undefined;
-    const posEffect = (item.positionEffect as string | null) ?? undefined;
-    const type = mapCategory(cat, evt, act, posEffect);
+    const type = mapCategory(cat, evt, act);
     const amt = item.amount ?? 0n;
     const sig = item.txSignature || `evt-${item.timestamp}-${item.eventType}`;
 
@@ -696,15 +695,12 @@ function mapCategory(
   cat: string,
   evt: string,
   actionType?: string,
-  positionEffect?: string,
 ): ActivityType {
   if (cat === "trade") {
-    // v6 events carry positionEffect ("increment"/"decrement"/"none") instead
-    // of actionType. Prefer it when present — actionType is null for post-
-    // ActionType-elimination events.
-    if (positionEffect === "increment") return "open_position";
-    if (positionEffect === "decrement") return "close_position";
-    // Legacy v5 event path: actionType carries swap vs lend vs perps detail.
+    // Position counter deletion (council 9-1 vote, 2026-04-19) collapsed all
+    // trade events into "swap" by default. Legacy actionType decode is still
+    // honored for historical (pre-v6) events in storage — "lend" is preserved
+    // for deposit/withdraw-style lending actions that aren't stablecoin flows.
     if (actionType) {
       const at = actionType.toLowerCase();
       if (
@@ -713,17 +709,7 @@ function mapCategory(
         at.includes("withdraw")
       )
         return "lend";
-      if (
-        at.includes("open") ||
-        at === "openposition" ||
-        at === "swapandopenposition"
-      )
-        return "open_position";
-      if (at.includes("close") || at === "closeposition")
-        return "close_position";
     }
-    if (evt.includes("Open")) return "open_position";
-    if (evt.includes("Close")) return "close_position";
     return "swap";
   }
   if (cat === "deposit") return "deposit";
