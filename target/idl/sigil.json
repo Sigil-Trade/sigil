@@ -2967,10 +2967,6 @@
           "type": "u16"
         },
         {
-          "name": "max_concurrent_positions",
-          "type": "u8"
-        },
-        {
           "name": "developer_fee_rate",
           "type": "u16"
         },
@@ -3653,18 +3649,6 @@
           }
         },
         {
-          "name": "can_open_positions",
-          "type": {
-            "option": "bool"
-          }
-        },
-        {
-          "name": "max_concurrent_positions",
-          "type": {
-            "option": "u8"
-          }
-        },
-        {
           "name": "developer_fee_rate",
           "type": {
             "option": "u16"
@@ -4331,62 +4315,6 @@
         {
           "name": "proof",
           "type": "bytes"
-        }
-      ]
-    },
-    {
-      "name": "sync_positions",
-      "docs": [
-        "Sync the vault's open position counter with the actual state."
-      ],
-      "discriminator": [
-        255,
-        102,
-        161,
-        80,
-        185,
-        74,
-        140,
-        60
-      ],
-      "accounts": [
-        {
-          "name": "owner",
-          "signer": true
-        },
-        {
-          "name": "vault",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  118,
-                  97,
-                  117,
-                  108,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "vault.owner",
-                "account": "AgentVault"
-              },
-              {
-                "kind": "account",
-                "path": "vault.vault_id",
-                "account": "AgentVault"
-              }
-            ]
-          }
-        }
-      ],
-      "args": [
-        {
-          "name": "actual_positions",
-          "type": "u8"
         }
       ]
     },
@@ -5460,19 +5388,6 @@
       ]
     },
     {
-      "name": "PositionsSynced",
-      "discriminator": [
-        83,
-        33,
-        144,
-        201,
-        168,
-        13,
-        0,
-        95
-      ]
-    },
-    {
       "name": "PostAssertionChecked",
       "discriminator": [
         166,
@@ -5620,386 +5535,366 @@
     },
     {
       "code": 6008,
-      "name": "TooManyPositions",
-      "msg": "Maximum concurrent open positions reached"
-    },
-    {
-      "code": 6009,
-      "name": "PositionOpeningDisallowed",
-      "msg": "Cannot open new positions (policy disallows)"
-    },
-    {
-      "code": 6010,
       "name": "SessionNotAuthorized",
       "msg": "Session not authorized"
     },
     {
-      "code": 6011,
+      "code": 6009,
       "name": "InvalidSession",
       "msg": "Invalid session: does not belong to this vault"
     },
     {
-      "code": 6012,
-      "name": "OpenPositionsExist",
-      "msg": "Vault has open positions, cannot close"
-    },
-    {
-      "code": 6013,
+      "code": 6010,
       "name": "TooManyAllowedProtocols",
       "msg": "Policy configuration invalid: too many allowed protocols"
     },
     {
-      "code": 6014,
+      "code": 6011,
       "name": "AgentAlreadyRegistered",
       "msg": "Agent already registered for this vault"
     },
     {
-      "code": 6015,
+      "code": 6012,
       "name": "NoAgentRegistered",
       "msg": "No agent registered for this vault"
     },
     {
-      "code": 6016,
+      "code": 6013,
       "name": "VaultNotFrozen",
       "msg": "Vault is not frozen (expected frozen for reactivation)"
     },
     {
-      "code": 6017,
+      "code": 6014,
       "name": "VaultAlreadyClosed",
       "msg": "Vault is already closed"
     },
     {
-      "code": 6018,
+      "code": 6015,
       "name": "InsufficientBalance",
       "msg": "Insufficient vault balance for withdrawal"
     },
     {
-      "code": 6019,
+      "code": 6016,
       "name": "DeveloperFeeTooHigh",
       "msg": "Developer fee rate exceeds maximum (500 / 1,000,000 = 5 BPS)"
     },
     {
-      "code": 6020,
+      "code": 6017,
       "name": "InvalidFeeDestination",
       "msg": "Fee destination account invalid"
     },
     {
-      "code": 6021,
+      "code": 6018,
       "name": "InvalidProtocolTreasury",
       "msg": "Protocol treasury account does not match expected address"
     },
     {
-      "code": 6022,
+      "code": 6019,
       "name": "InvalidAgentKey",
       "msg": "Invalid agent: cannot be the zero address"
     },
     {
-      "code": 6023,
+      "code": 6020,
       "name": "AgentIsOwner",
       "msg": "Invalid agent: agent cannot be the vault owner"
     },
     {
-      "code": 6024,
+      "code": 6021,
       "name": "Overflow",
       "msg": "Arithmetic overflow"
     },
     {
-      "code": 6025,
+      "code": 6022,
       "name": "InvalidTokenAccount",
       "msg": "Token account does not belong to vault or has wrong mint"
     },
     {
-      "code": 6026,
+      "code": 6023,
       "name": "TimelockNotExpired",
       "msg": "Timelock period has not expired yet"
     },
     {
-      "code": 6027,
+      "code": 6024,
       "name": "NoTimelockConfigured",
       "msg": "No timelock configured on this vault"
     },
     {
-      "code": 6028,
+      "code": 6025,
       "name": "DestinationNotAllowed",
       "msg": "Destination not in allowed list"
     },
     {
-      "code": 6029,
+      "code": 6026,
       "name": "TooManyDestinations",
       "msg": "Too many destinations (max 10)"
     },
     {
-      "code": 6030,
+      "code": 6027,
       "name": "InvalidProtocolMode",
       "msg": "Invalid protocol mode (must be 0, 1, or 2)"
     },
     {
-      "code": 6031,
+      "code": 6028,
       "name": "InvalidNonSpendingAmount",
       "msg": "Non-spending action must have amount = 0"
     },
     {
-      "code": 6032,
-      "name": "NoPositionsToClose",
-      "msg": "No open positions to close or cancel"
-    },
-    {
-      "code": 6033,
+      "code": 6029,
       "name": "CpiCallNotAllowed",
       "msg": "Instruction must be top-level (CPI calls not allowed)"
     },
     {
-      "code": 6034,
+      "code": 6030,
       "name": "MissingFinalizeInstruction",
       "msg": "Transaction must include finalize_session after validate"
     },
     {
-      "code": 6035,
+      "code": 6031,
       "name": "NonTrackedSwapMustReturnStablecoin",
       "msg": "Non-stablecoin swap must return stablecoin (balance did not increase)"
     },
     {
-      "code": 6036,
+      "code": 6032,
       "name": "SwapSlippageExceeded",
       "msg": "Swap slippage exceeds policy max_slippage_bps or quoted output is zero"
     },
     {
-      "code": 6037,
+      "code": 6033,
       "name": "InvalidJupiterInstruction",
       "msg": "Cannot parse Jupiter swap instruction data"
     },
     {
-      "code": 6038,
+      "code": 6034,
       "name": "UnauthorizedTokenTransfer",
       "msg": "Top-level SPL Token transfer not allowed between validate and finalize"
     },
     {
-      "code": 6039,
+      "code": 6035,
       "name": "SlippageBpsTooHigh",
       "msg": "Slippage BPS exceeds maximum (5000 = 50%)"
     },
     {
-      "code": 6040,
+      "code": 6036,
       "name": "ProtocolMismatch",
       "msg": "DeFi instruction program does not match declared target_protocol"
     },
     {
-      "code": 6041,
+      "code": 6037,
       "name": "TooManyDeFiInstructions",
       "msg": "Spending allows at most one DeFi instruction"
     },
     {
-      "code": 6042,
+      "code": 6038,
       "name": "MaxAgentsReached",
       "msg": "Maximum agents per vault reached (limit: 10)"
     },
     {
-      "code": 6043,
+      "code": 6039,
       "name": "InsufficientPermissions",
       "msg": "Agent lacks permission for this action type"
     },
     {
-      "code": 6044,
+      "code": 6040,
       "name": "InvalidPermissions",
       "msg": "Permission bitmask contains invalid bits"
     },
     {
-      "code": 6045,
+      "code": 6041,
       "name": "EscrowNotActive",
       "msg": "Escrow is not in Active status"
     },
     {
-      "code": 6046,
+      "code": 6042,
       "name": "EscrowExpired",
       "msg": "Escrow has expired"
     },
     {
-      "code": 6047,
+      "code": 6043,
       "name": "EscrowNotExpired",
       "msg": "Escrow has not expired yet"
     },
     {
-      "code": 6048,
+      "code": 6044,
       "name": "InvalidEscrowVault",
       "msg": "Invalid escrow vault"
     },
     {
-      "code": 6049,
+      "code": 6045,
       "name": "EscrowConditionsNotMet",
       "msg": "Escrow conditions not met"
     },
     {
-      "code": 6050,
+      "code": 6046,
       "name": "EscrowDurationExceeded",
       "msg": "Escrow duration exceeds maximum (30 days)"
     },
     {
-      "code": 6051,
+      "code": 6047,
       "name": "InvalidConstraintConfig",
       "msg": "Invalid constraint configuration: bounds exceeded"
     },
     {
-      "code": 6052,
+      "code": 6048,
       "name": "ConstraintViolated",
       "msg": "Instruction constraint violated"
     },
     {
-      "code": 6053,
+      "code": 6049,
       "name": "InvalidConstraintsPda",
       "msg": "Invalid constraints PDA: wrong owner or vault"
     },
     {
-      "code": 6054,
+      "code": 6050,
       "name": "InvalidPendingConstraintsPda",
       "msg": "Invalid pending constraints PDA: wrong owner or vault"
     },
     {
-      "code": 6055,
+      "code": 6051,
       "name": "AgentSpendLimitExceeded",
       "msg": "Agent rolling 24h spend exceeds per-agent spending limit"
     },
     {
-      "code": 6056,
+      "code": 6052,
       "name": "OverlaySlotExhausted",
       "msg": "Per-agent overlay is full; cannot register agent with spending limit"
     },
     {
-      "code": 6057,
+      "code": 6053,
       "name": "AgentSlotNotFound",
       "msg": "Agent has per-agent spending limit but no overlay tracking slot"
     },
     {
-      "code": 6058,
+      "code": 6054,
       "name": "UnauthorizedTokenApproval",
       "msg": "Unauthorized SPL Token Approve between validate and finalize"
     },
     {
-      "code": 6059,
+      "code": 6055,
       "name": "InvalidSessionExpiry",
       "msg": "Session expiry slots out of range (10-450)"
     },
     {
-      "code": 6060,
+      "code": 6056,
       "name": "UnconstrainedProgramBlocked",
       "msg": "Program has no constraint entry and strict mode is enabled"
     },
     {
-      "code": 6061,
+      "code": 6057,
       "name": "ProtocolCapExceeded",
       "msg": "Per-protocol rolling 24h spending cap would be exceeded"
     },
     {
-      "code": 6062,
+      "code": 6058,
       "name": "ProtocolCapsMismatch",
       "msg": "protocol_caps length must match protocols length when has_protocol_caps is true"
     },
     {
-      "code": 6063,
+      "code": 6059,
       "name": "ActiveEscrowsExist",
       "msg": "Cannot close vault with active escrow deposits"
     },
     {
-      "code": 6064,
+      "code": 6060,
       "name": "ConstraintsNotClosed",
       "msg": "Instruction constraints must be closed before closing vault"
     },
     {
-      "code": 6065,
+      "code": 6061,
       "name": "PendingPolicyExists",
       "msg": "Pending policy update must be applied or cancelled before closing vault"
     },
     {
-      "code": 6066,
+      "code": 6062,
       "name": "AgentPaused",
       "msg": "Agent is paused and cannot execute actions"
     },
     {
-      "code": 6067,
+      "code": 6063,
       "name": "AgentAlreadyPaused",
       "msg": "Agent is already paused"
     },
     {
-      "code": 6068,
+      "code": 6064,
       "name": "AgentNotPaused",
       "msg": "Agent is not paused"
     },
     {
-      "code": 6069,
+      "code": 6065,
       "name": "UnauthorizedPostFinalizeInstruction",
       "msg": "Instructions after finalize_session must be ComputeBudget or SystemProgram only"
     },
     {
-      "code": 6070,
+      "code": 6066,
       "name": "UnexpectedBalanceDecrease",
       "msg": "Vault balance decreased more than delegated amount — potential CPI attack"
     },
     {
-      "code": 6071,
+      "code": 6067,
       "name": "TimelockTooShort",
       "msg": "Timelock duration below minimum (1800 seconds / 30 minutes)"
     },
     {
-      "code": 6072,
+      "code": 6068,
       "name": "PolicyVersionMismatch",
       "msg": "Policy version mismatch — policy changed since agent's last RPC read"
     },
     {
-      "code": 6073,
+      "code": 6069,
       "name": "PendingAgentPermsExists",
       "msg": "A pending agent permissions update already exists for this agent"
     },
     {
-      "code": 6074,
+      "code": 6070,
       "name": "PendingCloseConstraintsExists",
       "msg": "A pending close constraints operation already exists for this vault"
     },
     {
-      "code": 6075,
+      "code": 6071,
       "name": "ActiveSessionsExist",
       "msg": "Cannot close vault with active sessions (finalize pending sessions first)"
     },
     {
-      "code": 6076,
+      "code": 6072,
       "name": "PostAssertionFailed",
       "msg": "Post-execution assertion failed: account state did not satisfy constraint"
     },
     {
-      "code": 6077,
+      "code": 6073,
       "name": "InvalidPostAssertionIndex",
       "msg": "Post-assertion constraint references invalid instruction index"
     },
     {
-      "code": 6078,
+      "code": 6074,
       "name": "UnauthorizedPreValidateInstruction",
       "msg": "Non-infrastructure instruction detected before validate_and_authorize"
     },
     {
-      "code": 6079,
+      "code": 6075,
       "name": "SnapshotNotCaptured",
       "msg": "Delta assertion snapshot was not captured in validate_and_authorize"
     },
     {
-      "code": 6080,
+      "code": 6076,
       "name": "ConstraintIndexOutOfBounds",
       "msg": "Constraint entry index out of bounds for zero-copy array"
     },
     {
-      "code": 6081,
+      "code": 6077,
       "name": "InvalidConstraintOperator",
       "msg": "Constraint operator value is not a valid ConstraintOperator discriminant"
     },
     {
-      "code": 6082,
+      "code": 6078,
       "name": "ConstraintsVaultMismatch",
       "msg": "Zero-copy constraints account has wrong vault"
     },
     {
-      "code": 6083,
+      "code": 6079,
       "name": "ConstraintEntryCountExceeded",
       "msg": "Cannot pack entries: entry count exceeds MAX_CONSTRAINT_ENTRIES"
     },
     {
-      "code": 6084,
+      "code": 6080,
       "name": "BlockedSplOpcode",
       "msg": "SPL opcode is blocked at runtime and cannot be used in constraints"
     }
@@ -6581,19 +6476,6 @@
             "type": "u64"
           },
           {
-            "name": "open_positions",
-            "docs": [
-              "Number of currently open positions (for perps tracking).",
-              "DESIGN DECISION: Counter-only. Does not store per-position details",
-              "(entry price, size, liquidation price). Individual position data is",
-              "protocol-specific (Flash Trade vs Drift vs Jupiter perps have different",
-              "layouts). The SDK reads position details via RPC. sync_positions",
-              "corrects counter drift from auto-liquidation.",
-              "Found by: Persona test (Perps Developer \"Jake\")"
-            ],
-            "type": "u8"
-          },
-          {
             "name": "active_escrow_count",
             "docs": [
               "Number of active (unsettled/unrefunded) escrow deposits from this vault"
@@ -6728,13 +6610,6 @@
             "type": "u8"
           },
           {
-            "name": "position_effect",
-            "docs": [
-              "Position effect: 0=None, 1=Increment, 2=Decrement."
-            ],
-            "type": "u8"
-          },
-          {
             "name": "discriminator_format",
             "docs": [
               "Discriminator format for this entry's target program. Controls the",
@@ -6755,17 +6630,17 @@
       "docs": [
         "BYTE LAYOUT REGISTRY — Canonical assignment of padding bytes.",
         "",
-        "Both `feat/multi-format-discriminator` and `feat/actiontype-elimination`",
-        "branches carve fields from the original 6-byte `_padding`. This registry",
-        "is the single source of truth. When merging, the layout MUST be:",
+        "Layout (post position-counter removal, council decision 2026-04-19):",
         "",
-        "byte 554: discriminator_format  (this branch)",
-        "byte 555: is_spending           (actiontype-elimination branch)",
-        "byte 556: position_effect       (actiontype-elimination branch)",
-        "bytes 557-559: _padding[3]      (reserved for future use)",
+        "byte 554: is_spending",
+        "byte 555: discriminator_format",
+        "bytes 556-559: _padding[4]  (reserved for future use)",
         "",
-        "Total: 32+320+200+1+1+1+1+1+3 = 560 (unchanged).",
-        "The branch that merges second MUST rebase and adjust its slot to match."
+        "Total: 32+320+200+1+1+1+1+4 = 560 (unchanged).",
+        "Position_effect (formerly byte 555) was deleted with the entire position",
+        "counter system. The freed byte is absorbed by _padding to preserve the",
+        "560-byte total — shrinking the struct would corrupt every existing",
+        "on-chain InstructionConstraints PDA (35,888-byte zero-copy account)."
       ],
       "serialization": "bytemuck",
       "repr": {
@@ -6827,14 +6702,6 @@
             "type": "u8"
           },
           {
-            "name": "position_effect",
-            "docs": [
-              "Position tracking: 0=None, 1=Increment (opens position), 2=Decrement (closes position).",
-              "Replaces ActionType.position_effect()."
-            ],
-            "type": "u8"
-          },
-          {
             "name": "discriminator_format",
             "docs": [
               "DiscriminatorFormat discriminant (0=Anchor8, 1=Spl1). Write-time only —",
@@ -6848,7 +6715,7 @@
             "type": {
               "array": [
                 "u8",
-                3
+                4
               ]
             }
           }
@@ -7739,18 +7606,6 @@
             }
           },
           {
-            "name": "can_open_positions",
-            "type": {
-              "option": "bool"
-            }
-          },
-          {
-            "name": "max_concurrent_positions",
-            "type": {
-              "option": "u8"
-            }
-          },
-          {
             "name": "developer_fee_rate",
             "type": {
               "option": "u16"
@@ -7905,20 +7760,6 @@
             "type": "u16"
           },
           {
-            "name": "can_open_positions",
-            "docs": [
-              "Whether the agent can open new positions (vs only close existing)"
-            ],
-            "type": "bool"
-          },
-          {
-            "name": "max_concurrent_positions",
-            "docs": [
-              "Maximum number of concurrent open positions"
-            ],
-            "type": "u8"
-          },
-          {
             "name": "developer_fee_rate",
             "docs": [
               "Developer fee rate (rate / 1,000,000). Applied to every finalized",
@@ -8020,30 +7861,6 @@
               "0 = no assertions, non-zero = assertions required."
             ],
             "type": "u8"
-          }
-        ]
-      }
-    },
-    {
-      "name": "PositionsSynced",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "vault",
-            "type": "pubkey"
-          },
-          {
-            "name": "old_count",
-            "type": "u8"
-          },
-          {
-            "name": "new_count",
-            "type": "u8"
-          },
-          {
-            "name": "timestamp",
-            "type": "i64"
           }
         ]
       }
@@ -8449,13 +8266,6 @@
             "type": "bool"
           },
           {
-            "name": "position_effect",
-            "docs": [
-              "Position effect from matched constraint entry (0=None, 1=Increment, 2=Decrement)."
-            ],
-            "type": "u8"
-          },
-          {
             "name": "expires_at_slot",
             "docs": [
               "Slot-based expiry: session is valid until this slot"
@@ -8599,13 +8409,6 @@
               "Whether this was a spending action."
             ],
             "type": "bool"
-          },
-          {
-            "name": "position_effect",
-            "docs": [
-              "Position effect: 0=None, 1=Increment, 2=Decrement."
-            ],
-            "type": "u8"
           }
         ]
       }
