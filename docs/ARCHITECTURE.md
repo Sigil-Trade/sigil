@@ -139,7 +139,6 @@ Total: **36** dispatchable instructions defined in `programs/sigil/src/lib.rs`.
 | `freeze_vault` | `instructions/freeze_vault.rs` | Immediately set vault status to `Frozen`; preserves all agent entries |
 | `reactivate_vault` | `instructions/reactivate_vault.rs` | Unfreeze vault; optionally register a new agent in the same call |
 | `close_vault` | `instructions/close_vault.rs` | Close vault (requires `active_sessions == 0`); reclaim rent from owned PDAs |
-| `sync_positions` | `instructions/sync_positions.rs` | Correct `vault.open_positions` counter drift from auto-liquidation |
 
 ### Fund Management (2)
 
@@ -255,8 +254,8 @@ allow testing on devnet where Circle-controlled USDC cannot be minted
 ### Agent Capability Model
 
 The old 21-bit `permissions: u64` ActionType bitmask has been eliminated. Spending
-classification and position tracking now derive from matched `ConstraintEntryZC` fields
-(`is_spending`, `position_effect`). Agent authorization uses a 2-bit capability field
+classification now derives from the matched `ConstraintEntryZC.is_spending` field.
+Agent authorization uses a 2-bit capability field
 (`programs/sigil/src/state/vault.rs:6-8`, `programs/sigil/src/state/mod.rs:32`):
 
 | Constant | Value | Meaning |
@@ -315,7 +314,7 @@ instance-level vault and agent state caching.
 | `docs/ERROR-CODES.md` | Complete table of all error codes with messages and triggering conditions |
 | `docs/SECURITY.md` | Threat model, access control matrix, trust boundaries, upgrade authority governance |
 | `docs/ONCHAIN-FEATURE-INVENTORY.md` | Per-instruction operational detail, complete account type list, event catalog, capability model |
-| `docs/RFC-ACTIONTYPE-ELIMINATION.md` | Design rationale for replacing the 21-bit ActionType bitmask with constraint-derived `is_spending` / `position_effect` fields |
+| `docs/RFC-ACTIONTYPE-ELIMINATION.md` | Design rationale for replacing the 21-bit ActionType bitmask with the constraint-derived `is_spending` field |
 | `docs/COMMANDS-REFERENCE.md` | All build, test, deploy, and tooling commands |
 | `docs/DEPLOYMENT.md` | Devnet and mainnet deployment procedures, verification steps |
 | `docs/SECURITY-FINDINGS-2026-04-07.md` | Detailed write-up of security findings and mitigations (A3, A5, H-1, M-1, M-2) |

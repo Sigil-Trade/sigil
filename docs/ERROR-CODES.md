@@ -1,8 +1,8 @@
-# Error Codes (6000-6085)
+# Error Codes (6000-6080)
 
-All 85+ custom errors defined in `programs/sigil/src/errors.rs`. Use `require!(condition, SigilError::Name)`.
+All 81 custom errors defined in `programs/sigil/src/errors.rs`. Use `require!(condition, SigilError::Name)`.
 
-> **Source of truth:** `programs/sigil/src/errors.rs` — Anchor assigns codes sequentially from 6000 based on enum position. Always verify against the actual enum before relying on a specific numeric code (there was a transitional period where code-to-position mapping drifted in older docs).
+> **Source of truth:** `sdk/kit/src/generated/errors/sigil.ts` — codama-generated from the canonical IDL (`target/idl/sigil.json`). Anchor assigns codes sequentially from 6000 based on enum position. Always verify against the generated file before relying on a specific numeric code.
 
 | Code | Name | Category | Invoked In |
 |------|------|----------|------------|
@@ -14,109 +14,85 @@ All 85+ custom errors defined in `programs/sigil/src/errors.rs`. Use `require!(c
 | 6005 | TransactionTooLarge | Policy | validate_and_authorize |
 | 6006 | SpendingCapExceeded | Spending | validate_and_authorize, agent_transfer, finalize_session, create_escrow |
 | 6007 | LeverageTooHigh | Policy | validate_and_authorize |
-| 6008 | TooManyPositions | Policy | validate_and_authorize |
-| 6009 | PositionOpeningDisallowed | Policy | validate_and_authorize |
-| 6010 | SessionNotAuthorized | Session | finalize_session |
-| 6011 | InvalidSession | Session | finalize_session (Anchor `has_one = vault`) |
-| 6012 | OpenPositionsExist | Vault state | close_vault |
-| 6013 | TooManyAllowedProtocols | Policy | update_policy, queue_policy_update, apply_policy_update |
-| 6014 | AgentAlreadyRegistered | Vault state | register_agent |
-| 6015 | NoAgentRegistered | Vault state | reactivate_vault |
-| 6016 | VaultNotFrozen | Vault state | reactivate_vault |
-| 6017 | VaultAlreadyClosed | Vault state | close_vault |
-| 6018 | InsufficientBalance | Vault state | withdraw, agent_transfer |
-| 6019 | DeveloperFeeTooHigh | Fee | initialize_vault |
-| 6020 | InvalidFeeDestination | Fee | validate_and_authorize, agent_transfer, initialize_vault, create_escrow |
-| 6021 | InvalidProtocolTreasury | Fee | validate_and_authorize, agent_transfer, create_escrow |
-| 6022 | InvalidAgentKey | Validation | register_agent |
-| 6023 | AgentIsOwner | Validation | register_agent |
-| 6024 | Overflow | Arithmetic | 20+ files (all checked math) |
-| 6025 | InvalidTokenAccount | Validation | validate_and_authorize, finalize_session, agent_transfer (Anchor constraints) |
-| 6026 | TimelockNotExpired | Timelock | apply_policy_update, apply_constraints_update |
-| 6027 | TimelockActive | Timelock | update_policy |
-| 6028 | NoTimelockConfigured | Timelock | queue_policy_update, queue_constraints_update |
-| 6029 | DestinationNotAllowed | Policy | validate_and_authorize, agent_transfer |
-| 6030 | TooManyDestinations | Policy | update_policy, queue_policy_update, apply_policy_update |
-| 6031 | InvalidProtocolMode | Validation | update_policy, queue_policy_update, apply_policy_update |
-| 6032 | InvalidNonSpendingAmount | Validation | validate_and_authorize |
-| 6033 | NoPositionsToClose | Vault state | validate_and_authorize |
-| 6034 | CpiCallNotAllowed | Security | validate_and_authorize |
-| 6035 | MissingFinalizeInstruction | Security | validate_and_authorize |
-| 6036 | NonTrackedSwapMustReturnStablecoin | Stablecoin | finalize_session |
-| 6037 | SwapSlippageExceeded | Stablecoin | validate_and_authorize (Jupiter verifier) |
-| 6038 | InvalidJupiterInstruction | Integration | validate_and_authorize (Jupiter verifier) |
-| 6039 | UnauthorizedTokenTransfer | Security | validate_and_authorize |
-| 6040 | SlippageBpsTooHigh | Validation | update_policy, queue_policy_update, apply_policy_update |
-| 6041 | ProtocolMismatch | Validation | validate_and_authorize |
-| 6042 | TooManyDeFiInstructions | Security | validate_and_authorize |
-| 6043 | MaxAgentsReached | Multi-agent | register_agent |
-| 6044 | InsufficientPermissions | Multi-agent | validate_and_authorize |
-| 6045 | InvalidPermissions | Multi-agent | register_agent, update_agent_permissions |
-| 6046 | EscrowNotActive | Escrow | settle_escrow, refund_escrow |
-| 6047 | EscrowExpired | Escrow | settle_escrow |
-| 6048 | EscrowNotExpired | Escrow | refund_escrow |
-| 6049 | InvalidEscrowVault | Escrow | create_escrow, settle_escrow, refund_escrow, close_settled_escrow (Anchor constraints) |
-| 6050 | EscrowConditionsNotMet | Escrow | settle_escrow |
-| 6051 | EscrowDurationExceeded | Escrow | create_escrow |
-| 6052 | InvalidConstraintConfig | Constraints | set_instruction_constraints (via validate_entries) |
-| 6053 | ConstraintViolated | Constraints | validate_and_authorize (generic constraints) |
-| 6054 | InvalidConstraintsPda | Constraints | apply_constraints_update, queue_constraints_update, update_instruction_constraints (Anchor constraints) |
-| 6055 | InvalidPendingConstraintsPda | Constraints | cancel_constraints_update, apply_constraints_update (Anchor constraints) |
-| 6056 | AgentSpendLimitExceeded | Multi-agent | validate_and_authorize |
-| 6057 | OverlaySlotExhausted | Multi-agent | agent_spend_overlay |
-| 6058 | AgentSlotNotFound | Multi-agent | validate_and_authorize, agent_spend_overlay |
-| 6059 | UnauthorizedTokenApproval | Security | validate_and_authorize |
-| 6060 | InvalidSessionExpiry | Validation | validate_and_authorize |
-| 6061 | UnconstrainedProgramBlocked | Constraints | validate_and_authorize (generic constraints) |
-| 6062 | ProtocolCapExceeded | Spending | validate_and_authorize |
-| 6063 | ProtocolCapsMismatch | Validation | update_policy, queue_policy_update, apply_policy_update |
-| 6064 | ActiveEscrowsExist | Vault state | close_vault |
-| 6065 | ConstraintsNotClosed | Vault state | close_vault |
-| 6066 | PendingPolicyExists | Vault state | close_vault |
-| 6067 | AgentPaused | Emergency | validate_and_authorize |
-| 6068 | AgentAlreadyPaused | Emergency | pause_agent |
-| 6069 | AgentNotPaused | Emergency | unpause_agent |
-| 6070 | UnauthorizedPostFinalizeInstruction | Validation | finalize_session |
-| 6071 | UnexpectedBalanceDecrease | Security | finalize_session |
-| 6072 | TimelockTooShort | Timelock | initialize_vault, queue_policy_update, apply_pending_policy (MIN_TIMELOCK_DURATION = 1800s) |
-| 6073 | PolicyVersionMismatch | TOCTOU | validate_and_authorize, agent_transfer (expected_policy_version check) |
-| 6074 | PendingAgentPermsExists | Multi-agent | queue_agent_permissions_update |
-| 6075 | PendingCloseConstraintsExists | Constraints | queue_close_constraints |
-| 6076 | ActiveSessionsExist | Vault state | close_vault (blocks close if any SessionAuthority PDA open) |
-| 6077 | PostAssertionFailed | Post-execution | finalize_session (Phase B assertion verification) |
-| 6078 | InvalidPostAssertionIndex | Post-execution | finalize_session (assertion entry index out of bounds) |
-| 6079 | UnauthorizedPreValidateInstruction | Validation | validate_and_authorize (non-infrastructure instruction before validate) |
-| 6080 | SnapshotNotCaptured | Post-execution | finalize_session (delta assertion missing snapshot) |
-| 6081 | ConstraintIndexOutOfBounds | Constraints | pack_entries, verify_against_entries_zc (zero-copy bounds) |
-| 6082 | InvalidConstraintOperator | Constraints | validate_entries (ConstraintOperator discriminant check) |
-| 6083 | ConstraintsVaultMismatch | Constraints | verify_against_entries_zc (zero-copy vault field mismatch) |
-| 6084 | ConstraintEntryCountExceeded | Constraints | pack_entries (> MAX_CONSTRAINT_ENTRIES=64) |
-| 6085 | BlockedSplOpcode | Security | validate_entries (Spl1 format blocks runtime-enforced SPL opcodes) |
-
-## Changes from Previous (77 codes → 72 codes)
-
-**Renamed (4):**
-- 6003: TokenNotRegistered → UnsupportedToken
-- 6006: DailyCapExceeded → SpendingCapExceeded
-- 6037: SlippageTooHigh → SwapSlippageExceeded
-- 6039: DustDepositDetected → UnauthorizedTokenTransfer (also renumbered from 6041)
-
-**Removed (7 dead codes):**
-- InvalidFlashTradeInstruction (was 6039) — Flash Trade verifier removed
-- FlashTradePriceZero (was 6040) — Flash Trade verifier removed
-- InvalidJupiterLendInstruction (was 6042) — Jupiter Lend verifier removed
-- NoPendingConstraintsUpdate (was 6058) — Anchor handles implicitly
-- PendingConstraintsUpdateExists (was 6059) — Anchor `init` handles implicitly
-- ConstraintsUpdateNotExpired (was 6060) — Uses TimelockNotExpired (6026) instead
-- ConstraintsUpdateExpired (was 6062) — Reserved, never implemented
-
-All codes >= 6039 have been renumbered.
+| 6008 | SessionNotAuthorized | Session | finalize_session |
+| 6009 | InvalidSession | Session | finalize_session (Anchor `has_one = vault`) |
+| 6010 | TooManyAllowedProtocols | Policy | queue_policy_update, apply_policy_update |
+| 6011 | AgentAlreadyRegistered | Vault state | register_agent |
+| 6012 | NoAgentRegistered | Vault state | reactivate_vault |
+| 6013 | VaultNotFrozen | Vault state | reactivate_vault |
+| 6014 | VaultAlreadyClosed | Vault state | close_vault |
+| 6015 | InsufficientBalance | Vault state | withdraw, agent_transfer |
+| 6016 | DeveloperFeeTooHigh | Fee | initialize_vault |
+| 6017 | InvalidFeeDestination | Fee | validate_and_authorize, agent_transfer, initialize_vault, create_escrow |
+| 6018 | InvalidProtocolTreasury | Fee | validate_and_authorize, agent_transfer, create_escrow |
+| 6019 | InvalidAgentKey | Validation | register_agent |
+| 6020 | AgentIsOwner | Validation | register_agent |
+| 6021 | Overflow | Arithmetic | 20+ files (all checked math) |
+| 6022 | InvalidTokenAccount | Validation | validate_and_authorize, finalize_session, agent_transfer (Anchor constraints) |
+| 6023 | TimelockNotExpired | Timelock | apply_policy_update, apply_constraints_update |
+| 6024 | NoTimelockConfigured | Timelock | queue_policy_update, queue_constraints_update |
+| 6025 | DestinationNotAllowed | Policy | validate_and_authorize, agent_transfer |
+| 6026 | TooManyDestinations | Policy | queue_policy_update, apply_policy_update |
+| 6027 | InvalidProtocolMode | Validation | queue_policy_update, apply_policy_update |
+| 6028 | InvalidNonSpendingAmount | Validation | validate_and_authorize |
+| 6029 | CpiCallNotAllowed | Security | validate_and_authorize |
+| 6030 | MissingFinalizeInstruction | Security | validate_and_authorize |
+| 6031 | NonTrackedSwapMustReturnStablecoin | Stablecoin | finalize_session |
+| 6032 | SwapSlippageExceeded | Stablecoin | validate_and_authorize (Jupiter verifier) |
+| 6033 | InvalidJupiterInstruction | Integration | validate_and_authorize (Jupiter verifier) |
+| 6034 | UnauthorizedTokenTransfer | Security | validate_and_authorize |
+| 6035 | SlippageBpsTooHigh | Validation | queue_policy_update, apply_policy_update |
+| 6036 | ProtocolMismatch | Validation | validate_and_authorize |
+| 6037 | TooManyDeFiInstructions | Security | validate_and_authorize |
+| 6038 | MaxAgentsReached | Multi-agent | register_agent |
+| 6039 | InsufficientPermissions | Multi-agent | validate_and_authorize |
+| 6040 | InvalidPermissions | Multi-agent | register_agent, update_agent_permissions |
+| 6041 | EscrowNotActive | Escrow | settle_escrow, refund_escrow |
+| 6042 | EscrowExpired | Escrow | settle_escrow |
+| 6043 | EscrowNotExpired | Escrow | refund_escrow |
+| 6044 | InvalidEscrowVault | Escrow | create_escrow, settle_escrow, refund_escrow, close_settled_escrow (Anchor constraints) |
+| 6045 | EscrowConditionsNotMet | Escrow | settle_escrow |
+| 6046 | EscrowDurationExceeded | Escrow | create_escrow |
+| 6047 | InvalidConstraintConfig | Constraints | create_instruction_constraints (via validate_entries) |
+| 6048 | ConstraintViolated | Constraints | validate_and_authorize (generic constraints) |
+| 6049 | InvalidConstraintsPda | Constraints | apply_constraints_update, queue_constraints_update (Anchor constraints) |
+| 6050 | InvalidPendingConstraintsPda | Constraints | cancel_constraints_update, apply_constraints_update (Anchor constraints) |
+| 6051 | AgentSpendLimitExceeded | Multi-agent | validate_and_authorize |
+| 6052 | OverlaySlotExhausted | Multi-agent | agent_spend_overlay |
+| 6053 | AgentSlotNotFound | Multi-agent | validate_and_authorize, agent_spend_overlay |
+| 6054 | UnauthorizedTokenApproval | Security | validate_and_authorize |
+| 6055 | InvalidSessionExpiry | Validation | validate_and_authorize |
+| 6056 | UnconstrainedProgramBlocked | Constraints | validate_and_authorize (generic constraints) |
+| 6057 | ProtocolCapExceeded | Spending | validate_and_authorize |
+| 6058 | ProtocolCapsMismatch | Validation | queue_policy_update, apply_policy_update |
+| 6059 | ActiveEscrowsExist | Vault state | close_vault |
+| 6060 | ConstraintsNotClosed | Vault state | close_vault |
+| 6061 | PendingPolicyExists | Vault state | close_vault |
+| 6062 | AgentPaused | Emergency | validate_and_authorize |
+| 6063 | AgentAlreadyPaused | Emergency | pause_agent |
+| 6064 | AgentNotPaused | Emergency | unpause_agent |
+| 6065 | UnauthorizedPostFinalizeInstruction | Validation | finalize_session |
+| 6066 | UnexpectedBalanceDecrease | Security | finalize_session |
+| 6067 | TimelockTooShort | Timelock | initialize_vault, queue_policy_update, apply_pending_policy (MIN_TIMELOCK_DURATION = 1800s) |
+| 6068 | PolicyVersionMismatch | TOCTOU | validate_and_authorize, agent_transfer (expected_policy_version check) |
+| 6069 | PendingAgentPermsExists | Multi-agent | queue_agent_permissions_update |
+| 6070 | PendingCloseConstraintsExists | Constraints | queue_close_constraints |
+| 6071 | ActiveSessionsExist | Vault state | close_vault (blocks close if any SessionAuthority PDA open) |
+| 6072 | PostAssertionFailed | Post-execution | finalize_session (Phase B assertion verification) |
+| 6073 | InvalidPostAssertionIndex | Post-execution | finalize_session (assertion entry index out of bounds) |
+| 6074 | UnauthorizedPreValidateInstruction | Validation | validate_and_authorize (non-infrastructure instruction before validate) |
+| 6075 | SnapshotNotCaptured | Post-execution | finalize_session (delta assertion missing snapshot) |
+| 6076 | ConstraintIndexOutOfBounds | Constraints | pack_entries, verify_against_entries_zc (zero-copy bounds) |
+| 6077 | InvalidConstraintOperator | Constraints | validate_entries (ConstraintOperator discriminant check) |
+| 6078 | ConstraintsVaultMismatch | Constraints | verify_against_entries_zc (zero-copy vault field mismatch) |
+| 6079 | ConstraintEntryCountExceeded | Constraints | pack_entries (> MAX_CONSTRAINT_ENTRIES=64) |
+| 6080 | BlockedSplOpcode | Security | validate_entries (Spl1 format blocks runtime-enforced SPL opcodes) |
 
 ## TS Error Map Coverage
 
 | Location | Codes Mapped |
 |----------|-------------|
-| `sdk/kit/src/simulation.ts` | 72/72 |
-| `sdk/kit/src/agent-errors.ts` | 72/72 + 34 SDK |
-| `sdk/kit/src/generated/errors/sigil.ts` | 72/72 |
-| `target/idl/sigil.json` | 72/72 |
+| `sdk/kit/src/simulation.ts` | 81/81 |
+| `sdk/kit/src/agent-errors.ts` | 81/81 + 34 SDK |
+| `sdk/kit/src/generated/errors/sigil.ts` | 81/81 (canonical) |
+| `target/idl/sigil.json` | 81/81 |

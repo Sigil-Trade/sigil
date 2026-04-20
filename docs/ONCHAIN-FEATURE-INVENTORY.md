@@ -27,7 +27,6 @@ Cross-references (do not duplicate these here):
 | `freeze_vault` | `instructions/freeze_vault.rs` | Immediately freeze vault; preserves all agent entries |
 | `reactivate_vault` | `instructions/reactivate_vault.rs` | Unfreeze vault; optionally register a new agent in the same TX |
 | `close_vault` | `instructions/close_vault.rs` | Close vault and reclaim rent from all owned PDAs |
-| `sync_positions` | `instructions/sync_positions.rs` | Reconcile vault open-position counter with actual state |
 
 ### Fund Management (2)
 
@@ -195,15 +194,13 @@ All structs defined in `programs/sigil/src/events.rs`. Every instruction emits a
 
 **Post-execution assertions (3):** `PostAssertionsCreated`, `PostAssertionsClosed`, `PostAssertionChecked`
 
-**Misc (1):** `PositionsSynced`
-
 Full field-level documentation → `docs/SECURITY.md §6`.
 
 ---
 
 ## 7. Error Code Ranges
 
-85 error codes, `SigilError` enum in `programs/sigil/src/errors.rs`. Anchor maps enum index N to code 6000 + N, so the range is **6000–6084**.
+81 error codes, `SigilError` enum in `programs/sigil/src/errors.rs`. Anchor maps enum index N to code 6000 + N, so the range is **6000–6080**.
 
 Complete table with full error messages → `docs/ERROR-CODES.md`.
 

@@ -65,7 +65,7 @@ No unbounded `Vec<T>` in on-chain accounts. All vectors and arrays have compile-
 - `AgentSpendOverlay.entries`: fixed 10-element array of `AgentContributionEntry` (24 hourly epochs per entry)
 
 ### INV-3: Owner-Only Admin
-Only the vault owner can call: `deposit_funds`, `register_agent`, `revoke_agent`, `withdraw_funds`, `close_vault`, `reactivate_vault`, `queue_policy_update`, `apply_pending_policy`, `cancel_pending_policy`, `sync_positions`, `create_instruction_constraints`, `queue_constraints_update`, `apply_constraints_update`, `cancel_constraints_update`, `queue_close_constraints`, `apply_close_constraints`, `cancel_close_constraints`, `allocate_constraints_pda`, `allocate_pending_constraints_pda`, `extend_pda`, `create_post_assertions`, `close_post_assertions`, `freeze_vault`, `pause_agent`, `unpause_agent`, `queue_agent_permissions_update`, `apply_agent_permissions_update`, `cancel_agent_permissions_update`. Enforced by Anchor `has_one = owner` and PDA seed re-derivation.
+Only the vault owner can call: `deposit_funds`, `register_agent`, `revoke_agent`, `withdraw_funds`, `close_vault`, `reactivate_vault`, `queue_policy_update`, `apply_pending_policy`, `cancel_pending_policy`, `create_instruction_constraints`, `queue_constraints_update`, `apply_constraints_update`, `cancel_constraints_update`, `queue_close_constraints`, `apply_close_constraints`, `cancel_close_constraints`, `allocate_constraints_pda`, `allocate_pending_constraints_pda`, `extend_pda`, `create_post_assertions`, `close_post_assertions`, `freeze_vault`, `pause_agent`, `unpause_agent`, `queue_agent_permissions_update`, `apply_agent_permissions_update`, `cancel_agent_permissions_update`. Enforced by Anchor `has_one = owner` and PDA seed re-derivation.
 
 Source: `programs/sigil/src/lib.rs`.
 
@@ -170,7 +170,6 @@ Vault seeds include `vault_id` (a `u64`) to allow one owner to create multiple i
 | `queue_agent_permissions_update` | `owner` | `has_one = owner`. Agent must exist in vault. Creates PendingAgentPermissionsUpdate PDA (per-agent). Fails if already queued (`PendingAgentPermsExists`). |
 | `apply_agent_permissions_update` | `owner` | `has_one = owner`. Timelock expired. Applies new capability + spending limit. Closes PendingAgentPermissionsUpdate PDA. |
 | `cancel_agent_permissions_update` | `owner` | `has_one = owner`. Closes PendingAgentPermissionsUpdate PDA. |
-| `sync_positions` | `owner` | `has_one = owner`. Corrects `open_positions` counter after keeper-executed orders. |
 | `create_escrow` | `agent` | `vault.is_agent(agent)`. Agent not paused. OPERATOR capability (spending action). Spending caps + fees apply. Max duration 30 days. |
 | `settle_escrow` | `dest_owner/agent` | Escrow status == Active. Not expired. SHA-256 proof verified (if condition_hash set). |
 | `refund_escrow` | `source_owner` | Escrow status == Active. Expired (`now >= expires_at`). Cap NOT reversed (prevents cap-washing). |
@@ -195,9 +194,9 @@ Vault seeds include `vault_id` (a `u64`) to allow one owner to create multiple i
 
 ## 6. Event Catalog
 
-38 events using Anchor's `#[event]` attribute, emitted via `emit!()`. Source of truth: `programs/sigil/src/events.rs`.
+37 events using Anchor's `#[event]` attribute, emitted via `emit!()`. Source of truth: `programs/sigil/src/events.rs`.
 
-**Core vault lifecycle:** VaultCreated, FundsDeposited, AgentRegistered, AgentSpendLimitChecked, ActionAuthorized, SessionFinalized, DelegationRevoked, AgentRevoked, VaultReactivated, FundsWithdrawn, FeesCollected, VaultClosed, AgentTransferExecuted, PositionsSynced.
+**Core vault lifecycle:** VaultCreated, FundsDeposited, AgentRegistered, AgentSpendLimitChecked, ActionAuthorized, SessionFinalized, DelegationRevoked, AgentRevoked, VaultReactivated, FundsWithdrawn, FeesCollected, VaultClosed, AgentTransferExecuted.
 
 **Policy timelock:** PolicyChangeQueued, PolicyChangeApplied, PolicyChangeCancelled.
 
@@ -567,9 +566,9 @@ vault.has_capability(&agent, is_spending) → SigilError::InsufficientPermission
 
 ### 12.4 ConstraintEntryZC.is_spending (Session Classification)
 
-`ConstraintEntryZC.is_spending` (1=Spending, 2=NonSpending, 0=Unset rejected at creation) is configured by the vault owner at constraint creation time. When a DeFi instruction matches a constraint entry, the matched entry's `is_spending` and `position_effect` values are stored in the `SessionAuthority` PDA and emitted in the `SessionFinalized` event. This replaces the old `ActionType.is_spending()` and `ActionType.position_effect()` methods.
+`ConstraintEntryZC.is_spending` (1=Spending, 2=NonSpending, 0=Unset rejected at creation) is configured by the vault owner at constraint creation time. When a DeFi instruction matches a constraint entry, the matched entry's `is_spending` value is stored in the `SessionAuthority` PDA and emitted in the `SessionFinalized` event. This replaces the old `ActionType.is_spending()` method.
 
-Constraint entries with `is_spending == 0` are rejected at creation time. Source: `state/constraints.rs:313-317`.
+Constraint entries with `is_spending == 0` are rejected at creation time. Source: `state/constraints.rs`.
 
 ### 12.5 Queued Agent Permissions Updates
 

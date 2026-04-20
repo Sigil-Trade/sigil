@@ -270,7 +270,6 @@ Transaction {
 3. **Oracle staleness:** Drift rejects orders when the oracle price is stale. The SDK should check oracle freshness before composing transactions (pre-flight).
 4. **Market index, not market address.** Drift uses market indices (u16) not market addresses. The SDK must map market names ("SOL-PERP") to indices.
 5. **Leverage calculation:** Drift leverage is expressed differently than Flash Trade. Convert to BPS for Sigil policy comparison: `leverage_bps = (notional_value / collateral) * 100`.
-6. **Position tracking:** Drift allows multiple positions per market. Track `open_positions` as the count of distinct markets with non-zero positions, not the count of orders.
 
 ---
 
@@ -318,8 +317,6 @@ type ValidationDenialReason =
   | "TransactionTooLarge"
   | "SpendingCapExceeded"
   | "LeverageTooHigh"
-  | "TooManyPositions"
-  | "PositionOpeningDisallowed"
   | "InsufficientBalance";
 ```
 
@@ -480,29 +477,6 @@ const res = await shieldedFetch(wallet, url, { connection, dryRun: true });
 
 ---
 
-## Position Counter Reconciliation (Phase L)
-
-Vault position counters can drift when Flash Trade keepers execute trigger orders (TP/SL) or fill limit orders outside Sigil's session pattern. The reconciliation flow corrects this:
-
-### Flow
-
-```
-1. Keeper fills limit order → Flash Trade position changes
-2. Sigil vault.open_positions is now wrong
-3. SDK calls countFlashTradePositions() → derives PDAs, counts live positions
-4. SDK calls reconcilePositions() → compares counter, returns sync instruction if needed
-5. Owner signs sync_positions instruction → counter corrected
-```
-
-### Rules
-
-1. **Owner-only.** Only the vault owner can sync positions. Prevents griefing by third parties.
-2. **Client-side verification.** The SDK verifies the actual position count by reading Flash Trade position PDAs. The on-chain instruction trusts the owner's provided count.
-3. **Both directions.** Counter can be synced up (missed opens) or down (missed closes).
-4. **Idempotent.** Syncing when already correct is a no-op (emits event with old == new).
-
----
-
 ## Flash Trade Advanced Order Patterns (Phase L)
 
 ### Order Types
@@ -517,14 +491,12 @@ Vault position counters can drift when Flash Trade keepers execute trigger order
 | `shield_cancel_trigger_order` | Cancel TP/SL | — | No |
 | `shield_add_collateral` | Add collateral | `IncreasePosition` | Yes |
 | `shield_remove_collateral` | Remove collateral | `DecreasePosition` | No |
-| `shield_sync_positions` | Reconcile counter | — | No (owner-only) |
 
 ### Rules
 
-1. **Keeper-executed orders bypass sessions.** Flash Trade keepers fill limit orders and execute trigger orders without going through `validate_and_authorize`. Position counter drift is expected — use `sync_positions` to correct.
-2. **Non-spending actions must have amount = 0.** `ClosePosition` and `DecreasePosition` don't spend from the vault — enforced by `InvalidNonSpendingAmount` error.
-3. **Limit order reserve counts as spending.** When placing a limit order, the reserve amount (collateral locked) is tracked against spending caps.
-4. **Trigger orders don't count as new spending.** TP/SL orders use existing position collateral — no additional spend tracking.
+1. **Non-spending actions must have amount = 0.** `ClosePosition` and `DecreasePosition` don't spend from the vault — enforced by `InvalidNonSpendingAmount` error.
+2. **Limit order reserve counts as spending.** When placing a limit order, the reserve amount (collateral locked) is tracked against spending caps.
+3. **Trigger orders don't count as new spending.** TP/SL orders use existing position collateral — no additional spend tracking.
 
 ---
 
