@@ -585,7 +585,16 @@ describe("devnet-routing", () => {
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectError(err, "InvalidTokenAccount", "UnsupportedToken", "6014");
+      // Non-stablecoin input without output ATA: InvalidTokenAccount (6022) or
+      // UnsupportedToken (6003) depending on which check fires first. Stale
+      // "6014" removed — never the code for either (6014 = VaultAlreadyClosed).
+      expectError(
+        err,
+        "InvalidTokenAccount",
+        "UnsupportedToken",
+        "6022",
+        "6003",
+      );
     }
     console.log("    Non-stablecoin without output stablecoin rejected");
   });
@@ -740,10 +749,12 @@ describe("devnet-routing", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectError(err, "UnsupportedToken", "6014");
+      // agent_transfer only accepts stablecoins. UnsupportedToken = 6003.
+      // Stale "6014" removed (never correct — 6014 is VaultAlreadyClosed).
+      expectError(err, "UnsupportedToken", "6003");
     }
     console.log(
-      "    agent_transfer non-stablecoin rejected with UnsupportedToken (6014)",
+      "    agent_transfer non-stablecoin rejected with UnsupportedToken (6003)",
     );
   });
 
