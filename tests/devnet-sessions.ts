@@ -38,7 +38,7 @@ import {
   buildAuthorizeIx,
   buildFinalizeIx,
   fundKeypair,
-  expectError,
+  expectErrorLegacy,
   ensureStablecoinMint,
   TEST_USDC_KEYPAIR,
   TEST_USDT_KEYPAIR,
@@ -269,7 +269,7 @@ describe("devnet-sessions", () => {
       expect.fail("Should have thrown");
     } catch (err: any) {
       // Session PDA seeds include agent key — wrong signer yields seed mismatch
-      expectError(err, "ConstraintSeeds", "seeds", "0x7d6");
+      expectErrorLegacy(err, "ConstraintSeeds", "seeds", "0x7d6");
     }
     console.log("    Non-agent signer correctly rejected in composed TX");
   });

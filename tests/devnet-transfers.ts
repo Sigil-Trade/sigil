@@ -24,7 +24,7 @@ import {
   TEST_USDC_KEYPAIR,
   getTokenBalance,
   calculateFees,
-  expectError,
+  expectErrorLegacy,
   FullVaultResult,
 } from "./helpers/devnet-setup";
 
@@ -163,7 +163,7 @@ describe("devnet-transfers", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectError(err, "DestinationNotAllowed", "not in allowed");
+      expectErrorLegacy(err, "DestinationNotAllowed", "not in allowed");
     }
     console.log("    Non-allowed destination correctly rejected");
   });
@@ -271,7 +271,7 @@ describe("devnet-transfers", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectError(err, "UnauthorizedAgent", "unauthorized", "constraint");
+      expectErrorLegacy(err, "UnauthorizedAgent", "unauthorized", "constraint");
     }
     console.log("    Non-agent agent_transfer rejected");
   });
@@ -333,7 +333,7 @@ describe("devnet-transfers", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectError(err, "SpendingCapExceeded", "cap");
+      expectErrorLegacy(err, "SpendingCapExceeded", "cap");
     }
     console.log("    agent_transfer respects daily cap");
   });

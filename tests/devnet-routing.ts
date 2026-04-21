@@ -30,7 +30,7 @@ import {
   authorize,
   authorizeAndFinalize,
   fundKeypair,
-  expectError,
+  expectErrorLegacy,
   calculateFees,
   getTokenBalance,
   ensureStablecoinMint,
@@ -356,7 +356,7 @@ describe("devnet-routing", () => {
       });
       expect.fail("Should have thrown SpendingCapExceeded");
     } catch (err: any) {
-      expectError(err, "SpendingCapExceeded", "cap");
+      expectErrorLegacy(err, "SpendingCapExceeded", "cap");
     }
     console.log("    USDC + USDT aggregate cap enforced");
   });
@@ -432,7 +432,7 @@ describe("devnet-routing", () => {
       // Non-stablecoin input path requires exactly one DeFi instruction, so validate
       // rejects with TooManyDeFiInstructions (6037) — proves non-stablecoin input
       // with stablecoin output enters the non-stablecoin code path (not rejected outright).
-      expectError(err, "TooManyDeFiInstructions", "6037");
+      expectErrorLegacy(err, "TooManyDeFiInstructions", "6037");
     }
     console.log(
       "    Non-stablecoin input with stablecoin output: rejected without DeFi instruction (6037)",
@@ -513,7 +513,7 @@ describe("devnet-routing", () => {
       // The testWIF vault ATA doesn't exist on-chain (derived but never initialized).
       // Anchor's account deserialization rejects with AccountNotInitialized (3012)
       // before the stablecoin mint check runs — still proves the path is blocked.
-      expectError(err, "AccountNotInitialized", "3012");
+      expectErrorLegacy(err, "AccountNotInitialized", "3012");
     }
     console.log(
       "    Non-stablecoin -> non-stablecoin rejected with AccountNotInitialized (3012)",
@@ -588,7 +588,7 @@ describe("devnet-routing", () => {
       // Non-stablecoin input without output ATA: InvalidTokenAccount (6022) or
       // UnsupportedToken (6003) depending on which check fires first. Stale
       // "6014" removed — never the code for either (6014 = VaultAlreadyClosed).
-      expectError(
+      expectErrorLegacy(
         err,
         "InvalidTokenAccount",
         "UnsupportedToken",
@@ -751,7 +751,7 @@ describe("devnet-routing", () => {
     } catch (err: any) {
       // agent_transfer only accepts stablecoins. UnsupportedToken = 6003.
       // Stale "6014" removed (never correct — 6014 is VaultAlreadyClosed).
-      expectError(err, "UnsupportedToken", "6003");
+      expectErrorLegacy(err, "UnsupportedToken", "6003");
     }
     console.log(
       "    agent_transfer non-stablecoin rejected with UnsupportedToken (6003)",
@@ -839,7 +839,7 @@ describe("devnet-routing", () => {
       });
       expect.fail("Should have thrown SpendingCapExceeded");
     } catch (err: any) {
-      expectError(err, "SpendingCapExceeded", "cap");
+      expectErrorLegacy(err, "SpendingCapExceeded", "cap");
     }
     console.log("    Full chain USDC+USDT cap aggregation enforced");
   });

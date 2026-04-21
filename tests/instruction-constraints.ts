@@ -29,7 +29,7 @@ import {
   accountExists,
   advanceTime,
   sendVersionedTx,
-  expectSigilError,
+  expectSigilErrorLegacy,
   recordCU,
   printCUSummary,
   createConstraintsAccount,
@@ -553,7 +553,7 @@ describe("instruction-constraints", () => {
         sendVersionedTx(svm, [validateIx, finalizeIx], agent);
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err.toString(), "InvalidConstraintsPda");
+        expectSigilErrorLegacy(err.toString(), "InvalidConstraintsPda");
       }
     });
 
@@ -647,7 +647,7 @@ describe("instruction-constraints", () => {
         sendVersionedTx(svm, [validateIx, finalizeIx], agent);
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err.toString(), "InvalidConstraintsPda");
+        expectSigilErrorLegacy(err.toString(), "InvalidConstraintsPda");
       }
     });
   });
@@ -741,7 +741,7 @@ describe("instruction-constraints", () => {
         );
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err.toString(), "InvalidConstraintConfig");
+        expectSigilErrorLegacy(err.toString(), "InvalidConstraintConfig");
       }
     });
 
@@ -773,7 +773,7 @@ describe("instruction-constraints", () => {
         );
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err.toString(), "InvalidConstraintConfig");
+        expectSigilErrorLegacy(err.toString(), "InvalidConstraintConfig");
       }
     });
 
@@ -998,7 +998,7 @@ describe("instruction-constraints", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err.toString(), "TimelockNotExpired");
+        expectSigilErrorLegacy(err.toString(), "TimelockNotExpired");
       }
 
       // Advance time past timelock
@@ -1117,7 +1117,7 @@ describe("instruction-constraints", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err.toString(), "TimelockTooShort");
+        expectSigilErrorLegacy(err.toString(), "TimelockTooShort");
       }
     });
   });
@@ -1515,7 +1515,7 @@ describe("instruction-constraints", () => {
         );
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err.toString(), "InvalidConstraintConfig");
+        expectSigilErrorLegacy(err.toString(), "InvalidConstraintConfig");
       }
     });
 
@@ -1539,7 +1539,7 @@ describe("instruction-constraints", () => {
         );
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err.toString(), "InvalidConstraintConfig");
+        expectSigilErrorLegacy(err.toString(), "InvalidConstraintConfig");
       }
     });
 
@@ -2242,7 +2242,7 @@ describe("instruction-constraints", () => {
         sendVersionedTx(svm, [validateIx, mockDeFiIx, finalizeIx], cvAgent);
         expect.fail("Should have thrown ConstraintViolated");
       } catch (err: any) {
-        expectSigilError(err.toString(), "ConstraintViolated");
+        expectSigilErrorLegacy(err.toString(), "ConstraintViolated");
       }
 
       // Clean up: close constraints for next test
@@ -2299,7 +2299,7 @@ describe("instruction-constraints", () => {
         sendVersionedTx(svm, [validateIx, mockDeFiIx, finalizeIx], cvAgent);
         expect.fail("Should have thrown UnconstrainedProgramBlocked");
       } catch (err: any) {
-        expectSigilError(err.toString(), "UnconstrainedProgramBlocked");
+        expectSigilErrorLegacy(err.toString(), "UnconstrainedProgramBlocked");
       }
 
       // Clean up
@@ -2671,7 +2671,7 @@ describe("instruction-constraints", () => {
         sendVersionedTx(svm, [extendIx], owner.payer);
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err.toString(), "InvalidConstraintConfig");
+        expectSigilErrorLegacy(err.toString(), "InvalidConstraintConfig");
       }
       // No cleanup needed — fresh vault (9001), partial PDA cannot be closed via AccountLoader
     });
@@ -2702,7 +2702,7 @@ describe("instruction-constraints", () => {
         sendVersionedTx(svm, [extendIx], owner.payer);
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err.toString(), "InvalidConstraintConfig");
+        expectSigilErrorLegacy(err.toString(), "InvalidConstraintConfig");
       }
 
       // Cleanup
@@ -2755,7 +2755,7 @@ describe("instruction-constraints", () => {
         sendVersionedTx(svm, [allocIx, extendIx, populateIx], owner.payer);
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err.toString(), "InvalidConstraintsPda");
+        expectSigilErrorLegacy(err.toString(), "InvalidConstraintsPda");
       }
 
       // Cleanup — close if the PDA was partially created
@@ -2840,7 +2840,7 @@ describe("instruction-constraints", () => {
         sendVersionedTx(svm, [extendIx], owner.payer);
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err.toString(), "InvalidConstraintConfig");
+        expectSigilErrorLegacy(err.toString(), "InvalidConstraintConfig");
       }
       // No cleanup — fresh vault (9005), partial PDA cannot be closed via AccountLoader
     });
@@ -2877,7 +2877,7 @@ describe("instruction-constraints", () => {
         sendVersionedTx(svm, [shrinkIx], owner.payer);
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err.toString(), "InvalidConstraintConfig");
+        expectSigilErrorLegacy(err.toString(), "InvalidConstraintConfig");
       }
       // No cleanup — fresh vault (9006), partial PDA cannot be closed via AccountLoader
     });
@@ -3176,7 +3176,7 @@ describe("instruction-constraints", () => {
         );
         expect.fail("Should have rejected Spl1 on non-SPL program");
       } catch (err: any) {
-        expectSigilError(err.toString(), "InvalidConstraintConfig");
+        expectSigilErrorLegacy(err.toString(), "InvalidConstraintConfig");
       }
     });
 
@@ -3206,7 +3206,7 @@ describe("instruction-constraints", () => {
         );
         expect.fail("Should have rejected blocked SPL opcode");
       } catch (err: any) {
-        expectSigilError(err.toString(), "BlockedSplOpcode");
+        expectSigilErrorLegacy(err.toString(), "BlockedSplOpcode");
       }
     });
 
@@ -3236,7 +3236,7 @@ describe("instruction-constraints", () => {
         );
         expect.fail("Should have rejected blocked SPL opcode");
       } catch (err: any) {
-        expectSigilError(err.toString(), "BlockedSplOpcode");
+        expectSigilErrorLegacy(err.toString(), "BlockedSplOpcode");
       }
     });
 
@@ -3279,7 +3279,7 @@ describe("instruction-constraints", () => {
           );
           expect.fail(`Should have rejected blocked SPL opcode ${name}`);
         } catch (err: any) {
-          expectSigilError(err.toString(), "BlockedSplOpcode");
+          expectSigilErrorLegacy(err.toString(), "BlockedSplOpcode");
         }
       });
     }
@@ -3323,7 +3323,7 @@ describe("instruction-constraints", () => {
         );
         expect.fail("Should have rejected mixed formats for same program_id");
       } catch (err: any) {
-        expectSigilError(err.toString(), "InvalidConstraintConfig");
+        expectSigilErrorLegacy(err.toString(), "InvalidConstraintConfig");
       }
     });
 

@@ -656,9 +656,21 @@ export function calculateFees(amount: number, devFeeRate: number) {
 }
 
 /**
- * Asserts that an error message contains at least one of the given keywords.
+ * @deprecated Variadic substring-matching helper. The 2026-04-20 council
+ *   voted 7-0 to replace this with a strict typed helper. See:
+ *   MEMORY/WORK/20260420-201121_test-assertion-precision-council/COUNCIL_DECISION.md
+ *
+ *   Migration:
+ *     Before: expectErrorLegacy(err, "UnauthorizedAgent", "6001")
+ *     After:  expectSigilError(err, { name: "UnauthorizedAgent", code: 6001 })
+ *     Import: import { expectSigilError } from "@usesigil/kit/testing";
+ *
+ *   A follow-up PR will codemod all call sites. The tsc `@deprecated`
+ *   tag plus a CI grep step (see .github/workflows/ci.yml — "Forbid
+ *   legacy variadic error-assertion helpers") blocks re-introducing
+ *   the un-suffixed name in new code.
  */
-export function expectError(err: any, ...keywords: string[]) {
+export function expectErrorLegacy(err: any, ...keywords: string[]) {
   const s = err.toString();
   const found = keywords.some((k) => s.includes(k));
   if (!found) {

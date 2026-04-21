@@ -30,12 +30,17 @@ import {
   createFullVault,
   authorize,
   fundKeypair,
-  expectError,
+  expectErrorLegacy,
   ensureStablecoinMint,
   createNonStablecoinMint,
   TEST_USDC_KEYPAIR,
   FullVaultResult,
 } from "./helpers/devnet-setup";
+// Strict error helpers — see MEMORY/WORK/20260420-201121_test-assertion-precision-council/
+import {
+  expectOneOfSigilErrors,
+  expectSigilError,
+} from "@usesigil/kit/testing";
 
 describe("devnet-security", () => {
   const { provider, program, connection, owner } = getDevnetProvider();
@@ -127,7 +132,13 @@ describe("devnet-security", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectError(err, "ConstraintSeeds", "Unauthorized", "2006", "constraint");
+      expectErrorLegacy(
+        err,
+        "ConstraintSeeds",
+        "Unauthorized",
+        "2006",
+        "constraint",
+      );
     }
     console.log("    Non-owner queue_policy_update rejected");
   });
@@ -145,7 +156,13 @@ describe("devnet-security", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectError(err, "ConstraintSeeds", "Unauthorized", "2006", "constraint");
+      expectErrorLegacy(
+        err,
+        "ConstraintSeeds",
+        "Unauthorized",
+        "2006",
+        "constraint",
+      );
     }
     console.log("    Non-owner revoke_agent rejected");
   });
@@ -173,7 +190,13 @@ describe("devnet-security", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectError(err, "ConstraintSeeds", "Unauthorized", "2006", "constraint");
+      expectErrorLegacy(
+        err,
+        "ConstraintSeeds",
+        "Unauthorized",
+        "2006",
+        "constraint",
+      );
     }
     console.log("    Non-owner withdraw_funds rejected");
   });
@@ -194,7 +217,13 @@ describe("devnet-security", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectError(err, "ConstraintSeeds", "Unauthorized", "2006", "constraint");
+      expectErrorLegacy(
+        err,
+        "ConstraintSeeds",
+        "Unauthorized",
+        "2006",
+        "constraint",
+      );
     }
     console.log("    Non-owner close_vault rejected");
   });
@@ -234,7 +263,7 @@ describe("devnet-security", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectError(err, "UnauthorizedAgent", "unauthorized", "constraint");
+      expectErrorLegacy(err, "UnauthorizedAgent", "unauthorized", "constraint");
     }
     console.log("    Non-agent validate_and_authorize rejected");
   });
@@ -267,7 +296,13 @@ describe("devnet-security", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectError(err, "ConstraintSeeds", "Unauthorized", "2006", "constraint");
+      expectErrorLegacy(
+        err,
+        "ConstraintSeeds",
+        "Unauthorized",
+        "2006",
+        "constraint",
+      );
     }
     console.log("    Agent queue_policy_update rejected (owner-only)");
   });
@@ -344,7 +379,7 @@ describe("devnet-security", () => {
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectError(err, "SpendingCapExceeded", "cap");
+      expectErrorLegacy(err, "SpendingCapExceeded", "cap");
     }
     console.log("    Over-cap spending correctly blocked");
   });
@@ -403,7 +438,7 @@ describe("devnet-security", () => {
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectError(err, "TransactionTooLarge", "maximum");
+      expectErrorLegacy(err, "TransactionTooLarge", "maximum");
     }
     console.log("    Aggregate TransactionTooLarge enforced");
   });
@@ -539,14 +574,16 @@ describe("devnet-security", () => {
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
-      // revokeAgent removed the agent, so the first constraint hit is UnauthorizedAgent
-      expectError(
-        err,
-        "UnauthorizedAgent",
-        "VaultNotActive",
-        "not active",
-        "unauthorized",
-      );
+      // Council decision 2026-04-20: revokeAgent removes the agent, so the agent
+      // identity check fires BEFORE the vault-status check per Anchor's
+      // linearize() order. UnauthorizedAgent (6001) is the deterministic
+      // outcome. If check-order changes and VaultNotActive fires instead, we
+      // WANT this test to fail loudly — that's a real regression.
+      // See: MEMORY/WORK/20260420-201121_test-assertion-precision-council/COUNCIL_DECISION.md
+      expectSigilError(err, {
+        name: "UnauthorizedAgent",
+        code: 6001,
+      });
     }
     console.log("    Frozen vault blocks authorize");
   });
@@ -698,16 +735,15 @@ describe("devnet-security", () => {
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
-      // Non-stablecoin rejection: UnsupportedToken (6003) or InvalidTokenAccount
-      // (6022) depending on failure mode (mint-check vs. ATA-check). Stale "6014"
-      // removed — it was never the code for either (6014 is VaultAlreadyClosed).
-      expectError(
-        err,
-        "UnsupportedToken",
-        "InvalidTokenAccount",
-        "6003",
-        "6022",
-      );
+      // Council decision 2026-04-20: non-stablecoin mint in authorize has two
+      // legitimately-equivalent rejection paths depending on which check
+      // fires first under Anchor's linearize() order:
+      //   - UnsupportedToken (6003): mint is not USDC/USDT
+      //   - InvalidTokenAccount (6022): ATA does not belong to vault/mint
+      // Both are correct specifications of the rejection. The prior "6014"
+      // fallback was a typo — 6014 = AgentAlreadyRegistered, unrelated.
+      // expectOneOfSigilErrors enforces typed names and forbids substrings.
+      expectOneOfSigilErrors(err, ["UnsupportedToken", "InvalidTokenAccount"]);
     }
     console.log("    Non-stablecoin mint rejected in validate_and_authorize");
   });
@@ -770,7 +806,17 @@ describe("devnet-security", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectError(err, "VaultNotActive", "UnauthorizedAgent", "not active");
+      // Council decision 2026-04-20 (same as test 10): revokeAgent cascade
+      // fires agent-identity check BEFORE vault-status check. Deterministic
+      // outcome is UnauthorizedAgent. A vault-level freezeVault() direct
+      // admin path does not exist in Sigil's current instruction set —
+      // vault freeze is only reachable through the revoke-all-agents
+      // cascade, so this test path is definitive.
+      // See: MEMORY/WORK/20260420-201121_test-assertion-precision-council/COUNCIL_DECISION.md
+      expectSigilError(err, {
+        name: "UnauthorizedAgent",
+        code: 6001,
+      });
     }
     console.log("    Frozen vault rejects agent_transfer with stablecoin");
   });
@@ -826,7 +872,7 @@ describe("devnet-security", () => {
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectError(err, "TransactionTooLarge", "maximum");
+      expectErrorLegacy(err, "TransactionTooLarge", "maximum");
     }
     console.log("    max_transaction_size_usd enforced on stablecoin");
   });
