@@ -88,9 +88,6 @@ pub enum SigilError {
     InvalidProtocolMode,
 
     // --- Transaction validation errors ---
-    #[msg("Non-spending action must have amount = 0")]
-    InvalidNonSpendingAmount,
-
     #[msg("Instruction must be top-level (CPI calls not allowed)")]
     CpiCallNotAllowed,
 
@@ -223,12 +220,6 @@ pub enum SigilError {
     #[msg("Policy version mismatch — policy changed since agent's last RPC read")]
     PolicyVersionMismatch,
 
-    #[msg("A pending agent permissions update already exists for this agent")]
-    PendingAgentPermsExists,
-
-    #[msg("A pending close constraints operation already exists for this vault")]
-    PendingCloseConstraintsExists,
-
     #[msg("Cannot close vault with active sessions (finalize pending sessions first)")]
     ActiveSessionsExist,
 
@@ -245,17 +236,11 @@ pub enum SigilError {
     #[msg("Delta assertion snapshot was not captured in validate_and_authorize")]
     SnapshotNotCaptured,
 
-    #[msg("Constraint entry index out of bounds for zero-copy array")]
-    ConstraintIndexOutOfBounds,
-
     #[msg("Constraint operator value is not a valid ConstraintOperator discriminant")]
     InvalidConstraintOperator,
 
     #[msg("Zero-copy constraints account has wrong vault")]
     ConstraintsVaultMismatch,
-
-    #[msg("Cannot pack entries: entry count exceeds MAX_CONSTRAINT_ENTRIES")]
-    ConstraintEntryCountExceeded,
 
     #[msg("SPL opcode is blocked at runtime and cannot be used in constraints")]
     BlockedSplOpcode,
