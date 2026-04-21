@@ -2,7 +2,7 @@
   "suites": [
     {
       "name": "Core vault management & permission engine",
-      "count": 107,
+      "count": 106,
       "onChain": true,
       "claudePattern": "tests/sigil.ts` (ts-mocha + LiteSVM, no validator needed, %d tests)"
     },
@@ -26,7 +26,7 @@
     },
     {
       "name": "Security exploit scenarios",
-      "count": 149,
+      "count": 148,
       "onChain": true,
       "claudePattern": "tests/security-exploits.ts` (ts-mocha + LiteSVM, %d tests)"
     },
@@ -79,7 +79,7 @@
     },
     {
       "name": "Kit-native SDK (`@usesigil/kit` — includes merged core + dashboard)",
-      "count": 1436,
+      "count": 1435,
       "ciStepName": "Kit SDK tests",
       "claudePattern": "sdk/kit/tests/` (mocha + tsx, %d tests — includes core + dashboard + errors)"
     },
