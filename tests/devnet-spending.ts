@@ -27,7 +27,7 @@ import {
   finalize,
   authorizeAndFinalize,
   fundKeypair,
-  expectError,
+  expectErrorLegacy,
   ensureStablecoinMint,
   TEST_USDC_KEYPAIR,
   TEST_USDT_KEYPAIR,
@@ -232,7 +232,7 @@ describe("devnet-spending", () => {
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectError(err, "SpendingCapExceeded", "cap");
+      expectErrorLegacy(err, "SpendingCapExceeded", "cap");
     }
     console.log("    Aggregate USD cap enforced across two tokens");
   });
@@ -298,7 +298,7 @@ describe("devnet-spending", () => {
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectError(err, "TransactionTooLarge", "maximum");
+      expectErrorLegacy(err, "TransactionTooLarge", "maximum");
     }
     console.log("    max_transaction_size_usd enforced");
   });
@@ -425,7 +425,7 @@ describe("devnet-spending", () => {
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectError(err, "SpendingCapExceeded", "cap");
+      expectErrorLegacy(err, "SpendingCapExceeded", "cap");
     }
     console.log("    Session + agent_transfer spends tracked together at cap");
   });

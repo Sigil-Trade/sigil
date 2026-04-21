@@ -757,13 +757,20 @@ const SIGIL_ERROR_CODES: Record<string, number> = {
 };
 
 /**
- * Assert that an error matches a Sigil error by name OR code.
- * More robust than `.includes("ErrorName")` because it also checks the numeric code.
+ * @deprecated Substring-matching variadic helper. The 2026-04-20 council
+ *   voted 7-0 to replace this with a strict typed helper. See:
+ *   MEMORY/WORK/20260420-201121_test-assertion-precision-council/COUNCIL_DECISION.md
  *
- * @param errString - The error.toString() output
- * @param errorNames - One or more expected error names (matches if ANY appear)
+ *   Migration:
+ *     Before: expectSigilErrorLegacy(err.toString(), "UnauthorizedAgent")
+ *     After:  expectSigilError(err, { name: "UnauthorizedAgent", code: 6001 })
+ *     Import: import { expectSigilError } from "@usesigil/kit/testing";
+ *
+ *   A follow-up PR will codemod all call sites. The tsc `@deprecated`
+ *   tag produces an IDE warning at every call site; the CI grep step
+ *   blocks re-introduction of the un-suffixed name.
  */
-export function expectSigilError(
+export function expectSigilErrorLegacy(
   errString: string,
   ...errorNames: string[]
 ): void {

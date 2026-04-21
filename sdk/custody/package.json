@@ -52,7 +52,7 @@
     "sinon": "^21.0.2",
     "tsx": "^4.21.0",
     "typescript": "^5.3.3",
-    "@coral-xyz/anchor": "^0.32.1"
+    "@coral-xyz/anchor": "0.32.1"
   },
   "publishConfig": {
     "access": "public",

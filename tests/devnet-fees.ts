@@ -26,7 +26,7 @@ import {
   TEST_USDC_KEYPAIR,
   calculateFees,
   getTokenBalance,
-  expectError,
+  expectErrorLegacy,
   PROTOCOL_FEE_RATE,
   FEE_RATE_DENOMINATOR,
   FullVaultResult,
@@ -301,7 +301,7 @@ describe("devnet-fees", () => {
       });
       expect.fail("should have rejected dust amount");
     } catch (err) {
-      expectError(err, "Overflow");
+      expectErrorLegacy(err, "Overflow");
     }
     console.log("    Dust amount: ceiling fees exceed amount, rejected");
   });

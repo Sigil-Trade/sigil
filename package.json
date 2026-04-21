@@ -27,11 +27,13 @@
     "test:all": "pnpm test:onchain:full && pnpm test:sdk && pnpm test:rust",
     "update-readme": "node scripts/update-test-counts.js",
     "count:check": "node scripts/verify-test-counts.js",
-    "pr:check": "pnpm count:check && pnpm test:all",
+    "gen:error-types": "tsx scripts/gen-error-types.ts",
+    "verify:error-drift": "tsx scripts/verify-error-drift.ts",
+    "pr:check": "pnpm count:check && pnpm verify:error-drift && pnpm test:all",
     "prepare": "husky"
   },
   "dependencies": {
-    "@coral-xyz/anchor": "^0.32.1",
+    "@coral-xyz/anchor": "0.32.1",
     "@solana/spl-token": "^0.4.0",
     "@solana/web3.js": "^1.95.0",
     "flash-sdk": "^15.16.1"

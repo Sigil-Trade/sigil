@@ -51,6 +51,13 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # C-3 fix (adversarial review 2026-04-20): devnet tests import
+      # @usesigil/kit/testing for strict error-assertion helpers per
+      # the council decision. That subpath resolves to sdk/kit/dist/
+      # which only exists AFTER build. Required before ts-mocha below.
+      - name: Build kit SDK (required for error-helper imports)
+        run: pnpm --filter @usesigil/kit run build
+
       - name: Install Solana CLI
         run: |
           sh -c "$(curl -sSfL https://release.anza.xyz/v2.1.14/install)"

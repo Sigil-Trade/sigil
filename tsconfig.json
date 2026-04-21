@@ -8,6 +8,12 @@
     "esModuleInterop": true,
     "strict": true,
     "resolveJsonModule": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "paths": {
+      "@usesigil/kit/testing": ["./sdk/kit/dist/testing/index.d.ts"],
+      "@usesigil/kit/testing/errors": [
+        "./sdk/kit/dist/testing/errors/index.d.ts"
+      ]
+    }
   }
 }

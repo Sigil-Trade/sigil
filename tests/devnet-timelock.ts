@@ -24,7 +24,7 @@ import {
   ensureStablecoinMint,
   TEST_USDC_KEYPAIR,
   sleep,
-  expectError,
+  expectErrorLegacy,
   FullVaultResult,
 } from "./helpers/devnet-setup";
 
@@ -166,7 +166,7 @@ describe("devnet-timelock", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectError(err, "TimelockNotExpired", "not expired");
+      expectErrorLegacy(err, "TimelockNotExpired", "not expired");
     }
 
     // Clean up — cancel the pending update

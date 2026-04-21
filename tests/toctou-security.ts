@@ -32,7 +32,7 @@ import {
   mintToHelper,
   advanceTime,
   sendVersionedTx,
-  expectSigilError,
+  expectSigilErrorLegacy,
   createConstraintsAccount,
   queueConstraintsUpdateMultiIx,
   TestEnv,
@@ -317,7 +317,7 @@ describe("TOCTOU Security Fix", () => {
       sendVersionedTx(svm, [validateIx, finalizeIx], agent);
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectSigilError(err.toString(), "PolicyVersionMismatch");
+      expectSigilErrorLegacy(err.toString(), "PolicyVersionMismatch");
     }
   });
 
@@ -355,7 +355,7 @@ describe("TOCTOU Security Fix", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectSigilError(err.toString(), "TimelockTooShort");
+      expectSigilErrorLegacy(err.toString(), "TimelockTooShort");
     }
   });
 
@@ -390,7 +390,7 @@ describe("TOCTOU Security Fix", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectSigilError(err.toString(), "TimelockTooShort");
+      expectSigilErrorLegacy(err.toString(), "TimelockTooShort");
     }
   });
 
@@ -425,7 +425,7 @@ describe("TOCTOU Security Fix", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectSigilError(err.toString(), "TimelockTooShort");
+      expectSigilErrorLegacy(err.toString(), "TimelockTooShort");
     }
   });
 

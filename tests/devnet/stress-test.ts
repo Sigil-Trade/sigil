@@ -43,7 +43,7 @@ import {
   deriveSessionPda,
   getTokenBalance,
   calculateFees,
-  expectError,
+  expectErrorLegacy,
 } from "../helpers/devnet-setup";
 
 // ─── Shared State ──────────────────────────────────────────────────────────

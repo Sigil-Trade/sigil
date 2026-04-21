@@ -3,7 +3,7 @@
 # Runs on every push to main and on pull requests.
 # Eight jobs (1 detection + 6 parallel + 1 gate):
 #   0. changes                — Detect which file groups changed (package-level path filtering)
-#   1. build-lint-test        — TypeScript builds, Prettier, 1521 TS tests (conditional: any-ts or push)
+#   1. build-lint-test        — TypeScript builds, Prettier, 1559 TS tests (conditional: any-ts or push)
 #   2. rust-checks            — cargo fmt + cargo clippy (conditional: rust changes or push)
 #   3. on-chain-tests         — Anchor build + LiteSVM 508 tests (conditional: rust changes or push)
 #  3b. build-verification     — Feature flag safety net (conditional: rust changes or push)
@@ -23,7 +23,7 @@
 #   sdk/custody → Custody adapter tests (96 tests)
 #   packages/plugins → Plugin tests (14 tests)
 #
-# Total: ~2,230 tests across 19 suites (1521 TS + 508 on-chain + 59 Surfpool + 142 devnet)
+# Total: ~2,268 tests across 19 suites (1559 TS + 508 on-chain + 59 Surfpool + 142 devnet)
 # All security checks are BLOCKING — zero tolerance for known issues.
 
 name: CI
@@ -93,7 +93,7 @@ jobs:
               - 'tsconfig*.json'
 
   # ──────────────────────────────────────────────────────────────
-  # Job 1: TypeScript build, lint, and tests (4 suites, 1521 tests)
+  # Job 1: TypeScript build, lint, and tests (4 suites, 1559 tests)
   # ──────────────────────────────────────────────────────────────
   build-lint-test:
     name: Build, Lint & TS Tests
@@ -152,7 +152,62 @@ jobs:
             "sdk/platform/src/**/*.ts" \
             "sdk/custody/src/**/*.ts"
 
-      - name: Kit SDK tests (1394 tests)
+      # 2026-04-20 council (7-0 STRICT): belt-and-suspenders grep check.
+      # Legacy variadic helpers were renamed to *Legacy and marked @deprecated.
+      # This grep blocks re-introduction of the un-suffixed `expectError(` form.
+      # The new strict helper is also named `expectSigilError` but its object-
+      # param signature means tsc catches misuse of that name — so we only
+      # block the pure `expectError(` form.
+      #
+      # Regex uses a negative-lookbehind shim: require the char BEFORE
+      # `expectError` to NOT be a word-char or dot, preventing method-call
+      # false positives like `obj.expectError(` or comment-line matches
+      # like `// expectError(...)`. H-4 adversarial-review fix.
+      #
+      # Directory existence is verified BEFORE grep to catch layout drift
+      # that would otherwise silently return "no violations" (M-5 fix).
+      #
+      # See: MEMORY/WORK/20260420-201121_test-assertion-precision-council/COUNCIL_DECISION.md
+      - name: Forbid legacy variadic error-assertion helpers
+        run: |
+          set -eu
+
+          SCAN_DIRS="tests sdk/kit/tests sdk/platform/tests sdk/custody/tests packages/plugins/tests"
+          for dir in $SCAN_DIRS; do
+            if [ ! -d "$dir" ]; then
+              echo "::error::expected test directory '$dir' not found — CI grep would silently skip"
+              exit 1
+            fi
+          done
+
+          # Pattern: match `expectError(` only when preceded by non-word,
+          # non-dot (excludes `obj.expectError(`, `myExpectError(`, and
+          # most comment continuations). Exclude Legacy variant and the
+          # meta-test file (which intentionally mentions the deprecated
+          # symbol for regression guarantees).
+          FORBIDDEN=$(grep -rnE \
+            '(^|[^A-Za-z0-9_.])expectError\s*\(' \
+            --include='*.ts' \
+            $SCAN_DIRS \
+            | grep -vE 'expectErrorLegacy|expect-assertion\.test\.ts' \
+            || true)
+
+          if [ -n "$FORBIDDEN" ]; then
+            echo "::error::Legacy variadic expectError usage detected."
+            echo "$FORBIDDEN"
+            echo ""
+            echo "Replace with: expectSigilError(err, { name: 'ErrorName', code: 6xxx })"
+            echo "Import from:  '@usesigil/kit/testing'"
+            echo "See: MEMORY/WORK/20260420-201121_test-assertion-precision-council/"
+            exit 1
+          fi
+
+      # Verify the Rust IDL error enum and TS assertion map stay in sync
+      # (YULIA amendment — parses IDL JSON, not regex over errors.rs).
+      - name: Verify error-code drift (IDL to TypeScript map)
+        run: pnpm run verify:error-drift
+
+      - name: Kit SDK tests (1432 tests)
         if: >-
           needs.changes.outputs.sdk-kit == 'true' ||
           github.event_name == 'push'

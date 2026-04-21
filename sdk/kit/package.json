@@ -25,6 +25,10 @@
       "import": "./dist/testing/devnet.js",
       "types": "./dist/testing/devnet.d.ts"
     },
+    "./testing/errors": {
+      "import": "./dist/testing/errors/index.js",
+      "types": "./dist/testing/errors/index.d.ts"
+    },
     "./x402": {
       "import": "./dist/x402/index.js",
       "types": "./dist/x402/index.d.ts"
