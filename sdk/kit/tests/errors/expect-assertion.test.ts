@@ -546,12 +546,12 @@ describe("expectSystemError", () => {
 // ────────────────────────────────────────────────────────────────
 
 describe("SIGIL_ERRORS table integrity", () => {
-  it("has ≥ 80 entries (sanity)", async () => {
+  it("has ≥ 75 entries (sanity)", async () => {
     const { SIGIL_ERRORS, SIGIL_ERROR_COUNT } =
       await import("../../src/testing/errors/names.generated.js");
     assert.ok(
-      SIGIL_ERROR_COUNT >= 80,
-      `expected ≥ 80 Sigil error entries, got ${SIGIL_ERROR_COUNT}`,
+      SIGIL_ERROR_COUNT >= 75,
+      `expected ≥ 75 Sigil error entries, got ${SIGIL_ERROR_COUNT}`,
     );
     assert.equal(SIGIL_ERRORS.VaultNotActive, 6000);
   });

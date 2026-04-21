@@ -190,9 +190,9 @@ describe("agent-errors", () => {
     });
 
     it("converts object with code property in on-chain range", () => {
-      const err = { code: 6021, message: "Overflow" };
+      const err = { code: 6020, message: "Overflow" };
       const agent = toAgentError(err);
-      expect(agent.code).to.equal("6021");
+      expect(agent.code).to.equal("6020");
       expect(agent.category).to.equal("FATAL");
       expect(agent.context.error_name).to.equal("Overflow");
     });
