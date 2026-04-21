@@ -7,8 +7,10 @@
  * - Deletion of direct-mutation instructions (updatePolicy, etc.)
  * - Version bump on apply_pending_policy and apply_constraints_update
  */
-// Strict error helpers — see MEMORY/WORK/20260420-201121_test-assertion-precision-council/
-import { expectSigilError } from "@usesigil/kit/testing";
+// Strict error helpers — LOCAL SHIM (see tests/helpers/strict-errors.ts header
+// for why LiteSVM tests can't import from @usesigil/kit/testing directly).
+// Council decision: MEMORY/WORK/20260420-201121_test-assertion-precision-council/
+import { expectSigilError } from "./helpers/strict-errors";
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { Sigil } from "../target/types/sigil";
