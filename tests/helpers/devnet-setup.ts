@@ -655,30 +655,12 @@ export function calculateFees(amount: number, devFeeRate: number) {
   return { protocolFee, developerFee, netAmount };
 }
 
-/**
- * @deprecated Variadic substring-matching helper. The 2026-04-20 council
- *   voted 7-0 to replace this with a strict typed helper. See:
- *   MEMORY/WORK/20260420-201121_test-assertion-precision-council/COUNCIL_DECISION.md
- *
- *   Migration:
- *     Before: expectErrorLegacy(err, "UnauthorizedAgent", "6001")
- *     After:  expectSigilError(err, { name: "UnauthorizedAgent", code: 6001 })
- *     Import: import { expectSigilError } from "@usesigil/kit/testing";
- *
- *   A follow-up PR will codemod all call sites. The tsc `@deprecated`
- *   tag plus a CI grep step (see .github/workflows/ci.yml — "Forbid
- *   legacy variadic error-assertion helpers") blocks re-introducing
- *   the un-suffixed name in new code.
- */
-export function expectErrorLegacy(err: any, ...keywords: string[]) {
-  const s = err.toString();
-  const found = keywords.some((k) => s.includes(k));
-  if (!found) {
-    throw new Error(
-      `Expected error to contain one of [${keywords.join(", ")}], got: ${s}`,
-    );
-  }
-}
+// The legacy substring-matching `expectErrorLegacy` helper was deleted by
+// the 2026-04-20 council codemod. All call sites migrated to strict typed
+// helpers at `@usesigil/kit/testing`. See:
+//   MEMORY/WORK/20260420-201121_test-assertion-precision-council/COUNCIL_DECISION.md
+//   import { expectSigilError, expectAnchorError, expectOneOfSigilErrors,
+//            expectOneOfAnchorErrors, expectSystemError } from "@usesigil/kit/testing";
 
 /**
  * Fund a keypair from owner wallet (avoids rate-limited devnet faucet).

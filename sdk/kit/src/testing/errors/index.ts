@@ -6,12 +6,14 @@
 
 export {
   expectAnchorError,
+  expectOneOfAnchorErrors,
   expectOneOfSigilErrors,
   expectSigilError,
   expectSystemError,
   parseAnchorError,
   SIGIL_PROGRAM_ID_BASE58,
   SigilAssertionError,
+  type OneOfAnchorErrors,
   type OneOfSigilErrors,
 } from "./expect.js";
 

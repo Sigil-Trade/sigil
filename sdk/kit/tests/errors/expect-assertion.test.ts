@@ -24,6 +24,7 @@ import { describe, it } from "mocha";
 
 import {
   expectAnchorError,
+  expectOneOfAnchorErrors,
   expectOneOfSigilErrors,
   expectSigilError,
   expectSystemError,
@@ -440,6 +441,57 @@ describe("expectOneOfSigilErrors", () => {
     expectFail(
       () =>
         expectOneOfSigilErrors(err, ["VaultNotActive", "UnauthorizedAgent"]),
+      /got error from CPI callee/,
+    );
+  });
+});
+
+// ────────────────────────────────────────────────────────────────
+// expectOneOfAnchorErrors (symmetric with expectOneOfSigilErrors)
+// ────────────────────────────────────────────────────────────────
+
+describe("expectOneOfAnchorErrors", () => {
+  it("passes when error matches first Anchor name in tuple", () => {
+    const err = mkAnchorAccountConstraint({
+      accountName: "vault",
+      name: "ConstraintSeeds",
+      code: 2006,
+    });
+    expectOneOfAnchorErrors(err, ["ConstraintSeeds", "ConstraintHasOne"]);
+  });
+
+  it("passes when error matches second Anchor name in tuple", () => {
+    const err = mkAnchorAccountConstraint({
+      accountName: "vault",
+      name: "ConstraintHasOne",
+      code: 2001,
+    });
+    expectOneOfAnchorErrors(err, ["ConstraintSeeds", "ConstraintHasOne"]);
+  });
+
+  it("fails when Anchor error matches none of the names", () => {
+    const err = mkAnchorAccountConstraint({
+      accountName: "vault",
+      name: "ConstraintRaw",
+      code: 2003,
+    });
+    expectFail(
+      () =>
+        expectOneOfAnchorErrors(err, ["ConstraintSeeds", "ConstraintHasOne"]),
+      /expected one of.*got 'ConstraintRaw'/s,
+    );
+  });
+
+  it("G-1: fails when CPI callee emits matching-coded Anchor error", () => {
+    const err = mkAnchorAccountConstraint({
+      programId: JUPITER,
+      accountName: "pool",
+      name: "ConstraintSeeds",
+      code: 2006,
+    });
+    expectFail(
+      () =>
+        expectOneOfAnchorErrors(err, ["ConstraintSeeds", "ConstraintHasOne"]),
       /got error from CPI callee/,
     );
   });

@@ -7,6 +7,8 @@
  * V2: No per-token caps or rolling_spends. Tracker uses zero-copy epoch buckets.
  *     No recentTransactions. Stablecoin-only architecture.
  */
+// Strict error helpers — see MEMORY/WORK/20260420-201121_test-assertion-precision-council/
+import { expectSigilError } from "@usesigil/kit/testing";
 import * as anchor from "@coral-xyz/anchor";
 import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
 import {
@@ -27,7 +29,6 @@ import {
   finalize,
   authorizeAndFinalize,
   fundKeypair,
-  expectErrorLegacy,
   ensureStablecoinMint,
   TEST_USDC_KEYPAIR,
   TEST_USDT_KEYPAIR,
@@ -232,7 +233,7 @@ describe("devnet-spending", () => {
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectErrorLegacy(err, "SpendingCapExceeded", "cap");
+      expectSigilError(err, { name: "SpendingCapExceeded", code: 6006 });
     }
     console.log("    Aggregate USD cap enforced across two tokens");
   });
@@ -298,7 +299,7 @@ describe("devnet-spending", () => {
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectErrorLegacy(err, "TransactionTooLarge", "maximum");
+      expectSigilError(err, { name: "TransactionTooLarge", code: 6005 });
     }
     console.log("    max_transaction_size_usd enforced");
   });
@@ -425,7 +426,7 @@ describe("devnet-spending", () => {
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectErrorLegacy(err, "SpendingCapExceeded", "cap");
+      expectSigilError(err, { name: "SpendingCapExceeded", code: 6006 });
     }
     console.log("    Session + agent_transfer spends tracked together at cap");
   });

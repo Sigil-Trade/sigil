@@ -30,7 +30,6 @@ import {
   createFullVault,
   authorize,
   fundKeypair,
-  expectErrorLegacy,
   ensureStablecoinMint,
   createNonStablecoinMint,
   TEST_USDC_KEYPAIR,
@@ -38,6 +37,7 @@ import {
 } from "./helpers/devnet-setup";
 // Strict error helpers — see MEMORY/WORK/20260420-201121_test-assertion-precision-council/
 import {
+  expectAnchorError,
   expectOneOfSigilErrors,
   expectSigilError,
 } from "@usesigil/kit/testing";
@@ -132,13 +132,7 @@ describe("devnet-security", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectErrorLegacy(
-        err,
-        "ConstraintSeeds",
-        "Unauthorized",
-        "2006",
-        "constraint",
-      );
+      expectAnchorError(err, { name: "ConstraintSeeds", code: 2006 });
     }
     console.log("    Non-owner queue_policy_update rejected");
   });
@@ -156,13 +150,7 @@ describe("devnet-security", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectErrorLegacy(
-        err,
-        "ConstraintSeeds",
-        "Unauthorized",
-        "2006",
-        "constraint",
-      );
+      expectAnchorError(err, { name: "ConstraintSeeds", code: 2006 });
     }
     console.log("    Non-owner revoke_agent rejected");
   });
@@ -190,13 +178,7 @@ describe("devnet-security", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectErrorLegacy(
-        err,
-        "ConstraintSeeds",
-        "Unauthorized",
-        "2006",
-        "constraint",
-      );
+      expectAnchorError(err, { name: "ConstraintSeeds", code: 2006 });
     }
     console.log("    Non-owner withdraw_funds rejected");
   });
@@ -217,13 +199,7 @@ describe("devnet-security", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectErrorLegacy(
-        err,
-        "ConstraintSeeds",
-        "Unauthorized",
-        "2006",
-        "constraint",
-      );
+      expectAnchorError(err, { name: "ConstraintSeeds", code: 2006 });
     }
     console.log("    Non-owner close_vault rejected");
   });
@@ -263,7 +239,7 @@ describe("devnet-security", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectErrorLegacy(err, "UnauthorizedAgent", "unauthorized", "constraint");
+      expectSigilError(err, { name: "UnauthorizedAgent", code: 6001 });
     }
     console.log("    Non-agent validate_and_authorize rejected");
   });
@@ -296,13 +272,7 @@ describe("devnet-security", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectErrorLegacy(
-        err,
-        "ConstraintSeeds",
-        "Unauthorized",
-        "2006",
-        "constraint",
-      );
+      expectAnchorError(err, { name: "ConstraintSeeds", code: 2006 });
     }
     console.log("    Agent queue_policy_update rejected (owner-only)");
   });
@@ -379,7 +349,7 @@ describe("devnet-security", () => {
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectErrorLegacy(err, "SpendingCapExceeded", "cap");
+      expectSigilError(err, { name: "SpendingCapExceeded", code: 6006 });
     }
     console.log("    Over-cap spending correctly blocked");
   });
@@ -438,7 +408,7 @@ describe("devnet-security", () => {
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectErrorLegacy(err, "TransactionTooLarge", "maximum");
+      expectSigilError(err, { name: "TransactionTooLarge", code: 6005 });
     }
     console.log("    Aggregate TransactionTooLarge enforced");
   });
@@ -872,7 +842,7 @@ describe("devnet-security", () => {
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectErrorLegacy(err, "TransactionTooLarge", "maximum");
+      expectSigilError(err, { name: "TransactionTooLarge", code: 6005 });
     }
     console.log("    max_transaction_size_usd enforced on stablecoin");
   });

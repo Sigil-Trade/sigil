@@ -8,6 +8,8 @@
  *     Stablecoin-only architecture. agentTransfer requires tokenMintAccount.
  *     finalizeSession includes policy and tracker accounts.
  */
+// Strict error helpers — see MEMORY/WORK/20260420-201121_test-assertion-precision-council/
+import { expectSigilError } from "@usesigil/kit/testing";
 import * as anchor from "@coral-xyz/anchor";
 import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID, getAccount } from "@solana/spl-token";
@@ -26,7 +28,6 @@ import {
   TEST_USDC_KEYPAIR,
   calculateFees,
   getTokenBalance,
-  expectErrorLegacy,
   PROTOCOL_FEE_RATE,
   FEE_RATE_DENOMINATOR,
   FullVaultResult,
@@ -301,7 +302,7 @@ describe("devnet-fees", () => {
       });
       expect.fail("should have rejected dust amount");
     } catch (err) {
-      expectErrorLegacy(err, "Overflow");
+      expectSigilError(err, { name: "Overflow", code: 6021 });
     }
     console.log("    Dust amount: ceiling fees exceed amount, rejected");
   });

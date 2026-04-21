@@ -9,6 +9,8 @@
  *     Mandatory minimum timelockDuration: 1800.
  *     Test 1 verifies updatePolicy instruction no longer exists.
  */
+// Strict error helpers — see MEMORY/WORK/20260420-201121_test-assertion-precision-council/
+import { expectSigilError } from "@usesigil/kit/testing";
 import * as anchor from "@coral-xyz/anchor";
 import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
@@ -24,7 +26,6 @@ import {
   ensureStablecoinMint,
   TEST_USDC_KEYPAIR,
   sleep,
-  expectErrorLegacy,
   FullVaultResult,
 } from "./helpers/devnet-setup";
 
@@ -166,7 +167,7 @@ describe("devnet-timelock", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectErrorLegacy(err, "TimelockNotExpired", "not expired");
+      expectSigilError(err, { name: "TimelockNotExpired", code: 6023 });
     }
 
     // Clean up — cancel the pending update

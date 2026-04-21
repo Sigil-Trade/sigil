@@ -663,129 +663,16 @@ export function resetCUMeasurements(): void {
   cuMeasurements.clear();
 }
 
-// ─── Error Code Map (shared with surfpool-setup.ts) ─────────────────────────
-
-/**
- * Sigil custom error codes (6000-6080) mapped to Anchor error names.
- * Canonical source: sdk/kit/src/generated/errors/sigil.ts (codama-generated from IDL).
- *
- * Used by expectSigilError() for robust error matching that works
- * regardless of whether the error message contains the name or code.
- */
-const SIGIL_ERROR_CODES: Record<string, number> = {
-  VaultNotActive: 6000,
-  UnauthorizedAgent: 6001,
-  UnauthorizedOwner: 6002,
-  UnsupportedToken: 6003,
-  ProtocolNotAllowed: 6004,
-  TransactionTooLarge: 6005,
-  SpendingCapExceeded: 6006,
-  LeverageTooHigh: 6007,
-  SessionNotAuthorized: 6008,
-  InvalidSession: 6009,
-  TooManyAllowedProtocols: 6010,
-  AgentAlreadyRegistered: 6011,
-  NoAgentRegistered: 6012,
-  VaultNotFrozen: 6013,
-  VaultAlreadyClosed: 6014,
-  InsufficientBalance: 6015,
-  DeveloperFeeTooHigh: 6016,
-  InvalidFeeDestination: 6017,
-  InvalidProtocolTreasury: 6018,
-  InvalidAgentKey: 6019,
-  AgentIsOwner: 6020,
-  Overflow: 6021,
-  InvalidTokenAccount: 6022,
-  TimelockNotExpired: 6023,
-  NoTimelockConfigured: 6024,
-  DestinationNotAllowed: 6025,
-  TooManyDestinations: 6026,
-  InvalidProtocolMode: 6027,
-  InvalidNonSpendingAmount: 6028,
-  CpiCallNotAllowed: 6029,
-  MissingFinalizeInstruction: 6030,
-  NonTrackedSwapMustReturnStablecoin: 6031,
-  SwapSlippageExceeded: 6032,
-  InvalidJupiterInstruction: 6033,
-  UnauthorizedTokenTransfer: 6034,
-  SlippageBpsTooHigh: 6035,
-  ProtocolMismatch: 6036,
-  TooManyDeFiInstructions: 6037,
-  MaxAgentsReached: 6038,
-  InsufficientPermissions: 6039,
-  InvalidPermissions: 6040,
-  EscrowNotActive: 6041,
-  EscrowExpired: 6042,
-  EscrowNotExpired: 6043,
-  InvalidEscrowVault: 6044,
-  EscrowConditionsNotMet: 6045,
-  EscrowDurationExceeded: 6046,
-  InvalidConstraintConfig: 6047,
-  ConstraintViolated: 6048,
-  InvalidConstraintsPda: 6049,
-  InvalidPendingConstraintsPda: 6050,
-  AgentSpendLimitExceeded: 6051,
-  OverlaySlotExhausted: 6052,
-  AgentSlotNotFound: 6053,
-  UnauthorizedTokenApproval: 6054,
-  InvalidSessionExpiry: 6055,
-  UnconstrainedProgramBlocked: 6056,
-  ProtocolCapExceeded: 6057,
-  ProtocolCapsMismatch: 6058,
-  ActiveEscrowsExist: 6059,
-  ConstraintsNotClosed: 6060,
-  PendingPolicyExists: 6061,
-  AgentPaused: 6062,
-  AgentAlreadyPaused: 6063,
-  AgentNotPaused: 6064,
-  UnauthorizedPostFinalizeInstruction: 6065,
-  UnexpectedBalanceDecrease: 6066,
-  TimelockTooShort: 6067,
-  PolicyVersionMismatch: 6068,
-  PendingAgentPermsExists: 6069,
-  PendingCloseConstraintsExists: 6070,
-  ActiveSessionsExist: 6071,
-  PostAssertionFailed: 6072,
-  InvalidPostAssertionIndex: 6073,
-  UnauthorizedPreValidateInstruction: 6074,
-  SnapshotNotCaptured: 6075,
-  ConstraintIndexOutOfBounds: 6076,
-  InvalidConstraintOperator: 6077,
-  ConstraintsVaultMismatch: 6078,
-  ConstraintEntryCountExceeded: 6079,
-  BlockedSplOpcode: 6080,
-};
-
-/**
- * @deprecated Substring-matching variadic helper. The 2026-04-20 council
- *   voted 7-0 to replace this with a strict typed helper. See:
- *   MEMORY/WORK/20260420-201121_test-assertion-precision-council/COUNCIL_DECISION.md
- *
- *   Migration:
- *     Before: expectSigilErrorLegacy(err.toString(), "UnauthorizedAgent")
- *     After:  expectSigilError(err, { name: "UnauthorizedAgent", code: 6001 })
- *     Import: import { expectSigilError } from "@usesigil/kit/testing";
- *
- *   A follow-up PR will codemod all call sites. The tsc `@deprecated`
- *   tag produces an IDE warning at every call site; the CI grep step
- *   blocks re-introduction of the un-suffixed name.
- */
-export function expectSigilErrorLegacy(
-  errString: string,
-  ...errorNames: string[]
-): void {
-  for (const name of errorNames) {
-    if (errString.includes(name)) return; // Name match
-    const code = SIGIL_ERROR_CODES[name];
-    if (code !== undefined && errString.includes(String(code))) return; // Code match
-  }
-  const expected = errorNames
-    .map((n) => `${n} (${SIGIL_ERROR_CODES[n] ?? "?"})`)
-    .join(" | ");
-  throw new Error(
-    `Expected Sigil error [${expected}] but got: ${errString.slice(0, 200)}`,
-  );
-}
+// The legacy substring-matching `expectSigilErrorLegacy` helper AND its
+// shadow `SIGIL_ERROR_CODES` map (both 7-0 council casualties) were
+// deleted by the 2026-04-20 codemod. All consumers migrated to
+// strict typed helpers at `@usesigil/kit/testing`:
+//   import { expectSigilError, expectAnchorError, expectOneOfSigilErrors,
+//            expectOneOfAnchorErrors, expectSystemError } from "@usesigil/kit/testing";
+// The canonical name→code map now lives ONLY in
+// `sdk/kit/src/testing/errors/names.generated.ts` (IDL-generated) and
+// the public `SIGIL_ERRORS` export from `@usesigil/kit/testing`.
+// See: MEMORY/WORK/20260420-201121_test-assertion-precision-council/COUNCIL_DECISION.md
 
 // ─── Multi-instruction PDA creation helpers ─────────────────────────────────
 // InstructionConstraints (35,888 bytes) and PendingConstraintsUpdate (35,904

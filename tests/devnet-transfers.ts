@@ -7,6 +7,8 @@
  *     Stablecoin-only architecture. agentTransfer requires tokenMintAccount.
  *     Removed per-token max_tx_base test (V1 concept not in V2).
  */
+// Strict error helpers — see MEMORY/WORK/20260420-201121_test-assertion-precision-council/
+import { expectSigilError } from "@usesigil/kit/testing";
 import * as anchor from "@coral-xyz/anchor";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import {
@@ -24,7 +26,6 @@ import {
   TEST_USDC_KEYPAIR,
   getTokenBalance,
   calculateFees,
-  expectErrorLegacy,
   FullVaultResult,
 } from "./helpers/devnet-setup";
 
@@ -163,7 +164,7 @@ describe("devnet-transfers", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectErrorLegacy(err, "DestinationNotAllowed", "not in allowed");
+      expectSigilError(err, { name: "DestinationNotAllowed", code: 6025 });
     }
     console.log("    Non-allowed destination correctly rejected");
   });
@@ -271,7 +272,7 @@ describe("devnet-transfers", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectErrorLegacy(err, "UnauthorizedAgent", "unauthorized", "constraint");
+      expectSigilError(err, { name: "UnauthorizedAgent", code: 6001 });
     }
     console.log("    Non-agent agent_transfer rejected");
   });
@@ -333,7 +334,7 @@ describe("devnet-transfers", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectErrorLegacy(err, "SpendingCapExceeded", "cap");
+      expectSigilError(err, { name: "SpendingCapExceeded", code: 6006 });
     }
     console.log("    agent_transfer respects daily cap");
   });

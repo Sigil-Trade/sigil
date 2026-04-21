@@ -12,6 +12,8 @@
  *     Stablecoin-only architecture.
  *     finalizeSession includes policy and tracker accounts.
  */
+// Strict error helpers — see MEMORY/WORK/20260420-201121_test-assertion-precision-council/
+import { expectAnchorError } from "@usesigil/kit/testing";
 import * as anchor from "@coral-xyz/anchor";
 import {
   Keypair,
@@ -38,7 +40,6 @@ import {
   buildAuthorizeIx,
   buildFinalizeIx,
   fundKeypair,
-  expectErrorLegacy,
   ensureStablecoinMint,
   TEST_USDC_KEYPAIR,
   TEST_USDT_KEYPAIR,
@@ -269,7 +270,7 @@ describe("devnet-sessions", () => {
       expect.fail("Should have thrown");
     } catch (err: any) {
       // Session PDA seeds include agent key — wrong signer yields seed mismatch
-      expectErrorLegacy(err, "ConstraintSeeds", "seeds", "0x7d6");
+      expectAnchorError(err, { name: "ConstraintSeeds", code: 2006 });
     }
     console.log("    Non-agent signer correctly rejected in composed TX");
   });

@@ -388,6 +388,59 @@ export function expectOneOfSigilErrors(
 }
 
 /**
+ * Assert that `err` is ONE of a tight set of Anchor framework errors,
+ * thrown by the Sigil program (not a CPI callee).
+ *
+ * Tuple-typed at ≤3 elements, symmetric with {@link expectOneOfSigilErrors}.
+ * Use only for tests where Anchor's check-order can legitimately produce
+ * more than one constraint failure — e.g., "non-owner cannot X" tests
+ * where either `ConstraintSeeds` (PDA derivation) or `ConstraintHasOne`
+ * (`has_one = owner`) fires first depending on account ordering.
+ *
+ * If both constraints fire deterministically on one path, prefer the
+ * specific {@link expectAnchorError} — this helper is for the genuine
+ * multi-valued case.
+ */
+export type OneOfAnchorErrors =
+  | readonly [AnchorFrameworkName]
+  | readonly [AnchorFrameworkName, AnchorFrameworkName]
+  | readonly [AnchorFrameworkName, AnchorFrameworkName, AnchorFrameworkName];
+
+export function expectOneOfAnchorErrors(
+  err: unknown,
+  names: OneOfAnchorErrors,
+): void {
+  const parsed = parseAnchorError(err);
+  if (!parsed) {
+    throw new SigilAssertionError(
+      `expected one of Anchor framework errors [${names.join(", ")}]; ` +
+        `error is not parseable.\n` +
+        formatErrorForDiagnostic(err),
+    );
+  }
+
+  assertSigilOrigin(
+    parsed,
+    `expected one of Anchor framework errors [${names.join(", ")}]`,
+    err,
+  );
+
+  for (const name of names) {
+    if (parsed.name === name && parsed.code === ANCHOR_FRAMEWORK_ERRORS[name]) {
+      return;
+    }
+  }
+
+  const expected = names
+    .map((n) => `${n} (${ANCHOR_FRAMEWORK_ERRORS[n]})`)
+    .join(" | ");
+  throw new SigilAssertionError(
+    `expected one of [${expected}]; got '${parsed.name}' (${parsed.code}).\n` +
+      formatErrorForDiagnostic(err),
+  );
+}
+
+/**
  * Assert that `err` is a raw Solana/system-program error with the given
  * numeric code. For cases where no Anchor wrapper is involved — system
  * program, SPL Token, ComputeBudget, or explicit `custom program error:
