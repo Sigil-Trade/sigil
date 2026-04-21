@@ -43,7 +43,6 @@ pub fn handler(
     max_transaction_amount_usd: Option<u64>,
     protocol_mode: Option<u8>,
     protocols: Option<Vec<Pubkey>>,
-    max_leverage_bps: Option<u16>,
     developer_fee_rate: Option<u16>,
     max_slippage_bps: Option<u16>,
     timelock_duration: Option<u64>,
@@ -147,7 +146,6 @@ pub fn handler(
     pending.max_transaction_amount_usd = max_transaction_amount_usd;
     pending.protocol_mode = protocol_mode;
     pending.protocols = protocols;
-    pending.max_leverage_bps = max_leverage_bps;
     pending.developer_fee_rate = developer_fee_rate;
     pending.max_slippage_bps = max_slippage_bps;
     pending.timelock_duration = timelock_duration;

@@ -124,7 +124,6 @@ impl FuzzTest {
             protocol_mode: 0, // all protocols allowed
             protocols: vec![],
             protocol_caps: vec![],
-            max_leverage_bps: 10_000,
             developer_fee_rate: fee_rate,
             timelock_duration: 1800, // MIN_TIMELOCK_DURATION
             allowed_destinations: vec![],
@@ -585,7 +584,6 @@ impl FuzzTest {
             max_transaction_amount_usd: Some(new_cap),
             protocol_mode: None,
             protocols: None,
-            max_leverage_bps: None,
             developer_fee_rate: None,
             timelock_duration: None,
             allowed_destinations: None,
@@ -1059,7 +1057,6 @@ impl FuzzTest {
             max_transaction_amount_usd: None,
             protocol_mode: None,
             protocols: None,
-            max_leverage_bps: None,
             developer_fee_rate: None,
             timelock_duration: None,
             allowed_destinations: None,

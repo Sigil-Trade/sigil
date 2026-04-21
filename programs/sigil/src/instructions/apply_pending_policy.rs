@@ -61,9 +61,6 @@ pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
     if let Some(ref protos) = pending.protocols {
         policy.protocols = protos.clone();
     }
-    if let Some(leverage) = pending.max_leverage_bps {
-        policy.max_leverage_bps = leverage;
-    }
     if let Some(fee_rate) = pending.developer_fee_rate {
         policy.developer_fee_rate = fee_rate;
     }

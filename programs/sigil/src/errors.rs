@@ -23,9 +23,6 @@ pub enum SigilError {
     #[msg("Rolling 24h spending cap would be exceeded")]
     SpendingCapExceeded,
 
-    #[msg("Leverage exceeds maximum allowed")]
-    LeverageTooHigh,
-
     #[msg("Session not authorized")]
     SessionNotAuthorized,
 

@@ -62,7 +62,6 @@ pub fn handler(
     max_transaction_size_usd: u64,
     protocol_mode: u8,
     protocols: Vec<Pubkey>,
-    max_leverage_bps: u16,
     developer_fee_rate: u16,
     max_slippage_bps: u16,
     timelock_duration: u64,
@@ -140,7 +139,6 @@ pub fn handler(
     policy.max_transaction_size_usd = max_transaction_size_usd;
     policy.protocol_mode = protocol_mode;
     policy.protocols = protocols;
-    policy.max_leverage_bps = max_leverage_bps;
     policy.developer_fee_rate = developer_fee_rate;
     policy.max_slippage_bps = max_slippage_bps;
     policy.timelock_duration = timelock_duration;

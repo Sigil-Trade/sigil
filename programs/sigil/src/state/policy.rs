@@ -30,9 +30,6 @@ pub struct PolicyConfig {
     /// Bounded to MAX_ALLOWED_PROTOCOLS entries.
     pub protocols: Vec<Pubkey>,
 
-    /// DEPRECATED: Not enforced on-chain. Kept for layout stability. See Phase B3 post-assertions.
-    pub max_leverage_bps: u16,
-
     /// Developer fee rate (rate / 1,000,000). Applied to every finalized
     /// transaction. Max MAX_DEVELOPER_FEE_RATE (500 = 5 BPS).
     pub developer_fee_rate: u16,
@@ -89,7 +86,6 @@ impl PolicyConfig {
     /// Account discriminator (8) + vault (32) + daily_cap_usd (8) +
     /// max_tx_usd (8) + protocol_mode (1) +
     /// protocols vec (4 + 32 * MAX) +
-    /// max_leverage (2) +
     /// developer_fee_rate (2) + max_slippage_bps (2) + timelock_duration (8) +
     /// allowed_destinations vec (4 + 32 * MAX) + has_constraints (1) +
     /// has_pending_policy (1) + has_protocol_caps (1) +
@@ -101,7 +97,6 @@ impl PolicyConfig {
         + 8
         + 1
         + (4 + 32 * MAX_ALLOWED_PROTOCOLS)
-        + 2
         + 2
         + 2 // max_slippage_bps
         + 8
@@ -123,11 +118,6 @@ impl PolicyConfig {
             PROTOCOL_MODE_DENYLIST => !self.protocols.contains(program_id),
             _ => false, // invalid mode = deny all
         }
-    }
-
-    #[deprecated(note = "Leverage enforcement moved to Phase B3 post-execution assertions")]
-    pub fn is_leverage_within_limit(&self, leverage_bps: u16) -> bool {
-        leverage_bps <= self.max_leverage_bps
     }
 
     /// Check if a destination is allowed for agent transfers.

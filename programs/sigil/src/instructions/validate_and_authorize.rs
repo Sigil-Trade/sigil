@@ -446,8 +446,11 @@ pub fn handler(
     }
 
     // 7. Position counter system removed (council decision 2026-04-19, vote 9-1).
-    // Spending caps + leverage caps + protocol allowlist remain the load-bearing
-    // safety. See Plans/we-need-to-plan-serialized-summit.md for rationale.
+    // Spending caps + protocol allowlist + post-execution assertions (opt-in via
+    // create_post_assertions) remain the load-bearing safety. Leverage enforcement
+    // is delegated to the off-chain constraints package (@sigil-trade/constraints)
+    // which compiles runtime byte-level CrossFieldLte assertions per protocol.
+    // See Plans/we-need-to-plan-serialized-summit.md for rationale.
 
     // Extract vault PDA seeds data upfront
     let owner_key = vault.owner;
