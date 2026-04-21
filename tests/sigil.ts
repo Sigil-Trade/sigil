@@ -1151,9 +1151,10 @@ describe("sigil", () => {
         sendVersionedTx(svm, [validateIx, finalizeIx, splTransferIx], agent);
         expect.fail("Should have thrown");
       } catch (err: any) {
-        // Error 6065 = UnauthorizedPostFinalizeInstruction (renumbered after
-        // position counter removal). Checked at finalize instruction (index 1).
-        expect(err.toString()).to.include("6065");
+        // Error 6063 = UnauthorizedPostFinalizeInstruction (code shifted from
+        // 6065 → 6063 after phantom-error cleanup). Checked at finalize
+        // instruction (index 1).
+        expect(err.toString()).to.include("6063");
       }
     });
   });

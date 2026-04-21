@@ -175,7 +175,7 @@ describe("parseAnchorError", () => {
     const err = mkAnchorOccurred({ name: "Overflow", code: 6020 });
     const parsed = parseAnchorError(err);
     assert.ok(parsed);
-    assert.equal(parsed.code, 6021);
+    assert.equal(parsed.code, 6020);
     assert.equal(parsed.name, "Overflow");
     assert.equal(parsed.originProgramId, SIGIL_PROGRAM_ID_BASE58);
   });
@@ -276,7 +276,7 @@ describe("expectSigilError", () => {
     const err = mkAnchorThrown({ name: "UnauthorizedAgent", code: 6001 });
     expectFail(
       // @ts-expect-error — intentional misuse, code must match name's canonical value
-      () => expectSigilError(err, { name: "UnauthorizedAgent", code: 6001 }),
+      () => expectSigilError(err, { name: "UnauthorizedAgent", code: 9999 }),
       /helper misuse.*name 'UnauthorizedAgent' maps to code 6001/s,
     );
   });
@@ -318,10 +318,9 @@ describe("expectSigilError", () => {
   });
 
   it("works on raw hex custom program error (no logs)", () => {
-    // MaxAgentsReached — post-position-counter-deletion renumber shifted
-    // this from 6042 down to 6038. The coupled {name, code} type guarantees
-    // tsc catches any drift here.
-    const err = mkRawCustomError(6038);
+    // MaxAgentsReached — canonical code is 6036 after phantom-error cleanup.
+    // The coupled {name, code} type guarantees tsc catches any drift here.
+    const err = mkRawCustomError(6036);
     expectSigilError(err, { name: "MaxAgentsReached", code: 6036 });
   });
 
@@ -370,7 +369,7 @@ describe("expectAnchorError", () => {
     });
     expectFail(
       // @ts-expect-error — misuse
-      () => expectAnchorError(err, { name: "ConstraintSeeds", code: 2006 }),
+      () => expectAnchorError(err, { name: "ConstraintSeeds", code: 1234 }),
       /helper misuse.*maps to Anchor code 2006/s,
     );
   });
@@ -509,7 +508,7 @@ describe("expectSystemError", () => {
 
   it("passes when Anchor-parsed code matches", () => {
     const err = mkAnchorThrown({ name: "Overflow", code: 6020 });
-    expectSystemError(err, 6021);
+    expectSystemError(err, 6020);
   });
 
   it("rejects substring-coincidence matches (H-1 regression guard)", () => {
