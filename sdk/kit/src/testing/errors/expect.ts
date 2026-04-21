@@ -74,13 +74,20 @@ interface ParsedAnchorError {
  * The Solana runtime wraps the error in `Program <base58> failed: ...`
  * so we extract origin from those lines separately.
  */
+// ReDoS-hardened patterns. Every unbounded repetition is constrained to
+// either (a) a character class that excludes whitespace (so no backtracking
+// over log-line boundaries) OR (b) a {min,max} length bound (so worst-case
+// is linear). The filename portion of format #2 is bounded at 256 chars —
+// longer than any realistic Rust source path — to kill polynomial
+// backtracking on adversarial `err.logs` input (CodeQL js/polynomial-redos).
 const ANCHOR_ERROR_RES: Array<RegExp> = [
   // Source variant — produced by `error!()` / `require!()` (most common).
-  /AnchorError thrown in [^:]+:\d+\.\s*Error Code:\s*(\w+)\.\s*Error Number:\s*(\d+)\./,
+  // `[^:\s]{1,256}` = non-whitespace, non-colon filename, max 256 chars.
+  /AnchorError thrown in [^:\s]{1,256}:\d{1,10}\.\s{0,8}Error Code:\s{0,8}(\w{1,64})\.\s{0,8}Error Number:\s{0,8}(\d{1,10})\./,
   // AccountName variant — produced by `#[account(..., constraint = ... @ E)]`.
-  /AnchorError caused by account:\s*\w+\.\s*Error Code:\s*(\w+)\.\s*Error Number:\s*(\d+)\./,
+  /AnchorError caused by account:\s{0,8}\w{1,64}\.\s{0,8}Error Code:\s{0,8}(\w{1,64})\.\s{0,8}Error Number:\s{0,8}(\d{1,10})\./,
   // None variant.
-  /AnchorError occurred\.\s*Error Code:\s*(\w+)\.\s*Error Number:\s*(\d+)\./,
+  /AnchorError occurred\.\s{0,8}Error Code:\s{0,8}(\w{1,64})\.\s{0,8}Error Number:\s{0,8}(\d{1,10})\./,
 ];
 
 /** `Program <base58> invoke [<depth>]` — Solana runtime CPI log. */
