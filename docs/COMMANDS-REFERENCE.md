@@ -26,16 +26,16 @@ cargo fmt --check --manifest-path programs/sigil/Cargo.toml
 
 ## Testing
 
-| Command | What runs | External deps |
-|---|---|---|
-| `pnpm test` | 3 LiteSVM files (sigil, jupiter, flash-trade) via `anchor test` | anchor |
-| `pnpm test:onchain` | 4 LiteSVM files (above + security-exploits) | ts-mocha |
-| `pnpm test:onchain:full` | **All 9** LiteSVM files | ts-mocha |
-| `pnpm test:sdk` | All SDK + plugin package tests (kit, custody, platform, plugins) | pnpm workspaces |
-| `pnpm test:rust` | `cargo test` on `programs/sigil` | rust toolchain |
-| **`pnpm test:all`** | **`test:onchain:full` + `test:sdk` + `test:rust`** — every local-runnable suite | all of the above |
-| `pnpm test:surfpool` | 59 Surfpool integration tests | `surfpool start` running (see below) |
-| `pnpm count:check` | Drift check: actual test count vs `scripts/test-counts.json` | node |
+| Command                  | What runs                                                                       | External deps                        |
+| ------------------------ | ------------------------------------------------------------------------------- | ------------------------------------ |
+| `pnpm test`              | 3 LiteSVM files (sigil, jupiter, flash-trade) via `anchor test`                 | anchor                               |
+| `pnpm test:onchain`      | 4 LiteSVM files (above + security-exploits)                                     | ts-mocha                             |
+| `pnpm test:onchain:full` | **All 9** LiteSVM files                                                         | ts-mocha                             |
+| `pnpm test:sdk`          | All SDK + plugin package tests (kit, custody, platform, plugins)                | pnpm workspaces                      |
+| `pnpm test:rust`         | `cargo test` on `programs/sigil`                                                | rust toolchain                       |
+| **`pnpm test:all`**      | **`test:onchain:full` + `test:sdk` + `test:rust`** — every local-runnable suite | all of the above                     |
+| `pnpm test:surfpool`     | 59 Surfpool integration tests                                                   | `surfpool start` running (see below) |
+| `pnpm count:check`       | Drift check: actual test count vs `scripts/test-counts.json`                    | node                                 |
 
 Devnet and Trident fuzz suites are not included in `pnpm test:all` because they require external setup (devnet RPC + funded keypair, or `cargo trident` and multiple minutes). Run them separately:
 
@@ -83,11 +83,11 @@ RPC methods (`surfnet_setTokenAccount`, `surfnet_timeTravel`, etc.) via
 
 Three complementary security analysis tools for pre-audit preparation.
 
-| Tool | Type | Speed | CI | What it finds |
-|------|------|-------|-----|---------------|
-| **Sec3 X-Ray** | Static analysis | ~1 min | Yes | Known vulnerability patterns |
-| **Trident** | Fuzz testing | Hours | No | Unknown edge cases via random inputs |
-| **Certora** | Formal verification | Minutes-hours | No | Mathematical proofs of correctness |
+| Tool           | Type                | Speed         | CI  | What it finds                        |
+| -------------- | ------------------- | ------------- | --- | ------------------------------------ |
+| **Sec3 X-Ray** | Static analysis     | ~1 min        | Yes | Known vulnerability patterns         |
+| **Trident**    | Fuzz testing        | Hours         | No  | Unknown edge cases via random inputs |
+| **Certora**    | Formal verification | Minutes-hours | No  | Mathematical proofs of correctness   |
 
 ### Sec3 X-Ray — Static Analysis
 
@@ -107,13 +107,13 @@ docker run --rm --volume "$(pwd):/workspace" \
 
 Generates millions of random instruction sequences and verifies 5 invariants:
 
-| ID | Invariant | What it proves |
-|----|-----------|----------------|
-| INV-1 | Spending cap enforcement | Aggregate 24h spend never exceeds daily cap |
-| INV-2 | Access control | Only owner can modify policy / pause / withdraw |
-| INV-3 | Session expiry | Session PDA expires within 20 slots |
-| INV-4 | Fee immutability | fee_destination never changes after creation |
-| INV-5 | Revoke permanence | Frozen vaults can only be reactivated by owner |
+| ID    | Invariant                | What it proves                                  |
+| ----- | ------------------------ | ----------------------------------------------- |
+| INV-1 | Spending cap enforcement | Aggregate 24h spend never exceeds daily cap     |
+| INV-2 | Access control           | Only owner can modify policy / pause / withdraw |
+| INV-3 | Session expiry           | Session PDA expires within 20 slots             |
+| INV-4 | Fee immutability         | fee_destination never changes after creation    |
+| INV-5 | Revoke permanence        | Frozen vaults can only be reactivated by owner  |
 
 ```bash
 npm run security:fuzz
@@ -156,28 +156,34 @@ cargo +1.81 install cargo-certora-sbf
 Run this sequence before freezing the codebase for an external audit:
 
 ### 1. Code quality
+
 - [ ] `cargo fmt --check` passes
 - [ ] `cargo clippy` passes (with allowed Anchor lints)
 - [ ] `pnpm lint` passes
 - [ ] All tests pass (see `scripts/test-counts.json` for current counts)
 
 ### 2. Static analysis
+
 - [ ] `npm run security:xray` — zero High/Critical findings (or all triaged as false positives)
 
 ### 3. Fuzz testing
+
 - [ ] `npm run security:fuzz` — 24h run with zero crashes
 - [ ] All 5 invariants verified across millions of random sequences
 
 ### 4. Formal verification
+
 - [ ] `npm run security:verify` — all 16 specs verified
 
 ### 5. Freeze
+
 - [ ] Create tagged release: `git tag -a v1.0.0-audit -m "Frozen for security audit"`
 - [ ] Record commit hash: `git rev-parse HEAD`
 - [ ] Push tag: `git push origin v1.0.0-audit`
 - [ ] **No further commits** until audit is complete
 
 ### 6. Deliverables for auditor
+
 - [ ] Frozen commit hash
 - [ ] X-Ray report (with triage notes)
 - [ ] Trident fuzzing duration and crash summary
@@ -185,6 +191,7 @@ Run this sequence before freezing the codebase for an external audit:
 - [ ] `docs/SECURITY.md` (formal security specification)
 
 ### 7. Remediation (Post-Audit)
+
 1. Apply fixes in a single "remediation" commit
 2. Tag: `git tag -a v1.0.0-audit-fix -m "Audit remediation"`
 3. Auditor reviews only the remediation diff

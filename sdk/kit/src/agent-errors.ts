@@ -5,7 +5,7 @@
  * Every error includes a category, retryability flag, and
  * recovery actions that tell the agent exactly what to do next.
  *
- * Maps all 81 on-chain error codes (6000-6080) plus 34 SDK
+ * Maps all 75 on-chain error codes (6000-6074) plus 34 SDK
  * error codes (7000-7033) to AgentError with machine-readable metadata.
  *
  * Zero dependency on @solana/web3.js or @coral-xyz/anchor.
@@ -57,7 +57,7 @@ export interface AgentError {
 }
 
 // ---------------------------------------------------------------------------
-// On-chain error code mapping (6000-6080)
+// On-chain error code mapping (6000-6074)
 // ---------------------------------------------------------------------------
 
 interface ErrorMapping {
@@ -1691,7 +1691,7 @@ const SDK_ERRORS: Record<string, ErrorMapping> = {
  * Convert any error into a structured AgentError.
  *
  * Handles:
- * - On-chain Anchor errors (code 6000-6080)
+ * - On-chain Anchor errors (code 6000-6074)
  * - SDK errors (code 7000-7033)
  * - Network/RPC errors (from message patterns)
  * - Unknown errors (wrapped as FATAL)
@@ -2044,7 +2044,7 @@ function extractErrorCode(error: unknown): number | null {
   const e = error as Record<string, unknown>;
 
   // Direct code property
-  if (typeof e.code === "number" && e.code >= 6000 && e.code <= 6080)
+  if (typeof e.code === "number" && e.code >= 6000 && e.code <= 6074)
     return e.code;
 
   // Anchor error structure
@@ -2061,7 +2061,7 @@ function extractErrorCode(error: unknown): number | null {
     const match = e.message.match(/custom program error: 0x([0-9a-fA-F]+)/);
     if (match) {
       const code = parseInt(match[1], 16);
-      if (code >= 6000 && code <= 6080) return code;
+      if (code >= 6000 && code <= 6074) return code;
     }
   }
 
@@ -2302,7 +2302,7 @@ export class SigilSdkError extends Error implements AgentError {
  * Returns a SigilSdkError (extends Error) so instanceof Error checks still work.
  *
  * Processing order:
- * 1. Try on-chain error extraction via toAgentError() (numeric codes 6000-6080)
+ * 1. Try on-chain error extraction via toAgentError() (numeric codes 6000-6074)
  * 2. Pattern-match SDK error messages (11 patterns from seal.ts throw sites)
  * 3. Fallback to UNKNOWN/FATAL
  */

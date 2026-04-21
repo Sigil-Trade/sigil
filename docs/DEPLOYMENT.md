@@ -41,15 +41,15 @@ Save the returned ALT address.
 The Sigil ALT stores 7 non-program accounts shared across composed transactions
 (updated 2026-03-24 to add treasury ATAs for fee collection):
 
-| # | Account | Devnet | Mainnet |
-|---|---------|--------|---------|
-| 0 | USDC Mint | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` |
-| 1 | USDT Mint | `EJwZgeZrdC8TXTQbQBoL6bfuAnFUQYtEnqbJgLeNP2io` | `Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB` |
-| 2 | Protocol Treasury | `ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT` | `ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT` |
-| 3 | Instructions Sysvar | `Sysvar1nstructions1111111111111111111111111` | `Sysvar1nstructions1111111111111111111111111` |
-| 4 | Clock Sysvar | `SysvarC1ock11111111111111111111111111111111` | `SysvarC1ock11111111111111111111111111111111` |
-| 5 | Treasury USDC ATA | `J2SCySRvXFFQc6DdbRqnnmEz7kmtEtpM2FP37fz9R4Vt` | _(pending mainnet deployment)_ |
-| 6 | Treasury USDT ATA | `81RyRPBpxR5QK6ZBtjNDBSknid1qMHsrCcWF6w5NHKD6` | _(pending mainnet deployment)_ |
+| #   | Account             | Devnet                                         | Mainnet                                        |
+| --- | ------------------- | ---------------------------------------------- | ---------------------------------------------- |
+| 0   | USDC Mint           | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` |
+| 1   | USDT Mint           | `EJwZgeZrdC8TXTQbQBoL6bfuAnFUQYtEnqbJgLeNP2io` | `Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB` |
+| 2   | Protocol Treasury   | `ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT` | `ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT` |
+| 3   | Instructions Sysvar | `Sysvar1nstructions1111111111111111111111111`  | `Sysvar1nstructions1111111111111111111111111`  |
+| 4   | Clock Sysvar        | `SysvarC1ock11111111111111111111111111111111`  | `SysvarC1ock11111111111111111111111111111111`  |
+| 5   | Treasury USDC ATA   | `J2SCySRvXFFQc6DdbRqnnmEz7kmtEtpM2FP37fz9R4Vt` | _(pending mainnet deployment)_                 |
+| 6   | Treasury USDT ATA   | `81RyRPBpxR5QK6ZBtjNDBSknid1qMHsrCcWF6w5NHKD6` | _(pending mainnet deployment)_                 |
 
 Source of truth: `sdk/kit/src/alt-config.ts` — `EXPECTED_ALT_CONTENTS_DEVNET` /
 `EXPECTED_ALT_CONTENTS_MAINNET` arrays. Any ALT-contents change must be
@@ -141,29 +141,38 @@ The key design principle: **ALTs are an optimization, not a requirement.** Every
 ## 5. Devnet Deployment Status
 
 ### 5a. Program Deployment
+
 Program deployed to devnet at `4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL`. Redeploy after any Rust changes:
+
 ```bash
 anchor build --no-idl
 solana program deploy target/deploy/sigil.so --url devnet --keypair <deploy-authority>
 ```
 
 ### 5b. Devnet ALT
+
 ALT deployed and populated with 7 shared accounts (USDC/USDT mints, protocol treasury, instruction sysvar, clock sysvar, treasury USDC ATA, treasury USDT ATA). Address stored in `sdk/kit/src/alt-config.ts` as `SIGIL_ALT_DEVNET`.
 
 ### 5c. Treasury USDC ATA
+
 Protocol treasury requires a USDC ATA on devnet to receive protocol fees. Created via:
+
 ```bash
 spl-token create-account <USDC_DEVNET_MINT> --owner ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT --url devnet
 ```
+
 The treasury ATA address is hardcoded in `protocolTreasuryTokenAccount` references in test helpers.
 
 ### 5d. Turnkey Signing Policy Configuration
+
 For production custody, configure Turnkey signing policies to:
+
 1. Restrict signing to transactions containing `validate_and_authorize` as the first non-ComputeBudget instruction
 2. Enforce allowlisted program IDs (Sigil program + configured DeFi protocols)
 3. Set rate limits aligned with on-chain `PolicyConfig` caps
 
 Example Turnkey policy JSON for a Sigil agent wallet:
+
 ```json
 {
   "policyName": "sigil-agent-signing-policy",
@@ -175,6 +184,7 @@ Example Turnkey policy JSON for a Sigil agent wallet:
 ```
 
 Key policy requirements:
+
 - **Sigil program must be present**: Every agent TX must include `validate_and_authorize` (Sigil program ID in at least one instruction)
 - **No raw token transfers**: Block standalone SPL Token transfer/approve instructions not wrapped by Sigil
 - **Rate limiting**: Align Turnkey's per-wallet rate limit with the vault's `dailySpendingCapUsd`

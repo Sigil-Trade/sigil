@@ -26,10 +26,10 @@ This design has a deliberate secondary benefit: new DeFi protocol integrations r
 
 ## Program ID and Network
 
-| Network | Program ID |
-|---------|-----------|
-| Devnet | `4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL` |
-| Mainnet | Not yet deployed |
+| Network | Program ID                                     |
+| ------- | ---------------------------------------------- |
+| Devnet  | `4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL` |
+| Mainnet | Not yet deployed                               |
 
 The program ID is declared at `programs/sigil/src/lib.rs:16` (`declare_id!`) and registered in `Anchor.toml:9` under `[programs.devnet]`.
 
@@ -50,12 +50,12 @@ The program ID is declared at `programs/sigil/src/lib.rs:16` (`declare_id!`) and
 
 ## Packages
 
-| Package | Path | Version | Purpose |
-|---------|------|---------|---------|
-| `@usesigil/kit` | `sdk/kit/` | 0.8.1 | Primary TypeScript SDK — ESM-only, zero web3.js dependency, `@solana/kit` native. Exposes `SigilClient`, `seal()`, analytics, dashboard helpers, x402 integration, TEE utilities. (`sdk/kit/package.json`) |
-| `@usesigil/platform` | `sdk/platform/` | 0.1.0 | Platform client for TEE wallet provisioning via Solana Actions/Blinks. (`sdk/platform/package.json`) |
-| `@usesigil/custody` | `sdk/custody/` | 0.1.0 | TEE wallet custody adapters — Crossmint, Privy, Turnkey via subpath exports (`./crossmint`, `./privy`, `./turnkey`). (`sdk/custody/package.json`) |
-| `@usesigil/plugins` | `packages/plugins/` | 7.0.0 | Agent framework adapters — Solana Agent Kit (SAK) plugin via `./sak` subpath export. (`packages/plugins/package.json`) |
+| Package              | Path                | Version | Purpose                                                                                                                                                                                                    |
+| -------------------- | ------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@usesigil/kit`      | `sdk/kit/`          | 0.8.1   | Primary TypeScript SDK — ESM-only, zero web3.js dependency, `@solana/kit` native. Exposes `SigilClient`, `seal()`, analytics, dashboard helpers, x402 integration, TEE utilities. (`sdk/kit/package.json`) |
+| `@usesigil/platform` | `sdk/platform/`     | 0.1.0   | Platform client for TEE wallet provisioning via Solana Actions/Blinks. (`sdk/platform/package.json`)                                                                                                       |
+| `@usesigil/custody`  | `sdk/custody/`      | 0.1.0   | TEE wallet custody adapters — Crossmint, Privy, Turnkey via subpath exports (`./crossmint`, `./privy`, `./turnkey`). (`sdk/custody/package.json`)                                                          |
+| `@usesigil/plugins`  | `packages/plugins/` | 7.0.0   | Agent framework adapters — Solana Agent Kit (SAK) plugin via `./sak` subpath export. (`packages/plugins/package.json`)                                                                                     |
 
 ---
 
@@ -63,11 +63,11 @@ The program ID is declared at `programs/sigil/src/lib.rs:16` (`declare_id!`) and
 
 ```
 agent-middleware/
-├── programs/sigil/         Anchor program source — 36 instruction handlers, 12 PDA types, 81 errors, 37 events
+├── programs/sigil/         Anchor program source — 36 instruction handlers, 12 PDA types, 75 errors, 37 events
 │   └── src/
 │       ├── instructions/   One .rs file per dispatchable instruction
 │       ├── state/          One .rs file per on-chain account type
-│       ├── errors.rs       All 81 custom SigilError variants (codes 6000-6080)
+│       ├── errors.rs       All 75 custom SigilError variants (codes 6000-6074)
 │       └── events.rs       All 38 Anchor event structs
 ├── sdk/
 │   ├── kit/                @usesigil/kit — primary TypeScript SDK (ESM, @solana/kit)
@@ -145,18 +145,18 @@ Scripts are defined in `package.json` and `docs/COMMANDS-REFERENCE.md`.
 
 All files live in `agent-middleware/docs/`:
 
-| File | Description |
-|------|-------------|
-| `PROJECT.md` | This file — top-level project orientation, tech stack, packages, test statistics |
-| `ARCHITECTURE.md` | Account model, seed derivation, instruction flow, composed-transaction anatomy, constants |
-| `INSTRUCTIONS.md` | Claude Code guardrails — Solana constraints, Anchor patterns, coding conventions, what never to do |
-| `ERROR-CODES.md` | Full table of all 81 custom `SigilError` variants (codes 6000-6080) with categories and invocation sites |
-| `SECURITY.md` | Formal security specification — access control matrix, trust model, invariants, threat model; intended for external auditors |
-| `ONCHAIN-FEATURE-INVENTORY.md` | Complete on-chain feature inventory — all 36 instructions, 12 account types, capability model, events; source-cited from actual .rs files |
-| `COMMANDS-REFERENCE.md` | Developer command reference — build, test, lint, deploy, security tooling |
-| `DEPLOYMENT.md` | ALT (Address Lookup Table) deployment plan for devnet and mainnet |
-| `RFC-ACTIONTYPE-ELIMINATION.md` | Design record for the ActionType → tri-state capability migration; status: IMPLEMENTED |
-| `SECURITY-FINDINGS-2026-04-07.md` | Internal security findings log — Phase 1 audit closure pass; tracks finding status and fix commits |
+| File                              | Description                                                                                                                               |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `PROJECT.md`                      | This file — top-level project orientation, tech stack, packages, test statistics                                                          |
+| `ARCHITECTURE.md`                 | Account model, seed derivation, instruction flow, composed-transaction anatomy, constants                                                 |
+| `INSTRUCTIONS.md`                 | Claude Code guardrails — Solana constraints, Anchor patterns, coding conventions, what never to do                                        |
+| `ERROR-CODES.md`                  | Full table of all 75 custom `SigilError` variants (codes 6000-6074) with categories and invocation sites                                  |
+| `SECURITY.md`                     | Formal security specification — access control matrix, trust model, invariants, threat model; intended for external auditors              |
+| `ONCHAIN-FEATURE-INVENTORY.md`    | Complete on-chain feature inventory — all 36 instructions, 12 account types, capability model, events; source-cited from actual .rs files |
+| `COMMANDS-REFERENCE.md`           | Developer command reference — build, test, lint, deploy, security tooling                                                                 |
+| `DEPLOYMENT.md`                   | ALT (Address Lookup Table) deployment plan for devnet and mainnet                                                                         |
+| `RFC-ACTIONTYPE-ELIMINATION.md`   | Design record for the ActionType → tri-state capability migration; status: IMPLEMENTED                                                    |
+| `SECURITY-FINDINGS-2026-04-07.md` | Internal security findings log — Phase 1 audit closure pass; tracks finding status and fix commits                                        |
 
 ---
 

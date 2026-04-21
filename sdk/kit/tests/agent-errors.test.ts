@@ -17,15 +17,15 @@ describe("agent-errors", () => {
   // ─── On-chain error map completeness ──────────────────────────────────────
 
   describe("ON_CHAIN_ERROR_MAP completeness", () => {
-    it("maps all 81 error codes (6000-6080)", () => {
+    it("maps all 75 error codes (6000-6074)", () => {
       const codes = getAllOnChainErrorCodes();
-      expect(codes).to.have.lengthOf(81);
+      expect(codes).to.have.lengthOf(75);
       expect(codes[0]).to.equal(6000);
-      expect(codes[codes.length - 1]).to.equal(6080);
+      expect(codes[codes.length - 1]).to.equal(6074);
     });
 
-    it("every code from 6000-6080 is present with no gaps", () => {
-      for (let code = 6000; code <= 6080; code++) {
+    it("every code from 6000-6074 is present with no gaps", () => {
+      for (let code = 6000; code <= 6074; code++) {
         const entry = ON_CHAIN_ERROR_MAP[code];
         expect(entry, `Missing error code ${code}`).to.exist;
         expect(entry.name).to.be.a("string").and.not.be.empty;
@@ -84,10 +84,10 @@ describe("agent-errors", () => {
       expect(err!.context.error_name).to.equal("VaultNotActive");
     });
 
-    it("parses numeric code 6065 (UnauthorizedPostFinalizeInstruction)", () => {
-      const err = parseOnChainErrorCode(6065);
+    it("parses numeric code 6063 (UnauthorizedPostFinalizeInstruction)", () => {
+      const err = parseOnChainErrorCode(6063);
       expect(err).to.not.be.null;
-      expect(err!.code).to.equal("6065");
+      expect(err!.code).to.equal("6063");
       expect(err!.category).to.equal("POLICY_VIOLATION");
       expect(err!.context.error_name).to.equal(
         "UnauthorizedPostFinalizeInstruction",
@@ -101,10 +101,10 @@ describe("agent-errors", () => {
       expect(err!.context.error_name).to.equal("VaultNotActive");
     });
 
-    it("parses hex string 0x17A9 (= 6057 ProtocolCapExceeded)", () => {
-      const err = parseOnChainErrorCode("0x17A9");
+    it("parses hex string 0x17A7 (= 6055 ProtocolCapExceeded)", () => {
+      const err = parseOnChainErrorCode("0x17A7");
       expect(err).to.not.be.null;
-      expect(err!.code).to.equal("6057");
+      expect(err!.code).to.equal("6055");
       expect(err!.context.error_name).to.equal("ProtocolCapExceeded");
     });
 
@@ -131,14 +131,14 @@ describe("agent-errors", () => {
       expect(dailyCap!.retryable).to.be.true;
       expect(dailyCap!.retry_after_ms).to.equal(3_600_000);
 
-      const timelockNotExpired = parseOnChainErrorCode(6023);
+      const timelockNotExpired = parseOnChainErrorCode(6022);
       expect(timelockNotExpired).to.not.be.null;
       expect(timelockNotExpired!.retryable).to.be.true;
       expect(timelockNotExpired!.retry_after_ms).to.equal(60_000);
     });
 
     it("non-retryable errors do not include retry_after_ms", () => {
-      const overflow = parseOnChainErrorCode(6021);
+      const overflow = parseOnChainErrorCode(6020);
       expect(overflow).to.not.be.null;
       expect(overflow!.retryable).to.be.false;
       expect(overflow!.retry_after_ms).to.be.undefined;

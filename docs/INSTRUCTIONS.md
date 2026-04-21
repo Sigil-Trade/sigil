@@ -113,6 +113,7 @@ If step 1 is called twice in the same transaction, the second call fails because
 ### Integer Overflow
 
 All financial calculations MUST use checked arithmetic. Key areas:
+
 - Spending cap accumulation
 - Stablecoin-to-USD decimal scaling
 - Leverage calculation (basis points math)
@@ -129,6 +130,7 @@ For the MVP, MEV protection is handled at the transaction submission level (Jito
 ## Testing Strategy
 
 ### Unit Tests (Anchor/Bankrun)
+
 - Test every instruction in isolation
 - Test every error path
 - Test policy enforcement edge cases
@@ -136,12 +138,14 @@ For the MVP, MEV protection is handled at the transaction submission level (Jito
 - Use `bankrun` for fast local testing where possible
 
 ### Integration Tests
+
 - Test full composed transactions (validate → swap → finalize)
 - Test with mock Jupiter/Flash Trade programs on localnet
 - Test transaction failure scenarios (what happens if the swap fails after authorization?)
 - Test concurrent agents on different vaults
 
 ### Security Tests
+
 - Attempt to call owner-only instructions as agent (must fail)
 - Attempt to authorize actions on a frozen vault (must fail)
 - Attempt to reuse a session (must fail)
@@ -161,6 +165,7 @@ For the MVP, MEV protection is handled at the transaction submission level (Jito
 ## Style Guide
 
 ### Rust
+
 - Use `rustfmt` default formatting
 - Max line length: 100 characters
 - Use `pub(crate)` for internal visibility, `pub` only for the external interface
@@ -168,6 +173,7 @@ For the MVP, MEV protection is handled at the transaction submission level (Jito
 - Name instruction handler functions as `handler` within their module (Anchor convention)
 
 ### TypeScript
+
 - Use strict TypeScript (`"strict": true`)
 - Use `async/await`, never raw promises
 - Use `BN` from `@coral-xyz/anchor` for all on-chain number types
@@ -175,6 +181,7 @@ For the MVP, MEV protection is handled at the transaction submission level (Jito
 - Export all public types from `src/index.ts`
 
 ### Git
+
 - Conventional commits: `feat:`, `fix:`, `test:`, `docs:`, `refactor:`
 - One logical change per commit
 - Tests must pass before committing
@@ -234,23 +241,23 @@ Drift integration follows the same instruction composition pattern as Jupiter an
 
 Drift uses a complex account model that must be accounted for in transaction composition:
 
-| Account | Description | Required For |
-|---------|-------------|-------------|
-| `User` | Per-user PDA holding positions and orders | All operations |
-| `UserStats` | Per-user stats (fees paid, volume) | All operations |
-| `State` | Global Drift protocol state | All operations |
-| `PerpMarket` | Per-market configuration and state | Perp operations |
-| `SpotMarket` | Per-spot-market state | Spot operations |
-| `Oracle` | Price oracle for the market | All operations |
+| Account      | Description                               | Required For    |
+| ------------ | ----------------------------------------- | --------------- |
+| `User`       | Per-user PDA holding positions and orders | All operations  |
+| `UserStats`  | Per-user stats (fees paid, volume)        | All operations  |
+| `State`      | Global Drift protocol state               | All operations  |
+| `PerpMarket` | Per-market configuration and state        | Perp operations |
+| `SpotMarket` | Per-spot-market state                     | Spot operations |
+| `Oracle`     | Price oracle for the market               | All operations  |
 
 ### Instruction Mapping
 
-| Sigil Action | Drift Instruction | ActionType |
-|-------------------|-------------------|------------|
-| Open perp position | `place_perp_order` | `OpenPosition` |
-| Close perp position | `cancel_order` + `place_perp_order` (reduce-only) | `ClosePosition` |
-| Modify position | `modify_order` | `IncreasePosition` or `DecreasePosition` |
-| Cancel pending order | `cancel_order` | `ClosePosition` |
+| Sigil Action         | Drift Instruction                                 | ActionType                               |
+| -------------------- | ------------------------------------------------- | ---------------------------------------- |
+| Open perp position   | `place_perp_order`                                | `OpenPosition`                           |
+| Close perp position  | `cancel_order` + `place_perp_order` (reduce-only) | `ClosePosition`                          |
+| Modify position      | `modify_order`                                    | `IncreasePosition` or `DecreasePosition` |
+| Cancel pending order | `cancel_order`                                    | `ClosePosition`                          |
 
 ### Composition Pattern
 
@@ -316,7 +323,6 @@ type ValidationDenialReason =
   | "ProtocolNotAllowed"
   | "TransactionTooLarge"
   | "SpendingCapExceeded"
-  | "LeverageTooHigh"
   | "InsufficientBalance";
 ```
 
@@ -328,7 +334,6 @@ type ValidationDenialReason =
 4. **Include balance check.** Pre-flight should also verify the vault has sufficient token balance for the requested amount (on-chain doesn't check this — the SPL transfer would fail).
 5. **Return actionable details.** When denied, include enough context for the agent to adapt:
    - `SpendingCapExceeded` → `{ spent: 450, cap: 500, requested: 100, remainingBudget: 50 }`
-   - `LeverageTooHigh` → `{ requested: 2000, max: 1000 }` (in BPS)
    - `TokenNotAllowed` → `{ requestedToken: "...", allowedTokens: ["...", "..."] }`
 6. **Budget helper.** `client.getRemainingBudget(vault)` returns the remaining daily spend capacity as a single number. This is the most common pre-flight query and should be optimized.
 
@@ -412,6 +417,7 @@ x402 is the dominant HTTP 402 Payment Required standard for machine-to-machine c
 ```
 
 **Key design decisions:**
+
 - **Client NEVER settles.** Client signs payment and retries. The x402 API server calls the facilitator to settle.
 - **Double-evaluation avoidance:** `evaluateX402Payment()` is pre-check only (no spend recording). The actual enforcement + recording happens in `signTransaction()`.
 - **Loop prevention:** Checks for existing `PAYMENT-SIGNATURE` header before any policy evaluation (prevents infinite retry loops).
@@ -424,15 +430,15 @@ x402 is the dominant HTTP 402 Payment Required standard for machine-to-machine c
 interface PaymentRequired {
   x402Version: 2;
   resource: { url: string; description: string; mimeType: string };
-  accepts: PaymentRequirements[];  // Array of payment options
+  accepts: PaymentRequirements[]; // Array of payment options
 }
 
 interface PaymentRequirements {
-  scheme: string;        // e.g., "exact"
-  network: string;       // e.g., "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"
-  asset: string;         // Token mint (e.g., USDC)
-  amount: string;        // Amount in base units
-  payTo: string;         // Recipient address
+  scheme: string; // e.g., "exact"
+  network: string; // e.g., "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"
+  asset: string; // Token mint (e.g., USDC)
+  amount: string; // Amount in base units
+  payTo: string; // Recipient address
   maxTimeoutSeconds: number;
   extra: Record<string, unknown>;
 }
@@ -441,20 +447,22 @@ interface PaymentRequirements {
 ### SDK API
 
 ```typescript
-import { shieldedFetch, createShieldedFetch } from '@usesigil/kit/x402';
+import { shieldedFetch, createShieldedFetch } from "@usesigil/kit/x402";
 
 // Direct usage
-const res = await shieldedFetch(wallet, 'https://api.example.com/paid', { connection });
+const res = await shieldedFetch(wallet, "https://api.example.com/paid", {
+  connection,
+});
 if (res.x402?.paid) {
   console.log(`Paid ${res.x402.amountPaid} to ${res.x402.payTo}`);
 }
 
 // Wallet-bound factory
 const fetch = createShieldedFetchForWallet(wallet, { connection });
-const res = await fetch('https://api.example.com/paid');
+const res = await fetch("https://api.example.com/paid");
 
 // Convenience method on ShieldedWallet
-const res = await wallet.fetch('https://api.example.com/paid');
+const res = await wallet.fetch("https://api.example.com/paid");
 
 // Dry run (check if payment would be required, without paying)
 const res = await shieldedFetch(wallet, url, { connection, dryRun: true });
@@ -481,20 +489,20 @@ const res = await shieldedFetch(wallet, url, { connection, dryRun: true });
 
 ### Order Types
 
-| MCP Tool | Flash Trade Operation | ActionType | Spending? |
-|----------|----------------------|------------|-----------|
-| `shield_open_position` | Market order open | `OpenPosition` | Yes (collateral) |
-| `shield_close_position` | Market order close | `ClosePosition` | No |
-| `shield_place_limit_order` | Limit order | `OpenPosition` | Yes (reserve) |
-| `shield_cancel_limit_order` | Cancel limit | `ClosePosition` | No |
-| `shield_place_trigger_order` | TP/SL order | — | No (uses existing position) |
-| `shield_cancel_trigger_order` | Cancel TP/SL | — | No |
-| `shield_add_collateral` | Add collateral | `IncreasePosition` | Yes |
-| `shield_remove_collateral` | Remove collateral | `DecreasePosition` | No |
+| MCP Tool                      | Flash Trade Operation | ActionType         | Spending?                   |
+| ----------------------------- | --------------------- | ------------------ | --------------------------- |
+| `shield_open_position`        | Market order open     | `OpenPosition`     | Yes (collateral)            |
+| `shield_close_position`       | Market order close    | `ClosePosition`    | No                          |
+| `shield_place_limit_order`    | Limit order           | `OpenPosition`     | Yes (reserve)               |
+| `shield_cancel_limit_order`   | Cancel limit          | `ClosePosition`    | No                          |
+| `shield_place_trigger_order`  | TP/SL order           | —                  | No (uses existing position) |
+| `shield_cancel_trigger_order` | Cancel TP/SL          | —                  | No                          |
+| `shield_add_collateral`       | Add collateral        | `IncreasePosition` | Yes                         |
+| `shield_remove_collateral`    | Remove collateral     | `DecreasePosition` | No                          |
 
 ### Rules
 
-1. **Non-spending actions must have amount = 0.** `ClosePosition` and `DecreasePosition` don't spend from the vault — enforced by `InvalidNonSpendingAmount` error.
+1. **Non-spending actions should have amount = 0.** `ClosePosition` and `DecreasePosition` don't spend from the vault. The amount field is enforced by the capability bitmask + permission check, not a dedicated error code.
 2. **Limit order reserve counts as spending.** When placing a limit order, the reserve amount (collateral locked) is tracked against spending caps.
 3. **Trigger orders don't count as new spending.** TP/SL orders use existing position collateral — no additional spend tracking.
 
@@ -506,12 +514,12 @@ The trust score interface is **protocol-agnostic**. Sigil does not depend on any
 
 ### Currently Verified Providers
 
-| Provider | What It Provides | Integration Path |
-|----------|-----------------|-----------------|
-| **Visa Trusted Agent Protocol** | Agent identity via Visa rails (RFC 9421 HTTP Message Signatures) | Read Visa TAP attestation account on-chain |
-| **Civic Gateway tokens** | Identity verification via Civic Pass (KYC/KYB) | Read Civic gateway token state |
-| **KYAPay JWT** | JWT-based agent identity (`sub`=agent pubkey, `iss`=policy authority, `cap`=spending limit) | Verify JWT signature, map claims to PolicyConfig fields |
-| **ERC-8004** | Cross-chain agent identity (live Ethereum mainnet Jan 2026, 3 registries) | Read via Wormhole Queries (feasibility TBD) |
+| Provider                        | What It Provides                                                                            | Integration Path                                        |
+| ------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| **Visa Trusted Agent Protocol** | Agent identity via Visa rails (RFC 9421 HTTP Message Signatures)                            | Read Visa TAP attestation account on-chain              |
+| **Civic Gateway tokens**        | Identity verification via Civic Pass (KYC/KYB)                                              | Read Civic gateway token state                          |
+| **KYAPay JWT**                  | JWT-based agent identity (`sub`=agent pubkey, `iss`=policy authority, `cap`=spending limit) | Verify JWT signature, map claims to PolicyConfig fields |
+| **ERC-8004**                    | Cross-chain agent identity (live Ethereum mainnet Jan 2026, 3 registries)                   | Read via Wormhole Queries (feasibility TBD)             |
 
 ### Trust Score Interface
 
@@ -524,9 +532,9 @@ interface TrustScoreProvider {
 }
 
 interface TrustScore {
-  score: number;     // 0-10000 (BPS scale)
-  tier: TrustTier;   // Unverified | Basic | Verified | Established
-  provider: string;  // "visa-tap" | "civic" | custom
+  score: number; // 0-10000 (BPS scale)
+  tier: TrustTier; // Unverified | Basic | Verified | Established
+  provider: string; // "visa-tap" | "civic" | custom
   expiresAt: number; // Unix timestamp
 }
 ```
