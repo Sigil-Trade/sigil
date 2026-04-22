@@ -8,6 +8,20 @@ Sigil is pre-1.0 and moves quickly. If anything in this doc disagrees with
 what you see in the code, the code is canonical — please open a PR to correct
 this file.
 
+## TL;DR Workflow
+
+**Single-trunk model. PR-only. Manual-merge only. No exceptions.**
+
+1. Branch off `main`. Open PR back to `main`. There is no `staging` branch — staging is a separate Solana program (`STAGSigi…`) deployed automatically after merge.
+2. CI must be green. Solo-dev today: review your own PR in the GitHub UI before merging. When 2+ maintainers, the ruleset bumps to 1-reviewer-required (code owner auto-requested via `.github/CODEOWNERS`).
+3. **You click "Merge"**. Auto-merge is disabled on `main` per ruleset. This applies to everyone — Dependabot, Changesets bot, hotfixes, you. The single click is the audit trail.
+4. After merge: staging program (`STAGSigi…`) auto-deploys to devnet (if `programs/sigil/**` changed). NPM `@canary` snapshot publishes (if `sdk/**` or `packages/**` changed).
+5. NPM `@latest` (stable) requires also merging the Changesets "Version Packages" PR — also a manual click.
+
+Why so strict? **Drift Protocol lost $285M on April 1, 2026** because their multisig had zero timelock. Every shortcut in the deploy/upgrade pipeline that "saves time" is a future failure mode. We optimize for human-in-the-loop, not for click-count.
+
+Full deploy/release flow: see [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+
 ## Repo Shape
 
 This repo is a pnpm monorepo with four top-level projects:
@@ -166,6 +180,14 @@ This pipeline has caught 77 findings across this project including 2 CRITICALs
   without understanding why. The committed IDL is the source of truth.
 - **Don't bundle unrelated changes** in a single PR. One concern per PR keeps
   the review pipeline fast and the revert surface small.
+- **Don't enable auto-merge.** Period. Not on your PR, not on the Version
+  Packages PR, not on Dependabot PRs. The ruleset rejects it on `main`. The
+  manual-merge click is the audit trail and the supply-chain gate.
+- **Don't deploy mainnet from CI.** When mainnet ships, all program upgrades
+  go through the Squads V4 multisig (≥24h timelock). CI builds + verifies +
+  files the proposal. Humans sign in the Squads UI. CI never holds the
+  mainnet upgrade authority key. See `docs/DEPLOYMENT.md` §5 for the
+  pre-mainnet checklist.
 
 ## Common Tasks
 
@@ -231,8 +253,9 @@ we follow to stop unnecessary version cascades).
 
 - **Architecture questions:** start with `docs/PROJECT.md` and
   `docs/ARCHITECTURE.md`.
-- **Error codes:** `docs/ERROR-CODES.md` lists all 71 on-chain codes (6000-6070).
+- **Error codes:** `docs/ERROR-CODES.md` lists all 75 on-chain codes (6000-6074).
 - **Build issues:** `docs/COMMANDS-REFERENCE.md` has every command we run.
+- **Deployment + release flow:** `docs/DEPLOYMENT.md` is the canonical source.
 - **Security:** `SECURITY.md` documents the threat model and disclosure path.
 
 ## Code of Conduct

@@ -1,12 +1,51 @@
-# Default: all changes require review from the maintainer
-* @Kaleb-Rupe
+# Sigil CODEOWNERS
+#
+# Single-trunk model: all PRs target `main`. Reviewers are auto-requested per the
+# rules below. The `main-protection` ruleset enforces "review by code owner" for
+# matched paths — see `docs/DEPLOYMENT.md`.
+#
+# Today (pre-mainnet, single dev): @Kaleb-Rupe is the sole owner everywhere.
+#
+# WHEN a 2nd permanent maintainer joins, change `@Kaleb-Rupe` on critical paths
+# (`programs/sigil/`, `sdk/kit/src/`, `.github/workflows/`) to a 2-person team
+# (e.g. `@Sigil-Trade/maintainers`). Branch protection's "require N reviewers"
+# automatically jumps to 2 the moment the team has ≥2 members. This is the
+# Drift/MarginFi pattern for graceful escalation without ruleset changes.
+#
+# WHEN mainnet ships, also add the path-filtered "Required reviewers" rule to
+# the `main-protection` ruleset — covered in pre-mainnet checklist in
+# `docs/DEPLOYMENT.md` (Squads V4 multisig migration milestone).
 
-# On-chain program — highest risk, handles real funds
-programs/ @Kaleb-Rupe
+# Default fallback — catches anything not matched below
+*                                  @Kaleb-Rupe
 
-# Serverless API — handles TEE provisioning and transaction building
-api/ @Kaleb-Rupe
+# ── Highest-risk: on-chain program (handles real funds) ─────────────────────
+/programs/                         @Kaleb-Rupe
+/Anchor.toml                       @Kaleb-Rupe
+/Cargo.toml                        @Kaleb-Rupe
+/Cargo.lock                        @Kaleb-Rupe
+/rust-toolchain.toml               @Kaleb-Rupe
 
-# CI/CD and security config
-.github/ @Kaleb-Rupe
-vercel.json @Kaleb-Rupe
+# ── High-risk: TypeScript SDK published to npm ──────────────────────────────
+/sdk/kit/src/                      @Kaleb-Rupe
+/sdk/kit/package.json              @Kaleb-Rupe
+/sdk/custody/src/                  @Kaleb-Rupe
+/sdk/platform/src/                 @Kaleb-Rupe
+/packages/plugins/src/             @Kaleb-Rupe
+
+# ── High-risk: CI/CD and security config ────────────────────────────────────
+/.github/                          @Kaleb-Rupe
+/.changeset/config.json            @Kaleb-Rupe
+/scripts/                          @Kaleb-Rupe
+/trident-tests/                    @Kaleb-Rupe
+/certora/                          @Kaleb-Rupe
+
+# ── Build artifacts (committed IDL is contract surface — review changes) ────
+/target/idl/                       @Kaleb-Rupe
+/target/types/                     @Kaleb-Rupe
+
+# ── Documentation (review for accuracy of contract claims) ──────────────────
+/docs/SECURITY.md                  @Kaleb-Rupe
+/docs/ERROR-CODES.md               @Kaleb-Rupe
+/docs/ARCHITECTURE.md              @Kaleb-Rupe
+/docs/INSTRUCTIONS.md              @Kaleb-Rupe

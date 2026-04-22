@@ -5,7 +5,7 @@
 > control model, PDA derivation paths, error catalog, and trust assumptions.
 >
 > Program: `programs/sigil/` — Anchor 0.32.1, Rust 1.89.0
-> 36 instruction handlers, 12 PDA account types, 75 error codes, 37 events.
+> 36 instruction handlers, 12 PDA account types, 81 error codes, 37 events.
 >
 > Cross-reference: See `docs/ARCHITECTURE.md` for account model,
 > `docs/RFC-ACTIONTYPE-ELIMINATION.md` for the capability model migration,
@@ -146,7 +146,7 @@ Escrow seeds include source vault, destination vault, and escrow_id (4 seeds). T
 
 ### PendingAgentPermissionsUpdate PDA Design
 
-The per-agent PDA (seeds include agent pubkey) allows concurrent pending updates for different agents in the same vault. Only one pending update per agent at a time — enforced natively by Anchor's `init` constraint, which returns `AccountAlreadyExists` (framework error 3010) if the PDA already exists.
+The per-agent PDA (seeds include agent pubkey) allows concurrent pending updates for different agents in the same vault. Only one pending update per agent at a time (`PendingAgentPermsExists`, error 6074).
 
 ### Vault PDA Design
 
@@ -177,13 +177,13 @@ Vault seeds include `vault_id` (a `u64`) to allow one owner to create multiple i
 | `queue_constraints_update`         | `owner`                   | `has_one = owner`. PDA pre-allocated. Creates PendingConstraintsUpdate PDA.                                                                                                                                                                                                                                                                                       |
 | `apply_constraints_update`         | `owner`                   | `has_one = owner`. Timelock expired. Merges entries. Closes pending PDA. Bumps `policy_version`.                                                                                                                                                                                                                                                                  |
 | `cancel_constraints_update`        | `owner`                   | `has_one = owner`. Closes PendingConstraintsUpdate PDA.                                                                                                                                                                                                                                                                                                           |
-| `queue_close_constraints`          | `owner`                   | `has_one = owner`. Creates PendingCloseConstraints PDA. Fails if already queued — Anchor `init` constraint returns `AccountAlreadyExists`.                                                                                                                                                                                                                        |
+| `queue_close_constraints`          | `owner`                   | `has_one = owner`. Creates PendingCloseConstraints PDA. Fails if already queued (`PendingCloseConstraintsExists`).                                                                                                                                                                                                                                                |
 | `apply_close_constraints`          | `owner`                   | `has_one = owner`. Timelock expired. Closes InstructionConstraints PDA. Sets `policy.has_constraints = false`. Closes PendingCloseConstraints PDA. Bumps `policy_version`.                                                                                                                                                                                        |
 | `cancel_close_constraints`         | `owner`                   | `has_one = owner`. Closes PendingCloseConstraints PDA.                                                                                                                                                                                                                                                                                                            |
 | `create_post_assertions`           | `owner`                   | `has_one = owner`. Max 4 assertion entries. Validates modes (0-3), operators (0-6), CrossFieldLte constraints. Sets `policy.has_post_assertions`.                                                                                                                                                                                                                 |
 | `close_post_assertions`            | `owner`                   | `has_one = owner`. Closes PostExecutionAssertions PDA. Clears `policy.has_post_assertions`.                                                                                                                                                                                                                                                                       |
 | `agent_transfer`                   | `agent`                   | `vault.is_agent(agent)`. Agent not paused. `vault.is_active()`. Stablecoin-only (USDC/USDT). Destination in allowed list. USD caps enforced. Fees deducted inline. `expected_policy_version` check.                                                                                                                                                               |
-| `queue_agent_permissions_update`   | `owner`                   | `has_one = owner`. Agent must exist in vault. Creates PendingAgentPermissionsUpdate PDA (per-agent). Fails if already queued — Anchor `init` constraint returns `AccountAlreadyExists`.                                                                                                                                                                           |
+| `queue_agent_permissions_update`   | `owner`                   | `has_one = owner`. Agent must exist in vault. Creates PendingAgentPermissionsUpdate PDA (per-agent). Fails if already queued (`PendingAgentPermsExists`).                                                                                                                                                                                                         |
 | `apply_agent_permissions_update`   | `owner`                   | `has_one = owner`. Timelock expired. Applies new capability + spending limit. Closes PendingAgentPermissionsUpdate PDA.                                                                                                                                                                                                                                           |
 | `cancel_agent_permissions_update`  | `owner`                   | `has_one = owner`. Closes PendingAgentPermissionsUpdate PDA.                                                                                                                                                                                                                                                                                                      |
 | `create_escrow`                    | `agent`                   | `vault.is_agent(agent)`. Agent not paused. OPERATOR capability (spending action). Spending caps + fees apply. Max duration 30 days.                                                                                                                                                                                                                               |
@@ -198,14 +198,14 @@ Vault seeds include `vault_id` (a `u64`) to allow one owner to create multiple i
 
 ## 5. Error Code Catalog
 
-75 error codes (6000–6074) using Anchor's `#[error_code]`. See `docs/ERROR-CODES.md` for the full table with categories. Source of truth: `programs/sigil/src/errors.rs`.
+81 error codes (6000–6080) using Anchor's `#[error_code]`. See `docs/ERROR-CODES.md` for the full table with categories. Source of truth: `programs/sigil/src/errors.rs`.
 
 **New categories beyond original 70 codes:**
 
 - Timelock (new): TimelockTooShort, PolicyVersionMismatch
-- Pending state (new): ActiveSessionsExist. Concurrent-pending-update collisions for agent permissions and close-constraints are caught natively by Anchor's `init` constraint (`AccountAlreadyExists`), so no dedicated custom error is needed.
+- Pending state (new): PendingAgentPermsExists, PendingCloseConstraintsExists, ActiveSessionsExist
 - Post-assertions (new): PostAssertionFailed, InvalidPostAssertionIndex, SnapshotNotCaptured, UnauthorizedPreValidateInstruction
-- Constraints (new): InvalidConstraintOperator, ConstraintsVaultMismatch, BlockedSplOpcode
+- Constraints (new): ConstraintIndexOutOfBounds, InvalidConstraintOperator, ConstraintsVaultMismatch, ConstraintEntryCountExceeded, BlockedSplOpcode
 
 ---
 
@@ -284,7 +284,37 @@ Vault seeds include `vault_id` (a `u64`) to allow one owner to create multiple i
 
 ### 8.1 Upgrade Authority
 
-The program retains upgrade authority. The deployer keypair can upgrade the program binary. Before mainnet, this should be transferred to a multisig or renounced after the program is stable. The upgrade authority can change any program logic, including bypassing all security controls.
+The program retains upgrade authority. The deployer keypair can upgrade the program binary. Before mainnet, this MUST be transferred to a Squads V4 multisig with a non-zero timelock — see [Pre-Mainnet Upgrade Authority Migration](#pre-mainnet-upgrade-authority-migration) below. The upgrade authority can change any program logic, including bypassing all security controls.
+
+#### Pre-Mainnet Upgrade Authority Migration
+
+**Status:** Required before mainnet deploy. Tracked in `docs/DEPLOYMENT.md` §5 (Pre-Mainnet Checklist).
+
+**Plan:**
+
+1. **Squads V4 multisig.** Create a Squads V4 multisig where the multisig vault PDA becomes the program's upgrade authority. Pattern verified across Drift, MarginFi, Kamino, Squads itself, and Jupiter — all five mature Solana protocols use Squads V4 for program upgrade authority.
+
+2. **Signer composition.** Recommended 2-of-3 or 3-of-5. Avoid going wider — every additional signer expands the social-engineering attack surface. (Drift's compromised 2-of-5 was breached via per-signer phishing.)
+
+3. **Non-zero timelock — ≥24 hours, mandatory.**
+
+   > **Drift Protocol lost $285M on April 1, 2026** because their Squads multisig had **zero timelock**. The migration that removed the timelock was performed six days earlier (March 26) "for operational improvement." With no delay window, attackers who compromised signing devices could pre-sign upgrade transactions and apply them immediately. The timelock is what gives the team observable time to notice an unauthorized proposal and intervene.
+   >
+   > Sources: [Chainalysis: Lessons from the Drift hack](https://www.chainalysis.com/blog/lessons-from-the-drift-hack/) · [BlockSec: Drift multisig governance compromise](https://blocksec.com/blog/drift-protocol-incident-multisig-governance-compromise-via-durable-nonce-exploitation)
+
+   Sigil's mainnet timelock MUST be ≥24h. No exceptions, no "operational improvement" overrides. The friction IS the safety mechanism.
+
+4. **CI never holds mainnet upgrade authority.** Universal pattern across all 5 protocols. CI builds the bytecode, verifies it (`solana-verify`), uploads to a buffer account, and files a Squads multisig proposal. Humans review the proposal in the Squads UI and sign. The on-chain `solana program deploy` step happens server-side via Squads' executor — CI does not run it.
+
+5. **Separate multisigs per surface.** Kamino's pattern: distinct Squads multisigs for KFarms, KLend, KamMS, and KLend Staging. Sigil should split similarly:
+   - Program upgrade authority (mainnet program account)
+   - ALT authority (per [`MEMORY/alt-authority-migration.md`](../MEMORY/alt-authority-migration.md))
+   - Fee destination (rare changes; conservative review)
+   - Future: per-environment staging multisig
+
+6. **Action: `mrgnlabs/squads-program-upgrade@v0.3.1` (or fork).** Battle-tested by MarginFi. **Don't comment out the proposal step like MarginFi did** — that turns the action into a buffer-uploader that humans must remember to follow up on. Keep the full flow: build → buffer upload → proposal creation → notify signers.
+
+7. **Pre-mainnet rehearsal.** Test the full multisig upgrade flow on devnet using the staging program (`STAGSigi…`) as the target. Practice signer rotation. Practice rejecting a malicious proposal. Document signer recovery procedures for lost or compromised devices.
 
 ### 8.2 Stablecoin Trust
 
@@ -349,7 +379,7 @@ Per-protocol spend counters (`SpendTracker.protocol_counters`) use a simple 24-h
 - All 36 instruction handlers in `programs/sigil/src/instructions/`
 - All 12 PDA account types in `programs/sigil/src/state/`
 - DeFi integration verifiers in `programs/sigil/src/instructions/integrations/`
-- Error definitions in `programs/sigil/src/errors.rs` (75 codes, 6000–6074)
+- Error definitions in `programs/sigil/src/errors.rs` (81 codes, 6000–6080)
 - Event definitions in `programs/sigil/src/events.rs` (38 events)
 - Program entrypoint in `programs/sigil/src/lib.rs`
 - Capability model design rationale: `docs/RFC-ACTIONTYPE-ELIMINATION.md`
@@ -596,7 +626,7 @@ Constraint entries with `is_spending == 0` are rejected at creation time. Source
 
 ### 12.5 Queued Agent Permissions Updates
 
-Agent capability changes are timelock-gated: `queue_agent_permissions_update` → (wait `timelock_duration` seconds) → `apply_agent_permissions_update`. The direct `update_agent_permissions` instruction has been deleted. A per-agent `PendingAgentPermissionsUpdate` PDA (105 bytes, seeds `[b"pending_agent_perms", vault, agent]`) tracks the queued change. Only one pending update per agent is allowed at a time — enforced natively by Anchor's `init` constraint, which returns `AccountAlreadyExists` (framework error 3010) if the PDA already exists.
+Agent capability changes are timelock-gated: `queue_agent_permissions_update` → (wait `timelock_duration` seconds) → `apply_agent_permissions_update`. The direct `update_agent_permissions` instruction has been deleted. A per-agent `PendingAgentPermissionsUpdate` PDA (105 bytes, seeds `[b"pending_agent_perms", vault, agent]`) tracks the queued change. Only one pending update per agent is allowed at a time (`PendingAgentPermsExists`, error 6074).
 
 Source: `state/pending_agent_perms.rs`, `instructions/queue_agent_permissions_update.rs`.
 
