@@ -13,7 +13,7 @@ this file.
 **Single-trunk model. PR-only. Manual-merge only. No exceptions.**
 
 1. Branch off `main`. Open PR back to `main`. There is no `staging` branch — staging is a separate Solana program (`STAGSigi…`) deployed automatically after merge.
-2. CI must be green. Code owner must approve (auto-requested via `.github/CODEOWNERS`).
+2. CI must be green. Solo-dev today: review your own PR in the GitHub UI before merging. When 2+ maintainers, the ruleset bumps to 1-reviewer-required (code owner auto-requested via `.github/CODEOWNERS`).
 3. **You click "Merge"**. Auto-merge is disabled on `main` per ruleset. This applies to everyone — Dependabot, Changesets bot, hotfixes, you. The single click is the audit trail.
 4. After merge: staging program (`STAGSigi…`) auto-deploys to devnet (if `programs/sigil/**` changed). NPM `@canary` snapshot publishes (if `sdk/**` or `packages/**` changed).
 5. NPM `@latest` (stable) requires also merging the Changesets "Version Packages" PR — also a manual click.

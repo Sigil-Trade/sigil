@@ -56,6 +56,16 @@ Sigil follows the **trunk-based development** pattern used by every mature Solan
 | CI never holds mainnet upgrade authority.                                         | Universal Solana pattern. CI compromise must not = program drain.                       |
 | Mainnet upgrades require Squads V4 multisig with **non-zero timelock** (≥24h).    | Drift removed timelock March 26, 2026 → drained $285M six days later.                   |
 
+### Approving-review threshold — solo-dev mode today
+
+The `main-protection` ruleset currently sets `required_approving_review_count: 0` with `require_code_owner_review: false`. GitHub does not allow PR authors to approve their own PRs, so a 1-reviewer requirement on a solo-dev repo = permanent merge block.
+
+**Every other protection stays active:** PR required, CI must pass (Security Gate), linear history enforced, conversation threads must resolve, no auto-merge anywhere, squash/rebase only.
+
+Review still happens — the PR flow forces you to look at the diff in the web UI before clicking merge. GitHub just doesn't gate the click on an approval event that's impossible to produce.
+
+**When a 2nd permanent maintainer joins:** update the ruleset via `gh api -X PUT repos/Sigil-Trade/sigil/rulesets/13087437 …` to set `required_approving_review_count: 1` and `require_code_owner_review: true`. `.github/CODEOWNERS` auto-requests the right reviewer for each path.
+
 ---
 
 ## 1. PR Flow (Day-to-Day)
@@ -102,8 +112,9 @@ gh pr create --base main
 
 ### 1.5 Review
 
-- A code owner reviews per `.github/CODEOWNERS` (today: `@Kaleb-Rupe` everywhere; when 2nd dev joins, automatic 2-reviewer requirement on `programs/`, `sdk/kit/src/`, `.github/workflows/`).
-- Address comments. Force-push allowed on the PR branch (not on `main`).
+- **Today (solo dev):** review your own PR in the GitHub web UI before merging. `required_approving_review_count: 0` in the ruleset because GitHub blocks self-approval. Discipline is: read the diff, verify the CI artifacts, then click merge.
+- **When 2nd dev joins:** bump `required_approving_review_count` to 1, flip `require_code_owner_review: true`. `.github/CODEOWNERS` paths auto-request the right reviewer for changed files.
+- Force-push allowed on the PR branch (not on `main`).
 
 ### 1.6 Merge (manual click)
 
