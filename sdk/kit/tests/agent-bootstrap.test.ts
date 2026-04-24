@@ -74,10 +74,7 @@ describe("capabilityTierToNames", () => {
   });
 
   it("tier 2 (Operator) → ['Spending', 'NonSpending']", () => {
-    expect(capabilityTierToNames(2)).to.deep.equal([
-      "Spending",
-      "NonSpending",
-    ]);
+    expect(capabilityTierToNames(2)).to.deep.equal(["Spending", "NonSpending"]);
   });
 
   it("unknown tier → empty array (defensive)", () => {
@@ -155,9 +152,7 @@ describe("composeAgentBootstrap — prompt substitution", () => {
 
   it("joins capabilities with comma-space", () => {
     const r = composeAgentBootstrap(SAMPLE);
-    expect(r.onboardingPrompt).to.include(
-      "Permissions: Spending, NonSpending",
-    );
+    expect(r.onboardingPrompt).to.include("Permissions: Spending, NonSpending");
   });
 
   it("handles empty protocol list gracefully", () => {
@@ -237,9 +232,7 @@ describe("composeAgentBootstrap — injection + input validation (review fixes)"
     );
     // The ACTUAL capability slot should ALSO be filled correctly —
     // proves the template didn't get over-substituted.
-    expect(r.onboardingPrompt).to.include(
-      "Permissions: Spending, NonSpending",
-    );
+    expect(r.onboardingPrompt).to.include("Permissions: Spending, NonSpending");
   });
 
   it("address containing a $ sign renders literally", () => {

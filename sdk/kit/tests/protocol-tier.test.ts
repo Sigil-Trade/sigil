@@ -55,8 +55,10 @@ describe("resolveProtocolTier — verified short-circuit", () => {
       const tier = await resolveProtocolTier(a.programId, spy.fn);
       expect(tier, `${a.name} resolves to verified`).to.equal("verified");
     }
-    expect(spy.calls, "check never called for any verified program").to.have
-      .lengthOf(0);
+    expect(
+      spy.calls,
+      "check never called for any verified program",
+    ).to.have.lengthOf(0);
   });
 });
 

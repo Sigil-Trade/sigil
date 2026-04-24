@@ -54,10 +54,7 @@ import { lookupProtocolAnnotation } from "./protocol-registry/index.js";
  * serves a different purpose (KNOWN / DEFAULT / NOT_ALLOWED — allow-list
  * enforcement, not trust classification). The two coexist.
  */
-export type ProtocolTrustTier =
-  | "verified"
-  | "unverified"
-  | "non-constrainable";
+export type ProtocolTrustTier = "verified" | "unverified" | "non-constrainable";
 
 /**
  * Reason codes surfaced when a protocol is NOT constrainable. Stable
@@ -74,7 +71,11 @@ export type NonConstrainableReason =
  * Which source the IDL came from when the constraint parser succeeded.
  * Stable string keys for telemetry / debug panels.
  */
-export type IdlSource = "registry" | "on_chain_metadata" | "solanafm" | "helius";
+export type IdlSource =
+  | "registry"
+  | "on_chain_metadata"
+  | "solanafm"
+  | "helius";
 
 /**
  * Result of the async constrainability check. Discriminated union on

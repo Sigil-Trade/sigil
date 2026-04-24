@@ -78,9 +78,9 @@ describe("protocol-registry — VERIFIED_PROGRAMS", () => {
   });
 
   it("does not contain an unknown programId", () => {
-    expect(
-      VERIFIED_PROGRAMS.has("11111111111111111111111111111111"),
-    ).to.equal(false);
+    expect(VERIFIED_PROGRAMS.has("11111111111111111111111111111111")).to.equal(
+      false,
+    );
   });
 });
 
@@ -128,7 +128,9 @@ describe("protocol-registry — ProtocolAnnotation type", () => {
       (a): a is ProtocolAnnotation & { notes: string } =>
         typeof a.notes === "string" && a.notes.length > 0,
     );
-    expect(withNotes.length, "at least one annotation has notes").to.be.at
-      .least(1);
+    expect(
+      withNotes.length,
+      "at least one annotation has notes",
+    ).to.be.at.least(1);
   });
 });

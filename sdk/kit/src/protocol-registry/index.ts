@@ -97,7 +97,5 @@ export const VERIFIED_PROGRAMS: ReadonlySet<string> = new Set(
 export function lookupProtocolAnnotation(
   programId: string,
 ): ProtocolAnnotation | null {
-  return (
-    PROTOCOL_ANNOTATIONS.find((a) => a.programId === programId) ?? null
-  );
+  return PROTOCOL_ANNOTATIONS.find((a) => a.programId === programId) ?? null;
 }
