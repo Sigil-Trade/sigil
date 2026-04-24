@@ -146,17 +146,81 @@ jobs:
             sleep 30
           done
 
+      - name: Wait for program upgrade to propagate
+        # solana program deploy returns once the tx is finalized at the
+        # submitting RPC, but RPC nodes queried by subsequent steps may
+        # briefly still see the OLD executable slot. If anchor idl close
+        # fires during that window the simulator returns:
+        #   Error: Unsupported program id; Program is not deployed
+        # The old fallthrough swallowed that error and anchor idl init
+        # then hit "already in use" — misleading signal for an RPC race.
+        # Poll until the RPC reports a healthy program before proceeding.
+        run: |
+          echo "Polling for program upgrade propagation (max 60s)..."
+          for i in $(seq 1 12); do
+            if solana program show ${{ env.PROGRAM_ID }} \
+                --url "${{ secrets.DEVNET_RPC_URL }}" > /dev/null 2>&1; then
+              echo "Program executable is live (took ~$((i * 5))s)"
+              break
+            fi
+            if [ "$i" -eq 12 ]; then
+              echo "::error::Program still not visible to RPC after 60s — aborting IDL deploy"
+              exit 1
+            fi
+            echo "  attempt $i/12 — program not yet visible, sleeping 5s"
+            sleep 5
+          done
+
       - name: Deploy IDL (close + init strategy)
         run: |
-          # Always close then init — never use `anchor idl upgrade`.
+          # Always close then init — never use anchor idl upgrade.
           # Upgrade fails with RequireGteViolated when IDL grows beyond
           # the initial account allocation (e.g., 9498 < 11675 bytes).
+          #
+          # Two failure modes this handles:
+          #  1. NO existing IDL (first deploy / previous close succeeded):
+          #     anchor idl close exits non-zero with AccountNotInitialized
+          #     or similar. Acceptable — fall through to init.
+          #  2. Transient RPC lag / "Program is not deployed":
+          #     Previous implementation fell through on ALL close errors,
+          #     hiding the race and surfacing a misleading "already in use"
+          #     on init. Now we retry close with backoff before falling
+          #     through, and only do so on explicit account-absent signals.
 
           echo "Closing existing IDL account (if any)..."
-          anchor idl close ${{ env.PROGRAM_ID }} \
-            --provider.cluster "${{ secrets.DEVNET_RPC_URL }}" 2>&1 || {
-            echo "No existing IDL to close (first deploy or already closed). Continuing..."
-          }
+          CLOSE_MAX_RETRIES=5
+          CLOSE_SUCCESS=false
+          for i in $(seq 1 $CLOSE_MAX_RETRIES); do
+            echo "  close attempt $i/$CLOSE_MAX_RETRIES"
+            CLOSE_OUTPUT=$(anchor idl close ${{ env.PROGRAM_ID }} \
+              --provider.cluster "${{ secrets.DEVNET_RPC_URL }}" 2>&1 || true)
+            echo "$CLOSE_OUTPUT"
+
+            if echo "$CLOSE_OUTPUT" | grep -qiE "idl closed|successfully closed"; then
+              CLOSE_SUCCESS=true
+              echo "IDL close succeeded on attempt $i"
+              break
+            fi
+            if echo "$CLOSE_OUTPUT" | grep -qiE "AccountNotInitialized|account does not exist|no such account"; then
+              echo "No existing IDL to close. Proceeding to init."
+              break
+            fi
+            if [ "$i" -eq "$CLOSE_MAX_RETRIES" ]; then
+              echo "::error::IDL close failed after $CLOSE_MAX_RETRIES attempts"
+              echo "::error::Last error: $CLOSE_OUTPUT"
+              exit 1
+            fi
+            echo "  transient close error, sleeping 15s before retry..."
+            sleep 15
+          done
+
+          # Brief settle-time between close finalization and init submission.
+          # Devnet RPC commitment level can lag a few slots; init hitting
+          # "already in use" against an account that just closed is typical.
+          if [ "$CLOSE_SUCCESS" = "true" ]; then
+            echo "Waiting 10s for close to propagate before init..."
+            sleep 10
+          fi
 
           echo "Initializing IDL account with current IDL..."
           MAX_RETRIES=3
