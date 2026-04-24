@@ -205,6 +205,10 @@ const actual = {
     "tests/analytics-counters.ts",
     TS_RE,
   ),
+  "tests/post-assertion-integration.ts": countOneFile(
+    "tests/post-assertion-integration.ts",
+    TS_RE,
+  ),
   "tests/surfpool-integration.ts": countOneFile(
     "tests/surfpool-integration.ts",
     TS_RE,
