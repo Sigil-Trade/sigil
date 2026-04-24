@@ -116,6 +116,25 @@ export {
   fetchPendingCloseConstraints,
 } from "./constraint-reads.js";
 
+// ─── Post-execution assertion authoring (Phase 2) ────────────────────────────
+// Client-side validator that mirrors the on-chain validate_entries check so
+// callers fail fast before burning an RPC round-trip. Typed error surface
+// (PostAssertionValidationError) preserves a machine-readable
+// `validationCode` string plus the failing `entryIndex` for pinpoint UI
+// messaging, WHILE ALSO satisfying DxError structurally (numeric `code`,
+// `message`, `recovery: string[]`). See post-assertion-validation.ts
+// docblock for why the two-code surface exists.
+export type { PostAssertionValidationCode } from "./post-assertion-validation.js";
+export {
+  PostAssertionValidationError,
+  validatePostAssertionEntries,
+  DX_CODE_POST_ASSERTION_VALIDATION,
+} from "./post-assertion-validation.js";
+// Re-export the underlying entry type so dashboard consumers don't have to
+// reach into `@usesigil/kit/dist/generated/...` (covenant D1 bans generated
+// imports from FE code).
+export type { PostAssertionEntry } from "../generated/types/postAssertionEntry.js";
+
 /**
  * Owner-side client for Sigil vault management.
  *

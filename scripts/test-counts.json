@@ -55,6 +55,12 @@
       "claudePattern": "tests/analytics-counters.ts` (ts-mocha + LiteSVM, %d tests)"
     },
     {
+      "name": "Post-execution assertions E2E (CrossFieldLte golden/evil + fail-closed)",
+      "count": 9,
+      "onChain": true,
+      "claudePattern": "tests/post-assertion-integration.ts` (ts-mocha + LiteSVM, %d tests)"
+    },
+    {
       "name": "Devnet integration tests (real network)",
       "count": 64,
       "devnet": true
@@ -79,9 +85,9 @@
     },
     {
       "name": "Kit-native SDK (`@usesigil/kit` — includes merged core + dashboard)",
-      "count": 1435,
+      "count": 1542,
       "ciStepName": "Kit SDK tests",
-      "claudePattern": "sdk/kit/tests/` (mocha + tsx, %d tests — includes core + dashboard + errors)"
+      "claudePattern": "sdk/kit/tests/` (mocha + tsx, %d tests — includes core + dashboard + errors + post-assertions)"
     },
     {
       "name": "Kit SDK devnet tests (`@usesigil/kit` devnet)",
