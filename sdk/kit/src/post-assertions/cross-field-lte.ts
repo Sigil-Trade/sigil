@@ -11,21 +11,37 @@
  * multiplier_bps = maxLeverage × 10000. If the cap is violated, the program
  * raises `PostAssertionFailed` (6068) and the entire transaction reverts.
  *
- * ## Jupiter Perpetuals safety rail
+ * ## Jupiter Perpetuals UX rail — NOT a security boundary
  *
- * `leverageCapLteBps()` HARD-REJECTS target accounts owned by the Jupiter
- * Perpetuals program. Jupiter Perps uses a 2-transaction keeper-fulfillment
- * model: the user's tx writes a PositionRequest, a Jupiter-hosted keeper
- * executes the actual position change up to 45 seconds later. Sigil's
+ * `leverageCapLteBps()` throws `JupiterPerpsPostAssertionUnsupportedError`
+ * when the caller supplies a target account owned by the Jupiter Perpetuals
+ * program. This is a **UX-level misuse-prevention guardrail**, NOT a
+ * security guarantee — the on-chain program does **not** reject Jupiter
+ * Perps target accounts. A caller who constructs a plain `PostAssertionEntry`
+ * object literal (skipping this builder) and passes it to
+ * `createPostAssertions(...)` WILL land an entry that targets a Jupiter
+ * Perps Position account. That entry will always pass trivially, because:
+ *
+ * Jupiter Perps uses a 2-transaction keeper-fulfillment model — the user's
+ * tx writes a PositionRequest, and a Jupiter-hosted keeper executes the
+ * actual position change up to 45 seconds later. Sigil's
  * `finalize_session` reads account state in the USER's tx, not the keeper's,
  * so the Jupiter Position account still reflects pre-trade state at check
- * time. A post-execution CrossFieldLte on that account would always pass
- * trivially — a silent constraint bypass.
+ * time. CrossFieldLte post-execution over that account therefore is a
+ * **silent constraint bypass** — the user thinks their leverage cap is
+ * active when it isn't.
  *
- * Jupiter Perps remains a fully supported protocol for agent use.
- * Configure constraints via pre-execution InstructionConstraints (the
- * `@sigil-trade/constraints` package compiles byte-level checks on Jupiter
- * instruction args that enforce BEFORE the request hits the keeper).
+ * For REAL security on Jupiter Perps, combine with pre-execution
+ * `InstructionConstraints` (the `@sigil-trade/constraints` package compiles
+ * byte-level checks on Jupiter instruction args that the on-chain program
+ * enforces BEFORE the request hits the keeper — covers the same attack
+ * surface from the opposite direction).
+ *
+ * Follow-up work (tracked in the Phase 2 PRD as deferred): add an on-chain
+ * `target_account.owner` deny-list check in `finalize_session.rs` that
+ * rejects CrossFieldLte entries whose target account is owned by Jupiter
+ * Perpetuals. Until that lands, this builder's rail is defense-against-
+ * typos, nothing more.
  *
  * @see programs/sigil/src/state/post_assertions.rs — on-chain source of truth
  * @see docs/LEVERAGE-ENFORCEMENT.md — full Jupiter Perps gap writeup
@@ -38,9 +54,11 @@ import type { PostAssertionEntry } from "../generated/types/postAssertionEntry.j
 /**
  * Jupiter Perpetuals program. Owner of Position + PositionRequest accounts.
  *
- * This is the ONLY Jupiter program rejected by `leverageCapLteBps`. Other
- * Jupiter programs (V6 Aggregator, Lend, Earn, Borrow) execute synchronously
- * in the user's transaction and work fine with post-execution assertions.
+ * This is the ONLY Jupiter program the `leverageCapLteBps` builder refuses
+ * at authoring time (see the docblock above for why — UX rail, not on-chain
+ * security). Other Jupiter programs (V6 Aggregator, Lend, Earn, Borrow)
+ * execute synchronously in the user's transaction and work fine with
+ * post-execution assertions.
  */
 export const JUPITER_PERPS_PROGRAM_ADDRESS =
   "PERPHjGBqRHArX4DySjwM6UJHiR3sWAatqfdBS2qQJu" as Address;
