@@ -13,6 +13,9 @@
       "@usesigil/kit/testing": ["./sdk/kit/dist/testing/index.d.ts"],
       "@usesigil/kit/testing/errors": [
         "./sdk/kit/dist/testing/errors/index.d.ts"
+      ],
+      "@usesigil/kit/post-assertions": [
+        "./sdk/kit/dist/post-assertions/index.d.ts"
       ]
     }
   }
