@@ -659,3 +659,16 @@ export type {
   ConstrainabilityResult,
   CheckConstrainabilityFn,
 } from "./protocol-tier.js";
+
+// ─── Agent handoff bootstrap (v2.2 FE↔BE contract C5) ───────────────────────
+// Canonical handoff-prompt composition for Claude Desktop / ChatGPT / CLI.
+// See FRONTEND-BACKEND-CONTRACT.md §3.4 + §5a C5.
+export {
+  composeAgentBootstrap,
+  getHandoffPromptTemplate,
+  capabilityTierToNames,
+} from "./agent-bootstrap.js";
+export type {
+  AgentBootstrap,
+  AgentBootstrapConfig,
+} from "./agent-bootstrap.js";
