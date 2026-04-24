@@ -71,6 +71,10 @@ import { getCancelConstraintsUpdateInstructionAsync } from "../generated/instruc
 import { getQueueCloseConstraintsInstructionAsync } from "../generated/instructions/queueCloseConstraints.js";
 import { getApplyCloseConstraintsInstructionAsync } from "../generated/instructions/applyCloseConstraints.js";
 import { getCancelCloseConstraintsInstructionAsync } from "../generated/instructions/cancelCloseConstraints.js";
+import { getCreatePostAssertionsInstructionAsync } from "../generated/instructions/createPostAssertions.js";
+import { getClosePostAssertionsInstructionAsync } from "../generated/instructions/closePostAssertions.js";
+import type { PostAssertionEntry } from "../generated/types/postAssertionEntry.js";
+import { validatePostAssertionEntries } from "./post-assertion-validation.js";
 
 import type {
   TxResult,
@@ -732,5 +736,96 @@ export async function cancelCloseConstraints(
   opts?: TxOpts,
 ): Promise<TxResult> {
   const ix = await getCancelCloseConstraintsInstructionAsync({ owner, vault });
+  return run(rpc, owner, network, [ix], opts);
+}
+
+// ─── Post-execution assertions (Phase 2) ─────────────────────────────────────
+// Composes with pre-execution InstructionConstraints — NOT a replacement.
+//
+// Pre-execution (createConstraints above): validates instruction args BEFORE
+// the DeFi call runs. Fails closed on disallowed instructions.
+//
+// Post-execution (createPostAssertions below): snapshots account bytes before
+// finalize_session, compares against the on-chain PostExecutionAssertions PDA
+// after the DeFi call completes, reverts the whole tx on mismatch. Used for
+// leverage caps (CrossFieldLte) and similar "state-after-is-bounded" checks.
+//
+// Both wrappers auto-derive their respective PDAs — callers pass only the
+// vault. Validation runs client-side so the caller never burns a round-trip
+// on an entry the on-chain validate_entries would reject. See
+// `post-assertion-validation.ts` and Phase 2 PRD ISC-6..9.
+
+/**
+ * Create the PostExecutionAssertions PDA for a vault and write the entries.
+ *
+ * Every entry is validated client-side first (see `validatePostAssertionEntries`).
+ * A mid-batch rejection throws a DxError with a message pointing at the
+ * offending index; the transaction is never built.
+ *
+ * Idempotency: calling this twice on the same vault without an intervening
+ * close returns an Anchor `AccountAlreadyExists` (3010) — Anchor's `init`
+ * constraint enforces this at the program boundary. Phase 2 ISC-45.
+ *
+ * Rent: destination on close is the vault's owner (Anchor `close = owner`
+ * on the account), so `closePostAssertions` refunds to the owner signer.
+ *
+ * @param rpc      RPC client for blockhash resolution + tx submission.
+ * @param vault    Vault PDA this assertions set belongs to.
+ * @param owner    Owner signer — must match the vault's `owner` field.
+ * @param network  Cluster selector (devnet / mainnet).
+ * @param entries  1..=4 PostAssertionEntry values. Validated before send.
+ * @param opts     Optional TxOpts (compute budget, priority fee).
+ * @returns        TxResult with the confirmed signature.
+ */
+export async function createPostAssertions(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  entries: PostAssertionEntry[],
+  opts?: TxOpts,
+): Promise<TxResult> {
+  // Client-side check mirrors on-chain validate_entries. Throws
+  // PostAssertionValidationError, which is structurally a DxError (numeric
+  // `code`, `message`, `recovery: string[]`) AND carries the typed
+  // `validationCode` + `entryIndex` for FE branching. We intentionally do
+  // NOT wrap via toDxError — that would collapse the typed fields into
+  // DX_ERROR_CODE_UNMAPPED (7999) and break ISC-19's "pinpoint the bad
+  // entry" promise. See post-assertion-validation.ts docblock.
+  validatePostAssertionEntries(entries);
+
+  const ix = await getCreatePostAssertionsInstructionAsync({
+    owner,
+    vault,
+    entries,
+  });
+  return run(rpc, owner, network, [ix], opts);
+}
+
+/**
+ * Close the PostExecutionAssertions PDA for a vault. Rent refunds to owner.
+ *
+ * No-op if the PDA does not exist — Anchor's `close` attribute will reject
+ * the instruction with `AccountNotInitialized` if there's nothing to close;
+ * the DxError surface communicates this cleanly.
+ *
+ * After close, `has_post_assertions` on PolicyConfig flips 0 and
+ * finalize_session skips the post-assertion scan on future agent txs.
+ *
+ * @param rpc      RPC client for blockhash resolution + tx submission.
+ * @param vault    Vault PDA whose assertions set should be closed.
+ * @param owner    Owner signer — receives the rent refund.
+ * @param network  Cluster selector.
+ * @param opts     Optional TxOpts.
+ * @returns        TxResult with the confirmed signature.
+ */
+export async function closePostAssertions(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  opts?: TxOpts,
+): Promise<TxResult> {
+  const ix = await getClosePostAssertionsInstructionAsync({ owner, vault });
   return run(rpc, owner, network, [ix], opts);
 }

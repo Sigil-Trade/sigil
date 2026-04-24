@@ -120,6 +120,15 @@ jobs:
       - name: Generate snapshot versions via Changesets
         env:
           SNAPSHOT_ID: ${{ steps.snapshot.outputs.id }}
+          # `changesets version` calls @changesets/get-github-info to enrich
+          # changelog entries with PR links + commit authors. That helper
+          # hits the GitHub API and requires GITHUB_TOKEN with read:user +
+          # repo:status scopes — both present in the default secrets.GITHUB_TOKEN
+          # for workflows with permissions.contents: read. Without this env
+          # var the step fails with: "Please create a GitHub personal access
+          # token ... with read:user and repo:status permissions". Using the
+          # repository-scoped secret (not an external PAT) is the safe pattern.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # `--snapshot <id>` produces SHA-suffixed versions like 0.16.0-canary-abc1234.
           # No changeset files required — this works even with no pending changesets.

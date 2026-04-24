@@ -44,6 +44,10 @@
     "./react": {
       "import": "./dist/react/index.js",
       "types": "./dist/react/index.d.ts"
+    },
+    "./post-assertions": {
+      "import": "./dist/post-assertions/index.js",
+      "types": "./dist/post-assertions/index.d.ts"
     }
   },
   "files": [
@@ -63,7 +67,7 @@
     "codama:kamino": "node codama.mjs --protocol=kamino",
     "codama:all": "node codama.mjs --all",
     "pretest": "tsc -p tsconfig.test.json --noEmit",
-    "test": "mocha --require tsx --require tests/global-setup.ts 'tests/*.test.ts' 'tests/core/*.test.ts' 'tests/dashboard/*.test.ts' 'tests/errors/*.test.ts' 'tests/experimental/*.test.ts' 'tests/helpers/*.test.ts' --timeout 30000",
+    "test": "mocha --require tsx --require tests/global-setup.ts 'tests/*.test.ts' 'tests/core/*.test.ts' 'tests/dashboard/*.test.ts' 'tests/errors/*.test.ts' 'tests/experimental/*.test.ts' 'tests/helpers/*.test.ts' 'tests/post-assertions/*.test.ts' --timeout 30000",
     "test:devnet": "mocha --require tsx tests/devnet/**/*.test.ts --timeout 300000",
     "test:experimental": "mocha --require tsx tests/experimental/**/*.test.ts --timeout 30000",
     "check:examples": "tsc -p tsconfig.examples.json"
