@@ -507,6 +507,20 @@ export type {
   OwnerTransactionResult,
 } from "./owner-transaction.js";
 
+// ─── Preview Create Vault (v2.2 FE↔BE contract C1) ──────────────────────────
+// Wraps `createVault` + `buildOwnerTransaction` into a single preview call
+// that returns rent + PDA list + cost + unsigned tx in one shot. Drives the
+// dashboard's split-screen `/onboard` flow per FRONTEND-BACKEND-CONTRACT.md
+// §3.3 + §5a C1.
+export { previewCreateVault } from "./preview-create-vault.js";
+export type {
+  CreateVaultPreview,
+  VaultPdaInfo,
+  VaultPdaName,
+  PreviewWarning,
+  PreviewCreateVaultConfig,
+} from "./preview-create-vault.js";
+
 // ─── Error Classification (typed predicates + transport classifier) ─────────
 //
 // Shared helpers used across `seal`, `shielded-fetch`, `facilitator-verify`,

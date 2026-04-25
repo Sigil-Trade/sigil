@@ -85,9 +85,9 @@
     },
     {
       "name": "Kit-native SDK (`@usesigil/kit` — includes merged core + dashboard)",
-      "count": 1613,
+      "count": 1683,
       "ciStepName": "Kit SDK tests",
-      "claudePattern": "sdk/kit/tests/` (mocha + tsx, %d tests — includes core + dashboard + errors + post-assertions + protocol-registry + protocol-tier + agent-bootstrap)"
+      "claudePattern": "sdk/kit/tests/` (mocha + tsx, %d tests — includes core + dashboard + errors + post-assertions + protocol-registry + protocol-tier + agent-bootstrap + preview-create-vault)"
     },
     {
       "name": "Kit SDK devnet tests (`@usesigil/kit` devnet)",
