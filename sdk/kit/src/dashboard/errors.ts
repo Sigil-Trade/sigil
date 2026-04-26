@@ -214,6 +214,90 @@ export function isAccountNotFoundError(
   );
 }
 
+// ─── DxError range constants (FE↔BE contract §6.3) ──────────────────────────
+
+/**
+ * Lower bound of the Anchor on-chain error range. Any code in
+ * [ANCHOR_ERROR_MIN, ANCHOR_ERROR_MAX] means the transaction reached the
+ * on-chain program and was rejected by program logic — FE renders a
+ * specific "the vault's rules prevented this" message.
+ */
+const ANCHOR_ERROR_MIN = 6000;
+/** Upper bound of the Anchor on-chain error range (Sigil ships 71 codes: 6000-6070; 6074 is the reserved ceiling per the FE↔BE contract). */
+const ANCHOR_ERROR_MAX = 6074;
+
+/**
+ * Lower bound of the SDK / dashboard logic error range (FE↔BE §6.3).
+ * Codes in [SDK_ERROR_MIN, SDK_ERROR_MAX] are classified as "user"
+ * category by `categorizeError()` — these are client-side validation
+ * failures the user can correct.
+ */
+const SDK_ERROR_MIN = 7000;
+/** Upper bound of the SDK / dashboard logic error range. */
+const SDK_ERROR_MAX = 7099;
+
+/**
+ * Lower bound of the RPC / network error range (FE↔BE §6.3). Codes in
+ * [NETWORK_ERROR_MIN, NETWORK_ERROR_MAX] mean the error was transport-
+ * layer — retryable from the FE's perspective.
+ */
+const NETWORK_ERROR_MIN = 7100;
+/** Upper bound of the RPC / network error range. */
+const NETWORK_ERROR_MAX = 7199;
+
+/**
+ * Is this code an Anchor on-chain program error? Shipped as public
+ * helper for consumers that want to route specific 6000-range codes to
+ * custom UI (e.g., the constraint-violation banner). Prefer
+ * `categorizeError()` if you just need the category.
+ */
+export function isOnChainReverted(code: number): boolean {
+  return (
+    Number.isFinite(code) &&
+    code >= ANCHOR_ERROR_MIN &&
+    code <= ANCHOR_ERROR_MAX
+  );
+}
+
+/**
+ * The four UX categories a `DxError` falls into for FE routing. Stable
+ * string keys; FE components switch on these directly.
+ */
+export type DxErrorCategory = "user" | "network" | "program" | "unknown";
+
+/**
+ * Friendly category for a `DxError` (FE↔BE contract §6.3 helper).
+ *
+ * Returns one of:
+ *   - `"program"` — Anchor on-chain error (6000-6074). Tx reached the
+ *     program and was rejected by program logic.
+ *   - `"user"` — SDK / dashboard logic error (7000-7099). Client-side
+ *     validation failure the user can fix.
+ *   - `"network"` — RPC / network error (7100-7199). Transport layer;
+ *     generally retryable.
+ *   - `"unknown"` — everything else, including the `DX_ERROR_CODE_UNMAPPED`
+ *     (7999) sentinel.
+ *
+ * Named `categorizeDxError` (NOT `categorizeError`) to avoid collision
+ * with the pre-existing `categorizeError(err: AgentError): SigilErrorCategory`
+ * at `src/agent-errors.ts` — which serves a different purpose (detailed
+ * discriminated-union classification of AgentError contexts). The two
+ * coexist; consumers use `categorizeDxError` when working with DxError
+ * (the normalized FE-facing shape) and `categorizeError` when working
+ * with raw AgentError (the SDK-internal shape).
+ *
+ * FE should use this helper instead of hard-coding range checks — range
+ * layout may evolve; this function is the canonical classifier.
+ */
+export function categorizeDxError(e: Pick<DxError, "code">): DxErrorCategory {
+  const code = e.code;
+  if (!Number.isFinite(code)) return "unknown";
+  if (code >= ANCHOR_ERROR_MIN && code <= ANCHOR_ERROR_MAX) return "program";
+  if (code >= NETWORK_ERROR_MIN && code <= NETWORK_ERROR_MAX) return "network";
+  if (code >= SDK_ERROR_MIN && code <= SDK_ERROR_MAX) return "user";
+  return "unknown";
+}
+
 // ─── toDxError ─────────────────────────────────────────────────────────────
 
 /** Normalize any error into a DxError with code, message, and recovery actions. */
@@ -229,6 +313,7 @@ export function toDxError(err: unknown, context?: string): DxError {
           (a: { description?: string; action?: string }) =>
             a.description ?? a.action ?? "",
         ) ?? [],
+      onChainReverted: isOnChainReverted(code),
     };
   } catch {
     // toAgentError itself failed — wrap the original error.
@@ -237,6 +322,7 @@ export function toDxError(err: unknown, context?: string): DxError {
       code: DX_ERROR_CODE_UNMAPPED,
       message: context ? `${context}: ${msg}` : msg,
       recovery: ["Check transaction logs for details"],
+      onChainReverted: false,
     };
   }
 }

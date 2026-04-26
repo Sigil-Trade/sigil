@@ -1,0 +1,7 @@
+{
+  "programId": "jupr81YtYssSyPt8jbnGuiWon5f6x9TcDEFxYe3Bdzi",
+  "name": "Jupiter Borrow",
+  "verified": true,
+  "category": "borrow",
+  "notes": "Jupiter Borrow protocol. Instruction-count-limited in the Sigil on-chain program. Default CU: 400,000."
+}

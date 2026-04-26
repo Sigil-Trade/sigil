@@ -118,6 +118,12 @@ export class FlashTradeLeverageOutOfRangeError extends Error {
     `Pass a whole number between ${MIN_LEVERAGE_X} and ${MAX_LEVERAGE_X}.`,
     "To disable an existing leverage cap, call `closePostAssertions(...)`.",
   ];
+  /**
+   * Always `false` — thrown at CLIENT validation time, before any RPC
+   * round-trip. Present to satisfy DxError's structural contract (every
+   * DxError carries `onChainReverted`; see v2.2 contract C2).
+   */
+  public readonly onChainReverted: boolean = false;
   public readonly received: unknown;
 
   constructor(received: unknown) {

@@ -1,0 +1,7 @@
+{
+  "programId": "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+  "name": "Jupiter",
+  "verified": true,
+  "category": "swap-aggregator",
+  "notes": "Jupiter V6 aggregator. Instruction-count-limited in the Sigil on-chain program. Default CU: 600,000."
+}

@@ -108,6 +108,13 @@ export class PostAssertionValidationError extends Error {
   public readonly validationCode: PostAssertionValidationCode;
   public readonly entryIndex: number | null;
   public readonly recovery: string[];
+  /**
+   * Always `false` — this error is thrown at CLIENT validation time,
+   * BEFORE any RPC round-trip. Present to satisfy the DxError structural
+   * contract (every DxError carries `onChainReverted`; see FE↔BE
+   * contract v2.2 C2). Pre-existing callers need no migration.
+   */
+  public readonly onChainReverted: boolean = false;
 
   constructor(
     validationCode: PostAssertionValidationCode,

@@ -11,7 +11,6 @@
  */
 
 import type {
-  Address,
   Instruction,
   Rpc,
   SolanaRpcApi,
@@ -36,7 +35,7 @@ import { getBlockhashCache, type Blockhash } from "./rpc-helpers.js";
 import { AltCache } from "./alt-loader.js";
 import { getSigilAltAddress } from "./alt-config.js";
 import { CU_OWNER_ACTION } from "./priority-fees.js";
-import { normalizeNetwork, type Network } from "./types.js";
+import { normalizeNetwork } from "./types.js";
 import { SigilSdkDomainError } from "./errors/sdk.js";
 import { SigilRpcError } from "./errors/rpc.js";
 import {
@@ -72,6 +71,14 @@ export interface OwnerTransactionResult {
   txSizeBytes: number;
   /** Base64-encoded wire transaction (for display/debugging). */
   wireBase64: string;
+  /**
+   * The blockhash actually embedded in the compiled transaction. Returned
+   * so callers building previews can surface `lastValidBlockHeight`
+   * without a second cache read (which could race against TTL refresh
+   * and produce a stale value disconnected from the bytes the user
+   * will sign).
+   */
+  blockhash: Blockhash;
 }
 
 // ─── Module-level caches ────────────────────────────────────────────────────
@@ -169,5 +176,6 @@ export async function buildOwnerTransaction(
     transaction: compiledTx,
     txSizeBytes: byteLength,
     wireBase64,
+    blockhash,
   };
 }
