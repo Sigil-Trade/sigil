@@ -6,7 +6,6 @@
  */
 
 import type { Address, Rpc, SolanaRpcApi } from "../kit-adapter.js";
-import { VaultStatus } from "../generated/types/vaultStatus.js";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -36,9 +35,23 @@ export interface MockRpcOverrides {
   sendResult?: string;
   statusResult?: { value: unknown[] };
   getAccountInfoResult?: any;
+  /**
+   * Override the rent-exemption response. Either:
+   *  - A bigint → returned for every size
+   *  - A function → called with the requested `size: bigint`, returns bigint
+   *  - Omitted → mock returns `size * 6960n + 890_880n` (Solana's
+   *    deterministic rent-exemption formula at typical lamports-per-byte-year).
+   */
+  getMinimumBalanceForRentExemptionResult?:
+    | bigint
+    | ((size: bigint) => bigint | Promise<bigint>);
 }
 
 export function createMockRpc(overrides?: MockRpcOverrides): Rpc<SolanaRpcApi> {
+  // Solana's rent-exempt minimum is `(account_size + 128) * 6960` lamports
+  // (lamports-per-byte-year × 2-year exemption). Producing a deterministic
+  // size-dependent value lets tests assert per-PDA rent without hardcoding.
+  const defaultRent = (size: bigint): bigint => (size + 128n) * 6_960n;
   return {
     getLatestBlockhash: () => ({
       send: async () => ({ value: MOCK_BLOCKHASH }),
@@ -60,6 +73,14 @@ export function createMockRpc(overrides?: MockRpcOverrides): Rpc<SolanaRpcApi> {
     }),
     getAccountInfo: () => ({
       send: async () => overrides?.getAccountInfoResult ?? { value: null },
+    }),
+    getMinimumBalanceForRentExemption: (size: bigint) => ({
+      send: async () => {
+        const o = overrides?.getMinimumBalanceForRentExemptionResult;
+        if (typeof o === "bigint") return o;
+        if (typeof o === "function") return o(size);
+        return defaultRent(size);
+      },
     }),
   } as unknown as Rpc<SolanaRpcApi>;
 }

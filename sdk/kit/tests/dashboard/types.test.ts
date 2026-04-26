@@ -295,13 +295,15 @@ describe("Dashboard types — type shapes (compile-time)", () => {
     expect(typeof bal.amount).to.equal("bigint");
   });
 
-  it("DxError has code, message, recovery[]", () => {
+  it("DxError has code, message, recovery[], onChainReverted", () => {
     const err: DxError = {
       code: 6006,
       message: "Cap exceeded",
       recovery: ["Wait for cap reset"],
+      onChainReverted: true,
     };
     expect(err.recovery).to.be.an("array");
+    expect(err.onChainReverted).to.equal(true);
   });
 
   it("PolicyChanges all fields are optional", () => {

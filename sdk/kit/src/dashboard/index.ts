@@ -135,6 +135,20 @@ export {
 // imports from FE code).
 export type { PostAssertionEntry } from "../generated/types/postAssertionEntry.js";
 
+// ─── DxError helpers (FE↔BE contract v2.2 C2) ────────────────────────────────
+// `toDxError` is the sole DxError construction funnel. `categorizeDxError`
+// classifies a DxError's code into the four UX categories the FE routes to
+// ("program" / "user" / "network" / "unknown"). `isOnChainReverted` is the
+// public helper for routing specific 6000-range codes to custom UI (the
+// constraint-violation banner specifically). Prefer `categorizeDxError`.
+export {
+  toDxError,
+  categorizeDxError,
+  isOnChainReverted,
+  DX_ERROR_CODE_UNMAPPED,
+} from "./errors.js";
+export type { DxErrorCategory } from "./errors.js";
+
 /**
  * Owner-side client for Sigil vault management.
  *

@@ -1,0 +1,7 @@
+{
+  "programId": "dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH",
+  "name": "Drift",
+  "verified": true,
+  "category": "perps",
+  "notes": "Drift Protocol perpetuals + spot. Not instruction-count-limited. Default CU: 800,000."
+}

@@ -74,6 +74,16 @@ export interface CreateVaultOptions {
   developerFeeRate?: number;
   protocols?: Address[];
   protocolMode?: number;
+  /**
+   * Per-protocol daily caps in USD base units (6-decimal). Index-aligned
+   * with `protocols`. Required when `protocolMode === 1` (ALLOWLIST) AND
+   * caps are desired. Must satisfy `protocolCaps.length === protocols.length`
+   * — the on-chain program rejects mismatched lengths with
+   * `ProtocolCapsMismatch`. A value of `0n` for an entry means no cap for
+   * that protocol (global cap still applies). Default: empty array (no
+   * per-protocol caps; only the global cap enforces).
+   */
+  protocolCaps?: bigint[];
   maxSlippageBps?: number;
   /**
    * Timelock duration in seconds for owner-initiated policy changes.
@@ -223,6 +233,17 @@ export async function createVault(
   const protocolMode = options.protocolMode ?? 0;
 
   // Step 4: Build initializeVault instruction
+  //
+  // `protocolCaps`: forward caller-supplied caps if provided; otherwise
+  // default to all-zeros (no per-protocol caps, global cap still applies).
+  // The on-chain program enforces `protocol_caps.len() == protocols.len()`
+  // when `protocol_caps` is non-empty, so empty + zeros are equivalent in
+  // effect; the empty path saves a Vec allocation on-chain.
+  const protocolCaps =
+    options.protocolCaps !== undefined
+      ? options.protocolCaps
+      : protocols.map(() => 0n);
+
   const initializeVaultIx = await getInitializeVaultInstructionAsync({
     owner: options.owner,
     agentSpendOverlay: agentOverlayAddress,
@@ -236,7 +257,7 @@ export async function createVault(
     maxSlippageBps: options.maxSlippageBps ?? 100,
     timelockDuration: options.timelockDuration,
     allowedDestinations: options.allowedDestinations ?? [],
-    protocolCaps: protocols.map(() => 0n),
+    protocolCaps,
   });
 
   // Step 5: Build registerAgent instruction

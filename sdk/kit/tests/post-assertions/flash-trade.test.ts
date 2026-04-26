@@ -26,7 +26,6 @@ import {
   MAX_LEVERAGE_X,
 } from "../../src/post-assertions/presets/flash-trade.js";
 import { validatePostAssertionEntries } from "../../src/dashboard/post-assertion-validation.js";
-// @ts-expect-error — flash-sdk ships an Anchor IDL JSON without a bundled .d.ts
 import FLASH_IDL from "flash-sdk/dist/idl/perpetuals.json" with { type: "json" };
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────

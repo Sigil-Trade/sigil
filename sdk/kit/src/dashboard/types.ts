@@ -424,15 +424,38 @@ export interface DiscoveredVault {
  * MCP servers and AI agents must NOT execute recovery suggestions automatically.
  */
 export interface DxError {
-  /** On-chain error code (6000-6071) or SDK error code (7000+). */
+  /**
+   * Error code. Range encodes category:
+   *   - 6000-6074 → on-chain Anchor program error (see Rust error codes)
+   *   - 7000-7099 → SDK / dashboard logic error
+   *   - 7100-7199 → RPC / network error
+   *   - 7999      → DX_ERROR_CODE_UNMAPPED sentinel
+   *
+   * FE should NOT hard-code range checks — use `categorizeDxError()`
+   * instead. The range layout may evolve and the helper is the
+   * canonical classification.
+   */
   code: number;
-  /** Human-readable error message. */
+  /** Human-readable error message. Safe to render directly. */
   message: string;
   /**
    * Advisory recovery steps — NEVER parse or execute programmatically.
-   * These are for human display in UI toast/alert messages.
+   * These are for human display in UI toast/alert messages (FE↔BE
+   * covenant D3).
    */
   recovery: string[];
+  /**
+   * True iff the transaction reached the Sigil on-chain program and was
+   * rejected by program logic (Anchor error codes 6000-6074). When
+   * true, the FE renders a specific "the vault's rules prevented this"
+   * message instead of a generic error. When false, the failure was
+   * client-side, RPC, or network — the caller may retry.
+   *
+   * Shipped as part of FE↔BE contract v2.2 commitment C2. Always
+   * populated by `toDxError()`; never undefined on a properly
+   * normalized error.
+   */
+  onChainReverted: boolean;
 }
 
 // ─── Serialized Types (toJSON output) ────────────────────────────────────────

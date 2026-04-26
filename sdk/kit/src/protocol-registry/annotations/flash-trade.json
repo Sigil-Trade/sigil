@@ -1,0 +1,7 @@
+{
+  "programId": "FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn",
+  "name": "Flash Trade",
+  "verified": true,
+  "category": "perps",
+  "notes": "Flash Trade perpetuals DEX. Instruction-count-limited in the Sigil on-chain program. Default CU: 800,000."
+}
