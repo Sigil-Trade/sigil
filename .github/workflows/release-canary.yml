@@ -120,6 +120,17 @@ jobs:
       - name: Generate snapshot versions via Changesets
         env:
           SNAPSHOT_ID: ${{ steps.snapshot.outputs.id }}
+          # `.changeset/config.json` declares the changelog generator as
+          # `@changesets/changelog-github` which calls the GitHub REST API
+          # via `@changesets/get-github-info` to enrich entries with PR
+          # links and contributor handles. That helper hard-requires
+          # `GITHUB_TOKEN` in env and refuses to fall back. Without this
+          # var the step fails with: "Please create a GitHub personal
+          # access token ... with read:user and repo:status permissions".
+          # The default `secrets.GITHUB_TOKEN` for workflows with
+          # `permissions.contents: read` already satisfies the required
+          # scopes (read:user, repo:status). No external PAT needed.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # `--snapshot <id>` produces SHA-suffixed versions like 0.16.0-canary-abc1234.
           # No changeset files required — this works even with no pending changesets.
