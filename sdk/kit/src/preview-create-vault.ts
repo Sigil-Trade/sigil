@@ -1,5 +1,5 @@
 /**
- * `@usesigil/kit/previewCreateVault` — FE↔BE Contract v2.2 Commitment C1.
+ * `@usesigil/kit/previewCreateVault`.
  *
  * Builds a `CreateVaultPreview` that the dashboard split-screen `/onboard`
  * page renders BEFORE the user signs. Wraps the existing `createVault()`
@@ -46,9 +46,6 @@
  *    `solPriceUsd: bigint` (6-decimal USD per SOL). Without it, the kit
  *    would have to either pin a default (silent lie) or take an RPC
  *    dependency on a price feed (scope creep).
- *
- * @see FRONTEND-BACKEND-CONTRACT.md §3.3 — split-screen `/onboard` flow
- * @see FRONTEND-BACKEND-CONTRACT.md §5a C1 — commitment text
  */
 
 import type {
@@ -71,6 +68,9 @@ import { CU_VAULT_CREATION } from "./priority-fees.js";
 import {
   validateNetwork,
   SYSTEM_PROGRAM_ADDRESS,
+  MAX_DEVELOPER_FEE_RATE,
+  MAX_ALLOWED_PROTOCOLS,
+  U64_MAX,
   type CapabilityTier,
   type UsdBaseUnits,
   type Network,
@@ -130,21 +130,14 @@ const DAILY_CAP_HIGH_THRESHOLD = 1_000_000_000_000n;
 
 /**
  * Upper bound for any 6-decimal USD bigint at the public API edge.
- * `u64::MAX` (18_446_744_073_709_551_615) divided by 1_000_000 = ~$18 trillion
- * in 6-decimal form. The on-chain program stores these as `u64`; values above
- * `u64::MAX` overflow there. We reject at the kit edge rather than ship
- * a tx the program will reject.
+ * Re-exported from `types.U64_MAX` (`18_446_744_073_709_551_615n`). The
+ * on-chain program stores these as `u64`; values above overflow there. We
+ * reject at the kit edge rather than ship a tx the program will reject.
  */
-const MAX_USD_BASE_UNITS = (1n << 64n) - 1n;
+const MAX_USD_BASE_UNITS = U64_MAX;
 
 /** Mirror of `MIN_TIMELOCK_DURATION` (1800) from `state/mod.rs`. */
 const MIN_TIMELOCK_DURATION_SECONDS = 1_800n;
-
-/** Mirror of `MAX_DEVELOPER_FEE_RATE` (500 BPS) from `state/mod.rs`. */
-const MAX_DEVELOPER_FEE_RATE_BPS = 500;
-
-/** Mirror of `MAX_ALLOWED_PROTOCOLS` (10) from `state/mod.rs`. */
-const MAX_ALLOWED_PROTOCOLS_COUNT = 10;
 
 /** Mirror of `MAX_ALLOWED_DESTINATIONS` (10) from `state/mod.rs`. */
 const MAX_ALLOWED_DESTINATIONS_COUNT = 10;
@@ -400,60 +393,79 @@ export async function previewCreateVault(
   // (which use the short literal type) while still accepting either form.
   const buildNetwork = toBuildNetwork(config.network);
 
-  // 2. Derive PDAs. `vault` is the seed for the other three; derive it first,
-  //    then resolve the rest in parallel.
-  const [vaultAddress, vaultBump] = await getVaultPDA(
-    config.owner,
-    config.vaultId,
-  );
+  // 2 + 3. Derive PDAs and fetch rent concurrently.
+  //
+  // Rent depends on size only, not address — fire all 4 rent RPC fetches
+  // in parallel with PDA derivation. PDA derivation is pure CPU (sha256
+  // in a 0..255 bump search loop) so overlapping it with network latency
+  // removes the serial CPU step from the wall-clock path on hot
+  // dashboard re-types.
+  //
+  // `vault` is the seed for the other three PDAs, so we wrap the
+  // dependent chain (`getVaultPDA` → policy/tracker/overlay) in a single
+  // async IIFE and `Promise.all` it alongside the rent fetches. Wrapping
+  // (rather than `await`-ing the vault PDA up front) keeps the rent
+  // promises in a Promise.all from the moment they're created, so a
+  // rejecting RPC never produces a transient
+  // `PromiseRejectionHandledWarning`.
+  const vaultChain = (async () => {
+    const [vAddr, vBump] = await getVaultPDA(config.owner, config.vaultId);
+    const [policy, tracker, overlay] = await Promise.all([
+      getPolicyPDA(vAddr),
+      getTrackerPDA(vAddr),
+      getAgentOverlayPDA(vAddr, 0),
+    ]);
+    return { vAddr, vBump, policy, tracker, overlay };
+  })();
   const [
-    [policyAddress, policyBump],
-    [trackerAddress, trackerBump],
-    [overlayAddress, overlayBump],
+    { vAddr, vBump, policy, tracker, overlay },
+    vaultRent,
+    policyRent,
+    trackerRent,
+    overlayRent,
   ] = await Promise.all([
-    getPolicyPDA(vaultAddress),
-    getTrackerPDA(vaultAddress),
-    getAgentOverlayPDA(vaultAddress, 0),
-  ]);
-
-  // 3. Fetch rent for each PDA size in parallel.
-  const [vaultRent, policyRent, trackerRent, overlayRent] = await Promise.all([
+    vaultChain,
     fetchRentForSize(config.rpc, AGENT_VAULT_SIZE, "AgentVault"),
     fetchRentForSize(config.rpc, POLICY_CONFIG_SIZE, "PolicyConfig"),
     fetchRentForSize(config.rpc, SPEND_TRACKER_SIZE, "SpendTracker"),
     fetchRentForSize(config.rpc, AGENT_SPEND_OVERLAY_SIZE, "AgentSpendOverlay"),
   ]);
+  const vaultAddress = vAddr;
+  const vaultBump = vBump;
+  const [policyAddress, policyBump] = policy;
+  const [trackerAddress, trackerBump] = tracker;
+  const [overlayAddress, overlayBump] = overlay;
 
   // 4. Build the pdaList tuple in deterministic on-chain `init` order.
   const pdaList = Object.freeze([
-    Object.freeze({
-      name: "AgentVault" as const,
-      address: vaultAddress,
-      bump: vaultBump,
-      sizeBytes: AGENT_VAULT_SIZE,
-      rentLamports: vaultRent,
-    }),
-    Object.freeze({
-      name: "PolicyConfig" as const,
-      address: policyAddress,
-      bump: policyBump,
-      sizeBytes: POLICY_CONFIG_SIZE,
-      rentLamports: policyRent,
-    }),
-    Object.freeze({
-      name: "SpendTracker" as const,
-      address: trackerAddress,
-      bump: trackerBump,
-      sizeBytes: SPEND_TRACKER_SIZE,
-      rentLamports: trackerRent,
-    }),
-    Object.freeze({
-      name: "AgentSpendOverlay" as const,
-      address: overlayAddress,
-      bump: overlayBump,
-      sizeBytes: AGENT_SPEND_OVERLAY_SIZE,
-      rentLamports: overlayRent,
-    }),
+    makePdaInfo(
+      "AgentVault",
+      vaultAddress,
+      vaultBump,
+      AGENT_VAULT_SIZE,
+      vaultRent,
+    ),
+    makePdaInfo(
+      "PolicyConfig",
+      policyAddress,
+      policyBump,
+      POLICY_CONFIG_SIZE,
+      policyRent,
+    ),
+    makePdaInfo(
+      "SpendTracker",
+      trackerAddress,
+      trackerBump,
+      SPEND_TRACKER_SIZE,
+      trackerRent,
+    ),
+    makePdaInfo(
+      "AgentSpendOverlay",
+      overlayAddress,
+      overlayBump,
+      AGENT_SPEND_OVERLAY_SIZE,
+      overlayRent,
+    ),
   ]) as CreateVaultPreview["pdaList"];
   const rentLamports = vaultRent + policyRent + trackerRent + overlayRent;
 
@@ -505,36 +517,32 @@ export async function previewCreateVault(
       : {}),
   });
 
-  // 7. Compute fee in lamports. microLamports per CU * CU = microLamports;
-  //    ÷ 1_000_000 = lamports. BigInt throughout (no number/bigint mixing).
+  // 7. feeLamports: microLamports per CU * CU / 1_000_000. Mul-before-divide
+  //    in BigInt to avoid number/bigint mixing.
   const feeLamports =
     (BigInt(priorityFeeMicroLamports) * BigInt(computeUnits)) /
     MICRO_LAMPORTS_PER_LAMPORT;
 
-  // 8. Compute totalCostUsd. Mul-before-divide: keeps precision until the
-  //    final integer truncation (max 1 unit of 6-decimal USD lost).
+  // 8. totalCostUsd: mul-before-divide preserves precision down to 1 unit of
+  //    6-decimal USD.
   const totalCostUsd =
     ((rentLamports + feeLamports) * config.solPriceUsd) / LAMPORTS_PER_SOL;
 
-  // 9. Decode wire bytes from base64. Browser-and-Node-safe — `atob` is
-  //    a built-in in both runtimes (Node ≥ 16).
   const unsignedTxBytes = base64ToUint8Array(ownerTx.wireBase64);
 
-  // 10. Surface lastValidBlockHeight from the same blockhash
-  //     `buildOwnerTransaction` actually embedded in the bytes — never
-  //     re-read the cache (which can refresh between calls and produce a
-  //     `lastValidBlockHeight` that doesn't match the bytes the user
-  //     signs). Source-of-truth integrity at the trust boundary.
+  // 9. lastValidBlockHeight is sourced from the same blockhash baked into the
+  //    wire bytes — never re-read the cache (TTL refresh would race the bytes
+  //    the user is about to sign).
   const blockhash = ownerTx.blockhash;
 
-  // 11. Build warnings. Sorted by code ascending for deterministic FE keys.
+  // 10. Warnings (sorted by code) → undefined when empty so the FE skips
+  //     rendering the panel.
   const warningsRaw = buildWarnings(config);
   const warnings =
     warningsRaw.length > 0
       ? (Object.freeze(warningsRaw) as readonly PreviewWarning[])
       : undefined;
 
-  // 12. Freeze and return.
   const preview: CreateVaultPreview = {
     pdaList,
     rentLamports,
@@ -553,9 +561,30 @@ export async function previewCreateVault(
 // ─── Private helpers ─────────────────────────────────────────────────────────
 
 /**
+ * Build one frozen `VaultPdaInfo` entry for `pdaList`. The literal `name`
+ * type is preserved so each tuple slot narrows to its specific account class
+ * (e.g. `pdaList[0].name === "AgentVault"`).
+ */
+function makePdaInfo<N extends VaultPdaName>(
+  name: N,
+  address: Address,
+  bump: number,
+  sizeBytes: number,
+  rentLamports: bigint,
+): VaultPdaInfo<N> {
+  return Object.freeze({
+    name,
+    address,
+    bump,
+    sizeBytes,
+    rentLamports,
+  }) as VaultPdaInfo<N>;
+}
+
+/**
  * Validate config at the API edge. Throws `RangeError` for value-out-of-range
- * (matches Lane A `composeAgentBootstrap` convention) and lets
- * `validateNetwork` propagate its `SigilSdkDomainError`.
+ * (matches the `composeAgentBootstrap` convention) and lets `validateNetwork`
+ * propagate its `SigilSdkDomainError`.
  */
 function validateConfig(config: PreviewCreateVaultConfig): void {
   // Network — propagates SigilSdkDomainError if invalid.
@@ -644,9 +673,9 @@ function validateConfig(config: PreviewCreateVaultConfig): void {
       `developerFeeRate must be a non-negative integer; received ${config.developerFeeRate}`,
     );
   }
-  if (config.developerFeeRate > MAX_DEVELOPER_FEE_RATE_BPS) {
+  if (config.developerFeeRate > MAX_DEVELOPER_FEE_RATE) {
     throw new RangeError(
-      `developerFeeRate must be <= ${MAX_DEVELOPER_FEE_RATE_BPS} BPS (MAX_DEVELOPER_FEE_RATE); ` +
+      `developerFeeRate must be <= ${MAX_DEVELOPER_FEE_RATE} BPS (MAX_DEVELOPER_FEE_RATE); ` +
         `received ${config.developerFeeRate}`,
     );
   }
@@ -655,9 +684,9 @@ function validateConfig(config: PreviewCreateVaultConfig): void {
       `maxSlippageBps must be a non-negative integer; received ${config.maxSlippageBps}`,
     );
   }
-  if (config.protocols.length > MAX_ALLOWED_PROTOCOLS_COUNT) {
+  if (config.protocols.length > MAX_ALLOWED_PROTOCOLS) {
     throw new RangeError(
-      `protocols.length must be <= ${MAX_ALLOWED_PROTOCOLS_COUNT} (MAX_ALLOWED_PROTOCOLS); ` +
+      `protocols.length must be <= ${MAX_ALLOWED_PROTOCOLS} (MAX_ALLOWED_PROTOCOLS); ` +
         `received ${config.protocols.length}`,
     );
   }

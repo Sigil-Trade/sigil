@@ -27,6 +27,7 @@ import {
   type MockRpcOverrides,
 } from "../src/testing/mock-rpc.js";
 import { CU_VAULT_CREATION } from "../src/priority-fees.js";
+import { MAX_TX_SIZE } from "../src/composer.js";
 import {
   getAgentOverlayPDA,
   getPolicyPDA,
@@ -702,7 +703,7 @@ describe("previewCreateVault — tx integrity", () => {
     const r = await previewCreateVault(baseConfig());
     expect(r.txSizeBytes).to.be.a("number");
     expect(r.txSizeBytes).to.be.greaterThan(0);
-    expect(r.txSizeBytes).to.be.at.most(1_232);
+    expect(r.txSizeBytes).to.be.at.most(MAX_TX_SIZE);
   });
 
   it("unsignedTxBytes.byteLength equals txSizeBytes", async () => {
