@@ -27,7 +27,7 @@ certora = ["no-entrypoint", "dep:cvlr"]
 # assertions. CI gates any version bump via full test matrix rerun.
 # See: MEMORY/WORK/20260420-201121_test-assertion-precision-council/COUNCIL_DECISION.md
 anchor-lang = { version = "=0.32.1", features = ["init-if-needed"] }
-anchor-spl = { version = "=0.32.1", features = ["token", "associated_token"] }
+anchor-spl = { version = "=1.0.1", features = ["token", "associated_token"] }
 solana-program = ">=2"
 bytemuck = { version = "1.14", features = ["derive", "min_const_generics"] }
 
