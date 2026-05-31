@@ -509,8 +509,13 @@ describe("audit-log (Phase 7)", () => {
     advanceTime(svm, 301);
     await program.methods
       .reactivateVault(
-        Keypair.generate().publicKey, // dummy new agent (capability needed)
-        2,
+        Keypair.generate().publicKey, // dummy new agent (satisfies no-empty-agents guard)
+        // VIEWER_CAPABILITY (1), NOT FULL (2): the D-5/NH-1 cosign gate
+        // (reactivate_vault.rs:229, ErrReactivateCosignRequiredForFullCapability
+        // 6114) fires only for capability==FULL when no cosigner is supplied.
+        // This test just needs a successful reactivate to write an audit entry,
+        // so a viewer agent reactivates cleanly with only { owner, vault }.
+        1,
       )
       .accounts({ owner: owner.publicKey, vault } as any)
       .rpc();

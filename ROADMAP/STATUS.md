@@ -47,7 +47,7 @@
 - **Full LiteSVM run (24 top-level files, excl. devnet*/surfpool* which need live infra): 544 passing / 12 failing / 5 pending.** The 12 failures are PRE-EXISTING (reproduce identically 78/12 on clean HEAD `e94ba539` with all M1-02 work stashed) and TEST-ONLY — none are vulnerabilities, none caused by M1-02:
   - **10 × instruction-constraints** — `AccountOwnedByWrongProgram (3007)` at multi-step PDA-alloc setup + `InvalidConstraintConfig 6037` + `RangeError encoding overruns`. KNOWN: documented in `ci.yml:417` + `docs/revamp/AUDIT_2026_05_19_DC/CLOSURE.md` as a test-setup bug. This is the constraints engine → **deleted in M1-04; do NOT fix these tests, they go away.**
   - **1 × cu-budget** "ComputeBudget×28 pad" — `RangeError: encoding overruns Uint8Array` at client serialization (oversized tx >1232B). Test-only.
-  - **1 × audit-log** "slot/blockhash read FRESH" — STALE TEST: calls `reactivateVault(agent, FULL_CAPABILITY)` with no cosigner, hits `ErrReactivateCosignRequiredForFullCapability (6114)` (the D-5/NH-1 gate). Fix scheduled as its own small commit (add cosigner or use VIEWER cap).
+  - **1 × audit-log** "slot/blockhash read FRESH" — STALE TEST: called `reactivateVault(agent, FULL_CAPABILITY)` with no cosigner, hit `ErrReactivateCosignRequiredForFullCapability (6114)` (the D-5/NH-1 gate). **FIXED** (switched to VIEWER capability) — audit-log.ts now 10/0. Full-suite failures 12 → 11.
 - **M1 EXIT gate must redefine "green"** = the real full suite, with the 10 constraints failures resolved by M1-04 teardown (not patched) and the 2 stale/oversized test bugs fixed.
 
 ## Open decisions to lock at each item's design-review
