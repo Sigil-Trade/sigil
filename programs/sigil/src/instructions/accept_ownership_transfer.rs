@@ -150,11 +150,16 @@ pub fn handler(ctx: Context<AcceptOwnershipTransfer>) -> Result<()> {
     // surfaces with `QueuedUpdateExpired` (the diagnostic answer).
     // PendingOwnershipTransfer has no M-5 digest, so the new field is NOT
     // digest-bound — defense is timelock (primary) + slot ceiling.
+    // F-4 close (audit 2026-05-25): use checked_sub instead of saturating_sub
+    // so an impossible-in-prod clock-backward anomaly surfaces as `Overflow`
+    // rather than silently rounding to 0 and passing the freshness check.
+    // Matches the sibling `unix_timestamp.checked_sub(...)` pattern below.
+    let slot_delta = clock
+        .slot
+        .checked_sub(ctx.accounts.pending.queued_at_slot)
+        .ok_or(error!(SigilError::Overflow))?;
     require!(
-        clock
-            .slot
-            .saturating_sub(ctx.accounts.pending.queued_at_slot)
-            < crate::state::MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN,
+        slot_delta < crate::state::MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN,
         SigilError::QueuedUpdateExpired,
     );
 
