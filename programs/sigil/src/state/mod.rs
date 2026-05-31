@@ -578,57 +578,24 @@ pub fn is_pinned_deposit_mint(_mint: &Pubkey) -> bool {
 // passed through PolicyConfig.protocols at vault creation time — generic primitive,
 // not Jupiter-specific.
 
-// ─── ADR-Phase-1 (2026-05-17) ───────────────────────────────────────────────
-// JUPITER_LEND_PROGRAM / JUPITER_EARN_PROGRAM / JUPITER_BORROW_PROGRAM survive
-// the Option A demolition as **`is_recognized_defi` markers** used by
-// `ProtocolMismatch` enforcement and `defi_ix_count` accounting in
-// `validate_and_authorize`. These are program-ID identifiers, NOT Jupiter
-// routing-format parsers; they comply with Option A L-1 because Sigil does NOT
-// interpret the Jupiter instruction data — it only checks whether the target
-// program of a bundle's DeFi instruction is on this recognized-DeFi list.
+// ─── ADR-M1 (2026-05-31): is_recognized_defi markers REMOVED ────────────────
+// The four former "recognized DeFi marker" constants (FLASH_TRADE_PROGRAM,
+// JUPITER_LEND_PROGRAM, JUPITER_EARN_PROGRAM, JUPITER_BORROW_PROGRAM) were
+// DELETED. They existed only to gate `ProtocolMismatch` enforcement and
+// `defi_ix_count` accounting for four hardcoded programs in
+// `validate_and_authorize`. Those checks now apply AGNOSTICALLY to every
+// allowlisted protocol (any instruction reaching ScanAction::PassedSharedChecks
+// is treated as a DeFi instruction), so no per-protocol marker set is needed.
+// Removing them eliminates protocol-specific code from the core enforcement
+// path and closes the gap where non-hardcoded allowlisted protocols (Orca,
+// Raydium, Kamino, …) escaped the single-DeFi-ix limit + target match.
 //
-// JUPITER_PERPS_PROGRAM survives in `KNOWN_ASYNC_FULFILLMENT_PROGRAMS`
-// (alongside `DRIFT_V2_PROGRAM` and `DRIFT_JIT_PROXY_PROGRAM`) as an
-// **attack-class block** — the program-ID is rejected outright in the scan
-// because async-fulfillment models break Sigil's stablecoin balance-delta
-// measurement (the keeper submits the SPL transfer 5-45s later in a separate
-// transaction, so `finalize_session` records a $0 spend). Again, no Jupiter
-// instruction-data parsing is involved; the block is purely program-ID based.
-//
-// **Future direction:** D-5 / Phase 4 TA-10 hardening will eventually replace
-// these explicit constants with a **generic primitive** (reject any program ID
-// known to follow async-fulfillment patterns; recognize DeFi via a per-vault
-// PolicyConfig.protocols list, not a hardcoded enum). For V1 the explicit
-// allowlist is the simplest implementation and the smallest blast radius.
+// The async-fulfillment constants below are DIFFERENT in kind: they are
+// program IDs REJECTED outright (KNOWN_ASYNC_FULFILLMENT_PROGRAMS) because
+// their request/keeper-fill model lands the real SPL transfer 5-45s AFTER
+// finalize_session, defeating Sigil's stablecoin balance-delta measurement.
+// They are kept; see the block immediately below.
 // ─────────────────────────────────────────────────────────────────────────────
-
-/// Flash Trade (Perpetuals) program
-/// Base58: FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn
-pub const FLASH_TRADE_PROGRAM: Pubkey = Pubkey::new_from_array([
-    212, 236, 82, 74, 222, 71, 209, 50, 127, 252, 246, 137, 90, 104, 93, 148, 41, 240, 55, 144,
-    196, 35, 87, 71, 243, 123, 215, 163, 221, 165, 30, 221,
-]);
-
-/// Jupiter Lend program (wraps deposits/withdrawals)
-/// Base58: JLend2fEim9xUFcaHsyGePEoBzFLvkjMi3MnPcSuCdu
-pub const JUPITER_LEND_PROGRAM: Pubkey = Pubkey::new_from_array([
-    4, 113, 24, 1, 43, 4, 76, 56, 240, 98, 104, 189, 87, 231, 52, 36, 154, 118, 168, 157, 132, 58,
-    30, 222, 238, 9, 26, 161, 252, 73, 18, 120,
-]);
-
-/// Jupiter Earn program (on-chain deposit/withdraw target)
-/// Base58: jup3YeL8QhtSx1e253b2FDvsMNC87fDrgQZivbrndc9
-pub const JUPITER_EARN_PROGRAM: Pubkey = Pubkey::new_from_array([
-    10, 254, 27, 145, 46, 72, 94, 149, 253, 21, 235, 41, 55, 223, 252, 75, 55, 163, 22, 208, 166,
-    56, 18, 255, 2, 186, 73, 180, 198, 193, 141, 30,
-]);
-
-/// Jupiter Borrow/Vaults program
-/// Base58: jupr81YtYssSyPt8jbnGuiWon5f6x9TcDEFxYe3Bdzi
-pub const JUPITER_BORROW_PROGRAM: Pubkey = Pubkey::new_from_array([
-    10, 254, 31, 147, 34, 167, 161, 209, 195, 102, 29, 103, 23, 145, 202, 155, 48, 211, 32, 47, 30,
-    31, 214, 135, 58, 119, 204, 220, 113, 143, 17, 51,
-]);
 
 // --- Async-fulfillment programs (C4 audit fix) ---
 //

@@ -913,24 +913,33 @@ pub fn handler(
                 ScanAction::PassedSharedChecks => {
                     // === SPENDING-ONLY CHECKS (must remain inline) ===
 
-                    // Recognized DeFi: protocol mismatch + defi_ix_count.
-                    // JUPITER_PROGRAM removed in Phase 1 (Option A demolition) —
-                    // Jupiter V6 swaps are no longer special-cased on-chain.
-                    // Slippage enforcement against `policy.max_slippage_bps` is
-                    // delegated to off-chain SDK simulators or generic
-                    // post-execution assertions (Phase 6).
-                    let is_recognized_defi = ix.program_id == FLASH_TRADE_PROGRAM
-                        || ix.program_id == JUPITER_LEND_PROGRAM
-                        || ix.program_id == JUPITER_EARN_PROGRAM
-                        || ix.program_id == JUPITER_BORROW_PROGRAM;
-
-                    if is_recognized_defi {
-                        require!(
-                            ix.program_id == target_protocol,
-                            SigilError::ProtocolMismatch
-                        );
-                        defi_ix_count = defi_ix_count.saturating_add(1);
-                    }
+                    // M1 (is_recognized_defi removal, 2026-05-31): ANY
+                    // instruction reaching PassedSharedChecks is a foreign DeFi
+                    // instruction — it already cleared the protocol allowlist,
+                    // the SPL / Token-2022 dangerous-opcode blocks, and (when
+                    // present) generic constraints, and is neither infrastructure
+                    // (ComputeBudget/System) nor finalize. Treat EVERY such
+                    // instruction AGNOSTICALLY: enforce target_protocol
+                    // consistency and count it toward the single-DeFi-ix limit.
+                    //
+                    // Previously these two checks fired only for FOUR hardcoded
+                    // program IDs (FLASH_TRADE / JUPITER_LEND / JUPITER_EARN /
+                    // JUPITER_BORROW); every OTHER allowlisted protocol (Orca,
+                    // Raydium, Kamino, …) reached this arm UNCOUNTED and
+                    // UNCHECKED — silently exempt from the "exactly one DeFi
+                    // instruction per session" invariant and the authorized-
+                    // target match. That protocol-specific favoritism is removed;
+                    // the invariants now apply uniformly.
+                    //
+                    // JUPITER_PROGRAM swap parsing was removed in Phase 1 (Option
+                    // A demolition); slippage enforcement against
+                    // `policy.max_slippage_bps` is delegated to off-chain SDK
+                    // simulators or generic post-execution assertions (Phase 6).
+                    require!(
+                        ix.program_id == target_protocol,
+                        SigilError::ProtocolMismatch
+                    );
+                    defi_ix_count = defi_ix_count.saturating_add(1);
 
                     // Phase 2 TA-02: wire allowed_destinations enforcement into
                     // BOTH spending paths (stablecoin input AND non-stablecoin

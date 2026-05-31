@@ -304,6 +304,15 @@ describe("sandwich-integration (Phase 6.1)", () => {
     perRecipientDailyCapUsd?: BN;
     allowedDestinations?: PublicKey[];
     depositAmount?: BN; // default 600 USDC
+    /**
+     * Extra program IDs to add to the policy protocol allowlist (in ADDITION
+     * to MOCK_DEFI_PROGRAM_ID). Used by the M1 ProtocolMismatch test, which
+     * needs a second allowlisted program to set as target_protocol while the
+     * executed DeFi ix targets MOCK_DEFI. These extras are NOT given
+     * constraint entries (they are never executed — only used as the
+     * authorized target value).
+     */
+    extraProtocols?: PublicKey[];
   }
 
   /**
@@ -319,6 +328,12 @@ describe("sandwich-integration (Phase 6.1)", () => {
     const perRecipientCap = opts.perRecipientDailyCapUsd ?? new BN(0);
     const allowedDestinations = opts.allowedDestinations ?? [];
     const depositAmount = opts.depositAmount ?? new BN(600_000_000); // 600 USDC
+    // Protocol allowlist = MOCK_DEFI plus any caller-supplied extras (M1
+    // ProtocolMismatch test needs a 2nd allowlisted program to use as
+    // target_protocol while executing a MOCK_DEFI ix). Same list must feed
+    // both the initializeVault arg AND the preview digest, or the digest
+    // mismatches (PolicyPreviewMismatch 6080).
+    const protocols = [MOCK_DEFI_PROGRAM_ID, ...(opts.extraProtocols ?? [])];
 
     const [vault] = PublicKey.findProgramAddressSync(
       [
@@ -370,7 +385,7 @@ describe("sandwich-integration (Phase 6.1)", () => {
         new BN(500_000_000_000), // 500K USDC daily cap (large; cap not under test here)
         new BN(100_000_000_000), // 100K USDC max-tx (large; not under test)
         1, // protocolMode = ALLOWLIST
-        [MOCK_DEFI_PROGRAM_ID],
+        protocols,
         0, // developer fee rate
         100, // max slippage bps
         new BN(1800), // timelock duration
@@ -388,7 +403,7 @@ describe("sandwich-integration (Phase 6.1)", () => {
           maxTransactionSizeUsd: new BN(100_000_000_000),
           maxSlippageBps: 100,
           protocolMode: 1,
-          protocols: [MOCK_DEFI_PROGRAM_ID],
+          protocols,
           allowedDestinations,
           timelockDuration: new BN(1800),
           createdAtSlot,
@@ -585,12 +600,22 @@ describe("sandwich-integration (Phase 6.1)", () => {
       isSigner: boolean;
       isWritable: boolean;
     }[];
+    /**
+     * Override the authorized `target_protocol`. Defaults to
+     * MOCK_DEFI_PROGRAM_ID (the program the executed DeFi ix targets). The M1
+     * ProtocolMismatch test sets this to a DIFFERENT allowlisted program so
+     * the executed MOCK_DEFI ix (program_id != target_protocol) trips
+     * ProtocolMismatch. Both the intent digest and the ix arg use this value
+     * so the AL3 intent-digest check passes and the mismatch is reached.
+     */
+    targetProtocolOverride?: PublicKey;
   }
 
   async function buildValidateIx(
     opts: SandwichOpts,
   ): Promise<TransactionInstruction> {
     const { ctx, amount } = opts;
+    const targetProtocol = opts.targetProtocolOverride ?? MOCK_DEFI_PROGRAM_ID;
     const [sessionPda] = PublicKey.findProgramAddressSync(
       [
         Buffer.from("session"),
@@ -614,14 +639,14 @@ describe("sandwich-integration (Phase 6.1)", () => {
       agent: ctx.agent.publicKey,
       tokenMint: DEVNET_USDC_MINT,
       amount,
-      targetProtocol: MOCK_DEFI_PROGRAM_ID,
+      targetProtocol,
     });
 
     let builder = program.methods
       .validateAndAuthorize(
         DEVNET_USDC_MINT,
         amount,
-        MOCK_DEFI_PROGRAM_ID,
+        targetProtocol,
         policyVersion,
         new BN(0),
         Array.from(intentDigest),
@@ -1060,6 +1085,132 @@ describe("sandwich-integration (Phase 6.1)", () => {
         expect.fail("Expected TA-14 per-recipient cap to revert");
       } catch (err: any) {
         expectSigilError(err, { name: "ErrRecipientCapExceeded" });
+      }
+    });
+  });
+
+  // ─── M1: defi_ix_count + ProtocolMismatch apply to ALL allowlisted
+  //         protocols (is_recognized_defi hardcoding removed) ───────────────
+  //
+  // Before the M1 `is_recognized_defi` removal, the spending-scan loop in
+  // validate_and_authorize.rs only incremented `defi_ix_count` and enforced
+  // the `ix.program_id == target_protocol` (ProtocolMismatch) check for FOUR
+  // hardcoded program IDs (FLASH_TRADE / JUPITER_LEND / JUPITER_EARN /
+  // JUPITER_BORROW). Any OTHER allowlisted protocol (here: MOCK_DEFI, which is
+  // exactly such a non-hardcoded but allowlisted program) reached
+  // ScanAction::PassedSharedChecks but was NOT counted and NOT mismatch-checked.
+  //
+  // Consequence (the latent gap these tests pin):
+  //   1. The "exactly one DeFi instruction per session" invariant silently did
+  //      NOT apply — two MOCK_DEFI instructions in one sandwich both passed.
+  //   2. The target_protocol consistency check was skipped — a sandwich could
+  //      authorize target=A and execute a different allowlisted program with no
+  //      ProtocolMismatch.
+  //
+  // After the fix (any instruction reaching PassedSharedChecks is treated as a
+  // DeFi instruction → counted + mismatch-checked), both behaviors apply to
+  // EVERY allowlisted protocol, agnostically. These tests FAIL on the
+  // pre-fix code (the bundles erroneously succeed) and PASS after the fix.
+  describe("M1: single-DeFi-ix limit applies to all allowlisted protocols", () => {
+    it("rejects two DeFi instructions from one allowlisted protocol with TooManyDeFiInstructions (6033)", async () => {
+      // MOCK_DEFI is allowlisted (freshVault wires it into policy.protocols)
+      // but is NOT one of the 4 hardcoded is_recognized_defi programs — so it
+      // is the exact case the pre-fix code failed to count.
+      //
+      // Two no-op mock-defi instructions between validate and finalize. Both
+      // are non-spending no-ops (no balance movement), so nothing else in the
+      // sandwich rejects them — the ONLY thing that should stop this bundle is
+      // the defi_ix_count limit. amount=0 keeps this on the non-spending-value
+      // path's sibling logic but is_spending is driven by amount; we use a
+      // non-zero amount so the spending scan (which holds defi_ix_count) runs.
+      const ctx = await freshVault();
+
+      const sandwichOpts: SandwichOpts = {
+        ctx,
+        amount: new BN(1_000_000), // 1 USDC — drives is_spending = true
+        validateRemainingAccounts: [
+          { pubkey: ctx.constraintsPda, isSigner: false, isWritable: false },
+        ],
+      };
+
+      const validateIx = await buildValidateIx(sandwichOpts);
+      const defiIx1 = buildMockDefiNoopIx(ctx.agent.publicKey);
+      const defiIx2 = buildMockDefiNoopIx(ctx.agent.publicKey);
+      const finalizeIx = await buildFinalizeIx(sandwichOpts);
+
+      try {
+        sendVersionedTx(
+          svm,
+          [validateIx, defiIx1, defiIx2, finalizeIx],
+          ctx.agent,
+        );
+        expect.fail(
+          "Expected TooManyDeFiInstructions — two DeFi ixs from an allowlisted protocol must be rejected",
+        );
+      } catch (err: any) {
+        expectSigilError(err, { name: "TooManyDeFiInstructions" });
+      }
+    });
+
+    it("accepts a single DeFi instruction from an allowlisted protocol (regression)", async () => {
+      // The fix must NOT break the legitimate single-DeFi-ix sandwich. One
+      // no-op mock-defi ix between validate and finalize must still succeed.
+      const ctx = await freshVault();
+
+      const sandwichOpts: SandwichOpts = {
+        ctx,
+        amount: new BN(1_000_000),
+        validateRemainingAccounts: [
+          { pubkey: ctx.constraintsPda, isSigner: false, isWritable: false },
+        ],
+      };
+
+      const validateIx = await buildValidateIx(sandwichOpts);
+      const defiIx = buildMockDefiNoopIx(ctx.agent.publicKey);
+      const finalizeIx = await buildFinalizeIx(sandwichOpts);
+
+      // Should NOT throw — a single allowlisted DeFi ix is the canonical path.
+      sendVersionedTx(svm, [validateIx, defiIx, finalizeIx], ctx.agent);
+    });
+
+    it("rejects a DeFi ix whose program != authorized target_protocol with ProtocolMismatch (6034)", async () => {
+      // The OTHER half of the M1 fix: the target_protocol consistency check now
+      // applies to EVERY allowlisted DeFi ix, not just the 4 former hardcoded
+      // programs. Pre-fix, authorizing target=B (a non-hardcoded allowlisted
+      // program) while executing a MOCK_DEFI ix slipped through unchecked
+      // because MOCK_DEFI wasn't is_recognized_defi. After the fix, the
+      // executed MOCK_DEFI ix (program_id != target_protocol) must trip
+      // ProtocolMismatch.
+      //
+      // Setup: allowlist a SECOND program (otherProtocol) alongside MOCK_DEFI,
+      // authorize the session against otherProtocol, then execute a MOCK_DEFI
+      // no-op. otherProtocol is never executed — it only serves as the
+      // authorized-but-mismatched target. Both programs are on the allowlist,
+      // so the failure is specifically the target mismatch (not
+      // ProtocolNotAllowed).
+      const otherProtocol = Keypair.generate().publicKey;
+      const ctx = await freshVault({ extraProtocols: [otherProtocol] });
+
+      const sandwichOpts: SandwichOpts = {
+        ctx,
+        amount: new BN(1_000_000), // drives is_spending = true
+        targetProtocolOverride: otherProtocol, // authorize target = B …
+        validateRemainingAccounts: [
+          { pubkey: ctx.constraintsPda, isSigner: false, isWritable: false },
+        ],
+      };
+
+      const validateIx = await buildValidateIx(sandwichOpts);
+      const defiIx = buildMockDefiNoopIx(ctx.agent.publicKey); // … but execute MOCK_DEFI
+      const finalizeIx = await buildFinalizeIx(sandwichOpts);
+
+      try {
+        sendVersionedTx(svm, [validateIx, defiIx, finalizeIx], ctx.agent);
+        expect.fail(
+          "Expected ProtocolMismatch — executed DeFi ix program must equal authorized target_protocol",
+        );
+      } catch (err: any) {
+        expectSigilError(err, { name: "ProtocolMismatch" });
       }
     });
   });
