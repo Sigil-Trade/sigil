@@ -74,6 +74,9 @@ const STANDARD_INIT_TIMELOCK = new BN(1800);
 // Mirrors PendingOwnershipTransfer::DEFAULT_MIN_DELAY (48h).
 const DEFAULT_MIN_DELAY = 172_800;
 
+// Mirrors reactivate_vault.rs REACTIVATE_COOLDOWN_SECONDS (5-min C28 cooldown).
+const REACTIVATE_COOLDOWN_SECONDS = 300;
+
 // CAPABILITY_OPERATOR (mirrors AgentCapability::Operator) — required for the
 // LBL-01 spending tests because validate_and_authorize / agent_transfer both
 // gate on has_capability(.., is_spending=true).
@@ -1264,5 +1267,187 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
     expect(caughtCode, "EOA accept of multisig pending MUST reject").to.not.be
       .null;
     expect(caughtCode).to.equal(6104); // ErrPendingOwnershipNotReady
+  });
+
+  // ===========================================================================
+  // M1-02: freeze is terminal — cannot accept ownership on a frozen vault.
+  //
+  // Threat: a phished owner-key attacker queues an ownership transfer, then the
+  // real owner freezes the vault. Without the status==Active gate at the head of
+  // accept_ownership_transfer, the attacker could wait out the 48h timelock and
+  // `accept` on the frozen vault, stealing ownership despite the kill-switch.
+  // The gate (require!(status == Active, VaultNotActive) === 6000) makes freeze
+  // terminal for the accept path.
+  // ===========================================================================
+  describe("M1-02: freeze is terminal — cannot accept ownership on a frozen vault", () => {
+    // 1. EXPLOIT-BLOCKED — initiate → freeze → advance past timelock → accept
+    //    MUST reject 6000 (VaultNotActive), and vault.owner MUST be unchanged.
+    it("EXPLOIT-BLOCKED: accept on a frozen vault after timelock → reject 6000, owner unchanged", async () => {
+      const { vault, policy, auditSuccess, pendingOwner } = await initVault(
+        new BN(9500),
+      );
+      const newOwner = Keypair.generate();
+      airdropSol(svm, newOwner.publicKey, 1 * LAMPORTS_PER_SOL);
+      const originalOwner = owner.publicKey;
+
+      // ACT 1 — initiate (vault still Active).
+      await program.methods
+        .initiateOwnershipTransfer(newOwner.publicKey, false)
+        .accounts({
+          owner: owner.publicKey,
+          vault,
+          policy,
+          pending: pendingOwner,
+          auditLogSuccess: auditSuccess,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .rpc();
+
+      // ACT 2 — real owner freezes the vault (kill-switch).
+      await program.methods
+        .freezeVault()
+        .accounts({ owner: owner.publicKey, vault } as any)
+        .rpc();
+
+      // ACT 3 — advance past the full timelock and attempt the attacker accept.
+      advanceTime(svm, DEFAULT_MIN_DELAY);
+      let caughtCode: number | null = null;
+      try {
+        await program.methods
+          .acceptOwnershipTransfer()
+          .accounts({
+            newOwner: newOwner.publicKey,
+            vault,
+            policy,
+            pending: pendingOwner,
+            auditLogSuccess: auditSuccess,
+            systemProgram: SystemProgram.programId,
+          } as any)
+          .signers([newOwner])
+          .rpc();
+      } catch (err: any) {
+        caughtCode = err?.error?.errorCode?.number ?? null;
+      }
+
+      // ASSERT — accept rejected with VaultNotActive (6000), and the freeze held:
+      // vault.owner is STILL the original owner, not the attacker's newOwner, and
+      // the pending PDA survives (accept never executed → close never ran).
+      expect(caughtCode, "frozen-vault accept MUST reject 6000").to.equal(6000);
+      const vaultState = await program.account.agentVault.fetch(vault);
+      expect(vaultState.owner.toString()).to.equal(originalOwner.toString());
+      expect(vaultState.owner.toString()).to.not.equal(
+        newOwner.publicKey.toString(),
+      );
+      expect(accountExists(svm, pendingOwner)).to.equal(true);
+    });
+
+    // 2. REGRESSION — the gate must NOT break the happy path: accept on an
+    //    ACTIVE vault after the timelock still succeeds and transfers ownership.
+    it("REGRESSION: accept on an active vault after timelock → success, owner transfers", async () => {
+      const { vault, policy, auditSuccess, pendingOwner } = await initVault(
+        new BN(9501),
+      );
+      const newOwner = Keypair.generate();
+      airdropSol(svm, newOwner.publicKey, 1 * LAMPORTS_PER_SOL);
+
+      await program.methods
+        .initiateOwnershipTransfer(newOwner.publicKey, false)
+        .accounts({
+          owner: owner.publicKey,
+          vault,
+          policy,
+          pending: pendingOwner,
+          auditLogSuccess: auditSuccess,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .rpc();
+
+      // No freeze — vault stays Active.
+      advanceTime(svm, DEFAULT_MIN_DELAY);
+      await program.methods
+        .acceptOwnershipTransfer()
+        .accounts({
+          newOwner: newOwner.publicKey,
+          vault,
+          policy,
+          pending: pendingOwner,
+          auditLogSuccess: auditSuccess,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .signers([newOwner])
+        .rpc();
+
+      const vaultState = await program.account.agentVault.fetch(vault);
+      expect(vaultState.owner.toString()).to.equal(
+        newOwner.publicKey.toString(),
+      );
+      expect(accountExists(svm, pendingOwner)).to.equal(false);
+    });
+
+    // 3. REACTIVATION — freeze is terminal for the FROZEN window, but the owner
+    //    can lawfully reactivate (after the 5-min C28 cooldown) and THEN the
+    //    accept succeeds. reactivate_vault requires status==Frozen + elapsed >=
+    //    REACTIVATE_COOLDOWN_SECONDS (300s), and (soft-lock guard, handler §5)
+    //    the vault must have >=1 agent after the call — so reactivate must graft
+    //    one. We use VIEWER_CAPABILITY (1): the FULL_CAPABILITY (2) cosign gate
+    //    fires only for capability==2, so a viewer agent reactivates with just
+    //    { owner, vault } and no remaining-accounts cosigner.
+    it("REACTIVATION: freeze → reactivate (after cooldown) → accept → success", async () => {
+      const { vault, policy, auditSuccess, pendingOwner } = await initVault(
+        new BN(9502),
+      );
+      const newOwner = Keypair.generate();
+      airdropSol(svm, newOwner.publicKey, 1 * LAMPORTS_PER_SOL);
+
+      // Initiate, then freeze.
+      await program.methods
+        .initiateOwnershipTransfer(newOwner.publicKey, false)
+        .accounts({
+          owner: owner.publicKey,
+          vault,
+          policy,
+          pending: pendingOwner,
+          auditLogSuccess: auditSuccess,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .rpc();
+
+      await program.methods
+        .freezeVault()
+        .accounts({ owner: owner.publicKey, vault } as any)
+        .rpc();
+
+      // Advance past the C28 reactivate cooldown (300s) with margin, then
+      // reactivate — grafting one VIEWER agent to satisfy the no-empty-agents
+      // soft-lock guard (NoAgentRegistered 6011 otherwise).
+      const VIEWER_CAPABILITY = 1;
+      const reactivateAgent = Keypair.generate();
+      advanceTime(svm, REACTIVATE_COOLDOWN_SECONDS + 60);
+      await program.methods
+        .reactivateVault(reactivateAgent.publicKey, VIEWER_CAPABILITY)
+        .accounts({ owner: owner.publicKey, vault } as any)
+        .rpc();
+
+      // Advance the remaining timelock window and accept — now Active again.
+      advanceTime(svm, DEFAULT_MIN_DELAY);
+      await program.methods
+        .acceptOwnershipTransfer()
+        .accounts({
+          newOwner: newOwner.publicKey,
+          vault,
+          policy,
+          pending: pendingOwner,
+          auditLogSuccess: auditSuccess,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .signers([newOwner])
+        .rpc();
+
+      const vaultState = await program.account.agentVault.fetch(vault);
+      expect(vaultState.owner.toString()).to.equal(
+        newOwner.publicKey.toString(),
+      );
+      expect(accountExists(svm, pendingOwner)).to.equal(false);
+    });
   });
 });

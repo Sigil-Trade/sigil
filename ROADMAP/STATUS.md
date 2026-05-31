@@ -24,8 +24,9 @@
 | Item | Status | PR | Notes |
 |---|---|---|---|
 | M1-00 baseline | **DONE** | (branch commits) | green 148/2/0; tree clean; churn stashed |
-| M1-01 HIGH destination-allowlist | PLANNED | — | — |
-| M1-02 HIGH frozen-accept | PLANNED | — | — |
+| M1-agnostic-protocol (`is_recognized_defi` removal) | **DONE** | `e94ba539` | adversarial review PASSED 2026-05-31 (no blocking; 6/6 vectors disproven); defi_ix_count + ProtocolMismatch now agnostic to all allowlisted protocols; 3 tests; suite 9/9 + 148/2/0 |
+| M1-01 HIGH destination-allowlist | PLANNED | — | design decision A/B/A+B still open |
+| M1-02 HIGH frozen-accept | **DONE** | — | both accept-handler gates applied (EOA :118, MS :136); 4 tests (3 single-sig 9500/01/02 + 1 multisig 9300); GREEN: ownership-transfer.ts 18/0, ownership-transfer-multisig.ts 6/0, all 4 M1-02 ✔; RED-proven load-bearing (gates git-stashed while UNCOMMITTED → exactly the 2 EXPLOIT-BLOCKED tests fail "null≠6000"; REGRESSION+REACTIVATION stay green); adversarial review PASSED (no blocking; complete owner-mutation surface; freeze_helper sets vault.status=Frozen which the gate reads); build+IDL clean |
 | M1-03 systemic frozen-gate | PLANNED | — | — |
 | M1-04 constraints teardown | PLANNED | — | — |
 | M1-05 promote agnostic primitives | PLANNED | — | — |
@@ -40,6 +41,14 @@
 | M2-03 integrity assertions | DESIGN | design-level | — |
 | M2-04 balance-delta metering | DESIGN | design-level | — |
 | M2-05 universal slippage (stable/round-trip) | DESIGN | design-level | — |
+
+## Test-suite reality (measured 2026-05-31 — CORRECTS the "148/2/0" baseline)
+- **`anchor test` is NOT the full suite.** Its `[scripts] test` runs only 4 files (sigil, jupiter-integration, flash-trade-integration, missing-coverage) → 148/2/0. CI's `test:onchain:full` is broader but STILL deliberately excludes `tests/instruction-constraints.ts` (`ci.yml:417` note). So "148/2/0 green" never exercised the constraints/audit/cu-budget suites.
+- **Full LiteSVM run (24 top-level files, excl. devnet*/surfpool* which need live infra): 544 passing / 12 failing / 5 pending.** The 12 failures are PRE-EXISTING (reproduce identically 78/12 on clean HEAD `e94ba539` with all M1-02 work stashed) and TEST-ONLY — none are vulnerabilities, none caused by M1-02:
+  - **10 × instruction-constraints** — `AccountOwnedByWrongProgram (3007)` at multi-step PDA-alloc setup + `InvalidConstraintConfig 6037` + `RangeError encoding overruns`. KNOWN: documented in `ci.yml:417` + `docs/revamp/AUDIT_2026_05_19_DC/CLOSURE.md` as a test-setup bug. This is the constraints engine → **deleted in M1-04; do NOT fix these tests, they go away.**
+  - **1 × cu-budget** "ComputeBudget×28 pad" — `RangeError: encoding overruns Uint8Array` at client serialization (oversized tx >1232B). Test-only.
+  - **1 × audit-log** "slot/blockhash read FRESH" — STALE TEST: calls `reactivateVault(agent, FULL_CAPABILITY)` with no cosigner, hits `ErrReactivateCosignRequiredForFullCapability (6114)` (the D-5/NH-1 gate). Fix scheduled as its own small commit (add cosigner or use VIEWER cap).
+- **M1 EXIT gate must redefine "green"** = the real full suite, with the 10 constraints failures resolved by M1-04 teardown (not patched) and the 2 stale/oversized test bugs fixed.
 
 ## Open decisions to lock at each item's design-review
 - M1-01: fix approach A / B / A+B (default B)

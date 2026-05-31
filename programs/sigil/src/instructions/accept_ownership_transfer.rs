@@ -105,6 +105,20 @@ pub struct AcceptOwnershipTransfer<'info> {
 pub fn handler(ctx: Context<AcceptOwnershipTransfer>) -> Result<()> {
     crate::reject_cpi!();
 
+    // M1-02 (kill-switch terminality, 2026-05-31): a frozen/closed vault MUST
+    // NOT have ownership accepted. Without this gate, freeze is not terminal —
+    // an attacker who phished the owner key and queued a transfer could be
+    // frozen out by the real owner, then simply wait out the 48h timelock and
+    // `accept` on the FROZEN vault to take ownership (freeze does not pause the
+    // timelock). Status check FIRST so the operator sees `VaultNotActive` (the
+    // diagnostic answer), mirroring `initiate_ownership_transfer` ISC-130. The
+    // owner must `reactivate_vault` before any accept can proceed; that
+    // reactivation is the deliberate, owner-authorized decision point.
+    require!(
+        ctx.accounts.vault.status == VaultStatus::Active,
+        SigilError::VaultNotActive,
+    );
+
     // Defense-in-depth: bind the signer to the queued target exactly. Anchor
     // already enforces `pending.bump` + PDA seeds, but this surfaces the
     // intent at the handler level and gives a precise error code (6104

@@ -125,6 +125,18 @@ pub struct AcceptOwnershipTransferMultisig<'info> {
 pub fn handler(ctx: Context<AcceptOwnershipTransferMultisig>) -> Result<()> {
     crate::reject_cpi!();
 
+    // M1-02 (kill-switch terminality, 2026-05-31): a frozen/closed vault MUST
+    // NOT have ownership accepted — identical rationale to the EOA accept
+    // handler. Freeze does not pause the 48h timelock, so without this gate a
+    // phished-then-frozen vault could still be taken over once the timelock
+    // elapses. Status check FIRST so the operator sees `VaultNotActive`,
+    // mirroring `initiate_ownership_transfer` ISC-130. Only the owner's
+    // deliberate `reactivate_vault` can unblock an accept.
+    require!(
+        ctx.accounts.vault.status == VaultStatus::Active,
+        SigilError::VaultNotActive,
+    );
+
     // 1. Authority binding gate A — multisig PDA owner program check.
     //    The supplied multisig PDA MUST be owned by the Squads V4 program;
     //    any other owner (SystemProgram, attacker-deployed program, etc.) is

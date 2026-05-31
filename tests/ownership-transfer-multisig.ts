@@ -490,4 +490,72 @@ describe("ownership-transfer-multisig (Phase 8 Batch 4 — Squads V4 accept)", (
 
     expect(accountExists(svm, pendingOwner)).to.equal(true);
   });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // M1-02: freeze is terminal on the multisig accept path too.
+  //
+  // Mirror of the single-sig EXPLOIT-BLOCKED test for the Squads V4 multisig
+  // accept handler. A phished owner queues a multisig-target transfer, the real
+  // owner freezes, and the attacker waits out the 48h timelock. The status==Active
+  // gate at the head of accept_ownership_transfer_multisig
+  // (require!(status == Active, VaultNotActive) === 6000) must reject the accept,
+  // leaving vault.owner unchanged and the pending PDA intact.
+  // ───────────────────────────────────────────────────────────────────────────
+  it("M1-02 EXPLOIT-BLOCKED: multisig accept on a frozen vault after timelock → reject 6000, owner unchanged", async () => {
+    const { vault, policy, auditSuccess, pendingOwner } = await initVault(
+      new BN(9300),
+    );
+    const originalOwner = owner.publicKey;
+    const mockMultisig = forgeMockMultisig(svm, SQUADS_V4_PROGRAM_ID);
+
+    // ACT 1 — initiate with is_multisig_target=true (vault still Active).
+    await program.methods
+      .initiateOwnershipTransfer(mockMultisig, true)
+      .accounts({
+        owner: owner.publicKey,
+        vault,
+        policy,
+        pending: pendingOwner,
+        auditLogSuccess: auditSuccess,
+        systemProgram: SystemProgram.programId,
+      } as any)
+      .rpc();
+
+    // ACT 2 — real owner freezes the vault (kill-switch).
+    await program.methods
+      .freezeVault()
+      .accounts({ owner: owner.publicKey, vault } as any)
+      .rpc();
+
+    // ACT 3 — advance past the full timelock and attempt the multisig accept.
+    advanceTime(svm, DEFAULT_MIN_DELAY);
+    let caughtCode: number | null = null;
+    try {
+      await program.methods
+        .acceptOwnershipTransferMultisig()
+        .accounts({
+          multisigPda: mockMultisig,
+          vault,
+          policy,
+          pending: pendingOwner,
+          auditLogSuccess: auditSuccess,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .rpc();
+    } catch (err: any) {
+      caughtCode = err?.error?.errorCode?.number ?? null;
+    }
+
+    // ASSERT — accept rejected with VaultNotActive (6000); freeze held:
+    // vault.owner is STILL the original owner, not the multisig PDA, and the
+    // pending PDA survives (accept never executed).
+    expect(
+      caughtCode,
+      "frozen-vault multisig accept MUST reject 6000",
+    ).to.equal(6000);
+    const vaultState = await program.account.agentVault.fetch(vault);
+    expect(vaultState.owner.toString()).to.equal(originalOwner.toString());
+    expect(vaultState.owner.toString()).to.not.equal(mockMultisig.toString());
+    expect(accountExists(svm, pendingOwner)).to.equal(true);
+  });
 });
