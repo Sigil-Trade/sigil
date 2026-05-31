@@ -64,6 +64,16 @@ pub fn handler(
         SigilError::VaultAlreadyClosed
     );
 
+    // M1-03 (systemic frozen-gate, 2026-05-31): a frozen vault MUST NOT accept a
+    // newly-staged agent-permissions update. Staging an escalation during a
+    // freeze is ADDITIVE — gate queue AND apply (defense in depth). Owner
+    // reactivates (deliberate) before queuing. Frozen surfaces VaultNotActive;
+    // Closed is rejected above with its own diagnostic.
+    require!(
+        vault.status != VaultStatus::Frozen,
+        SigilError::VaultNotActive
+    );
+
     // Timelock must be configured (always true now with MIN_TIMELOCK_DURATION)
     require!(
         policy.timelock_duration > 0,

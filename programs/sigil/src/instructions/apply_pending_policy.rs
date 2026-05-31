@@ -100,6 +100,18 @@ pub struct ApplyPendingPolicy<'info> {
 pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
     crate::reject_cpi!();
 
+    // M1-03 (systemic frozen-gate, 2026-05-31): a queued policy update MUST NOT
+    // apply to a frozen/closed vault. freeze_vault does not pause this timelock,
+    // so without this gate an attacker-staged change (e.g. a cap-raise queued
+    // before the owner froze in suspicion of compromise) would land the moment
+    // the timelock elapses, defeating "freeze halts all churn". Applying a
+    // staged change is ADDITIVE — gated. The owner's deliberate reactivate_vault
+    // is the only path back to applying staged updates. Mirrors apply_agent_grant.
+    require!(
+        ctx.accounts.vault.status == VaultStatus::Active,
+        SigilError::VaultNotActive
+    );
+
     let clock = Clock::get()?;
     let pending = &ctx.accounts.pending_policy;
 

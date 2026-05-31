@@ -101,6 +101,16 @@ pub fn handler(
         vault.status != VaultStatus::Closed,
         SigilError::VaultAlreadyClosed
     );
+    // M1-03 (systemic frozen-gate, 2026-05-31): a frozen vault MUST NOT accept a
+    // NEW agent. Registering an agent is ADDITIVE (it grants execution authority
+    // to a new key) — exactly what a freeze is meant to halt, and what a phished
+    // owner key could abuse. Removing/pausing an agent (revoke_agent,
+    // pause_agent) stays allowed while frozen; only the additive direction is
+    // gated. Closed is rejected above with its own diagnostic.
+    require!(
+        vault.status != VaultStatus::Frozen,
+        SigilError::VaultNotActive
+    );
     // Phase 2 TA-04: reserved capability values 3..=255 explicitly rejected.
     // Replaces prior silent zero-coerce behaviour in `has_capability`.
     require!(capability <= FULL_CAPABILITY, SigilError::InvalidCapability);

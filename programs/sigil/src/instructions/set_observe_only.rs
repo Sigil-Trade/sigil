@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 
 use crate::errors::SigilError;
 use crate::events::ObserveOnlyChanged;
-use crate::state::{AgentVault, PolicyConfig};
+use crate::state::{AgentVault, PolicyConfig, VaultStatus};
 use crate::utils::policy_digest::{
     compute_agent_set_hash, compute_policy_preview_digest, PolicyPreviewFields,
 };
@@ -49,6 +49,19 @@ pub fn handler(ctx: Context<SetObserveOnly>, new_value: bool) -> Result<()> {
     crate::reject_cpi!();
     let vault = &mut ctx.accounts.vault;
     let policy = &mut ctx.accounts.policy;
+
+    // M1-03 (systemic frozen-gate, 2026-05-31): only the ADDITIVE direction is
+    // gated, consistent with the cosign gate below. Flipping observe_only OFF
+    // (new_value == false) makes the vault executable — that must not happen on a
+    // frozen/closed vault (a phished owner key could re-arm execution during a
+    // freeze). Flipping observe_only ON (making the vault inert) is DEFENSIVE and
+    // stays allowed while frozen so the owner can further lock down mid-freeze.
+    if !new_value {
+        require!(
+            vault.status == VaultStatus::Active,
+            SigilError::VaultNotActive
+        );
+    }
 
     // P0.1 PEN-8b interim cosign gate (audit 2026-05-19).
     //

@@ -73,10 +73,20 @@ pub fn handler(ctx: Context<UnpauseAgent>, agent_to_unpause: Pubkey) -> Result<(
 
     let vault = &mut ctx.accounts.vault;
 
-    // Works on Active or Frozen vaults (not Closed)
     require!(
         vault.status != VaultStatus::Closed,
         SigilError::VaultAlreadyClosed
+    );
+
+    // M1-03 (systemic frozen-gate, 2026-05-31): a frozen vault MUST NOT un-pause
+    // an agent. Un-pausing is ADDITIVE — it restores an agent's execution
+    // capability, which a freeze is meant to halt and a phished owner key could
+    // abuse to re-enable a suspended agent. The defensive inverse (pause_agent)
+    // stays allowed while frozen. (Supersedes the prior "Works on Active or
+    // Frozen" intent for this handler — frozen un-pause is now blocked.)
+    require!(
+        vault.status != VaultStatus::Frozen,
+        SigilError::VaultNotActive
     );
 
     // Find the agent entry

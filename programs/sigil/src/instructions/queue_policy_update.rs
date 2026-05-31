@@ -116,6 +116,18 @@ pub fn handler(
         SigilError::VaultAlreadyClosed
     );
 
+    // M1-03 (systemic frozen-gate, 2026-05-31): a frozen vault MUST NOT accept a
+    // newly-staged policy update. Staging a change during a freeze is ADDITIVE —
+    // it lets a phished owner key pre-position a loosening (e.g. cap-raise) to
+    // apply the moment the vault is reactivated; gate queue AND apply (defense in
+    // depth). A defensive tightening is not lost: the owner reactivates (a
+    // deliberate decision) and then queues. Closed is already rejected above with
+    // its own diagnostic; Frozen surfaces VaultNotActive.
+    require!(
+        vault.status != VaultStatus::Frozen,
+        SigilError::VaultNotActive
+    );
+
     // Timelock must be configured to use queue
     require!(
         policy.timelock_duration > 0,

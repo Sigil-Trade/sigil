@@ -52,6 +52,15 @@ pub fn handler(ctx: Context<PromoteGraylistDestination>, destination: Pubkey) ->
         SigilError::VaultAlreadyClosed
     );
 
+    // M1-03 (systemic frozen-gate, 2026-05-31): a frozen vault MUST NOT promote
+    // (whitelist) a destination. Adding an allowed destination is ADDITIVE — a
+    // phished owner key could whitelist a drain address during a freeze to apply
+    // once reactivated. Gated. Closed is rejected above with its own diagnostic.
+    require!(
+        vault.status != VaultStatus::Frozen,
+        SigilError::VaultNotActive
+    );
+
     // Round 2 V5 MED finding (audit 2026-05-19): interim cosign gate for
     // `promote_graylist_destination`. Without this gate a phished owner
     // on a cosign-opted-in vault could pre-stage a hostile destination

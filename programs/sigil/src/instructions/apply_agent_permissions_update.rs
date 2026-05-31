@@ -72,6 +72,17 @@ pub struct ApplyAgentPermissionsUpdate<'info> {
 pub fn handler(ctx: Context<ApplyAgentPermissionsUpdate>) -> Result<()> {
     crate::reject_cpi!();
 
+    // M1-03 (systemic frozen-gate, 2026-05-31): a queued agent-permissions
+    // update MUST NOT apply to a frozen/closed vault. freeze_vault does not
+    // pause this timelock, so without this gate a staged agent ESCALATION would
+    // land once the timelock elapses, defeating "freeze halts all churn".
+    // Applying a staged permission change is ADDITIVE — gated. Mirrors
+    // apply_agent_grant / apply_pending_policy.
+    require!(
+        ctx.accounts.vault.status == VaultStatus::Active,
+        SigilError::VaultNotActive
+    );
+
     let clock = Clock::get()?;
     let pending = &ctx.accounts.pending_agent_perms;
 
