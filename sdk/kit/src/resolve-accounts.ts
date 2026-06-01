@@ -187,28 +187,6 @@ export async function getAgentOverlayPDA(
   return [pda, bump];
 }
 
-export async function getConstraintsPDA(
-  vault: Address,
-  programAddress: Address = SIGIL_PROGRAM_ADDRESS,
-): Promise<[Address, number]> {
-  const [pda, bump] = await getProgramDerivedAddress({
-    programAddress,
-    seeds: [seedString("constraints"), seedAddress(vault)],
-  });
-  return [pda, bump];
-}
-
-export async function getPendingConstraintsPDA(
-  vault: Address,
-  programAddress: Address = SIGIL_PROGRAM_ADDRESS,
-): Promise<[Address, number]> {
-  const [pda, bump] = await getProgramDerivedAddress({
-    programAddress,
-    seeds: [seedString("pending_constraints"), seedAddress(vault)],
-  });
-  return [pda, bump];
-}
-
 /**
  * Phase 7 — derive PDA for `AuditLogSuccess` at `[b"audit_success", vault]`.
  * Allocated at vault creation, written by every mutating instruction that
@@ -241,22 +219,6 @@ export async function getAuditLogRejectedPDA(
   return [pda, bump];
 }
 
-/**
- * Derive PDA for pending CLOSE constraints (queue_close_constraints).
- * Seed: "pending_close_constraints" — NOT the same as "pending_constraints" (which is for updates).
- * See close_vault.rs:127.
- */
-export async function getPendingCloseConstraintsPDA(
-  vault: Address,
-  programAddress: Address = SIGIL_PROGRAM_ADDRESS,
-): Promise<[Address, number]> {
-  const [pda, bump] = await getProgramDerivedAddress({
-    programAddress,
-    seeds: [seedString("pending_close_constraints"), seedAddress(vault)],
-  });
-  return [pda, bump];
-}
-
 // ─── Composite Account Resolution ────────────────────────────────────────────
 
 export interface ResolveAccountsInput {
@@ -265,7 +227,6 @@ export interface ResolveAccountsInput {
   tokenMint: Address;
   outputMint?: Address;
   feeDestination?: Address;
-  hasConstraints?: boolean;
 }
 
 export interface ResolvedAccounts {
@@ -273,7 +234,6 @@ export interface ResolvedAccounts {
   policyPda: Address;
   trackerPda: Address;
   sessionPda: Address;
-  constraintsPda?: Address;
   agentOverlayPda?: Address;
 }
 
@@ -300,14 +260,6 @@ export async function resolveAccounts(
     trackerPda,
     sessionPda,
   };
-
-  if (input.hasConstraints) {
-    const [constraintsPda] = await getConstraintsPDA(
-      input.vault,
-      programAddress,
-    );
-    result.constraintsPda = constraintsPda;
-  }
 
   return result;
 }

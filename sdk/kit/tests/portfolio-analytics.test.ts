@@ -26,7 +26,6 @@ function mockVaultSummary(overrides: any = {}): VaultSummary {
       capRemaining: 600_000_000n,
       capResetsIn: 3600,
       timeToCapAtCurrentRate: null,
-      hasConstraints: false,
       hasTimelock: true,
       timelockDuration: 3600,
       hasPendingPolicyChange: false,

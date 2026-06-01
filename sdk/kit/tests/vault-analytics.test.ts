@@ -28,7 +28,6 @@ function mockState(overrides: any = {}) {
       timelockDuration: 3600n,
       maxSlippageBps: 500,
       hasProtocolCaps: false,
-      hasConstraints: false,
       ...(overrides.policy ?? {}),
     },
     tracker: overrides.tracker ?? null,

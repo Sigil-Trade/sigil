@@ -106,8 +106,6 @@ export {
   getSessionPDA,
   getPendingPolicyPDA,
   getAgentOverlayPDA,
-  getConstraintsPDA,
-  getPendingConstraintsPDA,
   getAuditLogSuccessPDA,
   getAuditLogRejectedPDA,
 } from "./resolve-accounts.js";

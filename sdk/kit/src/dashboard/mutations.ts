@@ -38,7 +38,6 @@ import { AccountRole } from "../kit-adapter.js";
 import {
   getAgentOverlayPDA,
   getPendingPolicyPDA,
-  getPendingCloseConstraintsPDA,
   getPolicyPDA,
 } from "../resolve-accounts.js";
 import { resolveVaultStateForOwner } from "../state-resolver.js";
@@ -523,15 +522,8 @@ export async function closeVault(
     agents.map((agent) => derivePendingAgentPermsPDA(vault, agent.pubkey)),
   );
 
-  const [pendingCloseConstraintsPda] =
-    await getPendingCloseConstraintsPDA(vault);
-
   // Check all PDAs in parallel (E4 fix — batch instead of sequential)
-  const allPdas = [
-    pendingPolicyPda,
-    ...agentPdaDerivations,
-    pendingCloseConstraintsPda,
-  ];
+  const allPdas = [pendingPolicyPda, ...agentPdaDerivations];
 
   const existenceChecks = await Promise.all(
     allPdas.map(async (pda) => {
@@ -571,22 +563,12 @@ export async function closeVault(
       });
     }
   }
-  // 3. pending_close_constraints (if exists) — E1 fix: correct seed "pending_close_constraints"
-  const constraintsIdx = 1 + agents.length;
-  if (existenceChecks[constraintsIdx]) {
-    remainingAccounts.push({
-      address: existenceChecks[constraintsIdx]!,
-      role: AccountRole.WRITABLE,
-    });
-  }
-
-  // 4-6. CH-2 close (Bucket-3 audit 2026-05-23): enumerate pending_owner +
-  // pending_agent_grant + pending_constraints via the dedicated helper.
-  // Without these, the on-chain drain blocks at close_vault.rs:188 (SFH-01
-  // pending_owner), :216 (SFH-01 pending_agent_grant), and :233-262 (CH-2
-  // pending_constraints) silently no-op via the `lamports() > 0` guard,
-  // orphaning their rent. Helper performs parallel getAccountInfo and only
-  // includes accounts that exist.
+  // 3-4. SFH-01 close: enumerate pending_owner + pending_agent_grant via the
+  // dedicated helper. Without these, the on-chain drain blocks for
+  // pending_owner + pending_agent_grant silently no-op via the
+  // `lamports() > 0` guard, orphaning their rent. Helper performs parallel
+  // getAccountInfo and only includes accounts that exist.
+  // (M1-04b: pending_close_constraints + pending_constraints drains removed.)
   //
   // HH-1 close (audit 2026-05-23 §RP): the helper's silent-failure on RPC
   // errors is now escalated to ERROR-level log with vault context. If a

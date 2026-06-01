@@ -1,9 +1,9 @@
 /**
  * close-vault helpers — pending-PDA enumeration for the close_vault path.
  *
- * CH-2 (Bucket-3 audit 2026-05-23) companion to the Rust handler change
- * in `programs/sigil/src/instructions/close_vault.rs` that added a drain
- * block for the `pending_constraints` PDA.
+ * Companion to the `close_vault` drain logic in
+ * `programs/sigil/src/instructions/close_vault.rs`: enumerates the pending
+ * PDAs (pending_owner, pending_agent_grant) the handler drains.
  *
  * Why this lives in its own file
  * ─────────────────────────────
@@ -19,19 +19,20 @@
  * ───────────────────────────
  * close_vault.rs (HEAD 321a8fb3 + CH-2):
  *
- *   1. `pending_policy`              [b"pending_policy", vault]            — MUST be slot 0 when present (close_vault.rs:100-103 unconditionally reads `remaining_accounts.first()`)
+ *   1. `pending_policy`              [b"pending_policy", vault]            — MUST be slot 0 when present (close_vault.rs unconditionally reads `remaining_accounts.first()`)
  *   2. `pending_agent_perms`         [b"pending_agent_perms", vault, agent] — one per registered agent
- *   3. `pending_close_constraints`   [b"pending_close_constraints", vault]
- *   4. `pending_owner`               [b"pending_owner", vault]
- *   5. `pending_agent_grant`         [b"pending_agent_grant", vault]
- *   6. `pending_constraints`         [b"pending_constraints", vault]      — **CH-2 (new)**
+ *   3. `pending_owner`               [b"pending_owner", vault]
+ *   4. `pending_agent_grant`         [b"pending_agent_grant", vault]
  *
- * The Rust drain loops at lines 130-231 use `start_idx` (= 1 if
- * `policy.has_pending_policy`, else 0) — a single static offset, not an
- * incrementing cursor. So drains 2-6 all scan the same trailing window
- * and match by pubkey. The order of items 2-6 in `remaining_accounts`
- * does not matter functionally, but {@link CLOSE_VAULT_PENDING_PDA_ORDER}
- * pins the canonical layout for review-grep + future audit symmetry.
+ * (M1-04b: the pending_close_constraints + pending_constraints drains were
+ * removed — the constraints engine is gone, those PDAs can never exist.)
+ *
+ * The Rust drain loops use `start_idx` (= 1 if `policy.has_pending_policy`,
+ * else 0) — a single static offset, not an incrementing cursor. So drains
+ * 2-4 all scan the same trailing window and match by pubkey. The order of
+ * items 2-4 in `remaining_accounts` does not matter functionally, but
+ * {@link CLOSE_VAULT_PENDING_PDA_ORDER} pins the canonical layout for
+ * review-grep + future audit symmetry.
  *
  * Behavior on RPC failure
  * ───────────────────────
@@ -40,7 +41,7 @@
  * handler silently skips any drain block whose PDA isn't passed (since
  * `lamports() > 0` is the guard). This matches the existing
  * `mutations.ts::closeVault` behavior for `pending_policy` +
- * `pending_agent_perms` + `pending_close_constraints`. A transient RPC
+ * `pending_agent_perms`. A transient RPC
  * outage therefore degrades to "rent stays orphaned, vault still closes"
  * — never to "close TX rejects".
  */
@@ -64,9 +65,6 @@ const PENDING_OWNER_SEED = new TextEncoder().encode("pending_owner");
 const PENDING_AGENT_GRANT_SEED = new TextEncoder().encode(
   "pending_agent_grant",
 );
-const PENDING_CONSTRAINTS_SEED = new TextEncoder().encode(
-  "pending_constraints",
-);
 
 /**
  * Canonical layout pins for `close_vault` remaining_accounts.
@@ -80,10 +78,8 @@ const PENDING_CONSTRAINTS_SEED = new TextEncoder().encode(
 export const CLOSE_VAULT_PENDING_PDA_ORDER = [
   "pending_policy",
   "pending_agent_perms", // one per registered agent
-  "pending_close_constraints",
   "pending_owner",
   "pending_agent_grant",
-  "pending_constraints", // CH-2 (Bucket-3 audit 2026-05-23)
 ] as const;
 
 // ─── PDA derivation ──────────────────────────────────────────────────────
@@ -124,29 +120,6 @@ export async function findPendingAgentGrantPda(
   return pda;
 }
 
-/**
- * Derive the `PendingConstraintsUpdate` PDA for a vault.
- * Seeds: `[b"pending_constraints", vault]`
- *
- * Drained by `close_vault.rs` (CH-2 block, Bucket-3 audit 2026-05-23).
- *
- * Re-exported here (separate from the existing
- * `constraint-reads.ts::findPendingConstraintsPda`) so the close_vault
- * builder can stay in this file's narrow API surface without a
- * cross-file import for a one-line seed derivation.
- */
-export async function findPendingConstraintsPdaForClose(
-  vault: Address,
-  programAddress: Address = SIGIL_PROGRAM_ADDRESS,
-): Promise<Address> {
-  const encoder = getAddressEncoder();
-  const [pda] = await getProgramDerivedAddress({
-    programAddress,
-    seeds: [PENDING_CONSTRAINTS_SEED, encoder.encode(vault)],
-  });
-  return pda;
-}
-
 // ─── On-chain enumeration ────────────────────────────────────────────────
 
 /**
@@ -166,15 +139,13 @@ export interface CloseVaultPendingAccount {
 }
 
 /**
- * Enumerate the **CH-2 + SFH-01** pending PDAs (pending_owner,
- * pending_agent_grant, pending_constraints) that currently hold rent
- * on-chain for a given vault.
+ * Enumerate the **SFH-01** pending PDAs (pending_owner, pending_agent_grant)
+ * that currently hold rent on-chain for a given vault.
  *
- * This helper is the load-bearing piece of the CH-2 SDK companion: callers
- * (the `closeVault` builder in `mutations.ts` — CH-3 will wire it)
- * append the returned entries to the existing
- * `pending_policy` + `pending_agent_perms` + `pending_close_constraints`
- * list to ensure every drainable PDA is covered.
+ * This helper is the load-bearing piece of the close-vault drain companion:
+ * the `closeVault` builder in `mutations.ts` appends the returned entries to
+ * the existing `pending_policy` + `pending_agent_perms` list to ensure every
+ * drainable PDA is covered.
  *
  * Failure mode: RPC errors on individual PDAs are logged via the Sigil
  * module logger and treated as "absent" — the close TX still proceeds,
@@ -198,12 +169,10 @@ export async function enumerateExistingPendingPdasForClose(
     cause: unknown,
   ) => void,
 ): Promise<readonly CloseVaultPendingAccount[]> {
-  const [pendingOwnerPda, pendingAgentGrantPda, pendingConstraintsPda] =
-    await Promise.all([
-      findPendingOwnerPda(vault, programAddress),
-      findPendingAgentGrantPda(vault, programAddress),
-      findPendingConstraintsPdaForClose(vault, programAddress),
-    ]);
+  const [pendingOwnerPda, pendingAgentGrantPda] = await Promise.all([
+    findPendingOwnerPda(vault, programAddress),
+    findPendingAgentGrantPda(vault, programAddress),
+  ]);
 
   const candidates: ReadonlyArray<{
     kind: CloseVaultPendingAccount["kind"];
@@ -211,7 +180,6 @@ export async function enumerateExistingPendingPdasForClose(
   }> = [
     { kind: "pending_owner", address: pendingOwnerPda },
     { kind: "pending_agent_grant", address: pendingAgentGrantPda },
-    { kind: "pending_constraints", address: pendingConstraintsPda },
   ];
 
   const checks = await Promise.all(

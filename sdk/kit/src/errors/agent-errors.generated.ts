@@ -2,7 +2,7 @@
 // Regenerate via `pnpm -C sdk/kit codegen:errors` after IDL changes.
 //
 // Source: agent-middleware/target/idl/sigil.json
-// Generated: 2026-06-01T18:04:13.723Z
+// Generated: 2026-06-01T18:37:07.182Z
 // Codes: 105 (min 6000, max 6104)
 
 /** Pure IDL projection of every Anchor error variant. */

@@ -7,8 +7,6 @@ import {
   getTrackerPDA,
   getSessionPDA,
   getAgentOverlayPDA,
-  getConstraintsPDA,
-  getPendingConstraintsPDA,
   resolveAccounts,
 } from "../src/resolve-accounts.js";
 
@@ -128,21 +126,6 @@ describe("resolve-accounts", () => {
     });
   });
 
-  describe("getConstraintsPDA / getPendingConstraintsPDA", () => {
-    it("both derive from vault", async () => {
-      const [cpda] = await getConstraintsPDA(VAULT);
-      const [ppda] = await getPendingConstraintsPDA(VAULT);
-      // They use different seeds so they should be different
-      expect(cpda).to.not.equal(ppda);
-    });
-
-    it("deterministic", async () => {
-      const [c1] = await getConstraintsPDA(VAULT);
-      const [c2] = await getConstraintsPDA(VAULT);
-      expect(c1).to.equal(c2);
-    });
-  });
-
   describe("resolveAccounts", () => {
     it("returns all 4 required PDAs", async () => {
       const resolved = await resolveAccounts({
@@ -154,17 +137,6 @@ describe("resolve-accounts", () => {
       expect(resolved.policyPda).to.be.a("string");
       expect(resolved.trackerPda).to.be.a("string");
       expect(resolved.sessionPda).to.be.a("string");
-      expect(resolved.constraintsPda).to.be.undefined;
-    });
-
-    it("hasConstraints=true adds constraintsPda", async () => {
-      const resolved = await resolveAccounts({
-        vault: VAULT,
-        agent: AGENT,
-        tokenMint: TOKEN_MINT,
-        hasConstraints: true,
-      });
-      expect(resolved.constraintsPda).to.be.a("string");
     });
   });
 });

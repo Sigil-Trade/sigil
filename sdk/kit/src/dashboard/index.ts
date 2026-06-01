@@ -50,7 +50,6 @@ import type {
 
 import * as reads from "./reads.js";
 import * as mutations from "./mutations.js";
-import * as constraintReads from "./constraint-reads.js";
 import { discoverVaults as discoverVaultsImpl } from "./discover.js";
 
 // Re-export all types for consumers
@@ -119,16 +118,6 @@ export {
   DEFAULT_OVERVIEW_ACTIVITY_LIMIT,
 } from "./reads.js";
 
-export type { ConstraintsPdaInfo } from "./constraint-reads.js";
-export {
-  findConstraintsPda,
-  findPendingConstraintsPda,
-  findPendingCloseConstraintsPda,
-  fetchConstraints,
-  fetchPendingConstraintsUpdate,
-  fetchPendingCloseConstraints,
-} from "./constraint-reads.js";
-
 // ─── close_vault pending-PDA enumeration (CH-2 Bucket-3 audit 2026-05-23) ────
 // Stand-alone helpers for the CH-2 + SFH-01 pending PDAs (pending_owner /
 // pending_agent_grant / pending_constraints). Re-exported here so the
@@ -140,7 +129,6 @@ export {
   CLOSE_VAULT_PENDING_PDA_ORDER,
   findPendingOwnerPda,
   findPendingAgentGrantPda,
-  findPendingConstraintsPdaForClose,
   enumerateExistingPendingPdasForClose,
 } from "./close-vault.js";
 
@@ -791,29 +779,6 @@ export class OwnerClient {
       opts,
     );
   }
-
-  // ─── Constraint Reads (Phase A1.5) ──────────────────────────────────────
-
-  /** Get the constraints PDA address for this vault. */
-  async findConstraintsPda(): Promise<Address> {
-    return constraintReads.findConstraintsPda(this.vault);
-  }
-
-  /** Fetch the InstructionConstraints account (raw bytes). */
-  async fetchConstraints() {
-    return constraintReads.fetchConstraints(this.rpc, this.vault);
-  }
-
-  /** Fetch the PendingConstraintsUpdate account (raw bytes). */
-  async fetchPendingConstraintsUpdate() {
-    return constraintReads.fetchPendingConstraintsUpdate(this.rpc, this.vault);
-  }
-
-  /** Fetch the PendingCloseConstraints account (raw bytes). */
-  async fetchPendingCloseConstraints() {
-    return constraintReads.fetchPendingCloseConstraints(this.rpc, this.vault);
-  }
-
 
   // ─── Phase 8 Ownership Transfer (M-2, audit 2026-05-21) ─────────────────────
   //
