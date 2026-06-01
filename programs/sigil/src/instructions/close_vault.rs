@@ -80,11 +80,13 @@ pub fn handler(ctx: Context<CloseVault>) -> Result<()> {
         SigilError::VaultAlreadyClosed
     );
     require!(vault.active_sessions == 0, SigilError::ActiveSessionsExist);
-    require!(
-        !ctx.accounts.policy.has_constraints,
-        SigilError::ConstraintsNotClosed
-    );
-    // H-3 close (audit 2026-05-21): symmetric to has_constraints. The 672-byte
+    // M1-04 (constraints-engine teardown): the "constraints must be closed
+    // before vault close" guard (`require!(!policy.has_constraints, …)`) is
+    // removed — the constraints engine is gone, so no vault can ever carry a
+    // live constraint set. has_constraints is hardwired false until the field
+    // is removed in step 5. (The ConstraintsNotClosed error variant is removed
+    // in step 6.)
+    // H-3 close (audit 2026-05-21): the 672-byte
     // PostExecutionAssertions PDA has its own dedicated close handler
     // (close_post_assertions.rs) and must be drained before vault close to
     // avoid orphaning the PDA. Pre-fix, owners could close the vault while
