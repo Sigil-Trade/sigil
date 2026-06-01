@@ -44,7 +44,8 @@ use crate::utils::policy_digest::{
 // `PolicyPreviewFields` in `utils/policy_digest.rs`. This constant
 // is re-asserted here at the apply-time site as a load-bearing reminder.
 #[allow(dead_code)]
-const EXPECTED_DIGEST_FIELD_COUNT: usize = 22;
+// M1-04: was 22; has_constraints removed (digest-version bump).
+const EXPECTED_DIGEST_FIELD_COUNT: usize = 21;
 const _: () = assert!(
     EXPECTED_DIGEST_FIELD_COUNT == crate::utils::policy_digest::POLICY_PREVIEW_FIELD_COUNT,
     "P0.2 PEN-7: PolicyPreviewFields count diverged from TA-19 binding. \
@@ -381,7 +382,6 @@ pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
         timelock_duration: policy.timelock_duration,
         session_expiry_seconds: policy.session_expiry_seconds,
         observe_only: ctx.accounts.vault.observe_only,
-        has_constraints: policy.has_constraints,
         has_post_assertions: policy.has_post_assertions,
         // PEN-CROSS-2: re-bind to live policy's immutable creation slot.
         created_at_slot: policy.created_at_slot,

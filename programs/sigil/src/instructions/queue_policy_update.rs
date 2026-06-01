@@ -267,7 +267,6 @@ pub fn handler(
     // for digest correctness so this queue's recomputed digest matches the
     // owner's signed digest even when set_observe_only ran independently.
     let eff_observe_only = vault.observe_only;
-    let eff_has_constraints = policy.has_constraints;
     let eff_has_post_assertions = policy.has_post_assertions;
     // TA-12 (Phase 5): merged-effective stable_balance_floor.
     let eff_stable_balance_floor = stable_balance_floor.unwrap_or(policy.stable_balance_floor);
@@ -486,7 +485,6 @@ pub fn handler(
         timelock_duration: eff_timelock,
         session_expiry_seconds: eff_session_expiry,
         observe_only: eff_observe_only,
-        has_constraints: eff_has_constraints,
         has_post_assertions: eff_has_post_assertions,
         // PEN-CROSS-2: created_at_slot is bound to vault lifetime — never
         // mutates after init, so pass through from live policy.

@@ -240,7 +240,6 @@ pub fn handler(ctx: Context<AcceptOwnershipTransfer>) -> Result<()> {
             timelock_duration: policy.timelock_duration,
             session_expiry_seconds: policy.session_expiry_seconds,
             observe_only: ctx.accounts.vault.observe_only,
-            has_constraints: policy.has_constraints,
             has_post_assertions: policy.has_post_assertions,
             created_at_slot: policy.created_at_slot,
             operating_hours: policy.operating_hours,

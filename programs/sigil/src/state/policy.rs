@@ -66,9 +66,12 @@ pub struct PolicyConfig {
     /// Empty = any destination allowed. Bounded to MAX_ALLOWED_DESTINATIONS.
     pub allowed_destinations: Vec<Pubkey>,
 
-    /// Whether instruction constraints PDA exists for this vault.
-    /// Set true by create_instruction_constraints, false by apply_close_constraints.
-    pub has_constraints: bool,
+    // M1-04 (constraints-engine teardown): `has_constraints: bool` REMOVED.
+    // The constraints engine is gone, so the flag is always-false and carries
+    // no information. Removing it (rather than reserving it) is the deliberate
+    // pre-launch digest-version bump — it shifts canonical-digest fields 13..22
+    // down by one byte; the SDK encoder + IDL + Codama decoder are updated in
+    // lockstep (M1-04 step 5b).
 
     /// Whether a pending policy update PDA exists for this vault.
     /// Set true by queue_policy_update, false by apply/cancel_pending_policy.
@@ -362,7 +365,7 @@ impl PolicyConfig {
         + 2 // max_slippage_bps
         + 8
         + (4 + 32 * MAX_ALLOWED_DESTINATIONS)
-        + 1 // has_constraints
+        // M1-04: has_constraints (1 byte) removed
         + 1 // has_pending_policy
         + 1 // has_protocol_caps
         + (4 + 8 * MAX_ALLOWED_PROTOCOLS) // protocol_caps

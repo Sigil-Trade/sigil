@@ -220,7 +220,6 @@ pub fn handler(
         timelock_duration,
         session_expiry_seconds: 0,
         observe_only,
-        has_constraints: false,
         has_post_assertions: 0,
         // PEN-CROSS-2: defends against close+reinit replay.
         created_at_slot,
@@ -298,7 +297,6 @@ pub fn handler(
     policy.max_slippage_bps = max_slippage_bps;
     policy.timelock_duration = timelock_duration;
     policy.allowed_destinations = allowed_destinations;
-    policy.has_constraints = false;
     policy.has_protocol_caps = !protocol_caps.is_empty();
     policy.protocol_caps = protocol_caps;
     policy.session_expiry_seconds = 0;

@@ -116,7 +116,6 @@ pub fn handler(ctx: Context<SetObserveOnly>, new_value: bool) -> Result<()> {
         timelock_duration: policy.timelock_duration,
         session_expiry_seconds: policy.session_expiry_seconds,
         observe_only: vault.observe_only,
-        has_constraints: policy.has_constraints,
         has_post_assertions: policy.has_post_assertions,
         // PEN-CROSS-2: created_at_slot is immutable post-init.
         created_at_slot: policy.created_at_slot,

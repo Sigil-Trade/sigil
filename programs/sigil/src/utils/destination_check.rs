@@ -222,7 +222,6 @@ mod h1_hard_reject_tests {
             max_slippage_bps: 0,
             timelock_duration: 0,
             allowed_destinations: vec![],
-            has_constraints: false,
             has_pending_policy: false,
             has_protocol_caps: false,
             protocol_caps: vec![],

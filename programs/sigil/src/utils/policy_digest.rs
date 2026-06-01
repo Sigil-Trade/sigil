@@ -20,17 +20,18 @@
 //! 9. `timelock_duration: u64`        (8 bytes, LE)
 //! 10. `session_expiry_seconds: u64`  (8 bytes, LE)
 //! 11. `observe_only: bool`           (1 byte, 0 or 1)
-//! 12. `has_constraints: bool`        (1 byte, 0 or 1)
-//! 13. `has_post_assertions: u8`      (1 byte)
-//! 14. `created_at_slot: u64`         (8 bytes, LE) — PEN-CROSS-2 (Phase 2 close-up)
-//! 15. `operating_hours: u32`         (4 bytes, LE) — TA-05 (Phase 3 pre-exec)
-//! 16. `auto_promote_grays: bool`     (1 byte, 0/1)  — TA-07 (Phase 3 pre-exec)
-//! 17. `auto_revoke_threshold: u8`    (1 byte)       — TA-17 (Phase 3 pre-exec)
-//! 18. `stable_balance_floor: u64`    (8 bytes, LE)  — TA-12 (Phase 5 post-exec)
-//! 19. `per_recipient_daily_cap_usd: u64` (8 bytes, LE) — TA-14 (Phase 5 post-exec)
-//! 20. `cosign_required: bool`        (1 byte, 0/1)  — G6 (audit 2026-05-18 cosign opt-in)
-//! 21. `agent_set_hash: [u8; 32]`     (32 bytes)     — Phase 8 PEN-CROSS-1
-//! 22. `cosign_session_pubkey: Pubkey` (32 bytes)    — D-5 (audit 2026-05-19, F-RP3-1)
+//! M1-04 (digest-version bump): field 12 `has_constraints` REMOVED with the
+//! constraints engine; fields below renumbered (was 13..22, now 12..21).
+//! 12. `has_post_assertions: u8`      (1 byte)
+//! 13. `created_at_slot: u64`         (8 bytes, LE) — PEN-CROSS-2 (Phase 2 close-up)
+//! 14. `operating_hours: u32`         (4 bytes, LE) — TA-05 (Phase 3 pre-exec)
+//! 15. `auto_promote_grays: bool`     (1 byte, 0/1)  — TA-07 (Phase 3 pre-exec)
+//! 16. `auto_revoke_threshold: u8`    (1 byte)       — TA-17 (Phase 3 pre-exec)
+//! 17. `stable_balance_floor: u64`    (8 bytes, LE)  — TA-12 (Phase 5 post-exec)
+//! 18. `per_recipient_daily_cap_usd: u64` (8 bytes, LE) — TA-14 (Phase 5 post-exec)
+//! 19. `cosign_required: bool`        (1 byte, 0/1)  — G6 (audit 2026-05-18 cosign opt-in)
+//! 20. `agent_set_hash: [u8; 32]`     (32 bytes)     — Phase 8 PEN-CROSS-1
+//! 21. `cosign_session_pubkey: Pubkey` (32 bytes)    — D-5 (audit 2026-05-19, F-RP3-1)
 //!
 //! Phase 3 append-only additions (TA-05/07/17): the three new policy-owned
 //! fields are appended at positions 15-17 to preserve the existing 14-field
@@ -51,7 +52,7 @@
 //! and then drain via subsequent non-elevated mutations.
 //!
 //! Phase 8 PEN-CROSS-1 append-only addition (Council ISC-66/A8/A9): the
-//! `agent_set_hash` at position 21 binds the EXISTING agent set into the
+//! `agent_set_hash` at position 20 (was 21 pre-M1-04) binds the EXISTING agent set into the
 //! signed digest. SHA-256 over Borsh of `Vec<(Pubkey, u8 capability)>`
 //! sorted by pubkey ascending so the projection is deterministic regardless
 //! of register order. Closes the silent-insertion vector: a phished owner
@@ -61,7 +62,7 @@
 //! 32-byte hash (SHA-256 of the 4-byte LE-encoded zero length prefix).
 //!
 //! D-5 append-only addition (audit 2026-05-19, F-RP3-1): the
-//! `cosign_session_pubkey` at position 22 binds the owner's chosen
+//! `cosign_session_pubkey` at position 21 (was 22 pre-M1-04) binds the owner's chosen
 //! reactivate-time cosigner into the signed policy. The
 //! `reactivate_vault` handler reads this pubkey at runtime and requires
 //! a matching `is_signer == true` entry in `remaining_accounts` whenever
@@ -111,7 +112,7 @@ pub struct PolicyPreviewFields<'a> {
     pub timelock_duration: u64,
     pub session_expiry_seconds: u64,
     pub observe_only: bool,
-    pub has_constraints: bool,
+    // M1-04: has_constraints removed (digest-version bump).
     pub has_post_assertions: u8,
     /// PEN-CROSS-2 (Phase 2 close-up): the slot at which the vault was
     /// initialized. Closes the close+reinit replay window — replaying a
@@ -180,7 +181,8 @@ pub struct PolicyPreviewFields<'a> {
 /// The const-assert lives at the apply-time site as a load-bearing reminder
 /// (apply_pending_policy.rs::EXPECTED_DIGEST_FIELD_COUNT). Both this and
 /// the apply-side constant must change in lockstep.
-pub const POLICY_PREVIEW_FIELD_COUNT: usize = 22;
+// M1-04: was 22; has_constraints removed (digest-version bump).
+pub const POLICY_PREVIEW_FIELD_COUNT: usize = 21;
 
 /// Phase 8 PEN-CROSS-1 (Council ISC-66/A8/A9 / ISC-141 empty-set determinism).
 ///
@@ -248,7 +250,6 @@ mod field_count_invariant {
             timelock_duration: 0,
             session_expiry_seconds: 0,
             observe_only: false,
-            has_constraints: false,
             has_post_assertions: 0,
             created_at_slot: 0,
             operating_hours: 0,
@@ -282,7 +283,6 @@ mod field_count_invariant {
             timelock_duration: _,
             session_expiry_seconds: _,
             observe_only: _,
-            has_constraints: _,
             has_post_assertions: _,
             created_at_slot: _,
             operating_hours: _,
@@ -294,7 +294,7 @@ mod field_count_invariant {
             agent_set_hash: _,
             cosign_session_pubkey: _,
         } = fields;
-        assert_eq!(POLICY_PREVIEW_FIELD_COUNT, 22);
+        assert_eq!(POLICY_PREVIEW_FIELD_COUNT, 21);
     }
 }
 
@@ -337,25 +337,25 @@ pub fn compute_policy_preview_digest(fields: &PolicyPreviewFields<'_>) -> [u8; 3
     buf.extend_from_slice(&fields.session_expiry_seconds.to_le_bytes());
     // 11. observe_only: bool as 1 byte (0/1)
     buf.push(u8::from(fields.observe_only));
-    // 12. has_constraints: bool as 1 byte
-    buf.push(u8::from(fields.has_constraints));
-    // 13. has_post_assertions: u8
+    // M1-04 (digest-version bump): field 12 `has_constraints` REMOVED. All
+    // fields below shift up by one position (was 13..22, now 12..21).
+    // 12. has_post_assertions: u8
     buf.push(fields.has_post_assertions);
-    // 14. created_at_slot: u64 LE — PEN-CROSS-2 (Phase 2 close-up)
+    // 13. created_at_slot: u64 LE — PEN-CROSS-2 (Phase 2 close-up)
     buf.extend_from_slice(&fields.created_at_slot.to_le_bytes());
-    // 15. operating_hours: u32 LE — TA-05 (Phase 3 pre-exec)
+    // 14. operating_hours: u32 LE — TA-05 (Phase 3 pre-exec)
     buf.extend_from_slice(&fields.operating_hours.to_le_bytes());
-    // 16. auto_promote_grays: bool as 1 byte (0/1) — TA-07 (Phase 3 pre-exec)
+    // 15. auto_promote_grays: bool as 1 byte (0/1) — TA-07 (Phase 3 pre-exec)
     buf.push(u8::from(fields.auto_promote_grays));
-    // 17. auto_revoke_threshold: u8 — TA-17 (Phase 3 pre-exec)
+    // 16. auto_revoke_threshold: u8 — TA-17 (Phase 3 pre-exec)
     buf.push(fields.auto_revoke_threshold);
-    // 18. stable_balance_floor: u64 LE — TA-12 (Phase 5 post-exec invariant)
+    // 17. stable_balance_floor: u64 LE — TA-12 (Phase 5 post-exec invariant)
     buf.extend_from_slice(&fields.stable_balance_floor.to_le_bytes());
-    // 19. per_recipient_daily_cap_usd: u64 LE — TA-14 (Phase 5 post-exec)
+    // 18. per_recipient_daily_cap_usd: u64 LE — TA-14 (Phase 5 post-exec)
     buf.extend_from_slice(&fields.per_recipient_daily_cap_usd.to_le_bytes());
-    // 20. cosign_required: bool as 1 byte (0/1) — G6 (audit 2026-05-18 cosign opt-in)
+    // 19. cosign_required: bool as 1 byte (0/1) — G6 (audit 2026-05-18 cosign opt-in)
     buf.push(u8::from(fields.cosign_required));
-    // 21. agent_set_hash: [u8; 32] — Phase 8 PEN-CROSS-1. Pre-computed
+    // 20. agent_set_hash: [u8; 32] — Phase 8 PEN-CROSS-1. Pre-computed
     // SHA-256 of Borsh-encoded `Vec<(Pubkey, u8)>` sorted by pubkey
     // ascending (see `compute_agent_set_hash`). Bound here so any silent
     // mutation of `vault.agents` (e.g. phished-owner `register_agent` of
@@ -396,7 +396,6 @@ mod tests {
             timelock_duration: 1800,
             session_expiry_seconds: 30,
             observe_only: false,
-            has_constraints: false,
             has_post_assertions: 0,
             created_at_slot: 0,
             operating_hours: 0,
@@ -437,7 +436,6 @@ mod tests {
             timelock_duration: 1800,
             session_expiry_seconds: 30,
             observe_only: false,
-            has_constraints: false,
             has_post_assertions: 0,
             created_at_slot: 0,
             operating_hours: 0,
@@ -487,7 +485,6 @@ mod tests {
             timelock_duration: 1800,
             session_expiry_seconds: 30,
             observe_only: false,
-            has_constraints: false,
             has_post_assertions: 0,
             created_at_slot: 0,
             operating_hours: 0,
@@ -536,7 +533,6 @@ mod tests {
             timelock_duration: 1800,
             session_expiry_seconds: 30,
             observe_only: false,
-            has_constraints: false,
             has_post_assertions: 0,
             created_at_slot: 12345,
             operating_hours: 0x00FFFFFF,
@@ -585,7 +581,6 @@ mod tests {
             timelock_duration: 1800,
             session_expiry_seconds: 30,
             observe_only: false,
-            has_constraints: false,
             has_post_assertions: 0,
             created_at_slot: 12345,
             operating_hours: 0x00FFFFFF,
@@ -632,7 +627,6 @@ mod tests {
             timelock_duration: 1800,
             session_expiry_seconds: 30,
             observe_only: false,
-            has_constraints: false,
             has_post_assertions: 0,
             created_at_slot: 12345,
             operating_hours: 0x00FFFFFF,
@@ -684,7 +678,6 @@ mod tests {
             timelock_duration: 1800,
             session_expiry_seconds: 30,
             observe_only: false,
-            has_constraints: false,
             has_post_assertions: 0,
             created_at_slot: 12345,
             operating_hours: 0x00FFFFFF,
@@ -736,7 +729,6 @@ mod tests {
             timelock_duration: 1800,
             session_expiry_seconds: 30,
             observe_only: false,
-            has_constraints: false,
             has_post_assertions: 0,
             created_at_slot: 12345,
             operating_hours: 0x00FFFFFF,
@@ -789,7 +781,6 @@ mod tests {
             timelock_duration: 1800,
             session_expiry_seconds: 30,
             observe_only: false,
-            has_constraints: false,
             has_post_assertions: 0,
             created_at_slot: 12345,
             operating_hours: 0x00FFFFFF,
@@ -836,7 +827,6 @@ mod tests {
             timelock_duration: 1800,
             session_expiry_seconds: 30,
             observe_only: false,
-            has_constraints: false,
             has_post_assertions: 0,
             created_at_slot: 12345,
             operating_hours: 0x00FFFFFF,
@@ -924,7 +914,6 @@ mod tests {
             timelock_duration: 1800,
             session_expiry_seconds: 30,
             observe_only: false,
-            has_constraints: false,
             has_post_assertions: 0,
             created_at_slot: 12345,
             operating_hours: 0x00FFFFFF,
@@ -979,7 +968,6 @@ mod tests {
             timelock_duration: 0,
             session_expiry_seconds: 0,
             observe_only: false,
-            has_constraints: false,
             has_post_assertions: 0,
             created_at_slot: 0,
             // Minimal fixture uses operating_hours=0 (no hours enabled — an
@@ -1067,7 +1055,6 @@ mod tests {
             timelock_duration: 1800,
             session_expiry_seconds: 30,
             observe_only: false,
-            has_constraints: false,
             has_post_assertions: 0,
             // PEN-CROSS-2: realistic fixture exercises a non-zero
             // created_at_slot to lock the byte layout of an active vault.
