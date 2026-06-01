@@ -146,7 +146,7 @@ export const SIGIL_ERROR__INVALID_CONSTRAINT_OPERATOR = 0x17af; // 6063
 export const SIGIL_ERROR__ZERO_COPY_VAULT_MISMATCH = 0x17b0; // 6064
 /** BlockedSplOpcode: SPL opcode is blocked at runtime and cannot be used in constraints */
 export const SIGIL_ERROR__BLOCKED_SPL_OPCODE = 0x17b1; // 6065
-/** QueuedUpdateExpired: Queued update is too old (>MAX_APPLY_AGE_SLOTS) — re-queue to apply. Defends against durable-nonce pre-signing. */
+/** QueuedUpdateExpired: Queued update is too old (>MAX_APPLY_AGE_SLOTS / >MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN) — re-queue via the matching queue/initiate ix (queue_policy_update, queue_constraints_update, queue_close_constraints, queue_agent_permissions_update, queue_agent_grant, or initiate_ownership_transfer) to apply. Defends against durable-nonce pre-signing (CH-1 audit 2026-05-23 extended scope to timelocked-admin PDAs). */
 export const SIGIL_ERROR__QUEUED_UPDATE_EXPIRED = 0x17b2; // 6066
 /** AccountWritabilityMismatch: Account writability flag does not match constraint requirement */
 export const SIGIL_ERROR__ACCOUNT_WRITABILITY_MISMATCH = 0x17b3; // 6067
@@ -454,7 +454,7 @@ if (process.env.NODE_ENV !== "production") {
     [SIGIL_ERROR__PROTOCOL_CAPS_MISMATCH]: `protocol_caps length must match protocols length when has_protocol_caps is true`,
     [SIGIL_ERROR__PROTOCOL_MISMATCH]: `DeFi instruction program does not match declared target_protocol`,
     [SIGIL_ERROR__PROTOCOL_NOT_ALLOWED]: `Protocol not allowed by policy`,
-    [SIGIL_ERROR__QUEUED_UPDATE_EXPIRED]: `Queued update is too old (>MAX_APPLY_AGE_SLOTS) — re-queue to apply. Defends against durable-nonce pre-signing.`,
+    [SIGIL_ERROR__QUEUED_UPDATE_EXPIRED]: `Queued update is too old (>MAX_APPLY_AGE_SLOTS / >MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN) — re-queue via the matching queue/initiate ix (queue_policy_update, queue_constraints_update, queue_close_constraints, queue_agent_permissions_update, queue_agent_grant, or initiate_ownership_transfer) to apply. Defends against durable-nonce pre-signing (CH-1 audit 2026-05-23 extended scope to timelocked-admin PDAs).`,
     [SIGIL_ERROR__SESSION_NOT_AUTHORIZED]: `Session not authorized`,
     [SIGIL_ERROR__SLIPPAGE_BPS_TOO_HIGH]: `Slippage BPS exceeds maximum (5000 = 50%)`,
     [SIGIL_ERROR__SNAPSHOT_NOT_CAPTURED]: `Delta assertion snapshot was not captured in validate_and_authorize`,

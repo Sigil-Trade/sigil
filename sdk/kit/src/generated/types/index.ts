@@ -6,8 +6,6 @@
  * @see https://github.com/codama-idl/codama
  */
 
-export * from "./accountConstraint.js";
-export * from "./accountConstraintZC.js";
 export * from "./actionAuthorized.js";
 export * from "./agentAutoRevoked.js";
 export * from "./agentContributionEntry.js";
@@ -25,34 +23,18 @@ export * from "./agentSpendLimitChecked.js";
 export * from "./agentTransferExecuted.js";
 export * from "./agentUnpausedEvent.js";
 export * from "./auditEntry.js";
-export * from "./closeConstraintsApplied.js";
-export * from "./closeConstraintsCancelled.js";
-export * from "./closeConstraintsQueued.js";
-export * from "./constraintEntry.js";
-export * from "./constraintEntryZC.js";
-export * from "./constraintOperator.js";
-export * from "./constraintsChangeApplied.js";
-export * from "./constraintsChangeCancelled.js";
-export * from "./constraintsChangeQueued.js";
-export * from "./dataConstraint.js";
-export * from "./dataConstraintZC.js";
 export * from "./delegationRevoked.js";
 export * from "./destinationGraylistEntry.js";
-export * from "./discriminatorFormat.js";
 export * from "./epochBucket.js";
 export * from "./feesCollected.js";
 export * from "./fundsDeposited.js";
 export * from "./fundsWithdrawn.js";
 export * from "./graylistEntered.js";
 export * from "./graylistPromoted.js";
-export * from "./instructionConstraintsCreated.js";
 export * from "./observeOnlyChanged.js";
-export * from "./orphanConstraintsPdaCleaned.js";
 export * from "./ownershipTransferAccepted.js";
 export * from "./ownershipTransferCancelled.js";
 export * from "./ownershipTransferInitiated.js";
-export * from "./pdaAllocated.js";
-export * from "./pdaExtended.js";
 export * from "./perRecipientCounter.js";
 export * from "./policyChangeApplied.js";
 export * from "./policyChangeCancelled.js";

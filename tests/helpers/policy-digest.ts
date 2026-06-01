@@ -88,7 +88,6 @@ export interface PolicyDigestFields {
   timelockDuration: BN | bigint | number;
   sessionExpirySeconds?: BN | bigint | number;
   observeOnly: boolean;
-  hasConstraints?: boolean;
   hasPostAssertions?: number;
   /**
    * PEN-CROSS-2 (Phase 2 close-up): now part of the canonical digest encoding.
@@ -201,7 +200,6 @@ export function computePolicyPreviewDigest(
   parts.push(u64le(fields.timelockDuration));
   parts.push(u64le(fields.sessionExpirySeconds ?? 0));
   parts.push(u8(fields.observeOnly ? 1 : 0));
-  parts.push(u8(fields.hasConstraints ? 1 : 0));
   parts.push(u8(fields.hasPostAssertions ?? 0));
   // PEN-CROSS-2: created_at_slot at position 14 of canonical encoding.
   parts.push(u64le(fields.createdAtSlot ?? 0));
@@ -340,7 +338,6 @@ export function initVaultPreviewDigest(args: {
     timelockDuration: args.timelockDuration,
     sessionExpirySeconds: 0,
     observeOnly: args.observeOnly ?? false,
-    hasConstraints: false,
     hasPostAssertions: 0,
     createdAtSlot: args.createdAtSlot ?? 0,
     operatingHours: args.operatingHours ?? 0,
@@ -388,7 +385,6 @@ export interface LiveLikePolicy {
   allowedDestinations: PublicKey[];
   timelockDuration: BN | bigint;
   sessionExpirySeconds: BN | bigint;
-  hasConstraints: boolean;
   hasPostAssertions: number;
   /**
    * PEN-CROSS-2: bound by the canonical digest. Read from
@@ -493,7 +489,6 @@ export function queuePolicyMergedDigest(
       live.sessionExpirySeconds,
     ),
     observeOnly,
-    hasConstraints: live.hasConstraints,
     hasPostAssertions: live.hasPostAssertions,
     // PEN-CROSS-2: created_at_slot is immutable post-init — always sourced
     // from live policy. Queue does NOT mutate it; no override is exposed.
@@ -549,7 +544,7 @@ export async function siblingHandlerDigest(
   program: any,
   policyPda: PublicKey,
   vaultPda: PublicKey,
-  override: { hasConstraints?: boolean; hasPostAssertions?: number },
+  override: { hasPostAssertions?: number },
 ): Promise<number[]> {
   const policy = await program.account.policyConfig.fetch(policyPda);
   const vault = await program.account.agentVault.fetch(vaultPda);
@@ -565,10 +560,6 @@ export async function siblingHandlerDigest(
     timelockDuration: policy.timelockDuration,
     sessionExpirySeconds: policy.sessionExpirySeconds,
     observeOnly: !!vault.observeOnly,
-    hasConstraints:
-      override.hasConstraints !== undefined
-        ? override.hasConstraints
-        : !!policy.hasConstraints,
     hasPostAssertions:
       override.hasPostAssertions !== undefined
         ? override.hasPostAssertions
@@ -633,7 +624,6 @@ export async function fetchAndComputeQueueDigest(
     allowedDestinations: policy.allowedDestinations,
     timelockDuration: policy.timelockDuration,
     sessionExpirySeconds: policy.sessionExpirySeconds,
-    hasConstraints: policy.hasConstraints,
     hasPostAssertions: policy.hasPostAssertions,
     createdAtSlot: policy.createdAtSlot ?? 0,
     operatingHours: policy.operatingHours ?? 0,

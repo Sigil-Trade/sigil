@@ -101,6 +101,11 @@ export type PendingOwnershipTransfer = {
    * `init` and unread today.
    */
   padding: ReadonlyUint8Array;
+  /**
+   * CH-1 close (Bucket-3 audit 2026-05-23): slot at queue time for
+   * F-10 freshness. See pending_agent_grant.rs for the threat model.
+   */
+  queuedAtSlot: bigint;
 };
 
 export type PendingOwnershipTransferArgs = {
@@ -150,6 +155,11 @@ export type PendingOwnershipTransferArgs = {
    * `init` and unread today.
    */
   padding: ReadonlyUint8Array;
+  /**
+   * CH-1 close (Bucket-3 audit 2026-05-23): slot at queue time for
+   * F-10 freshness. See pending_agent_grant.rs for the threat model.
+   */
+  queuedAtSlot: number | bigint;
 };
 
 /** Gets the encoder for {@link PendingOwnershipTransferArgs} account data. */
@@ -165,6 +175,7 @@ export function getPendingOwnershipTransferEncoder(): FixedSizeEncoder<PendingOw
       ["isMultisigTarget", getBooleanEncoder()],
       ["bump", getU8Encoder()],
       ["padding", fixEncoderSize(getBytesEncoder(), 6)],
+      ["queuedAtSlot", getU64Encoder()],
     ]),
     (value) => ({
       ...value,
@@ -185,6 +196,7 @@ export function getPendingOwnershipTransferDecoder(): FixedSizeDecoder<PendingOw
     ["isMultisigTarget", getBooleanDecoder()],
     ["bump", getU8Decoder()],
     ["padding", fixDecoderSize(getBytesDecoder(), 6)],
+    ["queuedAtSlot", getU64Decoder()],
   ]);
 }
 
@@ -275,5 +287,5 @@ export async function fetchAllMaybePendingOwnershipTransfer(
 }
 
 export function getPendingOwnershipTransferSize(): number {
-  return 128;
+  return 136;
 }

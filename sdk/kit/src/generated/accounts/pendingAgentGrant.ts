@@ -104,7 +104,9 @@ export type PendingAgentGrant = {
   /**
    * M-5 close (Bucket 2, Phase 10 PEN-CROSS-3): SHA-256 over the
    * canonical byte encoding of the pending content (vault + agent +
-   * capability + spending_limit_usd + queued_at + min_delay_seconds).
+   * capability + spending_limit_usd + queued_at + min_delay_seconds +
+   * queued_at_slot — CH-1 close Bucket-3 audit 2026-05-23 folded
+   * queued_at_slot into the canonical encoder at position 7).
    * Written once at `queue_agent_grant` and re-asserted at
    * `apply_agent_grant` before any mutation of `vault.agents`.
    *
@@ -116,11 +118,26 @@ export type PendingAgentGrant = {
    * `ErrPendingAgentGrantDigestMismatch`.
    *
    * Alignment: Anchor's `#[account]` uses Borsh on-the-wire layout, so
-   * the byte arithmetic is purely additive: 104 + 32 = 136 bytes total.
+   * the byte arithmetic is purely additive: 104 + 32 + 8 = 144 bytes
+   * total (CH-1 Bucket-3 added 8 bytes for queued_at_slot).
    * `[u8; 32]` has alignment 1, so no padding is required regardless of
    * the preceding `u8` + `[u8; 6]` shape.
    */
   pendingContentDigest: ReadonlyUint8Array;
+  /**
+   * CH-1 close (Bucket-3 audit 2026-05-23): slot at queue time for
+   * F-10 freshness check. Paired with `MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN`
+   * to defend against the Drift-April-2026 durable-nonce pre-signing
+   * attack class: a compromised owner key can pre-sign queue+apply ix
+   * in the same slot, queue NOW, then replay the pre-signed apply
+   * weeks later. Slot-based F-10 catches the "weeks later" case.
+   *
+   * Note: `queued_at: i64` above is the existing unix-timestamp used
+   * by the 48h timelock countdown — that semantic is unchanged. This
+   * slot field is additive and load-bearing only for the F-10 fresh-
+   * ness check.
+   */
+  queuedAtSlot: bigint;
 };
 
 export type PendingAgentGrantArgs = {
@@ -175,7 +192,9 @@ export type PendingAgentGrantArgs = {
   /**
    * M-5 close (Bucket 2, Phase 10 PEN-CROSS-3): SHA-256 over the
    * canonical byte encoding of the pending content (vault + agent +
-   * capability + spending_limit_usd + queued_at + min_delay_seconds).
+   * capability + spending_limit_usd + queued_at + min_delay_seconds +
+   * queued_at_slot — CH-1 close Bucket-3 audit 2026-05-23 folded
+   * queued_at_slot into the canonical encoder at position 7).
    * Written once at `queue_agent_grant` and re-asserted at
    * `apply_agent_grant` before any mutation of `vault.agents`.
    *
@@ -187,11 +206,26 @@ export type PendingAgentGrantArgs = {
    * `ErrPendingAgentGrantDigestMismatch`.
    *
    * Alignment: Anchor's `#[account]` uses Borsh on-the-wire layout, so
-   * the byte arithmetic is purely additive: 104 + 32 = 136 bytes total.
+   * the byte arithmetic is purely additive: 104 + 32 + 8 = 144 bytes
+   * total (CH-1 Bucket-3 added 8 bytes for queued_at_slot).
    * `[u8; 32]` has alignment 1, so no padding is required regardless of
    * the preceding `u8` + `[u8; 6]` shape.
    */
   pendingContentDigest: ReadonlyUint8Array;
+  /**
+   * CH-1 close (Bucket-3 audit 2026-05-23): slot at queue time for
+   * F-10 freshness check. Paired with `MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN`
+   * to defend against the Drift-April-2026 durable-nonce pre-signing
+   * attack class: a compromised owner key can pre-sign queue+apply ix
+   * in the same slot, queue NOW, then replay the pre-signed apply
+   * weeks later. Slot-based F-10 catches the "weeks later" case.
+   *
+   * Note: `queued_at: i64` above is the existing unix-timestamp used
+   * by the 48h timelock countdown — that semantic is unchanged. This
+   * slot field is additive and load-bearing only for the F-10 fresh-
+   * ness check.
+   */
+  queuedAtSlot: number | bigint;
 };
 
 /** Gets the encoder for {@link PendingAgentGrantArgs} account data. */
@@ -208,6 +242,7 @@ export function getPendingAgentGrantEncoder(): FixedSizeEncoder<PendingAgentGran
       ["bump", getU8Encoder()],
       ["padding", fixEncoderSize(getBytesEncoder(), 6)],
       ["pendingContentDigest", fixEncoderSize(getBytesEncoder(), 32)],
+      ["queuedAtSlot", getU64Encoder()],
     ]),
     (value) => ({ ...value, discriminator: PENDING_AGENT_GRANT_DISCRIMINATOR }),
   );
@@ -226,6 +261,7 @@ export function getPendingAgentGrantDecoder(): FixedSizeDecoder<PendingAgentGran
     ["bump", getU8Decoder()],
     ["padding", fixDecoderSize(getBytesDecoder(), 6)],
     ["pendingContentDigest", fixDecoderSize(getBytesDecoder(), 32)],
+    ["queuedAtSlot", getU64Decoder()],
   ]);
 }
 
@@ -304,5 +340,5 @@ export async function fetchAllMaybePendingAgentGrant(
 }
 
 export function getPendingAgentGrantSize(): number {
-  return 136;
+  return 144;
 }

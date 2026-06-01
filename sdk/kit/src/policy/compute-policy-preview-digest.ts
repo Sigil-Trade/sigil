@@ -130,8 +130,7 @@ export interface PolicyPreviewFields {
   sessionExpirySeconds: bigint;
   /** TA-19: observe-only kill switch (rejects all validate_and_authorize). */
   observeOnly: boolean;
-  /** Whether instruction-constraints PDA exists for this vault. */
-  hasConstraints: boolean;
+  // M1-04: hasConstraints removed (digest-version bump; constraints engine gone).
   /** Whether post-execution assertions are configured (0 = no, non-zero = yes). */
   hasPostAssertions: number;
   /**
@@ -245,8 +244,9 @@ export interface PolicyPreviewFields {
 // `assert_field_count_in_lockstep` IIFE catches step-skips at module
 // load.
 
-/** Mirrors `policy_digest.rs::POLICY_PREVIEW_FIELD_COUNT`. */
-export const POLICY_PREVIEW_FIELD_COUNT = 22;
+/** Mirrors `policy_digest.rs::POLICY_PREVIEW_FIELD_COUNT`.
+ *  M1-04: was 22; has_constraints removed (digest-version bump). */
+export const POLICY_PREVIEW_FIELD_COUNT = 21;
 
 /**
  * Phase 8 PEN-CROSS-1 (Council ISC-141): SHA-256 of the Borsh-encoded
@@ -322,17 +322,17 @@ const PER_FIELD_FIXED_SIZES = [
   8, // 9.  timelock_duration            (u64 LE)
   8, // 10. session_expiry_seconds       (u64 LE)
   1, // 11. observe_only                 (bool as u8)
-  1, // 12. has_constraints              (bool as u8)
-  1, // 13. has_post_assertions          (u8)
-  8, // 14. created_at_slot              (u64 LE) PEN-CROSS-2
-  4, // 15. operating_hours              (u32 LE) TA-05
-  1, // 16. auto_promote_grays           (bool as u8) TA-07
-  1, // 17. auto_revoke_threshold        (u8) TA-17
-  8, // 18. stable_balance_floor         (u64 LE) TA-12
-  8, // 19. per_recipient_daily_cap_usd  (u64 LE) TA-14
-  1, // 20. cosign_required              (bool as u8) G6
-  32, // 21. agent_set_hash              ([u8;32]) Phase 8 PEN-CROSS-1
-  32, // 22. cosign_session_pubkey       (Pubkey)  D-5 (audit 2026-05-19, F-RP3-1)
+  // M1-04: field 12 has_constraints REMOVED (digest-version bump); renumbered below.
+  1, // 12. has_post_assertions          (u8)
+  8, // 13. created_at_slot              (u64 LE) PEN-CROSS-2
+  4, // 14. operating_hours              (u32 LE) TA-05
+  1, // 15. auto_promote_grays           (bool as u8) TA-07
+  1, // 16. auto_revoke_threshold        (u8) TA-17
+  8, // 17. stable_balance_floor         (u64 LE) TA-12
+  8, // 18. per_recipient_daily_cap_usd  (u64 LE) TA-14
+  1, // 19. cosign_required              (bool as u8) G6
+  32, // 20. agent_set_hash              ([u8;32]) Phase 8 PEN-CROSS-1
+  32, // 21. cosign_session_pubkey       (Pubkey)  D-5 (audit 2026-05-19, F-RP3-1)
 ] as const;
 
 /** Derived sum — must match the encoder's `fixedSize` exactly. */
@@ -412,7 +412,7 @@ export function computePolicyPreviewDigest(
   off = writeU64Le(view, off, fields.timelockDuration);
   off = writeU64Le(view, off, fields.sessionExpirySeconds);
   buf[off++] = fields.observeOnly ? 1 : 0;
-  buf[off++] = fields.hasConstraints ? 1 : 0;
+  // M1-04: has_constraints byte removed (digest-version bump).
   buf[off++] = fields.hasPostAssertions;
   // PEN-CROSS-2: created_at_slot at position 14 of canonical encoding.
   off = writeU64Le(view, off, fields.createdAtSlot);

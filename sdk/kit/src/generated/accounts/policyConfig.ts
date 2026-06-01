@@ -108,11 +108,6 @@ export type PolicyConfig = {
    */
   allowedDestinations: Array<Address>;
   /**
-   * Whether instruction constraints PDA exists for this vault.
-   * Set true by create_instruction_constraints, false by apply_close_constraints.
-   */
-  hasConstraints: boolean;
-  /**
    * Whether a pending policy update PDA exists for this vault.
    * Set true by queue_policy_update, false by apply/cancel_pending_policy.
    */
@@ -414,11 +409,6 @@ export type PolicyConfigArgs = {
    */
   allowedDestinations: Array<Address>;
   /**
-   * Whether instruction constraints PDA exists for this vault.
-   * Set true by create_instruction_constraints, false by apply_close_constraints.
-   */
-  hasConstraints: boolean;
-  /**
    * Whether a pending policy update PDA exists for this vault.
    * Set true by queue_policy_update, false by apply/cancel_pending_policy.
    */
@@ -690,7 +680,6 @@ export function getPolicyConfigEncoder(): Encoder<PolicyConfigArgs> {
       ["maxSlippageBps", getU16Encoder()],
       ["timelockDuration", getU64Encoder()],
       ["allowedDestinations", getArrayEncoder(getAddressEncoder())],
-      ["hasConstraints", getBooleanEncoder()],
       ["hasPendingPolicy", getBooleanEncoder()],
       ["hasProtocolCaps", getBooleanEncoder()],
       ["protocolCaps", getArrayEncoder(getU64Encoder())],
@@ -730,7 +719,6 @@ export function getPolicyConfigDecoder(): Decoder<PolicyConfig> {
     ["maxSlippageBps", getU16Decoder()],
     ["timelockDuration", getU64Decoder()],
     ["allowedDestinations", getArrayDecoder(getAddressDecoder())],
-    ["hasConstraints", getBooleanDecoder()],
     ["hasPendingPolicy", getBooleanDecoder()],
     ["hasProtocolCaps", getBooleanDecoder()],
     ["protocolCaps", getArrayDecoder(getU64Decoder())],
