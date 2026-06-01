@@ -3,7 +3,7 @@ use anchor_lang::prelude::*;
 use crate::errors::SigilError;
 use crate::events::AgentGrantApplied;
 use crate::state::pending_agent_grant::compute_pending_agent_grant_digest;
-use crate::state::pending_constraints::ct_eq_32;
+use crate::state::assertions::ct_eq_32;
 use crate::state::*;
 use crate::utils::audit_log::build_audit_entry;
 use crate::utils::policy_digest::{

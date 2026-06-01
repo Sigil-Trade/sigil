@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-use crate::state::constraints::{ConstraintOperator, MAX_CONSTRAINT_VALUE_LEN};
+use crate::state::assertions::{ConstraintOperator, MAX_CONSTRAINT_VALUE_LEN};
 
 /// Maximum number of post-execution assertion entries per vault.
 /// Kept small to limit compute cost in finalize_session.

@@ -1,4 +1,9 @@
 pub mod agent_spend_overlay;
+// M1-04: kept agnostic-assertion primitives (ConstraintOperator, bytes_match,
+// ct_eq_32, …) relocated here ahead of the constraints-engine teardown. NOT
+// glob-re-exported below — consumers import `state::assertions::X` explicitly —
+// so it does not collide with the (soon-to-be-deleted) `constraints::*` glob.
+pub mod assertions;
 pub mod audit_log_rejected;
 pub mod audit_log_success;
 pub mod constraints;

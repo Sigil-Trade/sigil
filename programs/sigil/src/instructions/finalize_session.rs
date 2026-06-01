@@ -1017,15 +1017,16 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
                 crate::state::post_assertions::AssertionMode::Absolute => {
                     // Phase B1: check current value against expected_value
                     let expected = &entry.expected_value[..len];
-                    let operator = ConstraintOperator::try_from(entry.operator)
-                        .map_err(|_| error!(SigilError::InvalidConstraintOperator))?;
+                    let operator = crate::state::assertions::ConstraintOperator::try_from(
+                        entry.operator,
+                    )
+                    .map_err(|_| error!(SigilError::InvalidConstraintOperator))?;
 
                     // Phase B3 CrossFieldLte branch DELETED in Phase 1 Option A demolition.
                     // Standard absolute comparison (B1) is now the sole path.
-                    let passed =
-                        crate::instructions::integrations::generic_constraints::bytes_match(
-                            actual, &operator, expected,
-                        );
+                    // M1-04: bytes_match relocated to state::assertions (was
+                    // instructions::integrations::generic_constraints).
+                    let passed = crate::state::assertions::bytes_match(actual, &operator, expected);
                     require!(passed, SigilError::PostAssertionFailed);
                 }
                 crate::state::post_assertions::AssertionMode::MaxDecrease => {
