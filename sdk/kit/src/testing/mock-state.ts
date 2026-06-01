@@ -146,7 +146,6 @@ export function createMockVaultState(
     },
     tracker: null,
     overlay: null,
-    constraints: null,
     globalBudget: {
       spent24h: spent,
       cap: dailyCap,

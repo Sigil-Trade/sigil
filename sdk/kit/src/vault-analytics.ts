@@ -58,7 +58,7 @@ export interface VaultHealth {
   capResetsIn: number;
   /** Seconds until cap would be hit at current rate. null = safe. */
   timeToCapAtCurrentRate: number | null;
-  hasConstraints: boolean;
+  // M1-04: hasConstraints removed (constraints engine deleted).
   hasTimelock: boolean;
   timelockDuration: number;
   hasPendingPolicyChange: boolean;
@@ -108,7 +108,7 @@ export function getVaultHealth(
   state: ResolvedVaultState | ResolvedVaultStateForOwner,
   nowUnix: bigint,
 ): VaultHealth {
-  const { vault, policy, tracker, globalBudget, constraints } = state;
+  const { vault, policy, tracker, globalBudget } = state;
 
   // VaultStatus is a numeric enum (Active=0, Frozen=1, Closed=2).
   // Use reverse mapping for display string.
@@ -190,12 +190,6 @@ export function getVaultHealth(
       passed: policy.maxSlippageBps < 1000,
       severity: "warning",
     },
-    {
-      id: "constraints-configured",
-      label: "Instruction constraints are set",
-      passed: constraints !== null,
-      severity: "info",
-    },
   ];
 
   const criticalFailures = securityChecks.filter(
@@ -218,7 +212,6 @@ export function getVaultHealth(
     capRemaining: globalBudget.remaining,
     capResetsIn,
     timeToCapAtCurrentRate: velocity.timeToCapSeconds,
-    hasConstraints: constraints !== null,
     hasTimelock: policy.timelockDuration > 0n,
     timelockDuration: Number(policy.timelockDuration),
     hasPendingPolicyChange: false, // Overridden by getVaultSummary()

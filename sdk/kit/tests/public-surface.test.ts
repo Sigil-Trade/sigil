@@ -80,18 +80,16 @@ describe("v0.9.0 root barrel — kept exports", () => {
     expect(kit.SAFETY_PRESETS.production.timelockDuration).to.equal(86_400);
   });
 
-  it("DOES export the 11 account types + their decoders", () => {
+  it("DOES export the account types + their decoders (M1-04: 3 constraint accounts removed)", () => {
     const accounts = [
       "getAgentVaultDecoder",
       "getPolicyConfigDecoder",
       "getSpendTrackerDecoder",
       "getSessionAuthorityDecoder",
       "getAgentSpendOverlayDecoder",
-      "getInstructionConstraintsDecoder",
+      // M1-04: constraint account decoders removed (engine deleted).
       "getPendingPolicyUpdateDecoder",
-      "getPendingConstraintsUpdateDecoder",
       "getPendingAgentPermissionsUpdateDecoder",
-      "getPendingCloseConstraintsDecoder",
       "getPostExecutionAssertionsDecoder",
     ];
     for (const name of accounts) {

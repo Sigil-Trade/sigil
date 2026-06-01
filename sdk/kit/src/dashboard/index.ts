@@ -40,7 +40,6 @@ import type {
   HealthData,
   PolicyData,
   PolicyChanges,
-  ConstraintEntry,
   DiscoveredVault,
   OverviewData,
   GetOverviewOptions,
@@ -69,7 +68,6 @@ export type {
   HealthData,
   PolicyData,
   PolicyChanges,
-  ConstraintEntry,
   DiscoveredVault,
   DxError,
   ChartPoint,
@@ -816,108 +814,6 @@ export class OwnerClient {
     return constraintReads.fetchPendingCloseConstraints(this.rpc, this.vault);
   }
 
-  // ─── Constraints (timelocked for modifications/deletion) ────────────────────
-
-  /**
-   * Immediate — additive, creates constraints that didn't exist.
-   * AL2 mainnet gate: see {@link OwnerClient.assertMainnetConfirmed}.
-   */
-  async createConstraints(
-    entries: ConstraintEntry[],
-    opts?: TxOpts,
-  ): Promise<TxResult> {
-    this.assertMainnetConfirmed("createConstraints", opts);
-    return mutations.createConstraints(
-      this.rpc,
-      this.vault,
-      this.owner,
-      this.network,
-      entries,
-      opts,
-    );
-  }
-
-  /**
-   * Timelocked — existing queue/apply pattern.
-   * AL2 mainnet gate: see {@link OwnerClient.assertMainnetConfirmed}.
-   */
-  async queueConstraintsUpdate(
-    entries: ConstraintEntry[],
-    opts?: TxOpts,
-  ): Promise<TxResult> {
-    this.assertMainnetConfirmed("queueConstraintsUpdate", opts);
-    return mutations.queueConstraintsUpdate(
-      this.rpc,
-      this.vault,
-      this.owner,
-      this.network,
-      entries,
-      opts,
-    );
-  }
-
-  /** AL2 mainnet gate: see {@link OwnerClient.assertMainnetConfirmed}. */
-  async applyConstraintsUpdate(opts?: TxOpts): Promise<TxResult> {
-    this.assertMainnetConfirmed("applyConstraintsUpdate", opts);
-    return mutations.applyConstraintsUpdate(
-      this.rpc,
-      this.vault,
-      this.owner,
-      this.network,
-      opts,
-    );
-  }
-
-  /** AL2 mainnet gate: see {@link OwnerClient.assertMainnetConfirmed}. */
-  async cancelConstraintsUpdate(opts?: TxOpts): Promise<TxResult> {
-    this.assertMainnetConfirmed("cancelConstraintsUpdate", opts);
-    return mutations.cancelConstraintsUpdate(
-      this.rpc,
-      this.vault,
-      this.owner,
-      this.network,
-      opts,
-    );
-  }
-
-  /**
-   * Timelocked — direct close_instruction_constraints deleted (TOCTOU fix).
-   * AL2 mainnet gate: see {@link OwnerClient.assertMainnetConfirmed}.
-   */
-  async queueCloseConstraints(opts?: TxOpts): Promise<TxResult> {
-    this.assertMainnetConfirmed("queueCloseConstraints", opts);
-    return mutations.queueCloseConstraints(
-      this.rpc,
-      this.vault,
-      this.owner,
-      this.network,
-      opts,
-    );
-  }
-
-  /** AL2 mainnet gate: see {@link OwnerClient.assertMainnetConfirmed}. */
-  async applyCloseConstraints(opts?: TxOpts): Promise<TxResult> {
-    this.assertMainnetConfirmed("applyCloseConstraints", opts);
-    return mutations.applyCloseConstraints(
-      this.rpc,
-      this.vault,
-      this.owner,
-      this.network,
-      opts,
-    );
-  }
-
-  /** AL2 mainnet gate: see {@link OwnerClient.assertMainnetConfirmed}. */
-  async cancelCloseConstraints(opts?: TxOpts): Promise<TxResult> {
-    this.assertMainnetConfirmed("cancelCloseConstraints", opts);
-    return mutations.cancelCloseConstraints(
-      this.rpc,
-      this.vault,
-      this.owner,
-      this.network,
-      opts,
-    );
-  }
 
   // ─── Phase 8 Ownership Transfer (M-2, audit 2026-05-21) ─────────────────────
   //

@@ -145,7 +145,6 @@ describe("Kit SDK Devnet — Vault Lifecycle", function () {
       timelockDuration: livePolicy.data.timelockDuration,
       sessionExpirySeconds: livePolicy.data.sessionExpirySeconds,
       observeOnly: liveVault.data.observeOnly,
-      hasConstraints: livePolicy.data.hasConstraints,
       hasPostAssertions: livePolicy.data.hasPostAssertions,
       // PEN-CROSS-2: created_at_slot is immutable post-init.
       createdAtSlot: livePolicy.data.createdAtSlot,

@@ -59,10 +59,11 @@ import {
 //
 // Cross-impl byte-equality pinned against Rust unit tests in
 // `programs/sigil/src/utils/policy_digest.rs::digest_known_value_*`.
+// M1-04: regenerated for the 21-field digest (has_constraints removed).
 const HEX_MINIMAL =
-  "f36f0bce45b2ccd681891f2b4922b733563ad21485e6801e4f5f43f475ca0949";
+  "8d80e131f0fca07e71d173cd5c559f0041a6ef9391e3a87ecac5f249c5bda36d";
 const HEX_REALISTIC =
-  "68778cdd2c3fc158756997c3f851d6b67235cbac7f5217a9c4614afd39a344c4";
+  "21155d71a1d0a466cf57676658dcae577b3cab8d1cc512c4589f9ebba10bae03";
 /**
  * Phase 8 PEN-CROSS-1 (audit 2026-05-19): empty-vault agent_set_hash.
  * SHA-256 of [0x00,0x00,0x00,0x00]. Mirrors Rust
@@ -98,7 +99,6 @@ describe("TA-19 — computePolicyPreviewDigest cross-impl pin", () => {
       timelockDuration: 0n,
       sessionExpirySeconds: 0n,
       observeOnly: false,
-      hasConstraints: false,
       hasPostAssertions: 0,
       createdAtSlot: 0n,
       // TA-05: minimal fixture uses inert operating_hours=0
@@ -128,7 +128,6 @@ describe("TA-19 — computePolicyPreviewDigest cross-impl pin", () => {
       timelockDuration: 1800n,
       sessionExpirySeconds: 30n,
       observeOnly: false,
-      hasConstraints: false,
       hasPostAssertions: 0,
       createdAtSlot: 12345n,
       // TA-05: realistic fixture pins all-hours default
@@ -160,7 +159,6 @@ describe("TA-19 — computePolicyPreviewDigest cross-impl pin", () => {
       timelockDuration: 1800n,
       sessionExpirySeconds: 30n,
       observeOnly: false,
-      hasConstraints: false,
       hasPostAssertions: 0,
       createdAtSlot: 0n,
       operatingHours: 0,
@@ -183,7 +181,6 @@ describe("TA-19 — computePolicyPreviewDigest cross-impl pin", () => {
       timelockDuration: 1800n,
       sessionExpirySeconds: 30n,
       observeOnly: false,
-      hasConstraints: false,
       hasPostAssertions: 0,
       createdAtSlot: 0n,
       operatingHours: 0,
@@ -206,7 +203,6 @@ describe("TA-19 — computePolicyPreviewDigest cross-impl pin", () => {
       timelockDuration: 1800n,
       sessionExpirySeconds: 30n,
       observeOnly: false,
-      hasConstraints: false,
       hasPostAssertions: 0,
       createdAtSlot: 0n,
       operatingHours: 0,
@@ -232,7 +228,6 @@ describe("TA-19 — computePolicyPreviewDigest cross-impl pin", () => {
       timelockDuration: 1800n,
       sessionExpirySeconds: 30n,
       observeOnly: false,
-      hasConstraints: false,
       hasPostAssertions: 0,
       createdAtSlot: 0n,
       operatingHours: 0,
@@ -257,7 +252,6 @@ describe("TA-19 — computePolicyPreviewDigest cross-impl pin", () => {
       timelockDuration: 1800n,
       sessionExpirySeconds: 30n,
       observeOnly: false,
-      hasConstraints: false,
       hasPostAssertions: 0,
       createdAtSlot: 12345n,
       operatingHours: 0,
@@ -281,7 +275,6 @@ describe("TA-19 — computePolicyPreviewDigest cross-impl pin", () => {
         timelockDuration: 0n,
         sessionExpirySeconds: 0n,
         observeOnly: false,
-        hasConstraints: false,
         hasPostAssertions: 0,
         createdAtSlot: 0n,
         operatingHours: 0,
@@ -304,7 +297,6 @@ describe("TA-19 — computePolicyPreviewDigest cross-impl pin", () => {
       timelockDuration: 1800n,
       sessionExpirySeconds: 30n,
       observeOnly: false,
-      hasConstraints: false,
       hasPostAssertions: 0,
       createdAtSlot: 12345n,
       operatingHours: 0,
@@ -332,7 +324,6 @@ describe("TA-19 — computePolicyPreviewDigest cross-impl pin", () => {
       timelockDuration: 1800n,
       sessionExpirySeconds: 30n,
       observeOnly: false,
-      hasConstraints: false,
       hasPostAssertions: 0,
       createdAtSlot: 12345n,
       operatingHours: 0x00ffffff,
@@ -361,7 +352,6 @@ describe("TA-19 — computePolicyPreviewDigest cross-impl pin", () => {
       timelockDuration: 1800n,
       sessionExpirySeconds: 30n,
       observeOnly: false,
-      hasConstraints: false,
       hasPostAssertions: 0,
       createdAtSlot: 12345n,
       operatingHours: 0x00ffffff,
@@ -393,7 +383,6 @@ describe("TA-19 — computePolicyPreviewDigest cross-impl pin", () => {
       timelockDuration: 1800n,
       sessionExpirySeconds: 30n,
       observeOnly: false,
-      hasConstraints: false,
       hasPostAssertions: 0,
       createdAtSlot: 12345n,
       operatingHours: 0x00ffffff,
@@ -428,7 +417,6 @@ describe("TA-19 — computePolicyPreviewDigest cross-impl pin", () => {
       timelockDuration: 1800n,
       sessionExpirySeconds: 30n,
       observeOnly: false,
-      hasConstraints: false,
       hasPostAssertions: 0,
       createdAtSlot: 12345n,
       operatingHours: 0x00ffffff,
@@ -479,7 +467,6 @@ describe("TA-19 — computePolicyPreviewDigest cross-impl pin", () => {
       timelockDuration: 1800n,
       sessionExpirySeconds: 30n,
       observeOnly: false,
-      hasConstraints: false,
       hasPostAssertions: 0,
       createdAtSlot: 12345n,
       operatingHours: 0x00ffffff,
@@ -517,7 +504,6 @@ describe("TA-19 — computePolicyPreviewDigest cross-impl pin", () => {
       timelockDuration: 1800n,
       sessionExpirySeconds: 30n,
       observeOnly: false,
-      hasConstraints: false,
       hasPostAssertions: 0,
       createdAtSlot: 12345n,
       operatingHours: 0x00ffffff,
@@ -596,7 +582,6 @@ function referenceDigest(fields: {
   timelockDuration: bigint;
   sessionExpirySeconds: bigint;
   observeOnly: boolean;
-  hasConstraints: boolean;
   hasPostAssertions: number;
   createdAtSlot: bigint;
   operatingHours: number;
@@ -645,7 +630,6 @@ function referenceDigest(fields: {
   pushU64(fields.timelockDuration);
   pushU64(fields.sessionExpirySeconds);
   pushU8(fields.observeOnly ? 1 : 0);
-  pushU8(fields.hasConstraints ? 1 : 0);
   pushU8(fields.hasPostAssertions);
   pushU64(fields.createdAtSlot);
   // TA-05: operating_hours at position 15
@@ -698,7 +682,6 @@ describe("TA-19 — property test: SDK encoder == reference encoder (PEN-CROSS-7
         fc.bigUint({ max: (1n << 64n) - 1n }), // timelock_duration
         fc.bigUint({ max: (1n << 64n) - 1n }), // session_expiry_seconds
         fc.boolean(), // observe_only
-        fc.boolean(), // has_constraints
         fc.integer({ min: 0, max: 255 }), // has_post_assertions
         fc.bigUint({ max: (1n << 64n) - 1n }), // created_at_slot
         fc.integer({ min: 0, max: 0xffffffff }), // operating_hours (TA-05; encoder must handle any u32)
@@ -721,7 +704,6 @@ describe("TA-19 — property test: SDK encoder == reference encoder (PEN-CROSS-7
           timelock,
           sessionExpiry,
           observeOnly,
-          hasConstraints,
           hasPostAssertions,
           createdAtSlot,
           operatingHours,
@@ -747,7 +729,6 @@ describe("TA-19 — property test: SDK encoder == reference encoder (PEN-CROSS-7
             timelockDuration: timelock,
             sessionExpirySeconds: sessionExpiry,
             observeOnly,
-            hasConstraints,
             hasPostAssertions,
             createdAtSlot,
             operatingHours,
@@ -774,7 +755,6 @@ describe("TA-19 — property test: SDK encoder == reference encoder (PEN-CROSS-7
             timelockDuration: timelock,
             sessionExpirySeconds: sessionExpiry,
             observeOnly,
-            hasConstraints,
             hasPostAssertions,
             createdAtSlot,
             operatingHours,

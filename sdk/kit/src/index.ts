@@ -81,7 +81,6 @@ export {
   findVaultsByOwner,
   findSessionsByVault,
   getPendingPolicyForVault,
-  getPendingConstraintsForVault,
 } from "./state-resolver.js";
 export type {
   EffectiveBudget,

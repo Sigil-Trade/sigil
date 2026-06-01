@@ -9,7 +9,7 @@
 
 import type { Address, TransactionSigner } from "../kit-adapter.js";
 import type { Rpc, SolanaRpcApi } from "../kit-adapter.js";
-import type { ConstraintEntryArgs } from "../generated/types/constraintEntry.js";
+// M1-04: ConstraintEntryArgs import removed (constraints engine deleted).
 import type { ResolvedVaultStateForOwner } from "../state-resolver.js";
 import type { VaultPnL } from "../balance-tracker.js";
 import type { VaultActivityItem } from "../event-analytics.js";
@@ -533,11 +533,7 @@ export interface PolicyChanges {
   destinationMode?: number;
 }
 
-/**
- * Re-export from generated types. Byte-level constraint matching — the on-chain
- * program validates instruction data fields against these rules.
- */
-export type { ConstraintEntryArgs as ConstraintEntry };
+// M1-04: the ConstraintEntry re-export was removed with the constraints engine.
 
 // ─── Discovery ───────────────────────────────────────────────────────────────
 

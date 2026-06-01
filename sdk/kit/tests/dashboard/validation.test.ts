@@ -16,8 +16,6 @@ import {
   addAgent,
   queuePolicyUpdate,
   pauseAgent,
-  createConstraints,
-  queueConstraintsUpdate,
 } from "../../src/dashboard/mutations.js";
 import { capability, usd, type CapabilityTier } from "../../src/types.js";
 
@@ -302,24 +300,3 @@ describe("Validation: queuePolicyUpdate", () => {
   });
 });
 
-// ─── Constraint entries validation ──────────────────────────────────────────
-
-describe("Validation: constraint entries", () => {
-  it("createConstraints rejects empty array", async () => {
-    try {
-      await createConstraints(rpc, VAULT, owner, "devnet", []);
-      expect.fail("Should have thrown");
-    } catch (err: any) {
-      expect(err.message).to.include("non-empty");
-    }
-  });
-
-  it("queueConstraintsUpdate rejects empty array", async () => {
-    try {
-      await queueConstraintsUpdate(rpc, VAULT, owner, "devnet", []);
-      expect.fail("Should have thrown");
-    } catch (err: any) {
-      expect(err.message).to.include("non-empty");
-    }
-  });
-});

@@ -106,7 +106,6 @@ function mockState(): ResolvedVaultState {
       maxSlippageBps: 500,
       timelockDuration: 0n,
       allowedDestinations: [],
-      hasConstraints: false,
       hasPendingPolicy: false,
       hasProtocolCaps: false,
       protocolCaps: [],
@@ -132,7 +131,6 @@ function mockState(): ResolvedVaultState {
     },
     tracker: null,
     overlay: null,
-    constraints: null,
     globalBudget: {
       spent24h: 0n,
       cap: 10_000_000_000n,

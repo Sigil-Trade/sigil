@@ -9,7 +9,7 @@
  * agent and perfect everything else would get "90/100" — dangerously misleading.
  */
 
-import { getAddressEncoder, type Address } from "./kit-adapter.js";
+import { type Address } from "./kit-adapter.js";
 import type {
   ResolvedVaultState,
   ResolvedVaultStateForOwner,
@@ -79,7 +79,7 @@ export interface AuditEntry {
  * Checks 18-19: discriminator staleness, allowlist coverage. Check 20: mode-ALL warning.
  */
 export function getSecurityPosture(state: ResolvedVaultState): SecurityPosture {
-  const { vault, policy, constraints } = state;
+  const { vault, policy } = state;
 
   const checks: SecurityCheck[] = [
     {
@@ -188,18 +188,6 @@ export function getSecurityPosture(state: ResolvedVaultState): SecurityPosture {
         "Reduce per-agent limits so their sum is at or below the vault daily cap.",
     },
     {
-      id: "constraints-configured",
-      label: "Instruction constraints are set",
-      passed: constraints !== null,
-      severity: "info",
-      detail:
-        "Instruction constraints add byte-level validation on DeFi instructions.",
-      remediation:
-        constraints === null
-          ? "Consider adding instruction constraints for high-value vaults."
-          : null,
-    },
-    {
       id: "has-agents",
       label: "At least one agent is registered",
       passed: vault.agents.length > 0,
@@ -280,42 +268,6 @@ export function getSecurityPosture(state: ResolvedVaultState): SecurityPosture {
             : null,
     },
     {
-      id: "constraints-protocol-aligned",
-      label: "Constraint programs are in allowlist",
-      passed: (() => {
-        if (
-          !constraints ||
-          !constraints.entries ||
-          policy.protocolMode !== PROTOCOL_MODE_ALLOWLIST
-        )
-          return true;
-        if (!policy.protocols) return true;
-        const encoder = getAddressEncoder();
-        const allowedBytes = policy.protocols.map((p) => encoder.encode(p));
-        const activeEntries = constraints.entries.slice(
-          0,
-          constraints.entryCount,
-        );
-        for (const entry of activeEntries) {
-          const matches = allowedBytes.some((ab) => {
-            if (ab.length !== entry.programId.length) return false;
-            for (let i = 0; i < 32; i++) {
-              if (ab[i] !== entry.programId[i]) return false;
-            }
-            return true;
-          });
-          if (!matches) return false;
-        }
-        return true;
-      })(),
-      severity: "warning",
-      detail:
-        "Instruction constraints reference program addresses not in the protocol allowlist. " +
-        "These constraints will never trigger because the protocol is already blocked.",
-      remediation:
-        "Update the allowlist to include constrained programs, or remove stale constraints.",
-    },
-    {
       id: "no-permission-concentration",
       label: "No agent has full Operator capability",
       passed: !vault.agents.some(
@@ -329,86 +281,6 @@ export function getSecurityPosture(state: ResolvedVaultState): SecurityPosture {
         "Downgrade agent capability to Observer (1) if spending is not required.",
     },
     // ---- Step 18: 2 more checks (18-19) — council security findings ----
-    {
-      id: "constraints-current",
-      label: "Constraint discriminators are current",
-      passed:
-        !constraints ||
-        !constraints.entries ||
-        constraints.entries.length === 0 ||
-        (() => {
-          // Verify constraint entries reference known program discriminators.
-          // Stale constraints silently stop matching after protocol upgrades.
-          for (const entry of constraints.entries) {
-            if (
-              entry.dataConstraints &&
-              entry.dataConstraints.length === 0 &&
-              entry.accountConstraints &&
-              entry.accountConstraints.length === 0
-            ) {
-              return false; // Empty entry = likely stale or misconfigured
-            }
-          }
-          return true;
-        })(),
-      severity: "warning",
-      detail:
-        "Stale or empty constraint entries may not match current protocol instruction formats. " +
-        "Review constraints when protocols upgrade.",
-      remediation:
-        "Review and update InstructionConstraints entries. Remove empty entries.",
-    },
-    {
-      id: "constraints-cover-allowlist",
-      label: "All allowlisted protocols have constraint entries",
-      passed: (() => {
-        if (
-          !constraints ||
-          !constraints.entries ||
-          policy.protocolMode !== PROTOCOL_MODE_ALLOWLIST ||
-          !policy.protocols
-        )
-          return true;
-        const encoder = getAddressEncoder();
-        const activeEntries = constraints.entries.slice(
-          0,
-          constraints.entryCount,
-        );
-        return policy.protocols.every((p: Address) => {
-          const pBytes = encoder.encode(p);
-          return activeEntries.some((e) => {
-            if (pBytes.length !== e.programId.length) return false;
-            for (let i = 0; i < 32; i++) {
-              if (pBytes[i] !== e.programId[i]) return false;
-            }
-            return true;
-          });
-        });
-      })(),
-      severity: "info",
-      detail:
-        "Protocols on the allowlist without constraint entries rely solely on spending caps for protection.",
-      remediation:
-        "Add InstructionConstraints entries for all allowlisted protocols.",
-    },
-    // ---- Step 20: 1 more check (20) — council security finding ----
-    {
-      id: "mode-all-unguarded",
-      label: "Protocol mode ALL has constraint protection",
-      // V2 (REVAMP_PLAN §2.2): strict_mode dichotomy removed. Constraints
-      // are always strictly enforced when present. The remaining gap is
-      // protocol mode ALL paired with NO constraints at all — agents would
-      // hit no allowlist filter and no entry-match check.
-      passed:
-        policy.protocolMode !== 0 /* PROTOCOL_MODE_ALL */ ||
-        constraints !== null,
-      severity: "critical",
-      detail:
-        "Protocol mode ALL allows agents to call any program. Without InstructionConstraints, " +
-        "agents have unrestricted program access beyond spending caps and SPL transfer blocking.",
-      remediation:
-        "Switch to Allowlist mode, or define InstructionConstraints entries for the vault.",
-    },
   ];
 
   const passCount = checks.filter((c) => c.passed).length;

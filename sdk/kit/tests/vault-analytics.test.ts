@@ -174,8 +174,9 @@ describe("getVaultHealth", () => {
     expect(health.capRemaining).to.equal(0n);
   });
 
-  it("includes 7 security checks", () => {
+  it("includes 6 security checks", () => {
+    // M1-04: the constraints-configured check was removed (engine deleted) → 6.
     const health = getVaultHealth(mockState(), 1700000000n);
-    expect(health.securityChecks).to.have.length(7);
+    expect(health.securityChecks).to.have.length(6);
   });
 });

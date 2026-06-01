@@ -125,16 +125,7 @@ describe("OwnerClient", () => {
         "queuePolicyUpdate",
         "applyPendingPolicy",
         "cancelPendingPolicy",
-        // Constraints — immediate
-        "createConstraints",
-        // Constraints — timelocked update
-        "queueConstraintsUpdate",
-        "applyConstraintsUpdate",
-        "cancelConstraintsUpdate",
-        // Constraints — timelocked close
-        "queueCloseConstraints",
-        "applyCloseConstraints",
-        "cancelCloseConstraints",
+        // M1-04: 7 constraint mutation methods removed (engine deleted).
         // M-2 (audit 2026-05-21): Phase 8 ownership transfer
         "initiateOwnershipTransfer",
         "acceptOwnershipTransfer",

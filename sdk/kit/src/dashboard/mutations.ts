@@ -73,11 +73,6 @@ import { getCancelPendingPolicyInstructionAsync } from "../generated/instruction
 import { getQueueAgentPermissionsUpdateInstructionAsync } from "../generated/instructions/queueAgentPermissionsUpdate.js";
 import { getApplyAgentPermissionsUpdateInstructionAsync } from "../generated/instructions/applyAgentPermissionsUpdate.js";
 import { getCancelAgentPermissionsUpdateInstruction } from "../generated/instructions/cancelAgentPermissionsUpdate.js";
-import { getApplyConstraintsUpdateInstructionAsync } from "../generated/instructions/applyConstraintsUpdate.js";
-import { getCancelConstraintsUpdateInstructionAsync } from "../generated/instructions/cancelConstraintsUpdate.js";
-import { getQueueCloseConstraintsInstructionAsync } from "../generated/instructions/queueCloseConstraints.js";
-import { getApplyCloseConstraintsInstructionAsync } from "../generated/instructions/applyCloseConstraints.js";
-import { getCancelCloseConstraintsInstructionAsync } from "../generated/instructions/cancelCloseConstraints.js";
 import { getCreatePostAssertionsInstructionAsync } from "../generated/instructions/createPostAssertions.js";
 import { getClosePostAssertionsInstructionAsync } from "../generated/instructions/closePostAssertions.js";
 
@@ -91,16 +86,11 @@ import { getAcceptOwnershipTransferMultisigInstructionAsync } from "../generated
 import { getCancelOwnershipTransferInstructionAsync } from "../generated/instructions/cancelOwnershipTransfer.js";
 import type { PostAssertionEntry } from "../generated/types/postAssertionEntry.js";
 import { validatePostAssertionEntries } from "./post-assertion-validation.js";
-import {
-  buildCreateConstraintsIxs,
-  buildQueueConstraintsUpdateIxs,
-} from "./constraint-builders.js";
 
 import type {
   TxResult,
   TxOpts,
   PolicyChanges,
-  ConstraintEntry,
 } from "./types.js";
 import { toDxError } from "./errors.js";
 import { SigilSdkDomainError } from "../errors/sdk.js";
@@ -175,7 +165,7 @@ function assertMutationMainnetConfirmed(
 async function siblingHandlerExpectedDigest(
   rpc: Rpc<SolanaRpcApi>,
   vault: Address,
-  override: { hasConstraints?: boolean; hasPostAssertions?: number },
+  override: { hasPostAssertions?: number },
 ): Promise<Uint8Array> {
   const [policyAddress] = await getPolicyPDA(vault);
   const [livePolicy, liveVault] = await Promise.all([
@@ -194,10 +184,6 @@ async function siblingHandlerExpectedDigest(
     timelockDuration: livePolicy.data.timelockDuration,
     sessionExpirySeconds: livePolicy.data.sessionExpirySeconds,
     observeOnly: liveVault.data.observeOnly,
-    hasConstraints:
-      override.hasConstraints !== undefined
-        ? override.hasConstraints
-        : livePolicy.data.hasConstraints,
     hasPostAssertions:
       override.hasPostAssertions !== undefined
         ? override.hasPostAssertions
@@ -889,7 +875,6 @@ export async function queuePolicyUpdate(
     timelockDuration: effTimelock,
     sessionExpirySeconds: effSessionExpiry,
     observeOnly: liveVault.data.observeOnly,
-    hasConstraints: livePolicy.data.hasConstraints,
     hasPostAssertions: livePolicy.data.hasPostAssertions,
     // PEN-CROSS-2: created_at_slot is immutable post-init — read from live.
     createdAtSlot: livePolicy.data.createdAtSlot,
@@ -1086,139 +1071,6 @@ export async function cancelAgentPermissions(
   return run(rpc, owner, network, [ix], opts);
 }
 
-/**
- * Allocate the constraints PDA and write the entries.
- *
- * Day-0 fix: this used to send only the `create_instruction_constraints`
- * instruction, which always failed because the PDA needs to be pre-allocated
- * to `InstructionConstraints::SIZE` (35,888 bytes) before the populate handler
- * runs. We now send the full 5-instruction chain (allocate + 3 extends +
- * populate) in one atomic transaction. See `constraint-builders.ts` for the
- * tx-size guardrail (~3 fully-populated entries per call).
- */
-export async function createConstraints(
-  rpc: Rpc<SolanaRpcApi>,
-  vault: Address,
-  owner: TransactionSigner,
-  network: "devnet" | "mainnet",
-  entries: ConstraintEntry[],
-  opts?: TxOpts,
-): Promise<TxResult> {
-  if (!entries || entries.length === 0)
-    throw toDxError(new Error("Constraint entries must be a non-empty array"));
-  try {
-    const [policy] = await getPolicyPDA(vault);
-    // PEN-CROSS-3: bind the post-mutation digest (`has_constraints=true`).
-    const expectedDigest = await siblingHandlerExpectedDigest(rpc, vault, {
-      hasConstraints: true,
-    });
-    const ixs = await buildCreateConstraintsIxs({
-      owner,
-      vault,
-      policy,
-      entries,
-      expectedDigest,
-    });
-    return run(rpc, owner, network, ixs, opts);
-  } catch (err: unknown) {
-    throw toDxError(err);
-  }
-}
-
-/**
- * Allocate the pending constraints PDA and queue an update.
- *
- * Same Day-0 fix as `createConstraints` but targets the `pending_constraints`
- * PDA at 35,904 bytes (16 more than `InstructionConstraints` for the extra
- * timestamp fields in `PendingConstraintsUpdate`).
- */
-export async function queueConstraintsUpdate(
-  rpc: Rpc<SolanaRpcApi>,
-  vault: Address,
-  owner: TransactionSigner,
-  network: "devnet" | "mainnet",
-  entries: ConstraintEntry[],
-  opts?: TxOpts,
-): Promise<TxResult> {
-  if (!entries || entries.length === 0)
-    throw toDxError(new Error("Constraint entries must be a non-empty array"));
-  try {
-    const [policy] = await getPolicyPDA(vault);
-    const ixs = await buildQueueConstraintsUpdateIxs({
-      owner,
-      vault,
-      policy,
-      entries,
-    });
-    return run(rpc, owner, network, ixs, opts);
-  } catch (err: unknown) {
-    throw toDxError(err);
-  }
-}
-
-export async function applyConstraintsUpdate(
-  rpc: Rpc<SolanaRpcApi>,
-  vault: Address,
-  owner: TransactionSigner,
-  network: "devnet" | "mainnet",
-  opts?: TxOpts,
-): Promise<TxResult> {
-  const ix = await getApplyConstraintsUpdateInstructionAsync({ owner, vault });
-  return run(rpc, owner, network, [ix], opts);
-}
-
-export async function cancelConstraintsUpdate(
-  rpc: Rpc<SolanaRpcApi>,
-  vault: Address,
-  owner: TransactionSigner,
-  network: "devnet" | "mainnet",
-  opts?: TxOpts,
-): Promise<TxResult> {
-  const ix = await getCancelConstraintsUpdateInstructionAsync({ owner, vault });
-  return run(rpc, owner, network, [ix], opts);
-}
-
-export async function queueCloseConstraints(
-  rpc: Rpc<SolanaRpcApi>,
-  vault: Address,
-  owner: TransactionSigner,
-  network: "devnet" | "mainnet",
-  opts?: TxOpts,
-): Promise<TxResult> {
-  const ix = await getQueueCloseConstraintsInstructionAsync({ owner, vault });
-  return run(rpc, owner, network, [ix], opts);
-}
-
-export async function applyCloseConstraints(
-  rpc: Rpc<SolanaRpcApi>,
-  vault: Address,
-  owner: TransactionSigner,
-  network: "devnet" | "mainnet",
-  opts?: TxOpts,
-): Promise<TxResult> {
-  // PEN-CROSS-3: bind the post-mutation digest (`has_constraints=false`)
-  // into the ix. Handler rejects on mismatch — defends owner blind-sign.
-  const expectedDigest = await siblingHandlerExpectedDigest(rpc, vault, {
-    hasConstraints: false,
-  });
-  const ix = await getApplyCloseConstraintsInstructionAsync({
-    owner,
-    vault,
-    expectedDigest,
-  });
-  return run(rpc, owner, network, [ix], opts);
-}
-
-export async function cancelCloseConstraints(
-  rpc: Rpc<SolanaRpcApi>,
-  vault: Address,
-  owner: TransactionSigner,
-  network: "devnet" | "mainnet",
-  opts?: TxOpts,
-): Promise<TxResult> {
-  const ix = await getCancelCloseConstraintsInstructionAsync({ owner, vault });
-  return run(rpc, owner, network, [ix], opts);
-}
 
 // ─── Post-execution assertions (Phase 2) ─────────────────────────────────────
 // Composes with pre-execution InstructionConstraints — NOT a replacement.

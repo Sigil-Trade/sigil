@@ -54,10 +54,12 @@ function mockSecurityState(overrides: any = {}) {
 // ─── getSecurityPosture ──────────────────────────────────────────────────────
 
 describe("getSecurityPosture", () => {
-  it("has exactly 20 checks and each one passes for well-configured vault", () => {
-    const state = mockSecurityState({ constraints: {} });
+  it("has exactly 15 checks and each one passes for well-configured vault", () => {
+    // M1-04: 5 constraint posture-checks removed (constraints-configured,
+    // -protocol-aligned, -current, -cover-allowlist, mode-all-unguarded) → 20-5=15.
+    const state = mockSecurityState({});
     const posture = getSecurityPosture(state);
-    expect(posture.checks).to.have.length(20);
+    expect(posture.checks).to.have.length(15);
     // Verify each critical/warning check individually (not just summary)
     const ids = posture.checks.map((c) => c.id);
     expect(ids).to.include("no-full-perms");
@@ -66,7 +68,6 @@ describe("getSecurityPosture", () => {
     expect(ids).to.include("timelock-meaningful");
     expect(ids).to.include("fee-rate-reasonable");
     expect(ids).to.include("no-permission-concentration");
-    expect(ids).to.include("mode-all-unguarded");
     // Every single check should pass — assert individually to prevent cancellation trap
     for (const check of posture.checks) {
       expect(
@@ -426,17 +427,8 @@ describe("Step 8 security checks", () => {
     );
     expect(check!.passed).to.equal(false);
   });
-
-  it("fails mode-all-unguarded for protocol mode ALL without strict constraints", () => {
-    const state = mockSecurityState({
-      policy: { protocolMode: 0 },
-      constraints: null,
-    });
-    const posture = getSecurityPosture(state);
-    const check = posture.checks.find((c) => c.id === "mode-all-unguarded");
-    expect(check!.passed).to.equal(false);
-    expect(check!.severity).to.equal("critical");
-  });
+  // M1-04: "fails mode-all-unguarded" test removed — the check was deleted with
+  // the constraints engine (protocol mode is allowlist-only post-reset).
 });
 
 // ─── getAuditTrail ───────────────────────────────────────────────────────────

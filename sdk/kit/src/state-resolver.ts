@@ -28,10 +28,7 @@ import {
   decodeAgentVault,
   type AgentVault,
 } from "./generated/accounts/agentVault.js";
-import {
-  decodeInstructionConstraints,
-  type InstructionConstraints,
-} from "./generated/accounts/instructionConstraints.js";
+// M1-04: InstructionConstraints account import removed (constraints engine deleted).
 import {
   decodePolicyConfig,
   type PolicyConfig,
@@ -50,10 +47,7 @@ import {
   fetchMaybePendingPolicyUpdate,
   type PendingPolicyUpdate,
 } from "./generated/accounts/pendingPolicyUpdate.js";
-import {
-  fetchMaybePendingConstraintsUpdate,
-  type PendingConstraintsUpdate,
-} from "./generated/accounts/pendingConstraintsUpdate.js";
+// M1-04: PendingConstraintsUpdate account import removed (constraints engine deleted).
 import type { AgentContributionEntry } from "./generated/types/agentContributionEntry.js";
 import { SigilSdkDomainError } from "./errors/sdk.js";
 import {
@@ -66,10 +60,8 @@ import {
   getPolicyPDA,
   getTrackerPDA,
   getAgentOverlayPDA,
-  getConstraintsPDA,
   getSessionPDA,
   getPendingPolicyPDA,
-  getPendingConstraintsPDA,
 } from "./resolve-accounts.js";
 import {
   EPOCH_DURATION,
@@ -120,7 +112,7 @@ export interface ResolvedVaultState {
   policy: PolicyConfig;
   tracker: SpendTracker | null;
   overlay: AgentSpendOverlay | null;
-  constraints: InstructionConstraints | null;
+  // M1-04: `constraints` field removed (constraints engine deleted).
 
   globalBudget: EffectiveBudget;
   agentBudget: EffectiveBudget | null;
@@ -401,29 +393,27 @@ export async function resolveVaultState(
   const usdtMint = net === "devnet" ? USDT_MINT_DEVNET : USDT_MINT_MAINNET;
 
   // 1. Derive PDAs + stablecoin ATAs in parallel
+  // M1-04: constraints PDA removed from the resolve flow (constraints engine gone).
   const [
     [policyPda],
     [trackerPda],
     [overlayPda],
-    [constraintsPda],
     vaultUsdcAta,
     vaultUsdtAta,
   ] = await Promise.all([
     getPolicyPDA(vault),
     getTrackerPDA(vault),
     getAgentOverlayPDA(vault, 0),
-    getConstraintsPDA(vault),
     deriveAta(vault, usdcMint),
     deriveAta(vault, usdtMint),
   ]);
 
-  // 2. Single batch fetch (one RPC round-trip — 7 accounts)
+  // 2. Single batch fetch (one RPC round-trip — 6 accounts)
   const encoded = await fetchEncodedAccounts(rpc, [
     vault,
     policyPda,
     trackerPda,
     overlayPda,
-    constraintsPda,
     vaultUsdcAta,
     vaultUsdtAta,
   ]);
@@ -457,10 +447,7 @@ export async function resolveVaultState(
     ? decodedOverlay.data
     : null;
 
-  const decodedConstraints = decodeInstructionConstraints(encoded[4]);
-  const constraints: InstructionConstraints | null = decodedConstraints.exists
-    ? decodedConstraints.data
-    : null;
+  // M1-04: constraints decode removed. ATAs are now encoded[4]/encoded[5].
 
   // 4. Timestamp
   const timestamp = nowUnix ?? BigInt(Math.floor(Date.now() / 1000));
@@ -552,7 +539,7 @@ export async function resolveVaultState(
   let usdcBalance = 0n;
   let usdtBalance = 0n;
 
-  const usdcEncoded = encoded[5];
+  const usdcEncoded = encoded[4];
   if (usdcEncoded?.exists) {
     const usdcData = (usdcEncoded as { data: Uint8Array }).data;
     if (usdcData && usdcData.length >= 72) {
@@ -567,7 +554,7 @@ export async function resolveVaultState(
     }
   }
 
-  const usdtEncoded = encoded[6];
+  const usdtEncoded = encoded[5];
   if (usdtEncoded?.exists) {
     const usdtData = (usdtEncoded as { data: Uint8Array }).data;
     if (usdtData && usdtData.length >= 72) {
@@ -582,7 +569,6 @@ export async function resolveVaultState(
     policy: decodedPolicy.data,
     tracker,
     overlay,
-    constraints,
     globalBudget,
     agentBudget,
     allAgentBudgets,
@@ -1038,15 +1024,4 @@ export async function getPendingPolicyForVault(
   return result.exists ? result.data : null;
 }
 
-/**
- * Fetch the pending constraints update for a vault, if any.
- * Returns null if no pending update exists.
- */
-export async function getPendingConstraintsForVault(
-  rpc: Rpc<SolanaRpcApi>,
-  vault: Address,
-): Promise<PendingConstraintsUpdate | null> {
-  const [pda] = await getPendingConstraintsPDA(vault);
-  const result = await fetchMaybePendingConstraintsUpdate(rpc, pda);
-  return result.exists ? result.data : null;
-}
+// M1-04: getPendingConstraintsForVault removed with the constraints engine.

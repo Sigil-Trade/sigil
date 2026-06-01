@@ -287,26 +287,7 @@ describe("AL2 — OwnerClient mainnet confirmation gate (H-9)", () => {
           name: "cancelPendingPolicy",
           run: (c) => c.cancelPendingPolicy(),
         },
-        {
-          name: "applyConstraintsUpdate",
-          run: (c) => c.applyConstraintsUpdate(),
-        },
-        {
-          name: "cancelConstraintsUpdate",
-          run: (c) => c.cancelConstraintsUpdate(),
-        },
-        {
-          name: "queueCloseConstraints",
-          run: (c) => c.queueCloseConstraints(),
-        },
-        {
-          name: "applyCloseConstraints",
-          run: (c) => c.applyCloseConstraints(),
-        },
-        {
-          name: "cancelCloseConstraints",
-          run: (c) => c.cancelCloseConstraints(),
-        },
+        // M1-04: constraint mutation gate-entries removed (engine deleted).
         {
           name: "initiateOwnershipTransfer",
           run: (c) => c.initiateOwnershipTransfer(AGENT_ADDR, false),
