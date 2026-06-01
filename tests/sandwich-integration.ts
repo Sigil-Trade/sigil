@@ -69,7 +69,6 @@ import {
   createAtaIdempotentHelper,
   mintToHelper,
   sendVersionedTx,
-  createConstraintsAccount,
   TestEnv,
   LiteSVM,
 } from "./helpers/litesvm-setup";
@@ -294,7 +293,6 @@ describe("sandwich-integration (Phase 6.1)", () => {
     auditSuccess: PublicKey;
     auditRejected: PublicKey;
     postAssertionsPda: PublicKey;
-    constraintsPda: PublicKey;
     vaultUsdcAta: PublicKey;
     agent: Keypair;
   }
@@ -365,10 +363,6 @@ describe("sandwich-integration (Phase 6.1)", () => {
     );
     const [postAssertionsPda] = PublicKey.findProgramAddressSync(
       [Buffer.from("post_assertions"), vault.toBuffer()],
-      program.programId,
-    );
-    const [constraintsPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("constraints"), vault.toBuffer()],
       program.programId,
     );
 
@@ -460,66 +454,13 @@ describe("sandwich-integration (Phase 6.1)", () => {
       } as any)
       .rpc();
 
-    // Install a permissive InstructionConstraints PDA so the sandwich's
-    // validate_and_authorize accepts the mock-defi ix between validate and
-    // finalize. validate_and_authorize.rs:237-285 treats
-    // `remaining_accounts[0]` as the constraints PDA whenever the slice is
-    // non-empty AND requires `has_constraints == false` when it's empty.
-    // Our post-assertion sandwiches MUST pass the post-assertions PDA in
-    // remaining_accounts, which forces the slice to be non-empty —
-    // therefore we ALSO need real constraints installed so the position-0
-    // discriminator/owner check passes. Two entries: one for the no-op
-    // `open_position` discriminator (used by R-2/R-3/R-4/TA-12), and one
-    // for `drain_via_delegation` (used by R-1/TA-14). The A5 anchor rule
-    // (state/constraints.rs:248-283) requires the first dataConstraint to
-    // be `Eq` at offset 0 with a non-zero 8-byte discriminator value.
-    //
-    // Pre-existing bug workaround: `litesvm-setup.ts::autoSiblingHandlerDigest`
-    // is missing canonical-digest position 22 (cosign_session_pubkey, D-5
-    // audit 2026-05-19). The async `siblingHandlerDigest` in
-    // `policy-digest.ts` IS up to date, so we compute the digest explicitly
-    // and pass it. CI excludes `tests/instruction-constraints.ts` for this
-    // same reason — Phase 6.1 should not re-introduce that excluded path.
-    const constraintsDigest = await siblingHandlerDigest(
-      program,
-      policy,
-      vault,
-      { hasConstraints: true },
-    );
-    createConstraintsAccount(
-      program,
-      svm,
-      (owner as any).payer,
-      vault,
-      policy,
-      [
-        {
-          programId: MOCK_DEFI_PROGRAM_ID,
-          dataConstraints: [
-            {
-              offset: 0,
-              operator: { eq: {} },
-              value: MOCK_DEFI_OPEN_POSITION_DISC,
-            },
-          ],
-          accountConstraints: [],
-          discriminatorFormat: { anchor8: {} },
-        },
-        {
-          programId: MOCK_DEFI_PROGRAM_ID,
-          dataConstraints: [
-            {
-              offset: 0,
-              operator: { eq: {} },
-              value: MOCK_DEFI_DRAIN_DISC,
-            },
-          ],
-          accountConstraints: [],
-          discriminatorFormat: { anchor8: {} },
-        },
-      ],
-      constraintsDigest,
-    );
+    // M1-04 (constraints-engine teardown): the permissive InstructionConstraints
+    // PDA that used to be installed here is gone. validate_and_authorize no
+    // longer interprets remaining_accounts[0] as a constraints PDA, so the
+    // sandwich's post-assertions PDA passes through cleanly. The 9 tests below
+    // assert FINALIZE-time outcome guarantees (mint-delta-cap, ATA-pin, output
+    // floor, declaration consistency, stable-floor, per-recipient cap, the M1
+    // single-DeFi-ix limit) — all independent of the deleted engine.
 
     return {
       vaultId,
@@ -530,7 +471,6 @@ describe("sandwich-integration (Phase 6.1)", () => {
       auditSuccess,
       auditRejected,
       postAssertionsPda,
-      constraintsPda,
       vaultUsdcAta,
       agent,
     };
@@ -760,7 +700,6 @@ describe("sandwich-integration (Phase 6.1)", () => {
         ctx,
         amount: new BN(50_000_000), // declared 50 USDC (validate-time delegation)
         validateRemainingAccounts: [
-          { pubkey: ctx.constraintsPda, isSigner: false, isWritable: false },
           {
             pubkey: ctx.postAssertionsPda,
             isSigner: false,
@@ -831,7 +770,6 @@ describe("sandwich-integration (Phase 6.1)", () => {
         ctx,
         amount: new BN(50_000_000),
         validateRemainingAccounts: [
-          { pubkey: ctx.constraintsPda, isSigner: false, isWritable: false },
           {
             pubkey: ctx.postAssertionsPda,
             isSigner: false,
@@ -892,7 +830,6 @@ describe("sandwich-integration (Phase 6.1)", () => {
         ctx,
         amount: new BN(50_000_000),
         validateRemainingAccounts: [
-          { pubkey: ctx.constraintsPda, isSigner: false, isWritable: false },
           {
             pubkey: ctx.postAssertionsPda,
             isSigner: false,
@@ -953,7 +890,6 @@ describe("sandwich-integration (Phase 6.1)", () => {
         ctx,
         amount: new BN(50_000_000),
         validateRemainingAccounts: [
-          { pubkey: ctx.constraintsPda, isSigner: false, isWritable: false },
           {
             pubkey: ctx.postAssertionsPda,
             isSigner: false,
@@ -1007,9 +943,7 @@ describe("sandwich-integration (Phase 6.1)", () => {
       const sandwichOpts: SandwichOpts = {
         ctx,
         amount: new BN(50_000_000),
-        validateRemainingAccounts: [
-          { pubkey: ctx.constraintsPda, isSigner: false, isWritable: false },
-        ],
+        validateRemainingAccounts: [],
       };
 
       const validateIx = await buildValidateIx(sandwichOpts);
@@ -1060,9 +994,7 @@ describe("sandwich-integration (Phase 6.1)", () => {
       const sandwichOpts: SandwichOpts = {
         ctx,
         amount: new BN(50_000_000),
-        validateRemainingAccounts: [
-          { pubkey: ctx.constraintsPda, isSigner: false, isWritable: false },
-        ],
+        validateRemainingAccounts: [],
         // TA-14 walks the DeFi ix's metas + looks up the writable token
         // accounts in finalize.remaining_accounts. The recipient ATA must
         // be passed there so the recipient resolution succeeds.
@@ -1128,9 +1060,7 @@ describe("sandwich-integration (Phase 6.1)", () => {
       const sandwichOpts: SandwichOpts = {
         ctx,
         amount: new BN(1_000_000), // 1 USDC — drives is_spending = true
-        validateRemainingAccounts: [
-          { pubkey: ctx.constraintsPda, isSigner: false, isWritable: false },
-        ],
+        validateRemainingAccounts: [],
       };
 
       const validateIx = await buildValidateIx(sandwichOpts);
@@ -1160,9 +1090,7 @@ describe("sandwich-integration (Phase 6.1)", () => {
       const sandwichOpts: SandwichOpts = {
         ctx,
         amount: new BN(1_000_000),
-        validateRemainingAccounts: [
-          { pubkey: ctx.constraintsPda, isSigner: false, isWritable: false },
-        ],
+        validateRemainingAccounts: [],
       };
 
       const validateIx = await buildValidateIx(sandwichOpts);
@@ -1195,9 +1123,7 @@ describe("sandwich-integration (Phase 6.1)", () => {
         ctx,
         amount: new BN(1_000_000), // drives is_spending = true
         targetProtocolOverride: otherProtocol, // authorize target = B …
-        validateRemainingAccounts: [
-          { pubkey: ctx.constraintsPda, isSigner: false, isWritable: false },
-        ],
+        validateRemainingAccounts: [],
       };
 
       const validateIx = await buildValidateIx(sandwichOpts);

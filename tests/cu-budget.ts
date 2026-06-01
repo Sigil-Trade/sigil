@@ -549,38 +549,6 @@ describe("cu-budget", () => {
    * loop to walk all 64 entries before finding a match — the worst case for
    * the verify_against_entries_zc scan.
    */
-  function installFallthroughConstraints(ctx: VaultCtx): void {
-    const entries: SyntheticEntry[] = [];
-    for (let i = 0; i < 63; i++) {
-      // Distinct fake disc per entry, all with first byte 0..62 (none == 229 = ROUTE_DISC[0])
-      const fake = Buffer.alloc(8, i & 0xff);
-      // Force first byte to be unique 0..62 (guaranteed != ROUTE_DISC[0]=229).
-      fake.writeUInt8(i, 0);
-      entries.push({
-        programId: JUPITER_PROGRAM_ID,
-        discriminatorValue: fake,
-      });
-    }
-    // 64th entry matches ROUTE_DISC at offset 0
-    entries.push({
-      programId: JUPITER_PROGRAM_ID,
-      discriminatorValue: Buffer.from(ROUTE_DISC),
-    });
-    const data = buildConstraintsAccountData(
-      ctx.vault,
-      ctx.constraintsBump,
-      entries,
-    );
-    const rentExempt = Number(
-      svm.minimumBalanceForRentExemption(BigInt(data.length)),
-    );
-    svm.setAccount(ctx.constraints, {
-      lamports: rentExempt,
-      data,
-      owner: program.programId,
-      executable: false,
-    });
-  }
 
   before(async () => {
     resetCUMeasurements();
@@ -750,72 +718,10 @@ describe("cu-budget", () => {
   // ───────────────────────────────────────────────────────────────────────────
   // Scenario 4: validate + 64-entry OR-fall-through (V2: strict-by-default)
   // ───────────────────────────────────────────────────────────────────────────
-  it(`Scenario 4: validate + 64-entry OR-fall-through ≤ ${THRESHOLDS.or64Fallthrough.toLocaleString()} CU`, async () => {
-    const ctx = await setupVault(new BN(60004), [JUPITER_PROGRAM_ID]);
-    installFallthroughConstraints(ctx);
-
-    const jupiterIx = new TransactionInstruction({
-      programId: JUPITER_PROGRAM_ID,
-      keys: [{ pubkey: agent.publicKey, isSigner: true, isWritable: false }],
-      data: buildJupiterRouteData(1),
-    });
-    const validateIx = await buildValidateIx(
-      ctx,
-      new BN(50_000_000),
-      JUPITER_PROGRAM_ID,
-      [{ pubkey: ctx.constraints, isSigner: false, isWritable: false }],
-    );
-    const finalizeIx = await buildFinalizeIx(ctx);
-    const result = sendAndMeasureCU(
-      svm,
-      [validateIx, jupiterIx, finalizeIx],
-      agent,
-    );
-    recordCU("4:or64-fallthrough", result);
-    console.log(
-      `  measured: ${result.computeUnitsConsumed.toLocaleString()} CU` +
-        `  (succeeded=${result.succeeded})` +
-        (result.errStr ? `  err=${result.errStr}` : ""),
-    );
-    expect(result.computeUnitsConsumed).to.be.greaterThan(0);
-    expect(result.computeUnitsConsumed).to.be.lessThan(
-      THRESHOLDS.or64Fallthrough,
-    );
-  });
 
   // ───────────────────────────────────────────────────────────────────────────
   // Scenario 5: validate + Jupiter-10-step + 64 entries combined
   // ───────────────────────────────────────────────────────────────────────────
-  it(`Scenario 5: 10-step + 64 entries combined ≤ ${THRESHOLDS.combined.toLocaleString()} CU`, async () => {
-    const ctx = await setupVault(new BN(60005), [JUPITER_PROGRAM_ID]);
-    installFallthroughConstraints(ctx);
-
-    const jupiterIx = new TransactionInstruction({
-      programId: JUPITER_PROGRAM_ID,
-      keys: [{ pubkey: agent.publicKey, isSigner: true, isWritable: false }],
-      data: buildJupiterRouteData(MAX_ROUTE_STEPS),
-    });
-    const validateIx = await buildValidateIx(
-      ctx,
-      new BN(50_000_000),
-      JUPITER_PROGRAM_ID,
-      [{ pubkey: ctx.constraints, isSigner: false, isWritable: false }],
-    );
-    const finalizeIx = await buildFinalizeIx(ctx);
-    const result = sendAndMeasureCU(
-      svm,
-      [validateIx, jupiterIx, finalizeIx],
-      agent,
-    );
-    recordCU("5:combined", result);
-    console.log(
-      `  measured: ${result.computeUnitsConsumed.toLocaleString()} CU` +
-        `  (succeeded=${result.succeeded})` +
-        (result.errStr ? `  err=${result.errStr}` : ""),
-    );
-    expect(result.computeUnitsConsumed).to.be.greaterThan(0);
-    expect(result.computeUnitsConsumed).to.be.lessThan(THRESHOLDS.combined);
-  });
 
   // ───────────────────────────────────────────────────────────────────────────
   // Scenario 6: validate + finalize + ComputeBudget×32 pad attack baseline

@@ -41,7 +41,6 @@ import {
   DEVNET_USDC_MINT,
   advanceTime,
   accountExists,
-  createConstraintsAccount,
   TestEnv,
   LiteSVM,
 } from "./helpers/litesvm-setup";
@@ -170,72 +169,6 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
   // ───────────────────────────────────────────────────────────────────────
   // 1. cancel_close_constraints — owner cancels queued constraints closure
   // ───────────────────────────────────────────────────────────────────────
-  it("cancel_close_constraints: closes PendingCloseConstraints PDA", async () => {
-    const vaultId = new BN(5000);
-    const { vault, policy } = await initVaultFor(vaultId);
-
-    const [constraintsPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("constraints"), vault.toBuffer()],
-      program.programId,
-    );
-    const [pendingCloseConstraints] = PublicKey.findProgramAddressSync(
-      [Buffer.from("pending_close_constraints"), vault.toBuffer()],
-      program.programId,
-    );
-
-    // Create constraints (need has_constraints=true to queue close).
-    const entries = [
-      {
-        programId: jupiterProgramId,
-        dataConstraints: [
-          {
-            offset: 0,
-            operator: { eq: {} },
-            value: Buffer.from([0xaa, 0xbb, 0, 0, 0, 0, 0, 0]),
-          },
-        ],
-        accountConstraints: [],
-        discriminatorFormat: { anchor8: {} },
-      },
-    ];
-    createConstraintsAccount(
-      program,
-      svm,
-      (owner as any).payer,
-      vault,
-      policy,
-      entries,
-    );
-
-    // Queue close.
-    await program.methods
-      .queueCloseConstraints()
-      .accounts({
-        owner: owner.publicKey,
-        vault,
-        policy,
-        constraints: constraintsPda,
-        pendingCloseConstraints,
-        systemProgram: SystemProgram.programId,
-      } as any)
-      .rpc();
-
-    // PRECONDITION: pending PDA exists.
-    expect(accountExists(svm, pendingCloseConstraints)).to.equal(true);
-
-    // ACT: cancel.
-    await program.methods
-      .cancelCloseConstraints()
-      .accounts({
-        owner: owner.publicKey,
-        vault,
-        pendingCloseConstraints,
-      } as any)
-      .rpc();
-
-    // ASSERT: pending PDA closed (close = owner refunds rent).
-    expect(accountExists(svm, pendingCloseConstraints)).to.equal(false);
-  });
 
   // ───────────────────────────────────────────────────────────────────────
   // 2. record_agent_violation — owner records a policy-violation failure

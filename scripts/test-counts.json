@@ -37,12 +37,6 @@
       "claudePattern": "tests/security-exploits.ts` (ts-mocha + LiteSVM, %d tests)"
     },
     {
-      "name": "Instruction constraints (generic enforcement)",
-      "count": 70,
-      "onChain": true,
-      "claudePattern": "tests/instruction-constraints.ts` (ts-mocha + LiteSVM, %d tests)"
-    },
-    {
       "name": "Escrow integration (deposit/settle/refund)",
       "count": 0,
       "onChain": true,

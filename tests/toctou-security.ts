@@ -44,8 +44,6 @@ import {
   mintToHelper,
   advanceTime,
   sendVersionedTx,
-  createConstraintsAccount,
-  queueConstraintsUpdateMultiIx,
   TestEnv,
   LiteSVM,
 } from "./helpers/litesvm-setup";
@@ -542,103 +540,6 @@ describe("TOCTOU Security Fix", () => {
 
   // ─── Test 6: Version bump on apply_constraints_update ────────────────────
 
-  it("bumps policy_version when applying constraints update", async () => {
-    const v = await setupFullVault(1800);
-
-    // PEN-CROSS-5: baseline is 1 (register_agent bumped).
-    const policy0 = await program.account.policyConfig.fetch(v.policyPda);
-    const baseline = (policy0 as any).policyVersion.toNumber();
-    expect(baseline).to.equal(1);
-
-    // Create instruction constraints PDA
-    const [constraintsPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("constraints"), v.vaultPda.toBuffer()],
-      program.programId,
-    );
-
-    const entries = [
-      {
-        programId: jupiterProgramId,
-        dataConstraints: [
-          {
-            offset: 0,
-            operator: { eq: {} },
-            value: Buffer.from([
-              0xe5, 0x17, 0xcb, 0x97, 0x7a, 0xe3, 0xad, 0x2a,
-            ]),
-          },
-        ],
-        accountConstraints: [],
-        discriminatorFormat: { anchor8: {} },
-      },
-    ];
-
-    createConstraintsAccount(
-      program,
-      svm,
-      owner.payer,
-      v.vaultPda,
-      v.policyPda,
-      entries,
-    );
-
-    // Queue constraints update
-    const [pendingConstraintsPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("pending_constraints"), v.vaultPda.toBuffer()],
-      program.programId,
-    );
-
-    // A5 invariant: first DC must be offset=0, Eq, >=8 bytes, non-zero.
-    const newEntries = [
-      {
-        programId: jupiterProgramId,
-        dataConstraints: [
-          {
-            offset: 0,
-            operator: { eq: {} },
-            value: Buffer.from([
-              0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8,
-            ]),
-          },
-        ],
-        accountConstraints: [],
-        discriminatorFormat: { anchor8: {} },
-      },
-    ];
-
-    queueConstraintsUpdateMultiIx(
-      program,
-      svm,
-      owner.payer,
-      v.vaultPda,
-      v.policyPda,
-      constraintsPda,
-      newEntries,
-    );
-
-    // Advance time past the 1800s timelock
-    advanceTime(svm, 1801);
-
-    // Apply constraints update — now requires policy account for version bump
-    await program.methods
-      .applyConstraintsUpdate()
-      .accounts({
-        owner: owner.publicKey,
-        vault: v.vaultPda,
-        policy: v.policyPda,
-        constraints: constraintsPda,
-        pendingConstraints: pendingConstraintsPda,
-      } as any)
-      .rpc();
-
-    // Verify policy version bumped to 3 — PEN-CROSS-5 register_agent (1) +
-    // Phase 2 TA-19 PEN-CROSS-3 `create_instruction_constraints` (1) +
-    // `apply_constraints_update` (1) = 3. Pre-PEN-CROSS-5 this expected 2
-    // (no register_agent bump). The triple sequence reflects each
-    // mutation's defense-in-depth OCC contribution.
-    const policy1 = await program.account.policyConfig.fetch(v.policyPda);
-    expect((policy1 as any).policyVersion.toNumber()).to.equal(baseline + 2);
-  });
 
   // ─── Test 7: Deleted instructions not callable ───────────────────────────
 
