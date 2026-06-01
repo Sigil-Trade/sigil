@@ -102,11 +102,12 @@ const DISC_PAUSE_AGENT = 10;
 const DISC_UNPAUSE_AGENT = 11;
 const DISC_REVOKE_AGENT = 12;
 const DISC_POLICY_APPLY = 14;
-const DISC_CONSTRAINTS_APPLY = 15;
 const DISC_AGENT_GRANT_CANCEL = 19;
 const DISC_AGENT_PERMS_APPLY = 20;
-const DISC_CONSTRAINTS_CLOSE_APPLY = 21;
 const DISC_AGENT_AUTO_REVOKED = 22;
+// M1-04c: DISC_CONSTRAINTS_APPLY (15) + DISC_CONSTRAINTS_CLOSE_APPLY (21)
+// removed — the apply_constraints / apply_close_constraints instructions
+// they discriminated are gone.
 
 // Capability levels mirror state/vault.rs constants.
 const CAPABILITY_OBSERVER = 1;
@@ -150,25 +151,9 @@ function entryCount(svm: LiteSVM, pda: PublicKey): number {
   return Buffer.from(acct.data)[entriesEnd + 1];
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// PendingConstraintsUpdate size (post-M-4 close, Bucket 2 Phase 10):
-//
-//   8 (Anchor disc) + 32 (vault) + 64 * 560 (entries) + 1 (entry_count)
-//   + 1 (bump) + 6 (pad) + 8 (queued_at) + 8 (executes_at)
-//   + 8 (queued_at_slot) + 32 (pending_content_digest M-4)
-//   = 35,944 bytes
-//
-// The shared helper `buildQueueConstraintsUpdateIxs` in
-// `tests/helpers/litesvm-setup.ts` has not been updated to the post-M-4
-// size — it still emits extends to 35,912 (pre-M-4 SIZE), so calls to
-// it fail at queue_constraints_update.rs:80 with
-// `InvalidPendingConstraintsPda` (data_len mismatch). The local
-// alternative below sizes correctly and is only used here; merging
-// upstream into the shared helper is tracked as a separate housekeeping
-// task for the Phase 10 redeploy.
-// ─────────────────────────────────────────────────────────────────────────
-const PENDING_CONSTRAINTS_SIZE_M4 = 35_944;
-const MAX_CPI_SIZE = 10_240;
+// M1-04c: removed dead PendingConstraintsUpdate size constants
+// (PENDING_CONSTRAINTS_SIZE_M4, MAX_CPI_SIZE) — the constraints engine is
+// gone, nothing in this file builds a constraints PDA anymore.
 
 function anchorDisc(name: string): Buffer {
   return createHash("sha256").update(`global:${name}`).digest().subarray(0, 8);

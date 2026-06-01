@@ -737,7 +737,10 @@ pub fn disables_cosign_predicate(new: Option<bool>, live: bool) -> bool {
 #[inline(never)]
 fn derive_vault_keyed_protected_pdas(vault: &Pubkey, program_id: &Pubkey) -> Vec<Pubkey> {
     let vault_seed = vault.as_ref();
-    let seeds: [&[u8]; 13] = [
+    // M1-04c: pending_constraints, pending_close_constraints, and constraints
+    // seeds removed — the constraints engine is gone, those PDAs can never be
+    // allocated, so denylisting them as destinations protected nothing.
+    let seeds: [&[u8]; 10] = [
         b"vault",
         b"policy",
         b"tracker",
@@ -745,14 +748,11 @@ fn derive_vault_keyed_protected_pdas(vault: &Pubkey, program_id: &Pubkey) -> Vec
         b"audit_success",
         b"audit_rejected",
         b"pending_policy",
-        b"pending_constraints",
-        b"pending_close_constraints",
         b"pending_owner",
         b"pending_agent_grant",
-        b"constraints",
         b"agent_spend",
     ];
-    let mut pdas: Vec<Pubkey> = Vec::with_capacity(13);
+    let mut pdas: Vec<Pubkey> = Vec::with_capacity(10);
     for seed in seeds.iter() {
         let (pda, _) = Pubkey::find_program_address(&[seed, vault_seed], program_id);
         pdas.push(pda);

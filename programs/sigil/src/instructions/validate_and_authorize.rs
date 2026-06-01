@@ -511,30 +511,28 @@ pub fn handler(
     // **Set construction.** We use the already-loaded `ctx.accounts.*` PDA
     // pubkeys for vault / policy / tracker / agent_spend_overlay / session
     // (no derivation cost — those are zero-cost reads of in-memory Anchor
-    // accounts). For other families (constraints, post_assertions, pending_*,
-    // pending_owner) we use `find_program_address` lazily — only one call
-    // per family. Forward-looking families (audit_success, audit_rejected,
-    // cosign, recipient) are listed in PROTECTED_SEED_PREFIXES for
-    // documentation but the derivation step is skipped because no PDA of
-    // that family yet exists for the current vault (Phase 7+ ship them).
+    // accounts). For other families (post_assertions, pending_*, pending_owner)
+    // we use `find_program_address` lazily — only one call per family.
+    // Forward-looking families (audit_success, audit_rejected, cosign,
+    // recipient) are listed in PROTECTED_SEED_PREFIXES for documentation but
+    // the derivation step is skipped because no PDA of that family yet exists
+    // for the current vault (Phase 7+ ship them).
     //
-    // **Prefix count (C-5 close + L-2, audit 2026-05-21).** PROTECTED_SEED_PREFIXES
-    // currently lists 17 entries split as **15 active + 2 forward-compat**:
-    //   ACTIVE (15): vault, policy, tracker, session, post_assertions,
-    //     pending_policy, pending_constraints, pending_agent_perms,
-    //     pending_close_constraints, pending_owner, pending_agent_grant,
-    //     constraints, agent_spend, audit_success, audit_rejected (audit_*
-    //     pair landed when Phase 7 audit-log PDAs went live; pending_agent_grant
-    //     landed in Phase 8 PEN-CROSS-1 — see queue_agent_grant.rs:56 / line
-    //     245 of state/mod.rs).
+    // **Prefix count (M1-04c, 2026-06-01; was C-5 close + L-2 audit 2026-05-21).**
+    // PROTECTED_SEED_PREFIXES lists 14 entries split as **12 active + 2
+    // forward-compat** (M1-04c removed the 3 dead constraint seeds —
+    // constraints, pending_constraints, pending_close_constraints — when the
+    // constraints engine was torn down; those PDAs can never be allocated):
+    //   ACTIVE (12): vault, policy, tracker, session, post_assertions,
+    //     pending_policy, pending_agent_perms, pending_owner,
+    //     pending_agent_grant, agent_spend, audit_success, audit_rejected
+    //     (audit_* pair landed when Phase 7 audit-log PDAs went live;
+    //     pending_agent_grant landed in Phase 8 PEN-CROSS-1).
     //   FORWARD-COMPAT (2): cosign (Phase 3 cosign session — no live PDA in
     //     V2 register yet), recipient (post-exec per-recipient cap).
-    // The runtime `protected: [Pubkey; 15]` array below is the derived view:
-    // 15 real keys, zero sentinel slots. The prior single `Pubkey::default()`
-    // sentinel that stood in for the 4 forward-compat families was dropped
-    // when audit_success / audit_rejected became live; the remaining 2
-    // forward-compat families will land as additional derivations + array
-    // entries when their PDAs ship.
+    // The runtime TA-11 set below derives 11 vault-keyed base entries (the 12
+    // active prefixes minus the 2 forward-compat plus per-agent expansion of
+    // pending_agent_perms) + N per-agent pending_agent_perms keys.
     //
     // **CU profile (measured 2026-05-19 via LiteSVM in
     // tests/sysvar-scan-bound.ts "TA-11 protected-writable scan CU profile"
@@ -545,11 +543,11 @@ pub fn handler(
     //   - 30-sibling-noop bundle end-to-end: ~181K CU (validate + finalize +
     //     30 SystemProgram noops + 3 sysvar scans). Pre-SA4 baseline ~169K.
     //   - TA-11 scan delta for 20 extra siblings: ~61K CU (3K per extra ix).
-    //   - 10 lazy find_program_address derivations: ~50K CU (paid once per
-    //     validate). Up from 9 × 5K = ~45K CU pre-C-5 (pending_agent_grant
-    //     derivation added in C-5 fix).
-    //   - Per-meta protected-set lookup (15 entries × pubkey-equality
-    //     compare): < 240 CU per meta. Up from 14 entries × < 220 CU.
+    //   - lazy find_program_address derivations: now 7 (M1-04c removed 3
+    //     constraint derivations). The measured ~50K CU above was for the
+    //     prior 10 derivations; actual is now ~15K lower (3 fewer × ~5K).
+    //   - Per-meta protected-set lookup (now 12 entries × pubkey-equality
+    //     compare): < 240 CU per meta.
     //   - Worst-case 8 sibling ixs × 16 metas/ix ≈ 9K (scan-loop) + 50K
     //     (derivations) ≈ 55-60K total. Even doubling stays under the
     //     prompt's 90K budget; leaves > 1.3M CU for the actual sandwich.
@@ -565,7 +563,8 @@ pub fn handler(
     // any CPI. Failure rejects the bundle before paying any fee.
     {
         // TA-11 protected set built by an out-of-line helper to keep the
-        // (now up-to-25) `find_program_address` derivations + Vec growth out
+        // (now up to 16: 6 fixed + up to 10 per-agent) `find_program_address`
+        // derivations + Vec growth out
         // of `validate_and_authorize`'s already-tight stack frame (C-5 close
         // 2026-05-21, FINDING-B follow-up 2026-05-21 — adding
         // `pending_agent_grant` + per-agent pending_agent_perms expansion
@@ -1359,13 +1358,11 @@ fn build_ta11_protected_set(
     use anchor_lang::solana_program::pubkey::Pubkey as SP;
 
     let vault_seed = vault_key.as_ref();
-    let (constraints_key, _) = SP::find_program_address(&[b"constraints", vault_seed], &crate::ID);
+    // M1-04c: constraints / pending_constraints / pending_close_constraints
+    // derivations removed — the constraints engine is gone, those PDAs can
+    // never be allocated, so they cannot be smuggled as writable.
     let (pending_policy_key, _) =
         SP::find_program_address(&[b"pending_policy", vault_seed], &crate::ID);
-    let (pending_constraints_key, _) =
-        SP::find_program_address(&[b"pending_constraints", vault_seed], &crate::ID);
-    let (pending_close_constraints_key, _) =
-        SP::find_program_address(&[b"pending_close_constraints", vault_seed], &crate::ID);
     let (post_assertions_key, _) =
         SP::find_program_address(&[b"post_assertions", vault_seed], &crate::ID);
     let (pending_owner_key, _) =
@@ -1407,19 +1404,16 @@ fn build_ta11_protected_set(
     let (pending_agent_grant_key, _) =
         SP::find_program_address(&[b"pending_agent_grant", vault_seed], &crate::ID);
 
-    // 14 base entries (vault-keyed) + N per-agent pending_agent_perms entries.
+    // 11 base entries (vault-keyed) + N per-agent pending_agent_perms entries.
     // Capacity sized for the worst case (MAX_AGENTS_PER_VAULT = 10) so the
     // Vec never reallocates during the per-agent push loop below.
-    let mut protected: Vec<Pubkey> = Vec::with_capacity(14 + agents.len());
+    let mut protected: Vec<Pubkey> = Vec::with_capacity(11 + agents.len());
     protected.push(vault_key);
     protected.push(policy_key);
     protected.push(tracker_key);
     protected.push(overlay_key);
     protected.push(session_key);
-    protected.push(constraints_key);
     protected.push(pending_policy_key);
-    protected.push(pending_constraints_key);
-    protected.push(pending_close_constraints_key);
     protected.push(post_assertions_key);
     protected.push(pending_owner_key);
     protected.push(pending_agent_grant_key);
