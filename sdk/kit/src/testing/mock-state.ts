@@ -107,7 +107,6 @@ export function createMockVaultState(
       maxSlippageBps: 100,
       timelockDuration: 0n,
       allowedDestinations: [],
-      hasConstraints: false,
       hasPendingPolicy: false,
       hasProtocolCaps: false,
       protocolCaps: [],

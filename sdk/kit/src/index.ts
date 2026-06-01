@@ -482,13 +482,12 @@ export type {
 } from "./protocol-resolver.js";
 
 // ─── Inspector ───────────────────────────────────────────────────────────────
-export { analyzeInstructions, inspectConstraints } from "./inspector.js";
+export { analyzeInstructions } from "./inspector.js";
 export type {
   InspectableInstruction,
   TokenTransferInfo,
   InstructionAnalysis,
   DangerousTokenOperation,
-  ConstraintSummary,
 } from "./inspector.js";
 
 // ─── Shield ─────────────────────────────────────────────────────────────────

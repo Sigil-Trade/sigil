@@ -60,7 +60,6 @@ import {
 import {
   getSessionPDA,
   getAgentOverlayPDA,
-  getConstraintsPDA,
 } from "./resolve-accounts.js";
 import { composeSigilTransaction, measureTransactionSize } from "./composer.js";
 import {
@@ -843,17 +842,11 @@ export async function seal(params: SealParams): Promise<SealResult> {
   // new Instruction object that copies the existing accounts and appends the
   // constraints PDA as the first (and only) remaining account — matching the
   // on-chain handler's positional read at index 0 of remaining_accounts.
-  let validateIx = validateIxBase as Instruction;
-  if (state.policy.hasConstraints) {
-    const [constraintsPda] = await getConstraintsPDA(params.vault);
-    validateIx = {
-      ...validateIxBase,
-      accounts: [
-        ...(validateIxBase.accounts ?? []),
-        { address: constraintsPda, role: AccountRole.READONLY },
-      ],
-    } as Instruction;
-  }
+  // M1-04 (constraints-engine teardown): validate_and_authorize no longer reads
+  // a constraints PDA from remaining_accounts. The prior block that appended the
+  // constraints PDA when `state.policy.hasConstraints` was set is removed with
+  // the field. No remaining-account injection is needed here.
+  const validateIx = validateIxBase as Instruction;
 
   const finalizeIx = await getFinalizeSessionInstructionAsync({
     payer: params.agent,

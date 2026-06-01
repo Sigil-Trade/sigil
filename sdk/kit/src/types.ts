@@ -23,10 +23,8 @@ export type ActionType = never;
 export type { VaultStatus } from "./generated/types/vaultStatus.js";
 export type { AgentEntry } from "./generated/types/agentEntry.js";
 export type { EpochBucket } from "./generated/types/epochBucket.js";
-export type { ConstraintEntry } from "./generated/types/constraintEntry.js";
-export type { DataConstraint } from "./generated/types/dataConstraint.js";
-export type { AccountConstraint } from "./generated/types/accountConstraint.js";
-export type { ConstraintOperator } from "./generated/types/constraintOperator.js";
+// M1-04: ConstraintEntry/DataConstraint/AccountConstraint/ConstraintOperator
+// re-exports removed with the constraints engine (generated types deleted).
 
 // ─── Fee Constants ────────────────────────────────────────────────────────────
 

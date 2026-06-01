@@ -285,7 +285,6 @@ export async function provisionVault(
     timelockDuration,
     sessionExpirySeconds: 0n,
     observeOnly,
-    hasConstraints: false,
     hasPostAssertions: 0,
     createdAtSlot,
     operatingHours: 0x00ffffff,

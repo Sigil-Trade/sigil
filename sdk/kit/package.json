@@ -37,10 +37,6 @@
       "import": "./dist/dashboard/index.js",
       "types": "./dist/dashboard/index.d.ts"
     },
-    "./constraints": {
-      "import": "./dist/constraints/index.js",
-      "types": "./dist/constraints/index.d.ts"
-    },
     "./errors": {
       "import": "./dist/errors/public.js",
       "types": "./dist/errors/public.d.ts"

@@ -374,7 +374,6 @@ export async function createVault(
     timelockDuration: BigInt(options.timelockDuration),
     sessionExpirySeconds: 0n,
     observeOnly,
-    hasConstraints: false,
     hasPostAssertions: 0,
     // PEN-CROSS-2: defends against close+reinit replay.
     createdAtSlot,

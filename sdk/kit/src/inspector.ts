@@ -9,7 +9,6 @@
  */
 
 import type { Address } from "./kit-adapter.js";
-import type { ConstraintEntry } from "./generated/types/constraintEntry.js";
 import { resolveProtocolName } from "./protocol-names.js";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -200,82 +199,6 @@ export function analyzeInstructions(
     estimatedValue,
     dangerousOperations,
   };
-}
-
-// ─── Constraint Inspection ───────────────────────────────────────────────────
-
-export interface ConstraintSummary {
-  /** 0-based index in the constraints array. */
-  index: number;
-  /** Protocol program address this constraint targets. */
-  program: Address;
-  /** Human-readable protocol name (e.g. "Jupiter") or shortened address. */
-  programName: string;
-  /** Number of data constraints (byte-level rules). */
-  dataConstraintCount: number;
-  /** Number of account constraints (address-level rules). */
-  accountConstraintCount: number;
-  /** Human-readable description of each rule. */
-  rules: string[];
-}
-
-const OPERATOR_NAMES: Record<number, string> = {
-  0: "==",
-  1: "!=",
-  2: "<",
-  3: "<=",
-  4: ">",
-  5: ">=",
-  6: "contains",
-};
-
-/**
- * Inspect an InstructionConstraints account and return a human-readable
- * summary of each constraint entry.
- *
- * @param entries - The constraint entries from the InstructionConstraints PDA.
- *   Obtain via: `(await resolveVaultState(rpc, vault, agent)).constraints?.entries`
- */
-export function inspectConstraints(
-  entries: ConstraintEntry[],
-): ConstraintSummary[] {
-  return entries
-    .map((entry, index) => {
-      const program = entry.programId;
-      const programName = resolveProtocolName(String(program));
-      const rules: string[] = [];
-
-      // Data constraints: { offset, operator: ConstraintOperator, value: ReadonlyUint8Array }
-      for (const dc of entry.dataConstraints ?? []) {
-        const opNum =
-          typeof dc.operator === "number"
-            ? dc.operator
-            : (dc.operator as { __kind: string }).__kind
-              ? 0
-              : 0;
-        const op = OPERATOR_NAMES[opNum] ?? `op(${String(dc.operator)})`;
-        const bytes = new Uint8Array(dc.value as unknown as ArrayLike<number>);
-        const valueHex = Array.from(bytes)
-          .map((b) => b.toString(16).padStart(2, "0"))
-          .join("");
-        rules.push(`data[${dc.offset}..+${bytes.length}] ${op} 0x${valueHex}`);
-      }
-
-      // Account constraints: { index, expected: Address }
-      for (const ac of entry.accountConstraints ?? []) {
-        rules.push(`account[${ac.index}] == ${ac.expected}`);
-      }
-
-      return {
-        index,
-        program,
-        programName,
-        dataConstraintCount: entry.dataConstraints?.length ?? 0,
-        accountConstraintCount: entry.accountConstraints?.length ?? 0,
-        rules,
-      };
-    })
-    .filter((s) => s.rules.length > 0);
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
