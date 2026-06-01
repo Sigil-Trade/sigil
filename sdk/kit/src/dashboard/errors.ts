@@ -278,7 +278,7 @@ export type DxErrorCategory = "user" | "network" | "program" | "unknown";
  * Friendly category for a `DxError` (FE↔BE contract §6.3 helper).
  *
  * Returns one of:
- *   - `"program"` — Anchor on-chain error (6000-6102 post-Phase-6). Tx
+ *   - `"program"` — Anchor on-chain error (6000-6104 post M1-04). Tx
  *     reached the program and was rejected by program logic.
  *   - `"user"` — SDK / dashboard logic error (7000-7099). Client-side
  *     validation failure the user can fix.

@@ -1152,7 +1152,7 @@ describe("sigil", () => {
       // Advance past 5-min reactivate cooldown (Phase 8 C28).
       advanceTime(svm, 301);
       // Attempt FULL_CAPABILITY reactivate WITHOUT cosigner — must fail
-      // with 6114 (NH-1 Bucket 2 re-audit 2026-05-21).
+      // with 6104 (NH-1 Bucket 2 re-audit 2026-05-21).
       const newAgentPk = Keypair.generate().publicKey;
       try {
         await program.methods
@@ -1480,11 +1480,11 @@ describe("sigil", () => {
         sendVersionedTx(svm, [validateIx, finalizeIx, splTransferIx], agent);
         expect.fail("Should have thrown");
       } catch (err: any) {
-        // UnauthorizedPostFinalizeInstruction (code: 6054 post-Phase-1 — shifted
+        // UnauthorizedPostFinalizeInstruction (code: 6049 post-M1-04 — shifted
         // from 6056 by the Phase 1 Option A demolition which deleted the two
         // Jupiter-specific variants at 6030/6031). Checked at finalize
         // instruction (index 1).
-        expect(err.toString()).to.include("6054");
+        expect(err.toString()).to.include("6049");
       }
     });
   });
@@ -3276,7 +3276,7 @@ describe("sigil", () => {
         // ignore if already frozen
       }
 
-      // Phase 8 Batch 5: advance past 5-min reactivate cooldown (ErrReactivateCooldownActive 6106)
+      // Phase 8 Batch 5: advance past 5-min reactivate cooldown (ErrReactivateCooldownActive 6097)
       advanceTime(svm, 301);
 
       // NH-1: FULL_CAPABILITY reactivate requires a non-owner cosigner.
@@ -5183,7 +5183,7 @@ describe("sigil", () => {
 
     // Phase 2 Option A: OpenWithCap mode (destination_mode=1) was deleted.
     // The test now verifies that the queue rejects destination_mode=1 with
-    // InvalidDestinationMode (6078), instead of the previous "opt-in to drain"
+    // InvalidDestinationMode (6069), instead of the previous "opt-in to drain"
     // behavior. Companion test "queue with destination_mode=2" below covers
     // the >1 case.
     it("rejects destination_mode=1 (OpenWithCap deleted in Phase 2 Option A)", async () => {
@@ -5936,7 +5936,7 @@ describe("sigil", () => {
 
     it("register up to 10 agents — succeeds", async () => {
       // Phase 8 Batch 5: prior it() froze vault via last-agent revoke;
-      // advance past 5-min reactivate cooldown (ErrReactivateCooldownActive 6106)
+      // advance past 5-min reactivate cooldown (ErrReactivateCooldownActive 6097)
       advanceTime(svm, 301);
 
       // Reactivate first
@@ -6021,7 +6021,7 @@ describe("sigil", () => {
 
       const newAgent = Keypair.generate();
 
-      // Phase 8 Batch 5: advance past 5-min reactivate cooldown (ErrReactivateCooldownActive 6106)
+      // Phase 8 Batch 5: advance past 5-min reactivate cooldown (ErrReactivateCooldownActive 6097)
       advanceTime(svm, 301);
 
       await program.methods
@@ -6105,7 +6105,7 @@ describe("sigil", () => {
       expect(entry!.capability).to.equal(FULL_CAPABILITY);
     });
 
-    it("invalid capability value → InvalidCapability (6079, Phase 2 TA-04)", async () => {
+    it("invalid capability value → InvalidCapability (6070, Phase 2 TA-04)", async () => {
       const badAgent = Keypair.generate();
       try {
         await program.methods
@@ -7718,7 +7718,7 @@ describe("sigil", () => {
 
     it("reactivate unfreezes without needing to add agent (agents preserved)", async () => {
       // Vault is currently frozen from the first test
-      // Phase 8 Batch 5: advance past 5-min reactivate cooldown (ErrReactivateCooldownActive 6106)
+      // Phase 8 Batch 5: advance past 5-min reactivate cooldown (ErrReactivateCooldownActive 6097)
       advanceTime(svm, 301);
 
       await program.methods
@@ -7794,7 +7794,7 @@ describe("sigil", () => {
       const balance = getTokenBalance(svm, vaultUsdcAta);
       expect(balance.toString()).to.equal("0");
 
-      // Phase 8 Batch 5: advance past 5-min reactivate cooldown (ErrReactivateCooldownActive 6106)
+      // Phase 8 Batch 5: advance past 5-min reactivate cooldown (ErrReactivateCooldownActive 6097)
       advanceTime(svm, 301);
 
       // Clean up: reactivate
@@ -8108,7 +8108,7 @@ describe("sigil", () => {
       );
       expect(entry2!.paused).to.equal(true);
 
-      // Phase 8 Batch 5: advance past 5-min reactivate cooldown (ErrReactivateCooldownActive 6106)
+      // Phase 8 Batch 5: advance past 5-min reactivate cooldown (ErrReactivateCooldownActive 6097)
       advanceTime(svm, 301);
 
       // Clean up: unfreeze and unpause agent2

@@ -198,10 +198,10 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
     expect(entryBefore).to.not.be.undefined;
     expect(entryBefore!.consecutiveFailures).to.equal(0);
 
-    // ACT: record a violation with code 6086 (TA-07 ErrGraylistFriction —
+    // ACT: record a violation with code 6077 (TA-07 ErrGraylistFriction —
     // a real policy-violation code per state/mod.rs::is_policy_violation_code).
     await program.methods
-      .recordAgentViolation(agent.publicKey, 6086)
+      .recordAgentViolation(agent.publicKey, 6077)
       .accounts({
         owner: owner.publicKey,
         vault,
@@ -437,7 +437,7 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
   //
   // Closes DC audit C-7 gap: TA-17 had no runtime REJECT test asserting that
   // an agent with consecutive_failures >= threshold is auto-revoked and that
-  // subsequent validate_and_authorize calls fail with ErrAutoRevoked (6090).
+  // subsequent validate_and_authorize calls fail with ErrAutoRevoked (6081).
   // ───────────────────────────────────────────────────────────────────────
   it("TA-17 REJECT: record_agent_violation trips threshold → auto-revoke + ErrAutoRevoked on validate", async () => {
     const vaultId = new BN(5005);
@@ -463,7 +463,7 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
     // ACT 1-2: record violations 1 and 2 — counter 0→1→2; threshold (3) NOT yet hit.
     for (let i = 0; i < 2; i++) {
       await program.methods
-        .recordAgentViolation(agent.publicKey, 6086)
+        .recordAgentViolation(agent.publicKey, 6077)
         .accounts({ owner: owner.publicKey, vault, policy } as any)
         .rpc();
     }
@@ -478,7 +478,7 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
     // ACT 3: record violation #3 — counter 2 → 3; threshold tripped.
     // Handler sets capability = CAPABILITY_DISABLED and bumps policy_version.
     await program.methods
-      .recordAgentViolation(agent.publicKey, 6086)
+      .recordAgentViolation(agent.publicKey, 6077)
       .accounts({ owner: owner.publicKey, vault, policy } as any)
       .rpc();
 
@@ -491,7 +491,7 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
 
     // ASSERT: subsequent validate-style read sees the auto-revoke state.
     // Full sandwich-level ErrAutoRevoked reject (validate_and_authorize.rs:307-313
-    // surfaces ErrAutoRevoked 6090 when capability=DISABLED && failures>=threshold)
+    // surfaces ErrAutoRevoked 6081 when capability=DISABLED && failures>=threshold)
     // lives in Phase 6.1 sandwich integration tests (task #55). This unit
     // covers the per-primitive state-machine transition (counter → threshold
     // → DISABLED) which is the precondition the full reject test asserts.
@@ -541,7 +541,7 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
     // ASSERT: the call MUST have failed.
     expect(caughtErrorCode).to.not.be.null;
     // ErrCosignRequired = 6089 (see SDK agent-errors.ts ON_CHAIN_ERROR_MAP).
-    expect(caughtErrorCode).to.equal(6089);
+    expect(caughtErrorCode).to.equal(6080);
 
     // ASSERT: observe_only did NOT flip — vault remains observe_only=true.
     const vaultAfter = await program.account.agentVault.fetch(vault);
@@ -671,7 +671,7 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
     }
 
     expect(caughtCode, "apply MUST have rejected").to.not.be.null;
-    expect(caughtCode).to.equal(6089); // ErrCosignRequired
+    expect(caughtCode).to.equal(6080); // ErrCosignRequired
 
     // ASSERT: policy.cosign_required UNCHANGED (still true — defense held).
     const policyAfter = await program.account.policyConfig.fetch(policy);
@@ -881,12 +881,12 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
   //      `policy.cosign_session_pubkey != Pubkey::default()`, the handler
   //      requires an `is_signer == true` entry in `remaining_accounts`
   //      matching the bound pubkey. The attacker (owner-key only) has no
-  //      such signature → reject 6114.
+  //      such signature → reject 6104.
   //
   // Tests:
   //   12. NEGATIVE: reactivate(new_agent=X, FULL_CAPABILITY) WITHOUT
   //       cosign on a vault with `cosign_session_pubkey` configured →
-  //       reject `ErrReactivateCosignRequiredForFullCapability` (6114).
+  //       reject `ErrReactivateCosignRequiredForFullCapability` (6104).
   //   13. POSITIVE (gate doesn't over-fire): reactivate(new_agent=X,
   //       OBSERVER) WITHOUT cosign on the same vault → succeeds. The
   //       gate ONLY fires for FULL_CAPABILITY; lower capabilities pass
@@ -910,7 +910,7 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
   // is the load-bearing primitive — Rust unit tests at
   // `policy_digest.rs::digest_changes_on_cosign_session_pubkey_flip`
   // pin the digest binding side cross-impl.
-  it.skip("D-5 NEGATIVE: reactivate(FULL_CAPABILITY) without cosigner on opted-in vault → reject 6114", async () => {
+  it.skip("D-5 NEGATIVE: reactivate(FULL_CAPABILITY) without cosigner on opted-in vault → reject 6104", async () => {
     // SCAFFOLD: see header comment for the integration plumbing.
     // 1. Init vault with cosign_required=false (D-5 gate is orthogonal
     //    to the existing G6 cosign_required gate — both can be enabled
@@ -922,7 +922,7 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
     // 4. freeze_vault as owner.
     // 5. advanceTime(300); reactivate_vault(new_agent=attacker,
     //    capability=FULL_CAPABILITY) with NO remaining_accounts.
-    // 6. ASSERT: rejected with code 6114
+    // 6. ASSERT: rejected with code 6104
     //    (ErrReactivateCosignRequiredForFullCapability).
   });
 

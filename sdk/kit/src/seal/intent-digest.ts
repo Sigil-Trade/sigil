@@ -411,7 +411,7 @@ export interface ScalarIntentInput {
  * The on-chain verifier at `programs/sigil/src/utils/intent_digest.rs`
  * recomputes this same digest from `validate_and_authorize`'s typed
  * arguments and rejects bundle execution on byte-equal mismatch
- * (`ErrIntentDigestMismatch` code 6111). Network discriminant is derived
+ * (`ErrIntentDigestMismatch` code 6102). Network discriminant is derived
  * on-chain from the program's build feature; the caller does NOT pin it
  * — the encoder here just writes the byte the caller's wallet computed,
  * and Rust verifies the byte matches its own network. Wrong-network

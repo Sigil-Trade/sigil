@@ -200,7 +200,7 @@ mod h1_hard_reject_tests {
     //! H-1 hard-reject (audit 2026-05-19): `enforce_destination_allowlist`
     //! must REJECT (not silently truncate) when a foreign DeFi ix exceeds
     //! the destination-check meta budget. These tests pin the error code
-    //! (6102 IxMetaCountExceeded) and the boundary behaviour.
+    //! (6093 IxMetaCountExceeded) and the boundary behaviour.
     use super::*;
 
     fn pk(b: u8) -> Pubkey {
@@ -265,11 +265,11 @@ mod h1_hard_reject_tests {
         );
     }
 
-    /// One-over-cap: an ix with 17 metas must REJECT with 6102. This is
+    /// One-over-cap: an ix with 17 metas must REJECT with 6093. This is
     /// the silent-truncate-attack closure: previously the helper would
     /// `take(16)` and ignore slot 17.
     #[test]
-    fn one_over_cap_rejects_with_6102() {
+    fn one_over_cap_rejects_with_6093() {
         let vault_pubkey = pk(0xA);
         let metas: Vec<AccountMeta> = (0..(MAX_DESTINATION_CHECK_METAS_PER_IX + 1))
             .map(|i| AccountMeta::new_readonly(pk(i as u8 + 16), false))
@@ -279,12 +279,12 @@ mod h1_hard_reject_tests {
         let err = enforce_destination_allowlist(&metas, &remaining, &vault_pubkey, &policy, 0)
             .expect_err("ix exceeding bound MUST reject");
         // Convert the AnchorError -> u32 error code via the standard
-        // Anchor error projection. We pin the 6102 numeric for forward-
+        // Anchor error projection. We pin the 6093 numeric for forward-
         // compat with off-chain monitors.
         let err_str = format!("{:?}", err);
         assert!(
-            err_str.contains("IxMetaCountExceeded") || err_str.contains("6102"),
-            "expected IxMetaCountExceeded (6102), got: {}",
+            err_str.contains("IxMetaCountExceeded") || err_str.contains("6093"),
+            "expected IxMetaCountExceeded (6093), got: {}",
             err_str
         );
     }
@@ -305,8 +305,8 @@ mod h1_hard_reject_tests {
             .expect_err("25-meta ix MUST reject");
         let err_str = format!("{:?}", err);
         assert!(
-            err_str.contains("IxMetaCountExceeded") || err_str.contains("6102"),
-            "expected IxMetaCountExceeded (6102), got: {}",
+            err_str.contains("IxMetaCountExceeded") || err_str.contains("6093"),
+            "expected IxMetaCountExceeded (6093), got: {}",
             err_str
         );
     }

@@ -900,7 +900,7 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
       caughtCode = err?.error?.errorCode?.number ?? null;
     }
     expect(caughtCode, "accept MUST have rejected").to.not.be.null;
-    expect(caughtCode).to.equal(6104); // ErrPendingOwnershipNotReady
+    expect(caughtCode).to.equal(6095); // ErrPendingOwnershipNotReady
   });
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1150,7 +1150,7 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
       caughtCode = err?.error?.errorCode?.number ?? null;
     }
     expect(caughtCode, "initiate-to-system MUST reject").to.not.be.null;
-    expect(caughtCode).to.equal(6107); // ErrInvalidOwnershipTarget
+    expect(caughtCode).to.equal(6098); // ErrInvalidOwnershipTarget
   });
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1181,7 +1181,7 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
       caughtCode = err?.error?.errorCode?.number ?? null;
     }
     expect(caughtCode, "no-cosigner initiate MUST reject").to.not.be.null;
-    expect(caughtCode).to.equal(6089); // ErrCosignRequired
+    expect(caughtCode).to.equal(6080); // ErrCosignRequired
   });
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1266,7 +1266,7 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
     }
     expect(caughtCode, "EOA accept of multisig pending MUST reject").to.not.be
       .null;
-    expect(caughtCode).to.equal(6104); // ErrPendingOwnershipNotReady
+    expect(caughtCode).to.equal(6095); // ErrPendingOwnershipNotReady
   });
 
   // ===========================================================================

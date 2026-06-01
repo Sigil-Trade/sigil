@@ -6,7 +6,7 @@
 //! `PolicyConfig.destination_graylist` with `unlock_unix = now + 86400`.
 //! Until either the unlock elapses or the owner calls this ix, spending
 //! paths reject value routed to the destination with
-//! `ErrGraylistFriction` (6086).
+//! `ErrGraylistFriction` (6077).
 //!
 //! This ix is the **owner-only** escape hatch — the agent / session
 //! cannot self-promote. It sets the unlock to `clock.unix_timestamp`

@@ -244,7 +244,7 @@ pub fn handler(
     // agent's traffic DoS all other agents on the vault.
     //
     // Load the overlay, locate the agent's slot, check the elapsed time
-    // against the configured cooldown_seconds. Failure surfaces as 6085
+    // against the configured cooldown_seconds. Failure surfaces as 6076
     // ErrCooldownActive. Agents without a configured cooldown
     // (cooldown_seconds == 0) auto-pass.
     {
@@ -292,7 +292,7 @@ pub fn handler(
     // TA-17 (Phase 3): distinguish auto-revoked agents from manually-
     // disabled ones. If the agent's capability is DISABLED AND its
     // consecutive_failures hit the policy threshold, surface
-    // ErrAutoRevoked (6090) instead of InsufficientPermissions — owner
+    // ErrAutoRevoked (6081) instead of InsufficientPermissions — owner
     // observability into auto-revoke events. Owner re-enables via
     // queue_agent_permissions_update.
     let agent_key_check = ctx.accounts.agent.key();
@@ -503,7 +503,7 @@ pub fn handler(
     //      additionally verify the on-chain `account.owner == &crate::ID`
     //      via remaining_accounts (F-30 — prevents discriminator spoofing
     //      from an attacker-deployed program at the same derived pubkey).
-    //   2. If owner check passes → reject with 6092 ErrProtectedWritable.
+    //   2. If owner check passes → reject with 6083 ErrProtectedWritable.
     //   3. If owner check fails → the BPF loader's owner check will
     //      prevent the foreign program from mutating Sigil state anyway;
     //      continue (no reject).

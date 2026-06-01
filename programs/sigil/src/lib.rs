@@ -359,7 +359,7 @@ pub mod sigil {
 
     /// TA-17 (Phase 3): record an on-chain policy-violation failure for
     /// an agent. Owner-only. `error_code` MUST be in the policy-violation
-    /// range (6083-6100); external codes (CU exhaustion, auth, init)
+    /// range (6074-6091); external codes (CU exhaustion, auth, init)
     /// reject with InvalidPermissions.
     ///
     /// When `agent.consecutive_failures >= policy.auto_revoke_threshold`,

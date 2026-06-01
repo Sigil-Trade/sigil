@@ -61,7 +61,7 @@ pub fn handler(ctx: Context<UnpauseAgent>, agent_to_unpause: Pubkey) -> Result<(
     //
     // Mechanism: scan ctx.remaining_accounts for any signer pubkey that
     // is NOT the owner. Absence of such a signer == cosign missing on a
-    // vault that requires it -> reject with 6089 ErrCosignRequired.
+    // vault that requires it -> reject with 6080 ErrCosignRequired.
     if ctx.accounts.policy.cosign_required {
         let owner_key = ctx.accounts.owner.key();
         let has_cosigner = crate::instructions::register_agent::has_non_owner_signer(

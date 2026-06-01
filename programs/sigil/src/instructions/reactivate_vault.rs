@@ -62,7 +62,7 @@ pub fn handler(
     // Round 2 §RP-1 F-RP3-1 fix (audit 2026-05-19): status check fires
     // FIRST so callers operating on a non-frozen vault receive the more
     // diagnostic `VaultNotFrozen` (6021) rather than the misleading
-    // `ErrCosignRequired` (6089) that the cosign gate would surface. The
+    // `ErrCosignRequired` (6080) that the cosign gate would surface. The
     // cosign gate is still load-bearing for the phished-owner scenario
     // (freeze→reactivate(attacker, FULL_CAPABILITY)) — it just runs
     // SECOND so the error-code priority matches operator expectations.

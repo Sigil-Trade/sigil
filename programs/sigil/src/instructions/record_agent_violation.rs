@@ -13,7 +13,7 @@
 //! This ix is the explicit reporting path. The agent's middleware (or
 //! the vault owner's off-chain monitor) calls it after observing a
 //! failed seal. The reported code is range-filtered to ensure only
-//! genuine policy-violation rejects (6083-6100) count — external
+//! genuine policy-violation rejects (6074-6091) count — external
 //! causes (CU exhaustion, network, auth errors) do NOT increment.
 //!
 //! Successful validate_and_authorize on the same agent RESETS the
@@ -36,7 +36,7 @@
 //!   3. Bumps `policy.policy_version` (OCC).
 //!
 //! Subsequent validate_and_authorize calls reject with
-//! `ErrAutoRevoked` (6090).
+//! `ErrAutoRevoked` (6081).
 
 use anchor_lang::prelude::*;
 
@@ -96,9 +96,9 @@ pub fn handler(ctx: Context<RecordAgentViolation>, agent: Pubkey, error_code: u3
     );
 
     // Filter the reported code by NUMERIC RANGE — string match would be
-    // brittle. 6083-6100 = on-chain policy-violation codes (TA-03/05/06/
+    // brittle. 6074-6091 = on-chain policy-violation codes (TA-03/05/06/
     // 07/08/09/17 + reserved for Phase 4+5 post-exec). External codes
-    // (sysvar-scan 6068 SysvarScanBoundExceeded, async-fulfillment 6069
+    // (sysvar-scan 6062 SysvarScanBoundExceeded, async-fulfillment 6063
     // AsyncFulfillmentNotPermitted, auth 6000-6082) do NOT count.
     require!(
         is_policy_violation_code(error_code),

@@ -9,7 +9,7 @@
 //!   - MetadataPointer (id 18)
 //!
 //! Any other extension — including future-added type IDs we don't yet know
-//! about — REJECTS with `ErrToken2022ExtensionForbidden` (6088). The
+//! about — REJECTS with `ErrToken2022ExtensionForbidden` (6079). The
 //! forward-secure default is REJECT (not skip), so a future extension that
 //! introduces hostile semantics cannot slip past V1 deposits.
 //!
@@ -189,13 +189,13 @@ mod tests {
             return Ok(());
         }
         if data[TOKEN_2022_MINT_BASE_LEN] != TOKEN_2022_ACCOUNT_TYPE_MINT {
-            return Err(6088);
+            return Err(6079);
         }
         let mut cursor = TOKEN_2022_MINT_BASE_LEN + 1;
         let mut iter = 0;
         while cursor + 4 <= data.len() {
             if iter >= 64 {
-                return Err(6088);
+                return Err(6079);
             }
             iter += 1;
             let ext_type = u16::from_le_bytes([data[cursor], data[cursor + 1]]);
@@ -204,11 +204,11 @@ mod tests {
                 break;
             }
             if !is_allowlisted_extension(ext_type) {
-                return Err(6088);
+                return Err(6079);
             }
             let next = cursor + 4 + ext_len;
             if next > data.len() {
-                return Err(6088);
+                return Err(6079);
             }
             cursor = next;
         }
@@ -270,35 +270,35 @@ mod tests {
     fn transfer_fee_config_rejects() {
         // ExtensionType::TransferFeeConfig = 1 — NOT on allowlist.
         let buf = mock_mint(&[(1, &[0u8; 64])]);
-        assert_eq!(walk_mint_tlv(&buf), Err(6088));
+        assert_eq!(walk_mint_tlv(&buf), Err(6079));
     }
 
     #[test]
     fn permanent_delegate_rejects() {
         // ExtensionType::PermanentDelegate = 12 — NOT on allowlist.
         let buf = mock_mint(&[(12, &[0u8; 32])]);
-        assert_eq!(walk_mint_tlv(&buf), Err(6088));
+        assert_eq!(walk_mint_tlv(&buf), Err(6079));
     }
 
     #[test]
     fn transfer_hook_rejects() {
         // ExtensionType::TransferHook = 14 — NOT on allowlist.
         let buf = mock_mint(&[(14, &[0u8; 64])]);
-        assert_eq!(walk_mint_tlv(&buf), Err(6088));
+        assert_eq!(walk_mint_tlv(&buf), Err(6079));
     }
 
     #[test]
     fn confidential_transfer_mint_rejects() {
         // ExtensionType::ConfidentialTransferMint = 4 — NOT on allowlist.
         let buf = mock_mint(&[(4, &[0u8; 32])]);
-        assert_eq!(walk_mint_tlv(&buf), Err(6088));
+        assert_eq!(walk_mint_tlv(&buf), Err(6079));
     }
 
     #[test]
     fn default_account_state_rejects() {
         // ExtensionType::DefaultAccountState = 6 — NOT on allowlist.
         let buf = mock_mint(&[(6, &[1u8])]);
-        assert_eq!(walk_mint_tlv(&buf), Err(6088));
+        assert_eq!(walk_mint_tlv(&buf), Err(6079));
     }
 
     #[test]
@@ -308,7 +308,7 @@ mod tests {
         // introduce hostile semantics in a new extension we haven't yet
         // catalogued.
         let buf = mock_mint(&[(99, &[0u8; 32])]);
-        assert_eq!(walk_mint_tlv(&buf), Err(6088));
+        assert_eq!(walk_mint_tlv(&buf), Err(6079));
     }
 
     #[test]
@@ -318,7 +318,7 @@ mod tests {
             (EXT_MEMO_TRANSFER, &[1u8]),
             (1, &[0u8; 64]), // TransferFeeConfig — forbidden
         ]);
-        assert_eq!(walk_mint_tlv(&buf), Err(6088));
+        assert_eq!(walk_mint_tlv(&buf), Err(6079));
     }
 
     #[test]
@@ -341,7 +341,7 @@ mod tests {
         buf.extend_from_slice(&EXT_METADATA_POINTER.to_le_bytes());
         buf.extend_from_slice(&(65000u16).to_le_bytes()); // huge length
         buf.extend_from_slice(&[0u8; 32]); // far less than 65000
-        assert_eq!(walk_mint_tlv(&buf), Err(6088));
+        assert_eq!(walk_mint_tlv(&buf), Err(6079));
     }
 
     #[test]
@@ -351,6 +351,6 @@ mod tests {
         buf.push(2);
         buf.extend_from_slice(&EXT_METADATA_POINTER.to_le_bytes());
         buf.extend_from_slice(&0u16.to_le_bytes());
-        assert_eq!(walk_mint_tlv(&buf), Err(6088));
+        assert_eq!(walk_mint_tlv(&buf), Err(6079));
     }
 }

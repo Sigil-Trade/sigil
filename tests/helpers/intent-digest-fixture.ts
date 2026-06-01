@@ -80,11 +80,11 @@ export function buildExpectedIntentDigestArgs(
   return digestAsArgs(buildExpectedIntentDigest(input));
 }
 
-// Use ONLY in tests asserting error 6111 (ErrIntentDigestMismatch) or
+// Use ONLY in tests asserting error 6102 (ErrIntentDigestMismatch) or
 // CPI depth (CpiCallNotAllowed — the only earlier gate). The on-chain
 // digest check at validate_and_authorize.rs:159-191 runs FIRST, before
-// any other state check — so a zero-buffer digest on a non-6111 test
-// will fail with 6111 instead of the intended error. ALWAYS compute a
+// any other state check — so a zero-buffer digest on a non-6102 test
+// will fail with 6102 instead of the intended error. ALWAYS compute a
 // real digest unless the test literally targets the digest gate itself.
 export const ZERO_INTENT_DIGEST: number[] = Array.from(
   new Uint8Array(INTENT_DIGEST_OUTPUT_BYTES),

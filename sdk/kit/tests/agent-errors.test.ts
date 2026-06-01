@@ -17,27 +17,19 @@ describe("agent-errors", () => {
   // ─── On-chain error map completeness ──────────────────────────────────────
 
   describe("ON_CHAIN_ERROR_MAP completeness", () => {
-    it("maps all 115 error codes (6000-6114) post-Bucket-2", () => {
+    it("maps all 105 error codes (6000-6104) post M1-04 teardown", () => {
       const codes = getAllOnChainErrorCodes();
-      // 6000-6114 inclusive = 115 codes. Phase 5 added 6094/6095/6096.
-      // Phase 6 added 6097-6101 (R-1/R-2/R-3/R-4 + MintDeltaCapMisconfigured).
-      // Audit 2026-05-19 H-1 added 6102 IxMetaCountExceeded.
-      // Phase 8 Batches 1-5 added 6103-6108 (ownership transfer + freeze
-      // hardening); SDK mappings landed in Phase 8 Batch 6 alongside the
-      // PEN-CROSS-1 agent-grant work (audit 2026-05-19).
-      // Pre-redeploy audit 2026-05-21 H-3 added 6109 ErrPostAssertionsNotClosed.
-      // Bucket-1 cleanup 2026-05-21 H-4 added 6110 ErrDestinationIsProtectedPda.
-      // Bucket-2 2026-05-21 added 6111 ErrIntentDigestMismatch (D-1 AL3
-      // verifier), 6112 ErrPendingConstraintsDigestMismatch (M-4),
-      // 6113 ErrPendingAgentGrantDigestMismatch (M-5),
-      // 6114 ErrReactivateCosignRequiredForFullCapability (D-5).
-      expect(codes).to.have.lengthOf(115);
+      // 6000-6104 inclusive = 105 codes. M1-04 Step 6 removed 10 dead
+      // constraint-only variants and renumbered the enum (positional). The
+      // IDL↔generated↔hand-map bijection (incl. name-per-code) is enforced by
+      // error-map-drift.test.ts; this test guards the count/extremes only.
+      expect(codes).to.have.lengthOf(105);
       expect(codes[0]).to.equal(6000);
-      expect(codes[codes.length - 1]).to.equal(6114);
+      expect(codes[codes.length - 1]).to.equal(6104);
     });
 
-    it("every code from 6000-6114 is present with no gaps post-Bucket-2", () => {
-      for (let code = 6000; code <= 6114; code++) {
+    it("every code from 6000-6104 is present with no gaps post M1-04 teardown", () => {
+      for (let code = 6000; code <= 6104; code++) {
         const entry = ON_CHAIN_ERROR_MAP[code];
         expect(entry, `Missing error code ${code}`).to.exist;
         expect(entry.name).to.be.a("string").and.not.be.empty;
@@ -71,9 +63,13 @@ describe("agent-errors", () => {
     // recipients, tracker array full). The SDK error mapping must surface
     // a recovery action for the "multiple distinct recipients in one tx"
     // branch — splitting the bundle — which the pre-H-10 mapping did not.
-    it("6096 (ErrRecipientCapExceeded) exposes the H-10 split-into-separate-transactions recovery", () => {
-      const entry = ON_CHAIN_ERROR_MAP[6096];
-      expect(entry, "6096 must be mapped").to.exist;
+    it("ErrRecipientCapExceeded exposes the H-10 split-into-separate-transactions recovery", () => {
+      // Name-anchored to the generated constant (M1-04 shifted this 6096 → 6087).
+      const entry =
+        ON_CHAIN_ERROR_MAP[
+          generatedErrors.SIGIL_ERROR__ERR_RECIPIENT_CAP_EXCEEDED
+        ];
+      expect(entry, "ErrRecipientCapExceeded must be mapped").to.exist;
       const actions = entry.recovery_actions.map((a) => a.action);
       expect(actions).to.include(
         "split_into_separate_transactions",
@@ -117,13 +113,14 @@ describe("agent-errors", () => {
       expect(err!.context.error_name).to.equal("VaultNotActive");
     });
 
-    it("parses numeric code 6054 (UnauthorizedPostFinalizeInstruction post-Phase-1)", () => {
-      // V2 demolition (Phase 0): escrow codes removed shifted post-finalize from
-      // 6063→6056. Phase 1 Option A then deleted 2 Jupiter variants at 6030/6031,
-      // shifting post-finalize further: 6056 → 6054.
-      const err = parseOnChainErrorCode(6054);
+    it("parses UnauthorizedPostFinalizeInstruction by generated code (name-anchored)", () => {
+      // Anchored to the generated constant so it never rots on a renumber
+      // (M1-04 Step 6 shifted this 6054 → 6049).
+      const code =
+        generatedErrors.SIGIL_ERROR__UNAUTHORIZED_POST_FINALIZE_INSTRUCTION;
+      const err = parseOnChainErrorCode(code);
       expect(err).to.not.be.null;
-      expect(err!.code).to.equal("6054");
+      expect(err!.code).to.equal(String(code));
       expect(err!.category).to.equal("POLICY_VIOLATION");
       expect(err!.context.error_name).to.equal(
         "UnauthorizedPostFinalizeInstruction",
@@ -137,20 +134,21 @@ describe("agent-errors", () => {
       expect(err!.context.error_name).to.equal("VaultNotActive");
     });
 
-    it("parses hex string 0x179F (= 6047 ProtocolCapExceeded post-Phase-1)", () => {
-      // V2 demolition (Phase 0): shifted ProtocolCapExceeded from 6055 → 6049.
-      // Phase 1 Option A then shifted further to 6047 (= 0x179F).
-      const err = parseOnChainErrorCode("0x179F");
+    it("parses ProtocolCapExceeded via hex string (name-anchored)", () => {
+      // Anchored to the generated constant so the hex form tracks renumbers
+      // (M1-04 Step 6 shifted this 6047 → 6043).
+      const code = generatedErrors.SIGIL_ERROR__PROTOCOL_CAP_EXCEEDED;
+      const err = parseOnChainErrorCode("0x" + code.toString(16));
       expect(err).to.not.be.null;
-      expect(err!.code).to.equal("6047");
+      expect(err!.code).to.equal(String(code));
       expect(err!.context.error_name).to.equal("ProtocolCapExceeded");
     });
 
-    it("parses decimal string '6042' post-Phase-1", () => {
-      // Was 6044 pre-Phase-1; shifted to 6042 by Phase 1 Option A demolition.
-      const err = parseOnChainErrorCode("6042");
+    it("parses a decimal string code (name-anchored, InvalidSessionExpiry)", () => {
+      const code = generatedErrors.SIGIL_ERROR__INVALID_SESSION_EXPIRY;
+      const err = parseOnChainErrorCode(String(code));
       expect(err).to.not.be.null;
-      expect(err!.code).to.equal("6042");
+      expect(err!.code).to.equal(String(code));
       expect(err!.category).to.equal("INPUT_VALIDATION");
     });
 

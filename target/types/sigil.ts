@@ -6078,386 +6078,336 @@ export type Sigil = {
     },
     {
       "code": 6038,
-      "name": "constraintViolated",
-      "msg": "Instruction constraint violated"
-    },
-    {
-      "code": 6039,
-      "name": "invalidConstraintsPda",
-      "msg": "Invalid constraints PDA: wrong owner or vault"
-    },
-    {
-      "code": 6040,
-      "name": "invalidPendingConstraintsPda",
-      "msg": "Invalid pending constraints PDA: wrong owner or vault"
-    },
-    {
-      "code": 6041,
       "name": "agentSpendLimitExceeded",
       "msg": "Agent rolling 24h spend exceeds per-agent spending limit"
     },
     {
-      "code": 6042,
+      "code": 6039,
       "name": "overlaySlotExhausted",
       "msg": "Per-agent overlay is full; cannot register agent with spending limit"
     },
     {
-      "code": 6043,
+      "code": 6040,
       "name": "agentSlotNotFound",
       "msg": "Agent has per-agent spending limit but no overlay tracking slot"
     },
     {
-      "code": 6044,
+      "code": 6041,
       "name": "unauthorizedTokenApproval",
       "msg": "Unauthorized SPL Token Approve between validate and finalize"
     },
     {
-      "code": 6045,
+      "code": 6042,
       "name": "invalidSessionExpiry",
       "msg": "Session expiry seconds out of range (5-90)"
     },
     {
-      "code": 6046,
-      "name": "unconstrainedProgramBlocked",
-      "msg": "Program has no matching constraint entry — every instruction must match one"
-    },
-    {
-      "code": 6047,
+      "code": 6043,
       "name": "protocolCapExceeded",
-      "msg": "Per-protocol rolling 24h spending cap would be exceeded — LEGACY counter exhaustion path. New rolling-24h amount-based cap rejections use 6095 ErrDailyCapExceeded"
+      "msg": "Per-protocol rolling 24h spending cap would be exceeded — LEGACY counter exhaustion path. New rolling-24h amount-based cap rejections use 6086 ErrDailyCapExceeded"
     },
     {
-      "code": 6048,
+      "code": 6044,
       "name": "protocolCapsMismatch",
       "msg": "protocol_caps length must match protocols length when has_protocol_caps is true"
     },
     {
-      "code": 6049,
-      "name": "constraintsNotClosed",
-      "msg": "Instruction constraints must be closed before closing vault"
-    },
-    {
-      "code": 6050,
+      "code": 6045,
       "name": "pendingPolicyExists",
       "msg": "Pending policy update must be applied or cancelled before closing vault"
     },
     {
-      "code": 6051,
+      "code": 6046,
       "name": "agentPaused",
       "msg": "Agent is paused and cannot execute actions"
     },
     {
-      "code": 6052,
+      "code": 6047,
       "name": "agentAlreadyPaused",
       "msg": "Agent is already paused"
     },
     {
-      "code": 6053,
+      "code": 6048,
       "name": "agentNotPaused",
       "msg": "Agent is not paused"
     },
     {
-      "code": 6054,
+      "code": 6049,
       "name": "unauthorizedPostFinalizeInstruction",
       "msg": "Instructions after finalize_session must be ComputeBudget or SystemProgram only"
     },
     {
-      "code": 6055,
+      "code": 6050,
       "name": "unexpectedBalanceDecrease",
       "msg": "Vault balance decreased more than delegated amount — potential CPI attack"
     },
     {
-      "code": 6056,
+      "code": 6051,
       "name": "timelockTooShort",
       "msg": "Timelock duration below minimum (1800 seconds / 30 minutes)"
     },
     {
-      "code": 6057,
+      "code": 6052,
       "name": "policyVersionMismatch",
       "msg": "Policy version mismatch — policy changed since agent's last RPC read"
     },
     {
-      "code": 6058,
+      "code": 6053,
       "name": "activeSessionsExist",
       "msg": "Cannot close vault with active sessions (finalize pending sessions first)"
     },
     {
-      "code": 6059,
+      "code": 6054,
       "name": "postAssertionFailed",
       "msg": "Post-execution assertion failed: account state did not satisfy constraint"
     },
     {
-      "code": 6060,
+      "code": 6055,
       "name": "invalidPostAssertionIndex",
       "msg": "Post-assertion constraint references invalid instruction index"
     },
     {
-      "code": 6061,
+      "code": 6056,
       "name": "unauthorizedPreValidateInstruction",
       "msg": "Non-infrastructure instruction detected before validate_and_authorize"
     },
     {
-      "code": 6062,
+      "code": 6057,
       "name": "snapshotNotCaptured",
       "msg": "Delta assertion snapshot was not captured in validate_and_authorize"
     },
     {
-      "code": 6063,
+      "code": 6058,
       "name": "invalidConstraintOperator",
       "msg": "Constraint operator value is not a valid ConstraintOperator discriminant"
     },
     {
-      "code": 6064,
+      "code": 6059,
       "name": "zeroCopyVaultMismatch",
       "msg": "Zero-copy account vault key mismatch (defense-in-depth)"
     },
     {
-      "code": 6065,
-      "name": "blockedSplOpcode",
-      "msg": "SPL opcode is blocked at runtime and cannot be used in constraints"
-    },
-    {
-      "code": 6066,
+      "code": 6060,
       "name": "queuedUpdateExpired",
-      "msg": "Queued update is too old (>MAX_APPLY_AGE_SLOTS / >MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN) — re-queue via the matching queue/initiate ix (queue_policy_update, queue_constraints_update, queue_close_constraints, queue_agent_permissions_update, queue_agent_grant, or initiate_ownership_transfer) to apply. Defends against durable-nonce pre-signing (CH-1 audit 2026-05-23 extended scope to timelocked-admin PDAs)."
+      "msg": "Queued update is too old (>MAX_APPLY_AGE_SLOTS / >MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN) — re-queue via the matching queue/initiate ix (queue_policy_update, queue_agent_permissions_update, queue_agent_grant, or initiate_ownership_transfer) to apply. Defends against durable-nonce pre-signing (CH-1 audit 2026-05-23 extended scope to timelocked-admin PDAs)."
     },
     {
-      "code": 6067,
+      "code": 6061,
       "name": "accountWritabilityMismatch",
       "msg": "Account writability flag does not match constraint requirement"
     },
     {
-      "code": 6068,
+      "code": 6062,
       "name": "sysvarScanBoundExceeded",
       "msg": "Sysvar instruction scan exceeded the per-tx safety bound"
     },
     {
-      "code": 6069,
+      "code": 6063,
       "name": "asyncFulfillmentNotPermitted",
       "msg": "Async-fulfillment program is not permitted in V1 (Jupiter Perps, Drift, Drift JIT). Spending cannot be measured because keeper submits the actual transfer in a separate transaction after finalize_session returns."
     },
     {
-      "code": 6070,
-      "name": "constraintsAlreadyPopulated",
-      "msg": "Cannot clean an active constraints PDA; use queue+apply_close_constraints"
-    },
-    {
-      "code": 6071,
-      "name": "orphanPdaWrongOwner",
-      "msg": "PDA at constraints seeds is not program-owned"
-    },
-    {
-      "code": 6072,
-      "name": "orphanPdaPopulated",
-      "msg": "PDA is fully populated; not an orphan"
-    },
-    {
-      "code": 6073,
+      "code": 6064,
       "name": "confidentialTransferBlocked",
       "msg": "Token-2022 ConfidentialTransfer not permitted between validate and finalize"
     },
     {
-      "code": 6074,
+      "code": 6065,
       "name": "permanentDelegateBlocked",
       "msg": "Token-2022 PermanentDelegate not permitted between validate and finalize"
     },
     {
-      "code": 6075,
+      "code": 6066,
       "name": "transferHookBlocked",
       "msg": "Token-2022 TransferHook not permitted between validate and finalize"
     },
     {
-      "code": 6076,
+      "code": 6067,
       "name": "lamportDrainBlocked",
       "msg": "Token-2022 destructive-balance ix (opcodes 38/45/46) not permitted between validate and finalize"
     },
     {
-      "code": 6077,
+      "code": 6068,
       "name": "batchInstructionBlocked",
       "msg": "Token-2022 Batch instruction (opcode 255) is blocked outright — wraps inner instructions and bypasses byte-0 blocklist"
     },
     {
-      "code": 6078,
+      "code": 6069,
       "name": "invalidDestinationMode",
       "msg": "Invalid destination mode (must be 0 = RESTRICTED)"
     },
     {
-      "code": 6079,
+      "code": 6070,
       "name": "invalidCapability",
       "msg": "Invalid agent capability value (must be 0 = Disabled, 1 = Observer, or 2 = Operator)"
     },
     {
-      "code": 6080,
+      "code": 6071,
       "name": "policyPreviewMismatch",
       "msg": "Policy preview digest mismatch — caller's signed digest differs from recomputed canonical digest"
     },
     {
-      "code": 6081,
+      "code": 6072,
       "name": "observeOnlyModeBlocksExecute",
       "msg": "Vault is in observe_only mode — validate_and_authorize is blocked"
     },
     {
-      "code": 6082,
+      "code": 6073,
       "name": "activeVaultRequiresAllowlist",
       "msg": "Active (non-observe_only) vault must have at least one protocol or destination on the allowlist"
     },
     {
-      "code": 6083,
+      "code": 6074,
       "name": "errMintNotPinned",
       "msg": "Deposit mint is not a build-time-pinned stablecoin (USDC or USDT)"
     },
     {
-      "code": 6084,
+      "code": 6075,
       "name": "errOutsideOperatingHours",
       "msg": "Current UTC hour is outside the policy's operating_hours bitmask"
     },
     {
-      "code": 6085,
+      "code": 6076,
       "name": "errCooldownActive",
       "msg": "Agent cooldown period has not elapsed since the last action"
     },
     {
-      "code": 6086,
+      "code": 6077,
       "name": "errGraylistFriction",
       "msg": "Destination is graylisted (24h friction window — awaiting promote_graylist_destination or unlock)"
     },
     {
-      "code": 6087,
+      "code": 6078,
       "name": "errGraylistFull",
       "msg": "Destination graylist is full (max 10 entries) — wait for an existing entry to unlock or promote"
     },
     {
-      "code": 6088,
+      "code": 6079,
       "name": "errToken2022ExtensionForbidden",
       "msg": "Token-2022 mint has a forbidden extension (only MemoTransfer + MetadataPointer + NonTransferable allowed)"
     },
     {
-      "code": 6089,
+      "code": 6080,
       "name": "errCosignRequired",
       "msg": "Elevated policy mutation requires an owner-signed cosigning session"
     },
     {
-      "code": 6090,
+      "code": 6081,
       "name": "errAutoRevoked",
       "msg": "Agent capability auto-revoked after consecutive policy-violation failures; owner must re-enable"
     },
     {
-      "code": 6091,
+      "code": 6082,
       "name": "errSandwichIntegrity",
       "msg": "Bundle integrity violation: multiple validate_and_authorize instructions for the same (vault, agent, mint) tuple in one transaction"
     },
     {
-      "code": 6092,
+      "code": 6083,
       "name": "errProtectedWritable",
       "msg": "Protected Sigil PDA passed as writable to a foreign instruction between validate and finalize"
     },
     {
-      "code": 6093,
+      "code": 6084,
       "name": "errSessionNonceMismatch",
       "msg": "Session nonce mismatch — caller's expected_nonce does not match the session's stored nonce (durable-nonce replay defense)"
     },
     {
-      "code": 6094,
+      "code": 6085,
       "name": "errStableFloorViolation",
       "msg": "Stable balance floor violated — combined USDC+USDT balance dropped below policy.stable_balance_floor"
     },
     {
-      "code": 6095,
+      "code": 6086,
       "name": "errDailyCapExceeded",
       "msg": "Per-protocol daily spending cap would be exceeded (rolling 24h)"
     },
     {
-      "code": 6096,
+      "code": 6087,
       "name": "errRecipientCapExceeded",
       "msg": "Per-recipient daily cap exceeded — recipient outflow would breach policy.per_recipient_daily_cap_usd within the rolling 24h window, or per_recipient array full with no expired slot to evict"
     },
     {
-      "code": 6097,
+      "code": 6088,
       "name": "errMintDeltaCapExceeded",
       "msg": "R-1 MintDeltaCap: vault-mint balance decreased by more than max_net_decrease"
     },
     {
-      "code": 6098,
+      "code": 6089,
       "name": "mintDeltaCapMisconfigured",
       "msg": "R-1 MintDeltaCap misconfigured — target account missing, mint mismatch, or owner not vault"
     },
     {
-      "code": 6099,
+      "code": 6090,
       "name": "errAtaAuthorityChanged",
       "msg": "R-2 AtaAuthorityPin: vault-owned token account authority changed or account closed/reinitialized mid-sandwich"
     },
     {
-      "code": 6100,
+      "code": 6091,
       "name": "errOutputBelowFloor",
       "msg": "R-3 OutputBalanceFloor: post-execution balance increase fell below the configured min_increase floor"
     },
     {
-      "code": 6101,
+      "code": 6092,
       "name": "errDeclarationInconsistent",
       "msg": "R-4 DeclarationConsistency: declared recipient/mint does not match CPI account-meta"
     },
     {
-      "code": 6102,
+      "code": 6093,
       "name": "ixMetaCountExceeded",
       "msg": "Foreign DeFi instruction passed more account metas than the destination-check budget (16) allows; truncate the ix or split into shorter ixs"
     },
     {
-      "code": 6103,
+      "code": 6094,
       "name": "errPendingOwnershipExists",
       "msg": "An ownership transfer is already pending; cancel it first"
     },
     {
-      "code": 6104,
+      "code": 6095,
       "name": "errPendingOwnershipNotReady",
       "msg": "Ownership transfer timelock has not elapsed"
     },
     {
-      "code": 6105,
+      "code": 6096,
       "name": "errInvalidFreezeReason",
       "msg": "freeze_reason value out of {{0,1,2}}"
     },
     {
-      "code": 6106,
+      "code": 6097,
       "name": "errReactivateCooldownActive",
       "msg": "Reactivate requires 5-minute observation cooldown to elapse"
     },
     {
-      "code": 6107,
+      "code": 6098,
       "name": "errInvalidOwnershipTarget",
       "msg": "new_owner cannot be system/program/sysvar addresses (Council ISC-128)"
     },
     {
-      "code": 6108,
+      "code": 6099,
       "name": "errTooManyRevokePairs",
       "msg": "freeze_internal MAX_REVOKE_PAIRS = 10 exceeded (Council ISC-136)"
     },
     {
-      "code": 6109,
+      "code": 6100,
       "name": "errPostAssertionsNotClosed",
       "msg": "PostExecutionAssertions PDA still active — call close_post_assertions first"
     },
     {
-      "code": 6110,
+      "code": 6101,
       "name": "errDestinationIsProtectedPda",
       "msg": "Destination is a Sigil-protected PDA — rejected at queue time"
     },
     {
-      "code": 6111,
+      "code": 6102,
       "name": "errIntentDigestMismatch",
       "msg": "AL3 intent-digest mismatch — preview digest does not match executed bundle"
     },
     {
-      "code": 6112,
-      "name": "errPendingConstraintsDigestMismatch",
-      "msg": "PendingConstraintsUpdate digest mismatch between queue and apply"
-    },
-    {
-      "code": 6113,
+      "code": 6103,
       "name": "errPendingAgentGrantDigestMismatch",
       "msg": "PendingAgentGrant digest mismatch between queue and apply"
     },
     {
-      "code": 6114,
+      "code": 6104,
       "name": "errReactivateCosignRequiredForFullCapability",
       "msg": "Reactivate with FULL_CAPABILITY new agent requires cosign"
     }

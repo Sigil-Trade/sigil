@@ -132,14 +132,15 @@ pub enum SigilError {
     #[msg("Invalid constraint configuration: bounds exceeded")]
     InvalidConstraintConfig,
 
-    #[msg("Instruction constraint violated")]
-    ConstraintViolated,
-
-    #[msg("Invalid constraints PDA: wrong owner or vault")]
-    InvalidConstraintsPda,
-
-    #[msg("Invalid pending constraints PDA: wrong owner or vault")]
-    InvalidPendingConstraintsPda,
+    // --- M1-04 constraints-engine teardown: 10 error variants REMOVED ---
+    // ConstraintViolated, InvalidConstraintsPda, InvalidPendingConstraintsPda,
+    // UnconstrainedProgramBlocked, ConstraintsNotClosed, BlockedSplOpcode,
+    // ConstraintsAlreadyPopulated, OrphanPdaWrongOwner, OrphanPdaPopulated,
+    // ErrPendingConstraintsDigestMismatch were removed when the instruction-
+    // data-parsing constraints engine was deleted (M1-04 Steps 1-5). The enum
+    // was renumbered (positional); subsequent codes shifted down. The kept
+    // agnostic post-execution-assertion errors (InvalidConstraintConfig,
+    // InvalidConstraintOperator, ZeroCopyVaultMismatch) are RETAINED below.
 
     // --- Per-agent spend limit errors ---
     #[msg("Agent rolling 24h spend exceeds per-agent spending limit")]
@@ -157,17 +158,13 @@ pub enum SigilError {
     #[msg("Session expiry seconds out of range (5-90)")]
     InvalidSessionExpiry,
 
-    // --- Generic constraints V2 errors ---
-    #[msg("Program has no matching constraint entry — every instruction must match one")]
-    UnconstrainedProgramBlocked,
-
     // --- Per-protocol spend cap errors ---
     //
     // M-5 semantic distinction (audit 2026-05-19): two related-but-distinct
     // protocol-cap error codes exist. Both are protocol-spending failures,
     // but the surface is different:
     //
-    // - 6058 `ProtocolCapExceeded` (THIS) — LEGACY counter exhaustion path.
+    // - 6043 `ProtocolCapExceeded` (THIS) — LEGACY counter exhaustion path.
     //   Fires when the per-protocol counter slot bookkeeping itself runs
     //   out of capacity (the `protocol_counters` array slot for the protocol
     //   is exhausted). Pre-Phase-5 this was the ONLY per-protocol error;
@@ -175,20 +172,18 @@ pub enum SigilError {
     //   Kept for backward compatibility — do NOT migrate away from this
     //   code at the existing call sites.
     //
-    // - 6095 `ErrDailyCapExceeded` (below, in Phase 5 block) — the modern
+    // - 6086 `ErrDailyCapExceeded` (below, in Phase 5 block) — the modern
     //   per-protocol rolling-24h SPEND-CAP path. Fires when the rolling 24h
     //   accumulated USD spend for the protocol PLUS the current transaction
     //   would exceed `policy.protocol_caps[i]`. This is the new amount-
-    //   based bound; 6058 is the legacy capacity-based bound.
-    #[msg("Per-protocol rolling 24h spending cap would be exceeded — LEGACY counter exhaustion path. New rolling-24h amount-based cap rejections use 6095 ErrDailyCapExceeded")]
+    //   based bound; 6043 is the legacy capacity-based bound.
+    #[msg("Per-protocol rolling 24h spending cap would be exceeded — LEGACY counter exhaustion path. New rolling-24h amount-based cap rejections use 6086 ErrDailyCapExceeded")]
     ProtocolCapExceeded,
 
     #[msg("protocol_caps length must match protocols length when has_protocol_caps is true")]
     ProtocolCapsMismatch,
 
     // --- Vault cleanup guard errors ---
-    #[msg("Instruction constraints must be closed before closing vault")]
-    ConstraintsNotClosed,
 
     #[msg("Pending policy update must be applied or cancelled before closing vault")]
     PendingPolicyExists,
@@ -237,20 +232,18 @@ pub enum SigilError {
     #[msg("Constraint operator value is not a valid ConstraintOperator discriminant")]
     InvalidConstraintOperator,
 
-    /// Used by both the InstructionConstraints/PendingConstraintsUpdate paths
-    /// AND the AuditLogSuccess/AuditLogRejected paths (post §RP-2 HIGH-3 fix
-    /// 2026-05-19). The PDA seeds derivation makes the wrong-vault case
-    /// unreachable in practice; this variant exists as defense-in-depth.
-    /// Variant renamed from `ConstraintsVaultMismatch` in §RP-2 HIGH-3;
-    /// error code **6064** unchanged.
+    /// General-purpose zero-copy / `has_one = vault` key-mismatch guard, used
+    /// across the AuditLog paths and ~25 owner/agent handlers (ownership
+    /// transfer, deposit/withdraw, register/revoke/pause agent, finalize,
+    /// apply_pending_policy, …). The PDA seeds derivation makes the wrong-vault
+    /// case unreachable in practice; this variant exists as defense-in-depth.
+    /// Variant renamed from `ConstraintsVaultMismatch` in §RP-2 HIGH-3; was
+    /// error code 6064 at that fix, renumbered to 6059 in the M1-04 teardown.
     #[msg("Zero-copy account vault key mismatch (defense-in-depth)")]
     ZeroCopyVaultMismatch,
 
-    #[msg("SPL opcode is blocked at runtime and cannot be used in constraints")]
-    BlockedSplOpcode,
-
     // --- F-10 audit fix: durable-nonce pre-signing defense ---
-    #[msg("Queued update is too old (>MAX_APPLY_AGE_SLOTS / >MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN) — re-queue via the matching queue/initiate ix (queue_policy_update, queue_constraints_update, queue_close_constraints, queue_agent_permissions_update, queue_agent_grant, or initiate_ownership_transfer) to apply. Defends against durable-nonce pre-signing (CH-1 audit 2026-05-23 extended scope to timelocked-admin PDAs).")]
+    #[msg("Queued update is too old (>MAX_APPLY_AGE_SLOTS / >MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN) — re-queue via the matching queue/initiate ix (queue_policy_update, queue_agent_permissions_update, queue_agent_grant, or initiate_ownership_transfer) to apply. Defends against durable-nonce pre-signing (CH-1 audit 2026-05-23 extended scope to timelocked-admin PDAs).")]
     QueuedUpdateExpired,
 
     // --- M5: Squads SAP parity — account writability enforcement ---
@@ -264,16 +257,6 @@ pub enum SigilError {
     // --- C4 audit fix: async-fulfillment programs ---
     #[msg("Async-fulfillment program is not permitted in V1 (Jupiter Perps, Drift, Drift JIT). Spending cannot be measured because keeper submits the actual transfer in a separate transaction after finalize_session returns.")]
     AsyncFulfillmentNotPermitted,
-
-    // --- Orphan constraints PDA cleanup (F3-H1 audit fix) ---
-    #[msg("Cannot clean an active constraints PDA; use queue+apply_close_constraints")]
-    ConstraintsAlreadyPopulated,
-
-    #[msg("PDA at constraints seeds is not program-owned")]
-    OrphanPdaWrongOwner,
-
-    #[msg("PDA is fully populated; not an orphan")]
-    OrphanPdaPopulated,
 
     // --- Token-2022 ConfidentialTransfer block (M3) ---
     #[msg("Token-2022 ConfidentialTransfer not permitted between validate and finalize")]
@@ -301,26 +284,26 @@ pub enum SigilError {
     InvalidDestinationMode,
 
     // --- Phase 2 additions (TA-04 + TA-19) ---
-    // Appended at the END of the enum to preserve existing error codes 6000-6078.
-    /// 6079 — TA-04: Reserved AgentEntry.capability values 3..=255 explicitly
+    // Appended at the END of the enum to preserve existing error codes 6000-6069.
+    /// 6070 — TA-04: Reserved AgentEntry.capability values 3..=255 explicitly
     /// rejected at register/queue/apply. Replaces the prior silent zero-coerce
     /// behaviour (values >2 were treated as 0 by `has_capability`).
     #[msg("Invalid agent capability value (must be 0 = Disabled, 1 = Observer, or 2 = Operator)")]
     InvalidCapability,
 
-    /// 6080 — TA-19: SHA-256 digest of canonical policy preview encoding does
+    /// 6071 — TA-19: SHA-256 digest of canonical policy preview encoding does
     /// not match recomputed digest. Indicates owner-signer compromise or
     /// pending-PDA tampering between queue and apply. Hard reject.
     #[msg("Policy preview digest mismatch — caller's signed digest differs from recomputed canonical digest")]
     PolicyPreviewMismatch,
 
-    /// 6081 — TA-19: observe_only vault rejects all `validate_and_authorize`
+    /// 6072 — TA-19: observe_only vault rejects all `validate_and_authorize`
     /// calls. Owners stand up observe-only vaults to baseline agent behaviour
     /// before opening the execute path.
     #[msg("Vault is in observe_only mode — validate_and_authorize is blocked")]
     ObserveOnlyModeBlocksExecute,
 
-    /// 6082 — F-11 audit fix: an active (non-observe_only) vault must have at
+    /// 6073 — F-11 audit fix: an active (non-observe_only) vault must have at
     /// least ONE protocol on the allowlist OR at least ONE destination on the
     /// allowlist. Otherwise the vault is silently inert — accepts deposits but
     /// can never authorize any spending action. observe_only vaults are
@@ -329,8 +312,8 @@ pub enum SigilError {
     ActiveVaultRequiresAllowlist,
 
     // --- Phase 3 (Option A pre-execution guards TA-03/05/06/07/08/09/17) ---
-    // Appended at END to preserve existing error codes 6000-6082.
-    /// 6083 — TA-03: deposit mint must be a build-time-pinned stablecoin
+    // Appended at END to preserve existing error codes 6000-6073.
+    /// 6074 — TA-03: deposit mint must be a build-time-pinned stablecoin
     /// (USDC or USDT). With `devnet-testing` feature, any mint accepted.
     /// Rejects exotic / hostile / typosquatted mints at the entry point so
     /// downstream balance-delta logic in `finalize_session` cannot be evaded
@@ -338,21 +321,21 @@ pub enum SigilError {
     #[msg("Deposit mint is not a build-time-pinned stablecoin (USDC or USDT)")]
     ErrMintNotPinned,
 
-    /// 6084 — TA-05: operating_hours UTC bitmask rejects the current hour.
+    /// 6075 — TA-05: operating_hours UTC bitmask rejects the current hour.
     /// `operating_hours` is a 24-bit bitmask (bit `n` = hour `n` UTC). Default
     /// 0xFFFFFF (all 24h enabled); owner narrows for agents that should only
     /// run during business hours / market hours.
     #[msg("Current UTC hour is outside the policy's operating_hours bitmask")]
     ErrOutsideOperatingHours,
 
-    /// 6085 — TA-06: per-agent cooldown active. Per-agent (NOT per-vault per
+    /// 6076 — TA-06: per-agent cooldown active. Per-agent (NOT per-vault per
     /// F-16) — a per-vault cooldown would let one agent's traffic DoS all
     /// other agents on the vault. Stored on `AgentSpendOverlay` per slot;
     /// `last_action_unix` rewritten on successful `validate_and_authorize`.
     #[msg("Agent cooldown period has not elapsed since the last action")]
     ErrCooldownActive,
 
-    /// 6086 — TA-07: first-time-destination 24h graylist friction. New
+    /// 6077 — TA-07: first-time-destination 24h graylist friction. New
     /// destinations added to the allowlist enter a graylist with
     /// `unlock_unix = now + 86400`. Until the unlock time elapses (or the
     /// owner promotes the entry via `promote_graylist_destination`), spend
@@ -360,21 +343,21 @@ pub enum SigilError {
     #[msg("Destination is graylisted (24h friction window — awaiting promote_graylist_destination or unlock)")]
     ErrGraylistFriction,
 
-    /// 6087 — TA-07: graylist bound exceeded. `destination_graylist` is
+    /// 6078 — TA-07: graylist bound exceeded. `destination_graylist` is
     /// bounded ≤10 entries to keep PolicyConfig SIZE deterministic. When
     /// full, additional allowlist adds must wait for an existing entry to
     /// unlock or be promoted.
     #[msg("Destination graylist is full (max 10 entries) — wait for an existing entry to unlock or promote")]
     ErrGraylistFull,
 
-    /// 6088 — TA-08: Token-2022 extension blocked. Deposit allowlists exactly
+    /// 6079 — TA-08: Token-2022 extension blocked. Deposit allowlists exactly
     /// 3 extensions (MemoTransfer, MetadataPointer, NonTransferable). Anything
     /// else — including future-added extensions — rejects with this code.
     /// Forward-secure: unknown extension type IDs reject (do not skip).
     #[msg("Token-2022 mint has a forbidden extension (only MemoTransfer + MetadataPointer + NonTransferable allowed)")]
     ErrToken2022ExtensionForbidden,
 
-    /// 6089 — TA-09: cosign required for elevated policy mutations. Raising
+    /// 6080 — TA-09: cosign required for elevated policy mutations. Raising
     /// daily_spending_cap_usd, raising max_transaction_size_usd, expanding
     /// allowed_destinations / allowed_protocols, lowering stable_balance_floor,
     /// or pre-graylist-bypass adds require an owner-signed session co-signature
@@ -383,17 +366,17 @@ pub enum SigilError {
     #[msg("Elevated policy mutation requires an owner-signed cosigning session")]
     ErrCosignRequired,
 
-    /// 6090 — TA-17: agent auto-revoked after `auto_revoke_threshold`
+    /// 6081 — TA-17: agent auto-revoked after `auto_revoke_threshold`
     /// consecutive policy-violation failures. Only on-chain policy-violation
-    /// codes (6083-6100) count; external causes (CU exhaustion, nonce desync,
+    /// codes (6074-6091) count; external causes (CU exhaustion, nonce desync,
     /// auth errors) do NOT increment. Owner re-enables via existing
     /// `queue_agent_permissions_update`.
     #[msg("Agent capability auto-revoked after consecutive policy-violation failures; owner must re-enable")]
     ErrAutoRevoked,
 
     // --- Phase 4 (bundle integrity TA-10 + TA-11 + AC-10) ---
-    // Appended at END to preserve existing error codes 6000-6090.
-    /// 6091 — TA-10: sandwich-integrity uniqueness. At most ONE
+    // Appended at END to preserve existing error codes 6000-6081.
+    /// 6082 — TA-10: sandwich-integrity uniqueness. At most ONE
     /// `validate_and_authorize` instruction may exist per (vault, agent,
     /// mint) tuple per transaction. Multiple validates against the same
     /// tuple would let an attacker stage a second authorization sandwich
@@ -403,7 +386,7 @@ pub enum SigilError {
     #[msg("Bundle integrity violation: multiple validate_and_authorize instructions for the same (vault, agent, mint) tuple in one transaction")]
     ErrSandwichIntegrity,
 
-    /// 6092 — TA-11: writable Sigil-owned PDA in a foreign instruction
+    /// 6083 — TA-11: writable Sigil-owned PDA in a foreign instruction
     /// between validate and finalize. The DYNAMIC seed-prefix family check
     /// derives every protected PDA family from `PROTECTED_SEED_PREFIXES`
     /// and rejects when a foreign instruction passes any such PDA with
@@ -413,7 +396,7 @@ pub enum SigilError {
     #[msg("Protected Sigil PDA passed as writable to a foreign instruction between validate and finalize")]
     ErrProtectedWritable,
 
-    /// 6093 — AC-10: session nonce mismatch. The caller's `expected_nonce`
+    /// 6084 — AC-10: session nonce mismatch. The caller's `expected_nonce`
     /// argument does not match the session's stored nonce. Closes the
     /// durable-nonce pre-signing replay class for in-flight sessions
     /// (per Audit #1 C-1). Phase 8 ownership-transfer replay protection
@@ -422,8 +405,8 @@ pub enum SigilError {
     ErrSessionNonceMismatch,
 
     // --- Phase 5 (post-execution invariants TA-12 + TA-13 + TA-14) ---
-    // Appended at END to preserve existing error codes 6000-6093.
-    /// 6094 — TA-12: combined USDC+USDT vault balance dropped below the
+    // Appended at END to preserve existing error codes 6000-6084.
+    /// 6085 — TA-12: combined USDC+USDT vault balance dropped below the
     /// owner-configured `policy.stable_balance_floor` after a finalize.
     /// This is the HARD reserve — no combination of attacks (CPI drain,
     /// per-protocol cap bypass, fee inflation) may drain the vault below
@@ -436,7 +419,7 @@ pub enum SigilError {
     #[msg("Stable balance floor violated — combined USDC+USDT balance dropped below policy.stable_balance_floor")]
     ErrStableFloorViolation,
 
-    /// 6095 — TA-13: per-protocol daily cap exceeded. Wired into
+    /// 6086 — TA-13: per-protocol daily cap exceeded. Wired into
     /// `finalize_session` since Phase 2 (`policy.has_protocol_caps` +
     /// `policy.protocol_caps[i]`) but no dedicated error code existed —
     /// callers got the generic `ProtocolCapExceeded`. Phase 5 ratifies
@@ -450,18 +433,18 @@ pub enum SigilError {
     /// path. The two semantics are intentionally separate.
     ///
     /// M-5 semantic clarification (audit 2026-05-19): see also doc comment
-    /// on 6058 `ProtocolCapExceeded`. The TL;DR distinction:
-    ///   - 6058 = LEGACY counter capacity exhaustion (per-protocol slot
+    /// on 6043 `ProtocolCapExceeded`. The TL;DR distinction:
+    ///   - 6043 = LEGACY counter capacity exhaustion (per-protocol slot
     ///     in the `protocol_counters` array is full).
-    ///   - 6095 = modern rolling-24h amount-based spending bound exceeded
+    ///   - 6086 = modern rolling-24h amount-based spending bound exceeded
     ///     (`policy.protocol_caps[i]` would be breached).
     /// Off-chain monitors that gauge user-facing "you spent too much on
-    /// protocol X" should pin to 6095; monitors that detect bookkeeping
-    /// pressure / migration needs should pin to 6058.
+    /// protocol X" should pin to 6086; monitors that detect bookkeeping
+    /// pressure / migration needs should pin to 6043.
     #[msg("Per-protocol daily spending cap would be exceeded (rolling 24h)")]
     ErrDailyCapExceeded,
 
-    /// 6096 — TA-14: per-recipient daily cap exceeded. The fixed-size
+    /// 6087 — TA-14: per-recipient daily cap exceeded. The fixed-size
     /// `tracker.per_recipient` array (≤10 entries, bounded per F-14)
     /// tracks rolling 24h spend per recipient pubkey (resolved from the
     /// SPL TokenAccount.owner of the destination meta — NOT the ATA
@@ -480,8 +463,8 @@ pub enum SigilError {
     ErrRecipientCapExceeded,
 
     // --- Phase 6 (Maestro borrows R-1/R-2/R-3/R-4) ---
-    // Appended at END to preserve existing error codes 6000-6096.
-    /// 6097 — R-1 MintDeltaCap: combined balance of vault-owned ATAs for the
+    // Appended at END to preserve existing error codes 6000-6087.
+    /// 6088 — R-1 MintDeltaCap: combined balance of vault-owned ATAs for the
     /// configured mint dropped by more than `max_net_decrease` between
     /// `validate_and_authorize` (pre-snap sum) and `finalize_session` (post sum).
     ///
@@ -498,7 +481,7 @@ pub enum SigilError {
     #[msg("R-1 MintDeltaCap: vault-mint balance decreased by more than max_net_decrease")]
     ErrMintDeltaCapExceeded,
 
-    /// 6098 — R-1 MintDeltaCap: entry's accounts couldn't be resolved at
+    /// 6089 — R-1 MintDeltaCap: entry's accounts couldn't be resolved at
     /// validate time. Common shapes:
     ///   - `scope=1` and target_account not present in remaining_accounts
     ///   - target_account's mint field doesn't match the configured mint
@@ -510,7 +493,7 @@ pub enum SigilError {
     #[msg("R-1 MintDeltaCap misconfigured — target account missing, mint mismatch, or owner not vault")]
     MintDeltaCapMisconfigured,
 
-    /// 6099 — R-2 AtaAuthorityPin: a vault-owned token account had its
+    /// 6090 — R-2 AtaAuthorityPin: a vault-owned token account had its
     /// authority changed during the sandwich, or was closed and not
     /// reinstated as a vault-owned account before finalize. Detected by
     /// reading bytes 32..64 of the post-CPI token account data and
@@ -523,7 +506,7 @@ pub enum SigilError {
     #[msg("R-2 AtaAuthorityPin: vault-owned token account authority changed or account closed/reinitialized mid-sandwich")]
     ErrAtaAuthorityChanged,
 
-    /// 6100 — R-3 OutputBalanceFloor: a token account that was supposed to
+    /// 6091 — R-3 OutputBalanceFloor: a token account that was supposed to
     /// receive at least `min_increase` units of its mint during the sandwich
     /// did not. Snapshot taken at `validate_and_authorize` against
     /// `target_account.amount` (u64 LE at bytes 64..72), finalize requires
@@ -533,16 +516,10 @@ pub enum SigilError {
     /// authority then runs a swap that returns 1 lamport — R-3 forces the
     /// caller to declare the floor below which the swap is "no value
     /// returned" and rejects.
-    ///
-    /// NOTE on prompt drift: the Phase 6 brief mapped 6099 → ErrOutputBelowFloor.
-    /// During implementation we added MintDeltaCapMisconfigured at 6098
-    /// (distinguishing "caller bug" from "attack") which shifted R-2 to 6099
-    /// and R-3 to this slot. The drift is forward-only; no existing 6097-6098
-    /// assignment moved.
     #[msg("R-3 OutputBalanceFloor: post-execution balance increase fell below the configured min_increase floor")]
     ErrOutputBelowFloor,
 
-    /// 6101 — R-4 DeclarationConsistency: the (recipient, mint) pair
+    /// 6092 — R-4 DeclarationConsistency: the (recipient, mint) pair
     /// declared on a post-assertion entry doesn't match the SPL token
     /// account at the configured CPI account-meta index of the DeFi
     /// instruction.
@@ -559,15 +536,12 @@ pub enum SigilError {
     /// "recipient: alice" to satisfy a destination-allowlist check, then
     /// inserts attacker_ata into the CPI metas. The recipient who would
     /// receive funds (attacker_ata.owner) ≠ alice, so R-4 rejects.
-    ///
-    /// Prompt drift (continued from R-3): brief mapped R-4 → 6100. With
-    /// MintDeltaCapMisconfigured at 6098, the actual assignment is 6101.
     #[msg("R-4 DeclarationConsistency: declared recipient/mint does not match CPI account-meta")]
     ErrDeclarationInconsistent,
 
     // --- Audit 2026-05-19 (P1 HIGH fixes) ---
-    // Appended at END to preserve existing error codes 6000-6101.
-    /// 6102 — H-1 hard-reject (audit 2026-05-19): the foreign DeFi
+    // Appended at END to preserve existing error codes 6000-6092.
+    /// 6093 — H-1 hard-reject (audit 2026-05-19): the foreign DeFi
     /// instruction passed more account metas than
     /// `MAX_DESTINATION_CHECK_METAS_PER_IX` (16). Previously the
     /// destination-check helper silently `take()`-truncated at the bound,
@@ -583,8 +557,8 @@ pub enum SigilError {
     IxMetaCountExceeded,
 
     // --- Phase 8 (ownership transfer + freeze hardening) ---
-    // Appended at END to preserve existing error codes 6000-6102.
-    /// 6103 — Phase 8 ownership transfer: a queued ownership transfer for
+    // Appended at END to preserve existing error codes 6000-6093.
+    /// 6094 — Phase 8 ownership transfer: a queued ownership transfer for
     /// this vault already exists. Owner must `cancel_ownership_transfer`
     /// before queueing a new target. Prevents a phished owner from quietly
     /// chaining multiple pending transfers and racing the timelock with
@@ -592,7 +566,7 @@ pub enum SigilError {
     #[msg("An ownership transfer is already pending; cancel it first")]
     ErrPendingOwnershipExists,
 
-    /// 6104 — Phase 8 ownership transfer: `apply_ownership_transfer` was
+    /// 6095 — Phase 8 ownership transfer: `apply_ownership_transfer` was
     /// invoked before the timelock window elapsed. Mirrors policy/agent-
     /// permissions timelock semantics — a phished owner has the full
     /// `policy.timelock_duration` window to cancel before the transfer
@@ -600,7 +574,7 @@ pub enum SigilError {
     #[msg("Ownership transfer timelock has not elapsed")]
     ErrPendingOwnershipNotReady,
 
-    /// 6105 — Phase 8 freeze hardening (audit lineage: F19 cached-deser +
+    /// 6096 — Phase 8 freeze hardening (audit lineage: F19 cached-deser +
     /// F-RP3-2 sibling drift): caller-provided `freeze_reason` byte is
     /// outside the {0,1,2} enum range. Rejecting unknown discriminants is
     /// forward-secure — a future-added FreezeReason variant a tampered SDK
@@ -608,14 +582,14 @@ pub enum SigilError {
     #[msg("freeze_reason value out of {{0,1,2}}")]
     ErrInvalidFreezeReason,
 
-    /// 6106 — Phase 8 reactivate cooldown: `reactivate_vault` requires the
+    /// 6097 — Phase 8 reactivate cooldown: `reactivate_vault` requires the
     /// 5-minute observation window after `frozen_at_timestamp` to elapse
     /// before the vault can return to Active. Closes F-RP3-1 (phished owner
     /// freeze→reactivate→full-capability replay in one transaction).
     #[msg("Reactivate requires 5-minute observation cooldown to elapse")]
     ErrReactivateCooldownActive,
 
-    /// 6107 — Phase 8 ownership transfer (Council ISC-128): `new_owner`
+    /// 6098 — Phase 8 ownership transfer (Council ISC-128): `new_owner`
     /// cannot be a system/program/sysvar address. Closes the foot-gun where
     /// a phished owner signs a transfer to a non-signing address (e.g.
     /// SystemProgram::ID, Pubkey::default(), known sysvar pubkeys) and
@@ -624,7 +598,7 @@ pub enum SigilError {
     #[msg("new_owner cannot be system/program/sysvar addresses (Council ISC-128)")]
     ErrInvalidOwnershipTarget,
 
-    /// 6108 — Phase 8 freeze_internal (Council ISC-136): caller passed more
+    /// 6099 — Phase 8 freeze_internal (Council ISC-136): caller passed more
     /// than `MAX_REVOKE_PAIRS = 10` (session_pda, vault_token_account) pairs
     /// in `remaining_accounts`. The 10-pair cap matches `MAX_AGENTS_PER_VAULT`
     /// (one active session per agent ceiling) and bounds CU consumption of
@@ -633,20 +607,20 @@ pub enum SigilError {
     #[msg("freeze_internal MAX_REVOKE_PAIRS = 10 exceeded (Council ISC-136)")]
     ErrTooManyRevokePairs,
 
-    /// 6109 — H-3 close (audit 2026-05-21): symmetric to `ConstraintsNotClosed`
-    /// at code 6058. `close_vault` rejects if `policy.has_post_assertions != 0`
-    /// because the 672-byte `PostExecutionAssertions` zero-copy PDA must be
-    /// drained via `close_post_assertions` first — otherwise it would be
-    /// orphaned (post-close vault cannot reinit; the PDA's rent becomes
+    /// 6100 — H-3 close (audit 2026-05-21): `close_vault` rejects if
+    /// `policy.has_post_assertions != 0` because the 672-byte
+    /// `PostExecutionAssertions` zero-copy PDA must be drained via
+    /// `close_post_assertions` first — otherwise it would be orphaned
+    /// (post-close vault cannot reinit; the PDA's rent becomes
     /// unreclaimable). Symmetric class to the SFH-01 (Phase 8) pending_owner
     /// / pending_agent_grant drain bug already fixed via inline drain logic
     /// in close_vault. Post-assertions has its own dedicated close handler
     /// (`close_post_assertions.rs`) so a require!() guard is the closer
-    /// pattern match — mirrors line 84's `has_constraints` check.
+    /// pattern match.
     #[msg("PostExecutionAssertions PDA still active — call close_post_assertions first")]
     ErrPostAssertionsNotClosed,
 
-    /// 6110 — H-4 close (audit 2026-05-21, Bucket 1): `queue_policy_update`
+    /// 6101 — H-4 close (audit 2026-05-21, Bucket 1): `queue_policy_update`
     /// rejects if any entry in `allowed_destinations` is the address of a
     /// Sigil-owned protected PDA for this vault. Closes the owner-self-foot-
     /// gun where a phished owner allowlists a Sigil PDA (e.g. `vault`,
@@ -661,7 +635,7 @@ pub enum SigilError {
     #[msg("Destination is a Sigil-protected PDA — rejected at queue time")]
     ErrDestinationIsProtectedPda,
 
-    /// 6111 — D-1 close (Bucket 2, audit 2026-05-21): AL3 on-chain intent-
+    /// 6102 — D-1 close (Bucket 2, audit 2026-05-21): AL3 on-chain intent-
     /// digest verifier rejected the bundle. `validate_and_authorize` accepts
     /// `expected_intent_digest: [u8; 32]` from the caller (TS SDK computes
     /// SHA-256 over the canonical SealInput at preview time) and recomputes
@@ -672,15 +646,7 @@ pub enum SigilError {
     #[msg("AL3 intent-digest mismatch — preview digest does not match executed bundle")]
     ErrIntentDigestMismatch,
 
-    /// 6112 — M-4 close (Bucket 2, PEN-CROSS-3): apply_constraints_update
-    /// rejected because the recomputed digest of pending content does not
-    /// match the digest stored at queue time. Defense-in-depth against
-    /// discriminator-collision overwrite of `PendingConstraintsUpdate`
-    /// content between queue and apply.
-    #[msg("PendingConstraintsUpdate digest mismatch between queue and apply")]
-    ErrPendingConstraintsDigestMismatch,
-
-    /// 6113 — M-5 close (Bucket 2, PEN-CROSS-3): apply_agent_grant rejected
+    /// 6103 — M-5 close (Bucket 2, PEN-CROSS-3): apply_agent_grant rejected
     /// because the recomputed digest of pending content does not match the
     /// digest stored at queue time. Defense-in-depth against discriminator-
     /// collision overwrite of `PendingAgentGrant` content between queue
@@ -688,7 +654,7 @@ pub enum SigilError {
     #[msg("PendingAgentGrant digest mismatch between queue and apply")]
     ErrPendingAgentGrantDigestMismatch,
 
-    /// 6114 — D-5 close (Bucket 2, F-RP3-1): `reactivate_vault` rejected
+    /// 6104 — D-5 close (Bucket 2, F-RP3-1): `reactivate_vault` rejected
     /// because the operation grafts a new agent at FULL_CAPABILITY without
     /// the required cosign signature. Closes the phished-owner foot-gun
     /// where freeze→reactivate(new_agent=ATTACKER, FULL_CAPABILITY) in one

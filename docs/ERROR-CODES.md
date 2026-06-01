@@ -1,6 +1,6 @@
-# Error Codes (6000-6114)
+# Error Codes (6000-6104)
 
-All 115 custom errors defined in `programs/sigil/src/errors.rs`. Use `require!(condition, SigilError::Name)`.
+All 105 custom errors defined in `programs/sigil/src/errors.rs`. Use `require!(condition, SigilError::Name)`.
 
 Source of truth: `target/idl/sigil.json` (regenerate this file by running `bash scripts/regen-error-codes-doc.sh` after any change to `errors.rs`).
 
@@ -44,80 +44,70 @@ Source of truth: `target/idl/sigil.json` (regenerate this file by running `bash 
 | 6035 | `InsufficientPermissions` | Agent lacks permission for this action type |
 | 6036 | `InvalidPermissions` | Permission bitmask contains invalid bits |
 | 6037 | `InvalidConstraintConfig` | Invalid constraint configuration: bounds exceeded |
-| 6038 | `ConstraintViolated` | Instruction constraint violated |
-| 6039 | `InvalidConstraintsPda` | Invalid constraints PDA: wrong owner or vault |
-| 6040 | `InvalidPendingConstraintsPda` | Invalid pending constraints PDA: wrong owner or vault |
-| 6041 | `AgentSpendLimitExceeded` | Agent rolling 24h spend exceeds per-agent spending limit |
-| 6042 | `OverlaySlotExhausted` | Per-agent overlay is full; cannot register agent with spending limit |
-| 6043 | `AgentSlotNotFound` | Agent has per-agent spending limit but no overlay tracking slot |
-| 6044 | `UnauthorizedTokenApproval` | Unauthorized SPL Token Approve between validate and finalize |
-| 6045 | `InvalidSessionExpiry` | Session expiry seconds out of range (5-90) |
-| 6046 | `UnconstrainedProgramBlocked` | Program has no matching constraint entry — every instruction must match one |
-| 6047 | `ProtocolCapExceeded` | Per-protocol rolling 24h spending cap would be exceeded — LEGACY counter exhaustion path. New rolling-24h amount-based cap rejections use 6095 ErrDailyCapExceeded |
-| 6048 | `ProtocolCapsMismatch` | protocol_caps length must match protocols length when has_protocol_caps is true |
-| 6049 | `ConstraintsNotClosed` | Instruction constraints must be closed before closing vault |
-| 6050 | `PendingPolicyExists` | Pending policy update must be applied or cancelled before closing vault |
-| 6051 | `AgentPaused` | Agent is paused and cannot execute actions |
-| 6052 | `AgentAlreadyPaused` | Agent is already paused |
-| 6053 | `AgentNotPaused` | Agent is not paused |
-| 6054 | `UnauthorizedPostFinalizeInstruction` | Instructions after finalize_session must be ComputeBudget or SystemProgram only |
-| 6055 | `UnexpectedBalanceDecrease` | Vault balance decreased more than delegated amount — potential CPI attack |
-| 6056 | `TimelockTooShort` | Timelock duration below minimum (1800 seconds / 30 minutes) |
-| 6057 | `PolicyVersionMismatch` | Policy version mismatch — policy changed since agent's last RPC read |
-| 6058 | `ActiveSessionsExist` | Cannot close vault with active sessions (finalize pending sessions first) |
-| 6059 | `PostAssertionFailed` | Post-execution assertion failed: account state did not satisfy constraint |
-| 6060 | `InvalidPostAssertionIndex` | Post-assertion constraint references invalid instruction index |
-| 6061 | `UnauthorizedPreValidateInstruction` | Non-infrastructure instruction detected before validate_and_authorize |
-| 6062 | `SnapshotNotCaptured` | Delta assertion snapshot was not captured in validate_and_authorize |
-| 6063 | `InvalidConstraintOperator` | Constraint operator value is not a valid ConstraintOperator discriminant |
-| 6064 | `ZeroCopyVaultMismatch` | Zero-copy account vault key mismatch (defense-in-depth) |
-| 6065 | `BlockedSplOpcode` | SPL opcode is blocked at runtime and cannot be used in constraints |
-| 6066 | `QueuedUpdateExpired` | Queued update is too old (>MAX_APPLY_AGE_SLOTS) — re-queue to apply. Defends against durable-nonce pre-signing. |
-| 6067 | `AccountWritabilityMismatch` | Account writability flag does not match constraint requirement |
-| 6068 | `SysvarScanBoundExceeded` | Sysvar instruction scan exceeded the per-tx safety bound |
-| 6069 | `AsyncFulfillmentNotPermitted` | Async-fulfillment program is not permitted in V1 (Jupiter Perps, Drift, Drift JIT). Spending cannot be measured because keeper submits the actual transfer in a separate transaction after finalize_session returns. |
-| 6070 | `ConstraintsAlreadyPopulated` | Cannot clean an active constraints PDA; use queue+apply_close_constraints |
-| 6071 | `OrphanPdaWrongOwner` | PDA at constraints seeds is not program-owned |
-| 6072 | `OrphanPdaPopulated` | PDA is fully populated; not an orphan |
-| 6073 | `ConfidentialTransferBlocked` | Token-2022 ConfidentialTransfer not permitted between validate and finalize |
-| 6074 | `PermanentDelegateBlocked` | Token-2022 PermanentDelegate not permitted between validate and finalize |
-| 6075 | `TransferHookBlocked` | Token-2022 TransferHook not permitted between validate and finalize |
-| 6076 | `LamportDrainBlocked` | Token-2022 destructive-balance ix (opcodes 38/45/46) not permitted between validate and finalize |
-| 6077 | `BatchInstructionBlocked` | Token-2022 Batch instruction (opcode 255) is blocked outright — wraps inner instructions and bypasses byte-0 blocklist |
-| 6078 | `InvalidDestinationMode` | Invalid destination mode (must be 0 = RESTRICTED) |
-| 6079 | `InvalidCapability` | Invalid agent capability value (must be 0 = Disabled, 1 = Observer, or 2 = Operator) |
-| 6080 | `PolicyPreviewMismatch` | Policy preview digest mismatch — caller's signed digest differs from recomputed canonical digest |
-| 6081 | `ObserveOnlyModeBlocksExecute` | Vault is in observe_only mode — validate_and_authorize is blocked |
-| 6082 | `ActiveVaultRequiresAllowlist` | Active (non-observe_only) vault must have at least one protocol or destination on the allowlist |
-| 6083 | `ErrMintNotPinned` | Deposit mint is not a build-time-pinned stablecoin (USDC or USDT) |
-| 6084 | `ErrOutsideOperatingHours` | Current UTC hour is outside the policy's operating_hours bitmask |
-| 6085 | `ErrCooldownActive` | Agent cooldown period has not elapsed since the last action |
-| 6086 | `ErrGraylistFriction` | Destination is graylisted (24h friction window — awaiting promote_graylist_destination or unlock) |
-| 6087 | `ErrGraylistFull` | Destination graylist is full (max 10 entries) — wait for an existing entry to unlock or promote |
-| 6088 | `ErrToken2022ExtensionForbidden` | Token-2022 mint has a forbidden extension (only MemoTransfer + MetadataPointer + NonTransferable allowed) |
-| 6089 | `ErrCosignRequired` | Elevated policy mutation requires an owner-signed cosigning session |
-| 6090 | `ErrAutoRevoked` | Agent capability auto-revoked after consecutive policy-violation failures; owner must re-enable |
-| 6091 | `ErrSandwichIntegrity` | Bundle integrity violation: multiple validate_and_authorize instructions for the same (vault, agent, mint) tuple in one transaction |
-| 6092 | `ErrProtectedWritable` | Protected Sigil PDA passed as writable to a foreign instruction between validate and finalize |
-| 6093 | `ErrSessionNonceMismatch` | Session nonce mismatch — caller's expected_nonce does not match the session's stored nonce (durable-nonce replay defense) |
-| 6094 | `ErrStableFloorViolation` | Stable balance floor violated — combined USDC+USDT balance dropped below policy.stable_balance_floor |
-| 6095 | `ErrDailyCapExceeded` | Per-protocol daily spending cap would be exceeded (rolling 24h) |
-| 6096 | `ErrRecipientCapExceeded` | Per-recipient daily cap exceeded — recipient outflow would breach policy.per_recipient_daily_cap_usd within the rolling 24h window, or per_recipient array full with no expired slot to evict |
-| 6097 | `ErrMintDeltaCapExceeded` | R-1 MintDeltaCap: vault-mint balance decreased by more than max_net_decrease |
-| 6098 | `MintDeltaCapMisconfigured` | R-1 MintDeltaCap misconfigured — target account missing, mint mismatch, or owner not vault |
-| 6099 | `ErrAtaAuthorityChanged` | R-2 AtaAuthorityPin: vault-owned token account authority changed or account closed/reinitialized mid-sandwich |
-| 6100 | `ErrOutputBelowFloor` | R-3 OutputBalanceFloor: post-execution balance increase fell below the configured min_increase floor |
-| 6101 | `ErrDeclarationInconsistent` | R-4 DeclarationConsistency: declared recipient/mint does not match CPI account-meta |
-| 6102 | `IxMetaCountExceeded` | Foreign DeFi instruction passed more account metas than the destination-check budget (16) allows; truncate the ix or split into shorter ixs |
-| 6103 | `ErrPendingOwnershipExists` | An ownership transfer is already pending; cancel it first |
-| 6104 | `ErrPendingOwnershipNotReady` | Ownership transfer timelock has not elapsed |
-| 6105 | `ErrInvalidFreezeReason` | freeze_reason value out of {{0,1,2}} |
-| 6106 | `ErrReactivateCooldownActive` | Reactivate requires 5-minute observation cooldown to elapse |
-| 6107 | `ErrInvalidOwnershipTarget` | new_owner cannot be system/program/sysvar addresses (Council ISC-128) |
-| 6108 | `ErrTooManyRevokePairs` | freeze_internal MAX_REVOKE_PAIRS = 10 exceeded (Council ISC-136) |
-| 6109 | `ErrPostAssertionsNotClosed` | PostExecutionAssertions PDA still active — call close_post_assertions first |
-| 6110 | `ErrDestinationIsProtectedPda` | Destination is a Sigil-protected PDA — rejected at queue time |
-| 6111 | `ErrIntentDigestMismatch` | AL3 intent-digest mismatch — preview digest does not match executed bundle |
-| 6112 | `ErrPendingConstraintsDigestMismatch` | PendingConstraintsUpdate digest mismatch between queue and apply |
-| 6113 | `ErrPendingAgentGrantDigestMismatch` | PendingAgentGrant digest mismatch between queue and apply |
-| 6114 | `ErrReactivateCosignRequiredForFullCapability` | Reactivate with FULL_CAPABILITY new agent requires cosign |
+| 6038 | `AgentSpendLimitExceeded` | Agent rolling 24h spend exceeds per-agent spending limit |
+| 6039 | `OverlaySlotExhausted` | Per-agent overlay is full; cannot register agent with spending limit |
+| 6040 | `AgentSlotNotFound` | Agent has per-agent spending limit but no overlay tracking slot |
+| 6041 | `UnauthorizedTokenApproval` | Unauthorized SPL Token Approve between validate and finalize |
+| 6042 | `InvalidSessionExpiry` | Session expiry seconds out of range (5-90) |
+| 6043 | `ProtocolCapExceeded` | Per-protocol rolling 24h spending cap would be exceeded — LEGACY counter exhaustion path. New rolling-24h amount-based cap rejections use 6086 ErrDailyCapExceeded |
+| 6044 | `ProtocolCapsMismatch` | protocol_caps length must match protocols length when has_protocol_caps is true |
+| 6045 | `PendingPolicyExists` | Pending policy update must be applied or cancelled before closing vault |
+| 6046 | `AgentPaused` | Agent is paused and cannot execute actions |
+| 6047 | `AgentAlreadyPaused` | Agent is already paused |
+| 6048 | `AgentNotPaused` | Agent is not paused |
+| 6049 | `UnauthorizedPostFinalizeInstruction` | Instructions after finalize_session must be ComputeBudget or SystemProgram only |
+| 6050 | `UnexpectedBalanceDecrease` | Vault balance decreased more than delegated amount — potential CPI attack |
+| 6051 | `TimelockTooShort` | Timelock duration below minimum (1800 seconds / 30 minutes) |
+| 6052 | `PolicyVersionMismatch` | Policy version mismatch — policy changed since agent's last RPC read |
+| 6053 | `ActiveSessionsExist` | Cannot close vault with active sessions (finalize pending sessions first) |
+| 6054 | `PostAssertionFailed` | Post-execution assertion failed: account state did not satisfy constraint |
+| 6055 | `InvalidPostAssertionIndex` | Post-assertion constraint references invalid instruction index |
+| 6056 | `UnauthorizedPreValidateInstruction` | Non-infrastructure instruction detected before validate_and_authorize |
+| 6057 | `SnapshotNotCaptured` | Delta assertion snapshot was not captured in validate_and_authorize |
+| 6058 | `InvalidConstraintOperator` | Constraint operator value is not a valid ConstraintOperator discriminant |
+| 6059 | `ZeroCopyVaultMismatch` | Zero-copy account vault key mismatch (defense-in-depth) |
+| 6060 | `QueuedUpdateExpired` | Queued update is too old (>MAX_APPLY_AGE_SLOTS / >MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN) — re-queue via the matching queue/initiate ix (queue_policy_update, queue_agent_permissions_update, queue_agent_grant, or initiate_ownership_transfer) to apply. Defends against durable-nonce pre-signing (CH-1 audit 2026-05-23 extended scope to timelocked-admin PDAs). |
+| 6061 | `AccountWritabilityMismatch` | Account writability flag does not match constraint requirement |
+| 6062 | `SysvarScanBoundExceeded` | Sysvar instruction scan exceeded the per-tx safety bound |
+| 6063 | `AsyncFulfillmentNotPermitted` | Async-fulfillment program is not permitted in V1 (Jupiter Perps, Drift, Drift JIT). Spending cannot be measured because keeper submits the actual transfer in a separate transaction after finalize_session returns. |
+| 6064 | `ConfidentialTransferBlocked` | Token-2022 ConfidentialTransfer not permitted between validate and finalize |
+| 6065 | `PermanentDelegateBlocked` | Token-2022 PermanentDelegate not permitted between validate and finalize |
+| 6066 | `TransferHookBlocked` | Token-2022 TransferHook not permitted between validate and finalize |
+| 6067 | `LamportDrainBlocked` | Token-2022 destructive-balance ix (opcodes 38/45/46) not permitted between validate and finalize |
+| 6068 | `BatchInstructionBlocked` | Token-2022 Batch instruction (opcode 255) is blocked outright — wraps inner instructions and bypasses byte-0 blocklist |
+| 6069 | `InvalidDestinationMode` | Invalid destination mode (must be 0 = RESTRICTED) |
+| 6070 | `InvalidCapability` | Invalid agent capability value (must be 0 = Disabled, 1 = Observer, or 2 = Operator) |
+| 6071 | `PolicyPreviewMismatch` | Policy preview digest mismatch — caller's signed digest differs from recomputed canonical digest |
+| 6072 | `ObserveOnlyModeBlocksExecute` | Vault is in observe_only mode — validate_and_authorize is blocked |
+| 6073 | `ActiveVaultRequiresAllowlist` | Active (non-observe_only) vault must have at least one protocol or destination on the allowlist |
+| 6074 | `ErrMintNotPinned` | Deposit mint is not a build-time-pinned stablecoin (USDC or USDT) |
+| 6075 | `ErrOutsideOperatingHours` | Current UTC hour is outside the policy's operating_hours bitmask |
+| 6076 | `ErrCooldownActive` | Agent cooldown period has not elapsed since the last action |
+| 6077 | `ErrGraylistFriction` | Destination is graylisted (24h friction window — awaiting promote_graylist_destination or unlock) |
+| 6078 | `ErrGraylistFull` | Destination graylist is full (max 10 entries) — wait for an existing entry to unlock or promote |
+| 6079 | `ErrToken2022ExtensionForbidden` | Token-2022 mint has a forbidden extension (only MemoTransfer + MetadataPointer + NonTransferable allowed) |
+| 6080 | `ErrCosignRequired` | Elevated policy mutation requires an owner-signed cosigning session |
+| 6081 | `ErrAutoRevoked` | Agent capability auto-revoked after consecutive policy-violation failures; owner must re-enable |
+| 6082 | `ErrSandwichIntegrity` | Bundle integrity violation: multiple validate_and_authorize instructions for the same (vault, agent, mint) tuple in one transaction |
+| 6083 | `ErrProtectedWritable` | Protected Sigil PDA passed as writable to a foreign instruction between validate and finalize |
+| 6084 | `ErrSessionNonceMismatch` | Session nonce mismatch — caller's expected_nonce does not match the session's stored nonce (durable-nonce replay defense) |
+| 6085 | `ErrStableFloorViolation` | Stable balance floor violated — combined USDC+USDT balance dropped below policy.stable_balance_floor |
+| 6086 | `ErrDailyCapExceeded` | Per-protocol daily spending cap would be exceeded (rolling 24h) |
+| 6087 | `ErrRecipientCapExceeded` | Per-recipient daily cap exceeded — recipient outflow would breach policy.per_recipient_daily_cap_usd within the rolling 24h window, or per_recipient array full with no expired slot to evict |
+| 6088 | `ErrMintDeltaCapExceeded` | R-1 MintDeltaCap: vault-mint balance decreased by more than max_net_decrease |
+| 6089 | `MintDeltaCapMisconfigured` | R-1 MintDeltaCap misconfigured — target account missing, mint mismatch, or owner not vault |
+| 6090 | `ErrAtaAuthorityChanged` | R-2 AtaAuthorityPin: vault-owned token account authority changed or account closed/reinitialized mid-sandwich |
+| 6091 | `ErrOutputBelowFloor` | R-3 OutputBalanceFloor: post-execution balance increase fell below the configured min_increase floor |
+| 6092 | `ErrDeclarationInconsistent` | R-4 DeclarationConsistency: declared recipient/mint does not match CPI account-meta |
+| 6093 | `IxMetaCountExceeded` | Foreign DeFi instruction passed more account metas than the destination-check budget (16) allows; truncate the ix or split into shorter ixs |
+| 6094 | `ErrPendingOwnershipExists` | An ownership transfer is already pending; cancel it first |
+| 6095 | `ErrPendingOwnershipNotReady` | Ownership transfer timelock has not elapsed |
+| 6096 | `ErrInvalidFreezeReason` | freeze_reason value out of {{0,1,2}} |
+| 6097 | `ErrReactivateCooldownActive` | Reactivate requires 5-minute observation cooldown to elapse |
+| 6098 | `ErrInvalidOwnershipTarget` | new_owner cannot be system/program/sysvar addresses (Council ISC-128) |
+| 6099 | `ErrTooManyRevokePairs` | freeze_internal MAX_REVOKE_PAIRS = 10 exceeded (Council ISC-136) |
+| 6100 | `ErrPostAssertionsNotClosed` | PostExecutionAssertions PDA still active — call close_post_assertions first |
+| 6101 | `ErrDestinationIsProtectedPda` | Destination is a Sigil-protected PDA — rejected at queue time |
+| 6102 | `ErrIntentDigestMismatch` | AL3 intent-digest mismatch — preview digest does not match executed bundle |
+| 6103 | `ErrPendingAgentGrantDigestMismatch` | PendingAgentGrant digest mismatch between queue and apply |
+| 6104 | `ErrReactivateCosignRequiredForFullCapability` | Reactivate with FULL_CAPABILITY new agent requires cosign |

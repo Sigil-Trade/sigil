@@ -2061,7 +2061,7 @@ describe("surfpool-integration", function () {
 
     it("reactivate_vault restores operations", async () => {
       // Phase 8 Batch 5: prior it() froze vault; advance past 5-min reactivate
-      // cooldown (ErrReactivateCooldownActive 6106) via Surfnet time travel.
+      // cooldown (ErrReactivateCooldownActive 6097) via Surfnet time travel.
       {
         const clock = await getClock(env.connection);
         await timeTravel(env.connection, {
@@ -2444,7 +2444,7 @@ describe("surfpool-integration", function () {
       );
 
       // Phase 8 Batch 5: advance past 5-min reactivate cooldown
-      // (ErrReactivateCooldownActive 6106) before cleanup unfreeze.
+      // (ErrReactivateCooldownActive 6097) before cleanup unfreeze.
       {
         const clock = await getClock(env.connection);
         await timeTravel(env.connection, {

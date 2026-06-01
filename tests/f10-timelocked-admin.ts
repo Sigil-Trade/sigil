@@ -17,7 +17,7 @@
  *
  * This suite asserts:
  *   1. Stale `pending_agent_grant` (slot delta >= 700_000) rejects with
- *      `QueuedUpdateExpired` (6066) — the Drift-April-2026 durable-nonce
+ *      `QueuedUpdateExpired` (6061) — the Drift-April-2026 durable-nonce
  *      pre-signed replay class.
  *   2. Stale `pending_ownership_transfer` rejects identically — proves
  *      the cap applies to both admin families uniformly.

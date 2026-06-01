@@ -528,10 +528,10 @@ describe("policy-digest invariant (TA-19 sibling-handler recompute)", () => {
 // F-16 audit fix: negative tests for Phase 2 primitives
 // ============================================================================
 //
-// 1. observe_only rejects validate_and_authorize (code 6081)
+// 1. observe_only rejects validate_and_authorize (code 6072)
 // 2. apply_pending_policy digest re-assert defends pending-update staleness
 //    (code 6080) — substitute path: requeue invalidates prior digest
-// 3. F-4 capability bound at apply_agent_permissions_update (code 6079) —
+// 3. F-4 capability bound at apply_agent_permissions_update (code 6070) —
 //    queue with valid capability, mutate to invalid in cancel/requeue flow
 
 describe("Phase 2 close-up — F-16 negative tests", () => {
@@ -763,7 +763,7 @@ describe("Phase 2 close-up — F-16 negative tests", () => {
       expect(msg).to.satisfy(
         (m: string) =>
           m.includes("ObserveOnlyModeBlocksExecute") || m.includes("6081"),
-        `expected ObserveOnlyModeBlocksExecute (6081), got: ${msg}`,
+        `expected ObserveOnlyModeBlocksExecute (6072), got: ${msg}`,
       );
     }
     expect(
@@ -946,7 +946,7 @@ describe("Phase 2 close-up — F-16 negative tests", () => {
   // register_agent + queue_agent_permissions_update + apply_agent_permissions_update.
   // Easiest reproducible negative is at queue (apply is a re-validation of the
   // queued capability, so queue rejection covers the same surface). Test that
-  // capability=5 is rejected with InvalidCapability (6079).
+  // capability=5 is rejected with InvalidCapability (6070).
   it("queue_agent_permissions_update with capability=5 → InvalidCapability", async () => {
     const agent = Keypair.generate();
     airdropSol(svm, agent.publicKey, 10 * LAMPORTS_PER_SOL);
@@ -1000,7 +1000,7 @@ describe("Phase 2 close-up — F-16 negative tests", () => {
       const msg = err?.message ?? String(err);
       expect(msg).to.satisfy(
         (m: string) => m.includes("InvalidCapability") || m.includes("6079"),
-        `expected InvalidCapability (6079), got: ${msg}`,
+        `expected InvalidCapability (6070), got: ${msg}`,
       );
     }
     expect(

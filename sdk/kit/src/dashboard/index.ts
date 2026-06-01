@@ -835,11 +835,11 @@ export class OwnerClient {
    * does not add it for you.
    *
    * Errors:
-   *  - 6103 `ErrPendingOwnershipExists` — a previous transfer is still
+   *  - 6094 `ErrPendingOwnershipExists` — a previous transfer is still
    *    pending. Call {@link OwnerClient.cancelOwnershipTransfer} first.
-   *  - 6107 `ErrInvalidOwnershipTarget` — `newOwner` is a system program
+   *  - 6098 `ErrInvalidOwnershipTarget` — `newOwner` is a system program
    *    / sysvar (would permanently brick the vault).
-   *  - 6089 `ErrCosignRequired` — cosign-opted-in policy and no co-signer.
+   *  - 6080 `ErrCosignRequired` — cosign-opted-in policy and no co-signer.
    *
    * @param newOwner         Target pubkey for the transfer.
    * @param isMultisigTarget `true` when `newOwner` is a Squads V4

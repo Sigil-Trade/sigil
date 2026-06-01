@@ -208,7 +208,7 @@ pub struct PolicyConfig {
     /// Owner-configurable in range 3..=20; out-of-range values rejected
     /// at policy-write time with `InvalidPermissions`. Default 5.
     ///
-    /// Only on-chain policy-violation codes (6083-6100) count — see
+    /// Only on-chain policy-violation codes (6074-6091) count — see
     /// `POLICY_VIOLATION_RANGE` in finalize_session. External codes
     /// (CU exhaustion, nonce desync, auth) do NOT increment.
     ///

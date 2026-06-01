@@ -518,7 +518,7 @@ describe("pen-cross-1-absorption (Phase 8 Batch 6)", () => {
     } catch (err: any) {
       caughtCode = err?.error?.errorCode?.number ?? null;
     }
-    expect(caughtCode, "queue MUST require cosign").to.equal(6089);
+    expect(caughtCode, "queue MUST require cosign").to.equal(6080);
   });
 
   // ─────────────────────────────────────────────────────────────────────────

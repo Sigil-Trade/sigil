@@ -9,7 +9,7 @@
 // The pinned vectors are the cross-impl source of truth. The SDK kit's own
 // AL3 fixture suite validates the TS side under sdk/kit/tests/al-envelope/.
 // Rust↔helper parity is asserted at runtime in every validate_and_authorize
-// integration test — if the helper drifts, ErrIntentDigestMismatch (6111)
+// integration test — if the helper drifts, ErrIntentDigestMismatch (6102)
 // fires on-chain. We do NOT import the SDK kit directly here because that
 // package is ESM-only (`"type": "module"`) and the LiteSVM test runner is
 // CJS via ts-mocha + tsconfig `module: commonjs`.

@@ -798,7 +798,7 @@ export async function seal(params: SealParams): Promise<SealResult> {
   // intent_version + network + vault + agent + token_mint + amount +
   // target_protocol) — the on-chain verifier in `validate_and_authorize`
   // recomputes the same digest from its handler args and rejects on byte-
-  // equal mismatch with `ErrIntentDigestMismatch` (6111). This closes the
+  // equal mismatch with `ErrIntentDigestMismatch` (6102). This closes the
   // preview→execute scalar-tamper class (recipient/amount/mint/protocol
   // swap between the user's signed preview and the submitted bundle).
   // The full ix-bound digest (`computeSealInputDigest` above) remains
@@ -829,19 +829,6 @@ export async function seal(params: SealParams): Promise<SealResult> {
     expectedIntentDigest: scalarIntentDigest,
   });
 
-  // Step 8b: When the vault has instruction constraints configured, the on-chain
-  // matcher reads the InstructionConstraints PDA from `ctx.remaining_accounts[0]`
-  // (programs/sigil/src/instructions/validate_and_authorize.rs:141-177). If this
-  // PDA is not appended, the matcher is silently skipped — and the on-chain
-  // handler hard-fails with InvalidConstraintsPda when has_constraints == true
-  // and remaining_accounts is empty (rs:175). Append it as a READONLY remaining
-  // account so constraint enforcement is reachable.
-  //
-  // The codama-generated instruction is Object.freeze'd (see validateAndAuthorize.ts
-  // line 408), so we cannot mutate its `accounts` array in place. We construct a
-  // new Instruction object that copies the existing accounts and appends the
-  // constraints PDA as the first (and only) remaining account — matching the
-  // on-chain handler's positional read at index 0 of remaining_accounts.
   // M1-04 (constraints-engine teardown): validate_and_authorize no longer reads
   // a constraints PDA from remaining_accounts. The prior block that appended the
   // constraints PDA when `state.policy.hasConstraints` was set is removed with

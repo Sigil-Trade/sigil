@@ -137,4 +137,80 @@ describe("error-map-drift — IDL ↔ generated ↔ hand-maintained", () => {
       `Hand-map shape violations: ${violations.join("; ")}`,
     ).to.have.lengthOf(0);
   });
+
+  // Renumber-safety gate (added M1-04 Step 6). The "covers every IDL code"
+  // test above is presence-only: it would stay green if an entry were keyed
+  // to the right CODE but carried the wrong NAME — exactly the failure mode a
+  // positional renumber introduces. This asserts ON_CHAIN_ERROR_MAP[code].name
+  // equals the IDL name for every Sigil code, closing that hole.
+  it("hand-maintained ON_CHAIN_ERROR_MAP name matches the IDL name for every code", () => {
+    const mismatches: string[] = [];
+    for (const e of idlErrors) {
+      if (e.code < SIGIL_ON_CHAIN_ERROR_MIN) continue;
+      const entry = ON_CHAIN_ERROR_MAP[e.code];
+      if (entry && entry.name !== e.name) {
+        mismatches.push(`${e.code}: IDL=${e.name} vs hand=${entry.name}`);
+      }
+    }
+    expect(
+      mismatches,
+      `Hand-map name drift (re-key the entry by name to its new code): ${mismatches.join("; ")}`,
+    ).to.have.lengthOf(0);
+  });
+});
+
+// ─── errors.rs doc self-citation lint (added M1-04 Step 6) ────────────────
+// Anchor error codes are POSITIONAL (6000 + variant index). Each variant's
+// doc comment may cite its own code inline (`/// 60XX — TAG: ...`). After a
+// removal/renumber those numbers silently rot. This reads the Rust enum,
+// computes the positional code of every variant, and asserts each inline
+// self-citation matches — the durable guard for the "clean start" doc numbers.
+const ERRORS_RS_PATH = resolve(
+  __dirname,
+  "../../../programs/sigil/src/errors.rs",
+);
+
+describe("errors.rs doc self-citations match positional codes", () => {
+  it("every `/// 60XX —` self-citation equals the variant's positional code", () => {
+    const src = readFileSync(ERRORS_RS_PATH, "utf8");
+    const lines = src.split("\n");
+    const variantRe = /^    ([A-Z][A-Za-z0-9_]*),\s*$/;
+    const docNumRe = /^\s*\/\/\/\s*(\d{4})\b/;
+    // Build the ordered variant list → positional code.
+    const variants: Array<{ name: string; line: number }> = [];
+    lines.forEach((l, i) => {
+      const m = variantRe.exec(l);
+      if (m) variants.push({ name: m[1]!, line: i });
+    });
+    const mismatches: string[] = [];
+    let checked = 0;
+    variants.forEach((v, idx) => {
+      const code = 6000 + idx;
+      // Walk up from the variant to its attached doc block; take the FIRST
+      // `///` line (top of the block). Stop at a blank line or section header.
+      let firstDoc: number | null = null;
+      for (let j = v.line - 1; j >= 0; j--) {
+        const s = lines[j]!.trim();
+        if (s === "" || s.startsWith("// ---")) break;
+        if (s.startsWith("///")) firstDoc = j;
+        else if (s.startsWith("#[") || s.startsWith("//")) continue;
+        else break;
+      }
+      if (firstDoc === null) return;
+      const dm = docNumRe.exec(lines[firstDoc]!);
+      if (!dm) return;
+      checked++;
+      const cited = Number(dm[1]);
+      if (cited !== code) {
+        mismatches.push(`${v.name}: cites ${cited} but positional code is ${code}`);
+      }
+    });
+    expect(checked, "expected several numbered self-citations").to.be.greaterThan(
+      10,
+    );
+    expect(
+      mismatches,
+      `errors.rs doc self-citation drift: ${mismatches.join("; ")}`,
+    ).to.have.lengthOf(0);
+  });
 });

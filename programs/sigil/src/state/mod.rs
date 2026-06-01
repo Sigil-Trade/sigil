@@ -164,28 +164,33 @@ pub const SQUADS_V4_PROGRAM_ID: Pubkey = Pubkey::new_from_array([
 /// TA-17 (Phase 3): numeric range of on-chain "policy-violation" error
 /// codes that count toward the consecutive-failures counter.
 ///
-/// 6083..=6100 covers:
-///   - 6083 ErrMintNotPinned (TA-03)
-///   - 6084 ErrOutsideOperatingHours (TA-05)
-///   - 6085 ErrCooldownActive (TA-06)
-///   - 6086 ErrGraylistFriction (TA-07)
-///   - 6087 ErrGraylistFull (TA-07)
-///   - 6088 ErrToken2022ExtensionForbidden (TA-08)
-///   - 6089 ErrCosignRequired (TA-09)
-///   - 6090 ErrAutoRevoked (TA-17)
-///   - 6091-6100 reserved for Phase 4 + Phase 5 post-exec assertions
+/// ⚠ RENUMBER-SENSITIVE: these are positional error codes. On any change to
+/// the SigilError enum order, re-derive the band from ErrMintNotPinned..=
+/// ErrOutputBelowFloor (see target/idl/sigil.json). Post M1-04 teardown:
+///
+/// 6074..=6091 covers:
+///   - 6074 ErrMintNotPinned (TA-03)
+///   - 6075 ErrOutsideOperatingHours (TA-05)
+///   - 6076 ErrCooldownActive (TA-06)
+///   - 6077 ErrGraylistFriction (TA-07)
+///   - 6078 ErrGraylistFull (TA-07)
+///   - 6079 ErrToken2022ExtensionForbidden (TA-08)
+///   - 6080 ErrCosignRequired (TA-09)
+///   - 6081 ErrAutoRevoked (TA-17)
+///   - 6082-6091 Phase 4 + Phase 5 post-exec assertions (ErrSandwichIntegrity
+///     .. ErrOutputBelowFloor); ErrDeclarationInconsistent (6092) is excluded.
 ///
 /// EXCLUDED:
-///   - 6068 SysvarScanBoundExceeded (CU exhaustion / external pad attack)
-///   - 6069 AsyncFulfillmentNotPermitted (external program-id quirk)
-///   - 6000-6082 auth / init / wrapping errors (not policy violations;
+///   - 6062 SysvarScanBoundExceeded (CU exhaustion / external pad attack)
+///   - 6063 AsyncFulfillmentNotPermitted (external program-id quirk)
+///   - 6000-6073 auth / init / wrapping errors (not policy violations;
 ///     auto-revoking on UnauthorizedOwner 6002 would let an attacker
 ///     brick a working agent by spamming wrong-key seal attempts)
 ///
 /// The filter is by NUMERIC RANGE, not string match — robust against
 /// future error message changes.
 pub fn is_policy_violation_code(code: u32) -> bool {
-    (6083..=6100).contains(&code)
+    (6074..=6091).contains(&code)
 }
 
 /// sha256("global:finalize_session")[0..8] — used by validate_and_authorize
@@ -395,29 +400,29 @@ mod treasury_tests {
 mod ta17_policy_violation_filter_tests {
     use super::*;
 
-    /// TA-17: codes 6083-6100 are policy violations.
+    /// TA-17: codes 6074-6091 are policy violations.
     #[test]
     fn policy_violation_accepts_phase3_codes() {
-        assert!(is_policy_violation_code(6083), "TA-03 ErrMintNotPinned");
+        assert!(is_policy_violation_code(6074), "TA-03 ErrMintNotPinned");
         assert!(
-            is_policy_violation_code(6084),
+            is_policy_violation_code(6075),
             "TA-05 ErrOutsideOperatingHours"
         );
-        assert!(is_policy_violation_code(6085), "TA-06 ErrCooldownActive");
-        assert!(is_policy_violation_code(6086), "TA-07 ErrGraylistFriction");
-        assert!(is_policy_violation_code(6087), "TA-07 ErrGraylistFull");
+        assert!(is_policy_violation_code(6076), "TA-06 ErrCooldownActive");
+        assert!(is_policy_violation_code(6077), "TA-07 ErrGraylistFriction");
+        assert!(is_policy_violation_code(6078), "TA-07 ErrGraylistFull");
         assert!(
-            is_policy_violation_code(6088),
+            is_policy_violation_code(6079),
             "TA-08 ErrToken2022ExtensionForbidden"
         );
-        assert!(is_policy_violation_code(6089), "TA-09 ErrCosignRequired");
-        assert!(is_policy_violation_code(6090), "TA-17 ErrAutoRevoked");
+        assert!(is_policy_violation_code(6080), "TA-09 ErrCosignRequired");
+        assert!(is_policy_violation_code(6081), "TA-17 ErrAutoRevoked");
     }
 
-    /// TA-17: reserved range 6091-6100 also accepted (Phase 4/5 future).
+    /// TA-17: reserved range 6082-6091 also accepted (Phase 4/5 future).
     #[test]
     fn policy_violation_accepts_reserved_phase45_range() {
-        for code in 6091..=6100 {
+        for code in 6082..=6091 {
             assert!(
                 is_policy_violation_code(code),
                 "reserved {} must accept",
@@ -430,14 +435,14 @@ mod ta17_policy_violation_filter_tests {
     /// CU-exhaustion / external pad attack.
     #[test]
     fn policy_violation_rejects_cu_exhaustion() {
-        assert!(!is_policy_violation_code(6068));
+        assert!(!is_policy_violation_code(6062));
     }
 
     /// TA-17: AsyncFulfillmentNotPermitted (6069) is NOT a policy violation
     /// — external program-id quirk.
     #[test]
     fn policy_violation_rejects_async_fulfillment() {
-        assert!(!is_policy_violation_code(6069));
+        assert!(!is_policy_violation_code(6063));
     }
 
     /// TA-17: UnauthorizedOwner (6002) is NOT a policy violation. Auto-
@@ -448,19 +453,19 @@ mod ta17_policy_violation_filter_tests {
         assert!(!is_policy_violation_code(6002));
     }
 
-    /// TA-17: Codes outside 6083-6100 reject (lower boundary 6082).
+    /// TA-17: Codes outside 6074-6091 reject (lower boundary 6073).
     #[test]
     fn policy_violation_rejects_just_below_range() {
         assert!(
-            !is_policy_violation_code(6082),
+            !is_policy_violation_code(6073),
             "ActiveVaultRequiresAllowlist"
         );
     }
 
-    /// TA-17: Codes outside 6083-6100 reject (upper boundary 6101).
+    /// TA-17: Codes outside 6074-6091 reject (upper boundary 6092).
     #[test]
     fn policy_violation_rejects_just_above_range() {
-        assert!(!is_policy_violation_code(6101));
+        assert!(!is_policy_violation_code(6092));
     }
 
     /// TA-17: arbitrary error codes (lower range) reject.

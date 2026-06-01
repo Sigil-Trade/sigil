@@ -322,7 +322,7 @@ describe("ownership-transfer-multisig (Phase 8 Batch 4 — Squads V4 accept)", (
     }
     expect(caughtCode, "wrong-owner-program multisig accept MUST reject").to.not
       .be.null;
-    expect(caughtCode).to.equal(6107); // ErrInvalidOwnershipTarget
+    expect(caughtCode).to.equal(6098); // ErrInvalidOwnershipTarget
 
     // Pending PDA still alive.
     expect(accountExists(svm, pendingOwner)).to.equal(true);
@@ -376,7 +376,7 @@ describe("ownership-transfer-multisig (Phase 8 Batch 4 — Squads V4 accept)", (
     }
     expect(caughtCode, "mock_B substituted for mock_A MUST reject").to.not.be
       .null;
-    expect(caughtCode).to.equal(6104); // ErrPendingOwnershipNotReady
+    expect(caughtCode).to.equal(6095); // ErrPendingOwnershipNotReady
 
     // Pending PDA still alive (no mutation occurred).
     expect(accountExists(svm, pendingOwner)).to.equal(true);
@@ -437,7 +437,7 @@ describe("ownership-transfer-multisig (Phase 8 Batch 4 — Squads V4 accept)", (
       caughtCode,
       "standard-target pending on multisig handler MUST reject",
     ).to.not.be.null;
-    expect(caughtCode).to.equal(6104); // ErrPendingOwnershipNotReady
+    expect(caughtCode).to.equal(6095); // ErrPendingOwnershipNotReady
 
     expect(accountExists(svm, pendingOwner)).to.equal(true);
   });
@@ -486,7 +486,7 @@ describe("ownership-transfer-multisig (Phase 8 Batch 4 — Squads V4 accept)", (
     }
     expect(caughtCode, "pre-timelock multisig accept MUST reject").to.not.be
       .null;
-    expect(caughtCode).to.equal(6104); // ErrPendingOwnershipNotReady
+    expect(caughtCode).to.equal(6095); // ErrPendingOwnershipNotReady
 
     expect(accountExists(svm, pendingOwner)).to.equal(true);
   });
