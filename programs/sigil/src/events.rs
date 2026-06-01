@@ -146,59 +146,10 @@ pub struct AgentTransferExecuted {
 // AgentPermissionsUpdated event removed — replaced by AgentPermissionsChangeApplied (queue/apply path).
 // PositionsSynced event removed — sync_positions instruction deleted with position counter (2026-04-19).
 
-#[event]
-pub struct InstructionConstraintsCreated {
-    pub vault: Pubkey,
-    pub entries_count: u8,
-    // strict_mode field removed in V2 (REVAMP_PLAN §2.2): every entry is
-    // strictly enforced; emitting it would be misleading.
-    /// Per-entry discriminator format (0=Anchor8, 1=Spl1).
-    /// Enables off-chain monitors to detect format changes/downgrades.
-    pub discriminator_formats: Vec<u8>,
-    pub timestamp: i64,
-}
-
-// InstructionConstraintsUpdated event removed — replaced by ConstraintsChangeApplied (queue/apply path).
-// InstructionConstraintsClosed event removed — replaced by CloseConstraintsApplied (queue/apply path).
-
-#[event]
-pub struct PdaAllocated {
-    pub vault: Pubkey,
-    pub pda_type: u8, // 0 = constraints, 1 = pending_constraints
-    pub initial_size: u32,
-    pub timestamp: i64,
-}
-
-#[event]
-pub struct PdaExtended {
-    pub vault: Pubkey,
-    pub old_size: u32,
-    pub new_size: u32,
-    pub timestamp: i64,
-}
-
-#[event]
-pub struct ConstraintsChangeQueued {
-    pub vault: Pubkey,
-    /// Per-entry discriminator format (0=Anchor8, 1=Spl1).
-    /// Enables off-chain monitors to detect format changes/downgrades.
-    pub discriminator_formats: Vec<u8>,
-    pub executes_at: i64,
-}
-
-#[event]
-pub struct ConstraintsChangeApplied {
-    pub vault: Pubkey,
-    /// Per-entry discriminator format (0=Anchor8, 1=Spl1) from the applied entries.
-    /// Emitted at apply time so monitors see the active format when it takes effect.
-    pub discriminator_formats: Vec<u8>,
-    pub applied_at: i64,
-}
-
-#[event]
-pub struct ConstraintsChangeCancelled {
-    pub vault: Pubkey,
-}
+// M1-04 (constraints-engine teardown, 2026-05-31): the constraints-engine
+// events were removed with their (deleted) emitters: InstructionConstraintsCreated,
+// PdaAllocated, PdaExtended, ConstraintsChange{Queued,Applied,Cancelled},
+// CloseConstraints{Queued,Applied,Cancelled}, OrphanConstraintsPdaCleaned.
 
 // Escrow events (EscrowCreated, EscrowSettled, EscrowRefunded) REMOVED in
 // Stage 1 of v2 revamp (REVAMP_PLAN.md §2.1).
@@ -256,23 +207,6 @@ pub struct AgentPermissionsChangeCancelled {
     pub agent: Pubkey,
 }
 
-#[event]
-pub struct CloseConstraintsQueued {
-    pub vault: Pubkey,
-    pub executes_at: i64,
-}
-
-#[event]
-pub struct CloseConstraintsApplied {
-    pub vault: Pubkey,
-    pub applied_at: i64,
-}
-
-#[event]
-pub struct CloseConstraintsCancelled {
-    pub vault: Pubkey,
-}
-
 // --- Post-execution assertions (Phase B) ---
 
 #[event]
@@ -293,15 +227,6 @@ pub struct PostAssertionChecked {
     pub vault: Pubkey,
     pub entry_index: u8,
     pub passed: bool,
-    pub timestamp: i64,
-}
-
-// --- Orphan constraints PDA cleanup (F3-H1 audit fix) ---
-
-#[event]
-pub struct OrphanConstraintsPdaCleaned {
-    pub vault: Pubkey,
-    pub rent_recovered: u64,
     pub timestamp: i64,
 }
 

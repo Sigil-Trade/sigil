@@ -71,10 +71,11 @@ pub fn handler(
         // Phase B3 CrossFieldLte field copies DELETED in Phase 1 Option A demolition.
 
         // Copy expected value (padded to MAX_CONSTRAINT_VALUE_LEN)
+        // M1-04: MAX_CONSTRAINT_VALUE_LEN relocated to state::assertions.
         let len = entry
             .expected_value
             .len()
-            .min(crate::state::constraints::MAX_CONSTRAINT_VALUE_LEN);
+            .min(crate::state::assertions::MAX_CONSTRAINT_VALUE_LEN);
         zc.expected_value[..len].copy_from_slice(&entry.expected_value[..len]);
 
         // Phase 6: copy the new aux fields. Without these copies, the

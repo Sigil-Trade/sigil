@@ -1,16 +1,12 @@
 pub mod agent_spend_overlay;
 // M1-04: kept agnostic-assertion primitives (ConstraintOperator, bytes_match,
-// ct_eq_32, …) relocated here ahead of the constraints-engine teardown. NOT
-// glob-re-exported below — consumers import `state::assertions::X` explicitly —
-// so it does not collide with the (soon-to-be-deleted) `constraints::*` glob.
+// ct_eq_32, …) relocated here from the now-deleted constraints engine.
+// Consumers import `state::assertions::X` explicitly (no glob re-export).
 pub mod assertions;
 pub mod audit_log_rejected;
 pub mod audit_log_success;
-pub mod constraints;
 pub mod pending_agent_grant;
 pub mod pending_agent_perms;
-pub mod pending_close_constraints;
-pub mod pending_constraints;
 pub mod pending_ownership_transfer;
 pub mod pending_policy;
 pub mod policy;
@@ -22,11 +18,8 @@ pub mod vault;
 pub use agent_spend_overlay::*;
 pub use audit_log_rejected::*;
 pub use audit_log_success::*;
-pub use constraints::*;
 pub use pending_agent_grant::*;
 pub use pending_agent_perms::*;
-pub use pending_close_constraints::*;
-pub use pending_constraints::*;
 pub use pending_ownership_transfer::*;
 pub use pending_policy::*;
 pub use policy::*;

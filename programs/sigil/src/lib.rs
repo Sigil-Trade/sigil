@@ -244,90 +244,15 @@ pub mod sigil {
         instructions::cancel_pending_policy::handler(ctx)
     }
 
-    /// Allocate the InstructionConstraints PDA at 10,240 bytes (CPI limit).
-    /// Must be followed by extend_pda calls + create_instruction_constraints
-    /// in the same atomic transaction to reach full SIZE.
-    pub fn allocate_constraints_pda(ctx: Context<AllocateConstraintsPda>) -> Result<()> {
-        instructions::allocate_constraints_pda::handler(ctx)
-    }
-
-    /// Allocate the PendingConstraintsUpdate PDA at 10,240 bytes (CPI limit).
-    /// Must be followed by extend_pda calls + queue_constraints_update
-    /// in the same atomic transaction.
-    pub fn allocate_pending_constraints_pda(
-        ctx: Context<AllocatePendingConstraintsPda>,
-    ) -> Result<()> {
-        instructions::allocate_pending_constraints_pda::handler(ctx)
-    }
-
-    /// Grow a program-owned PDA by up to 10,240 bytes per call.
-    /// Used to extend constraints/pending PDAs to full SIZE before population.
-    pub fn extend_pda(ctx: Context<ExtendPda>, target_size: u32) -> Result<()> {
-        instructions::extend_pda::handler(ctx, target_size)
-    }
-
-    /// Populate a pre-allocated InstructionConstraints PDA with entries.
-    /// Only the owner can call this. PDA must be at full SIZE.
-    ///
-    /// V2: strict_mode parameter removed. Every constraint entry is strictly
-    /// enforced — if no entry matches an instruction's program_id, the
-    /// instruction is rejected. (REVAMP_PLAN §2.2)
-    pub fn create_instruction_constraints(
-        ctx: Context<CreateInstructionConstraints>,
-        entries: Vec<state::ConstraintEntry>,
-        expected_digest: [u8; 32],
-    ) -> Result<()> {
-        instructions::create_instruction_constraints::handler(ctx, entries, expected_digest)
-    }
-
-    // close_instruction_constraints DELETED — use queue_close_constraints → apply_close_constraints.
-    // update_instruction_constraints DELETED — use queue_constraints_update → apply_constraints_update.
-
-    /// Queue a constraints update when timelock is active.
-    ///
-    /// V2: strict_mode parameter removed (REVAMP_PLAN §2.2).
-    pub fn queue_constraints_update(
-        ctx: Context<QueueConstraintsUpdate>,
-        entries: Vec<state::ConstraintEntry>,
-    ) -> Result<()> {
-        instructions::queue_constraints_update::handler(ctx, entries)
-    }
-
-    /// Apply a queued constraints update after the timelock expires.
-    pub fn apply_constraints_update(ctx: Context<ApplyConstraintsUpdate>) -> Result<()> {
-        instructions::apply_constraints_update::handler(ctx)
-    }
-
-    /// Cancel a queued constraints update.
-    pub fn cancel_constraints_update(ctx: Context<CancelConstraintsUpdate>) -> Result<()> {
-        instructions::cancel_constraints_update::handler(ctx)
-    }
-
-    /// Queue a constraint closure. Timelock-gated.
-    pub fn queue_close_constraints(ctx: Context<QueueCloseConstraints>) -> Result<()> {
-        instructions::queue_close_constraints::handler(ctx)
-    }
-
-    /// Apply a queued constraint closure after timelock expires.
-    /// Closes the constraints PDA, clears policy.has_constraints, bumps policy_version.
-    pub fn apply_close_constraints(
-        ctx: Context<ApplyCloseConstraints>,
-        expected_digest: [u8; 32],
-    ) -> Result<()> {
-        instructions::apply_close_constraints::handler(ctx, expected_digest)
-    }
-
-    /// Cancel a queued constraint closure.
-    pub fn cancel_close_constraints(ctx: Context<CancelCloseConstraints>) -> Result<()> {
-        instructions::cancel_close_constraints::handler(ctx)
-    }
-
-    /// Cleanup an orphan InstructionConstraints PDA from a partial
-    /// allocate+extend chain that never reached create_instruction_constraints.
-    /// Owner-only. Drains rent back to owner. F3-H1 audit fix.
-    pub fn cleanup_orphan_constraints_pda(ctx: Context<CleanupOrphanConstraintsPda>) -> Result<()> {
-        instructions::cleanup_orphan_constraints_pda::handler(ctx)
-    }
+    // ─── Constraints engine REMOVED (M1-04, 2026-05-31) ──────────────────────
+    // The instruction-data constraints engine (allocate/extend/create/
+    // queue/apply/cancel/close/cleanup for InstructionConstraints +
+    // PendingConstraintsUpdate + PendingCloseConstraints, 11 instructions) was
+    // deleted. It could not be both protocol-agnostic and caveat-free; the
+    // surviving guardrails — caps, allowlists, sessions, and the balance-delta
+    // / post-execution assertion outcome checks — are independent of it. The
+    // agnostic comparison primitives it shared (ConstraintOperator, bytes_match,
+    // ct_eq_32) were relocated to state::assertions.
 
     // ─── Post-Execution Assertions (Phase B) ─────────────────────────────────
 
