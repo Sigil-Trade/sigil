@@ -411,64 +411,69 @@ describe("audit-log-burst (Phase 7.1)", () => {
       program.programId,
     );
 
-    const CYCLES = 65;
-    for (let i = 0; i < CYCLES; i++) {
+    // M1-03 (2026-05-31): use a ROLLING agent so the vault never hits zero
+    // agents mid-loop. `revoke_agent` auto-freezes the vault when it removes the
+    // LAST agent (revoke_agent.rs:94, FreezeReason::AutoRevoke), and register_agent
+    // is now gated on a frozen vault (M1-03). By always registering the next
+    // agent BEFORE revoking the previous one, agent_count stays ≥1 until the
+    // final revoke, which is the last op (nothing registers after it). Still 65
+    // registers + 65 revokes = 130 writes, same buffer-wrap coverage.
+    //
+    // Assertions are computed from the recorded write order (`writes`) rather
+    // than hardcoded positions — robust to the rolling reorder and strictly
+    // stronger than the prior magic-number checks.
+    const TOTAL_PAIRS = 65; // 65 register + 65 revoke = 130 writes
+    const writes: number[] = [];
+    let prevAgent: Keypair | null = null;
+    for (let i = 0; i < TOTAL_PAIRS; i++) {
       const agent = Keypair.generate();
-      // Register (disc=13)
       await program.methods
         .registerAgent(agent.publicKey, 2, new BN(0))
-        .accounts({
-          owner: owner.publicKey,
-          vault,
-          policy,
-          agentSpendOverlay: overlay,
-        } as any)
+        .accounts({ owner: owner.publicKey, vault, policy, agentSpendOverlay: overlay } as any)
         .rpc();
-      // Revoke (disc=12)
-      await program.methods
-        .revokeAgent(agent.publicKey)
-        .accounts({
-          owner: owner.publicKey,
-          vault,
-          policy,
-          agentSpendOverlay: overlay,
-        } as any)
-        .rpc();
+      writes.push(DISC_REGISTER_AGENT);
+      if (prevAgent) {
+        await program.methods
+          .revokeAgent(prevAgent.publicKey)
+          .accounts({ owner: owner.publicKey, vault, policy, agentSpendOverlay: overlay } as any)
+          .rpc();
+        writes.push(DISC_REVOKE_AGENT);
+      }
+      prevAgent = agent;
     }
+    // Final revoke removes the last agent → vault auto-freezes here (terminal op).
+    await program.methods
+      .revokeAgent(prevAgent!.publicKey)
+      .accounts({ owner: owner.publicKey, vault, policy, agentSpendOverlay: overlay } as any)
+      .rpc();
+    writes.push(DISC_REVOKE_AGENT);
+
+    expect(writes.length, "130 total writes").to.equal(130);
 
     const log = decodeAuditLog(svm, auditSuccess);
-    expect(log.count).to.equal(SUCCESS_CAPACITY);
-    expect(log.head, "head = 130 mod 128").to.equal(130 % SUCCESS_CAPACITY);
-
-    const chronological = ordered(log);
-    // Drop sequence: 130 - 128 = 2 entries dropped (the first register +
-    // first revoke). Oldest retained is the 2nd register (entry #3).
-    // Positions 3..130 alternate register/revoke, so:
-    //   chronological[0]   = entry #3   = register  (disc=13)
-    //   chronological[1]   = entry #4   = revoke    (disc=12)
-    //   chronological[126] = entry #129 = register  (disc=13)
-    //   chronological[127] = entry #130 = revoke    (disc=12)
-    expect(chronological[0].discriminator, "oldest = register #3").to.equal(
-      DISC_REGISTER_AGENT,
+    expect(log.count, "count saturates at CAPACITY").to.equal(SUCCESS_CAPACITY);
+    expect(log.head, "head = total writes mod CAPACITY").to.equal(
+      writes.length % SUCCESS_CAPACITY,
     );
-    expect(
-      chronological[chronological.length - 1].discriminator,
-      "newest = revoke",
-    ).to.equal(DISC_REVOKE_AGENT);
-    expect(
-      chronological[chronological.length - 2].discriminator,
-      "second-newest = register",
-    ).to.equal(DISC_REGISTER_AGENT);
 
-    // 64 register + 64 revoke in the retained window.
-    let regCount = 0;
-    let revCount = 0;
-    for (const e of chronological) {
-      if (e.discriminator === DISC_REGISTER_AGENT) regCount++;
-      else if (e.discriminator === DISC_REVOKE_AGENT) revCount++;
-    }
-    expect(regCount, "64 register entries retained").to.equal(64);
-    expect(revCount, "64 revoke entries retained").to.equal(64);
+    // The retained 128 entries are exactly the LAST 128 writes, in order.
+    const expected = writes.slice(writes.length - SUCCESS_CAPACITY);
+    const chronological = ordered(log);
+    expect(chronological.length).to.equal(SUCCESS_CAPACITY);
+    chronological.forEach((e, idx) => {
+      expect(e.discriminator, `retained entry ${idx} disc`).to.equal(
+        expected[idx],
+      );
+    });
+    // Coverage: both register and revoke discs are present in the window.
+    expect(
+      chronological.some((e) => e.discriminator === DISC_REGISTER_AGENT),
+      "register disc present",
+    ).to.equal(true);
+    expect(
+      chronological.some((e) => e.discriminator === DISC_REVOKE_AGENT),
+      "revoke disc present",
+    ).to.equal(true);
   });
 
   /**
@@ -488,28 +493,36 @@ describe("audit-log-burst (Phase 7.1)", () => {
       program.programId,
     );
 
-    // 64 register/revoke pairs = 128 entries.
+    // M1-03 (2026-05-31): ROLLING agent so the vault never hits zero agents
+    // mid-loop (revoke_agent auto-freezes at zero → register_agent then gated).
+    // 64 registers + 64 revokes = exactly 128 writes (head wraps to 0). Pattern:
+    // register #1, then 63×(register, revoke), then the final revoke — the last
+    // revoke is terminal (auto-freezes), nothing registers after it.
+    const writes: number[] = [];
+    let prevAgent: Keypair | null = null;
     for (let i = 0; i < 64; i++) {
       const agent = Keypair.generate();
       await program.methods
         .registerAgent(agent.publicKey, 2, new BN(0))
-        .accounts({
-          owner: owner.publicKey,
-          vault,
-          policy,
-          agentSpendOverlay: overlay,
-        } as any)
+        .accounts({ owner: owner.publicKey, vault, policy, agentSpendOverlay: overlay } as any)
         .rpc();
-      await program.methods
-        .revokeAgent(agent.publicKey)
-        .accounts({
-          owner: owner.publicKey,
-          vault,
-          policy,
-          agentSpendOverlay: overlay,
-        } as any)
-        .rpc();
+      writes.push(DISC_REGISTER_AGENT);
+      if (prevAgent) {
+        await program.methods
+          .revokeAgent(prevAgent.publicKey)
+          .accounts({ owner: owner.publicKey, vault, policy, agentSpendOverlay: overlay } as any)
+          .rpc();
+        writes.push(DISC_REVOKE_AGENT);
+      }
+      prevAgent = agent;
     }
+    await program.methods
+      .revokeAgent(prevAgent!.publicKey)
+      .accounts({ owner: owner.publicKey, vault, policy, agentSpendOverlay: overlay } as any)
+      .rpc();
+    writes.push(DISC_REVOKE_AGENT);
+
+    expect(writes.length, "exactly 128 writes").to.equal(SUCCESS_CAPACITY);
 
     const log = decodeAuditLog(svm, auditSuccess);
     expect(log.count, "count saturates at CAPACITY").to.equal(SUCCESS_CAPACITY);
@@ -517,12 +530,11 @@ describe("audit-log-burst (Phase 7.1)", () => {
       0,
     );
 
-    // All 128 entries retained, in physical buffer order = chronological order.
+    // At exactly CAPACITY writes, physical order == chronological == write order.
     const chronological = ordered(log);
-    // First (oldest) = first register.
-    expect(chronological[0].discriminator).to.equal(DISC_REGISTER_AGENT);
-    // Last (newest) = last revoke.
-    expect(chronological[127].discriminator).to.equal(DISC_REVOKE_AGENT);
+    chronological.forEach((e, idx) => {
+      expect(e.discriminator, `entry ${idx} disc`).to.equal(writes[idx]);
+    });
   });
 
   // ───────────────────────────────────────────────────────────────────────
