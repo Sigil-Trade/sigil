@@ -10,7 +10,6 @@ use crate::events::{ActionAuthorized, FeesCollected};
 use crate::state::*;
 use crate::utils::destination_check::enforce_destination_allowlist;
 
-use super::integrations::generic_constraints;
 
 /// Maximum instructions to scan from any sysvar introspection loop.
 ///
@@ -269,59 +268,13 @@ pub fn handler(
     let is_spending = amount > 0;
     let is_stablecoin_input = is_stablecoin_mint(&token_mint);
 
-    // Load zero-copy constraints PDA from remaining_accounts.
-    // We hold the borrowed account data alive for the scan duration so we can
-    // reference the zero-copy struct without copying 35KB onto the stack.
-    let _constraints_data_borrow;
-    let loaded_constraints: Option<&InstructionConstraints> = if !ctx.remaining_accounts.is_empty()
-    {
-        let info = &ctx.remaining_accounts[0];
-        require!(info.owner == &crate::ID, SigilError::InvalidConstraintsPda);
-        _constraints_data_borrow = info.try_borrow_data()?;
-        let data = &*_constraints_data_borrow;
-        // Verify account data is large enough for the zero-copy struct
-        let struct_size = core::mem::size_of::<InstructionConstraints>();
-        require!(
-            data.len() >= 8 + struct_size,
-            SigilError::InvalidConstraintsPda
-        );
-        // F-1 audit fix: verify Anchor discriminator before bytemuck cast.
-        // Cashio/Crema lesson — owner + PDA derivation alone are insufficient
-        // when multiple zero-copy types share byte layout. Without this check,
-        // a future Sigil instruction that introduces a different
-        // #[account(zero_copy)] type owned by crate::ID with the same byte
-        // layout as InstructionConstraints could be type-punned through this
-        // load. The discriminator is the 4th defense-in-depth check
-        // (alongside owner / length / PDA-derivation / vault).
-        require!(
-            data[..8] == *<InstructionConstraints as anchor_lang::Discriminator>::DISCRIMINATOR,
-            SigilError::InvalidConstraintsPda,
-        );
-        // SAFETY: InstructionConstraints is #[account(zero_copy)] = #[repr(C)] + Pod.
-        // The 8-byte Anchor discriminator precedes the struct data.
-        let constraints: &InstructionConstraints = bytemuck::from_bytes(&data[8..8 + struct_size]);
-
-        // Use stored bump for O(1) PDA verification
-        let constraints_pda = Pubkey::create_program_address(
-            &[b"constraints", vault_key.as_ref(), &[constraints.bump]],
-            &crate::ID,
-        )
-        .map_err(|_| error!(SigilError::InvalidConstraintsPda))?;
-        require_keys_eq!(
-            info.key(),
-            constraints_pda,
-            SigilError::InvalidConstraintsPda
-        );
-        require!(
-            constraints.vault == vault_key.to_bytes(),
-            SigilError::InvalidConstraintsPda
-        );
-        Some(constraints)
-    } else {
-        // No constraints PDA passed — verify none are configured
-        require!(!policy.has_constraints, SigilError::InvalidConstraintsPda);
-        None
-    };
+    // M1-04 (constraints-engine teardown, 2026-05-31): the instruction-data
+    // constraints engine is removed. validate_and_authorize no longer loads or
+    // enforces an InstructionConstraints PDA from remaining_accounts — the scan
+    // below relies on the protocol allowlist + dangerous-opcode blocks + the
+    // balance-delta / post-assertion outcome checks (all independent of the
+    // deleted engine). `policy.has_constraints` is collapsed to always-false in
+    // step 3 and removed in step 5; no runtime constraint load remains.
 
     // 1. Vault must be active
     require!(vault.is_active(), SigilError::VaultNotActive);
@@ -719,11 +672,11 @@ pub fn handler(
     enum ScanAction {
         FoundFinalize,
         Infrastructure,
-        // V2: constraint entry match is mandatory. If loaded_constraints exists,
-        // the program_id must be in it AND the entry must match. If no entry exists
-        // for this program_id, the call returned Err::UnconstrainedProgramBlocked
-        // above. By the time we reach this arm, the instruction has passed
-        // constraint enforcement.
+        // Reached once an instruction has cleared the protocol allowlist + the
+        // SPL/Token-2022 dangerous-opcode blocks + the async-fulfillment reject.
+        // (M1-04: the instruction-data constraint-entry match was removed with
+        // the constraints engine; outcome enforcement lives in the balance-delta
+        // / post-assertion path at finalize_session.)
         PassedSharedChecks,
     }
 
@@ -733,7 +686,6 @@ pub fn handler(
         compute_budget_id: &Pubkey,
         finalize_hash: &[u8; 8],
         policy: &PolicyConfig,
-        loaded_constraints: &Option<&InstructionConstraints>,
     ) -> anchor_lang::Result<ScanAction> {
         // Stop at finalize_session
         if ix.program_id == crate::ID && ix.data.len() >= 8 && ix.data[..8] == *finalize_hash {
@@ -851,23 +803,11 @@ pub fn handler(
             SigilError::ProtocolNotAllowed
         );
 
-        // Generic instruction constraints (OR across entries, zero-copy).
-        // V2 (REVAMP_PLAN §2.2): strict_mode dichotomy removed. Every entry
-        // is strictly enforced — if no entry matches the instruction's
-        // program_id + data + accounts, the instruction is rejected. This
-        // collapses the prior permissive default (DEEP-1) that allowed any
-        // unconstrained program through.
-        if let Some(constraints) = loaded_constraints {
-            let matched = generic_constraints::verify_against_entries_zc(
-                constraints,
-                &ix.program_id,
-                &ix.data,
-                &ix.accounts,
-            )?;
-            if matched.is_none() {
-                return Err(error!(SigilError::UnconstrainedProgramBlocked));
-            }
-        }
+        // M1-04: the generic instruction-data constraint match was removed with
+        // the constraints engine. An instruction that clears the allowlist +
+        // opcode blocks + async-fulfillment reject is allowed through here; its
+        // effects are bounded by spend caps and the balance-delta / post-
+        // assertion outcome checks at finalize_session.
 
         Ok(ScanAction::PassedSharedChecks)
     }
@@ -899,7 +839,6 @@ pub fn handler(
                 &compute_budget_id,
                 &finalize_hash,
                 policy,
-                &loaded_constraints,
             )? {
                 ScanAction::FoundFinalize => {
                     found_finalize = true;
@@ -988,7 +927,6 @@ pub fn handler(
                 &compute_budget_id,
                 &finalize_hash,
                 policy,
-                &loaded_constraints,
             )? {
                 ScanAction::FoundFinalize => {
                     found_finalize = true;
