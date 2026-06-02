@@ -81,13 +81,13 @@ export const SIGIL_ON_CHAIN_ERROR_MIN = 6000;
 /**
  * Highest Anchor-error code currently in use. Bump when errors.rs grows.
  *
- * Post M1-04 the enum tops out at 6104 (105 codes). The drift gate at
+ * The enum tops out at 6106 (107 codes). The drift gate at
  * `tests/error-map-drift.test.ts` derives the expected count from
  * `target/idl/sigil.json` (the authoritative code↔name source) and asserts
  * this map agrees with it by code AND name — so adding or renumbering an
  * on-chain error without updating this map fails at test time.
  */
-export const SIGIL_ON_CHAIN_ERROR_MAX = 6105;
+export const SIGIL_ON_CHAIN_ERROR_MAX = 6106;
 
 interface ErrorMapping {
   name: string;
@@ -1832,6 +1832,20 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
         action: "use_seal_to_populate_remaining_accounts",
         description:
           "Build the bundle with seal(), which auto-populates validate's (and finalize's) remaining_accounts with every writable account of the DeFi instruction (the fee-payer agent included). Hand-built bundles must mirror this.",
+      },
+    ],
+  },
+  6106: {
+    name: "ErrToken2022OutputMintUnresolvable",
+    message:
+      "A vault-owned Token-2022 token account's mint could not be resolved in validate's remaining_accounts (or the supplied account is not Token-2022-owned), so the guard cannot vet its extensions (F-Q4 — rejected fail-closed). A PermanentDelegate / TransferHook / ConfidentialTransfer mint must be vetted before the vault may acquire the token.",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "use_seal_to_populate_remaining_accounts",
+        description:
+          "Build the bundle with seal(), which auto-resolves vault-owned Token-2022 output mints (reading each writable account's mint on-chain) and feeds them into validate's remaining_accounts. Hand-built bundles must include the mint account of every vault-owned Token-2022 token account the swap writes.",
       },
     ],
   },

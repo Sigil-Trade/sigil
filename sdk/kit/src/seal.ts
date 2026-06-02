@@ -22,7 +22,11 @@ import type {
   SolanaRpcApi,
   TransactionSigner,
 } from "./kit-adapter.js";
-import { compileTransaction, AccountRole } from "./kit-adapter.js";
+import {
+  compileTransaction,
+  AccountRole,
+  fetchEncodedAccounts,
+} from "./kit-adapter.js";
 import { getSigilModuleLogger, setSigilModuleLogger } from "./logger.js";
 import {
   newCorrelationId,
@@ -52,6 +56,7 @@ import {
   resolveVaultState,
   resolveVaultStateForOwner,
   resolveVaultBudget,
+  bytesToAddress,
   type ResolvedVaultState,
   type ResolvedVaultStateForOwner,
   type EffectiveBudget,
@@ -292,6 +297,12 @@ export interface SealResult {
 
 // ─── Internal helpers ───────────────────────────────────────────────────────
 
+/** One decoded account as returned by `fetchEncodedAccounts`. */
+type FetchedAccount = Awaited<ReturnType<typeof fetchEncodedAccounts>>[number];
+
+/** A readonly account meta appended to an instruction's remaining_accounts. */
+type ReadonlyMeta = { address: Address; role: AccountRole };
+
 /** Replace agent ATAs with vault ATAs in DeFi instruction account lists. */
 export function replaceAgentAtas(
   instructions: Instruction[],
@@ -315,6 +326,65 @@ export function replaceAgentAtas(
       return acc;
     }),
   }));
+}
+
+/**
+ * F-Q4 satisfier helper — resolve the mints of VAULT-OWNED Token-2022 token
+ * accounts among the sandwiched DeFi instruction's writable accounts.
+ *
+ * The on-chain F-Q4 gate (`validate_and_authorize` → `destination_check`) vets
+ * the mint EXTENSIONS of any vault-owned Token-2022 token account a swap
+ * delivers into the vault — a PermanentDelegate / TransferHook /
+ * ConfidentialTransfer mint could let a third party drain or hide the holding
+ * out-of-band. To do so it reads the token account's mint (bytes[0..32]) and
+ * REQUIRES that mint resolvable in validate's `remaining_accounts`, else it
+ * reverts `ErrToken2022OutputMintUnresolvable` (6106). The F-Q1a writable set
+ * does NOT carry the mint (a mint is read-only in a swap), so this resolves it.
+ *
+ * Mirrors the on-chain demand EXACTLY (destination_check.rs:166-219): an account
+ * triggers the gate iff it is owned by the Token-2022 program, has >= 72 bytes,
+ * and its token-account authority (bytes[32..64]) is the vault. For each such
+ * account this returns its mint (bytes[0..32]) as a READONLY meta.
+ *
+ * It is PLUMBING, not enforcement: it only adds read-only classification
+ * accounts; the on-chain gate stays the sole enforcer. A mint missed here can
+ * only cause a fail-closed 6106 revert (never a drain); a mint added that the
+ * gate does not demand is harmless (the gate looks it up by pubkey on demand).
+ *
+ * @param fetched     results of `fetchEncodedAccounts` over the candidate
+ *                    writable accounts (each carries its own on-chain bytes).
+ * @param vault       the vault PDA — only token accounts it authorizes are vetted.
+ * @param alreadySeen pubkeys already appended to remaining_accounts (the F-Q1a
+ *                    writable set) — skip re-adding them.
+ * @returns deduped READONLY metas, one per distinct vault-owned T22 output mint.
+ */
+export function resolveT22OutputMintMetas(
+  fetched: ReadonlyArray<FetchedAccount>,
+  vault: Address,
+  alreadySeen: ReadonlySet<Address>,
+): ReadonlyMeta[] {
+  const metas: ReadonlyMeta[] = [];
+  const mintSeen = new Set<Address>();
+  for (const acc of fetched) {
+    // Non-existent on-chain (e.g. a lagging RPC view): the gate can only demand
+    // a mint for an account it reads as a vault-owned T22 token account.
+    if (!acc.exists) continue;
+    // Only Token-2022-owned accounts can be vault-owned T22 token accounts.
+    if (acc.programAddress !== TOKEN_2022_PROGRAM) continue;
+    // Mirror the on-chain length guard (destination_check.rs:180) BEFORE any
+    // slice — a token account's base layout is 165+ bytes; <72 cannot be one.
+    if (acc.data.length < 72) continue;
+    // Token-account authority ("owner" field, bytes[32..64]); only accounts the
+    // VAULT authorizes are the swap's deliver-into-vault target.
+    const authority = bytesToAddress(acc.data.slice(32, 64));
+    if (authority !== vault) continue;
+    // The acquired token's mint (bytes[0..32]) — what the gate vets + demands.
+    const mint = bytesToAddress(acc.data.slice(0, 32));
+    if (alreadySeen.has(mint) || mintSeen.has(mint)) continue;
+    mintSeen.add(mint);
+    metas.push({ address: mint, role: AccountRole.READONLY });
+  }
+  return metas;
 }
 
 // ACTION_TYPE_KEYS removed — ActionType enum eliminated in v6.
@@ -797,8 +867,7 @@ export async function seal(params: SealParams): Promise<SealResult> {
   // (atomic-guard principle: feed accounts to inspect, never reshape the tx).
   const feePayer = params.agent.address;
   const defiWritableSeen = new Set<Address>();
-  const defiWritableReadonlyMetas: { address: Address; role: AccountRole }[] =
-    [];
+  const defiWritableReadonlyMetas: ReadonlyMeta[] = [];
   for (const ix of rewrittenDefiInstructions) {
     for (const acc of ix.accounts ?? []) {
       const declaredWritable =
@@ -821,6 +890,70 @@ export async function seal(params: SealParams): Promise<SealResult> {
         });
       }
     }
+  }
+
+  // F-Q4 SATISFIER — vault-owned Token-2022 output-mint resolution.
+  //
+  // When a swap delivers a Token-2022 token INTO a vault-owned ATA, the on-chain
+  // F-Q4 gate (validate_and_authorize → destination_check) vets that mint's
+  // extensions and REQUIRES the mint resolvable in validate's remaining_accounts
+  // (else `ErrToken2022OutputMintUnresolvable` 6106). The F-Q1a writable set
+  // above does NOT carry it (a mint is read-only in a swap), so resolve + append
+  // it here. Validate is the SOLE consumer — finalize_session does not run
+  // destination_check — so these go on validate ONLY.
+  //
+  // PERF GATE (sound + fail-closed): only fetch when the Token-2022 program
+  // appears in the bundle. Writing a vault Token-2022 account REQUIRES invoking
+  // Token-2022, and any invoked program must appear in the invoking ix's account
+  // list — so a vault-owned T22 account can never be written without T22 showing
+  // up here. If this gate were ever wrong it can only SKIP the fetch → an honest
+  // T22 swap reverts 6106 (fail-closed DX), never a bypass. Classic-SPL swaps
+  // (the common case) skip the fetch entirely, and existing classic/mock seal
+  // tests never trigger the extra RPC round-trip.
+  //
+  // Rule B: this gate is NON-WEIGHTING on security — under-fire is impossible
+  // (the program that touches a vault T22 account is always present in the
+  // invoking ix's account metas, so the scan cannot miss it), so the round-trip
+  // saving never trades against the (fail-closed) security feed. No pre-flight
+  // warning is emitted: a gate skip cannot coincide with a vault T22 write, and
+  // detecting one would require the very fetch the gate is optimizing away.
+  let t22OutputMintReadonlyMetas: ReadonlyMeta[] = [];
+  const bundleTouchesToken2022 = rewrittenDefiInstructions.some(
+    (ix) =>
+      ix.programAddress === TOKEN_2022_PROGRAM ||
+      (ix.accounts ?? []).some((acc) => acc.address === TOKEN_2022_PROGRAM),
+  );
+  if (bundleTouchesToken2022 && defiWritableReadonlyMetas.length > 0) {
+    // One batched getMultipleAccounts over the (<=24) writable DeFi accounts.
+    const candidateAddresses = defiWritableReadonlyMetas.map((m) => m.address);
+    let fetchedCandidates;
+    try {
+      fetchedCandidates = await fetchEncodedAccounts(
+        params.rpc,
+        candidateAddresses,
+      );
+    } catch (err) {
+      // Fail CLOSED with CONTEXT (not swallow-and-continue): if the bundle
+      // delivers a Token-2022 token into the vault, feeding no mint would make
+      // the on-chain gate revert 6106 — a far more opaque failure. Surface a
+      // domain-typed, step-named error so the caller knows it was the F-Q4
+      // output-mint resolution that failed (mirrors how the sibling stablecoin-
+      // ATA and balance fetches contextualize their RPC errors).
+      throw new SigilSdkDomainError(
+        SIGIL_ERROR__SDK__SEAL_FAILED,
+        "F-Q4 output-mint resolution failed: could not fetch the swap's " +
+          "writable accounts to detect vault-owned Token-2022 outputs. If the " +
+          "bundle delivers a Token-2022 token into the vault, on-chain " +
+          "validation would revert 6106 (ErrToken2022OutputMintUnresolvable). " +
+          "Retry once the RPC is reachable.",
+        { context: { candidateAddresses, cause: redactCause(err) } as never },
+      );
+    }
+    t22OutputMintReadonlyMetas = resolveT22OutputMintMetas(
+      fetchedCandidates,
+      params.vault,
+      defiWritableSeen,
+    );
   }
 
   // Step 8: Build validate_and_authorize instruction.
@@ -877,6 +1010,10 @@ export async function seal(params: SealParams): Promise<SealResult> {
     accounts: [
       ...(validateIxBase.accounts ?? []),
       ...defiWritableReadonlyMetas,
+      // F-Q4: vault-owned Token-2022 output mints (validate-only consumer; the
+      // on-chain gate searches remaining_accounts positionally, so append even
+      // when a mint is also a named account such as the input tokenMintAccount).
+      ...t22OutputMintReadonlyMetas,
     ],
   };
 

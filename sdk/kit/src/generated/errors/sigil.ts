@@ -226,6 +226,8 @@ export const SIGIL_ERROR__ERR_PENDING_AGENT_GRANT_DIGEST_MISMATCH = 0x17d7; // 6
 export const SIGIL_ERROR__ERR_REACTIVATE_COSIGN_REQUIRED_FOR_FULL_CAPABILITY = 0x17d8; // 6104
 /** DestinationAccountUnresolvable: Writable DeFi account could not be resolved in remaining_accounts — destination set incomplete */
 export const SIGIL_ERROR__DESTINATION_ACCOUNT_UNRESOLVABLE = 0x17d9; // 6105
+/** ErrToken2022OutputMintUnresolvable: Vault-owned Token-2022 output ATA's mint is absent from remaining_accounts or not Token-2022-owned — cannot vet extensions */
+export const SIGIL_ERROR__ERR_TOKEN2022_OUTPUT_MINT_UNRESOLVABLE = 0x17da; // 6106
 
 export type SigilError =
   | typeof SIGIL_ERROR__ACCOUNT_WRITABILITY_MISMATCH
@@ -273,6 +275,7 @@ export type SigilError =
   | typeof SIGIL_ERROR__ERR_SESSION_NONCE_MISMATCH
   | typeof SIGIL_ERROR__ERR_STABLE_FLOOR_VIOLATION
   | typeof SIGIL_ERROR__ERR_TOKEN2022_EXTENSION_FORBIDDEN
+  | typeof SIGIL_ERROR__ERR_TOKEN2022_OUTPUT_MINT_UNRESOLVABLE
   | typeof SIGIL_ERROR__ERR_TOO_MANY_REVOKE_PAIRS
   | typeof SIGIL_ERROR__INSUFFICIENT_BALANCE
   | typeof SIGIL_ERROR__INSUFFICIENT_PERMISSIONS
@@ -383,6 +386,7 @@ if (process.env.NODE_ENV !== "production") {
     [SIGIL_ERROR__ERR_SESSION_NONCE_MISMATCH]: `Session nonce mismatch — caller's expected_nonce does not match the session's stored nonce (durable-nonce replay defense)`,
     [SIGIL_ERROR__ERR_STABLE_FLOOR_VIOLATION]: `Stable balance floor violated — combined USDC+USDT balance dropped below policy.stable_balance_floor`,
     [SIGIL_ERROR__ERR_TOKEN2022_EXTENSION_FORBIDDEN]: `Token-2022 mint has a forbidden extension (only MemoTransfer + MetadataPointer + NonTransferable allowed)`,
+    [SIGIL_ERROR__ERR_TOKEN2022_OUTPUT_MINT_UNRESOLVABLE]: `Vault-owned Token-2022 output ATA's mint is absent from remaining_accounts or not Token-2022-owned — cannot vet extensions`,
     [SIGIL_ERROR__ERR_TOO_MANY_REVOKE_PAIRS]: `freeze_internal MAX_REVOKE_PAIRS = 10 exceeded (Council ISC-136)`,
     [SIGIL_ERROR__INSUFFICIENT_BALANCE]: `Insufficient vault balance for withdrawal`,
     [SIGIL_ERROR__INSUFFICIENT_PERMISSIONS]: `Agent lacks permission for this action type`,
