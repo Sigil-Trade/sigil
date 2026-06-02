@@ -87,7 +87,7 @@ export const SIGIL_ON_CHAIN_ERROR_MIN = 6000;
  * this map agrees with it by code AND name — so adding or renumbering an
  * on-chain error without updating this map fails at test time.
  */
-export const SIGIL_ON_CHAIN_ERROR_MAX = 6104;
+export const SIGIL_ON_CHAIN_ERROR_MAX = 6105;
 
 interface ErrorMapping {
   name: string;
@@ -1627,14 +1627,14 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   6093: {
     name: "IxMetaCountExceeded",
     message:
-      "DeFi instruction exceeds destination check meta budget (max 16 metas). Common cause: Jupiter v6 max-step routes with 22-25 metas.",
+      "Foreign instruction exceeded the account-meta processing budget (destination check: max 24 writable metas / 64 total; agent_transfer floor-walk: 16). The bundle is rejected rather than partially inspected.",
     category: "POLICY_VIOLATION",
     retryable: false,
     recovery_actions: [
       {
-        action: "reshape_ix",
+        action: "use_a_shorter_route",
         description:
-          "Split the route into multiple smaller transactions, or use a non-max-step Jupiter route. v1.1 will expand the budget to 32 metas.",
+          "The route references more writable accounts than the guard can inspect in one pass. Use a shorter Jupiter route; Sigil never reshapes the route itself — an unguardable route atomically reverts.",
       },
     ],
   },
@@ -1818,6 +1818,20 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
         action: "include_second_signer_in_remaining_accounts",
         description:
           "Re-sign the reactivate transaction with a second non-owner signer in remaining_accounts. If policy.cosign_session_pubkey is set, the signer must match it.",
+      },
+    ],
+  },
+  6105: {
+    name: "DestinationAccountUnresolvable",
+    message:
+      "A writable account of the DeFi instruction could not be resolved in validate's remaining_accounts, so the guard cannot classify it (F-Q1a destination completeness — rejected fail-closed rather than silently skipped).",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "use_seal_to_populate_remaining_accounts",
+        description:
+          "Build the bundle with seal(), which auto-populates validate's (and finalize's) remaining_accounts with every writable account of the DeFi instruction (the fee-payer agent included). Hand-built bundles must mirror this.",
       },
     ],
   },

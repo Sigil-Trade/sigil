@@ -636,6 +636,10 @@ describe("cu-budget", () => {
       ctx,
       new BN(50_000_000), // spending
       JUPITER_PROGRAM_ID,
+      // F-Q1a completeness: the jupiter ix surfaces the fee-payer agent as a
+      // writable meta on-chain (compiled message), so it must be resolvable in
+      // validate's remaining_accounts (else DestinationAccountUnresolvable).
+      [{ pubkey: agent.publicKey, isSigner: false, isWritable: false }],
     );
     // Mock Jupiter ix: programId=JUPITER_PROGRAM, valid V1 1-step route data.
     // mock-defi.so is loaded at JUPITER_PROGRAM_ID — it will fail the Anchor
@@ -691,6 +695,8 @@ describe("cu-budget", () => {
       ctx,
       new BN(50_000_000),
       JUPITER_PROGRAM_ID,
+      // F-Q1a completeness: fee-payer agent is a writable meta on-chain.
+      [{ pubkey: agent.publicKey, isSigner: false, isWritable: false }],
     );
     const jupiterIx = new TransactionInstruction({
       programId: JUPITER_PROGRAM_ID,

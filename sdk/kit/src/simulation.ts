@@ -468,11 +468,11 @@ export const ANCHOR_ERROR_MAP: Record<
       "R-4 DeclarationConsistency: the recipient/mint declared on validate_and_authorize does not match the actual CPI account-meta. Re-derive the declared accounts from the same accounts the DeFi instruction will consume.",
   },
 
-  // ─── Phase 6 destination-check budget (code 6102) ───
+  // ─── destination-check + floor-walk meta budget (code 6093) ───
   6093: {
     name: "IxMetaCountExceeded",
     suggestion:
-      "Foreign DeFi instruction passed more account metas than the destination-check budget (16) allows. Truncate the instruction or split it into shorter ixs.",
+      "Foreign instruction exceeded the account-meta processing budget (destination check: max 24 writable metas). Use a shorter route — Sigil reverts an unguardable route rather than reshaping it.",
   },
 
   // ─── Phase 8 ownership-transfer ───

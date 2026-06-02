@@ -139,6 +139,7 @@ export const SIGIL_ERRORS = {
   ErrIntentDigestMismatch: 6102,
   ErrPendingAgentGrantDigestMismatch: 6103,
   ErrReactivateCosignRequiredForFullCapability: 6104,
+  DestinationAccountUnresolvable: 6105,
 } as const;
 
 export type SigilErrorName = keyof typeof SIGIL_ERRORS;

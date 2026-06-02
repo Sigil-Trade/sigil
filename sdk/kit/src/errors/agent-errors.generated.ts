@@ -2,8 +2,8 @@
 // Regenerate via `pnpm -C sdk/kit codegen:errors` after IDL changes.
 //
 // Source: agent-middleware/target/idl/sigil.json
-// Generated: 2026-06-01T18:37:07.182Z
-// Codes: 105 (min 6000, max 6104)
+// Generated: 2026-06-02T09:36:19.051Z
+// Codes: 106 (min 6000, max 6105)
 
 /** Pure IDL projection of every Anchor error variant. */
 export interface IdlErrorEntry {
@@ -114,7 +114,7 @@ export const IDL_ERROR_MAP: Readonly<Record<number, IdlErrorEntry>> =
     6090: { code: 6090, name: "ErrAtaAuthorityChanged", msg: "R-2 AtaAuthorityPin: vault-owned token account authority changed or account closed/reinitialized mid-sandwich" },
     6091: { code: 6091, name: "ErrOutputBelowFloor", msg: "R-3 OutputBalanceFloor: post-execution balance increase fell below the configured min_increase floor" },
     6092: { code: 6092, name: "ErrDeclarationInconsistent", msg: "R-4 DeclarationConsistency: declared recipient/mint does not match CPI account-meta" },
-    6093: { code: 6093, name: "IxMetaCountExceeded", msg: "Foreign DeFi instruction passed more account metas than the destination-check budget (16) allows; truncate the ix or split into shorter ixs" },
+    6093: { code: 6093, name: "IxMetaCountExceeded", msg: "Foreign instruction exceeded the account-meta processing budget; the bundle is rejected rather than partially inspected" },
     6094: { code: 6094, name: "ErrPendingOwnershipExists", msg: "An ownership transfer is already pending; cancel it first" },
     6095: { code: 6095, name: "ErrPendingOwnershipNotReady", msg: "Ownership transfer timelock has not elapsed" },
     6096: { code: 6096, name: "ErrInvalidFreezeReason", msg: "freeze_reason value out of {{0,1,2}}" },
@@ -126,13 +126,14 @@ export const IDL_ERROR_MAP: Readonly<Record<number, IdlErrorEntry>> =
     6102: { code: 6102, name: "ErrIntentDigestMismatch", msg: "AL3 intent-digest mismatch — preview digest does not match executed bundle" },
     6103: { code: 6103, name: "ErrPendingAgentGrantDigestMismatch", msg: "PendingAgentGrant digest mismatch between queue and apply" },
     6104: { code: 6104, name: "ErrReactivateCosignRequiredForFullCapability", msg: "Reactivate with FULL_CAPABILITY new agent requires cosign" },
+    6105: { code: 6105, name: "DestinationAccountUnresolvable", msg: "Writable DeFi account could not be resolved in remaining_accounts — destination set incomplete" },
   });
 
 /** Total error-code count derived from the IDL at generation time. */
-export const IDL_ERROR_COUNT = 105;
+export const IDL_ERROR_COUNT = 106;
 
 /** Lowest IDL error code. */
 export const IDL_ERROR_MIN = 6000;
 
 /** Highest IDL error code. */
-export const IDL_ERROR_MAX = 6104;
+export const IDL_ERROR_MAX = 6105;

@@ -57,10 +57,7 @@ import {
   type EffectiveBudget,
   type ResolvedBudget,
 } from "./state-resolver.js";
-import {
-  getSessionPDA,
-  getAgentOverlayPDA,
-} from "./resolve-accounts.js";
+import { getSessionPDA, getAgentOverlayPDA } from "./resolve-accounts.js";
 import { composeSigilTransaction, measureTransactionSize } from "./composer.js";
 import {
   BlockhashCache,
@@ -783,6 +780,49 @@ export async function seal(params: SealParams): Promise<SealResult> {
     ataReplacements,
   );
 
+  // F-Q1a SATISFIER (not enforcer). The on-chain destination COMPLETENESS
+  // invariant requires every writable, non-vault account of the sandwiched
+  // DeFi instruction to be resolvable in validate's AND finalize's
+  // remaining_accounts, so the guard can read each owner byte and classify it
+  // (an absent writable meta is now rejected fail-closed:
+  // DestinationAccountUnresolvable). Reviving the per-recipient cap + floor sum
+  // depends on the same accounts reaching finalize. We extract every writable
+  // account of the *rewritten* DeFi ixs (post agent-ATA->vault-ATA rewrite, so
+  // the addresses are exactly what executes — iterating the pre-rewrite list
+  // would capture stale agent ATAs) and attach them as READONLY remaining
+  // accounts on both wrapper ixs. READONLY grants no write/sign; the compiled
+  // message de-dups by pubkey (mergeRoles keeps the DeFi ix's WRITABLE), and
+  // accounts already referenced by the DeFi ix cost ~1 index byte each. This
+  // only gives the guard visibility — it never changes the route or intent
+  // (atomic-guard principle: feed accounts to inspect, never reshape the tx).
+  const feePayer = params.agent.address;
+  const defiWritableSeen = new Set<Address>();
+  const defiWritableReadonlyMetas: { address: Address; role: AccountRole }[] =
+    [];
+  for (const ix of rewrittenDefiInstructions) {
+    for (const acc of ix.accounts ?? []) {
+      const declaredWritable =
+        acc.role === AccountRole.WRITABLE ||
+        acc.role === AccountRole.WRITABLE_SIGNER;
+      // The fee-payer agent is WRITABLE in the compiled v0 message regardless of
+      // the role the DeFi ix declares for it. The on-chain completeness check
+      // reads writability from the compiled message (via
+      // load_instruction_at_checked), so a DeFi ix that lists the agent as a
+      // readonly signer still surfaces it as a writable meta on-chain — include
+      // it so completeness is satisfiable. (Vault ATAs that validate marks
+      // writable already appear writable in the swap ix, so the fee payer is the
+      // only writability divergence between the ix role and the compiled view.)
+      const onChainWritable = declaredWritable || acc.address === feePayer;
+      if (onChainWritable && !defiWritableSeen.has(acc.address)) {
+        defiWritableSeen.add(acc.address);
+        defiWritableReadonlyMetas.push({
+          address: acc.address,
+          role: AccountRole.READONLY,
+        });
+      }
+    }
+  }
+
   // Step 8: Build validate_and_authorize instruction.
   //
   // AC-10 (Phase 4): pass `expectedNonce = 0n`. The session PDA is created
@@ -829,13 +869,18 @@ export async function seal(params: SealParams): Promise<SealResult> {
     expectedIntentDigest: scalarIntentDigest,
   });
 
-  // M1-04 (constraints-engine teardown): validate_and_authorize no longer reads
-  // a constraints PDA from remaining_accounts. The prior block that appended the
-  // constraints PDA when `state.policy.hasConstraints` was set is removed with
-  // the field. No remaining-account injection is needed here.
-  const validateIx = validateIxBase as Instruction;
+  // F-Q1a satisfier: append the DeFi ix's writable accounts (as READONLY) to
+  // validate's remaining_accounts so the on-chain completeness invariant is
+  // satisfiable. Spread into a NEW array — Instruction.accounts is readonly.
+  const validateIx: Instruction = {
+    ...validateIxBase,
+    accounts: [
+      ...(validateIxBase.accounts ?? []),
+      ...defiWritableReadonlyMetas,
+    ],
+  };
 
-  const finalizeIx = await getFinalizeSessionInstructionAsync({
+  const finalizeIxBase = await getFinalizeSessionInstructionAsync({
     payer: params.agent,
     vault: params.vault,
     session: sessionPda,
@@ -844,6 +889,18 @@ export async function seal(params: SealParams): Promise<SealResult> {
     vaultTokenAccount,
     outputStablecoinAccount,
   });
+
+  // F-Q1a satisfier: finalize's per-recipient cap + floor sum walk the SAME
+  // DeFi metas and resolve them in finalize's own remaining_accounts, so the
+  // writable accounts must reach finalize too (validate and finalize each carry
+  // their own remaining_accounts).
+  const finalizeIx: Instruction = {
+    ...finalizeIxBase,
+    accounts: [
+      ...(finalizeIxBase.accounts ?? []),
+      ...defiWritableReadonlyMetas,
+    ],
+  };
 
   // Step 10: Compose + compile + measure
   const blockhash =

@@ -1,35 +1,53 @@
-//! Phase 2 TA-02: wire `PolicyConfig.allowed_destinations` enforcement into
-//! spending paths (`validate_and_authorize`), not just `agent_transfer`.
+//! F-Q1a destination COMPLETENESS + sink-scoped allowlist for the spending
+//! path (`validate_and_authorize`), complementing the single-recipient allowlist
+//! in `agent_transfer`.
 //!
-//! Pre-Phase-2 state: `allowed_destinations` was only enforced in
-//! `agent_transfer.rs`. The DeFi spending paths (stablecoin-input swap and
-//! non-stablecoin-input swap) could route value to ANY ATA whose owner was
-//! not in the allowlist as long as the protocol allowlist passed — a known
-//! gap surfaced by Audit #2.
+//! ## What this helper does (and does NOT do)
 //!
-//! Phase 2 closes the gap by extracting destination ATAs from the DeFi
-//! instruction's account metas and verifying their owners against the policy.
+//! It walks the sandwiched DeFi instruction's account metas (introspected from
+//! the instructions sysvar — a TRUSTED source the SVM actually executes) and,
+//! for every account that is **writable AND non-vault**, enforces a
+//! **completeness invariant**: the account MUST be resolvable in
+//! `remaining_accounts` so the guard can read its owner byte and classify it.
+//! An unresolvable writable meta is rejected FAIL-CLOSED
+//! (`DestinationAccountUnresolvable`) rather than silently skipped — the seal()
+//! satisfier is responsible for passing every writable account of the DeFi ix.
 //!
-//! ## Scope (intentionally narrow for V1)
+//! It does **NOT** hard-reject a resolved-but-non-allowlisted destination. On a
+//! swap, value flows *through* AMM pool vaults / Jupiter program-authority ATAs
+//! that legitimately receive the vault's value in flight and are
+//! byte-indistinguishable from a final sink — they can never be on an owner's
+//! allowlist. A non-allowlisted resolved token account is therefore treated as a
+//! transient route hop and SKIPPED (resolve-required, not allowlist-required).
+//! Hard "value may only leave to an allowlisted owner" (WHERE) is undecidable on
+//! the swap path and is enforced only on the single-recipient `agent_transfer`
+//! path. The decidable swap-path guarantees are COMPLETENESS (here) + MAGNITUDE
+//! (global/per-tx caps + the per-recipient cap in `finalize`) + CONSERVATION
+//! (the finalize balance-delta) + the output/input ATA pins (F-Q8). The model is
+//! WHERE+MAGNITUDE only — never VERB.
 //!
-//! The helper checks accounts that are **token accounts owned by the SPL Token
-//! program (or Token-2022) AND writable AND non-vault**. The vault's own ATAs
-//! are not "destinations" — value flowing out of the vault is the spend; value
-//! flowing back in is verified by the stablecoin-balance-delta check in
-//! `finalize_session`. The helper is called only when `is_spending` is true.
+//! ## Why completeness matters
+//!
+//! Pre-F-Q1a the helper did `None => continue` (fail-open) and `seal()` passed
+//! empty `remaining_accounts`, so EVERY meta was skipped — the destination
+//! check, the per-recipient cap, and the floor sum were all dead on the only
+//! production path. Forcing every writable account into THIS instruction's view
+//! (and rejecting omissions) makes the destination set fully visible at
+//! `validate`. The per-recipient cap and floor run in `finalize_session`, which
+//! carries its OWN `remaining_accounts`; `seal()` feeds finalize the same
+//! writable set (so they are live on the honest seal() path), but finalize does
+//! not yet INDEPENDENTLY fail-closed on omission — a raw-tx caller could omit a
+//! meta from finalize and shrink per-recipient/floor attribution. That residual
+//! is bounded by the global/per-tx magnitude cap (which reads the vault's own
+//! balance delta and is NOT omittable) and is tracked as F-Q1b/M2 (full-bundle
+//! binding). Do not over-claim finalize-side non-omittability here.
 //!
 //! ## Performance
 //!
-//! O(N · M) where N is the number of account metas (bounded by the Solana
-//! per-tx limit, ~64) and M is `MAX_ALLOWED_DESTINATIONS` (10). For real
-//! DeFi instructions N is typically 5-25, M is 1-3 → ~50-75 comparisons
-//! per call. Well below 1k CU.
-//!
-//! ## Defense layering
-//!
-//! `is_destination_allowed` on `PolicyConfig` is the actual allowlist
-//! check; this helper is the **discoverer** that finds which accounts need
-//! to be checked. Both must be present for end-to-end enforcement.
+//! O(N·M): N writable metas (hard-capped at `MAX_DESTINATION_WRITABLE_METAS`),
+//! M = `MAX_ALLOWED_DESTINATIONS`. A 32-byte `owner` pre-filter skips non-token
+//! writables before any deserialize. Classifying 24 token accounts is ~36K CU
+//! (<3% of the 1.4M budget).
 
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::instruction::AccountMeta;
@@ -38,77 +56,61 @@ use anchor_spl::token::TokenAccount;
 use crate::errors::SigilError;
 use crate::state::{PolicyConfig, TOKEN_2022_PROGRAM_ID};
 
-/// Walks the DeFi instruction's account metas, finds writable token-account
-/// recipients that are NOT the vault's own ATA, and verifies each recipient's
-/// owner against `policy.allowed_destinations`.
+/// F-Q1a security cap: hard-reject when the DeFi ix carries more than this many
+/// **writable** account metas. Only writable accounts can receive value (and
+/// only they are ever deserialized), so the writable/classified set — not the
+/// total meta count — is the exfiltration surface and the CU driver. Gating on
+/// writables is the tightest bound that still admits real routes: a single-hop
+/// Jupiter `sharedAccountsRoute` carries ~6-9 writable metas, a 3-4-leg
+/// max-step route ~12-20. 24 admits observed max-step routes with margin
+/// (~36K CU, ~+34 tx bytes — both <3% of budget). The cap is a HARD REJECT, not
+/// a silent truncate, preserving the H-1 closure (an attacker must not be able
+/// to hide a hostile writable destination beyond a truncation point). Oversized
+/// routes atomically REVERT; Sigil never reshapes a route to fit (atomic-guard).
 ///
-/// Returns `Ok(())` if every candidate destination passes the allowlist (or if
-/// no candidate destinations are present — uncommon but possible in pure
-/// observe-style DeFi calls). Returns `Err(DestinationNotAllowed)` on the
-/// first mismatch.
+/// Corrects the pre-F-Q1a cap, which gated TOTAL metas at 16 and thus rejected
+/// essentially every real `sharedAccountsRoute` swap (13 fixed accounts + >=1
+/// pool > 16) — a latent liveness bug never caught because the seal() path was
+/// only exercised with System-transfer mock DeFi ixs.
+pub(crate) const MAX_DESTINATION_WRITABLE_METAS: usize = 24;
+
+/// Loose total-meta iteration guard (DoS backstop ONLY — the security bound is
+/// `MAX_DESTINATION_WRITABLE_METAS`). Bounds the cheap skip/filter loop over all
+/// metas; sized above Solana's practical per-ix account count so it never
+/// rejects a legitimate route on its own.
+pub(crate) const MAX_DESTINATION_CHECK_TOTAL_METAS: usize = 64;
+
+/// Enforce the F-Q1a destination completeness invariant + sink-scoped allowlist.
+///
+/// For every account meta of the sandwiched DeFi instruction that is writable
+/// and not the vault PDA:
+/// - if it is **absent** from `remaining_accounts` → reject FAIL-CLOSED
+///   (`DestinationAccountUnresolvable`): the guard cannot classify an account it
+///   cannot read, and the seal() satisfier is contractually required to pass it;
+/// - if it is **present but non-token** (owner ∉ {SPL Token, Token-2022}) → skip
+///   (provably cannot hold SPL token value);
+/// - if it is a **vault-owned** token account → skip (spend source / swap return);
+/// - if it is a **non-allowlisted** token account → skip (transient route hop:
+///   AMM pool vault / DEX-internal / program-authority ATA — not a final sink we
+///   can decide on-chain);
+/// - if it is an **allowlisted** token account → enforce graylist friction.
 ///
 /// # Arguments
 ///
-/// * `ix_accounts` — the DeFi instruction's `Vec<AccountMeta>` (from the
-///   `Instruction` extracted via `load_instruction_at_checked`).
-/// * `remaining_accounts` — the full slice from `ctx.remaining_accounts`. We
-///   need this to read each candidate account's `owner` field (token-account
-///   owner = wallet that owns the token account, NOT the SPL Token program).
-/// * `vault_pubkey` — the vault PDA; vault-owned ATAs are excluded from the
-///   check (those are the spend source, not a destination).
-/// * `policy` — the live `PolicyConfig` used to check `allowed_destinations`.
-///
-/// # Why pre-borrow remaining_accounts?
-///
-/// We can't deserialize a `TokenAccount` from a raw byte slice without owning
-/// the data borrow for the lifetime of the unpack. So the caller holds the
-/// borrowed data and passes the unpacked owner. We resolve via Anchor's
-/// `TokenAccount::try_deserialize` shortcut.
+/// * `ix_accounts` — the DeFi instruction's `Vec<AccountMeta>`, read via
+///   `load_instruction_at_checked` (runtime truth, not caller-asserted).
+/// * `remaining_accounts` — `ctx.remaining_accounts`; supplies each candidate's
+///   on-chain bytes (owner field) for classification.
+/// * `vault_pubkey` — the vault PDA; its own ATAs are not destinations.
+/// * `policy` — live `PolicyConfig` (`allowed_destinations` + graylist).
+/// * `now` — `clock.unix_timestamp` for the graylist friction window.
 ///
 /// # Token-2022 awareness
 ///
-/// We accept both `spl_token::ID` and `TOKEN_2022_PROGRAM_ID` as token-account
-/// owners. Token-2022 accounts have a longer layout (extensions), but the
-/// `owner` field is in the same byte position, so `TokenAccount::try_deserialize`
-/// works for the read.
-/// PEN-CROSS-4 (Phase 4 absorption) — maximum account metas inspected per
-/// foreign instruction by `enforce_destination_allowlist`.
-///
-/// **Rationale.** Real DeFi instructions (Jupiter swaps, Flash Trade open/
-/// close, Marginfi deposit/withdraw, Drift place_order, etc.) have between
-/// 5 and 25 account metas in their main instruction. Empirically:
-/// - Jupiter v6 single-step: ~10 metas
-/// - Jupiter v6 max-step: 22-25 metas
-/// - Flash Trade open_position: 15-20 metas
-/// - SPL transfer: 3 metas
-///
-/// **H-1 hard-reject update (audit 2026-05-19).** Previously the helper
-/// silently `take(16)`-truncated, which a Jupiter-v6-max-step ix with 22-25
-/// metas trips — an attacker could hide a hostile destination at slot 17+
-/// because slots 17+ were never inspected. The cap is now a HARD REJECT
-/// (`require!`) at the helper entry rather than a silent slice. Real ixs
-/// up to 25 metas would now reject; the 16-meta budget is intentional for
-/// V1 because the legitimate Jupiter-v6-max-step shape can be split into
-/// shorter ixs, and shorter Jupiter routes cover the common path. Future
-/// expansion to 32 metas requires a measured CU justification (~+4 K CU per
-/// validate pass).
-///
-/// **CU savings.** The pre-filter on AccountInfo.owner (32-byte pubkey
-/// compare, no deserialize) covers the ~250 CU per non-token-meta case
-/// even before the bound triggers. The bound triggers only on adversarial
-/// or over-long real ixs — both of which now reject cleanly.
-pub(crate) const MAX_DESTINATION_CHECK_METAS_PER_IX: usize = 16;
-
-/// TA-07 (Phase 3) extended signature: `now` is the current Unix timestamp
-/// used by the graylist friction check. Callers pass `clock.unix_timestamp`.
-///
-/// PEN-CROSS-4 (Phase 4 absorption) — iteration is bounded at
-/// MAX_DESTINATION_CHECK_METAS_PER_IX (16) per call. Pre-filter by
-/// program_id BYTE-READ before TokenAccount::try_deserialize: any meta
-/// whose AccountInfo owner is neither SPL Token nor Token-2022 is skipped
-/// with a single 32-byte pubkey compare, no deserialize. The cumulative
-/// CU saving is ~5K per `agent_transfer` (which calls this helper twice
-/// in some paths via the Phase 2 forward scan).
+/// Accepts both `spl_token::ID` and `TOKEN_2022_PROGRAM_ID` owners. The `owner`
+/// field is at the same byte position, so `TokenAccount::try_deserialize` reads
+/// it for either; a non-165-byte / uninitialized buffer fails deserialize and
+/// reverts (fail-closed), never misclassifies.
 pub fn enforce_destination_allowlist<'info>(
     ix_accounts: &[AccountMeta],
     remaining_accounts: &[AccountInfo<'info>],
@@ -116,17 +118,22 @@ pub fn enforce_destination_allowlist<'info>(
     policy: &PolicyConfig,
     now: i64,
 ) -> Result<()> {
-    // H-1 hard-reject (audit 2026-05-19): refuse to scan ixs with more
-    // metas than the destination-check budget. Previously the helper
-    // silently truncated via `take(16)`, which a Jupiter-v6-max-step
-    // 22-25 meta ix would trip — attacker hides hostile destination at
-    // slot 17+ because slots 17+ are never inspected. Hard-reject closes
-    // the silent-drop. See `MAX_DESTINATION_CHECK_METAS_PER_IX` doc for
-    // CU rationale.
+    // Loose total-iteration guard (DoS backstop). Sized above any real route so
+    // it never rejects a legitimate swap on its own.
     require!(
-        ix_accounts.len() <= MAX_DESTINATION_CHECK_METAS_PER_IX,
+        ix_accounts.len() <= MAX_DESTINATION_CHECK_TOTAL_METAS,
         SigilError::IxMetaCountExceeded
     );
+
+    // Security cap: hard-reject on the count of WRITABLE metas — the set that
+    // can receive value and that may be deserialized. Read-only metas are inert.
+    // Hard-reject (not truncate) keeps the H-1 silent-truncation hole closed.
+    let writable_count = ix_accounts.iter().filter(|m| m.is_writable).count();
+    require!(
+        writable_count <= MAX_DESTINATION_WRITABLE_METAS,
+        SigilError::IxMetaCountExceeded
+    );
+
     for meta in ix_accounts.iter() {
         if !meta.is_writable {
             // Read-only accounts cannot receive value; skip.
@@ -137,57 +144,58 @@ pub fn enforce_destination_allowlist<'info>(
             continue;
         }
 
-        // Locate the AccountInfo for this meta in remaining_accounts.
-        // Solana puts the *target* program's accounts in remaining_accounts
-        // when the instruction is built via the sysvar-introspected path.
+        // COMPLETENESS (F-Q1a). The seal() satisfier MUST pass every writable
+        // account of the DeFi ix into `remaining_accounts`. A writable, non-vault
+        // meta that is absent here cannot be classified (we cannot read its owner
+        // or type), so it is rejected FAIL-CLOSED rather than silently skipped.
+        // This replaces the prior `None => continue` fail-open, which rewarded
+        // omission and rendered the destination check, the per-recipient cap, and
+        // the floor sum dead on the seal() path.
         let info = match remaining_accounts.iter().find(|ai| ai.key == &meta.pubkey) {
             Some(info) => info,
-            // If the account isn't passed in remaining_accounts, we can't read
-            // it. That's expected for non-token writable accounts (e.g. program
-            // PDAs of the target protocol — those don't receive token value).
-            // Skip rather than reject; the protocol allowlist + token-balance
-            // sandwich is the load-bearing defense for those.
-            None => continue,
+            None => return Err(error!(SigilError::DestinationAccountUnresolvable)),
         };
 
-        // PEN-CROSS-4 pre-filter: read the AccountInfo's `owner` byte
-        // FIRST (32-byte pubkey compare, no deserialize) before any
-        // TokenAccount::try_deserialize call. Filters out program PDAs,
-        // SystemProgram-owned accounts, and other non-token writable metas
-        // at the cheapest possible cost. Eliminates the prior cost where
-        // a foreign ix passing an SPL Mint or any random Program-owned
-        // PDA as writable would trigger an attempt to deserialize 165
-        // bytes via TokenAccount::try_deserialize before bailing.
+        // PEN-CROSS-4 pre-filter: read AccountInfo.owner (32-byte compare, no
+        // deserialize). An account owned by neither SPL Token nor Token-2022
+        // cannot hold SPL token value, so it is provably not a value
+        // destination — safe to skip (we HAVE its data and proved it non-token,
+        // unlike the absent case above which we cannot classify).
         let owner_program = info.owner;
         if *owner_program != anchor_spl::token::ID && *owner_program != TOKEN_2022_PROGRAM_ID {
             continue;
         }
 
-        // Owner is SPL Token or Token-2022 → safe to deserialize.
+        // Owner is SPL Token or Token-2022 → safe to deserialize and read owner.
         let data = info.try_borrow_data()?;
         let token_acct = TokenAccount::try_deserialize(&mut data.as_ref())?;
         let recipient_wallet = token_acct.owner;
 
-        // Skip the vault's own ATAs (recipient_wallet == vault PDA). The vault's
-        // ATAs carry tokens IN and OUT during the swap — the OUT direction is
-        // the spend (already capped) and the IN direction is verified by
-        // finalize_session's balance-delta check.
+        // Vault's own ATAs carry value IN/OUT during a swap — the OUT direction
+        // is the (capped) spend, the IN direction is verified by finalize's
+        // balance-delta. Not a destination.
         if recipient_wallet == *vault_pubkey {
             continue;
         }
 
-        // Allowlist check. Fail-closed: a single mismatched destination rejects
-        // the whole bundle.
-        require!(
-            policy.is_destination_allowed(&recipient_wallet),
-            SigilError::DestinationNotAllowed,
-        );
+        // SINK-SCOPED (F-Q1a — WHERE+MAGNITUDE model only). A non-vault token
+        // account whose owner is NOT allowlisted is a transient route hop (an
+        // AMM pool vault, a Jupiter program-authority ATA, a DEX-internal
+        // account). In a swap such accounts legitimately receive value in flight
+        // and are byte-indistinguishable from a final sink — so SKIP them
+        // (resolve-required, not allowlist-required). Hard "value may only leave
+        // to an allowlisted owner" is undecidable here (a pool legitimately
+        // receives the vault's stablecoin) and is enforced only on the
+        // single-recipient `agent_transfer` path. Magnitude leaving the vault is
+        // bounded by the global/per-tx caps; the per-recipient cap in `finalize`
+        // attributes only allowlisted recipients.
+        if !policy.is_destination_allowed(&recipient_wallet) {
+            continue;
+        }
 
-        // TA-07 (Phase 3): graylist friction check. If the destination is on
-        // the graylist AND still within its unlock window, reject — the
-        // owner authorised it via allowlist add but it has not yet served
-        // its 24h friction (unless auto_promote_grays or owner promoted via
-        // promote_graylist_destination, which would have cleared the entry).
+        // Allowlisted recipient → enforce graylist friction: the owner added it
+        // but it has not yet served its unlock window (unless auto_promote_grays
+        // or an explicit promotion cleared the entry).
         let (graylisted, _unlock) = policy.is_destination_graylisted(&recipient_wallet, now);
         require!(!graylisted, SigilError::ErrGraylistFriction);
     }
@@ -196,21 +204,23 @@ pub fn enforce_destination_allowlist<'info>(
 }
 
 #[cfg(test)]
-mod h1_hard_reject_tests {
-    //! H-1 hard-reject (audit 2026-05-19): `enforce_destination_allowlist`
-    //! must REJECT (not silently truncate) when a foreign DeFi ix exceeds
-    //! the destination-check meta budget. These tests pin the error code
-    //! (6093 IxMetaCountExceeded) and the boundary behaviour.
+mod cap_and_completeness_tests {
+    //! F-Q1a unit tests for the entry guards: the WRITABLE-meta security cap
+    //! (`MAX_DESTINATION_WRITABLE_METAS`), the loose total-iteration guard
+    //! (`MAX_DESTINATION_CHECK_TOTAL_METAS`), and the completeness fail-closed
+    //! (`DestinationAccountUnresolvable`) for an absent writable meta. The
+    //! sink-scoped allowlist / graylist / classification paths need real
+    //! `AccountInfo` bytes and are covered by the LiteSVM seal()-path tests.
     use super::*;
 
     fn pk(b: u8) -> Pubkey {
         Pubkey::new_from_array([b; 32])
     }
 
-    /// PolicyConfig has no Default impl (Anchor `#[account]` macro
-    /// doesn't derive it). The H-1 hard-reject fires BEFORE any policy
-    /// field is read, so this mock is never inspected — but a real
-    /// instance is required to satisfy the `&PolicyConfig` parameter.
+    /// PolicyConfig has no Default impl (Anchor `#[account]` macro doesn't
+    /// derive it). The cap/total guards and the completeness fail-closed all
+    /// fire before any policy field is read, so this mock is inert here — but a
+    /// real instance is required to satisfy the `&PolicyConfig` parameter.
     fn mock_policy() -> PolicyConfig {
         PolicyConfig {
             vault: pk(0),
@@ -239,48 +249,42 @@ mod h1_hard_reject_tests {
             stable_balance_floor: 0,
             per_recipient_daily_cap_usd: 0,
             cosign_required: false,
-            // D-5 (audit 2026-05-19, F-RP3-1): mock policy disables the
-            // reactivate-cosign gate. Tests below exercise the destination
-            // check before any policy field is read, so this is inert here.
+            // D-5 (audit 2026-05-19, F-RP3-1): cosign gate disabled in the mock.
             cosign_session_pubkey: Pubkey::default(),
         }
     }
 
-    /// Boundary: an ix with exactly MAX_DESTINATION_CHECK_METAS_PER_IX
-    /// metas is accepted (the cap is `<=`, not `<`). All metas are
-    /// non-writable so they're trivially skipped — the test is purely
-    /// about the entry-guard semantics, not destination resolution.
+    /// Boundary: exactly `MAX_DESTINATION_WRITABLE_METAS` writable metas is
+    /// accepted (the cap is `<=`). All metas point at the vault PDA so they are
+    /// skipped before the completeness check — this is purely a cap-arithmetic
+    /// test (no destination resolution).
     #[test]
-    fn boundary_at_cap_accepts() {
+    fn writable_boundary_at_cap_accepts() {
         let vault_pubkey = pk(0xA);
-        let metas: Vec<AccountMeta> = (0..MAX_DESTINATION_CHECK_METAS_PER_IX)
-            .map(|i| AccountMeta::new_readonly(pk(i as u8 + 16), false))
+        let metas: Vec<AccountMeta> = (0..MAX_DESTINATION_WRITABLE_METAS)
+            .map(|_| AccountMeta::new(vault_pubkey, false))
             .collect();
         let policy = mock_policy();
         let remaining: Vec<AccountInfo> = vec![];
         let res = enforce_destination_allowlist(&metas, &remaining, &vault_pubkey, &policy, 0);
         assert!(
             res.is_ok(),
-            "ix at exactly the bound must accept (non-writable metas skip cleanly)"
+            "exactly the writable cap (all vault metas) must accept"
         );
     }
 
-    /// One-over-cap: an ix with 17 metas must REJECT with 6093. This is
-    /// the silent-truncate-attack closure: previously the helper would
-    /// `take(16)` and ignore slot 17.
+    /// One-over the writable cap rejects with `IxMetaCountExceeded` (6093). The
+    /// cap fires before the loop, so `remaining_accounts` is never consulted.
     #[test]
-    fn one_over_cap_rejects_with_6093() {
+    fn writable_one_over_cap_rejects() {
         let vault_pubkey = pk(0xA);
-        let metas: Vec<AccountMeta> = (0..(MAX_DESTINATION_CHECK_METAS_PER_IX + 1))
-            .map(|i| AccountMeta::new_readonly(pk(i as u8 + 16), false))
+        let metas: Vec<AccountMeta> = (0..(MAX_DESTINATION_WRITABLE_METAS + 1))
+            .map(|i| AccountMeta::new(pk(i as u8 + 16), false))
             .collect();
         let policy = mock_policy();
         let remaining: Vec<AccountInfo> = vec![];
         let err = enforce_destination_allowlist(&metas, &remaining, &vault_pubkey, &policy, 0)
-            .expect_err("ix exceeding bound MUST reject");
-        // Convert the AnchorError -> u32 error code via the standard
-        // Anchor error projection. We pin the 6093 numeric for forward-
-        // compat with off-chain monitors.
+            .expect_err("ix exceeding the writable cap MUST reject");
         let err_str = format!("{:?}", err);
         assert!(
             err_str.contains("IxMetaCountExceeded") || err_str.contains("6093"),
@@ -289,25 +293,57 @@ mod h1_hard_reject_tests {
         );
     }
 
-    /// Far-over-cap (25 metas — Jupiter v6 max-step shape): also rejects.
-    /// Documents the legitimate-flow case the audit called out — Jupiter
-    /// v6 max-step ixs WILL hit this rejection in V1; the route must be
-    /// shortened or split.
+    /// The loose total-iteration guard rejects an ix with more than
+    /// `MAX_DESTINATION_CHECK_TOTAL_METAS` total metas (here all read-only, so
+    /// the writable cap is not what fires — the total guard is).
     #[test]
-    fn jupiter_v6_max_step_25_metas_rejects() {
+    fn total_iteration_guard_rejects() {
         let vault_pubkey = pk(0xA);
-        let metas: Vec<AccountMeta> = (0..25)
-            .map(|i| AccountMeta::new_readonly(pk(i as u8 + 16), false))
+        let metas: Vec<AccountMeta> = (0..(MAX_DESTINATION_CHECK_TOTAL_METAS + 1))
+            .map(|i| AccountMeta::new_readonly(pk(i as u8), false))
             .collect();
         let policy = mock_policy();
         let remaining: Vec<AccountInfo> = vec![];
         let err = enforce_destination_allowlist(&metas, &remaining, &vault_pubkey, &policy, 0)
-            .expect_err("25-meta ix MUST reject");
+            .expect_err("ix exceeding the total-meta guard MUST reject");
         let err_str = format!("{:?}", err);
         assert!(
             err_str.contains("IxMetaCountExceeded") || err_str.contains("6093"),
             "expected IxMetaCountExceeded (6093), got: {}",
             err_str
         );
+    }
+
+    /// COMPLETENESS fail-closed: a single writable, non-vault meta that is
+    /// ABSENT from `remaining_accounts` rejects with
+    /// `DestinationAccountUnresolvable` — the guard cannot classify what it
+    /// cannot read, so omission is rejected, not silently skipped (the old
+    /// `None => continue` fail-open).
+    #[test]
+    fn absent_writable_meta_fails_closed() {
+        let vault_pubkey = pk(0xA);
+        let metas = vec![AccountMeta::new(pk(0x20), false)]; // writable, non-vault
+        let policy = mock_policy();
+        let remaining: Vec<AccountInfo> = vec![]; // nothing to resolve against
+        let err = enforce_destination_allowlist(&metas, &remaining, &vault_pubkey, &policy, 0)
+            .expect_err("absent writable meta MUST fail closed");
+        let err_str = format!("{:?}", err);
+        assert!(
+            err_str.contains("DestinationAccountUnresolvable"),
+            "expected DestinationAccountUnresolvable, got: {}",
+            err_str
+        );
+    }
+
+    /// A read-only meta absent from `remaining_accounts` is fine — read-only
+    /// accounts cannot receive value and are skipped before completeness.
+    #[test]
+    fn absent_readonly_meta_is_ignored() {
+        let vault_pubkey = pk(0xA);
+        let metas = vec![AccountMeta::new_readonly(pk(0x20), false)];
+        let policy = mock_policy();
+        let remaining: Vec<AccountInfo> = vec![];
+        let res = enforce_destination_allowlist(&metas, &remaining, &vault_pubkey, &policy, 0);
+        assert!(res.is_ok(), "read-only metas must never trip completeness");
     }
 }

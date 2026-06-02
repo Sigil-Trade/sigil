@@ -6354,7 +6354,7 @@ export type Sigil = {
     {
       "code": 6093,
       "name": "ixMetaCountExceeded",
-      "msg": "Foreign DeFi instruction passed more account metas than the destination-check budget (16) allows; truncate the ix or split into shorter ixs"
+      "msg": "Foreign instruction exceeded the account-meta processing budget; the bundle is rejected rather than partially inspected"
     },
     {
       "code": 6094,
@@ -6410,6 +6410,11 @@ export type Sigil = {
       "code": 6104,
       "name": "errReactivateCosignRequiredForFullCapability",
       "msg": "Reactivate with FULL_CAPABILITY new agent requires cosign"
+    },
+    {
+      "code": 6105,
+      "name": "destinationAccountUnresolvable",
+      "msg": "Writable DeFi account could not be resolved in remaining_accounts — destination set incomplete"
     }
   ],
   "types": [

@@ -14,7 +14,7 @@
  */
 
 // ────────────────────────────────────────────────────────────────
-// Sigil program errors (6000-6104)
+// Sigil program errors (6000-6105)
 // ────────────────────────────────────────────────────────────────
 
 export const SIGIL_ERRORS = {
@@ -123,6 +123,7 @@ export const SIGIL_ERRORS = {
   ErrIntentDigestMismatch: 6102,
   ErrPendingAgentGrantDigestMismatch: 6103,
   ErrReactivateCosignRequiredForFullCapability: 6104,
+  DestinationAccountUnresolvable: 6105,
 } as const;
 
 /**

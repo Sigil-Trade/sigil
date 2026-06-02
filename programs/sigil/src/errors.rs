@@ -541,19 +541,18 @@ pub enum SigilError {
 
     // --- Audit 2026-05-19 (P1 HIGH fixes) ---
     // Appended at END to preserve existing error codes 6000-6092.
-    /// 6093 — H-1 hard-reject (audit 2026-05-19): the foreign DeFi
-    /// instruction passed more account metas than
-    /// `MAX_DESTINATION_CHECK_METAS_PER_IX` (16). Previously the
-    /// destination-check helper silently `take()`-truncated at the bound,
-    /// leaving slots 17+ uninspected. An attacker hiding a hostile
-    /// destination at slot 17+ would bypass the allowlist check while the
-    /// surrounding ix metadata looked benign (Jupiter-v6-max-step shape).
-    ///
-    /// Hard-reject closes the silent-drop. Legitimate flows with >16 metas
-    /// (Jupiter v6 max-step) can be expressed as shorter ixs in the V1
-    /// envelope. Expansion to 32 metas is v1.1 backlog (measured CU cost
-    /// of ~+4K CU per validate pass).
-    #[msg("Foreign DeFi instruction passed more account metas than the destination-check budget (16) allows; truncate the ix or split into shorter ixs")]
+    /// 6093 — account-meta processing budget exceeded (HARD REJECT, not a
+    /// silent truncate — this preserves the H-1 closure where a hostile account
+    /// hidden beyond a truncation point would escape inspection). Two callers
+    /// share this code, each with its own cap:
+    /// - `destination_check::enforce_destination_allowlist` rejects when the DeFi
+    ///   ix carries more than `MAX_DESTINATION_WRITABLE_METAS` (24) WRITABLE
+    ///   metas, or more than `MAX_DESTINATION_CHECK_TOTAL_METAS` (64) total metas
+    ///   (F-Q1a: writable is the security-relevant/CU-relevant set; oversized
+    ///   routes atomically revert, they are never reshaped to fit);
+    /// - `agent_transfer` reuses it for its `MAX_STABLE_FLOOR_WALK_ITERATIONS`
+    ///   (16) floor-walk bound.
+    #[msg("Foreign instruction exceeded the account-meta processing budget; the bundle is rejected rather than partially inspected")]
     IxMetaCountExceeded,
 
     // --- Phase 8 (ownership transfer + freeze hardening) ---
@@ -662,4 +661,27 @@ pub enum SigilError {
     /// pubkey is configured via `policy.cosign_session_pubkey`.
     #[msg("Reactivate with FULL_CAPABILITY new agent requires cosign")]
     ErrReactivateCosignRequiredForFullCapability,
+
+    /// 6105 — F-Q1a destination COMPLETENESS invariant, enforced in
+    /// `validate_and_authorize` via `enforce_destination_allowlist`. A writable,
+    /// non-vault account meta of the sandwiched DeFi instruction (introspected
+    /// from the instructions sysvar) could NOT be resolved in validate's
+    /// `remaining_accounts`, so the guard cannot classify it (token vs non-token)
+    /// or read its owner byte. The SDK `seal()` *satisfier* passes every writable
+    /// account of the DeFi ix into validate's `remaining_accounts`; an unresolved
+    /// writable meta is rejected FAIL-CLOSED rather than silently skipped
+    /// (replacing the prior fail-open `None => continue` branch). This makes the
+    /// validate-side destination set fully visible. NOTE: the per-recipient cap
+    /// and stable-balance floor run in `finalize_session`, which carries its OWN
+    /// `remaining_accounts`; `seal()` feeds finalize the same writable set (so
+    /// those controls are live on the honest seal() path), but finalize does not
+    /// yet INDEPENDENTLY fail-closed on omission — a raw-tx caller could omit a
+    /// meta from finalize and shrink per-recipient/floor attribution. That is
+    /// bounded by the global/per-tx magnitude cap (vault-balance delta, NOT
+    /// omittable) and tracked as F-Q1b/M2 (full-bundle binding). The model is
+    /// WHERE+MAGNITUDE only — a non-allowlisted *resolved* destination is a
+    /// transient route hop (skip), never a hard reject (hard WHERE is decidable
+    /// only on the single-recipient `agent_transfer` path).
+    #[msg("Writable DeFi account could not be resolved in remaining_accounts — destination set incomplete")]
+    DestinationAccountUnresolvable,
 }

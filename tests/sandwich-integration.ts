@@ -607,9 +607,21 @@ describe("sandwich-integration (Phase 6.1)", () => {
         systemProgram: SystemProgram.programId,
         instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
       });
-    if (opts.validateRemainingAccounts) {
-      builder = builder.remainingAccounts(opts.validateRemainingAccounts);
-    }
+    // F-Q1a completeness satisfier (mirrors seal()): the fee-payer agent is
+    // writable in the compiled v0 message, so the on-chain destination check —
+    // which reads writability from the compiled message via
+    // load_instruction_at_checked — sees the agent as a writable meta of every
+    // DeFi ix that references it (all mock-defi ixs list the agent signer). It
+    // must be resolvable in validate's remaining_accounts or completeness
+    // rejects with DestinationAccountUnresolvable. Append it to whatever the
+    // test passes (de-duped on-chain by find()). Drain-ix tests additionally
+    // pass the source + destination token accounts (the ix's declared writables)
+    // in opts.validateRemainingAccounts.
+    const validateRA = [
+      ...(opts.validateRemainingAccounts ?? []),
+      { pubkey: ctx.agent.publicKey, isSigner: false, isWritable: false },
+    ];
+    builder = builder.remainingAccounts(validateRA);
     return builder.instruction();
   }
 
@@ -707,6 +719,10 @@ describe("sandwich-integration (Phase 6.1)", () => {
           },
           { pubkey: ctx.vaultUsdcAta, isSigner: false, isWritable: false },
           { pubkey: vaultUsdcAta2022, isSigner: false, isWritable: false },
+          // F-Q1a completeness: the drain ix's writable destination (the source
+          // ctx.vaultUsdcAta is already above; the agent is auto-appended by
+          // buildValidateIx).
+          { pubkey: drainRecipientAta, isSigner: false, isWritable: false },
         ],
         finalizeRemainingAccounts: [
           {
@@ -994,7 +1010,14 @@ describe("sandwich-integration (Phase 6.1)", () => {
       const sandwichOpts: SandwichOpts = {
         ctx,
         amount: new BN(50_000_000),
-        validateRemainingAccounts: [],
+        // F-Q1a completeness: the drain ix's declared writables (source vault
+        // USDC ATA + destination recipient ATA) must be resolvable in validate's
+        // remaining_accounts (the agent fee-payer is auto-appended by
+        // buildValidateIx).
+        validateRemainingAccounts: [
+          { pubkey: ctx.vaultUsdcAta, isSigner: false, isWritable: false },
+          { pubkey: recipientUsdcAta, isSigner: false, isWritable: false },
+        ],
         // TA-14 walks the DeFi ix's metas + looks up the writable token
         // accounts in finalize.remaining_accounts. The recipient ATA must
         // be passed there so the recipient resolution succeeds.
@@ -1138,6 +1161,93 @@ describe("sandwich-integration (Phase 6.1)", () => {
       } catch (err: any) {
         expectSigilError(err, { name: "ProtocolMismatch" });
       }
+    });
+  });
+
+  // ─── F-Q1a: destination COMPLETENESS + sink-scoped allowlist ──────────────
+  describe("F-Q1a: completeness fail-closed + sink-scoped skip", () => {
+    it("rejects when a writable DeFi destination is withheld from remaining_accounts (DestinationAccountUnresolvable 6105)", async () => {
+      // The drain ix surfaces source + destination as writable metas on-chain.
+      // We pass the source (and the agent is auto-appended) but WITHHOLD the
+      // destination ATA — the guard cannot classify an account it cannot read,
+      // so completeness must reject FAIL-CLOSED rather than silently skip it.
+      const recipient = Keypair.generate();
+      airdropSol(svm, recipient.publicKey, 1 * LAMPORTS_PER_SOL);
+      const ctx = await freshVault();
+      const recipientUsdcAta = createAtaHelper(
+        svm,
+        (owner as any).payer,
+        DEVNET_USDC_MINT,
+        recipient.publicKey,
+      );
+
+      const sandwichOpts: SandwichOpts = {
+        ctx,
+        amount: new BN(50_000_000),
+        // Deliberately omit recipientUsdcAta (the writable destination). Source
+        // is present; agent is auto-appended by buildValidateIx.
+        validateRemainingAccounts: [
+          { pubkey: ctx.vaultUsdcAta, isSigner: false, isWritable: false },
+        ],
+      };
+
+      const validateIx = await buildValidateIx(sandwichOpts);
+      const drainIx = buildMockDefiDrainIx(
+        ctx.vaultUsdcAta,
+        recipientUsdcAta,
+        ctx.agent.publicKey,
+        new BN(10_000_000),
+      );
+      const finalizeIx = await buildFinalizeIx(sandwichOpts);
+
+      try {
+        sendVersionedTx(svm, [validateIx, drainIx, finalizeIx], ctx.agent);
+        expect.fail(
+          "Expected completeness fail-closed on the withheld destination",
+        );
+      } catch (err: any) {
+        expectSigilError(err, { name: "DestinationAccountUnresolvable" });
+      }
+    });
+
+    it("permits a swap whose writable destination is a NON-allowlisted hop, within caps (sink-scoped skip, swap survives)", async () => {
+      // The decidability point: a non-vault token account whose owner is NOT on
+      // the allowlist is a transient route hop (AMM pool / DEX-internal). With
+      // every writable account resolvable (completeness satisfied), the guard
+      // SKIPS the non-allowlisted destination rather than reverting — so the
+      // swap survives. Magnitude is bounded by the global cap (here 500K USDC).
+      const recipient = Keypair.generate(); // NOT in allowed_destinations
+      airdropSol(svm, recipient.publicKey, 1 * LAMPORTS_PER_SOL);
+      const ctx = await freshVault(); // empty allowlist + no per-recipient cap/floor
+      const recipientUsdcAta = createAtaHelper(
+        svm,
+        (owner as any).payer,
+        DEVNET_USDC_MINT,
+        recipient.publicKey,
+      );
+
+      const sandwichOpts: SandwichOpts = {
+        ctx,
+        amount: new BN(50_000_000),
+        // All writable DeFi accounts present (agent auto-appended) → completeness
+        // passes; the non-allowlisted recipient is skipped (sink-scoped).
+        validateRemainingAccounts: [
+          { pubkey: ctx.vaultUsdcAta, isSigner: false, isWritable: false },
+          { pubkey: recipientUsdcAta, isSigner: false, isWritable: false },
+        ],
+      };
+
+      const validateIx = await buildValidateIx(sandwichOpts);
+      const drainIx = buildMockDefiDrainIx(
+        ctx.vaultUsdcAta,
+        recipientUsdcAta,
+        ctx.agent.publicKey,
+        new BN(10_000_000), // 10 USDC, far under the 500K daily cap
+      );
+      const finalizeIx = await buildFinalizeIx(sandwichOpts);
+
+      // Must NOT throw — a non-allowlisted hop is skipped, not rejected.
+      sendVersionedTx(svm, [validateIx, drainIx, finalizeIx], ctx.agent);
     });
   });
 });

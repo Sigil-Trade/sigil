@@ -200,7 +200,7 @@ export const SIGIL_ERROR__ERR_ATA_AUTHORITY_CHANGED = 0x17ca; // 6090
 export const SIGIL_ERROR__ERR_OUTPUT_BELOW_FLOOR = 0x17cb; // 6091
 /** ErrDeclarationInconsistent: R-4 DeclarationConsistency: declared recipient/mint does not match CPI account-meta */
 export const SIGIL_ERROR__ERR_DECLARATION_INCONSISTENT = 0x17cc; // 6092
-/** IxMetaCountExceeded: Foreign DeFi instruction passed more account metas than the destination-check budget (16) allows; truncate the ix or split into shorter ixs */
+/** IxMetaCountExceeded: Foreign instruction exceeded the account-meta processing budget; the bundle is rejected rather than partially inspected */
 export const SIGIL_ERROR__IX_META_COUNT_EXCEEDED = 0x17cd; // 6093
 /** ErrPendingOwnershipExists: An ownership transfer is already pending; cancel it first */
 export const SIGIL_ERROR__ERR_PENDING_OWNERSHIP_EXISTS = 0x17ce; // 6094
@@ -224,6 +224,8 @@ export const SIGIL_ERROR__ERR_INTENT_DIGEST_MISMATCH = 0x17d6; // 6102
 export const SIGIL_ERROR__ERR_PENDING_AGENT_GRANT_DIGEST_MISMATCH = 0x17d7; // 6103
 /** ErrReactivateCosignRequiredForFullCapability: Reactivate with FULL_CAPABILITY new agent requires cosign */
 export const SIGIL_ERROR__ERR_REACTIVATE_COSIGN_REQUIRED_FOR_FULL_CAPABILITY = 0x17d8; // 6104
+/** DestinationAccountUnresolvable: Writable DeFi account could not be resolved in remaining_accounts — destination set incomplete */
+export const SIGIL_ERROR__DESTINATION_ACCOUNT_UNRESOLVABLE = 0x17d9; // 6105
 
 export type SigilError =
   | typeof SIGIL_ERROR__ACCOUNT_WRITABILITY_MISMATCH
@@ -240,6 +242,7 @@ export type SigilError =
   | typeof SIGIL_ERROR__BATCH_INSTRUCTION_BLOCKED
   | typeof SIGIL_ERROR__CONFIDENTIAL_TRANSFER_BLOCKED
   | typeof SIGIL_ERROR__CPI_CALL_NOT_ALLOWED
+  | typeof SIGIL_ERROR__DESTINATION_ACCOUNT_UNRESOLVABLE
   | typeof SIGIL_ERROR__DESTINATION_NOT_ALLOWED
   | typeof SIGIL_ERROR__DEVELOPER_FEE_TOO_HIGH
   | typeof SIGIL_ERROR__ERR_ATA_AUTHORITY_CHANGED
@@ -349,6 +352,7 @@ if (process.env.NODE_ENV !== "production") {
     [SIGIL_ERROR__BATCH_INSTRUCTION_BLOCKED]: `Token-2022 Batch instruction (opcode 255) is blocked outright — wraps inner instructions and bypasses byte-0 blocklist`,
     [SIGIL_ERROR__CONFIDENTIAL_TRANSFER_BLOCKED]: `Token-2022 ConfidentialTransfer not permitted between validate and finalize`,
     [SIGIL_ERROR__CPI_CALL_NOT_ALLOWED]: `Instruction must be top-level (CPI calls not allowed)`,
+    [SIGIL_ERROR__DESTINATION_ACCOUNT_UNRESOLVABLE]: `Writable DeFi account could not be resolved in remaining_accounts — destination set incomplete`,
     [SIGIL_ERROR__DESTINATION_NOT_ALLOWED]: `Destination not in allowed list`,
     [SIGIL_ERROR__DEVELOPER_FEE_TOO_HIGH]: `Developer fee rate exceeds maximum (500 / 1,000,000 = 5 BPS)`,
     [SIGIL_ERROR__ERR_ATA_AUTHORITY_CHANGED]: `R-2 AtaAuthorityPin: vault-owned token account authority changed or account closed/reinitialized mid-sandwich`,
@@ -395,7 +399,7 @@ if (process.env.NODE_ENV !== "production") {
     [SIGIL_ERROR__INVALID_SESSION]: `Invalid session: does not belong to this vault`,
     [SIGIL_ERROR__INVALID_SESSION_EXPIRY]: `Session expiry seconds out of range (5-90)`,
     [SIGIL_ERROR__INVALID_TOKEN_ACCOUNT]: `Token account does not belong to vault or has wrong mint`,
-    [SIGIL_ERROR__IX_META_COUNT_EXCEEDED]: `Foreign DeFi instruction passed more account metas than the destination-check budget (16) allows; truncate the ix or split into shorter ixs`,
+    [SIGIL_ERROR__IX_META_COUNT_EXCEEDED]: `Foreign instruction exceeded the account-meta processing budget; the bundle is rejected rather than partially inspected`,
     [SIGIL_ERROR__LAMPORT_DRAIN_BLOCKED]: `Token-2022 destructive-balance ix (opcodes 38/45/46) not permitted between validate and finalize`,
     [SIGIL_ERROR__MAX_AGENTS_REACHED]: `Maximum agents per vault reached (limit: 10)`,
     [SIGIL_ERROR__MINT_DELTA_CAP_MISCONFIGURED]: `R-1 MintDeltaCap misconfigured — target account missing, mint mismatch, or owner not vault`,
