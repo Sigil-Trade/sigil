@@ -684,4 +684,16 @@ pub enum SigilError {
     /// only on the single-recipient `agent_transfer` path).
     #[msg("Writable DeFi account could not be resolved in remaining_accounts — destination set incomplete")]
     DestinationAccountUnresolvable,
+
+    /// 6106 — F-Q4: a WRITABLE, VAULT-OWNED, Token-2022 token account appeared
+    /// in a DeFi instruction (a swap delivering tokens into a vault ATA), but
+    /// either its mint account was not passed in `remaining_accounts`, or the
+    /// account at that mint pubkey is not owned by the Token-2022 program. The
+    /// `seal()` satisfier feeds the mint of every vault-owned Token-2022 output
+    /// ATA so the forward-secure extension allowlist can run; a missing or decoy
+    /// mint is FAIL-CLOSED here (the swap reverts) rather than allowing a token
+    /// whose extensions (PermanentDelegate / TransferHook / ConfidentialTransfer)
+    /// could later drain or hide the vault's holding out-of-band.
+    #[msg("Vault-owned Token-2022 output ATA's mint is absent from remaining_accounts or not Token-2022-owned — cannot vet extensions")]
+    ErrToken2022OutputMintUnresolvable,
 }

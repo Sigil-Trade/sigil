@@ -6415,6 +6415,11 @@ export type Sigil = {
       "code": 6105,
       "name": "destinationAccountUnresolvable",
       "msg": "Writable DeFi account could not be resolved in remaining_accounts — destination set incomplete"
+    },
+    {
+      "code": 6106,
+      "name": "errToken2022OutputMintUnresolvable",
+      "msg": "Vault-owned Token-2022 output ATA's mint is absent from remaining_accounts or not Token-2022-owned — cannot vet extensions"
     }
   ],
   "types": [

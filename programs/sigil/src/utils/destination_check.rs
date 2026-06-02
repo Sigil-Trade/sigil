@@ -51,7 +51,6 @@
 
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::instruction::AccountMeta;
-use anchor_spl::token::TokenAccount;
 
 use crate::errors::SigilError;
 use crate::state::{PolicyConfig, TOKEN_2022_PROGRAM_ID};
@@ -107,10 +106,13 @@ pub(crate) const MAX_DESTINATION_CHECK_TOTAL_METAS: usize = 64;
 ///
 /// # Token-2022 awareness
 ///
-/// Accepts both `spl_token::ID` and `TOKEN_2022_PROGRAM_ID` owners. The `owner`
-/// field is at the same byte position, so `TokenAccount::try_deserialize` reads
-/// it for either; a non-165-byte / uninitialized buffer fails deserialize and
-/// reverts (fail-closed), never misclassifies.
+/// Accepts both `spl_token::ID` and `TOKEN_2022_PROGRAM_ID` owners. The `mint`
+/// (bytes 0..32) and `owner` (bytes 32..64) fields share the same base layout
+/// for SPL-classic and Token-2022 token accounts, so they are read RAW — NOT
+/// via the 165-exact `Account::unpack`, which would revert on a larger real
+/// Token-2022 ATA (it carries the ImmutableOwner extension). For a vault-owned
+/// Token-2022 account, the acquired token's mint extensions are then vetted by
+/// the forward-secure allowlist (F-Q4).
 pub fn enforce_destination_allowlist<'info>(
     ix_accounts: &[AccountMeta],
     remaining_accounts: &[AccountInfo<'info>],
@@ -166,15 +168,63 @@ pub fn enforce_destination_allowlist<'info>(
             continue;
         }
 
-        // Owner is SPL Token or Token-2022 → safe to deserialize and read owner.
-        let data = info.try_borrow_data()?;
-        let token_acct = TokenAccount::try_deserialize(&mut data.as_ref())?;
-        let recipient_wallet = token_acct.owner;
+        // Owner is SPL Token or Token-2022 → read mint + owner from the raw base
+        // layout (bytes 0..32 mint, 32..64 owner — identical for SPL classic and
+        // Token-2022 token accounts). RAW, not `TokenAccount::try_deserialize`:
+        // the strict SPL unpack requires EXACTLY 165 bytes, but a real Token-2022
+        // ATA is larger (it carries the ImmutableOwner extension), so the strict
+        // unpack would revert the whole tx HERE — making the vault-owned
+        // Token-2022 extension vetting below unreachable for real ATAs.
+        let (token_mint, recipient_wallet) = {
+            let data = info.try_borrow_data()?;
+            require!(data.len() >= 72, SigilError::InvalidTokenAccount);
+            let mut mint_bytes = [0u8; 32];
+            mint_bytes.copy_from_slice(&data[0..32]);
+            let mut owner_bytes = [0u8; 32];
+            owner_bytes.copy_from_slice(&data[32..64]);
+            (
+                Pubkey::new_from_array(mint_bytes),
+                Pubkey::new_from_array(owner_bytes),
+            )
+        };
 
         // Vault's own ATAs carry value IN/OUT during a swap — the OUT direction
         // is the (capped) spend, the IN direction is verified by finalize's
         // balance-delta. Not a destination.
         if recipient_wallet == *vault_pubkey {
+            // F-Q4 — a VAULT-OWNED token account here is a swap delivering
+            // tokens INTO the vault. If it is Token-2022, the acquired token's
+            // mint extensions MUST be vetted: a mint carrying PermanentDelegate
+            // / TransferHook / ConfidentialTransfer could let a third party
+            // drain (or hide) the vault's holding out-of-band, with no future
+            // Sigil transaction. NON-OMITTABLE — it rides on the same
+            // compiled-message writable meta + completeness that already forced
+            // this token account into `remaining_accounts`.
+            if *owner_program == TOKEN_2022_PROGRAM_ID {
+                let mint_key = token_mint;
+                let mint_info = match remaining_accounts.iter().find(|ai| ai.key == &mint_key)
+                {
+                    Some(info) => info,
+                    None => {
+                        return Err(error!(SigilError::ErrToken2022OutputMintUnresolvable))
+                    }
+                };
+                // Fake-mint guard: a real Token-2022 token account's mint is
+                // ALWAYS owned by the Token-2022 program. A System-owned decoy
+                // at the mint pubkey would make the allowlist walk a no-op and
+                // slip a dangerous mint through — fail closed instead.
+                require!(
+                    *mint_info.owner == TOKEN_2022_PROGRAM_ID,
+                    SigilError::ErrToken2022OutputMintUnresolvable
+                );
+                // Forward-secure allowlist: rejects PermanentDelegate,
+                // TransferHook, ConfidentialTransfer, TransferFee,
+                // DefaultAccountState, and any unknown/future extension
+                // (ErrToken2022ExtensionForbidden 6079).
+                crate::utils::token2022_extension::enforce_token2022_extension_allowlist(
+                    mint_info,
+                )?;
+            }
             continue;
         }
 

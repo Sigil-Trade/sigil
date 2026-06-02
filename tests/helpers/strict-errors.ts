@@ -140,6 +140,7 @@ export const SIGIL_ERRORS = {
   ErrPendingAgentGrantDigestMismatch: 6103,
   ErrReactivateCosignRequiredForFullCapability: 6104,
   DestinationAccountUnresolvable: 6105,
+  ErrToken2022OutputMintUnresolvable: 6106,
 } as const;
 
 export type SigilErrorName = keyof typeof SIGIL_ERRORS;

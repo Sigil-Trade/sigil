@@ -2,37 +2,45 @@
 //! ALLOWLIST.
 //!
 //! Walks the TLV blob trailing the base Mint layout in a Token-2022 mint
-//! account. Allowlists exactly 3 extension type IDs (per HARDENED prompt
-//! §6 lines 695-704):
+//! account. Allowlists exactly the custody-safe, measurement-inert extension
+//! type IDs (F-Q4 accept-set):
 //!   - MemoTransfer (id 8)
-//!   - NonTransferable (id 9)
 //!   - MetadataPointer (id 18)
+//!   - TokenMetadata (id 19)
+//!   - GroupPointer (id 20), TokenGroup (id 21),
+//!     GroupMemberPointer (id 22), TokenGroupMember (id 23)
 //!
-//! Any other extension — including future-added type IDs we don't yet know
-//! about — REJECTS with `ErrToken2022ExtensionForbidden` (6079). The
-//! forward-secure default is REJECT (not skip), so a future extension that
-//! introduces hostile semantics cannot slip past V1 deposits.
+//! NonTransferable (id 9) is NOT allowlisted — a vault that acquires such a
+//! token can never move it out (tier-1 lockout / trapped capital). Any other
+//! extension — including the DRAIN/FREEZE/MEASUREMENT-BREAK ones
+//! (PermanentDelegate, TransferHook, ConfidentialTransfer, TransferFee,
+//! DefaultAccountState, …) and future-added type IDs we don't yet know about —
+//! REJECTS with `ErrToken2022ExtensionForbidden` (6079). The forward-secure
+//! default is REJECT (not skip), so a future extension with hostile semantics
+//! cannot slip past.
 //!
 //! ## TLV layout
 //!
-//! Token-2022 mints lay out their data as:
+//! A Token-2022 mint WITH extensions lays out its data as (authoritative:
+//! spl-token-2022 `type_and_tlv_indices`):
 //!
 //!   ```text
 //!   bytes 0..82       base Mint (legacy SPL layout)
-//!   byte  82          AccountType discriminator (1 = Mint)
-//!   bytes 83..        TLV: [u16 LE type, u16 LE len, bytes data]+
+//!   bytes 82..165     zero padding (out to Account::LEN, so a mint-with-
+//!                     extensions is distinguishable from a 165-byte Account)
+//!   byte  165         AccountType discriminator (1 = Mint, 2 = Account)
+//!   bytes 166..       TLV: [u16 LE type, u16 LE len, bytes data]+
 //!   ```
 //!
-//! When the mint has no extensions, the account size is exactly 82 bytes
-//! (the legacy Mint size) — the `AccountType` byte is omitted. So we
-//! defensively skip the TLV walk for any account whose data length is
-//! `<= 82` bytes.
+//! A bare mint with NO extensions is exactly 82 bytes — no padding, no
+//! AccountType byte — so we skip the TLV walk for any account whose data length
+//! is `<= 82`. A length in `83..=165` is a malformed mint, rejected fail-closed.
 //!
-//! For accounts with `> 82` bytes, we assert byte 82 == 1 (Mint type) then
-//! walk the TLV starting at byte 83. Each entry consumes 4 header bytes
-//! (type + len, both u16 LE). The walk stops when the cursor reaches end
-//! of buffer OR encounters `type == 0` (Uninitialized — Token-2022's
-//! standard "no more extensions" sentinel).
+//! For accounts with `> 165` bytes, we assert the [82..165] padding is zero and
+//! byte 165 == 1 (Mint type), then walk the TLV from byte 166. Each entry
+//! consumes 4 header bytes (type + len, both u16 LE). The walk stops at end of
+//! buffer OR `type == 0` (Uninitialized — Token-2022's "no more extensions"
+//! sentinel).
 //!
 //! ## Defensive notes
 //!
@@ -52,39 +60,74 @@ use anchor_lang::prelude::*;
 use crate::errors::SigilError;
 use crate::state::TOKEN_2022_PROGRAM_ID;
 
-/// Token-2022 Mint AccountType discriminator (byte 82 of a Token-2022 mint).
-/// Value 1. Value 0 = Uninitialized / no extensions present.
+/// Token-2022 Mint AccountType discriminator. For a mint WITH extensions this
+/// byte lives at index 165 (Account::LEN), NOT 82 — a mint-with-extensions is
+/// zero-padded from its 82-byte base out to 165 so it cannot be confused with a
+/// 165-byte token Account. Value 1 = Mint, 2 = Account, 0 = Uninitialized.
 const TOKEN_2022_ACCOUNT_TYPE_MINT: u8 = 1;
 
-/// Token-2022 base Mint layout size, BEFORE the AccountType byte.
-/// Identical to the legacy SPL Token Mint layout: 82 bytes.
+/// Token-2022 base Mint layout size (a bare mint, no extensions): 82 bytes,
+/// identical to the legacy SPL Token Mint.
 const TOKEN_2022_MINT_BASE_LEN: usize = 82;
+
+/// Index of the AccountType byte in a Token-2022 mint-WITH-extensions buffer.
+/// Authoritative (spl-token-2022 `type_and_tlv_indices`):
+/// `account_type_index = BASE_ACCOUNT_LENGTH = Account::LEN = 165`; the TLV
+/// blob begins at 166; bytes [82..165] are zero padding the program enforces.
+const TOKEN_2022_ACCOUNT_TYPE_INDEX: usize = 165;
 
 /// Token-2022 extension type ID: Uninitialized (sentinel for "no more
 /// extensions"). Walker treats this as end-of-list.
 const EXT_UNINITIALIZED: u16 = 0;
 
-// ─── Allowlist (per HARDENED prompt §6 lines 695-704) ────────────────────────
-// Exactly 3 extension type IDs are accepted. Anything else (including
-// future-added IDs) REJECTS.
+// ─── Allowlist (forward-secure: accept known custody-safe, reject all else) ──
+// Accept ONLY custody-safe, measurement-inert mint extensions. Everything else
+// — including unknown/future IDs and all DRAIN / FREEZE / MEASUREMENT-BREAK
+// extensions — REJECTS (fail-closed, zero monitoring burden).
+//
+// F-Q4 (2026-06-02) accept-set revision:
+//  - REMOVED NonTransferable(9): a vault that ACQUIRES it can never move the
+//    token out = trapped capital = tier-1 lockout (permanent loss of control,
+//    ranked equal to theft). A spending vault has no use for an unspendable
+//    token, so admitting it only creates a brick vector.
+//  - ADDED the inert metadata/group extensions (19-23): they carry no
+//    transfer/freeze/amount semantics; rejecting them would reject legitimate
+//    well-formed metadata-bearing Token-2022 tokens (MetadataPointer +
+//    TokenMetadata is the common pairing) for no custody reason.
 
-/// Extension type ID for MemoTransfer. Source:
-/// `spl_token_2022::extension::ExtensionType::MemoTransfer = 8`.
+/// MemoTransfer = 8 (benign: requires a memo on transfer; no custody effect).
 const EXT_MEMO_TRANSFER: u16 = 8;
 
-/// Extension type ID for NonTransferable. Source:
-/// `spl_token_2022::extension::ExtensionType::NonTransferable = 9`.
-const EXT_NON_TRANSFERABLE: u16 = 9;
-
-/// Extension type ID for MetadataPointer. Source:
-/// `spl_token_2022::extension::ExtensionType::MetadataPointer = 18`.
+/// MetadataPointer = 18 (benign: points to the metadata account).
 const EXT_METADATA_POINTER: u16 = 18;
 
-/// Returns true iff the extension type ID is on the V1 allowlist.
+/// TokenMetadata = 19 (benign: inline name/symbol/URI; the update authority can
+/// rename but cannot move/freeze/rescale the vault's holding).
+const EXT_TOKEN_METADATA: u16 = 19;
+
+/// GroupPointer = 20 (benign: points to a token-group config account).
+const EXT_GROUP_POINTER: u16 = 20;
+
+/// TokenGroup = 21 (benign: inline group/collection root data).
+const EXT_TOKEN_GROUP: u16 = 21;
+
+/// GroupMemberPointer = 22 (benign: points to a group-member config account).
+const EXT_GROUP_MEMBER_POINTER: u16 = 22;
+
+/// TokenGroupMember = 23 (benign: inline group-membership data).
+const EXT_TOKEN_GROUP_MEMBER: u16 = 23;
+
+/// Returns true iff the extension type ID is on the custody-safe allowlist.
 fn is_allowlisted_extension(ext_type: u16) -> bool {
     matches!(
         ext_type,
-        EXT_MEMO_TRANSFER | EXT_NON_TRANSFERABLE | EXT_METADATA_POINTER
+        EXT_MEMO_TRANSFER
+            | EXT_METADATA_POINTER
+            | EXT_TOKEN_METADATA
+            | EXT_GROUP_POINTER
+            | EXT_TOKEN_GROUP
+            | EXT_GROUP_MEMBER_POINTER
+            | EXT_TOKEN_GROUP_MEMBER
     )
 }
 
@@ -96,8 +139,9 @@ fn is_allowlisted_extension(ext_type: u16) -> bool {
 ///     no-op (SPL-classic mints have no extension surface).
 ///   - If `mint_info.data.len() <= TOKEN_2022_MINT_BASE_LEN` (82), the
 ///     mint has no extensions — no-op.
-///   - Otherwise, asserts byte 82 == 1 (Mint AccountType) then walks
-///     the TLV blob from byte 83 onward.
+///   - Otherwise the mint is zero-padded to Account::LEN (165): asserts the
+///     [82..165] padding is zero and byte 165 == 1 (Mint AccountType), then
+///     walks the TLV blob from byte 166 onward.
 ///   - Each non-Uninitialized extension type ID is checked against the
 ///     allowlist; first mismatch returns `ErrToken2022ExtensionForbidden`.
 ///   - A malformed TLV (length-overflows-buffer) returns the same
@@ -111,22 +155,40 @@ pub fn enforce_token2022_extension_allowlist(mint_info: &AccountInfo<'_>) -> Res
     let data = mint_info.try_borrow_data()?;
     let data_len = data.len();
 
-    // 2) No extensions present (mint is exactly the base size).
+    // 2) No extensions present (a bare Token-2022 mint is exactly the 82-byte
+    //    base, identical to a legacy SPL mint).
     if data_len <= TOKEN_2022_MINT_BASE_LEN {
         return Ok(());
     }
 
-    // 3) AccountType byte must be Mint (1). Any other value is malformed
-    //    or a non-Mint account — reject.
+    // 3) A Token-2022 mint WITH extensions is zero-padded out to Account::LEN
+    //    (165) — so it can't be confused with a 165-byte token Account — then
+    //    carries the AccountType byte at index 165 and the TLV blob from 166.
+    //    Anything 83..=165 bytes is a malformed mint → fail closed.
     require!(
-        data[TOKEN_2022_MINT_BASE_LEN] == TOKEN_2022_ACCOUNT_TYPE_MINT,
+        data_len > TOKEN_2022_ACCOUNT_TYPE_INDEX,
         SigilError::ErrToken2022ExtensionForbidden
     );
 
-    // 4) Walk the TLV. Cursor starts immediately after the AccountType
-    //    byte (i.e. at index 83). Each entry consumes 4 header bytes
-    //    (2 for type, 2 for len) plus `len` data bytes.
-    let mut cursor = TOKEN_2022_MINT_BASE_LEN
+    // 3a) The [82..165] region MUST be zero padding (program-enforced on every
+    //     write). A non-zero byte there is malformed / non-standard → reject.
+    require!(
+        data[TOKEN_2022_MINT_BASE_LEN..TOKEN_2022_ACCOUNT_TYPE_INDEX]
+            .iter()
+            .all(|b| *b == 0),
+        SigilError::ErrToken2022ExtensionForbidden
+    );
+
+    // 3b) AccountType byte (index 165) must be Mint (1). Any other value
+    //     (e.g. 2 = Account) is the wrong account kind — reject.
+    require!(
+        data[TOKEN_2022_ACCOUNT_TYPE_INDEX] == TOKEN_2022_ACCOUNT_TYPE_MINT,
+        SigilError::ErrToken2022ExtensionForbidden
+    );
+
+    // 4) Walk the TLV from index 166 (immediately after the AccountType byte).
+    //    Each entry consumes 4 header bytes (2 type, 2 len) plus `len` data.
+    let mut cursor = TOKEN_2022_ACCOUNT_TYPE_INDEX
         .checked_add(1)
         .ok_or(error!(SigilError::Overflow))?;
 
@@ -188,10 +250,19 @@ mod tests {
         if data.len() <= TOKEN_2022_MINT_BASE_LEN {
             return Ok(());
         }
-        if data[TOKEN_2022_MINT_BASE_LEN] != TOKEN_2022_ACCOUNT_TYPE_MINT {
+        if data.len() <= TOKEN_2022_ACCOUNT_TYPE_INDEX {
+            return Err(6079); // 83..=165 bytes = malformed mint
+        }
+        if data[TOKEN_2022_MINT_BASE_LEN..TOKEN_2022_ACCOUNT_TYPE_INDEX]
+            .iter()
+            .any(|b| *b != 0)
+        {
+            return Err(6079); // [82..165] padding must be zero
+        }
+        if data[TOKEN_2022_ACCOUNT_TYPE_INDEX] != TOKEN_2022_ACCOUNT_TYPE_MINT {
             return Err(6079);
         }
-        let mut cursor = TOKEN_2022_MINT_BASE_LEN + 1;
+        let mut cursor = TOKEN_2022_ACCOUNT_TYPE_INDEX + 1;
         let mut iter = 0;
         while cursor + 4 <= data.len() {
             if iter >= 64 {
@@ -215,12 +286,12 @@ mod tests {
         Ok(())
     }
 
-    /// Build a minimal mock Token-2022 mint buffer: 82 zero bytes (base
-    /// layout doesn't matter for the TLV walker), one AccountType byte,
-    /// then a series of (type, len, payload) entries.
+    /// Build a mock Token-2022 mint buffer in the REAL layout: 82-byte base
+    /// zero-padded out to Account::LEN (165), the AccountType byte at 165, then
+    /// a series of (type, len, payload) TLV entries from 166.
     fn mock_mint(extensions: &[(u16, &[u8])]) -> Vec<u8> {
-        let mut buf = vec![0u8; TOKEN_2022_MINT_BASE_LEN];
-        buf.push(TOKEN_2022_ACCOUNT_TYPE_MINT);
+        let mut buf = vec![0u8; TOKEN_2022_ACCOUNT_TYPE_INDEX]; // [0..165] base + zero padding
+        buf.push(TOKEN_2022_ACCOUNT_TYPE_MINT); // [165] AccountType = Mint
         for (ext_type, payload) in extensions {
             buf.extend_from_slice(&ext_type.to_le_bytes());
             let len: u16 = payload.len() as u16;
@@ -244,10 +315,12 @@ mod tests {
     }
 
     #[test]
-    fn non_transferable_only_accepts() {
-        // NonTransferable is a 0-byte extension (no payload).
-        let buf = mock_mint(&[(EXT_NON_TRANSFERABLE, &[])]);
-        assert!(walk_mint_tlv(&buf).is_ok());
+    fn non_transferable_rejects() {
+        // F-Q4: NonTransferable (ID 9) is REMOVED from the allowlist — a vault
+        // that acquires such a token can never move it out (tier-1 lockout /
+        // trapped capital), so it must now REJECT. 0-byte extension (no payload).
+        let buf = mock_mint(&[(9, &[])]);
+        assert_eq!(walk_mint_tlv(&buf), Err(6079));
     }
 
     #[test]
@@ -257,13 +330,33 @@ mod tests {
     }
 
     #[test]
-    fn all_three_allowlist_extensions_accept() {
+    fn allowlisted_extensions_accept() {
+        // F-Q4 accept-set core: MemoTransfer(8) + MetadataPointer(18).
         let buf = mock_mint(&[
             (EXT_MEMO_TRANSFER, &[1u8]),
-            (EXT_NON_TRANSFERABLE, &[]),
             (EXT_METADATA_POINTER, &[0u8; 64]),
         ]);
         assert!(walk_mint_tlv(&buf).is_ok());
+    }
+
+    #[test]
+    fn metadata_and_group_extensions_accept() {
+        // F-Q4: the inert metadata/group extensions (19-23) are custody-safe
+        // (no transfer/freeze/amount semantics) and must ACCEPT, so legitimate
+        // metadata-bearing Token-2022 tokens are not rejected.
+        for ext_id in [
+            EXT_TOKEN_METADATA,
+            EXT_GROUP_POINTER,
+            EXT_TOKEN_GROUP,
+            EXT_GROUP_MEMBER_POINTER,
+            EXT_TOKEN_GROUP_MEMBER,
+        ] {
+            let buf = mock_mint(&[(ext_id, &[0u8; 16])]);
+            assert!(
+                walk_mint_tlv(&buf).is_ok(),
+                "extension {ext_id} should be allowlisted",
+            );
+        }
     }
 
     #[test]
@@ -336,8 +429,8 @@ mod tests {
     #[test]
     fn malformed_length_overflow_rejects() {
         // Claim length = 65000 but actual buffer is shorter — must REJECT.
-        let mut buf = vec![0u8; TOKEN_2022_MINT_BASE_LEN];
-        buf.push(TOKEN_2022_ACCOUNT_TYPE_MINT);
+        let mut buf = vec![0u8; TOKEN_2022_ACCOUNT_TYPE_INDEX]; // base + zero padding
+        buf.push(TOKEN_2022_ACCOUNT_TYPE_MINT); // AccountType @ 165
         buf.extend_from_slice(&EXT_METADATA_POINTER.to_le_bytes());
         buf.extend_from_slice(&(65000u16).to_le_bytes()); // huge length
         buf.extend_from_slice(&[0u8; 32]); // far less than 65000
@@ -347,8 +440,8 @@ mod tests {
     #[test]
     fn account_type_non_mint_rejects() {
         // AccountType byte = 2 (Account) instead of 1 (Mint) — reject.
-        let mut buf = vec![0u8; TOKEN_2022_MINT_BASE_LEN];
-        buf.push(2);
+        let mut buf = vec![0u8; TOKEN_2022_ACCOUNT_TYPE_INDEX]; // base + zero padding
+        buf.push(2); // AccountType @ 165 = Account (not Mint) → reject
         buf.extend_from_slice(&EXT_METADATA_POINTER.to_le_bytes());
         buf.extend_from_slice(&0u16.to_le_bytes());
         assert_eq!(walk_mint_tlv(&buf), Err(6079));

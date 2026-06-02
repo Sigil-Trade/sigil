@@ -2,8 +2,8 @@
 // Regenerate via `pnpm -C sdk/kit codegen:errors` after IDL changes.
 //
 // Source: agent-middleware/target/idl/sigil.json
-// Generated: 2026-06-02T17:23:20.653Z
-// Codes: 106 (min 6000, max 6105)
+// Generated: 2026-06-02T18:16:15.169Z
+// Codes: 107 (min 6000, max 6106)
 
 /** Pure IDL projection of every Anchor error variant. */
 export interface IdlErrorEntry {
@@ -127,13 +127,14 @@ export const IDL_ERROR_MAP: Readonly<Record<number, IdlErrorEntry>> =
     6103: { code: 6103, name: "ErrPendingAgentGrantDigestMismatch", msg: "PendingAgentGrant digest mismatch between queue and apply" },
     6104: { code: 6104, name: "ErrReactivateCosignRequiredForFullCapability", msg: "Reactivate with FULL_CAPABILITY new agent requires cosign" },
     6105: { code: 6105, name: "DestinationAccountUnresolvable", msg: "Writable DeFi account could not be resolved in remaining_accounts — destination set incomplete" },
+    6106: { code: 6106, name: "ErrToken2022OutputMintUnresolvable", msg: "Vault-owned Token-2022 output ATA's mint is absent from remaining_accounts or not Token-2022-owned — cannot vet extensions" },
   });
 
 /** Total error-code count derived from the IDL at generation time. */
-export const IDL_ERROR_COUNT = 106;
+export const IDL_ERROR_COUNT = 107;
 
 /** Lowest IDL error code. */
 export const IDL_ERROR_MIN = 6000;
 
 /** Highest IDL error code. */
-export const IDL_ERROR_MAX = 6105;
+export const IDL_ERROR_MAX = 6106;
