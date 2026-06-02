@@ -320,6 +320,9 @@ pub fn handler(
     // --- Stablecoin-only spending path ---
     let mut output_mint = Pubkey::default();
     let mut stablecoin_balance_before: u64 = 0;
+    // F-Q8: pin the exact stablecoin ATA measured at validate so finalize
+    // cannot be handed a different vault-owned stablecoin ATA.
+    let mut output_stablecoin_account_key = Pubkey::default();
     let (protocol_fee, developer_fee) = if is_spending {
         if is_stablecoin_input {
             // Snapshot stablecoin balance BEFORE fees or spending.
@@ -358,6 +361,8 @@ pub fn handler(
 
             output_mint = stablecoin_acct.mint;
             stablecoin_balance_before = stablecoin_acct.amount;
+            // F-Q8: pin this exact ATA's pubkey; finalize asserts it matches.
+            output_stablecoin_account_key = stablecoin_acct.key();
 
             // No fees here — cap check deferred to finalize_session when stablecoin delta is known
             (0u64, 0u64)
@@ -1090,6 +1095,8 @@ pub fn handler(
     session.delegated = is_spending;
     session.output_mint = output_mint;
     session.stablecoin_balance_before = stablecoin_balance_before;
+    // F-Q8: pinned output ATA (default for stablecoin-input path).
+    session.output_stablecoin_account = output_stablecoin_account_key;
     session.bump = ctx.bumps.session;
     // Initialize snapshot fields to zero (default for non-delta sessions).
     // Phase 6 grow: capacity 4 → 8 to match MAX_POST_ASSERTION_ENTRIES.

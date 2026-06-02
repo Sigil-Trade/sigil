@@ -114,6 +114,20 @@ pub struct SessionAuthority {
     /// not migrated (the program close+init cycle naturally retires them at
     /// the next finalize), so this is safe under a V2 program ID redeploy.
     pub nonce: u64,
+
+    /// F-Q8 — the vault stablecoin ATA pinned at validate for the
+    /// non-stablecoin-input outcome check. finalize_session asserts the
+    /// account it measures has THIS exact pubkey, so a compromised agent
+    /// cannot substitute a different vault-owned stablecoin ATA (whose
+    /// owner+mint also pass) to spoof the `current > before` return check.
+    /// Set to output_stablecoin_account.key() on the non-stablecoin-input
+    /// spending path; Pubkey::default() otherwise (stablecoin-input uses
+    /// vault_token_account, already pinned via delegation_token_account).
+    ///
+    /// **APPEND-ONLY**: new field at the END of SessionAuthority. SIZE grows
+    /// by 32 bytes (515 → 547). Sessions are init/close per cycle, so no
+    /// migration is required.
+    pub output_stablecoin_account: Pubkey,
 }
 
 impl SessionAuthority {
@@ -141,8 +155,12 @@ impl SessionAuthority {
     /// fields by name continue to work; only the per-account rent grows.
     /// Sessions are init/close per validate-finalize cycle, so no migration
     /// is required.
+    ///
+    /// F-Q8 (2026-06-02): appends `output_stablecoin_account: Pubkey` (+32),
+    /// SIZE 515 → 547. Append-shape (existing offsets preserved); ephemeral
+    /// session ⇒ no migration.
     pub const SIZE: usize =
-        8 + 32 + 32 + 1 + 8 + 32 + 32 + 8 + 1 + 32 + 8 + 8 + 32 + 8 + 1 + 256 + 8 + 8;
+        8 + 32 + 32 + 1 + 8 + 32 + 32 + 8 + 1 + 32 + 8 + 8 + 32 + 8 + 1 + 256 + 8 + 8 + 32;
 
     /// Returns true when wall-clock has passed the session's expiry timestamp.
     pub fn is_expired(&self, current_unix_ts: i64) -> bool {
@@ -201,6 +219,7 @@ mod f5h1_tests {
             assertion_snapshots: [[0u8; 32]; 8],
             snapshot_lens: [0u8; 8],
             nonce: 0,
+            output_stablecoin_account: Pubkey::default(),
         }
     }
 

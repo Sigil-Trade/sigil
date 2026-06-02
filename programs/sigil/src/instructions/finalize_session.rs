@@ -150,6 +150,9 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
     let session_developer_fee = session.developer_fee;
     let session_output_mint = session.output_mint;
     let session_balance_before = session.stablecoin_balance_before;
+    // F-Q8: the validate-pinned output stablecoin ATA (Pubkey::default() on
+    // the stablecoin-input path, which uses vault_token_account instead).
+    let session_output_stablecoin_account = session.output_stablecoin_account;
     let session_delegation_token_account = session.delegation_token_account;
     let session_authorized_amount = session.authorized_amount;
     let session_authorized_protocol = session.authorized_protocol;
@@ -274,6 +277,16 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
                 .output_stablecoin_account
                 .as_ref()
                 .ok_or(error!(SigilError::InvalidTokenAccount))?;
+            // F-Q8: the measured stablecoin ATA MUST be the exact account
+            // pinned at validate. Without this a compromised agent could pass
+            // a DIFFERENT vault-owned stablecoin ATA (whose owner+mint also
+            // pass the checks below) to spoof the `current > before` return
+            // check while the real proceeds went elsewhere.
+            require_keys_eq!(
+                stablecoin_account.key(),
+                session_output_stablecoin_account,
+                SigilError::InvalidTokenAccount
+            );
             let info = stablecoin_account.to_account_info();
             let data = info.try_borrow_data()?;
             require!(data.len() >= 72, SigilError::InvalidTokenAccount);

@@ -169,6 +169,14 @@ export type SessionAuthority = {
    * the next finalize), so this is safe under a V2 program ID redeploy.
    */
   nonce: bigint;
+  /**
+   * F-Q8 — the vault stablecoin ATA pinned at validate for the
+   * non-stablecoin-input outcome check. finalize_session asserts the
+   * measured account == this pubkey, blocking substitution of a
+   * different vault-owned stablecoin ATA. Pubkey::default() on the
+   * stablecoin-input path. Appended at END (SIZE 515 → 547).
+   */
+  outputStablecoinAccount: Address;
 };
 
 export type SessionAuthorityArgs = {
@@ -284,6 +292,14 @@ export type SessionAuthorityArgs = {
    * the next finalize), so this is safe under a V2 program ID redeploy.
    */
   nonce: number | bigint;
+  /**
+   * F-Q8 — the vault stablecoin ATA pinned at validate for the
+   * non-stablecoin-input outcome check. finalize_session asserts the
+   * measured account == this pubkey, blocking substitution of a
+   * different vault-owned stablecoin ATA. Pubkey::default() on the
+   * stablecoin-input path. Appended at END (SIZE 515 → 547).
+   */
+  outputStablecoinAccount: Address;
 };
 
 /** Gets the encoder for {@link SessionAuthorityArgs} account data. */
@@ -311,6 +327,7 @@ export function getSessionAuthorityEncoder(): FixedSizeEncoder<SessionAuthorityA
       ],
       ["snapshotLens", fixEncoderSize(getBytesEncoder(), 8)],
       ["nonce", getU64Encoder()],
+      ["outputStablecoinAccount", getAddressEncoder()],
     ]),
     (value) => ({ ...value, discriminator: SESSION_AUTHORITY_DISCRIMINATOR }),
   );
@@ -340,6 +357,7 @@ export function getSessionAuthorityDecoder(): FixedSizeDecoder<SessionAuthority>
     ],
     ["snapshotLens", fixDecoderSize(getBytesDecoder(), 8)],
     ["nonce", getU64Decoder()],
+    ["outputStablecoinAccount", getAddressDecoder()],
   ]);
 }
 
@@ -418,5 +436,5 @@ export async function fetchAllMaybeSessionAuthority(
 }
 
 export function getSessionAuthoritySize(): number {
-  return 515;
+  return 547;
 }

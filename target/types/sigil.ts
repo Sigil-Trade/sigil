@@ -9734,6 +9734,17 @@ export type Sigil = {
               "the next finalize), so this is safe under a V2 program ID redeploy."
             ],
             "type": "u64"
+          },
+          {
+            "name": "outputStablecoinAccount",
+            "docs": [
+              "F-Q8 — the vault stablecoin ATA pinned at validate for the",
+              "non-stablecoin-input outcome check. finalize_session asserts the",
+              "measured account == this pubkey, blocking substitution of a",
+              "different vault-owned stablecoin ATA. Pubkey::default() on the",
+              "stablecoin-input path. Appended at END (SIZE 515 → 547)."
+            ],
+            "type": "pubkey"
           }
         ]
       }
