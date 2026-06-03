@@ -145,7 +145,7 @@ pub fn handler(ctx: Context<AcceptOwnershipTransferMultisig>) -> Result<()> {
     //
     //    `AccountInfo::owner` returns `&Pubkey`; comparison is by reference to
     //    the program-pinned constant. We reuse `ErrInvalidOwnershipTarget`
-    //    (6107) — the same code initiate emits when the new_owner pubkey is
+    //    — the same error initiate emits when the new_owner pubkey is
     //    in the program/sysvar blocklist — because the semantics are
     //    identical: "the supplied target is not a valid ownership recipient."
     let multisig_info = ctx.accounts.multisig_pda.to_account_info();

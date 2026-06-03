@@ -417,7 +417,7 @@ export interface LiveLikePolicy {
   agentSetHash?: Buffer;
   /** D-5 (audit 2026-05-19, F-RP3-1): bound at canonical digest position 22. */
   cosignSessionPubkey?: PublicKey;
-  /** F-Q6 (2026-06-02): operator_grant_delay_seconds, bound at canonical digest position 23. */
+  /** F-Q6 (2026-06-02): operator_grant_delay_seconds, the final canonical digest field (after cosign_session_pubkey). */
   operatorGrantDelaySeconds?: BN | bigint | number;
 }
 
@@ -465,8 +465,8 @@ export interface QueueOverride {
   /**
    * F-Q6 (2026-06-02): operator_grant_delay_seconds override. null =
    * pass-through from live policy; any value sets the configured delay
-   * (the on-chain queue merges via `unwrap_or(live)`). Bound at digest
-   * position 23.
+   * (the on-chain queue merges via `unwrap_or(live)`). The final
+   * canonical digest field (after cosign_session_pubkey).
    */
   operatorGrantDelaySeconds?: BN | bigint | number | null;
 }

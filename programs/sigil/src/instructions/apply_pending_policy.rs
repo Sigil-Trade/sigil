@@ -290,6 +290,14 @@ pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
     // canonical position 22, so a tampered pending PDA that altered it between
     // queue and apply produces a digest mismatch.
     if let Some(delay) = pending.operator_grant_delay_seconds {
+        // Defense-in-depth (mirrors the timelock_duration / operating_hours
+        // re-validation above): re-assert the 48h bound at apply so a tampered
+        // pending PDA cannot install an out-of-range delay even if the TA-19
+        // digest binding were ever weakened. Primary gate: queue_policy_update.
+        require!(
+            delay <= crate::utils::operator_grant::MAX_OPERATOR_GRANT_DELAY,
+            SigilError::ErrOperatorGrantDelayTooLong
+        );
         policy.operator_grant_delay_seconds = delay;
     }
     // G6 (audit 2026-05-18 cosign opt-in): apply optional cosign_required

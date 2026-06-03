@@ -18,10 +18,12 @@ use crate::utils::audit_log::build_audit_entry;
 ///
 /// Without `cancel_agent_grant`, a phished owner key can:
 ///   1. Queue an OPERATOR-class grant via `queue_agent_grant(attacker, OPERATOR)`.
-///   2. Wait the 48h timelock (`PendingAgentGrant::DEFAULT_MIN_DELAY`).
+///   2. Wait the tier-derived effective delay stored in
+///      `PendingAgentGrant.min_delay_seconds` (>=600s for a single-key vault,
+///      else the configured `operator_grant_delay_seconds`; F-Q6).
 ///   3. Apply via `apply_agent_grant`, installing OPERATOR on the attacker.
 ///
-/// The 48h window exists so the owner can detect the queue (off-chain
+/// That delay window exists so the owner can detect the queue (off-chain
 /// monitor alerts on `AgentGrantQueued`) and react. The ONLY recovery
 /// action is this cancel — without it, the owner's recourse is
 /// `freeze_vault` (which is heavier-handed: it freezes all agent

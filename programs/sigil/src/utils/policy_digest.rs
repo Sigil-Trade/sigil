@@ -170,7 +170,7 @@ pub struct PolicyPreviewFields<'a> {
     /// F-Q6 (2026-06-02): owner-configured delay (in seconds) before an
     /// OPERATOR capability grant takes effect. Default 0. This is an
     /// owner-set security control gating OPERATOR seating, so it is bound by
-    /// TA-19 at canonical position 22 — a tampered SDK or pending-PDA mutation
+    /// TA-19 as the final canonical digest field — a tampered SDK or pending-PDA mutation
     /// cannot silently lower it between owner approval and on-chain landing
     /// (same class as `cosign_required`, `stable_balance_floor`,
     /// `cosign_session_pubkey`). The single-key forced floor
@@ -381,7 +381,7 @@ pub fn compute_policy_preview_digest(fields: &PolicyPreviewFields<'_>) -> [u8; 3
     // tampered SDK cannot silently flip the pubkey between owner approval
     // and on-chain landing (the digest mismatch closes that gap).
     buf.extend_from_slice(fields.cosign_session_pubkey.as_ref());
-    // 22. operator_grant_delay_seconds: u64 LE — F-Q6 (2026-06-02). Owner-
+    // (final) operator_grant_delay_seconds: u64 LE — F-Q6 (2026-06-02). Owner-
     // configured OPERATOR-grant delay; bound here so a tampered SDK or
     // pending-PDA mutation cannot silently lower it between owner approval
     // and on-chain landing.
