@@ -97,7 +97,7 @@ const AGENT_VAULT_SIZE = 634;
  * Layout: 8 disc + 32 vault + 8 daily_cap + 8 max_tx + 1 protocol_mode
  *       + (4 + 32*10) protocols + 2 dev_fee + 2 max_slippage_bps
  *       + 8 session_window + (4 + 32*10) allowed_destinations
- *       + 1 has_constraints + 1 has_pending_policy + 1 has_protocol_caps
+ *       + 1 has_pending_policy + 1 has_protocol_caps [M1-04 removed has_constraints]
  *       + (4 + 8*10) protocol_caps + 8 session_expiry + 1 bump
  *       + 8 policy_version + 1 has_post_assertions + 1 destination_mode
  *       + 32 policy_preview_digest [TA-19 Phase 2]
@@ -108,9 +108,12 @@ const AGENT_VAULT_SIZE = 634;
  *       + 8 stable_balance_floor [TA-12 Phase 5]
  *       + 8 per_recipient_daily_cap_usd [TA-14 Phase 5]
  *       + 1 cosign_required [G6 audit 2026-05-18]
- *       + 32 cosign_session_pubkey [D-5 audit 2026-05-19, F-RP3-1] = 1,322.
+ *       + 32 cosign_session_pubkey [D-5 audit 2026-05-19, F-RP3-1]
+ *       + 8 operator_grant_delay_seconds [F-Q6 2026-06-02] = 1,329.
+ *   (Was 1,322 pre-F-Q6 — that value double-counted the M1-04-removed
+ *    has_constraints byte; corrected to the rent-exact 1,329 here.)
  */
-const POLICY_CONFIG_SIZE = 1_322;
+const POLICY_CONFIG_SIZE = 1_329;
 
 /**
  * `SpendTracker::SIZE` from `programs/sigil/src/state/tracker.rs:200-214`.

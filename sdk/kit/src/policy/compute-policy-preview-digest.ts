@@ -212,6 +212,16 @@ export interface PolicyPreviewFields {
    * allowedDestinations fields.
    */
   cosignSessionPubkey?: Address | string | Uint8Array;
+  /**
+   * F-Q6 (2026-06-02): owner-configured delay (in seconds) before an OPERATOR
+   * capability grant takes effect. Default 0n when omitted (matching the
+   * on-chain init default). An owner-set security control gating OPERATOR
+   * seating — bound by TA-19 at canonical position 22 so a tampered SDK or
+   * pending-PDA mutation cannot silently lower it between owner approval and
+   * on-chain landing. Owners change it only via the timelocked
+   * `queue_policy_update` path.
+   */
+  operatorGrantDelaySeconds?: bigint;
 }
 
 // Base58 decode + sha256 + cursor writers now live in `../canonical-encode.ts`
@@ -245,8 +255,9 @@ export interface PolicyPreviewFields {
 // load.
 
 /** Mirrors `policy_digest.rs::POLICY_PREVIEW_FIELD_COUNT`.
- *  M1-04: was 22; has_constraints removed (digest-version bump). */
-export const POLICY_PREVIEW_FIELD_COUNT = 21;
+ *  M1-04: was 22; has_constraints removed (digest-version bump).
+ *  F-Q6 (2026-06-02): 21 → 22, binds operator_grant_delay_seconds. */
+export const POLICY_PREVIEW_FIELD_COUNT = 22;
 
 /**
  * Phase 8 PEN-CROSS-1 (Council ISC-141): SHA-256 of the Borsh-encoded
@@ -333,6 +344,7 @@ const PER_FIELD_FIXED_SIZES = [
   1, // 19. cosign_required              (bool as u8) G6
   32, // 20. agent_set_hash              ([u8;32]) Phase 8 PEN-CROSS-1
   32, // 21. cosign_session_pubkey       (Pubkey)  D-5 (audit 2026-05-19, F-RP3-1)
+  8, // 22. operator_grant_delay_seconds (u64 LE)  F-Q6 (2026-06-02)
 ] as const;
 
 /** Derived sum — must match the encoder's `fixedSize` exactly. */
@@ -463,6 +475,10 @@ export function computePolicyPreviewDigest(
   }
   buf.set(cosignSessionBytes, off);
   off += 32;
+  // F-Q6 (2026-06-02): operator_grant_delay_seconds at position 22 (u64 LE).
+  // Default 0n so legacy callers that don't configure a delay continue to
+  // produce the canonical digest. Owner opts in via queue_policy_update.
+  off = writeU64Le(view, off, fields.operatorGrantDelaySeconds ?? 0n);
 
   // §RP-2 L-NEW-1 forward-looking ratchet: the encoder MUST write
   // exactly `fixedSize + variableSize` bytes. `fixedSize` is now

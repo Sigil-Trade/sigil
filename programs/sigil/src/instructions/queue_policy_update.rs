@@ -522,6 +522,11 @@ pub fn handler(
         // silently flip the gate between owner approval and on-chain
         // landing.
         cosign_session_pubkey: eff_cosign_session_pubkey,
+        // F-Q6 (2026-06-02): operator_grant_delay_seconds bound at canonical
+        // position 22. queue_policy_update does NOT change this field in A1
+        // (not yet an arg) — read live policy so the recomputed digest matches
+        // the owner's signed digest. Stage B makes it configurable (eff_*).
+        operator_grant_delay_seconds: policy.operator_grant_delay_seconds,
     });
     require!(
         recomputed_digest == new_policy_preview_digest,

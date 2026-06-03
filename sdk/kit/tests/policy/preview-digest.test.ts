@@ -60,10 +60,14 @@ import {
 // Cross-impl byte-equality pinned against Rust unit tests in
 // `programs/sigil/src/utils/policy_digest.rs::digest_known_value_*`.
 // M1-04: regenerated for the 21-field digest (has_constraints removed).
+// F-Q6 (2026-06-02): regenerated for the 22-field digest (+operator_grant_delay_seconds=0).
+//   Pre-F-Q6 (post-D-5):
+//     HEX_MINIMAL   = 8d80e131f0fca07e71d173cd5c559f0041a6ef9391e3a87ecac5f249c5bda36d
+//     HEX_REALISTIC = 21155d71a1d0a466cf57676658dcae577b3cab8d1cc512c4589f9ebba10bae03
 const HEX_MINIMAL =
-  "8d80e131f0fca07e71d173cd5c559f0041a6ef9391e3a87ecac5f249c5bda36d";
+  "a213672e16ff350a5c4f6bb5920ee7b357507dd5f13dcdffb9ff5eae1ba8f125";
 const HEX_REALISTIC =
-  "21155d71a1d0a466cf57676658dcae577b3cab8d1cc512c4589f9ebba10bae03";
+  "55326e99a6f919f574719c9cf13b3aae6120e973de2e969fdad1561d278bc1d1";
 /**
  * Phase 8 PEN-CROSS-1 (audit 2026-05-19): empty-vault agent_set_hash.
  * SHA-256 of [0x00,0x00,0x00,0x00]. Mirrors Rust
@@ -594,6 +598,8 @@ function referenceDigest(fields: {
   // D-5 (audit 2026-05-19, F-RP3-1): owner-chosen reactivate-time
   // cosigner pubkey, encoded as 32 raw bytes at canonical position 22.
   cosignSessionPubkey: Uint8Array;
+  // F-Q6 (2026-06-02): operator_grant_delay_seconds, u64 LE, appended last.
+  operatorGrantDelaySeconds: bigint;
 }): string {
   const parts: number[] = [];
   const pushU64 = (v: bigint) => {
@@ -658,6 +664,8 @@ function referenceDigest(fields: {
     );
   }
   for (const x of fields.cosignSessionPubkey) parts.push(x);
+  // F-Q6 (2026-06-02): operator_grant_delay_seconds, u64 LE, appended last.
+  pushU64(fields.operatorGrantDelaySeconds);
 
   const buf = Buffer.from(parts);
   return createHash("sha256").update(buf).digest("hex");
@@ -692,6 +700,7 @@ describe("TA-19 — property test: SDK encoder == reference encoder (PEN-CROSS-7
         fc.boolean(), // cosign_required (G6 audit 2026-05-18 cosign opt-in)
         fc.uint8Array({ minLength: 32, maxLength: 32 }), // agent_set_hash (PEN-CROSS-1)
         fc.uint8Array({ minLength: 32, maxLength: 32 }), // cosign_session_pubkey (D-5 audit 2026-05-19, F-RP3-1)
+        fc.bigUint({ max: (1n << 64n) - 1n }), // operator_grant_delay_seconds (F-Q6 2026-06-02)
         (
           dailyCap,
           maxTx,
@@ -714,6 +723,7 @@ describe("TA-19 — property test: SDK encoder == reference encoder (PEN-CROSS-7
           cosignRequired,
           agentSetHash,
           cosignSessionPubkey,
+          operatorGrantDelaySeconds,
         ) => {
           const sdkDigest = computePolicyPreviewDigest({
             dailySpendingCapUsd: dailyCap,
@@ -742,6 +752,8 @@ describe("TA-19 — property test: SDK encoder == reference encoder (PEN-CROSS-7
             // directly to the encoder; the SDK helper accepts both raw
             // Uint8Array and base58-string shapes.
             cosignSessionPubkey,
+            // F-Q6 (2026-06-02): operator_grant_delay_seconds.
+            operatorGrantDelaySeconds,
           });
           const refDigest = referenceDigest({
             dailySpendingCapUsd: dailyCap,
@@ -765,6 +777,8 @@ describe("TA-19 — property test: SDK encoder == reference encoder (PEN-CROSS-7
             cosignRequired,
             agentSetHash,
             cosignSessionPubkey,
+            // F-Q6 (2026-06-02): operator_grant_delay_seconds.
+            operatorGrantDelaySeconds,
           });
           const sdkHex = Array.from(sdkDigest)
             .map((x) => x.toString(16).padStart(2, "0"))

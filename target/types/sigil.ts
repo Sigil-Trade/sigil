@@ -9164,6 +9164,16 @@ export type Sigil = {
               "of struct per F-14 APPEND-ONLY rule for Borsh stability."
             ],
             "type": "pubkey"
+          },
+          {
+            "name": "operatorGrantDelaySeconds",
+            "docs": [
+              "F-Q6 (2026-06-02): owner-configured delay (in seconds) before an",
+              "OPERATOR capability grant takes effect. Default 0. Bound by TA-19",
+              "at canonical digest position 22 so a tampered SDK or pending-PDA",
+              "mutation cannot silently lower it. APPENDED per F-14 APPEND-ONLY rule."
+            ],
+            "type": "u64"
           }
         ]
       }

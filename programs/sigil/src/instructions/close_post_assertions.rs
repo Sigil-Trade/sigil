@@ -93,6 +93,8 @@ pub fn handler(
         // pass-through from live policy keeps the re-bind digest matching
         // the queue-time digest.
         cosign_session_pubkey: policy.cosign_session_pubkey,
+        // F-Q6: operator_grant_delay_seconds bound at canonical digest position 22.
+        operator_grant_delay_seconds: policy.operator_grant_delay_seconds,
     });
     // PEN-CROSS-3: owner must have signed the post-mutation digest.
     require!(

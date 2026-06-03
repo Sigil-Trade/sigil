@@ -167,6 +167,16 @@ pub struct PolicyPreviewFields<'a> {
     /// cannot silently flip the pubkey between owner approval and
     /// on-chain landing.
     pub cosign_session_pubkey: Pubkey,
+    /// F-Q6 (2026-06-02): owner-configured delay (in seconds) before an
+    /// OPERATOR capability grant takes effect. Default 0. This is an
+    /// owner-set security control gating OPERATOR seating, so it is bound by
+    /// TA-19 at canonical position 22 — a tampered SDK or pending-PDA mutation
+    /// cannot silently lower it between owner approval and on-chain landing
+    /// (same class as `cosign_required`, `stable_balance_floor`,
+    /// `cosign_session_pubkey`). The single-key forced floor
+    /// (`max(field, 600)`) and the per-tier grant logic live in
+    /// `register_agent` / `queue_agent_grant`; this field is the persisted knob.
+    pub operator_grant_delay_seconds: u64,
 }
 
 /// P0.2 PEN-7 defense-in-depth ratchet (audit 2026-05-19).
@@ -182,7 +192,8 @@ pub struct PolicyPreviewFields<'a> {
 /// (apply_pending_policy.rs::EXPECTED_DIGEST_FIELD_COUNT). Both this and
 /// the apply-side constant must change in lockstep.
 // M1-04: was 22; has_constraints removed (digest-version bump).
-pub const POLICY_PREVIEW_FIELD_COUNT: usize = 21;
+// F-Q6 (2026-06-02): 21 → 22, binds `operator_grant_delay_seconds`.
+pub const POLICY_PREVIEW_FIELD_COUNT: usize = 22;
 
 /// Phase 8 PEN-CROSS-1 (Council ISC-66/A8/A9 / ISC-141 empty-set determinism).
 ///
@@ -266,6 +277,7 @@ mod field_count_invariant {
             // canonical position 22. Default Pubkey::default() = gate
             // disabled.
             cosign_session_pubkey: Pubkey::default(),
+            operator_grant_delay_seconds: 0,
         };
         // The destructuring pattern below is exhaustive. If a 23rd field
         // lands on PolicyPreviewFields, this match fails to compile with
@@ -293,8 +305,9 @@ mod field_count_invariant {
             cosign_required: _,
             agent_set_hash: _,
             cosign_session_pubkey: _,
+            operator_grant_delay_seconds: _,
         } = fields;
-        assert_eq!(POLICY_PREVIEW_FIELD_COUNT, 21);
+        assert_eq!(POLICY_PREVIEW_FIELD_COUNT, 22);
     }
 }
 
@@ -368,6 +381,11 @@ pub fn compute_policy_preview_digest(fields: &PolicyPreviewFields<'_>) -> [u8; 3
     // tampered SDK cannot silently flip the pubkey between owner approval
     // and on-chain landing (the digest mismatch closes that gap).
     buf.extend_from_slice(fields.cosign_session_pubkey.as_ref());
+    // 22. operator_grant_delay_seconds: u64 LE — F-Q6 (2026-06-02). Owner-
+    // configured OPERATOR-grant delay; bound here so a tampered SDK or
+    // pending-PDA mutation cannot silently lower it between owner approval
+    // and on-chain landing.
+    buf.extend_from_slice(&fields.operator_grant_delay_seconds.to_le_bytes());
 
     hashv(&[&buf]).to_bytes()
 }
@@ -414,6 +432,7 @@ mod tests {
             // Default Pubkey::default() = gate disabled — preserves prior
             // byte layout for fixtures that don't exercise the field.
             cosign_session_pubkey: Pubkey::default(),
+            operator_grant_delay_seconds: 0,
         };
         let d1 = compute_policy_preview_digest(&f);
         let d2 = compute_policy_preview_digest(&f);
@@ -454,6 +473,7 @@ mod tests {
             // Default Pubkey::default() = gate disabled — preserves prior
             // byte layout for fixtures that don't exercise the field.
             cosign_session_pubkey: Pubkey::default(),
+            operator_grant_delay_seconds: 0,
         };
         let mut flipped = base.daily_spending_cap_usd;
         let _ = &mut flipped; // suppress unused
@@ -503,6 +523,7 @@ mod tests {
             // Default Pubkey::default() = gate disabled — preserves prior
             // byte layout for fixtures that don't exercise the field.
             cosign_session_pubkey: Pubkey::default(),
+            operator_grant_delay_seconds: 0,
         };
         let f2 = PolicyPreviewFields {
             protocols: &b,
@@ -551,6 +572,7 @@ mod tests {
             // Default Pubkey::default() = gate disabled — preserves prior
             // byte layout for fixtures that don't exercise the field.
             cosign_session_pubkey: Pubkey::default(),
+            operator_grant_delay_seconds: 0,
         };
         let narrow = PolicyPreviewFields {
             // 13:00-17:00 UTC = bits 13..17 = 0x1E000
@@ -599,6 +621,7 @@ mod tests {
             // Default Pubkey::default() = gate disabled — preserves prior
             // byte layout for fixtures that don't exercise the field.
             cosign_session_pubkey: Pubkey::default(),
+            operator_grant_delay_seconds: 0,
         };
         let flipped = PolicyPreviewFields {
             auto_promote_grays: true,
@@ -645,6 +668,7 @@ mod tests {
             // Default Pubkey::default() = gate disabled — preserves prior
             // byte layout for fixtures that don't exercise the field.
             cosign_session_pubkey: Pubkey::default(),
+            operator_grant_delay_seconds: 0,
         };
         let lower = PolicyPreviewFields {
             auto_revoke_threshold: 3,
@@ -696,6 +720,7 @@ mod tests {
             // Default Pubkey::default() = gate disabled — preserves prior
             // byte layout for fixtures that don't exercise the field.
             cosign_session_pubkey: Pubkey::default(),
+            operator_grant_delay_seconds: 0,
         };
         let raised = PolicyPreviewFields {
             per_recipient_daily_cap_usd: 50_000_000, // $50 cap
@@ -747,6 +772,7 @@ mod tests {
             // Default Pubkey::default() = gate disabled — preserves prior
             // byte layout for fixtures that don't exercise the field.
             cosign_session_pubkey: Pubkey::default(),
+            operator_grant_delay_seconds: 0,
         };
         let raised = PolicyPreviewFields {
             // $100 floor in 6-decimal USDC face value
@@ -796,6 +822,7 @@ mod tests {
             // Default Pubkey::default() = gate disabled — preserves prior
             // byte layout for fixtures that don't exercise the field.
             cosign_session_pubkey: Pubkey::default(),
+            operator_grant_delay_seconds: 0,
         };
         let flipped = PolicyPreviewFields {
             cosign_required: true,
@@ -837,6 +864,7 @@ mod tests {
             cosign_required: false,
             agent_set_hash: [0u8; 32],
             cosign_session_pubkey: Pubkey::default(),
+            operator_grant_delay_seconds: 0,
         };
         let with_cosigner = PolicyPreviewFields {
             cosign_session_pubkey: pk(99),
@@ -925,6 +953,7 @@ mod tests {
             agent_set_hash: EMPTY_AGENT_SET_HASH,
             // D-5: cosign_session_pubkey at position 22 — default off.
             cosign_session_pubkey: Pubkey::default(),
+            operator_grant_delay_seconds: 0,
         };
         // Build a mutated agent set: one OPERATOR agent inserted.
         let new_agent = AgentEntry {
@@ -992,6 +1021,7 @@ mod tests {
             // dedicated flip-changes-digest test below exercises the
             // enabled path.
             cosign_session_pubkey: Pubkey::default(),
+            operator_grant_delay_seconds: 0,
         };
         // Encoding: 8 zero + 8 zero + 2 zero + 2 zero (developer_fee_rate)
         //   + 0x01 + 4 zero + 0x00 + 4 zero + 8 zero + 8 zero + 0 + 0 + 0
@@ -1086,6 +1116,7 @@ mod tests {
             // D-5 (audit 2026-05-19): realistic fixture pins
             // cosign_session_pubkey = Pubkey::default() — gate disabled.
             cosign_session_pubkey: Pubkey::default(),
+            operator_grant_delay_seconds: 0,
         };
         let digest = compute_policy_preview_digest(&f);
         // Prior digests:
@@ -1136,9 +1167,10 @@ mod tests {
 ///   = `f36f0bce45b2ccd681891f2b4922b733563ad21485e6801e4f5f43f475ca0949`
 #[cfg(test)]
 // M1-04: regenerated for the 21-field digest (has_constraints removed).
+// F-Q6 (2026-06-02): regenerated for the 22-field digest (+operator_grant_delay_seconds=0).
 const REGENERATED_HEX_MINIMAL: [u8; 32] = [
-    0x8d, 0x80, 0xe1, 0x31, 0xf0, 0xfc, 0xa0, 0x7e, 0x71, 0xd1, 0x73, 0xcd, 0x5c, 0x55, 0x9f, 0x00,
-    0x41, 0xa6, 0xef, 0x93, 0x91, 0xe3, 0xa8, 0x7e, 0xca, 0xc5, 0xf2, 0x49, 0xc5, 0xbd, 0xa3, 0x6d,
+    0xa2, 0x13, 0x67, 0x2e, 0x16, 0xff, 0x35, 0x0a, 0x5c, 0x4f, 0x6b, 0xb5, 0x92, 0x0e, 0xe7, 0xb3,
+    0x57, 0x50, 0x7d, 0xd5, 0xf1, 0x3d, 0xcd, 0xff, 0xb9, 0xff, 0x5e, 0xae, 0x1b, 0xa8, 0xf1, 0x25,
 ];
 
 /// D-5 (audit 2026-05-19, F-RP3-1) realistic-policy expected digest.
@@ -1156,9 +1188,10 @@ const REGENERATED_HEX_MINIMAL: [u8; 32] = [
 ///   = `68778cdd2c3fc158756997c3f851d6b67235cbac7f5217a9c4614afd39a344c4`
 #[cfg(test)]
 // M1-04: regenerated for the 21-field digest (has_constraints removed).
+// F-Q6 (2026-06-02): regenerated for the 22-field digest (+operator_grant_delay_seconds=0).
 const REGENERATED_HEX_REALISTIC: [u8; 32] = [
-    0x21, 0x15, 0x5d, 0x71, 0xa1, 0xd0, 0xa4, 0x66, 0xcf, 0x57, 0x67, 0x66, 0x58, 0xdc, 0xae, 0x57,
-    0x7b, 0x3c, 0xab, 0x8d, 0x1c, 0xc5, 0x12, 0xc4, 0x58, 0x9f, 0x9e, 0xbb, 0xa1, 0x0b, 0xae, 0x03,
+    0x55, 0x32, 0x6e, 0x99, 0xa6, 0xf9, 0x19, 0xf5, 0x74, 0x71, 0x9c, 0x9c, 0xf1, 0x3b, 0x3a, 0xae,
+    0x61, 0x20, 0xe9, 0x73, 0xde, 0x2e, 0x96, 0x9f, 0xda, 0xd1, 0x56, 0x1d, 0x27, 0x8b, 0xc1, 0xd1,
 ];
 
 /// Phase 8 PEN-CROSS-1 (Council ISC-141): empty-agent-set hash. SHA-256 of

@@ -301,6 +301,8 @@ mod cap_and_completeness_tests {
             cosign_required: false,
             // D-5 (audit 2026-05-19, F-RP3-1): cosign gate disabled in the mock.
             cosign_session_pubkey: Pubkey::default(),
+            // F-Q6 (2026-06-02): OPERATOR-grant delay default 0 in the mock.
+            operator_grant_delay_seconds: 0,
         }
     }
 

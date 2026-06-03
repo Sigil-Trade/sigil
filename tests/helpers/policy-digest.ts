@@ -29,6 +29,7 @@
  *   20. cosign_required: bool (1 byte 0/1) — G6 (audit 2026-05-18 cosign opt-in)
  *   21. agent_set_hash: [u8; 32] — Phase 8 PEN-CROSS-1 (audit 2026-05-19)
  *   22. cosign_session_pubkey: Pubkey (32 bytes) — D-5 (audit 2026-05-19, F-RP3-1)
+ *   23. operator_grant_delay_seconds: u64 LE — F-Q6 (2026-06-02, appended last)
  */
 
 import { createHash } from "crypto";
@@ -146,6 +147,12 @@ export interface PolicyDigestFields {
    * position 22.
    */
   cosignSessionPubkey?: PublicKey;
+  /**
+   * F-Q6 (2026-06-02): owner-configured OPERATOR-grant delay (in seconds).
+   * Default 0 so legacy fixtures produce the on-chain default-0 digest.
+   * Bound by TA-19, appended last in the canonical encoding.
+   */
+  operatorGrantDelaySeconds?: BN | bigint | number;
 }
 
 function u64le(v: BN | bigint | number): Buffer {
@@ -237,6 +244,9 @@ export function computePolicyPreviewDigest(
     );
   }
   parts.push(cosignSessionBuf);
+  // F-Q6 (2026-06-02): operator_grant_delay_seconds (u64 LE), appended last.
+  // Default 0 so legacy fixtures match the on-chain default-0 value.
+  parts.push(u64le(fields.operatorGrantDelaySeconds ?? 0));
 
   const buf = Buffer.concat(parts);
   return Array.from(createHash("sha256").update(buf).digest());

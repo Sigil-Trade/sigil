@@ -190,6 +190,8 @@ pub fn handler(ctx: Context<RecordAgentViolation>, agent: Pubkey, error_code: u3
             // mutates it, so pass-through from live policy keeps the
             // re-bind digest matching the queue-time digest.
             cosign_session_pubkey: policy.cosign_session_pubkey,
+            // F-Q6: operator_grant_delay_seconds bound at canonical digest position 22.
+            operator_grant_delay_seconds: policy.operator_grant_delay_seconds,
         });
         policy.policy_preview_digest = recomputed_digest;
         // OCC: bump policy_version so external monitors see the change.

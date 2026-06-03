@@ -129,6 +129,8 @@ pub fn handler(ctx: Context<RevokeAgent>, agent_to_remove: Pubkey) -> Result<()>
         // pass-through from live policy keeps the re-bind digest matching
         // the queue-time digest.
         cosign_session_pubkey: policy.cosign_session_pubkey,
+        // F-Q6: operator_grant_delay_seconds bound at canonical digest position 22.
+        operator_grant_delay_seconds: policy.operator_grant_delay_seconds,
     });
     policy.policy_preview_digest = new_digest;
 

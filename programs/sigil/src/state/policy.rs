@@ -312,6 +312,19 @@ pub struct PolicyConfig {
     /// Bound by TA-19 at canonical digest position 22. APPENDED at end
     /// of struct per F-14 APPEND-ONLY rule for Borsh stability.
     pub cosign_session_pubkey: Pubkey,
+
+    /// F-Q6 (2026-06-02): owner-configured delay (in seconds) before an
+    /// OPERATOR capability grant takes effect. Default 0. An owner-set
+    /// security control gating OPERATOR seating — bound by TA-19 at canonical
+    /// digest position 22 so a tampered SDK or pending-PDA mutation cannot
+    /// silently lower it between owner approval and on-chain landing.
+    /// Changeable only via the timelocked `queue_policy_update` path (so
+    /// lowering it is itself delayed). The single-key forced floor
+    /// (`max(field, 600)`) and per-tier grant logic live in `register_agent`
+    /// / `queue_agent_grant`.
+    ///
+    /// APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
+    pub operator_grant_delay_seconds: u64,
 }
 
 /// TA-07 (Phase 3): one entry in `PolicyConfig.destination_graylist`.
@@ -350,7 +363,8 @@ impl PolicyConfig {
     /// stable_balance_floor (8) [TA-12 Phase 5] +
     /// per_recipient_daily_cap_usd (8) [TA-14 Phase 5] +
     /// cosign_required (1) [G6 audit 2026-05-18] +
-    /// cosign_session_pubkey (32) [D-5 close audit 2026-05-19, F-RP3-1]
+    /// cosign_session_pubkey (32) [D-5 close audit 2026-05-19, F-RP3-1] +
+    /// operator_grant_delay_seconds (8) [F-Q6 2026-06-02]
     /// [TA-19, Phase 2; PEN-CROSS-2 Phase 2 close-up;
     ///  TA-05/07/17 Phase 3 pre-exec; TA-12/TA-14 Phase 5;
     ///  G6 cosign opt-in 2026-05-18 audit;
@@ -383,7 +397,8 @@ impl PolicyConfig {
         + 8 // stable_balance_floor [TA-12 Phase 5]
         + 8 // per_recipient_daily_cap_usd [TA-14 Phase 5]
         + 1 // cosign_required [G6 audit 2026-05-18]
-        + 32; // cosign_session_pubkey [D-5 audit 2026-05-19, F-RP3-1]
+        + 32 // cosign_session_pubkey [D-5 audit 2026-05-19, F-RP3-1]
+        + 8; // operator_grant_delay_seconds [F-Q6 2026-06-02]
 
     /// Check if a protocol is allowed.
     ///
@@ -481,6 +496,16 @@ impl PolicyConfig {
         (mask & (1u32 << hour)) != 0
     }
 }
+
+// F-Q6 (2026-06-02) compile-time SIZE pin (mirrors the AgentVault pattern).
+// Verifies the PolicyConfig::SIZE arithmetic after appending
+// operator_grant_delay_seconds (+8): 1321 (pre-F-Q6, post-M1-04 has_constraints
+// removal) + 8 = 1329. Any future field addition that forgets to update SIZE
+// fails the build here — the same PEN-7-class ratchet AgentVault already has.
+const _POLICY_CONFIG_SIZE_PIN: () = assert!(
+    PolicyConfig::SIZE == 1329,
+    "PolicyConfig::SIZE drifted from documented F-Q6 layout (1321 + 8 operator_grant_delay_seconds = 1329)"
+);
 
 /// TA-05 (Phase 3): mask covering bits 0..=23 only. Any `operating_hours`
 /// value whose bits 24..=31 are non-zero is invalid and MUST be rejected at

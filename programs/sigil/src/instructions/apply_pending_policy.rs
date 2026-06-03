@@ -45,7 +45,8 @@ use crate::utils::policy_digest::{
 // is re-asserted here at the apply-time site as a load-bearing reminder.
 #[allow(dead_code)]
 // M1-04: was 22; has_constraints removed (digest-version bump).
-const EXPECTED_DIGEST_FIELD_COUNT: usize = 21;
+// F-Q6 (2026-06-02): 21 → 22, binds operator_grant_delay_seconds.
+const EXPECTED_DIGEST_FIELD_COUNT: usize = 22;
 const _: () = assert!(
     EXPECTED_DIGEST_FIELD_COUNT == crate::utils::policy_digest::POLICY_PREVIEW_FIELD_COUNT,
     "P0.2 PEN-7: PolicyPreviewFields count diverged from TA-19 binding. \
@@ -417,6 +418,11 @@ pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
         // second-pass digest matches whatever the queue handler signed
         // against.
         cosign_session_pubkey: policy.cosign_session_pubkey,
+        // F-Q6 (2026-06-02): operator_grant_delay_seconds bound at canonical
+        // digest position 22. apply_pending_policy does not mutate it in A1
+        // (not yet a pending field) — read the live policy value so the
+        // second-pass digest matches the queue-time digest.
+        operator_grant_delay_seconds: policy.operator_grant_delay_seconds,
     });
     require!(
         recomputed_digest == pending.new_policy_preview_digest,

@@ -143,6 +143,8 @@ export function createMockVaultState(
       // that has queued+applied the opt-in via `queue_policy_update`.
       cosignSessionPubkey:
         "11111111111111111111111111111111" as unknown as Address,
+      // F-Q6 (2026-06-02): mock default 0 (no OPERATOR-grant delay).
+      operatorGrantDelaySeconds: 0n,
     },
     tracker: null,
     overlay: null,

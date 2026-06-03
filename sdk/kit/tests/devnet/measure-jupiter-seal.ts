@@ -128,6 +128,8 @@ function mockState(): ResolvedVaultState {
       // D-5 (Bucket 2 audit 2026-05-21, F-RP3-1): mock default unset.
       cosignSessionPubkey:
         "11111111111111111111111111111111" as unknown as Address,
+      // F-Q6 (2026-06-02): mock default 0 (no OPERATOR-grant delay).
+      operatorGrantDelaySeconds: 0n,
     },
     tracker: null,
     overlay: null,

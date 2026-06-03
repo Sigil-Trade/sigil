@@ -246,6 +246,10 @@ pub fn handler(
         // `queue_policy_update` by setting a non-default pubkey. Bound at
         // canonical digest position 22.
         cosign_session_pubkey: Pubkey::default(),
+        // F-Q6 (2026-06-02): at init operator_grant_delay_seconds = 0
+        // (default). Bound at canonical digest position 22; the off-chain SDK
+        // computes the same default-0 value when building the init digest.
+        operator_grant_delay_seconds: 0,
     });
     require!(
         recomputed_digest == preview_digest,
@@ -348,6 +352,10 @@ pub fn handler(
     // position 22 (the init recomputed digest above also encodes
     // `Pubkey::default()` so the assertion passes).
     policy.cosign_session_pubkey = Pubkey::default();
+    // F-Q6 (2026-06-02): OPERATOR-grant delay defaults to 0 (instant, subject
+    // to the per-tier rules in register_agent). Owner opts into a delay later
+    // via queue_policy_update. Bound by TA-19 at canonical digest position 22.
+    policy.operator_grant_delay_seconds = 0;
 
     // Initialize zero-copy tracker (buckets + protocol_counters zero-initialized by allocator)
     let mut tracker = ctx.accounts.tracker.load_init()?;

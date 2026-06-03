@@ -363,6 +363,13 @@ export type PolicyConfig = {
    * of struct per F-14 APPEND-ONLY rule for Borsh stability.
    */
   cosignSessionPubkey: Address;
+  /**
+   * F-Q6 (2026-06-02): owner-configured delay (in seconds) before an
+   * OPERATOR capability grant takes effect. Default 0. Bound by TA-19
+   * at canonical digest position 22 so a tampered SDK or pending-PDA
+   * mutation cannot silently lower it. APPENDED per F-14 APPEND-ONLY rule.
+   */
+  operatorGrantDelaySeconds: bigint;
 };
 
 export type PolicyConfigArgs = {
@@ -664,6 +671,13 @@ export type PolicyConfigArgs = {
    * of struct per F-14 APPEND-ONLY rule for Borsh stability.
    */
   cosignSessionPubkey: Address;
+  /**
+   * F-Q6 (2026-06-02): owner-configured delay (in seconds) before an
+   * OPERATOR capability grant takes effect. Default 0. Bound by TA-19
+   * at canonical digest position 22 so a tampered SDK or pending-PDA
+   * mutation cannot silently lower it. APPENDED per F-14 APPEND-ONLY rule.
+   */
+  operatorGrantDelaySeconds: number | bigint;
 };
 
 /** Gets the encoder for {@link PolicyConfigArgs} account data. */
@@ -701,6 +715,7 @@ export function getPolicyConfigEncoder(): Encoder<PolicyConfigArgs> {
       ["perRecipientDailyCapUsd", getU64Encoder()],
       ["cosignRequired", getBooleanEncoder()],
       ["cosignSessionPubkey", getAddressEncoder()],
+      ["operatorGrantDelaySeconds", getU64Encoder()],
     ]),
     (value) => ({ ...value, discriminator: POLICY_CONFIG_DISCRIMINATOR }),
   );
@@ -740,6 +755,7 @@ export function getPolicyConfigDecoder(): Decoder<PolicyConfig> {
     ["perRecipientDailyCapUsd", getU64Decoder()],
     ["cosignRequired", getBooleanDecoder()],
     ["cosignSessionPubkey", getAddressDecoder()],
+    ["operatorGrantDelaySeconds", getU64Decoder()],
   ]);
 }
 
