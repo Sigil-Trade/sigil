@@ -830,17 +830,19 @@ describe("findVaultsByOwner", () => {
   const u64Encoder = getU64Encoder();
 
   // AgentVault layout offsets used by findVaultsByOwner — keep in sync
-  // with state-resolver.ts:VAULT_AUTHORITY_OFFSET (643). The full body
+  // with state-resolver.ts:VAULT_AUTHORITY_OFFSET (644). The full body
   // is 675 bytes post-LBL-01; tests build a minimally-correct buffer
   // that places `vault_id` and `vault_authority` at the right offsets
   // so the H-5 re-derivation logic can run.
   const VAULT_ID_OFFSET = 40;
-  const VAULT_AUTHORITY_OFFSET = 643;
-  const AGENT_VAULT_FULL_SIZE = 675;
+  const VAULT_AUTHORITY_OFFSET = 644;
+  const AGENT_VAULT_FULL_SIZE = 676;
 
   /**
    * Build a base64-encoded full AgentVault body that places `vault_id`
-   * at offset 40 and `vault_authority` at offset 643. `authority`
+   * at offset 40 and `vault_authority` at offset 644 (F-Q6 2026-06-02
+   * inserted owner_type at 643, before vault_authority; vault_authority
+   * stays the final 32 bytes = SIZE-32). `authority`
    * defaults to OWNER so legacy tests exercise the
    * `vault.vault_authority === owner` (never-transferred) shape.
    */

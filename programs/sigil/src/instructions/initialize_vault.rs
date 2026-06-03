@@ -289,6 +289,10 @@ pub fn handler(
     // instead of `owner.key()`, so the account remains addressable under
     // the new owner.
     vault.vault_authority = ctx.accounts.owner.key();
+    // F-Q6 (2026-06-02): a fresh vault is single-key (EOA) by default. The owner
+    // opts into a multisig owner later via accept_ownership_transfer_multisig
+    // (which sets owner_type = MULTISIG). NOT digest-bound (program-set fact).
+    vault.owner_type = OWNER_TYPE_EOA;
 
     // Initialize policy
     let policy = &mut ctx.accounts.policy;

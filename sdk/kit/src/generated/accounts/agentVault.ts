@@ -155,6 +155,14 @@ export type AgentVault = {
    */
   freezeReason: number;
   /**
+   * F-Q6 (2026-06-02): owner-account-type discriminant — 0 = single-key
+   * EOA, 1 = N-of-M multisig (Squads V4). Set once from an on-chain-verified
+   * fact at the ownership-transfer site; NOT bound by any digest; a wrong
+   * value fails SAFE to the single-key delayed-grant path in register_agent.
+   * Placed before vault_authority so the LBL-01 seed-key stays the final 32 bytes.
+   */
+  ownerType: number;
+  /**
    * Phase 8 LBL-01 — immutable PDA seed-key set at `initialize_vault` time;
    * decouples vault PDA address from owner identity to enable ownership
    * transfer without bricking the account.
@@ -276,6 +284,14 @@ export type AgentVaultArgs = {
    */
   freezeReason: number;
   /**
+   * F-Q6 (2026-06-02): owner-account-type discriminant — 0 = single-key
+   * EOA, 1 = N-of-M multisig (Squads V4). Set once from an on-chain-verified
+   * fact at the ownership-transfer site; NOT bound by any digest; a wrong
+   * value fails SAFE to the single-key delayed-grant path in register_agent.
+   * Placed before vault_authority so the LBL-01 seed-key stays the final 32 bytes.
+   */
+  ownerType: number;
+  /**
    * Phase 8 LBL-01 — immutable PDA seed-key set at `initialize_vault` time;
    * decouples vault PDA address from owner identity to enable ownership
    * transfer without bricking the account.
@@ -328,6 +344,7 @@ export function getAgentVaultEncoder(): Encoder<AgentVaultArgs> {
       ["observeOnly", getBooleanEncoder()],
       ["frozenAtTimestamp", getI64Encoder()],
       ["freezeReason", getU8Encoder()],
+      ["ownerType", getU8Encoder()],
       ["vaultAuthority", getAddressEncoder()],
     ]),
     (value) => ({ ...value, discriminator: AGENT_VAULT_DISCRIMINATOR }),
@@ -355,6 +372,7 @@ export function getAgentVaultDecoder(): Decoder<AgentVault> {
     ["observeOnly", getBooleanDecoder()],
     ["frozenAtTimestamp", getI64Decoder()],
     ["freezeReason", getU8Decoder()],
+    ["ownerType", getU8Decoder()],
     ["vaultAuthority", getAddressDecoder()],
   ]);
 }

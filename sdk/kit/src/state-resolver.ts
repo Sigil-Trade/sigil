@@ -737,9 +737,9 @@ export type DiscoveredVault = VaultLocator;
 /**
  * AgentVault account size (bytes) — used for the GPA `dataSize` filter.
  *
- * Pinned to 675 to match the Phase 8 LBL-01 layout
- * (`programs/sigil/src/state/vault.rs:319` — `AgentVault::SIZE == 675`
- * with compile-time assertion). The post-LBL-01 layout adds 32 bytes
+ * Pinned to 676 to match the on-chain layout
+ * (`programs/sigil/src/state/vault.rs` — `AgentVault::SIZE == 676`
+ * with compile-time assertion; F-Q6 2026-06-02 added owner_type +1). The layout adds 32 bytes
  * for `vault_authority` at the tail; pre-LBL-01 vaults at 634 bytes no
  * longer exist on-chain (Phase 10 will redeploy under a new program ID
  * with fresh state).
@@ -750,20 +750,21 @@ export type DiscoveredVault = VaultLocator;
  * suite ignores filters, masking the regression). Closed by promoting the
  * documented invariant to live code.
  */
-const AGENT_VAULT_SIZE = 675;
+const AGENT_VAULT_SIZE = 676;
 
 /** Byte offset of the `vault_id` field in AgentVault (after 8 disc + 32 owner). */
 const VAULT_ID_OFFSET = 40;
 
 /**
- * Byte offset of the `vault_authority` field in AgentVault — Phase 8
- * LBL-01 appended this `Pubkey` (32 bytes) at the tail of the layout,
- * so the field sits at `AgentVault::SIZE - 32 = 643`. Used by H-5 to
- * re-derive vault PDAs from the IMMUTABLE seed key (which survives
+ * Byte offset of the `vault_authority` field in AgentVault — the Phase 8
+ * LBL-01 `Pubkey` (32 bytes) remains the FINAL 32 bytes of the layout
+ * (F-Q6 2026-06-02 inserted owner_type BEFORE it precisely to preserve this),
+ * so the field sits at `AgentVault::SIZE - 32 = 644`. Used by H-5 to re-derive
+ * vault PDAs from the IMMUTABLE seed key (which survives
  * `accept_ownership_transfer`) rather than the mutable `vault.owner`
  * byte at offset 8.
  */
-const VAULT_AUTHORITY_OFFSET = 643;
+const VAULT_AUTHORITY_OFFSET = 644;
 
 const u64Decoder = getU64Decoder();
 
@@ -842,7 +843,7 @@ export async function findVaultsByOwner(
   // currently owns appear here (including those received via
   // `accept_ownership_transfer`). The V-1 re-derivation below MUST use
   // the IMMUTABLE Phase 8 LBL-01 seed-key `vault.vault_authority`
-  // (offset 643), NOT the current `owner` — passing `owner` for a
+  // (offset 644), NOT the current `owner` — passing `owner` for a
   // transferred vault produces a PDA address that doesn't match the
   // entry's `pubkey` and the entry would be silently dropped.
   //
@@ -868,7 +869,7 @@ export async function findVaultsByOwner(
       .send();
 
     // H-5 verification: parse `vault_id` at offset 40 AND
-    // `vault_authority` at offset 643 from each returned account, then
+    // `vault_authority` at offset 644 from each returned account, then
     // re-derive the PDA from `vault_authority` (NOT `owner`). Drop any
     // entry whose body is too short to contain `vault_authority` (a
     // malformed / truncated response or a malicious RPC).

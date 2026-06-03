@@ -204,6 +204,9 @@ pub fn handler(ctx: Context<AcceptOwnershipTransfer>) -> Result<()> {
     {
         let vault = &mut ctx.accounts.vault;
         vault.owner = new_owner_key;
+        // F-Q6 (2026-06-02): the EOA accept path sets a single-key owner. Reset
+        // owner_type to EOA (a prior multisig owner may have set it to MULTISIG).
+        vault.owner_type = OWNER_TYPE_EOA;
     }
 
     // Phase 8 §RP Fix-Up B (LBL-10 HIGH, audit 2026-05-19): recompute

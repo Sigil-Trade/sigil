@@ -8,6 +8,14 @@ pub const CAPABILITY_DISABLED: u8 = 0;
 pub const CAPABILITY_OBSERVER: u8 = 1;
 pub const CAPABILITY_OPERATOR: u8 = 2;
 
+/// F-Q6 (2026-06-02) — `AgentVault.owner_type` discriminants. Records (once, at
+/// the verified ownership-transfer site) whether the vault owner is a single-key
+/// EOA or an N-of-M multisig. Read by `register_agent`'s tier rule to decide
+/// whether an instant OPERATOR grant carries >=2 authorization factors.
+/// Mis-detection fails SAFE to the single-key (delayed) path.
+pub const OWNER_TYPE_EOA: u8 = 0;
+pub const OWNER_TYPE_MULTISIG: u8 = 1;
+
 /// Phase 8 — FreezeReason enum recording why a vault entered Frozen status.
 ///
 /// Stored on `AgentVault.freeze_reason` (u8) so the on-chain wire format
@@ -179,6 +187,19 @@ pub struct AgentVault {
     /// rule for Borsh stability.
     pub freeze_reason: u8,
 
+    /// F-Q6 (2026-06-02) — owner-account-type discriminant: 0 = single-key EOA
+    /// (`OWNER_TYPE_EOA`), 1 = N-of-M multisig / Squads V4 (`OWNER_TYPE_MULTISIG`).
+    /// Set ONCE per owner from an on-chain-VERIFIED fact: `initialize_vault` = 0,
+    /// `accept_ownership_transfer` (EOA) = 0, `accept_ownership_transfer_multisig`
+    /// = 1. NOT bound by any digest — it is program-set (not owner-supplied), and
+    /// a stale/wrong value fails SAFE to the single-key delayed-grant path in
+    /// `register_agent`. Validated `<= OWNER_TYPE_MULTISIG` at the read site.
+    ///
+    /// Placed BEFORE `vault_authority` so the LBL-01 seed-key remains the final
+    /// 32 bytes (the SDK resolver reads it at `SIZE - 32`). Pre-launch — no
+    /// deployed vaults constrain byte placement.
+    pub owner_type: u8,
+
     /// Phase 8 LBL-01 — immutable PDA seed-key set at `initialize_vault` time;
     /// decouples vault PDA address from owner identity to enable ownership
     /// transfer without bricking the account.
@@ -229,7 +250,8 @@ impl AgentVault {
     /// total_deposited_usd (8) + total_withdrawn_usd (8) + total_failed_transactions (8) +
     /// active_sessions (1) + observe_only (1)  [Phase 2 TA-19] +
     /// frozen_at_timestamp (8) + freeze_reason (1)  [Phase 8] +
-    /// vault_authority (32)  [Phase 8 LBL-01: 643 + 32 vault_authority]
+    /// owner_type (1)  [F-Q6 2026-06-02] +
+    /// vault_authority (32)  [Phase 8 LBL-01 — stays the tail seed-key at SIZE-32]
     pub const SIZE: usize = 8
         + 32
         + 8
@@ -249,8 +271,9 @@ impl AgentVault {
         + 1  // observe_only        [Phase 2 TA-19]
         + 8  // frozen_at_timestamp  [Phase 8]
         + 1  // freeze_reason        [Phase 8]
-        + 32; // vault_authority     [Phase 8 LBL-01]
-              // = 675 (Phase 8 LBL-01: 643 + 32 vault_authority)
+        + 1  // owner_type           [F-Q6 2026-06-02]
+        + 32; // vault_authority     [Phase 8 LBL-01 — stays the tail seed-key]
+              // = 676 (675 Phase-8 LBL-01 + 1 owner_type [F-Q6])
 
     pub fn is_active(&self) -> bool {
         self.status == VaultStatus::Active
@@ -316,8 +339,8 @@ impl AgentVault {
 // compile time. Combined with the field-by-field SIZE doc comment above,
 // this is the strongest static guarantee available for a Borsh account.
 const _AGENT_VAULT_SIZE_PIN: () = assert!(
-    AgentVault::SIZE == 675,
-    "AgentVault::SIZE drifted from documented Phase 8 LBL-01 layout (643 + 32 vault_authority = 675)"
+    AgentVault::SIZE == 676,
+    "AgentVault::SIZE drifted from documented layout (675 Phase-8 LBL-01 + 1 owner_type [F-Q6] = 676)"
 );
 
 #[cfg(test)]
@@ -361,6 +384,7 @@ mod lbl01_vault_authority_tests {
             observe_only: false,
             frozen_at_timestamp: 0,
             freeze_reason: 0,
+            owner_type: 0,
             vault_authority: sentinel,
         };
         let mut buf: Vec<u8> = Vec::with_capacity(AgentVault::SIZE);
@@ -369,21 +393,21 @@ mod lbl01_vault_authority_tests {
             .expect("AgentVault must serialize");
         // Borsh serializes `Vec<AgentEntry>` as `len: u32 (LE) || elements…`.
         // With an empty agents vector, the body length is the sum of all
-        // fixed-size fields plus the 4-byte len prefix = 177 bytes:
+        // fixed-size fields plus the 4-byte len prefix = 178 bytes:
         //   owner(32) + vault_id(8) + agents_len(4) + fee_destination(32) +
         //   status(1) + bump(1) + created_at(8) + total_transactions(8) +
         //   total_volume(8) + total_fees_collected(8) + total_deposited_usd(8) +
         //   total_withdrawn_usd(8) + total_failed_transactions(8) +
         //   active_sessions(1) + observe_only(1) + frozen_at_timestamp(8) +
-        //   freeze_reason(1) + vault_authority(32) = 177.
-        // The SIZE constant (675) includes the 8-byte discriminator added at
+        //   freeze_reason(1) + owner_type(1) + vault_authority(32) = 178.
+        // The SIZE constant (676) includes the 8-byte discriminator added at
         // deserialize time AND reserves space for MAX_AGENTS_PER_VAULT (10)
-        // entries × 49 bytes = 490 bytes. So 177 + 8 (disc) + 490 (agents
-        // reserve) = 675 ✓.
+        // entries × 49 bytes = 490 bytes. So 178 + 8 (disc) + 490 (agents
+        // reserve) = 676 ✓.
         assert_eq!(
             buf.len(),
-            177,
-            "Borsh body of empty-agent-set vault must be 177 bytes (32+8+4+32+1+1+7*8+1+1+8+1+32)"
+            178,
+            "Borsh body of empty-agent-set vault must be 178 bytes (32+8+4+32+1+1+7*8+1+1+8+1+1+32)"
         );
         // vault_authority is the LAST 32 bytes of the serialized body —
         // assert the tail equals the sentinel pubkey. This is the
@@ -412,11 +436,11 @@ mod lbl01_vault_authority_tests {
 
     /// LBL-01 size invariant: the documented +32 bytes APPEND must hold.
     #[test]
-    fn vault_size_is_675_post_lbl01() {
+    fn vault_size_is_676_post_fq6() {
         assert_eq!(
             AgentVault::SIZE,
-            675,
-            "Phase 8 LBL-01 documented layout: 643 (pre-LBL-01) + 32 (vault_authority) = 675"
+            676,
+            "F-Q6 documented layout: 675 (Phase-8 LBL-01) + 1 (owner_type) = 676"
         );
     }
 }

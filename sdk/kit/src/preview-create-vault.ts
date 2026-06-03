@@ -88,9 +88,13 @@ import { SIGIL_ERROR__SDK__INVALID_PARAMS } from "./errors/codes.js";
  *       + 8 total_transactions + 8 total_volume
  *       + 8 total_fees_collected + 8 total_deposited_usd + 8 total_withdrawn_usd
  *       + 8 total_failed_transactions + 1 active_sessions
- *       + 1 observe_only [Phase 2 TA-19] = 634.
+ *       + 1 observe_only [Phase 2 TA-19] + 8 frozen_at_timestamp + 1 freeze_reason
+ *       + 1 owner_type [F-Q6] + 32 vault_authority [Phase 8 LBL-01] = 676.
+ *   (Was 634 — stale: it predated the Phase-8 fields frozen_at_timestamp +
+ *    freeze_reason + vault_authority (+41) and F-Q6 owner_type (+1); corrected
+ *    to the rent-exact 676 here.)
  */
-const AGENT_VAULT_SIZE = 634;
+const AGENT_VAULT_SIZE = 676;
 
 /**
  * `PolicyConfig::SIZE` from `programs/sigil/src/state/policy.rs:323-350`.

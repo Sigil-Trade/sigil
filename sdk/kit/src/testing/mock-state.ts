@@ -94,6 +94,8 @@ export function createMockVaultState(
       // exercise post-ownership-transfer state should NOT update this
       // field; only `owner` mutates on transfer, `vaultAuthority` stays
       // at the original initial-owner pubkey.
+      // F-Q6 (2026-06-02): mock single-key (EOA) owner.
+      ownerType: 0,
       vaultAuthority: owner,
     },
     policy: {

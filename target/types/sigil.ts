@@ -7262,6 +7262,17 @@ export type Sigil = {
             "type": "u8"
           },
           {
+            "name": "ownerType",
+            "docs": [
+              "F-Q6 (2026-06-02): owner-account-type discriminant — 0 = single-key",
+              "EOA, 1 = N-of-M multisig (Squads V4). Set once from an on-chain-verified",
+              "fact at the ownership-transfer site; NOT bound by any digest; a wrong",
+              "value fails SAFE to the single-key delayed-grant path in register_agent.",
+              "Placed before vault_authority so the LBL-01 seed-key stays the final 32 bytes."
+            ],
+            "type": "u8"
+          },
+          {
             "name": "vaultAuthority",
             "docs": [
               "Phase 8 LBL-01 — immutable PDA seed-key set at `initialize_vault` time;",

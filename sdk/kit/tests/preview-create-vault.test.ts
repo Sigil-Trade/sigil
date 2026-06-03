@@ -179,9 +179,12 @@ describe("previewCreateVault — PDA derivation", () => {
 // ─── G3 — Account size correctness ──────────────────────────────────────────
 
 describe("previewCreateVault — on-chain account sizes", () => {
-  it("AgentVault sizeBytes equals 634 (Phase 2 added observe_only byte)", async () => {
+  it("AgentVault sizeBytes equals 676 (Phase-8 fields + F-Q6 owner_type)", async () => {
     const r = await previewCreateVault(baseConfig());
-    expect(r.pdaList[0]!.sizeBytes).to.equal(634);
+    // F-Q6 (2026-06-02): 676 = 675 (Phase-8 LBL-01) + 1 owner_type. The prior
+    // 634 was stale by 41 bytes (never updated for frozen_at_timestamp +
+    // freeze_reason + vault_authority); corrected to the rent-exact size here.
+    expect(r.pdaList[0]!.sizeBytes).to.equal(676);
   });
 
   it("PolicyConfig sizeBytes equals 1,329 (Phase 2-5 + G6 + D-5 + F-Q6 operator_grant_delay_seconds)", async () => {
@@ -252,24 +255,27 @@ describe("previewCreateVault — cost math", () => {
     // Post-D-5 (audit 2026-05-19, F-RP3-1): PolicyConfig grew 32 bytes for
     // the new `cosign_session_pubkey` field — SDK SIZE constants now match
     // on-chain:
-    //   AgentVault 634, PolicyConfig 1329, SpendTracker 3328, AgentSpendOverlay 2688.
+    //   AgentVault 676, PolicyConfig 1329, SpendTracker 3328, AgentSpendOverlay 2688.
     // F-Q6 (2026-06-02): PolicyConfig 1322 → 1329 (+8 operator_grant_delay_seconds;
-    // the prior 1322 also double-counted the M1-04-removed has_constraints byte).
+    // the prior 1322 double-counted the M1-04-removed has_constraints byte) AND
+    // AgentVault 634 → 676 (+1 owner_type; the prior 634 was also stale by 41
+    // bytes — it predated the Phase-8 frozen_at_timestamp + freeze_reason +
+    // vault_authority fields).
     // Sum of rent for the 4 PDAs at default mock formula =
-    //   ((634+128) + (1329+128) + (3328+128) + (2688+128)) × 6960
-    // = (762 + 1457 + 3456 + 2816) × 6960
-    // = 8491 × 6960 = 59_097_360 lamports.
-    // totalCostUsd = 59_097_360 × 250_000_000 / 1_000_000_000 = 14_774_340
-    // (= $14.77434 in 6-decimal USD).
-    // Prior pin (pre-F-Q6): rentLamports = 59_048_640, totalCostUsd = 14_762_160.
+    //   ((676+128) + (1329+128) + (3328+128) + (2688+128)) × 6960
+    // = (804 + 1457 + 3456 + 2816) × 6960
+    // = 8533 × 6960 = 59_389_680 lamports.
+    // totalCostUsd = 59_389_680 × 250_000_000 / 1_000_000_000 = 14_847_420
+    // (= $14.84742 in 6-decimal USD).
+    // Prior pin (pre-AgentVault correction): rentLamports = 59_097_360, totalCostUsd = 14_774_340.
     const r = await previewCreateVault(
       baseConfig({
         priorityFeeMicroLamports: 0,
         solPriceUsd: 250_000_000n,
       }),
     );
-    expect(r.rentLamports).to.equal(59_097_360n);
-    expect(r.totalCostUsd).to.equal(14_774_340n);
+    expect(r.rentLamports).to.equal(59_389_680n);
+    expect(r.totalCostUsd).to.equal(14_847_420n);
   });
 
   it("totalCostUsd is bigint (never number)", async () => {

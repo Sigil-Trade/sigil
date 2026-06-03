@@ -234,6 +234,11 @@ pub fn handler(ctx: Context<AcceptOwnershipTransferMultisig>) -> Result<()> {
     {
         let vault = &mut ctx.accounts.vault;
         vault.owner = multisig_key;
+        // F-Q6 (2026-06-02): this path verified a Squads V4 multisig owner
+        // (multisig_pda.owner == SQUADS_V4_PROGRAM_ID + identity match above), so
+        // record owner_type = MULTISIG. register_agent's tier rule treats a
+        // multisig owner as >=2-factor → eligible for instant OPERATOR grants.
+        vault.owner_type = OWNER_TYPE_MULTISIG;
     }
 
     // 6. Phase 8 §RP Fix-Up B (LBL-10 HIGH, audit 2026-05-19): recompute
