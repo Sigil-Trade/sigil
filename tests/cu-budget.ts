@@ -755,7 +755,7 @@ describe("cu-budget", () => {
   // BEFORE any program runs. To work around this we use a mix of ComputeBudget
   // variants and System Program transfer noops to fill the 32 slots.
   // ───────────────────────────────────────────────────────────────────────────
-  it(`Scenario 6: ComputeBudget×28 pad ≤ ${THRESHOLDS.computeBudgetPad32.toLocaleString()} CU`, async () => {
+  it(`Scenario 6: ComputeBudget×16 pad ≤ ${THRESHOLDS.computeBudgetPad32.toLocaleString()} CU`, async () => {
     // F-15/F-11: setupVault now uses PROTOCOL_MODE_ALLOWLIST + JUPITER baseline.
     // Non-spending validate-only scenario; allowlist not load-bearing.
     const ctx = await setupVault(new BN(60006), []);
@@ -766,31 +766,31 @@ describe("cu-budget", () => {
     );
     const finalizeIx = await buildFinalizeIx(ctx);
 
-    // Build 28 unique padding instructions. Pre-Phase-7 this used 32 pad ixs
-    // (2 ComputeBudget kinds + 30 SystemProgram transfers); Phase 7 added 3
-    // accounts to finalize_session (audit_log_success, audit_log_rejected,
-    // slot_hashes_sysvar) which push the TX-level account-table 96 bytes
-    // closer to the 1232-byte cap. Reducing to 26 transfers (28 total ix)
-    // restores room. The TX-level pad-attack guarantee still holds —
-    // M11/SIMD-0296 caps the sysvar-scan iteration count, not the number
-    // of pads, so 28 vs 32 is equally adversarial for that guard.
+    // Build 16 unique padding instructions (2 ComputeBudget kinds + 14
+    // SystemProgram transfers). The pad COUNT is bounded by the 1232-byte TX
+    // WIRE limit, NOT by CU: validate+finalize already consume ~92k CU
+    // (Scenario 3), far under the 1.02M budget, so the pads are "noise" for the
+    // CU assertion — their real job is to prove the post-finalize scan does NOT
+    // iterate them (CU stays bounded regardless of N). The count has shrunk as
+    // validate/finalize grew their account tables + instruction data:
+    //   32 (pre-Phase-7) → 28 (Phase-7 added 3 finalize accounts) → 16 here
+    // because F-Q1a/F-Q4 (writable-destination + Token-2022-mint
+    // remaining-accounts) and F-Q1a's intent-digest 6th validate arg pushed the
+    // account table + ix data past 1232 bytes at 28. 16 leaves clear headroom.
+    // M11/SIMD-0296 caps the sysvar-scan ITERATION count (not the pad count),
+    // so 16 vs 32 is equally adversarial for that guard.
     //
     // ComputeBudget rejects duplicate SetComputeUnitLimit at TX-level
     // validation, so we mix 2 ComputeBudget kinds + N SystemProgram transfers
-    // with VARYING LAMPORT AMOUNTS (lamports are part of the ix data —
-    // different amounts make each ix bytewise unique even when sharing
-    // accounts, avoiding TX-level deduplication AND the per-pubkey 32-byte
-    // cost in the account table).
-    //
-    // To keep the TX under 1232 bytes we share a SINGLE destination keypair so
-    // the account table holds only one extra entry. All transfers are agent
-    // → padDest with amounts 1..=26 lamports. (We pre-fund agent above.)
+    // with VARYING LAMPORT AMOUNTS (lamports are ix data — different amounts
+    // make each ix bytewise unique even when sharing accounts). A SINGLE shared
+    // destination keeps the account table to one extra entry. (agent pre-funded.)
     const padDest = Keypair.generate().publicKey;
     const padIxs: TransactionInstruction[] = [
       ComputeBudgetProgram.setComputeUnitLimit({ units: 1_400_000 }),
       ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }),
     ];
-    for (let i = 0; i < 26; i++) {
+    for (let i = 0; i < 14; i++) {
       padIxs.push(
         SystemProgram.transfer({
           fromPubkey: agent.publicKey,
@@ -799,7 +799,7 @@ describe("cu-budget", () => {
         }),
       );
     }
-    expect(padIxs.length).to.equal(28);
+    expect(padIxs.length).to.equal(16);
 
     const result = sendAndMeasureCU(
       svm,
