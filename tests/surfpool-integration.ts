@@ -33,6 +33,10 @@ import {
   siblingHandlerDigest,
 } from "./helpers/policy-digest";
 import {
+  buildExpectedIntentDigest,
+  digestAsArgs,
+} from "./helpers/intent-digest-fixture";
+import {
   createSurfpoolTestEnv,
   SurfpoolTestEnv,
   DEVNET_USDC_MINT,
@@ -252,6 +256,15 @@ describe("surfpool-integration", function () {
           program.programId, // dummy protocol
           await readPolicyVersion(program, policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: vaultPda,
+              agent: agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(50_000_000),
+              targetProtocol: program.programId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -435,6 +448,15 @@ describe("surfpool-integration", function () {
           program.programId,
           await readPolicyVersion(program, policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: vaultPda,
+              agent: agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(10_000_000),
+              targetProtocol: program.programId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -498,6 +520,15 @@ describe("surfpool-integration", function () {
           program.programId,
           await readPolicyVersion(program, policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: vaultPda,
+              agent: agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(10_000_000),
+              targetProtocol: program.programId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -549,6 +580,15 @@ describe("surfpool-integration", function () {
           program.programId,
           await readPolicyVersion(program, policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: vaultPda,
+              agent: agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(5_000_000),
+              targetProtocol: program.programId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -722,6 +762,15 @@ describe("surfpool-integration", function () {
           program.programId,
           await readPolicyVersion(program, policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: vaultPda,
+              agent: agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(25_000_000),
+              targetProtocol: program.programId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -788,6 +837,15 @@ describe("surfpool-integration", function () {
           program.programId,
           await readPolicyVersion(program, policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: vaultPda,
+              agent: rogueAgent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(25_000_000),
+              targetProtocol: program.programId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: rogueAgent.publicKey,
@@ -864,6 +922,15 @@ describe("surfpool-integration", function () {
           program.programId,
           await readPolicyVersion(program, policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: vaultPda,
+              agent: agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(30_000_000),
+              targetProtocol: program.programId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -1060,6 +1127,15 @@ describe("surfpool-integration", function () {
           program.programId,
           await readPolicyVersion(program, policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: vaultPda,
+              agent: agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(amount),
+              targetProtocol: program.programId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -1235,6 +1311,15 @@ describe("surfpool-integration", function () {
           program.programId,
           await readPolicyVersion(program, policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: vaultPda,
+              agent: agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(20_000_000),
+              targetProtocol: program.programId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -1707,6 +1792,8 @@ describe("surfpool-integration", function () {
           null, // stable_balance_floor (TA-12 Phase 5 — pass-through)
           null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
           null, // cosign_required (G6 audit 2026-05-18 — pass-through, default off)
+          null, // cosign_session_pubkey (D-5: pass-through)
+          null, // operator_grant_delay_seconds (D-5: pass-through)
           PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
           await fetchAndComputeQueueDigest(program, policyPda, vaultPda, {
             dailySpendingCapUsd: new BN(200_000_000),
@@ -1770,6 +1857,8 @@ describe("surfpool-integration", function () {
           null, // stable_balance_floor (TA-12 Phase 5 — pass-through)
           null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
           null, // cosign_required (G6 audit 2026-05-18 — pass-through, default off)
+          null, // cosign_session_pubkey (D-5: pass-through)
+          null, // operator_grant_delay_seconds (D-5: pass-through)
           PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
           await fetchAndComputeQueueDigest(program, policyPda, vaultPda, {
             dailySpendingCapUsd: new BN(300_000_000),
@@ -2014,6 +2103,15 @@ describe("surfpool-integration", function () {
           program.programId,
           await readPolicyVersion(program, setup.policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: setup.vaultPda,
+              agent: setup.agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(10_000_000),
+              targetProtocol: program.programId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: setup.agent.publicKey,
@@ -2094,6 +2192,15 @@ describe("surfpool-integration", function () {
           program.programId,
           await readPolicyVersion(program, setup.policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: setup.vaultPda,
+              agent: setup.agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(5_000_000),
+              targetProtocol: program.programId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: setup.agent.publicKey,
@@ -2203,7 +2310,8 @@ describe("surfpool-integration", function () {
       const agentEntry = vault.agents.find(
         (a: any) => a.pubkey.toString() === setup.agent.publicKey.toString(),
       );
-      expect(agentEntry.paused).to.equal(true);
+      expect(agentEntry, "agent must be registered").to.exist;
+      expect(agentEntry!.paused).to.equal(true);
 
       // Agent's composed TX should fail
       const sessionPda = deriveSessionPda(
@@ -2219,6 +2327,15 @@ describe("surfpool-integration", function () {
           program.programId,
           await readPolicyVersion(program, setup.policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: setup.vaultPda,
+              agent: setup.agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(5_000_000),
+              targetProtocol: program.programId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: setup.agent.publicKey,
@@ -2280,6 +2397,15 @@ describe("surfpool-integration", function () {
           program.programId,
           await readPolicyVersion(program, setup.policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: setup.vaultPda,
+              agent: agent2.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(5_000_000),
+              targetProtocol: program.programId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: agent2.publicKey,
@@ -2338,7 +2464,8 @@ describe("surfpool-integration", function () {
       const agentEntry = vault.agents.find(
         (a: any) => a.pubkey.toString() === setup.agent.publicKey.toString(),
       );
-      expect(agentEntry.paused).to.equal(false);
+      expect(agentEntry, "agent must be registered").to.exist;
+      expect(agentEntry!.paused).to.equal(false);
 
       // Agent's composed TX should work again
       const sessionPda = deriveSessionPda(
@@ -2354,6 +2481,15 @@ describe("surfpool-integration", function () {
           program.programId,
           await readPolicyVersion(program, setup.policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: setup.vaultPda,
+              agent: setup.agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(5_000_000),
+              targetProtocol: program.programId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: setup.agent.publicKey,
@@ -2507,6 +2643,15 @@ describe("surfpool-integration", function () {
           program.programId,
           await readPolicyVersion(program, swapSetup.policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: swapSetup.vaultPda,
+              agent: swapSetup.agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(5_000_000),
+              targetProtocol: program.programId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: swapSetup.agent.publicKey,
@@ -2573,6 +2718,15 @@ describe("surfpool-integration", function () {
           program.programId,
           currentVersion,
           new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: noSwapSetup.vaultPda,
+              agent: noSwapSetup.agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(5_000_000),
+              targetProtocol: program.programId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: noSwapSetup.agent.publicKey,
@@ -2677,7 +2831,8 @@ describe("surfpool-integration", function () {
         (a: any) =>
           a.pubkey.toString() === swapSetup.agent.publicKey.toString(),
       );
-      expect(agentEntry.capability).to.equal(FULL_CAPABILITY);
+      expect(agentEntry, "agent must be registered").to.exist;
+      expect(agentEntry!.capability).to.equal(FULL_CAPABILITY);
     });
 
     it("two agents with different permissions operate independently", async () => {
@@ -2709,6 +2864,15 @@ describe("surfpool-integration", function () {
           program.programId,
           currentVersion,
           new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: swapSetup.vaultPda,
+              agent: agent2.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(5_000_000),
+              targetProtocol: program.programId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: agent2.publicKey,
@@ -2813,6 +2977,15 @@ describe("surfpool-integration", function () {
           program.programId,
           await readPolicyVersion(program, zeroSetup.policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: zeroSetup.vaultPda,
+              agent: zeroSetup.agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(5_000_000),
+              targetProtocol: program.programId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: zeroSetup.agent.publicKey,
@@ -3160,6 +3333,15 @@ describe("surfpool-integration", function () {
           program.programId,
           await readPolicyVersion(program, setup.policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: setup.vaultPda,
+              agent: setup.agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(5_000_000),
+              targetProtocol: program.programId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: setup.agent.publicKey,
@@ -3227,6 +3409,15 @@ describe("surfpool-integration", function () {
           program.programId,
           await readPolicyVersion(program, setup.policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: setup.vaultPda,
+              agent: setup.agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(5_000_000),
+              targetProtocol: program.programId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: setup.agent.publicKey,
