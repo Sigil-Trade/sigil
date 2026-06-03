@@ -417,6 +417,8 @@ export interface LiveLikePolicy {
   agentSetHash?: Buffer;
   /** D-5 (audit 2026-05-19, F-RP3-1): bound at canonical digest position 22. */
   cosignSessionPubkey?: PublicKey;
+  /** F-Q6 (2026-06-02): operator_grant_delay_seconds, bound at canonical digest position 23. */
+  operatorGrantDelaySeconds?: BN | bigint | number;
 }
 
 export interface QueueOverride {
@@ -460,6 +462,13 @@ export interface QueueOverride {
    * explicitly disables the gate; any other pubkey enables it.
    */
   cosignSessionPubkey?: PublicKey | null;
+  /**
+   * F-Q6 (2026-06-02): operator_grant_delay_seconds override. null =
+   * pass-through from live policy; any value sets the configured delay
+   * (the on-chain queue merges via `unwrap_or(live)`). Bound at digest
+   * position 23.
+   */
+  operatorGrantDelaySeconds?: BN | bigint | number | null;
 }
 
 function pick<T>(override: T | null | undefined, fallback: T): T {
@@ -538,6 +547,13 @@ export function queuePolicyMergedDigest(
       override.cosignSessionPubkey,
       live.cosignSessionPubkey ?? PublicKey.default,
     ),
+    // F-Q6 (2026-06-02): merged-effective operator_grant_delay_seconds.
+    // Mirrors the on-chain queue merge `unwrap_or(live)` — null override =
+    // pass-through from live policy (default 0 when live is unset).
+    operatorGrantDelaySeconds: pick(
+      override.operatorGrantDelaySeconds,
+      live.operatorGrantDelaySeconds ?? 0,
+    ),
   });
 }
 
@@ -604,6 +620,11 @@ export async function siblingHandlerDigest(
     cosignSessionPubkey:
       (policy.cosignSessionPubkey as PublicKey | undefined) ??
       PublicKey.default,
+    // F-Q6 (2026-06-02): pass-through from live policy. Sibling handlers
+    // (register/revoke/pause/unpause + post-assertions flips) never mutate
+    // operator_grant_delay_seconds; mirrors the register_agent.rs recompute.
+    operatorGrantDelaySeconds:
+      (policy.operatorGrantDelaySeconds as BN | undefined) ?? 0,
   });
 }
 
@@ -655,6 +676,10 @@ export async function fetchAndComputeQueueDigest(
     cosignSessionPubkey:
       (policy.cosignSessionPubkey as PublicKey | undefined) ??
       PublicKey.default,
+    // F-Q6 (2026-06-02): snapshot operator_grant_delay_seconds from live
+    // policy (BN from Anchor). Falls back to 0 when absent (pre-F-Q6 IDL).
+    operatorGrantDelaySeconds:
+      (policy.operatorGrantDelaySeconds as BN | undefined) ?? 0,
   };
   return queuePolicyMergedDigest(live, override, !!vault.observeOnly);
 }
