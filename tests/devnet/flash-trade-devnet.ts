@@ -48,6 +48,10 @@ import {
   PROTOCOL_TREASURY,
 } from "../helpers/devnet-setup";
 import { initVaultPreviewDigest } from "../helpers/policy-digest";
+import {
+  buildExpectedIntentDigest,
+  digestAsArgs,
+} from "../helpers/intent-digest-fixture";
 
 // ─── Flash Trade Devnet Constants ──────────────────────────────────────────
 
@@ -228,6 +232,12 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
           [], // destinations
           [], // protocolCaps
           false, // observe_only (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
           initVaultPreviewDigest({
             dailySpendingCapUsd: new BN(500_000_000),
             maxTransactionSizeUsd: new BN(100_000_000),
@@ -336,6 +346,15 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
           ((await program.account.policyConfig.fetch(policyPda))
             .policyVersion as BN) ?? new BN(0), // expectedPolicyVersion
           new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: vaultPda,
+              agent: agent.publicKey,
+              tokenMint: FLASH_USDC_DEVNET,
+              amount: new BN(500_000),
+              targetProtocol: FLASH_TRADE_DEVNET,
+            }),
+          ),
         )
         .accounts({
           agent: agent.publicKey,
@@ -522,6 +541,15 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
           FLASH_TRADE_DEVNET,
           new BN(0),
           new BN(0), // AC-10 expectedNonce
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault,
+              agent: agent.publicKey,
+              tokenMint: FLASH_USDC_DEVNET,
+              amount,
+              targetProtocol: FLASH_TRADE_DEVNET,
+            }),
+          ),
         )
         .accounts({
           agent: agent.publicKey,
@@ -616,6 +644,12 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
           [],
           [],
           false, // observe_only (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
           initVaultPreviewDigest({
             dailySpendingCapUsd: new BN(500_000_000),
             maxTransactionSizeUsd: new BN(100_000_000),
@@ -845,6 +879,12 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
           [],
           [],
           false, // observe_only (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
           initVaultPreviewDigest({
             dailySpendingCapUsd: new BN(500_000_000),
             maxTransactionSizeUsd: new BN(100_000_000),
@@ -920,6 +960,15 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
           ((await program.account.policyConfig.fetch(pdas.policyPda))
             .policyVersion as BN) ?? new BN(0),
           new BN(0), // AC-10 expectedNonce
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: pdas.vaultPda,
+              agent: agent.publicKey,
+              tokenMint: FLASH_USDC_DEVNET,
+              amount: new BN(100_000),
+              targetProtocol: FLASH_TRADE_DEVNET,
+            }),
+          ),
         )
         .accounts({
           agent: agent.publicKey,
@@ -1002,6 +1051,12 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
           [],
           [],
           false, // observe_only (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
           initVaultPreviewDigest({
             dailySpendingCapUsd: new BN(500_000_000),
             maxTransactionSizeUsd: new BN(100_000_000),
@@ -1076,6 +1131,15 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
             ((await program.account.policyConfig.fetch(pdas.policyPda))
               .policyVersion as BN) ?? new BN(0),
             new BN(0), // AC-10 expectedNonce
+            digestAsArgs(
+              buildExpectedIntentDigest({
+                vault: pdas.vaultPda,
+                agent: agent.publicKey,
+                tokenMint: FLASH_USDC_DEVNET,
+                amount: new BN(100_000),
+                targetProtocol: randomProgram,
+              }),
+            ),
           )
           .accounts({
             agent: agent.publicKey,
@@ -1234,7 +1298,7 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
         ),
       ];
       console.log(`    Unique programs in USDC→SOL swap: ${programs.length}`);
-      for (const p of programs) {
+      for (const p of programs as string[]) {
         const label =
           p === FLASH_TRADE_DEVNET.toString()
             ? " (Flash Trade)"

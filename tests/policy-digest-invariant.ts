@@ -186,7 +186,6 @@ describe("policy-digest invariant (TA-19 sibling-handler recompute)", () => {
     policyPda: PublicKey,
     vaultPda: PublicKey,
     override: Partial<{
-      hasConstraints: boolean;
       hasPostAssertions: number;
     }> = {},
   ): Promise<number[]> {
@@ -204,10 +203,8 @@ describe("policy-digest invariant (TA-19 sibling-handler recompute)", () => {
       timelockDuration: policy.timelockDuration,
       sessionExpirySeconds: policy.sessionExpirySeconds,
       observeOnly: !!vault.observeOnly,
-      hasConstraints:
-        override.hasConstraints !== undefined
-          ? override.hasConstraints
-          : !!policy.hasConstraints,
+      // M1-04: hasConstraints removed from the digest (constraints engine
+      // deleted); it was an excess property here, never read or encoded.
       hasPostAssertions:
         override.hasPostAssertions !== undefined
           ? override.hasPostAssertions
@@ -430,7 +427,6 @@ describe("policy-digest invariant (TA-19 sibling-handler recompute)", () => {
         allowedDestinations: livePolicy.allowedDestinations,
         timelockDuration: livePolicy.timelockDuration,
         sessionExpirySeconds: livePolicy.sessionExpirySeconds,
-        hasConstraints: !!livePolicy.hasConstraints,
         hasPostAssertions: livePolicy.hasPostAssertions as number,
         createdAtSlot: livePolicy.createdAtSlot ?? 0,
         // Phase 3 (TA-05/TA-07/TA-17): pass live values through so the
@@ -807,7 +803,6 @@ describe("Phase 2 close-up — F-16 negative tests", () => {
         allowedDestinations: livePolicy.allowedDestinations,
         timelockDuration: livePolicy.timelockDuration,
         sessionExpirySeconds: livePolicy.sessionExpirySeconds,
-        hasConstraints: !!livePolicy.hasConstraints,
         hasPostAssertions: livePolicy.hasPostAssertions as number,
         createdAtSlot: livePolicy.createdAtSlot ?? 0,
         // Phase 3 (TA-05/TA-07/TA-17): pass live values through so the

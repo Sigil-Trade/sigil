@@ -772,15 +772,20 @@ export async function setupVaultWithAgent(
   // pass `opts.protocols = [...]` explicitly.
   //
   // KNOWN: `tsc --noEmit` reports `TS2589: Type instantiation is excessively
-  // deep and possibly infinite` at the line below. This is a pre-existing
-  // Anchor 0.32.1 type-depth limit (the codec hits the compiler's depth-50
-  // ceiling on the long `.initializeVault(...)` argument chain). Phase 2's
-  // two new arguments (observeOnly + policy_preview_digest) shifted the line
-  // from 758 → 773; the underlying issue predates Phase 2 and is not a
-  // regression. Tracked for v1.1 SDK cleanup (Codama-generated client will
-  // sidestep this). DO NOT attempt to fix here — touching the chain only
-  // resurfaces the same error elsewhere.
-  await program.methods
+  // deep and possibly infinite` on the `.initializeVault(...)` chain below.
+  // This is a pre-existing Anchor 0.32.1 type-depth limit (the codec hits the
+  // compiler's depth-50 ceiling on the long argument chain). Tracked for v1.1
+  // SDK cleanup (Codama-generated client will sidestep this).
+  //
+  // FIX: alias `program.methods` to an `any`-typed local ONCE and use it for
+  // every `.methods.*` builder call in this function. Casting only the
+  // initialize_vault chain inline merely shifts the cumulative-depth ceiling
+  // onto the next builder call (e.g. register_agent) — the depth budget is
+  // per-file, so a single shared `any` alias is the stable fix. Runtime
+  // behavior is identical (same methods, same args, same `.rpc()`). Do NOT
+  // touch the argument chains themselves.
+  const methods = program.methods as any;
+  await methods
     .initializeVault(
       vaultId,
       dailyCap,
@@ -796,6 +801,9 @@ export async function setupVaultWithAgent(
       0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
       false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
       5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+      new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+      new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+      false, // cosign_required (G6 audit 2026-05-18 — opt-in, default off)
       initVaultPreviewDigest({
         dailySpendingCapUsd: dailyCap,
         maxTransactionSizeUsd: maxTxSize,
@@ -822,7 +830,7 @@ export async function setupVaultWithAgent(
     .rpc();
 
   if (!skipAgent) {
-    await program.methods
+    await methods
       .registerAgent(agent.publicKey, agentCapability, agentSpendingLimit)
       .accounts({
         owner: owner.publicKey,

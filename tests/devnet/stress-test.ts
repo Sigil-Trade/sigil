@@ -45,6 +45,10 @@ import {
   calculateFees,
 } from "../helpers/devnet-setup";
 import { initVaultPreviewDigest } from "../helpers/policy-digest";
+import {
+  buildExpectedIntentDigest,
+  digestAsArgs,
+} from "../helpers/intent-digest-fixture";
 
 // ─── Shared State ──────────────────────────────────────────────────────────
 
@@ -102,6 +106,12 @@ async function createVault(opts: {
       opts.destinations ?? [],
       [],
       false, // observe_only (Phase 2 TA-19)
+      0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+      false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+      5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+      new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+      new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+      false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
       initVaultPreviewDigest({
         dailySpendingCapUsd: opts.dailyCap,
         maxTransactionSizeUsd: opts.maxTx,
@@ -221,7 +231,22 @@ async function doComposedTx(
   });
 
   const validateIx = await program.methods
-    .validateAndAuthorize(usdcMint, amount, allowedProtocol, new BN(0))
+    .validateAndAuthorize(
+      usdcMint,
+      amount,
+      allowedProtocol,
+      new BN(0), // expectedPolicyVersion
+      new BN(0), // AC-10 expectedNonce
+      digestAsArgs(
+        buildExpectedIntentDigest({
+          vault,
+          agent: agent.publicKey,
+          tokenMint: usdcMint,
+          amount,
+          targetProtocol: allowedProtocol,
+        }),
+      ),
+    )
     .accounts({
       agent: agent.publicKey,
       vault,
@@ -392,7 +417,9 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
       const destBal = await getTokenBalance(connection, destAta);
 
       // Vault decreased (amount + protocol fee)
-      const fees = calculateFees(50_000_000, 200, 0);
+      // calculateFees(amount, devFeeRate) — protocol fee rate is now the
+      // internal PROTOCOL_FEE_RATE (200) constant, not a parameter.
+      const fees = calculateFees(50_000_000, 0);
       expect(after).to.be.lessThan(before);
       expect(destBal).to.be.greaterThan(0);
       console.log(
@@ -1031,7 +1058,17 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
           usdcMint,
           new BN(0), // amount=0 for non-spending
           allowedProtocol,
-          new BN(0),
+          new BN(0), // expectedPolicyVersion
+          new BN(0), // AC-10 expectedNonce
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: nsV.vault,
+              agent: agentA.publicKey,
+              tokenMint: usdcMint,
+              amount: new BN(0),
+              targetProtocol: allowedProtocol,
+            }),
+          ),
         )
         .accounts({
           agent: agentA.publicKey,

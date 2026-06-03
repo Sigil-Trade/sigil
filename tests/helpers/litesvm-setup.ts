@@ -32,6 +32,7 @@ import {
   LiteSVM,
   TransactionMetadata,
 } from "litesvm";
+// @ts-expect-error - bs58@4 ships no type declarations and there is no @types/bs58 installed
 import bs58 from "bs58";
 import { SuccessfulTxSimulationResponse } from "@coral-xyz/anchor/dist/cjs/utils/rpc";
 import * as path from "path";
