@@ -87,7 +87,7 @@ export const SIGIL_ON_CHAIN_ERROR_MIN = 6000;
  * this map agrees with it by code AND name — so adding or renumbering an
  * on-chain error without updating this map fails at test time.
  */
-export const SIGIL_ON_CHAIN_ERROR_MAX = 6109;
+export const SIGIL_ON_CHAIN_ERROR_MAX = 6110;
 
 interface ErrorMapping {
   name: string;
@@ -1888,6 +1888,20 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
         action: "report_state_corruption",
         description:
           "vault.owner_type is program-set to 0 (EOA) or 1 (multisig); an out-of-range value indicates on-chain state corruption and should be unreachable in normal operation. OPERATOR-grant paths are blocked until the vault state is valid — report this.",
+      },
+    ],
+  },
+  6110: {
+    name: "SpendAccountingUnderflow",
+    message:
+      "finalize_session detected collected fees exceeding the realized stablecoin outflow (fees_collected > total_decrease) — an accounting impossibility, since fees are CPI'd out before the DeFi leg. The transaction is rejected fail-closed rather than under-counting the spend against the caps (F-Q9).",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "review_swap_construction",
+        description:
+          "This fires when a stablecoin-input action net-returned stablecoin so the measured outflow was smaller than the protocol+developer fees. Verify the DeFi instruction actually spends the declared stablecoin input; a net-return on the stablecoin-input path is anomalous and is rejected.",
       },
     ],
   },

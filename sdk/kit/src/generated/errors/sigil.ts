@@ -234,6 +234,8 @@ export const SIGIL_ERROR__ERR_OPERATOR_GRANT_REQUIRES_TIMELOCK = 0x17db; // 6107
 export const SIGIL_ERROR__ERR_OPERATOR_GRANT_DELAY_TOO_LONG = 0x17dc; // 6108
 /** InvalidOwnerType: vault.owner_type is not a recognized discriminant (expected 0=EOA or 1=multisig) */
 export const SIGIL_ERROR__INVALID_OWNER_TYPE = 0x17dd; // 6109
+/** SpendAccountingUnderflow: finalize spend accounting underflow: collected fees exceed realized stablecoin outflow */
+export const SIGIL_ERROR__SPEND_ACCOUNTING_UNDERFLOW = 0x17de; // 6110
 
 export type SigilError =
   | typeof SIGIL_ERROR__ACCOUNT_WRITABILITY_MISMATCH
@@ -325,6 +327,7 @@ export type SigilError =
   | typeof SIGIL_ERROR__SESSION_NOT_AUTHORIZED
   | typeof SIGIL_ERROR__SLIPPAGE_BPS_TOO_HIGH
   | typeof SIGIL_ERROR__SNAPSHOT_NOT_CAPTURED
+  | typeof SIGIL_ERROR__SPEND_ACCOUNTING_UNDERFLOW
   | typeof SIGIL_ERROR__SPENDING_CAP_EXCEEDED
   | typeof SIGIL_ERROR__SYSVAR_SCAN_BOUND_EXCEEDED
   | typeof SIGIL_ERROR__TIMELOCK_NOT_EXPIRED
@@ -439,6 +442,7 @@ if (process.env.NODE_ENV !== "production") {
     [SIGIL_ERROR__SESSION_NOT_AUTHORIZED]: `Session not authorized`,
     [SIGIL_ERROR__SLIPPAGE_BPS_TOO_HIGH]: `Slippage BPS exceeds maximum (5000 = 50%)`,
     [SIGIL_ERROR__SNAPSHOT_NOT_CAPTURED]: `Delta assertion snapshot was not captured in validate_and_authorize`,
+    [SIGIL_ERROR__SPEND_ACCOUNTING_UNDERFLOW]: `finalize spend accounting underflow: collected fees exceed realized stablecoin outflow`,
     [SIGIL_ERROR__SPENDING_CAP_EXCEEDED]: `Rolling 24h spending cap would be exceeded`,
     [SIGIL_ERROR__SYSVAR_SCAN_BOUND_EXCEEDED]: `Sysvar instruction scan exceeded the per-tx safety bound`,
     [SIGIL_ERROR__TIMELOCK_NOT_EXPIRED]: `Timelock period has not expired yet`,

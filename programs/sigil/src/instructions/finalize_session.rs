@@ -332,7 +332,22 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
             let fees_collected = session_protocol_fee
                 .checked_add(session_developer_fee)
                 .ok_or(SigilError::Overflow)?;
-            let actual_spend = total_decrease.saturating_sub(fees_collected);
+            // F-Q9 (audit 2026-06-01, G12): checked-revert, NOT saturating.
+            // The fees were CPI'd OUT of THIS SAME ATA before the DeFi leg, so
+            // for any honest spend `current <= before - fees` ⟹
+            // `total_decrease >= fees`. `fees_collected > total_decrease` is
+            // therefore reachable ONLY when the vault's stablecoin ATA ended
+            // HIGHER than (snapshot - fees) — i.e. a net stablecoin INFLOW on
+            // this stablecoin-INPUT session (a net-positive round-trip). That
+            // is an explicitly-unsupported flow (see M2-05); failing closed is
+            // intended. The prior `saturating_sub` silently zeroed
+            // `actual_spend`, masking the anomaly and — with `ceil_fee`'s
+            // round-up — letting small spends round to 0 and skip every cap.
+            // DO NOT revert this to a saturating sub. (Conservation proof:
+            // Certora rule I1 NO-UNDERCOUNT, tracked for M2.)
+            let actual_spend = total_decrease
+                .checked_sub(fees_collected)
+                .ok_or(SigilError::SpendAccountingUnderflow)?;
             actual_spend_tracked = actual_spend;
 
             if actual_spend > 0 {

@@ -45,7 +45,7 @@ describe("isOnChainReverted — exact range boundaries", () => {
     expect(isOnChainReverted(6100)).to.equal(true);
   });
 
-  // Ceiling anchored to SIGIL_ON_CHAIN_ERROR_MAX (currently 6106 post F-Q4)
+  // Ceiling anchored to SIGIL_ON_CHAIN_ERROR_MAX (currently 6110 post F-Q9)
   // so it tracks future renumbers instead of pinning a literal.
   it("true at the on-chain ceiling (SIGIL_ON_CHAIN_ERROR_MAX)", () => {
     expect(isOnChainReverted(SIGIL_ON_CHAIN_ERROR_MAX)).to.equal(true);
@@ -102,9 +102,9 @@ describe("categorizeDxError — exact range boundaries", () => {
     category: DxErrorCategory;
     description: string;
   }> = [
-    // Program range (Anchor 6000-6109 post F-Q6)
+    // Program range (Anchor 6000-6110 post F-Q9)
     { code: 6000, category: "program", description: "program lower bound" },
-    { code: 6109, category: "program", description: "program upper bound" },
+    { code: 6110, category: "program", description: "program upper bound" },
     { code: 6050, category: "program", description: "mid program range" },
     {
       code: 6088,
@@ -134,7 +134,7 @@ describe("categorizeDxError — exact range boundaries", () => {
 
     // Unknown — outside all defined ranges
     { code: 5999, category: "unknown", description: "one below program range" },
-    { code: 6110, category: "unknown", description: "one above program range" },
+    { code: 6111, category: "unknown", description: "one above program range" },
     { code: 6999, category: "unknown", description: "one below user range" },
     { code: 7200, category: "unknown", description: "one above network range" },
     { code: 7999, category: "unknown", description: "DX_ERROR_CODE_UNMAPPED" },

@@ -6441,6 +6441,11 @@ export type Sigil = {
       "code": 6109,
       "name": "invalidOwnerType",
       "msg": "vault.owner_type is not a recognized discriminant (expected 0=EOA or 1=multisig)"
+    },
+    {
+      "code": 6110,
+      "name": "spendAccountingUnderflow",
+      "msg": "finalize spend accounting underflow: collected fees exceed realized stablecoin outflow"
     }
   ],
   "types": [

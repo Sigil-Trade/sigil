@@ -14,7 +14,7 @@
  */
 
 // ────────────────────────────────────────────────────────────────
-// Sigil program errors (6000-6109)
+// Sigil program errors (6000-6110)
 // ────────────────────────────────────────────────────────────────
 
 export const SIGIL_ERRORS = {
@@ -128,6 +128,7 @@ export const SIGIL_ERRORS = {
   ErrOperatorGrantRequiresTimelock: 6107,
   ErrOperatorGrantDelayTooLong: 6108,
   InvalidOwnerType: 6109,
+  SpendAccountingUnderflow: 6110,
 } as const;
 
 /**

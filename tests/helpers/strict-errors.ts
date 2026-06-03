@@ -144,6 +144,7 @@ export const SIGIL_ERRORS = {
   ErrOperatorGrantRequiresTimelock: 6107,
   ErrOperatorGrantDelayTooLong: 6108,
   InvalidOwnerType: 6109,
+  SpendAccountingUnderflow: 6110,
 } as const;
 
 export type SigilErrorName = keyof typeof SIGIL_ERRORS;

@@ -723,4 +723,16 @@ pub enum SigilError {
     /// (mirrors the TA-04 `InvalidCapability` reserved-value contract).
     #[msg("vault.owner_type is not a recognized discriminant (expected 0=EOA or 1=multisig)")]
     InvalidOwnerType,
+
+    /// 6110 — F-Q9 (audit 2026-06-01, G12): in `finalize_session`, the collected
+    /// fees exceeded the realized stablecoin outflow (`fees_collected >
+    /// total_decrease`). Fees are CPI'd OUT before the DeFi leg, so the realized
+    /// outflow MUST include them — a fee larger than the outflow is an accounting
+    /// impossibility (the DeFi leg net-RETURNED stablecoin on a stablecoin-INPUT
+    /// path). Previously `saturating_sub` silently zeroed `actual_spend` here,
+    /// masking the anomaly and — with `ceil_fee`'s round-up — letting small spends
+    /// round to 0 and skip the caps. Now rejected fail-closed rather than
+    /// under-counting the spend. Certora conservation proof tracked for M2.
+    #[msg("finalize spend accounting underflow: collected fees exceed realized stablecoin outflow")]
+    SpendAccountingUnderflow,
 }
