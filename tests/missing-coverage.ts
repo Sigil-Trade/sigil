@@ -44,6 +44,7 @@ import {
   TestEnv,
   LiteSVM,
 } from "./helpers/litesvm-setup";
+import { registerOperatorAgent } from "./helpers/register-operator-agent";
 
 const FULL_CAPABILITY = 2; // CAPABILITY_OPERATOR
 
@@ -175,20 +176,22 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
   // ───────────────────────────────────────────────────────────────────────
   it("record_agent_violation: increments consecutive_failures from 0 to 1", async () => {
     const vaultId = new BN(5001);
-    const { vault, policy, overlay } = await initVaultFor(vaultId);
+    const { vault, policy } = await initVaultFor(vaultId);
 
     const agent = Keypair.generate();
     airdropSol(svm, agent.publicKey, 1 * LAMPORTS_PER_SOL);
 
-    await program.methods
-      .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-      .accounts({
-        owner: owner.publicKey,
-        vault,
-        policy,
-        agentSpendOverlay: overlay,
-      } as any)
-      .rpc();
+    // F-Q6 (2026-06-02): a single-key vault can no longer instant-register an
+    // OPERATOR agent (register_agent reverts ErrOperatorGrantRequiresTimelock,
+    // 6107). This test needs an OPERATOR agent (it asserts capability ==
+    // FULL_CAPABILITY below), so seat it via the timelocked queue→apply helper.
+    await registerOperatorAgent({
+      program,
+      svm,
+      owner: owner.publicKey,
+      vault,
+      agent: agent.publicKey,
+    });
 
     // PRECONDITION: consecutive_failures == 0.
     const vaultBefore = await program.account.agentVault.fetch(vault);
@@ -367,20 +370,25 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
   // ───────────────────────────────────────────────────────────────────────
   it("cancel_agent_permissions_update: closes PendingAgentPermissionsUpdate PDA", async () => {
     const vaultId = new BN(5004);
-    const { vault, policy, overlay } = await initVaultFor(vaultId);
+    const { vault, policy } = await initVaultFor(vaultId);
 
     const agent = Keypair.generate();
     airdropSol(svm, agent.publicKey, 1 * LAMPORTS_PER_SOL);
 
-    await program.methods
-      .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-      .accounts({
-        owner: owner.publicKey,
-        vault,
-        policy,
-        agentSpendOverlay: overlay,
-      } as any)
-      .rpc();
+    // F-Q6 (2026-06-02): seat the OPERATOR agent via the timelocked queue→apply
+    // helper — single-key vaults can no longer instant-register OPERATOR
+    // (register_agent reverts ErrOperatorGrantRequiresTimelock, 6107). The
+    // helper closes its own `pending_agent_grant` PDA on apply, so it does NOT
+    // collide with the `pending_agent_perms` PDA this test queues below
+    // (distinct seeds). The agent stays at OPERATOR, matching the
+    // FULL_CAPABILITY re-asserted by the queued (then-cancelled) perm update.
+    await registerOperatorAgent({
+      program,
+      svm,
+      owner: owner.publicKey,
+      vault,
+      agent: agent.publicKey,
+    });
 
     const [pendingAgentPerms] = PublicKey.findProgramAddressSync(
       [
@@ -444,22 +452,24 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
     const vaultId = new BN(5005);
     // AUTO_REVOKE_THRESHOLD_MIN is 3 per state/mod.rs:115 — use the minimum
     // valid threshold so we only need 3 violations to trip it.
-    const { vault, policy, overlay } = await initVaultFor(vaultId, {
+    const { vault, policy } = await initVaultFor(vaultId, {
       autoRevokeThreshold: 3,
     });
 
     const agent = Keypair.generate();
     airdropSol(svm, agent.publicKey, 1 * LAMPORTS_PER_SOL);
 
-    await program.methods
-      .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-      .accounts({
-        owner: owner.publicKey,
-        vault,
-        policy,
-        agentSpendOverlay: overlay,
-      } as any)
-      .rpc();
+    // F-Q6 (2026-06-02): seat the OPERATOR agent via the timelocked queue→apply
+    // helper. This test asserts the auto-revoke transition OPERATOR(2)→
+    // DISABLED(0), so it must start at OPERATOR — which a single-key vault can
+    // no longer reach with an instant register_agent (reverts 6107).
+    await registerOperatorAgent({
+      program,
+      svm,
+      owner: owner.publicKey,
+      vault,
+      agent: agent.publicKey,
+    });
 
     // ACT 1-2: record violations 1 and 2 — counter 0→1→2; threshold (3) NOT yet hit.
     for (let i = 0; i < 2; i++) {

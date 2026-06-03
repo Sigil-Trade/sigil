@@ -14,7 +14,7 @@
  */
 
 // ────────────────────────────────────────────────────────────────
-// Sigil program errors (6000-6106)
+// Sigil program errors (6000-6109)
 // ────────────────────────────────────────────────────────────────
 
 export const SIGIL_ERRORS = {
@@ -125,6 +125,9 @@ export const SIGIL_ERRORS = {
   ErrReactivateCosignRequiredForFullCapability: 6104,
   DestinationAccountUnresolvable: 6105,
   ErrToken2022OutputMintUnresolvable: 6106,
+  ErrOperatorGrantRequiresTimelock: 6107,
+  ErrOperatorGrantDelayTooLong: 6108,
+  InvalidOwnerType: 6109,
 } as const;
 
 /**

@@ -58,6 +58,17 @@ const ENTRY_SIZE = 64;
 const SUCCESS_CAPACITY = 128;
 const ENTRIES_OFFSET = 8 + 32; // after Anchor disc (8) + vault pubkey (32)
 
+// CAPABILITY_OBSERVER (state/vault.rs) — non-spending agent capability.
+// F-Q6: an instant OPERATOR (capability 2) grant on a single-key vault now
+// reverts ErrOperatorGrantRequiresTimelock (6107). Every agent in this file is
+// registered ONLY to drive an audit-log write (register/revoke burst) or to
+// satisfy reactivate_vault's non-empty-agents precondition — none ever spends —
+// so OBSERVER is the correct capability and keeps register_agent a single
+// (disc=13) write, preserving every exact head/count assertion below. Mirrors
+// the sibling MED-3 suite (tests/audit-log-coverage.ts) and the Phase 7
+// baseline (tests/audit-log.ts), both already on OBSERVER.
+const CAPABILITY_OBSERVER = 1;
+
 // Discriminator allocation mirrors state/audit_log_success.rs.
 const DISC_FREEZE = 5;
 const DISC_REACTIVATE = 6;
@@ -281,7 +292,7 @@ describe("audit-log-burst (Phase 7.1)", () => {
       program.programId,
     );
     await program.methods
-      .registerAgent(agent.publicKey, 2, new BN(0))
+      .registerAgent(agent.publicKey, CAPABILITY_OBSERVER, new BN(0))
       .accounts({
         owner: owner.publicKey,
         vault,
@@ -428,7 +439,7 @@ describe("audit-log-burst (Phase 7.1)", () => {
     for (let i = 0; i < TOTAL_PAIRS; i++) {
       const agent = Keypair.generate();
       await program.methods
-        .registerAgent(agent.publicKey, 2, new BN(0))
+        .registerAgent(agent.publicKey, CAPABILITY_OBSERVER, new BN(0))
         .accounts({ owner: owner.publicKey, vault, policy, agentSpendOverlay: overlay } as any)
         .rpc();
       writes.push(DISC_REGISTER_AGENT);
@@ -503,7 +514,7 @@ describe("audit-log-burst (Phase 7.1)", () => {
     for (let i = 0; i < 64; i++) {
       const agent = Keypair.generate();
       await program.methods
-        .registerAgent(agent.publicKey, 2, new BN(0))
+        .registerAgent(agent.publicKey, CAPABILITY_OBSERVER, new BN(0))
         .accounts({ owner: owner.publicKey, vault, policy, agentSpendOverlay: overlay } as any)
         .rpc();
       writes.push(DISC_REGISTER_AGENT);
@@ -605,7 +616,7 @@ describe("audit-log-burst (Phase 7.1)", () => {
       program.programId,
     );
     await program.methods
-      .registerAgent(bootstrapAgent.publicKey, 2, new BN(0))
+      .registerAgent(bootstrapAgent.publicKey, CAPABILITY_OBSERVER, new BN(0))
       .accounts({
         owner: owner.publicKey,
         vault,
@@ -770,7 +781,7 @@ describe("audit-log-burst (Phase 7.1)", () => {
       program.programId,
     );
     await program.methods
-      .registerAgent(bootstrapAgent.publicKey, 2, new BN(0))
+      .registerAgent(bootstrapAgent.publicKey, CAPABILITY_OBSERVER, new BN(0))
       .accounts({
         owner: owner.publicKey,
         vault,

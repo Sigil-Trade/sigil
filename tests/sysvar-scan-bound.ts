@@ -60,6 +60,7 @@ import {
   TestEnv,
   LiteSVM,
 } from "./helpers/litesvm-setup";
+import { registerOperatorAgent } from "./helpers/register-operator-agent";
 
 const FULL_CAPABILITY = 2; // CAPABILITY_OPERATOR
 
@@ -219,16 +220,15 @@ describe("sysvar-scan-bound (M11 / SIMD-0296 pad-attack guard)", () => {
       } as any)
       .rpc();
 
-    // Register agent
-    await program.methods
-      .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-      .accounts({
-        owner: owner.publicKey,
-        vault: vaultPda,
-        policy: policyPda,
-        agentSpendOverlay: overlayPda,
-      } as any)
-      .rpc();
+    // Register agent (F-Q6: OPERATOR grant on a single-key vault goes through
+    // the timelocked queue→advance→apply path).
+    await registerOperatorAgent({
+      program,
+      svm,
+      owner: owner.publicKey,
+      vault: vaultPda,
+      agent: agent.publicKey,
+    });
   });
 
   // ─── Helpers ──────────────────────────────────────────────────────────────

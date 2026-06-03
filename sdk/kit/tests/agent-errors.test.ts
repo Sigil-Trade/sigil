@@ -17,21 +17,23 @@ describe("agent-errors", () => {
   // ─── On-chain error map completeness ──────────────────────────────────────
 
   describe("ON_CHAIN_ERROR_MAP completeness", () => {
-    it("maps all 107 error codes (6000-6106) post F-Q4", () => {
+    it("maps all 110 error codes (6000-6109) post F-Q6", () => {
       const codes = getAllOnChainErrorCodes();
-      // 6000-6106 inclusive = 107 codes. M1-04 Step 6 removed 10 dead
+      // 6000-6109 inclusive = 110 codes. M1-04 Step 6 removed 10 dead
       // constraint-only variants and renumbered the enum (positional); F-Q1a
-      // appended 6105 (DestinationAccountUnresolvable) and F-Q4 appended 6106
-      // (ErrToken2022OutputMintUnresolvable). The IDL↔generated↔hand-map
-      // bijection (incl. name-per-code) is enforced by error-map-drift.test.ts;
-      // this test guards the count/extremes only.
-      expect(codes).to.have.lengthOf(107);
+      // appended 6105 (DestinationAccountUnresolvable), F-Q4 appended 6106
+      // (ErrToken2022OutputMintUnresolvable), and F-Q6 appended 6107-6109
+      // (ErrOperatorGrantRequiresTimelock / ErrOperatorGrantDelayTooLong /
+      // InvalidOwnerType). The IDL↔generated↔hand-map bijection (incl.
+      // name-per-code) is enforced by error-map-drift.test.ts; this test guards
+      // the count/extremes only.
+      expect(codes).to.have.lengthOf(110);
       expect(codes[0]).to.equal(6000);
-      expect(codes[codes.length - 1]).to.equal(6106);
+      expect(codes[codes.length - 1]).to.equal(6109);
     });
 
-    it("every code from 6000-6106 is present with no gaps post F-Q4", () => {
-      for (let code = 6000; code <= 6106; code++) {
+    it("every code from 6000-6109 is present with no gaps post F-Q6", () => {
+      for (let code = 6000; code <= 6109; code++) {
         const entry = ON_CHAIN_ERROR_MAP[code];
         expect(entry, `Missing error code ${code}`).to.exist;
         expect(entry.name).to.be.a("string").and.not.be.empty;

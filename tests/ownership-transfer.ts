@@ -47,6 +47,7 @@ import {
 import { expect } from "chai";
 import BN from "bn.js";
 import { initVaultPreviewDigest } from "./helpers/policy-digest";
+import { registerOperatorAgent } from "./helpers/register-operator-agent";
 import {
   buildExpectedIntentDigest,
   digestAsArgs,
@@ -407,9 +408,15 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
     // fail with ConstraintSeeds because the seed-key was new_owner.key()
     // which doesn't match the vault PDA (originally derived from old
     // owner's key).
+    // F-Q6: this agent is setup-only — it is registered, paused, and asserted
+    // on, but never spends. An instant OPERATOR (2) grant on a single-key vault
+    // now reverts ErrOperatorGrantRequiresTimelock (6107); OBSERVER (1) grants
+    // are unchanged by F-Q6 and stay instant. The LBL-01 invariant under test
+    // here (new_owner can drive owner-side ix post-transfer) is capability-
+    // agnostic, so register as OBSERVER to keep the single register_agent call.
     const newAgent = Keypair.generate();
     await program.methods
-      .registerAgent(newAgent.publicKey, 2, new BN(0)) // CAPABILITY_OPERATOR = 2
+      .registerAgent(newAgent.publicKey, 1, new BN(0)) // CAPABILITY_OBSERVER = 1
       .accounts({
         owner: newOwner.publicKey,
         vault,
@@ -530,18 +537,21 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
           systemProgram: SystemProgram.programId,
         } as any)
         .rpc();
-      // Register a spending agent (FULL_CAPABILITY = Operator).
+      // Register a spending agent (FULL_CAPABILITY = Operator). F-Q6: an
+      // instant OPERATOR grant on this single-key vault now reverts
+      // ErrOperatorGrantRequiresTimelock (6107) — the agent is seated via the
+      // timelocked queue→advance→apply path instead. The grant happens BEFORE
+      // ownership transfer (owner is still the Anchor provider wallet, which
+      // auto-signs), so no extra signers are needed.
       const agent = Keypair.generate();
       airdropSol(svm, agent.publicKey, 5 * LAMPORTS_PER_SOL);
-      await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: owner.publicKey,
-          vault: ctx.vault,
-          policy: ctx.policy,
-          agentSpendOverlay: ctx.overlay,
-        } as any)
-        .rpc();
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: ctx.vault,
+        agent: agent.publicKey,
+      });
       return { ...ctx, vaultUsdcAta, agent };
     }
 

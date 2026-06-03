@@ -4,6 +4,9 @@ use crate::errors::SigilError;
 use crate::events::AgentRegistered;
 use crate::state::*;
 use crate::utils::audit_log::build_audit_entry;
+use crate::utils::operator_grant::{
+    classify_operator_grant_tier, operator_grant_is_instant_eligible, OperatorGrantTier,
+};
 use crate::utils::policy_digest::{
     compute_agent_set_hash, compute_policy_preview_digest, PolicyPreviewFields,
 };
@@ -73,29 +76,10 @@ pub fn handler(
 
     let vault = &mut ctx.accounts.vault;
 
-    // P0.1 PEN-CROSS-1 interim cosign gate (audit 2026-05-19).
-    //
-    // Full digest-binding + timelock fix stays in Phase 8 (per G2 deferral).
-    // This interim gate is a defensive partial fix: for vaults that have
-    // explicitly opted into cosign (`policy.cosign_required == true`), require
-    // a second non-owner signer in `remaining_accounts` (the cosign session)
-    // alongside the owner. Vaults with the default `cosign_required: false`
-    // are unaffected — single-signer flow continues.
-    //
-    // Threat: a phished/leaked owner key cannot silently `register_agent`
-    // (instantly granting operator capability with no timelock) on a vault
-    // that opted into cosign. Without this gate, register_agent bypasses
-    // the cosign workflow entirely because it does not pass through
-    // queue_policy_update.
-    //
-    // Mechanism: scan ctx.remaining_accounts for any signer pubkey that is
-    // NOT the owner. Absence of such a signer == cosign missing on a vault
-    // that requires it → reject with 6080 ErrCosignRequired.
-    if ctx.accounts.policy.cosign_required {
-        let owner_key = ctx.accounts.owner.key();
-        let has_cosigner = has_non_owner_signer(ctx.remaining_accounts, &owner_key);
-        require!(has_cosigner, SigilError::ErrCosignRequired);
-    }
+    // F-Q6 (2026-06-02): the cosign gate AND the OPERATOR-grant tier rule are
+    // unified BELOW — after the status + capability validation — so the tier
+    // decision sees a validated `capability` and `owner_type`. See the tiered
+    // block following the `capability <= FULL_CAPABILITY` check.
 
     require!(
         vault.status != VaultStatus::Closed,
@@ -114,28 +98,28 @@ pub fn handler(
     // Phase 2 TA-04: reserved capability values 3..=255 explicitly rejected.
     // Replaces prior silent zero-coerce behaviour in `has_capability`.
     require!(capability <= FULL_CAPABILITY, SigilError::InvalidCapability);
-    // Phase 8 PEN-CROSS-1 (audit 2026-05-19): on cosign-opted vaults,
-    // `register_agent` is Observer-only — OPERATOR-class grants MUST route
-    // through the `queue_agent_grant` → `apply_agent_grant` timelock-gated
-    // path (mirrors the F-RP3-2 cosign+timelock gate at
-    // `queue_agent_permissions_update`). Closes the phished-owner
-    // instant-operator-grant vector for vaults that opted into cosign.
+    // F-Q6 (2026-06-02) — OPERATOR-grant authorization tiering. An OPERATOR
+    // grant may be INSTANT here only if the vault carries >= 2 authorization
+    // factors AND no grant delay is configured; otherwise it MUST route
+    // through `queue_agent_grant` → `apply_agent_grant` (the time-delay is the
+    // missing 2nd factor). Observer/Disabled grants (capability <
+    // CAPABILITY_OPERATOR) cannot move funds and keep the interim cosign gate.
     //
-    // For vaults WITHOUT cosign_required (the V1 default for solo-founder
-    // simplicity), register_agent retains direct-grant semantics — those
-    // vaults have NO defense against a phished owner key by design, so
-    // adding a timelock here would not change the threat surface but
-    // would break 60%+ of existing fixtures.
-    //
-    // CAPABILITY_DISABLED (0) and CAPABILITY_OBSERVER (1) always go through
-    // this fast path because Observers cannot move funds —
-    // `has_capability(.., is_spending=true)` requires CAPABILITY_OPERATOR.
-    if ctx.accounts.policy.cosign_required {
-        require!(
-            capability < CAPABILITY_OPERATOR,
-            SigilError::InvalidPermissions
-        );
-    }
+    // owner_type validity is asserted first (ISC-33 / Council C-2): the field
+    // is program-set to {0,1}; anything else is corrupted authority state and
+    // is rejected rather than interpreted.
+    require!(
+        vault.owner_type <= OWNER_TYPE_MULTISIG,
+        SigilError::InvalidOwnerType
+    );
+    // F-Q6 ordering (2026-06-03): the agent-validity checks run BEFORE the
+    // OPERATOR tier gate so a bad agent (default / owner / duplicate /
+    // over-count) surfaces its SPECIFIC diagnostic (InvalidAgentKey /
+    // AgentIsOwner / AgentAlreadyRegistered / MaxAgentsReached) instead of
+    // being shadowed by ErrOperatorGrantRequiresTimelock (6107). All are
+    // reverts — reordering changes only WHICH error surfaces, not which inputs
+    // are rejected; the tier gate below still fires for a VALID single-key
+    // OPERATOR.
     require!(!vault.is_agent(&agent), SigilError::AgentAlreadyRegistered);
     require!(
         vault.agent_count() < MAX_AGENTS_PER_VAULT,
@@ -143,6 +127,53 @@ pub fn handler(
     );
     require!(agent != Pubkey::default(), SigilError::InvalidAgentKey);
     require!(agent != vault.owner, SigilError::AgentIsOwner);
+    if capability >= CAPABILITY_OPERATOR {
+        let tier = classify_operator_grant_tier(
+            vault.owner_type,
+            ctx.accounts.policy.cosign_required,
+            &ctx.accounts.policy.cosign_session_pubkey,
+        );
+        // Instant only with >= 2 factors at zero configured delay. SingleKey
+        // (1 factor) is always floored → never instant; a configured delay
+        // routes even cosign/multisig through the queue path. This closes the
+        // phished single-owner-key instant-OPERATOR vector.
+        require!(
+            operator_grant_is_instant_eligible(
+                tier,
+                ctx.accounts.policy.operator_grant_delay_seconds
+            ),
+            SigilError::ErrOperatorGrantRequiresTimelock
+        );
+        // C-1: a cosign-bound instant grant MUST carry a signer matching the
+        // BOUND `cosign_session_pubkey` (not merely "any non-owner signer" — a
+        // leaked owner key + a throwaway 2nd key would pass that weaker gate).
+        // `classify_operator_grant_tier` only returns CosignBound when the
+        // pubkey is non-default, so the match target is guaranteed bound.
+        // Mirrors the apply-time re-bind at `apply_agent_grant.rs` (H-1).
+        if tier == OperatorGrantTier::CosignBound {
+            let cosign_session_pubkey = ctx.accounts.policy.cosign_session_pubkey;
+            let cosign_ok = ctx
+                .remaining_accounts
+                .iter()
+                .any(|ai| ai.is_signer && ai.key() == cosign_session_pubkey);
+            require!(cosign_ok, SigilError::ErrCosignRequired);
+        }
+        // Multisig: no extra inline signer — the multisig's threshold already
+        // approved off-chain, and `has_one = owner` binds the signer to the
+        // recorded multisig owner. [V1 REACHABILITY NOTE: a keyless Squads
+        // vault PDA cannot satisfy `owner: Signer` + `reject_cpi!()`, so this
+        // arm is not reachable until a multisig-callable owner-op path exists.
+        // It is correct, fail-safe, and forward-compatible; an attacker also
+        // cannot reach it (no key to sign as the PDA owner). See the project
+        // notes for the pre-existing multisig-invocation gap.]
+    } else if ctx.accounts.policy.cosign_required {
+        // Observer/Disabled on a cosign-opted vault: preserve the interim
+        // cosign gate (any non-owner signer). Observers cannot move funds, so
+        // the weaker presence check is retained unchanged from V1.
+        let owner_key = ctx.accounts.owner.key();
+        let has_cosigner = has_non_owner_signer(ctx.remaining_accounts, &owner_key);
+        require!(has_cosigner, SigilError::ErrCosignRequired);
+    }
 
     vault.agents.push(AgentEntry {
         pubkey: agent,

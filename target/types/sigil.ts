@@ -6426,6 +6426,21 @@ export type Sigil = {
       "code": 6106,
       "name": "errToken2022OutputMintUnresolvable",
       "msg": "Vault-owned Token-2022 output ATA's mint is absent from remaining_accounts or not Token-2022-owned — cannot vet extensions"
+    },
+    {
+      "code": 6107,
+      "name": "errOperatorGrantRequiresTimelock",
+      "msg": "OPERATOR grant requires the timelock queue path on this vault — use queue_agent_grant"
+    },
+    {
+      "code": 6108,
+      "name": "errOperatorGrantDelayTooLong",
+      "msg": "operator_grant_delay_seconds exceeds the maximum (48h) — would brick grant applicability"
+    },
+    {
+      "code": 6109,
+      "name": "invalidOwnerType",
+      "msg": "vault.owner_type is not a recognized discriminant (expected 0=EOA or 1=multisig)"
     }
   ],
   "types": [

@@ -15,6 +15,7 @@ pub mod destination_check;
 pub mod freeze_helper;
 pub mod intent_digest;
 pub mod mint_delta_cap;
+pub mod operator_grant;
 pub mod policy_digest;
 pub mod post_assertion_helpers;
 pub mod token2022_extension;

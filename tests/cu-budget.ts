@@ -60,6 +60,7 @@ import { createHash } from "crypto";
 import * as path from "path";
 import { FailedTransactionMetadata } from "litesvm";
 import { initVaultPreviewDigest } from "./helpers/policy-digest";
+import { registerOperatorAgent } from "./helpers/register-operator-agent";
 import {
   buildExpectedIntentDigest,
   digestAsArgs,
@@ -80,8 +81,6 @@ import {
 } from "./helpers/litesvm-setup";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
-
-const FULL_CAPABILITY = 2; // CAPABILITY_OPERATOR
 
 /** Real Jupiter V6 program ID — must match programs/sigil/src/state/mod.rs:JUPITER_PROGRAM. */
 const JUPITER_PROGRAM_ID = new PublicKey(
@@ -413,14 +412,22 @@ describe("cu-budget", () => {
       })
       .rpc();
 
-    await program.methods
-      .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-      .accountsPartial({
-        owner: owner.publicKey,
-        vault,
-        agentSpendOverlay: overlay,
-      })
-      .rpc();
+    // F-Q6: a single-key vault (cosignRequired:false) can no longer instantly
+    // register an OPERATOR-class agent — that now reverts
+    // ErrOperatorGrantRequiresTimelock (6107). The agent here drives the
+    // validate→DeFi→finalize spending sessions every CU scenario benchmarks, so
+    // it MUST be OPERATOR; we seat it via the timelocked queue→advance→apply
+    // helper. register_agent's own CU is NOT what any scenario measures (they
+    // benchmark validate/finalize), so switching the seat path is benign here.
+    // The helper advances unix_timestamp by 601s but leaves the slot untouched,
+    // so the later (slot-based) session validate/finalize CU is unaffected.
+    await registerOperatorAgent({
+      program,
+      svm,
+      owner: owner.publicKey,
+      vault,
+      agent: agent.publicKey,
+    });
 
     const vaultAta = createAtaIdempotentHelper(
       svm,

@@ -28,6 +28,10 @@ import {
   buildExpectedIntentDigest,
   digestAsArgs,
 } from "./helpers/intent-digest-fixture";
+// F-Q6 (2026-06-02): single-key vaults can no longer instant-register an OPERATOR
+// agent — it must route through queue_agent_grant -> advance -> apply_agent_grant.
+// This helper performs that sequence; see its header for the full rationale.
+import { registerOperatorAgent } from "./helpers/register-operator-agent";
 import {
   createTestEnv,
   airdropSol,
@@ -451,15 +455,17 @@ describe("sigil", () => {
   // =========================================================================
   describe("register_agent", () => {
     it("registers an agent pubkey", async () => {
-      await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: owner.publicKey,
-          vault: vaultPda,
-          policy: policyPda,
-          agentSpendOverlay: overlayPda,
-        } as any)
-        .rpc();
+      // F-Q6: an OPERATOR (FULL_CAPABILITY) grant on this single-key vault must
+      // route through queue_agent_grant -> advance -> apply_agent_grant. The
+      // helper performs that sequence and lands the agent as OPERATOR, so the
+      // capability assertion below still holds.
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: vaultPda,
+        agent: agent.publicKey,
+      });
 
       const vault = await program.account.agentVault.fetch(vaultPda);
       expect(vault.agents[0].pubkey.toString()).to.equal(
@@ -471,9 +477,14 @@ describe("sigil", () => {
 
     it("rejects double registration", async () => {
       try {
-        // Register the SAME agent pubkey that was already registered
+        // Register the SAME agent pubkey that was already registered.
+        // F-Q6: use VIEWER_CAPABILITY so the OPERATOR-grant timelock check
+        // (ErrOperatorGrantRequiresTimelock, 6107) does not fire BEFORE the
+        // AgentAlreadyRegistered check this test targets. The agent is already
+        // registered (as OPERATOR via the helper in the prior test), so the
+        // duplicate-pubkey check fires regardless of the capability arg.
         await program.methods
-          .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
+          .registerAgent(agent.publicKey, VIEWER_CAPABILITY, new BN(0))
           .accounts({
             owner: owner.publicKey,
             vault: vaultPda,
@@ -819,8 +830,12 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
         } as any)
         .rpc();
+      // F-Q6: this agent is only registered so it can be revoked (to drive the
+      // vault to Frozen) — it never spends. Register as VIEWER to avoid the
+      // OPERATOR-grant timelock requirement; revoke freezes on agent-count == 0
+      // regardless of capability.
       await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
+        .registerAgent(agent.publicKey, VIEWER_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: revokeVaultPda,
@@ -975,9 +990,12 @@ describe("sigil", () => {
         } as any)
         .rpc();
 
-      // Register agent then freeze by revoking
+      // Register agent then freeze by revoking.
+      // F-Q6: setup-only agent (never spends) — VIEWER avoids the OPERATOR-grant
+      // timelock; the reactivate tests below seat their own OPERATOR via
+      // reactivateVault (unchanged by F-Q6).
       await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
+        .registerAgent(agent.publicKey, VIEWER_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: reactVaultPda,
@@ -1006,23 +1024,14 @@ describe("sigil", () => {
     it("reactivates a frozen vault", async () => {
       // Phase 8 C28: advance past 5-min reactivate cooldown
       advanceTime(svm, 301);
-      // NH-1 (Bucket 2 re-audit 2026-05-21): FULL_CAPABILITY reactivate
-      // requires a non-owner cosigner in remaining_accounts.
-      const reactCosignerR1 = Keypair.generate();
-      expect(reactCosignerR1.publicKey.toBase58()).to.not.equal(
-        owner.publicKey.toBase58(),
-      );
+      // F-Q6: a single-key vault cannot reactivate an OPERATOR agent instantly
+      // (ErrOperatorGrantRequiresTimelock 6107). This test only needs the vault
+      // Active with an agent present, so reactivate with VIEWER_CAPABILITY (1) —
+      // which satisfies the >=1-agent requirement and skips the OPERATOR tier
+      // gate (and therefore the NH-1 FULL-only cosigner requirement).
       await program.methods
-        .reactivateVault(agent.publicKey, FULL_CAPABILITY)
+        .reactivateVault(agent.publicKey, VIEWER_CAPABILITY)
         .accounts({ owner: owner.publicKey, vault: reactVaultPda } as any)
-        .remainingAccounts([
-          {
-            pubkey: reactCosignerR1.publicKey,
-            isSigner: true,
-            isWritable: false,
-          },
-        ])
-        .signers([reactCosignerR1])
         .rpc();
 
       const vault = await program.account.agentVault.fetch(reactVaultPda);
@@ -1069,23 +1078,12 @@ describe("sigil", () => {
         expectSigilError(err, { name: "NoAgentRegistered" });
       }
 
-      // Clean up: reactivate with new agent for subsequent tests
-      // NH-1: FULL_CAPABILITY reactivate requires a non-owner cosigner.
-      const reactCosignerR2 = Keypair.generate();
-      expect(reactCosignerR2.publicKey.toBase58()).to.not.equal(
-        owner.publicKey.toBase58(),
-      );
+      // Clean up: reactivate with new agent for subsequent tests.
+      // F-Q6: VIEWER_CAPABILITY reactivate (single-key vault cannot grant
+      // OPERATOR instantly); satisfies the >=1-agent requirement.
       await program.methods
-        .reactivateVault(agent.publicKey, FULL_CAPABILITY)
+        .reactivateVault(agent.publicKey, VIEWER_CAPABILITY)
         .accounts({ owner: owner.publicKey, vault: reactVaultPda } as any)
-        .remainingAccounts([
-          {
-            pubkey: reactCosignerR2.publicKey,
-            isSigner: true,
-            isWritable: false,
-          },
-        ])
-        .signers([reactCosignerR2])
         .rpc();
     });
 
@@ -1108,22 +1106,12 @@ describe("sigil", () => {
       advanceTime(svm, 301);
 
       const newAgent = Keypair.generate();
-      // NH-1: FULL_CAPABILITY reactivate requires a non-owner cosigner.
-      const reactCosignerR3 = Keypair.generate();
-      expect(reactCosignerR3.publicKey.toBase58()).to.not.equal(
-        owner.publicKey.toBase58(),
-      );
+      // F-Q6: VIEWER_CAPABILITY reactivate — this test asserts the agent KEY
+      // was rotated (not its capability), so VIEWER is the minimal correct fix
+      // and skips the OPERATOR tier gate + NH-1 cosigner requirement.
       await program.methods
-        .reactivateVault(newAgent.publicKey, FULL_CAPABILITY)
+        .reactivateVault(newAgent.publicKey, VIEWER_CAPABILITY)
         .accounts({ owner: owner.publicKey, vault: reactVaultPda } as any)
-        .remainingAccounts([
-          {
-            pubkey: reactCosignerR3.publicKey,
-            isSigner: true,
-            isWritable: false,
-          },
-        ])
-        .signers([reactCosignerR3])
         .rpc();
 
       const vault = await program.account.agentVault.fetch(reactVaultPda);
@@ -1133,7 +1121,7 @@ describe("sigil", () => {
       expect(vault.status).to.have.property("active");
     });
 
-    it("NH-1: rejects FULL_CAPABILITY reactivate without non-owner cosigner", async () => {
+    it("F-Q6: rejects OPERATOR (FULL_CAPABILITY) reactivate on a single-key vault (timelock required)", async () => {
       // Read the current (rotated) agent from chain — prior test rotated
       // the agent to a fresh keypair whose handle is block-scoped, so we
       // re-derive from chain state.
@@ -1154,37 +1142,31 @@ describe("sigil", () => {
         .rpc();
       // Advance past 5-min reactivate cooldown (Phase 8 C28).
       advanceTime(svm, 301);
-      // Attempt FULL_CAPABILITY reactivate WITHOUT cosigner — must fail
-      // with 6104 (NH-1 Bucket 2 re-audit 2026-05-21).
+      // F-Q6 (2026-06-02): on a SINGLE-KEY vault (cosign unbound), an instant
+      // OPERATOR (FULL_CAPABILITY) grant via reactivate is rejected with
+      // ErrOperatorGrantRequiresTimelock (6107) REGARDLESS of any signer — the
+      // forced timelock (queue_agent_grant → apply_agent_grant) is the missing
+      // 2nd authorization factor. The old NH-1 "bound-cosigner instant path"
+      // only applies to cosign-BOUND vaults, so even adding a cosigner here
+      // would still revert 6107. This supersedes the old NH-1 6104 assertion.
       const newAgentPk = Keypair.generate().publicKey;
       try {
         await program.methods
           .reactivateVault(newAgentPk, FULL_CAPABILITY)
           .accounts({ owner: owner.publicKey, vault: reactVaultPda } as any)
           .rpc();
-        expect.fail("Should have thrown NH-1");
+        expect.fail("Should have thrown ErrOperatorGrantRequiresTimelock");
       } catch (err: any) {
         expectSigilError(err, {
-          name: "ErrReactivateCosignRequiredForFullCapability",
+          name: "ErrOperatorGrantRequiresTimelock",
         });
       }
-      // Clean up: reactivate with cosigner so subsequent tests have a
-      // viable vault. ISC-A-7: cosigner is NEVER the owner.
-      const cleanupCosigner = Keypair.generate();
-      expect(cleanupCosigner.publicKey.toBase58()).to.not.equal(
-        owner.publicKey.toBase58(),
-      );
+      // Clean up: reactivate with VIEWER so subsequent tests have a viable
+      // Active vault. F-Q6: a single-key vault cannot grant OPERATOR instantly,
+      // so VIEWER (1) is the correct reactivation capability here.
       await program.methods
-        .reactivateVault(newAgentPk, FULL_CAPABILITY)
+        .reactivateVault(newAgentPk, VIEWER_CAPABILITY)
         .accounts({ owner: owner.publicKey, vault: reactVaultPda } as any)
-        .remainingAccounts([
-          {
-            pubkey: cleanupCosigner.publicKey,
-            isSigner: true,
-            isWritable: false,
-          },
-        ])
-        .signers([cleanupCosigner])
         .rpc();
     });
   });
@@ -2423,23 +2405,20 @@ describe("sigil", () => {
         } as any)
         .rpc();
 
-      // Register agent on fee vault
+      // Register agent on fee vault.
+      // F-Q6: OPERATOR grant on this single-key vault routes through the
+      // timelock queue path (helper); the agent then spends below.
       [feeOverlay] = PublicKey.findProgramAddressSync(
         [Buffer.from("agent_spend"), feeVaultPda.toBuffer(), Buffer.from([0])],
         program.programId,
       );
-      await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: owner.publicKey,
-          vault: feeVaultPda,
-          policy: PublicKey.findProgramAddressSync(
-            [Buffer.from("policy"), feeVaultPda.toBuffer()],
-            program.programId,
-          )[0],
-          agentSpendOverlay: feeOverlay,
-        } as any)
-        .rpc();
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: feeVaultPda,
+        agent: agent.publicKey,
+      });
 
       // Deposit to the fee vault
       feeVaultUsdcAta = anchor.utils.token.associatedAddress({
@@ -2921,19 +2900,16 @@ describe("sigil", () => {
         } as any)
         .rpc();
 
-      // Register agent
-      await program.methods
-        .registerAgent(lifecycleAgent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: owner.publicKey,
-          vault: lifecycleVaultPda,
-          policy: PublicKey.findProgramAddressSync(
-            [Buffer.from("policy"), lifecycleVaultPda.toBuffer()],
-            program.programId,
-          )[0],
-          agentSpendOverlay: lifecycleOverlay,
-        } as any)
-        .rpc();
+      // Register agent.
+      // F-Q6: OPERATOR grant on this single-key vault routes through the
+      // timelock queue path (helper); lifecycleAgent spends below.
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: lifecycleVaultPda,
+        agent: lifecycleAgent.publicKey,
+      });
 
       // Deposit USDC to vault
       lifecycleVaultUsdcAta = anchor.utils.token.associatedAddress({
@@ -3219,8 +3195,11 @@ describe("sigil", () => {
         } as any)
         .rpc();
       try {
+        // F-Q6: use VIEWER_CAPABILITY so the OPERATOR-grant timelock check
+        // (6107) does not pre-empt the AgentIsOwner check this test targets.
+        // owner == agent is rejected regardless of capability.
         await program.methods
-          .registerAgent(owner.publicKey, FULL_CAPABILITY, new BN(0)) // owner = agent → reject
+          .registerAgent(owner.publicKey, VIEWER_CAPABILITY, new BN(0)) // owner = agent → reject
           .accounts({
             owner: owner.publicKey,
             vault: v,
@@ -3287,22 +3266,13 @@ describe("sigil", () => {
       // Phase 8 Batch 5: advance past 5-min reactivate cooldown (ErrReactivateCooldownActive 6097)
       advanceTime(svm, 301);
 
-      // NH-1: FULL_CAPABILITY reactivate requires a non-owner cosigner.
-      const reactCosignerR4 = Keypair.generate();
-      expect(reactCosignerR4.publicKey.toBase58()).to.not.equal(
-        owner.publicKey.toBase58(),
-      );
+      // F-Q6: reactivate with VIEWER (single-key vault cannot grant OPERATOR
+      // instantly). This test asserts the OLD/revoked agent is rejected on
+      // validate; the reactivation agent's capability is irrelevant, so VIEWER
+      // is the minimal correct fix (skips the OPERATOR tier gate + cosigner).
       await program.methods
-        .reactivateVault(newAgent.publicKey, FULL_CAPABILITY)
+        .reactivateVault(newAgent.publicKey, VIEWER_CAPABILITY)
         .accounts({ owner: owner.publicKey, vault: rv } as any)
-        .remainingAccounts([
-          {
-            pubkey: reactCosignerR4.publicKey,
-            isSigner: true,
-            isWritable: false,
-          },
-        ])
-        .signers([reactCosignerR4])
         .rpc();
 
       // Now try to use the ORIGINAL agent (who was revoked)
@@ -3434,9 +3404,12 @@ describe("sigil", () => {
         } as any)
         .rpc();
 
-      // Register agent then freeze by revoking
+      // Register agent then freeze by revoking.
+      // F-Q6: setup-only agent (revoked immediately, never spends) — VIEWER
+      // avoids the OPERATOR-grant timelock. The deposit-to-frozen-vault
+      // assertion is independent of agent capability.
       await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
+        .registerAgent(agent.publicKey, VIEWER_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: fv,
@@ -3669,9 +3642,13 @@ describe("sigil", () => {
         } as any)
         .rpc();
 
-      // Register agent, then close
+      // Register agent, then close.
+      // F-Q6: setup-only agent — VIEWER avoids the OPERATOR-grant timelock.
+      // The validate-on-closed-vault path fails at account resolution
+      // (AccountNotInitialized) before any capability check, so the agent's
+      // capability is irrelevant to the assertion.
       await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
+        .registerAgent(agent.publicKey, VIEWER_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: cv,
@@ -3823,18 +3800,15 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
         } as any)
         .rpc();
-      await program.methods
-        .registerAgent(ringAgent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: owner.publicKey,
-          vault: ringVaultPda,
-          policy: PublicKey.findProgramAddressSync(
-            [Buffer.from("policy"), ringVaultPda.toBuffer()],
-            program.programId,
-          )[0],
-          agentSpendOverlay: ringOverlay,
-        } as any)
-        .rpc();
+      // F-Q6: OPERATOR grant on this single-key vault routes through the
+      // timelock queue path (helper); ringAgent runs 51 spend cycles below.
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: ringVaultPda,
+        agent: ringAgent.publicKey,
+      });
 
       ringVaultUsdcAta = anchor.utils.token.associatedAddress({
         mint: usdcMint,
@@ -4016,18 +3990,15 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
         } as any)
         .rpc();
-      await program.methods
-        .registerAgent(feeEdgeAgent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: owner.publicKey,
-          vault: feeEdgeVaultPda,
-          policy: PublicKey.findProgramAddressSync(
-            [Buffer.from("policy"), feeEdgeVaultPda.toBuffer()],
-            program.programId,
-          )[0],
-          agentSpendOverlay: feeEdgeOverlay,
-        } as any)
-        .rpc();
+      // F-Q6: OPERATOR grant on this single-key vault routes through the
+      // timelock queue path (helper); feeEdgeAgent spends below.
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: feeEdgeVaultPda,
+        agent: feeEdgeAgent.publicKey,
+      });
 
       feeEdgeVaultUsdcAta = anchor.utils.token.associatedAddress({
         mint: usdcMint,
@@ -4343,8 +4314,12 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
         } as any)
         .rpc();
+      // F-Q6: tlAgent exists only to keep the vault non-Frozen during the
+      // policy queue/apply tests below; it never spends and is revoked at the
+      // end of the block. Register as VIEWER to avoid the OPERATOR-grant
+      // timelock requirement.
       await program.methods
-        .registerAgent(tlAgent.publicKey, FULL_CAPABILITY, new BN(0))
+        .registerAgent(tlAgent.publicKey, VIEWER_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: tlVaultPda,
@@ -4943,18 +4918,15 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
         } as any)
         .rpc();
-      await program.methods
-        .registerAgent(destAgent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: owner.publicKey,
-          vault: destVaultPda,
-          policy: PublicKey.findProgramAddressSync(
-            [Buffer.from("policy"), destVaultPda.toBuffer()],
-            program.programId,
-          )[0],
-          agentSpendOverlay: destOverlay,
-        } as any)
-        .rpc();
+      // F-Q6: OPERATOR grant on this single-key vault routes through the
+      // timelock queue path (helper); destAgent does agent_transfer below.
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: destVaultPda,
+        agent: destAgent.publicKey,
+      });
 
       // Deposit USDC
       destVaultUsdcAta = getAssociatedTokenAddressSync(
@@ -5120,18 +5092,17 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
         } as any)
         .rpc();
-      await program.methods
-        .registerAgent(destAgent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: owner.publicKey,
-          vault: anyVault,
-          policy: PublicKey.findProgramAddressSync(
-            [Buffer.from("policy"), anyVault.toBuffer()],
-            program.programId,
-          )[0],
-          agentSpendOverlay: anyOverlay,
-        } as any)
-        .rpc();
+      // F-Q6: OPERATOR grant on this single-key vault routes through the
+      // timelock queue path (helper). The agent must be OPERATOR so the
+      // agent_transfer below reaches the destination check and fails with
+      // DestinationNotAllowed (the F-4 default-deny this test verifies).
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: anyVault,
+        agent: destAgent.publicKey,
+      });
 
       const anyVaultAta = getAssociatedTokenAddressSync(
         usdcMint,
@@ -5539,18 +5510,16 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
         } as any)
         .rpc();
-      await program.methods
-        .registerAgent(destAgent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: owner.publicKey,
-          vault: fv,
-          policy: PublicKey.findProgramAddressSync(
-            [Buffer.from("policy"), fv.toBuffer()],
-            program.programId,
-          )[0],
-          agentSpendOverlay: fvOverlay2,
-        } as any)
-        .rpc();
+      // F-Q6: OPERATOR grant on this single-key vault routes through the
+      // timelock queue path (helper); destAgent does a fee-bearing
+      // agent_transfer below.
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: fv,
+        agent: destAgent.publicKey,
+      });
 
       const fvAta = getAssociatedTokenAddressSync(usdcMint, fv, true);
       await program.methods
@@ -5740,19 +5709,17 @@ describe("sigil", () => {
         } as any)
         .rpc();
 
-      // Agent 2: full capability (operator)
-      await program.methods
-        .registerAgent(agent2.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: owner.publicKey,
-          vault: maVault,
-          policy: PublicKey.findProgramAddressSync(
-            [Buffer.from("policy"), maVault.toBuffer()],
-            program.programId,
-          )[0],
-          agentSpendOverlay: maOverlay,
-        } as any)
-        .rpc();
+      // Agent 2: full capability (operator).
+      // F-Q6: OPERATOR grant on this single-key vault routes through the
+      // timelock queue path (helper). agent2 is registered second, so it lands
+      // at agents[1] as OPERATOR — the capability assertion below still holds.
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: maVault,
+        agent: agent2.publicKey,
+      });
 
       const vault = await program.account.agentVault.fetch(maVault);
       expect(vault.agents.length).to.equal(2);
@@ -5956,31 +5923,25 @@ describe("sigil", () => {
       // advance past 5-min reactivate cooldown (ErrReactivateCooldownActive 6097)
       advanceTime(svm, 301);
 
-      // Reactivate first
-      // NH-1: FULL_CAPABILITY reactivate requires a non-owner cosigner.
-      const reactCosignerR5 = Keypair.generate();
-      expect(reactCosignerR5.publicKey.toBase58()).to.not.equal(
-        owner.publicKey.toBase58(),
-      );
+      // Reactivate first.
+      // F-Q6: reactivate with VIEWER (single-key vault cannot grant OPERATOR
+      // instantly). This test asserts only the agent COUNT (10), not their
+      // capabilities, so VIEWER is the minimal correct fix and skips the
+      // OPERATOR tier gate + NH-1 cosigner requirement.
       await program.methods
-        .reactivateVault(agent.publicKey, FULL_CAPABILITY)
+        .reactivateVault(agent.publicKey, VIEWER_CAPABILITY)
         .accounts({ owner: owner.publicKey, vault: maVault } as any)
-        .remainingAccounts([
-          {
-            pubkey: reactCosignerR5.publicKey,
-            isSigner: true,
-            isWritable: false,
-          },
-        ])
-        .signers([reactCosignerR5])
         .rpc();
 
-      // Register 9 more (total 10 with the agent from reactivate)
+      // Register 9 more (total 10 with the agent from reactivate).
+      // F-Q6: these filler agents only exercise the MAX_AGENTS count path and
+      // never spend — VIEWER avoids the OPERATOR-grant timelock. The test
+      // asserts only the agent count (10), not their capabilities.
       for (let i = 0; i < 9; i++) {
         const a = Keypair.generate();
         airdropSol(svm, a.publicKey, LAMPORTS_PER_SOL);
         await program.methods
-          .registerAgent(a.publicKey, FULL_CAPABILITY, new BN(0))
+          .registerAgent(a.publicKey, VIEWER_CAPABILITY, new BN(0))
           .accounts({
             owner: owner.publicKey,
             vault: maVault,
@@ -6000,8 +5961,12 @@ describe("sigil", () => {
     it("11th agent → MaxAgentsReached (6038)", async () => {
       const extra = Keypair.generate();
       try {
+        // F-Q6: use VIEWER_CAPABILITY so the OPERATOR-grant timelock check
+        // (6107) does not pre-empt the MaxAgentsReached check this test
+        // targets. The vault is already at MAX_AGENTS, so registration is
+        // rejected for being full regardless of the capability arg.
         await program.methods
-          .registerAgent(extra.publicKey, FULL_CAPABILITY, new BN(0))
+          .registerAgent(extra.publicKey, VIEWER_CAPABILITY, new BN(0))
           .accounts({
             owner: owner.publicKey,
             vault: maVault,
@@ -6240,23 +6205,19 @@ describe("sigil", () => {
         } as any)
         .rpc();
 
-      // Register agent with $1000 per-agent spend limit
-      await program.methods
-        .registerAgent(
-          epochAgent.publicKey,
-          FULL_CAPABILITY,
-          new BN(1_000_000_000),
-        )
-        .accounts({
-          owner: owner.publicKey,
-          vault: epochVault,
-          policy: PublicKey.findProgramAddressSync(
-            [Buffer.from("policy"), epochVault.toBuffer()],
-            program.programId,
-          )[0],
-          agentSpendOverlay: epochOverlay,
-        } as any)
-        .rpc();
+      // Register agent with $1000 per-agent spend limit.
+      // F-Q6: OPERATOR grant on this single-key vault routes through the
+      // timelock queue path (helper). The per-agent spend limit is carried
+      // through queue_agent_grant via spendingLimitUsd so the multi-epoch
+      // tracking assertions below remain valid.
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: epochVault,
+        agent: epochAgent.publicKey,
+        spendingLimitUsd: new BN(1_000_000_000),
+      });
 
       // Deposit USDC
       epochVaultUsdcAta = createAtaIdempotentHelper(
@@ -7274,16 +7235,18 @@ describe("sigil", () => {
         .signers([ta13Owner])
         .rpc();
 
-      await program.methods
-        .registerAgent(ta13Agent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: ta13Owner.publicKey,
-          vault: ta13Vault,
-          policy: ta13Policy,
-          agentSpendOverlay: ta13Overlay,
-        } as any)
-        .signers([ta13Owner])
-        .rpc();
+      // F-Q6: OPERATOR grant on this single-key vault routes through the
+      // timelock queue path (helper). ta13Owner is a non-provider keypair, so
+      // it is passed both as `owner` and in `signers` (queue + apply both
+      // require the owner to sign). ta13Agent spends via ta13Spend below.
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: ta13Owner.publicKey,
+        vault: ta13Vault,
+        agent: ta13Agent.publicKey,
+        signers: [ta13Owner],
+      });
     });
 
     const ta13Spend = async (protocol: PublicKey, amount: BN) => {
@@ -7656,8 +7619,11 @@ describe("sigil", () => {
         } as any)
         .rpc();
 
+      // F-Q6: freezeAgent / freezeAgent2 only verify that freeze/unfreeze
+      // preserves agent entries — neither spends and no capability is asserted.
+      // Register both as VIEWER to avoid the OPERATOR-grant timelock.
       await program.methods
-        .registerAgent(freezeAgent.publicKey, FULL_CAPABILITY, new BN(0))
+        .registerAgent(freezeAgent.publicKey, VIEWER_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: freezeVaultPda,
@@ -7670,7 +7636,7 @@ describe("sigil", () => {
         .rpc();
 
       await program.methods
-        .registerAgent(freezeAgent2.publicKey, FULL_CAPABILITY, new BN(0))
+        .registerAgent(freezeAgent2.publicKey, VIEWER_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: freezeVaultPda,
@@ -7914,21 +7880,24 @@ describe("sigil", () => {
         } as any)
         .rpc();
 
-      await program.methods
-        .registerAgent(pauseAgent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: owner.publicKey,
-          vault: pauseVaultPda,
-          policy: PublicKey.findProgramAddressSync(
-            [Buffer.from("policy"), pauseVaultPda.toBuffer()],
-            program.programId,
-          )[0],
-          agentSpendOverlay: pauseOverlay,
-        } as any)
-        .rpc();
+      // F-Q6: pauseAgent must stay OPERATOR (a later test asserts its
+      // capability == FULL_CAPABILITY and exercises a paused agent_transfer),
+      // so its OPERATOR grant routes through the timelock queue path (helper).
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: pauseVaultPda,
+        agent: pauseAgent.publicKey,
+      });
 
+      // F-Q6: pauseAgent2 is only paused/unpaused (and never spends, no
+      // capability assertion) — register as VIEWER to avoid the OPERATOR-grant
+      // timelock. (pauseAgent above stays OPERATOR via the helper because a
+      // later test asserts its capability == FULL_CAPABILITY and exercises a
+      // paused agentTransfer.)
       await program.methods
-        .registerAgent(pauseAgent2.publicKey, FULL_CAPABILITY, new BN(0))
+        .registerAgent(pauseAgent2.publicKey, VIEWER_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: pauseVaultPda,

@@ -25,6 +25,7 @@ import {
   buildExpectedIntentDigest,
   digestAsArgs,
 } from "./helpers/intent-digest-fixture";
+import { registerOperatorAgent } from "./helpers/register-operator-agent";
 // Inlined constants — sdk/typescript was deleted in Phase 0 nuclear cleanup
 const FLASH_TRADE_PROGRAM_ID = new PublicKey(
   "FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn",
@@ -301,15 +302,14 @@ describe("flash-trade-integration", () => {
       })
       .rpc();
 
-    // Register agent
-    await program.methods
-      .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-      .accountsPartial({
-        owner: owner.publicKey,
-        vault: vaultPda,
-        agentSpendOverlay: overlayPda,
-      })
-      .rpc();
+    // Register agent (F-Q6: OPERATOR grant on single-key vault → timelocked path)
+    await registerOperatorAgent({
+      program,
+      svm,
+      owner: owner.publicKey,
+      vault: vaultPda,
+      agent: agent.publicKey,
+    });
 
     // Fund the vault with USDC
     ownerUsdcAta = createAtaHelper(
@@ -498,14 +498,13 @@ describe("flash-trade-integration", () => {
         })
         .rpc();
 
-      await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accountsPartial({
-          owner: owner.publicKey,
-          vault: frozenVault,
-          agentSpendOverlay: frozenOverlay,
-        })
-        .rpc();
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: frozenVault,
+        agent: agent.publicKey,
+      });
 
       // Freeze vault
       await program.methods
@@ -688,14 +687,13 @@ describe("flash-trade-integration", () => {
         })
         .rpc();
 
-      await program.methods
-        .registerAgent(capAgentKp.publicKey, FULL_CAPABILITY, new BN(0))
-        .accountsPartial({
-          owner: owner.publicKey,
-          vault: capVault,
-          agentSpendOverlay: capOverlay,
-        })
-        .rpc();
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: capVault,
+        agent: capAgentKp.publicKey,
+      });
 
       // Mint fresh USDC for this vault's deposit
       mintToHelper(

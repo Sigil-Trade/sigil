@@ -21,6 +21,7 @@ import {
 import { expect } from "chai";
 import BN from "bn.js";
 import { initVaultPreviewDigest } from "./helpers/policy-digest";
+import { registerOperatorAgent } from "./helpers/register-operator-agent";
 import {
   buildExpectedIntentDigest,
   digestAsArgs,
@@ -334,15 +335,14 @@ describe("jupiter-integration", () => {
       })
       .rpc();
 
-    // Register agent
-    await program.methods
-      .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-      .accountsPartial({
-        owner: owner.publicKey,
-        vault: vaultPda,
-        agentSpendOverlay: overlayPda,
-      })
-      .rpc();
+    // Register agent (OPERATOR on single-key vault → timelocked queue→apply, F-Q6)
+    await registerOperatorAgent({
+      program,
+      svm,
+      owner: owner.publicKey,
+      vault: vaultPda,
+      agent: agent.publicKey,
+    });
 
     // Fund the vault with USDC
     ownerUsdcAta = createAtaHelper(
@@ -617,14 +617,13 @@ describe("jupiter-integration", () => {
         })
         .rpc();
 
-      await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accountsPartial({
-          owner: owner.publicKey,
-          vault: frozenVault,
-          agentSpendOverlay: frozenOverlay,
-        })
-        .rpc();
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: frozenVault,
+        agent: agent.publicKey,
+      });
 
       // Freeze it
       await program.methods
@@ -762,14 +761,13 @@ describe("jupiter-integration", () => {
         })
         .rpc();
 
-      await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accountsPartial({
-          owner: owner.publicKey,
-          vault: rollingVault,
-          agentSpendOverlay: rollingOverlay,
-        })
-        .rpc();
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: rollingVault,
+        agent: agent.publicKey,
+      });
 
       // Deposit USDC into rolling vault (needed for protocol fee transfers)
       rollingVaultUsdcAta = getAssociatedTokenAddressSync(

@@ -4,6 +4,9 @@ use crate::errors::SigilError;
 use crate::events::VaultReactivated;
 use crate::state::*;
 use crate::utils::audit_log::build_audit_entry;
+use crate::utils::operator_grant::{
+    classify_operator_grant_tier, operator_grant_is_instant_eligible, OperatorGrantTier,
+};
 use crate::utils::policy_digest::{
     compute_agent_set_hash, compute_policy_preview_digest, PolicyPreviewFields,
 };
@@ -156,80 +159,54 @@ pub fn handler(
             SigilError::AgentAlreadyRegistered
         );
 
-        // D-5 close (audit 2026-05-19, F-RP3-1): the FULL_CAPABILITY
-        // reactivate-cosign gate.
+        // F-Q6 (2026-06-03): an OPERATOR (== FULL_CAPABILITY) graft on the
+        // reactivate path now honors the SAME tier rule as register_agent — an
+        // instant OPERATOR seat requires >= 2 authorization factors at zero
+        // configured delay. This closes the freeze→reactivate instant-OPERATOR
+        // vector UNIFORMLY with register_agent: the prior NH-1 gate accepted ANY
+        // non-owner signer on an unbound (single-key) vault, but Council C-1
+        // established that an unbound throwaway signer is NOT a real 2nd factor.
         //
-        // THREAT: a phished owner key could otherwise chain
-        //   `freeze_vault → reactivate_vault(new_agent=ATTACKER, FULL_CAPABILITY)`
-        // in a single transaction. The earlier `policy.cosign_required`
-        // gate at the top of this handler catches that for vaults that
-        // opted into TA-09 cosign — but NOT for vaults whose owners want
-        // to keep the low-friction `cosign_required: false` posture while
-        // still defending against the freeze→reactivate FULL escalation.
-        //
-        // DEFENSE: when the new agent is being grafted at FULL_CAPABILITY,
-        // AND the owner has opted in via `policy.cosign_session_pubkey !=
-        // Pubkey::default()`, require an `is_signer == true` entry in
-        // `remaining_accounts` whose key equals the bound pubkey. The
-        // pubkey itself is TA-19-bound (canonical position 22) so a
-        // tampered SDK cannot silently flip the gate between owner
-        // approval and on-chain landing.
-        //
-        // Defaults preserved: vaults with `cosign_session_pubkey ==
-        // Pubkey::default()` retain today's behavior — no gate fires on
-        // the reactivate path. The gate is strictly opt-in via
-        // `queue_policy_update`.
-        //
-        // OPERATOR (and lower) capability is NOT gated here — only the
-        // FULL_CAPABILITY escalation is. Owners who want broader
-        // reactivate-time cosign should additionally enable
-        // `cosign_required` (the broader gate at the top of the handler).
-        if capability == FULL_CAPABILITY {
-            // NH-1 close (Bucket 2 re-audit 2026-05-21): the FULL_CAPABILITY
-            // grant on the reactivate path is the highest-impact operation
-            // a phished owner can be tricked into authorizing in a single
-            // transaction. Default-on safety requires the gate to fire
-            // REGARDLESS of whether `cosign_session_pubkey` has been
-            // configured — otherwise a freshly-initialized vault (with
-            // `cosign_session_pubkey == Pubkey::default()`) provides ZERO
-            // protection against a single-signature freeze→reactivate
-            // phishing attack.
-            //
-            // Behavior matrix (intentional):
-            //   1. `cosign_session_pubkey != Pubkey::default()` AND a
-            //      signer in `remaining_accounts` matches → OK.
-            //   2. `cosign_session_pubkey == Pubkey::default()` AND any
-            //      non-owner signer present in `remaining_accounts` → OK
-            //      (defaults-on: a second human approver defeats single-
-            //      signature phishing without forcing the owner to
-            //      pre-configure a specific cosign key).
-            //   3. Either: no matching/non-owner signer present → reject
-            //      with `ErrReactivateCosignRequiredForFullCapability`
-            //      (6114) so the rejection is distinct from the broader
-            //      `cosign_required` flow at the top of the handler.
-            //
-            // Owners who want STRONG binding (specific key only) configure
-            // `cosign_session_pubkey` via `queue_policy_update`. Owners
-            // who want the default (any second signer) just need to
-            // include a non-owner signer in the reactivate tx.
-            let cosign_session_pubkey = ctx.accounts.policy.cosign_session_pubkey;
-            let owner_key = ctx.accounts.owner.key();
-            let cosign_ok = if cosign_session_pubkey != Pubkey::default() {
-                // Bound to a specific pubkey — match exactly.
-                ctx.remaining_accounts
-                    .iter()
-                    .any(|ai| ai.key == &cosign_session_pubkey && ai.is_signer)
-            } else {
-                // Default policy — any non-owner signer counts.
-                crate::instructions::register_agent::has_non_owner_signer(
-                    ctx.remaining_accounts,
-                    &owner_key,
-                )
-            };
+        // Behavior by tier (matches register_agent exactly):
+        //   - SINGLE-KEY (incl. cosign_required but UNBOUND): NOT instant-
+        //     eligible → reject 6107. The owner reactivates with a non-OPERATOR
+        //     agent (an Observer satisfies the >=1-agent requirement at the
+        //     bottom of this handler) and routes the OPERATOR through
+        //     queue_agent_grant → apply_agent_grant (the >=10-min delay is the
+        //     missing 2nd factor). No brick: the Observer-reactivate path stays
+        //     open.
+        //   - COSIGN-BOUND (cosign_session_pubkey != default, delay 0): instant
+        //     IFF a signer matching the BOUND pubkey is present (TA-19-bound at
+        //     canonical position 22, so a tampered SDK cannot flip the gate).
+        //   - MULTISIG (owner_type==1): instant (unreachable in V1 — a keyless
+        //     Squads PDA can't satisfy owner:Signer + reject_cpi!).
+        // A configured operator_grant_delay_seconds > 0 routes even cosign/
+        // multisig through the queue path (instant-eligible only at delay 0).
+        if capability >= CAPABILITY_OPERATOR {
             require!(
-                cosign_ok,
-                SigilError::ErrReactivateCosignRequiredForFullCapability
+                vault.owner_type <= OWNER_TYPE_MULTISIG,
+                SigilError::InvalidOwnerType
             );
+            let tier = classify_operator_grant_tier(
+                vault.owner_type,
+                ctx.accounts.policy.cosign_required,
+                &ctx.accounts.policy.cosign_session_pubkey,
+            );
+            require!(
+                operator_grant_is_instant_eligible(
+                    tier,
+                    ctx.accounts.policy.operator_grant_delay_seconds
+                ),
+                SigilError::ErrOperatorGrantRequiresTimelock
+            );
+            if tier == OperatorGrantTier::CosignBound {
+                let cosign_session_pubkey = ctx.accounts.policy.cosign_session_pubkey;
+                let cosign_ok = ctx
+                    .remaining_accounts
+                    .iter()
+                    .any(|ai| ai.is_signer && ai.key() == cosign_session_pubkey);
+                require!(cosign_ok, SigilError::ErrCosignRequired);
+            }
         }
 
         vault.agents.push(AgentEntry {

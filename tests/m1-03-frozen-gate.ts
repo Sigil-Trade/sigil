@@ -199,12 +199,20 @@ describe("M1-03: systemic frozen-gate", () => {
       .accounts({ owner: owner.publicKey, vault } as any)
       .rpc();
 
+  // F-Q6 (2026-06-02): an instant OPERATOR grant on a single-key vault now
+  // reverts ErrOperatorGrantRequiresTimelock (6107) — only the timelocked
+  // queue→apply path can seat an OPERATOR. Every register() here is setup-only:
+  // the agent merely needs to EXIST so the vault can be frozen / revoked /
+  // reactivated (frozen-gate tests never open a spending session), so OBSERVER
+  // (CAPABILITY_VIEWER=1) is the correct capability and is unaffected by the
+  // F-Q6 tier gate. The NEGATIVE register-on-frozen tests still revert 6000
+  // (VaultNotActive) because the frozen check fires before the tier check.
   const register = (
     vault: PublicKey,
     policy: PublicKey,
     overlay: PublicKey,
     agent: PublicKey,
-    cap = CAPABILITY_OPERATOR,
+    cap = CAPABILITY_VIEWER,
   ) =>
     program.methods
       .registerAgent(agent, cap, new BN(0))

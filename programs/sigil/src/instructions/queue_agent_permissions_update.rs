@@ -175,6 +175,18 @@ pub fn handler(
         (Pubkey::default(), [0u8; 32])
     };
 
+    // F-Q6 (2026-06-03): the OPERATOR-elevation path here is timelocked by
+    // policy.timelock_duration, floored at MIN_TIMELOCK_DURATION (1800s) which is
+    // ALWAYS >= SINGLE_KEY_OPERATOR_DELAY_FLOOR (600s) — compile-asserted in
+    // utils/operator_grant.rs. So an Observer→OPERATOR elevation already
+    // satisfies the F-Q6 single-key floor. We deliberately do NOT pull in the
+    // configurable operator_grant_delay_seconds (0..48h): this PDA family's
+    // apply-time freshness ceiling is the NARROW MAX_APPLY_AGE_SLOTS (~24h), so a
+    // configured delay in (24h, 48h] would mature only AFTER the apply window
+    // closes and permanently brick the grant (a tier-2 liveness failure). The
+    // configurable delay governs the dedicated OPERATOR-SEATING paths
+    // (register_agent / queue_agent_grant, which use the wide admin ceiling),
+    // NOT re-permissioning of an already-registered agent.
     let clock = Clock::get()?;
     let pending = &mut ctx.accounts.pending_agent_perms;
     pending.vault = vault.key();

@@ -87,7 +87,7 @@ export const SIGIL_ON_CHAIN_ERROR_MIN = 6000;
  * this map agrees with it by code AND name — so adding or renumbering an
  * on-chain error without updating this map fails at test time.
  */
-export const SIGIL_ON_CHAIN_ERROR_MAX = 6106;
+export const SIGIL_ON_CHAIN_ERROR_MAX = 6109;
 
 interface ErrorMapping {
   name: string;
@@ -1846,6 +1846,48 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
         action: "use_seal_to_populate_remaining_accounts",
         description:
           "Build the bundle with seal(), which auto-resolves vault-owned Token-2022 output mints (reading each writable account's mint on-chain) and feeds them into validate's remaining_accounts. Hand-built bundles must include the mint account of every vault-owned Token-2022 token account the swap writes.",
+      },
+    ],
+  },
+  6107: {
+    name: "ErrOperatorGrantRequiresTimelock",
+    message:
+      "An OPERATOR-class agent grant cannot be seated instantly on this vault (single-key, cosign-required-but-unbound, or any vault with a configured operator_grant_delay_seconds > 0). It must route through the timelocked queue_agent_grant → apply_agent_grant path — the time-delay substitutes for the missing 2nd authorization factor (F-Q6).",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "use_queue_agent_grant",
+        description:
+          "Seat the OPERATOR via queue_agent_grant, wait the effective delay (>=10 min for a single-key vault, else the configured operator_grant_delay_seconds), then apply_agent_grant. A cosign-bound vault at zero delay can seat instantly by including the bound cosigner's signature in register_agent.",
+      },
+    ],
+  },
+  6108: {
+    name: "ErrOperatorGrantDelayTooLong",
+    message:
+      "operator_grant_delay_seconds exceeds the maximum (48h / 172800s). A larger delay could exceed the apply-time freshness ceiling and leave a queued OPERATOR grant permanently unapplyable, so it is rejected at configuration time (F-Q6).",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "lower_operator_grant_delay",
+        description:
+          "Set operator_grant_delay_seconds to at most 172800 (48h) in the queue_policy_update call.",
+      },
+    ],
+  },
+  6109: {
+    name: "InvalidOwnerType",
+    message:
+      "vault.owner_type held a value outside the recognized discriminants (0 = EOA, 1 = multisig) at an OPERATOR-grant read site. Only reachable via on-chain state corruption (the field is program-set to {0,1}); the operation is rejected rather than acting on corrupted authority state (F-Q6).",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "report_state_corruption",
+        description:
+          "vault.owner_type is program-set to 0 (EOA) or 1 (multisig); an out-of-range value indicates on-chain state corruption and should be unreachable in normal operation. OPERATOR-grant paths are blocked until the vault state is valid — report this.",
       },
     ],
   },

@@ -55,6 +55,7 @@ import {
 import { expect } from "chai";
 import BN from "bn.js";
 import { expectSigilError } from "./helpers/strict-errors";
+import { registerOperatorAgent } from "./helpers/register-operator-agent";
 import {
   initVaultPreviewDigest,
   siblingHandlerDigest,
@@ -441,18 +442,19 @@ describe("sandwich-integration (Phase 6.1)", () => {
       } as any)
       .rpc();
 
-    // Register a spending agent.
+    // Register a spending agent. F-Q6: an instant OPERATOR
+    // (FULL_CAPABILITY) grant on a single-key vault (cosign_required=false)
+    // is rejected (ErrOperatorGrantRequiresTimelock 6107); seat it via the
+    // timelocked queue→advance→apply path instead.
     const agent = Keypair.generate();
     airdropSol(svm, agent.publicKey, 5 * LAMPORTS_PER_SOL);
-    await program.methods
-      .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-      .accounts({
-        owner: owner.publicKey,
-        vault,
-        policy,
-        agentSpendOverlay: overlay,
-      } as any)
-      .rpc();
+    await registerOperatorAgent({
+      program,
+      svm,
+      owner: owner.publicKey,
+      vault,
+      agent: agent.publicKey,
+    });
 
     // M1-04 (constraints-engine teardown): the permissive InstructionConstraints
     // PDA that used to be installed here is gone. validate_and_authorize no

@@ -5,6 +5,7 @@ use crate::events::AgentGrantQueued;
 use crate::state::pending_agent_grant::compute_pending_agent_grant_digest;
 use crate::state::*;
 use crate::utils::audit_log::build_audit_entry;
+use crate::utils::operator_grant::{classify_operator_grant_tier, effective_operator_grant_delay};
 
 /// Phase 8 PEN-CROSS-1 (Council ISC-58..65) — queue an OPERATOR-class agent grant.
 ///
@@ -135,14 +136,33 @@ pub fn handler(
         require!(has_cosigner, SigilError::ErrCosignRequired);
     }
 
+    // 4.5. F-Q6 (2026-06-02) — owner_type validity (ISC-33 / Council C-2) +
+    // tier-derived effective delay (H-1). Computed at QUEUE time and stored in
+    // `pending.min_delay_seconds`; `apply_agent_grant` reads ONLY the pending
+    // value (never live policy), so a post-queue policy change cannot shorten
+    // an in-flight grant's timelock.
+    require!(
+        vault.owner_type <= OWNER_TYPE_MULTISIG,
+        SigilError::InvalidOwnerType
+    );
+    let effective_delay = effective_operator_grant_delay(
+        classify_operator_grant_tier(
+            vault.owner_type,
+            policy.cosign_required,
+            &policy.cosign_session_pubkey,
+        ),
+        policy.operator_grant_delay_seconds,
+    );
+
     // 5. Populate pending PDA.
     //
-    // Phase 8 §RP Fix-Up B (PEN-02a CRITICAL, audit 2026-05-19):
-    // `min_delay_seconds` now defaults to `PendingAgentGrant::DEFAULT_MIN_DELAY`
-    // (172_800s / 48h) — matching `PendingOwnershipTransfer`. The prior 30-min
-    // default gave a phished owner only 30 minutes to react before the apply
-    // window opened. 48h gives the same observation window as ownership
-    // transfer, which OPERATOR-class agent grants are at least as elevated as.
+    // F-Q6 (2026-06-02): `min_delay_seconds` is the TIER-DERIVED effective
+    // delay, replacing the prior hard `DEFAULT_MIN_DELAY` (48h). Single-key
+    // vaults are floored at `SINGLE_KEY_OPERATOR_DELAY_FLOOR` (10 min — the
+    // missing 2nd factor); cosign/multisig use the owner-configured
+    // `operator_grant_delay_seconds` (default 0). The value is bounded to
+    // `MAX_OPERATOR_GRANT_DELAY` at the `queue_policy_update` write site, so
+    // the `as i64` casts below cannot overflow.
     let clock = Clock::get()?;
     let vault_key = vault.key();
     {
@@ -152,7 +172,7 @@ pub fn handler(
         pending.capability = capability;
         pending.spending_limit_usd = spending_limit_usd;
         pending.queued_at = clock.unix_timestamp;
-        pending.min_delay_seconds = PendingAgentGrant::DEFAULT_MIN_DELAY;
+        pending.min_delay_seconds = effective_delay;
         pending.bump = ctx.bumps.pending;
         // CH-1 close (Bucket-3 audit 2026-05-23): capture slot at queue
         // time alongside `queued_at` unix-timestamp. Paired with
@@ -201,12 +221,14 @@ pub fn handler(
         log.append(entry);
     }
 
-    // Phase 8 §RP Fix-Up B (PEN-02a CRITICAL): emit the EFFECTIVE timelock
-    // window (48h default) in the event payload so off-chain monitors who
-    // surface "executes at" countdowns to the owner show the correct value.
+    // F-Q6 (2026-06-02): emit the EFFECTIVE (tier-derived) timelock window in
+    // the event payload so off-chain monitors surface the correct "executes
+    // at" countdown. `effective_delay` is bounded to MAX_OPERATOR_GRANT_DELAY
+    // (48h) so the i64 cast + checked_add cannot overflow in practice; the
+    // checked_add is retained as defense-in-depth.
     let executes_at = clock
         .unix_timestamp
-        .checked_add(PendingAgentGrant::DEFAULT_MIN_DELAY as i64)
+        .checked_add(effective_delay as i64)
         .ok_or(error!(SigilError::Overflow))?;
 
     emit!(AgentGrantQueued {

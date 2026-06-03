@@ -4,6 +4,7 @@ use crate::errors::SigilError;
 use crate::events::PolicyChangeQueued;
 use crate::state::*;
 use crate::utils::cosign_digest::{compute_cosign_digest, CosignDigestFields};
+use crate::utils::operator_grant::MAX_OPERATOR_GRANT_DELAY;
 use crate::utils::policy_digest::{
     compute_agent_set_hash, compute_policy_preview_digest, PolicyPreviewFields,
 };
@@ -194,6 +195,33 @@ pub fn handler(
     }
     if let Some(ref tl) = timelock_duration {
         require!(*tl >= MIN_TIMELOCK_DURATION, SigilError::TimelockTooShort);
+    }
+    // F-Q6 (2026-06-02): bound the OPERATOR-grant delay at its sole write site.
+    // A value above MAX_OPERATOR_GRANT_DELAY (48h) could exceed the apply-time
+    // freshness ceiling and leave a queued OPERATOR grant permanently
+    // unapplyable (a tier-2 liveness brick), so it is rejected here.
+    if let Some(ref delay) = operator_grant_delay_seconds {
+        require!(
+            *delay <= MAX_OPERATOR_GRANT_DELAY,
+            SigilError::ErrOperatorGrantDelayTooLong
+        );
+    }
+    // F-Q6 / Council C-1 (2026-06-03): a BOUND cosigner must be a DISTINCT 2nd
+    // factor. Forbid binding `cosign_session_pubkey` to the owner key, which
+    // would collapse C-1's "owner + cosigner" two factors into one (the owner
+    // alone could then satisfy the cosign-bound INSTANT OPERATOR path in
+    // register_agent / reactivate_vault). Mirrors the `cosign_session != owner`
+    // guard on the TA-09 elevated path below and in
+    // queue_agent_permissions_update. `Pubkey::default()` (disabling the gate)
+    // is exempt.
+    if let Some(ref new_cosign_pk) = cosign_session_pubkey {
+        if *new_cosign_pk != Pubkey::default() {
+            require_keys_neq!(
+                *new_cosign_pk,
+                ctx.accounts.owner.key(),
+                SigilError::ErrCosignRequired
+            );
+        }
     }
     if let Some(ref expiry) = session_expiry_seconds {
         if *expiry > 0 {

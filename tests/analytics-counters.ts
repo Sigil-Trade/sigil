@@ -34,6 +34,7 @@ import {
   TestEnv,
   LiteSVM,
 } from "./helpers/litesvm-setup";
+import { registerOperatorAgent } from "./helpers/register-operator-agent";
 
 const FULL_CAPABILITY = 2; // CAPABILITY_OPERATOR
 
@@ -177,15 +178,14 @@ describe("analytics-counters", () => {
       } as any)
       .rpc();
 
-    // Register agent
-    await program.methods
-      .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-      .accountsPartial({
-        owner: owner.publicKey,
-        vault: vaultPda,
-        agentSpendOverlay: overlayPda,
-      })
-      .rpc();
+    // Register agent (F-Q6: single-key OPERATOR grant via queue→advance→apply)
+    await registerOperatorAgent({
+      program,
+      svm,
+      owner: owner.publicKey,
+      vault: vaultPda,
+      agent: agent.publicKey,
+    });
 
     // Deposit USDC to vault
     await program.methods
@@ -374,14 +374,13 @@ describe("analytics-counters", () => {
     const agent2 = Keypair.generate();
     airdropSol(svm, agent2.publicKey, 5 * LAMPORTS_PER_SOL);
 
-    await program.methods
-      .registerAgent(agent2.publicKey, FULL_CAPABILITY, new BN(0))
-      .accountsPartial({
-        owner: owner.publicKey,
-        vault: vaultPda,
-        agentSpendOverlay: overlayPda,
-      })
-      .rpc();
+    await registerOperatorAgent({
+      program,
+      svm,
+      owner: owner.publicKey,
+      vault: vaultPda,
+      agent: agent2.publicKey,
+    });
 
     // Find agent2's slot
     let overlay = await program.account.agentSpendOverlay.fetch(overlayPda);

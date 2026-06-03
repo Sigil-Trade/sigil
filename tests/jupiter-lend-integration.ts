@@ -18,6 +18,7 @@ import {
 import { expect } from "chai";
 import BN from "bn.js";
 import { initVaultPreviewDigest } from "./helpers/policy-digest";
+import { registerOperatorAgent } from "./helpers/register-operator-agent";
 import {
   buildExpectedIntentDigest,
   digestAsArgs,
@@ -297,16 +298,14 @@ describe("jupiter-lend-integration", () => {
       })
       .rpc();
 
-    // Register agent
-    await program.methods
-      .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-      .accountsPartial({
-        owner: owner.publicKey,
-        vault: vaultPda,
-        policy: policyPda,
-        agentSpendOverlay: overlayPda,
-      })
-      .rpc();
+    // Register agent (OPERATOR on single-key vault → timelocked queue→apply)
+    await registerOperatorAgent({
+      program,
+      svm,
+      owner: owner.publicKey,
+      vault: vaultPda,
+      agent: agent.publicKey,
+    });
 
     // Fund the vault with USDC
     ownerUsdcAta = createAtaHelper(
@@ -541,18 +540,13 @@ describe("jupiter-lend-integration", () => {
         })
         .rpc();
 
-      await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accountsPartial({
-          owner: owner.publicKey,
-          vault: frozenVault,
-          policy: PublicKey.findProgramAddressSync(
-            [Buffer.from("policy"), frozenVault.toBuffer()],
-            program.programId,
-          )[0],
-          agentSpendOverlay: frozenOverlay,
-        })
-        .rpc();
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: frozenVault,
+        agent: agent.publicKey,
+      });
 
       // Freeze via revoke
       const [frozenOverlayRevoke] = PublicKey.findProgramAddressSync(
@@ -685,18 +679,13 @@ describe("jupiter-lend-integration", () => {
         })
         .rpc();
 
-      await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accountsPartial({
-          owner: owner.publicKey,
-          vault: rollingVault,
-          policy: PublicKey.findProgramAddressSync(
-            [Buffer.from("policy"), rollingVault.toBuffer()],
-            program.programId,
-          )[0],
-          agentSpendOverlay: rollingOverlay,
-        })
-        .rpc();
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: rollingVault,
+        agent: agent.publicKey,
+      });
 
       rollingVaultUsdcAta = getAssociatedTokenAddressSync(
         usdcMint,

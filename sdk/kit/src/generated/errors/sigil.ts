@@ -228,6 +228,12 @@ export const SIGIL_ERROR__ERR_REACTIVATE_COSIGN_REQUIRED_FOR_FULL_CAPABILITY = 0
 export const SIGIL_ERROR__DESTINATION_ACCOUNT_UNRESOLVABLE = 0x17d9; // 6105
 /** ErrToken2022OutputMintUnresolvable: Vault-owned Token-2022 output ATA's mint is absent from remaining_accounts or not Token-2022-owned — cannot vet extensions */
 export const SIGIL_ERROR__ERR_TOKEN2022_OUTPUT_MINT_UNRESOLVABLE = 0x17da; // 6106
+/** ErrOperatorGrantRequiresTimelock: OPERATOR grant requires the timelock queue path on this vault — use queue_agent_grant */
+export const SIGIL_ERROR__ERR_OPERATOR_GRANT_REQUIRES_TIMELOCK = 0x17db; // 6107
+/** ErrOperatorGrantDelayTooLong: operator_grant_delay_seconds exceeds the maximum (48h) — would brick grant applicability */
+export const SIGIL_ERROR__ERR_OPERATOR_GRANT_DELAY_TOO_LONG = 0x17dc; // 6108
+/** InvalidOwnerType: vault.owner_type is not a recognized discriminant (expected 0=EOA or 1=multisig) */
+export const SIGIL_ERROR__INVALID_OWNER_TYPE = 0x17dd; // 6109
 
 export type SigilError =
   | typeof SIGIL_ERROR__ACCOUNT_WRITABILITY_MISMATCH
@@ -261,6 +267,8 @@ export type SigilError =
   | typeof SIGIL_ERROR__ERR_INVALID_OWNERSHIP_TARGET
   | typeof SIGIL_ERROR__ERR_MINT_DELTA_CAP_EXCEEDED
   | typeof SIGIL_ERROR__ERR_MINT_NOT_PINNED
+  | typeof SIGIL_ERROR__ERR_OPERATOR_GRANT_DELAY_TOO_LONG
+  | typeof SIGIL_ERROR__ERR_OPERATOR_GRANT_REQUIRES_TIMELOCK
   | typeof SIGIL_ERROR__ERR_OUTPUT_BELOW_FLOOR
   | typeof SIGIL_ERROR__ERR_OUTSIDE_OPERATING_HOURS
   | typeof SIGIL_ERROR__ERR_PENDING_AGENT_GRANT_DIGEST_MISMATCH
@@ -285,6 +293,7 @@ export type SigilError =
   | typeof SIGIL_ERROR__INVALID_CONSTRAINT_OPERATOR
   | typeof SIGIL_ERROR__INVALID_DESTINATION_MODE
   | typeof SIGIL_ERROR__INVALID_FEE_DESTINATION
+  | typeof SIGIL_ERROR__INVALID_OWNER_TYPE
   | typeof SIGIL_ERROR__INVALID_PERMISSIONS
   | typeof SIGIL_ERROR__INVALID_POST_ASSERTION_INDEX
   | typeof SIGIL_ERROR__INVALID_PROTOCOL_MODE
@@ -372,6 +381,8 @@ if (process.env.NODE_ENV !== "production") {
     [SIGIL_ERROR__ERR_INVALID_OWNERSHIP_TARGET]: `new_owner cannot be system/program/sysvar addresses (Council ISC-128)`,
     [SIGIL_ERROR__ERR_MINT_DELTA_CAP_EXCEEDED]: `R-1 MintDeltaCap: vault-mint balance decreased by more than max_net_decrease`,
     [SIGIL_ERROR__ERR_MINT_NOT_PINNED]: `Deposit mint is not a build-time-pinned stablecoin (USDC or USDT)`,
+    [SIGIL_ERROR__ERR_OPERATOR_GRANT_DELAY_TOO_LONG]: `operator_grant_delay_seconds exceeds the maximum (48h) — would brick grant applicability`,
+    [SIGIL_ERROR__ERR_OPERATOR_GRANT_REQUIRES_TIMELOCK]: `OPERATOR grant requires the timelock queue path on this vault — use queue_agent_grant`,
     [SIGIL_ERROR__ERR_OUTPUT_BELOW_FLOOR]: `R-3 OutputBalanceFloor: post-execution balance increase fell below the configured min_increase floor`,
     [SIGIL_ERROR__ERR_OUTSIDE_OPERATING_HOURS]: `Current UTC hour is outside the policy's operating_hours bitmask`,
     [SIGIL_ERROR__ERR_PENDING_AGENT_GRANT_DIGEST_MISMATCH]: `PendingAgentGrant digest mismatch between queue and apply`,
@@ -396,6 +407,7 @@ if (process.env.NODE_ENV !== "production") {
     [SIGIL_ERROR__INVALID_CONSTRAINT_OPERATOR]: `Constraint operator value is not a valid ConstraintOperator discriminant`,
     [SIGIL_ERROR__INVALID_DESTINATION_MODE]: `Invalid destination mode (must be 0 = RESTRICTED)`,
     [SIGIL_ERROR__INVALID_FEE_DESTINATION]: `Fee destination account invalid`,
+    [SIGIL_ERROR__INVALID_OWNER_TYPE]: `vault.owner_type is not a recognized discriminant (expected 0=EOA or 1=multisig)`,
     [SIGIL_ERROR__INVALID_PERMISSIONS]: `Permission bitmask contains invalid bits`,
     [SIGIL_ERROR__INVALID_POST_ASSERTION_INDEX]: `Post-assertion constraint references invalid instruction index`,
     [SIGIL_ERROR__INVALID_PROTOCOL_MODE]: `Invalid protocol mode (must be 1 = ALLOWLIST)`,

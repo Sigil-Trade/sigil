@@ -35,6 +35,7 @@ import {
   buildExpectedIntentDigest,
   digestAsArgs,
 } from "./helpers/intent-digest-fixture";
+import { registerOperatorAgent } from "./helpers/register-operator-agent";
 import {
   createTestEnv,
   airdropSol,
@@ -201,18 +202,17 @@ describe("TOCTOU Security Fix", () => {
       } as any)
       .rpc();
 
-    await program.methods
-      .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-      .accountsPartial({
-        owner: owner.publicKey,
-        vault: pdas.vaultPda,
-        policy: PublicKey.findProgramAddressSync(
-          [Buffer.from("policy"), pdas.vaultPda.toBuffer()],
-          program.programId,
-        )[0],
-        agentSpendOverlay: pdas.overlayPda,
-      })
-      .rpc();
+    // F-Q6: instant OPERATOR grant on a single-key vault is rejected
+    // (ErrOperatorGrantRequiresTimelock 6107). Seat the agent via the
+    // timelocked queue→advance→apply path. Net policy_version effect is one
+    // bump (apply_agent_grant), identical to the prior inline registerAgent.
+    await registerOperatorAgent({
+      program,
+      svm,
+      owner: owner.publicKey,
+      vault: pdas.vaultPda,
+      agent: agent.publicKey,
+    });
 
     await program.methods
       .depositFunds(new BN(500_000_000))

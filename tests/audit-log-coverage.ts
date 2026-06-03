@@ -496,9 +496,11 @@ describe("audit-log-coverage (Phase 7.1)", () => {
       Buffer.alloc(15, 0),
       // arg 17: cosign_session_pubkey: Option<Pubkey> = None (tag=0)
       Buffer.from([0]),
-      // arg 18: cosign_session: Pubkey = Pubkey::default() (all zeros)
+      // arg 18 (F-Q6 2026-06-02): operator_grant_delay_seconds: Option<u64> = None (tag=0)
+      Buffer.from([0]),
+      // arg 19: cosign_session: Pubkey = Pubkey::default() (all zeros)
       Buffer.alloc(32, 0),
-      // arg 19: new_policy_preview_digest: [u8; 32]
+      // arg 20: new_policy_preview_digest: [u8; 32]
       Buffer.from(queueDigest),
     ]);
     const queueIx = new TransactionInstruction({
@@ -708,8 +710,16 @@ describe("audit-log-coverage (Phase 7.1)", () => {
     );
     const agent = Keypair.generate();
 
+    // F-Q6 (2026-06-02): register OBSERVER, not OPERATOR. This agent only
+    // needs to be a non-disabled registered agent so record_agent_violation
+    // can find it (by pubkey) and trip its consecutive_failures counter to
+    // CAPABILITY_DISABLED — it never opens a spending session, so OPERATOR
+    // capability is unnecessary. Instant OPERATOR register on a single-key
+    // vault now reverts ErrOperatorGrantRequiresTimelock (6107); OBSERVER
+    // stays instant and still writes exactly 1 audit entry (disc=13), so the
+    // disc=22 trip path and audit counts below are unchanged.
     await program.methods
-      .registerAgent(agent.publicKey, CAPABILITY_OPERATOR, new BN(0))
+      .registerAgent(agent.publicKey, CAPABILITY_OBSERVER, new BN(0))
       .accounts({
         owner: owner.publicKey,
         vault,

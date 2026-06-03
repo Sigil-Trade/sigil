@@ -255,6 +255,14 @@ pub fn handler(ctx: Context<AcceptOwnershipTransferMultisig>) -> Result<()> {
     //    fail fast under the new (multisig) authority.
     {
         let policy = &mut ctx.accounts.policy;
+        // F-Q6 / Council C-1 (2026-06-03): reset an inherited cosign binding that
+        // now equals the NEW multisig owner (the "owner + bound cosigner" two
+        // factors collapsed to one). Fail-safe to SingleKey; closes the
+        // transfer-ownership-to-the-bound-cosigner bypass of the F-3 guard.
+        // Done BEFORE the digest recompute so the bound digest reflects it.
+        if policy.cosign_session_pubkey == multisig_key {
+            policy.cosign_session_pubkey = Pubkey::default();
+        }
         let new_agent_set_hash = compute_agent_set_hash(&ctx.accounts.vault.agents);
         let new_digest = compute_policy_preview_digest(&PolicyPreviewFields {
             daily_spending_cap_usd: policy.daily_spending_cap_usd,

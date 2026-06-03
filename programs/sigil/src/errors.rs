@@ -696,4 +696,31 @@ pub enum SigilError {
     /// could later drain or hide the vault's holding out-of-band.
     #[msg("Vault-owned Token-2022 output ATA's mint is absent from remaining_accounts or not Token-2022-owned — cannot vet extensions")]
     ErrToken2022OutputMintUnresolvable,
+
+    /// 6107 — F-Q6: an OPERATOR-class agent grant was attempted INSTANTLY via
+    /// `register_agent` on a vault that does NOT carry >=2 authorization
+    /// factors at zero delay — a single-key vault, a cosign-required-but-
+    /// unbound vault, or any vault with a configured
+    /// `operator_grant_delay_seconds > 0`. Such grants MUST route through the
+    /// timelocked `queue_agent_grant` → `apply_agent_grant` path (the time-
+    /// delay substitutes for the missing 2nd factor). Not an attack — the SDK
+    /// should switch to the queue path.
+    #[msg("OPERATOR grant requires the timelock queue path on this vault — use queue_agent_grant")]
+    ErrOperatorGrantRequiresTimelock,
+
+    /// 6108 — F-Q6: `operator_grant_delay_seconds` supplied to
+    /// `queue_policy_update` exceeds `MAX_OPERATOR_GRANT_DELAY` (48h). A larger
+    /// delay could exceed the apply-time freshness ceiling and leave an
+    /// OPERATOR grant permanently unapplyable (a tier-2 liveness brick), so it
+    /// is rejected at configuration time.
+    #[msg("operator_grant_delay_seconds exceeds the maximum (48h) — would brick grant applicability")]
+    ErrOperatorGrantDelayTooLong,
+
+    /// 6109 — F-Q6: `vault.owner_type` held a value outside the recognized
+    /// discriminants (0 = EOA, 1 = multisig) at an OPERATOR-grant read site.
+    /// Only reachable via state corruption (the field is program-set to {0,1});
+    /// rejected explicitly rather than operating on corrupted authority state
+    /// (mirrors the TA-04 `InvalidCapability` reserved-value contract).
+    #[msg("vault.owner_type is not a recognized discriminant (expected 0=EOA or 1=multisig)")]
+    InvalidOwnerType,
 }

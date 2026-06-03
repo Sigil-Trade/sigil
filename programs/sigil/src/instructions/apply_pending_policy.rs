@@ -350,6 +350,21 @@ pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
     if let Some(new_cosign_pubkey) = pending.cosign_session_pubkey {
         policy.cosign_session_pubkey = new_cosign_pubkey;
     }
+    // F-Q6 / Council C-1 defense-in-depth (2026-06-03): re-assert the bound
+    // cosigner is a DISTINCT 2nd factor at this apply write site too. The
+    // queue_policy_update guard is the primary check; enforcing it here as well
+    // removes the brittleness of single-site enforcement and neutralizes any
+    // pre-guard self-cosign value carried forward. A bound cosigner == owner
+    // would collapse C-1's "owner + cosigner" to ONE factor, letting the owner
+    // key alone satisfy the cosign-bound INSTANT OPERATOR path in register_agent
+    // / reactivate_vault. `Pubkey::default()` (gate disabled) is exempt.
+    if policy.cosign_session_pubkey != Pubkey::default() {
+        require_keys_neq!(
+            policy.cosign_session_pubkey,
+            ctx.accounts.owner.key(),
+            SigilError::ErrCosignRequired
+        );
+    }
 
     // Phase 2 Option A: defense-in-depth — re-validate protocol_mode if pending overrode it.
     if let Some(mode) = pending.protocol_mode {

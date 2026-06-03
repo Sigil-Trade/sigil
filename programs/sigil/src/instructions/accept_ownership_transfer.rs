@@ -230,6 +230,16 @@ pub fn handler(ctx: Context<AcceptOwnershipTransfer>) -> Result<()> {
     // PolicyVersionMismatch under the new authority.
     {
         let policy = &mut ctx.accounts.policy;
+        // F-Q6 / Council C-1 (2026-06-03): if the inherited cosign binding now
+        // equals the NEW owner, the "owner + bound cosigner" two factors have
+        // collapsed to one — reset it to default (fail-safe to SingleKey) so the
+        // transferred vault cannot instantly seat an OPERATOR with the single
+        // new-owner key. Closes the transfer-ownership-to-the-bound-cosigner
+        // bypass of the F-3 owner!=cosigner guard. Done BEFORE the digest
+        // recompute so the bound digest reflects the reset value.
+        if policy.cosign_session_pubkey == new_owner_key {
+            policy.cosign_session_pubkey = Pubkey::default();
+        }
         let new_agent_set_hash = compute_agent_set_hash(&ctx.accounts.vault.agents);
         let new_digest = compute_policy_preview_digest(&PolicyPreviewFields {
             daily_spending_cap_usd: policy.daily_spending_cap_usd,

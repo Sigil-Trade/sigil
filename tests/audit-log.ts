@@ -260,8 +260,13 @@ describe("audit-log (Phase 7)", () => {
     );
     const agent = Keypair.generate();
 
+    // F-Q6: this agent only verifies the registration audit entry (disc=13 +
+    // subject) and never runs a spending session, so it registers as OBSERVER
+    // (capability 1). register_agent writes the same single disc=13 entry with
+    // the agent in the subject slot regardless of capability; using OBSERVER
+    // keeps the instant path (1 entry) and avoids the F-Q6 OPERATOR timelock.
     await program.methods
-      .registerAgent(agent.publicKey, 2, new BN(0))
+      .registerAgent(agent.publicKey, 1, new BN(0))
       .accounts({
         owner: owner.publicKey,
         vault,
@@ -295,8 +300,11 @@ describe("audit-log (Phase 7)", () => {
       [Buffer.from("agent_spend"), vault.toBuffer(), Buffer.from([0])],
       program.programId,
     );
+    // F-Q6: OBSERVER (capability 1) — this agent is only registered so that
+    // reactivate doesn't require a new_agent; it never spends. register_agent
+    // still writes the same single disc=13 entry (counted as entry #1 below).
     await program.methods
-      .registerAgent(agent.publicKey, 2, new BN(0))
+      .registerAgent(agent.publicKey, 1, new BN(0))
       .accounts({
         owner: owner.publicKey,
         vault,
@@ -357,8 +365,11 @@ describe("audit-log (Phase 7)", () => {
 
     const agent = Keypair.generate();
     airdropSol(svm, agent.publicKey, 10 * LAMPORTS_PER_SOL);
+    // F-Q6: OBSERVER (capability 1). This test simplifies and never actually
+    // drives a session (see note below), so the agent never spends; OBSERVER
+    // keeps the instant single-entry (disc=13) register so the count stays 1.
     await program.methods
-      .registerAgent(agent.publicKey, 2, new BN(0))
+      .registerAgent(agent.publicKey, 1, new BN(0))
       .accounts({
         owner: owner.publicKey,
         vault,
@@ -445,8 +456,11 @@ describe("audit-log (Phase 7)", () => {
 
     // Drive a few mutations across the discriminator allocation.
     const agent = Keypair.generate();
+    // F-Q6: OBSERVER (capability 1). This agent is paused/unpaused/revoked
+    // below (none of which gate on capability) and never spends; OBSERVER
+    // keeps the instant register so no extra audit entries are introduced.
     await program.methods
-      .registerAgent(agent.publicKey, 2, new BN(0))
+      .registerAgent(agent.publicKey, 1, new BN(0))
       .accounts({
         owner: owner.publicKey,
         vault,

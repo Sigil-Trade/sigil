@@ -55,12 +55,16 @@ const STANDARD_INIT_DAILY_CAP = new BN(500_000_000);
 const STANDARD_INIT_MAX_TX = new BN(100_000_000);
 const STANDARD_INIT_TIMELOCK = new BN(1800);
 
-// Phase 8 §RP Fix-Up B (PEN-02a CRITICAL, audit 2026-05-19): the PendingAgentGrant
-// default timelock was raised from MIN_TIMELOCK_DURATION (1800s / 30 min) to
-// PendingAgentGrant::DEFAULT_MIN_DELAY (172_800s / 48h) so that OPERATOR-class
-// grants have the same observation window as ownership transfer. The test
-// constant follows the on-chain default.
-const PENDING_AGENT_GRANT_DELAY = 172_800;
+// F-Q6 (2026-06-02): `queue_agent_grant` now stores the TIER-DERIVED effective
+// delay in `pending.min_delay_seconds`, NOT the old hard 48h default. For a
+// SINGLE-KEY vault (the default in this suite — `cosignRequired:false`, and even
+// `cosignRequired:true` WITHOUT a bound `cosign_session_pubkey`, which classifies
+// as SingleKey per utils/operator_grant.rs:97) the effective delay is floored at
+// SINGLE_KEY_OPERATOR_DELAY_FLOOR (600s) at the default configured delay of 0.
+// This is the actual on-chain `min_delay_seconds` for the single-key vaults below
+// and the real apply-time boundary. (Source: SINGLE_KEY_OPERATOR_DELAY_FLOOR in
+// programs/sigil/src/utils/operator_grant.rs:38.)
+const SINGLE_KEY_OPERATOR_DELAY = 600;
 
 // Capability levels (mirrors state/vault.rs constants).
 const CAPABILITY_DISABLED = 0;
@@ -212,19 +216,20 @@ describe("pen-cross-1-absorption (Phase 8 Batch 6)", () => {
   // ─────────────────────────────────────────────────────────────────────────
   // 1. register_agent(CAPABILITY_OPERATOR) → REJECT InvalidPermissions
   // ─────────────────────────────────────────────────────────────────────────
-  it("register_agent rejects CAPABILITY_OPERATOR on cosign-opted vaults (even WITH cosigner present) → 6036 InvalidPermissions", async () => {
-    // Phase 8 PEN-CROSS-1 closure is CONDITIONAL on policy.cosign_required.
-    // For vaults that opted into cosign, OPERATOR-class grants must route
-    // through queue/apply (the actual phished-owner+cosigner attack surface
-    // where both keys are compromised — only the timelock provides defense).
-    // For vaults without cosign (V1 default, solo-founder simplicity), the
-    // owner key has full unilateral authority — no additional gate adds
-    // value because the threat model has no defense to begin with.
+  it("register_agent rejects CAPABILITY_OPERATOR on a cosign-opted-but-UNBOUND vault (single-key tier) → 6107 ErrOperatorGrantRequiresTimelock", async () => {
+    // F-Q6 (2026-06-02): the old register_agent.rs:133-138 cosign-only OPERATOR
+    // reject (6036 InvalidPermissions) was REPLACED by the tiered rule. This
+    // vault sets cosignRequired:true but never BINDS a cosign_session_pubkey, so
+    // per classify_operator_grant_tier it is the SINGLE-KEY tier (an unbound
+    // cosigner is not a real 2nd factor — Council C-1). A single-key OPERATOR
+    // grant can NEVER be instant — it must route through queue_agent_grant →
+    // apply_agent_grant (the >=10-min delay substitutes for the missing 2nd
+    // factor). So register_agent reverts 6107 ErrOperatorGrantRequiresTimelock.
     //
-    // This test passes a cosigner to bypass the cosign gate (6089) and
-    // reach the new conditional capability gate (6036), proving that
-    // cosign-presence alone is insufficient for OPERATOR grants — the
-    // queue/apply timelock is the load-bearing defense.
+    // The randomly-generated cosigner in remaining_accounts is irrelevant: the
+    // tier is decided by the BOUND pubkey, not signer presence — so "even WITH a
+    // cosigner present" the unbound vault still rejects. (A truly cosign-BOUND
+    // vault's INSTANT OPERATOR path is covered by the Stage-D tier tests.)
     const { vault, policy, overlay, auditSuccess } = await initVault(
       new BN(11000),
       { cosignRequired: true },
@@ -257,8 +262,8 @@ describe("pen-cross-1-absorption (Phase 8 Batch 6)", () => {
     }
     expect(
       caughtCode,
-      `register_agent OPERATOR MUST reject on cosign-opted vault (got code=${caughtCode} name=${rawErrName})`,
-    ).to.equal(6036);
+      `register_agent OPERATOR MUST reject on a single-key/unbound-cosign vault (got code=${caughtCode} name=${rawErrName})`,
+    ).to.equal(6107);
   });
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -316,7 +321,7 @@ describe("pen-cross-1-absorption (Phase 8 Batch 6)", () => {
     expect(pendingState.capability).to.equal(CAPABILITY_OPERATOR);
     expect(pendingState.spendingLimitUsd.toString()).to.equal("50000000");
     expect(pendingState.minDelaySeconds.toString()).to.equal(
-      PENDING_AGENT_GRANT_DELAY.toString(),
+      SINGLE_KEY_OPERATOR_DELAY.toString(),
     );
 
     // Agent NOT in vault.agents yet.
@@ -330,7 +335,7 @@ describe("pen-cross-1-absorption (Phase 8 Batch 6)", () => {
   // ─────────────────────────────────────────────────────────────────────────
   // 4. BOUNDARY REJECT — apply 1 second before timelock elapses
   // ─────────────────────────────────────────────────────────────────────────
-  it("apply at queued_at + PENDING_AGENT_GRANT_DELAY - 1 → reject 6022 TimelockNotExpired", async () => {
+  it("apply at queued_at + SINGLE_KEY_OPERATOR_DELAY - 1 → reject 6022 TimelockNotExpired", async () => {
     const { vault, policy, overlay, auditSuccess, pendingAgentGrant } =
       await initVault(new BN(11003));
     const agent = Keypair.generate();
@@ -348,7 +353,7 @@ describe("pen-cross-1-absorption (Phase 8 Batch 6)", () => {
       } as any)
       .rpc();
 
-    advanceTime(svm, PENDING_AGENT_GRANT_DELAY - 1);
+    advanceTime(svm, SINGLE_KEY_OPERATOR_DELAY - 1);
 
     let caughtCode: number | null = null;
     try {
@@ -372,9 +377,9 @@ describe("pen-cross-1-absorption (Phase 8 Batch 6)", () => {
   });
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 5. BOUNDARY OK — apply exactly at queued_at + PENDING_AGENT_GRANT_DELAY
+  // 5. BOUNDARY OK — apply exactly at queued_at + SINGLE_KEY_OPERATOR_DELAY
   // ─────────────────────────────────────────────────────────────────────────
-  it("apply at queued_at + PENDING_AGENT_GRANT_DELAY → ok, agent inserted, policy_version bumped", async () => {
+  it("apply at queued_at + SINGLE_KEY_OPERATOR_DELAY → ok, agent inserted, policy_version bumped", async () => {
     const { vault, policy, overlay, auditSuccess, pendingAgentGrant } =
       await initVault(new BN(11004));
     const agent = Keypair.generate();
@@ -396,7 +401,7 @@ describe("pen-cross-1-absorption (Phase 8 Batch 6)", () => {
       } as any)
       .rpc();
 
-    advanceTime(svm, PENDING_AGENT_GRANT_DELAY);
+    advanceTime(svm, SINGLE_KEY_OPERATOR_DELAY);
 
     await program.methods
       .applyAgentGrant()
@@ -461,7 +466,7 @@ describe("pen-cross-1-absorption (Phase 8 Batch 6)", () => {
       } as any)
       .rpc();
 
-    advanceTime(svm, PENDING_AGENT_GRANT_DELAY);
+    advanceTime(svm, SINGLE_KEY_OPERATOR_DELAY);
 
     await program.methods
       .applyAgentGrant()
