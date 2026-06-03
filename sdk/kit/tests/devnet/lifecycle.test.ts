@@ -186,6 +186,8 @@ describe("Kit SDK Devnet — Vault Lifecycle", function () {
       // a dedicated elevated helper that verifies the new pubkey isn't a
       // Sigil-protected PDA at queue time.
       cosignSessionPubkey: null,
+      // F-Q6 (2026-06-02): non-elevated path — pass null for fall-through.
+      operatorGrantDelaySeconds: null,
       // TA-09 (Phase 3): zero pubkey for non-elevated path.
       cosignSession: "11111111111111111111111111111111" as unknown as Address,
       newPolicyPreviewDigest,

@@ -86,11 +86,7 @@ import { getCancelOwnershipTransferInstructionAsync } from "../generated/instruc
 import type { PostAssertionEntry } from "../generated/types/postAssertionEntry.js";
 import { validatePostAssertionEntries } from "./post-assertion-validation.js";
 
-import type {
-  TxResult,
-  TxOpts,
-  PolicyChanges,
-} from "./types.js";
+import type { TxResult, TxOpts, PolicyChanges } from "./types.js";
 import { toDxError } from "./errors.js";
 import { SigilSdkDomainError } from "../errors/sdk.js";
 import { SIGIL_ERROR__SDK__MAINNET_CONFIRMATION_REQUIRED } from "../errors/codes.js";
@@ -879,6 +875,10 @@ export async function queuePolicyUpdate(
     // ix arg below — but this dashboard helper keeps the policy stable
     // for the default path).
     cosignRequired: livePolicy.data.cosignRequired,
+    // F-Q6 (2026-06-02): operator_grant_delay not mutated by this dashboard
+    // surface — pass-through from live policy so the digest matches the
+    // on-chain merged (eff) value at canonical position 22.
+    operatorGrantDelaySeconds: livePolicy.data.operatorGrantDelaySeconds,
   });
 
   const ix = await getQueuePolicyUpdateInstructionAsync({
@@ -917,6 +917,10 @@ export async function queuePolicyUpdate(
     // sets cosign_session_pubkey via a dedicated elevated helper that
     // verifies the new pubkey isn't a Sigil-protected PDA at queue time.
     cosignSessionPubkey: null,
+    // F-Q6 (2026-06-02): not mutated by this dashboard surface — pass null
+    // (falls through to live policy at on-chain merge). Configurability is
+    // available via the raw codama builder + owner paths.
+    operatorGrantDelaySeconds: null,
     // TA-09 (Phase 3): non-elevated path by default — pass the
     // System Program / zero-pubkey ("11111111111111111111111111111111").
     // Elevated mutations through this dashboard surface require a
@@ -1052,7 +1056,6 @@ export async function cancelAgentPermissions(
   });
   return run(rpc, owner, network, [ix], opts);
 }
-
 
 // ─── Post-execution assertions (Phase 2) ─────────────────────────────────────
 // Composes with pre-execution InstructionConstraints — NOT a replacement.

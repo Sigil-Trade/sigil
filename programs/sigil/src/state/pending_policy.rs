@@ -124,6 +124,12 @@ pub struct PendingPolicyUpdate {
     ///
     /// APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
     pub cosign_session_pubkey: Option<Pubkey>,
+
+    /// F-Q6 (2026-06-02): optional update to
+    /// `PolicyConfig.operator_grant_delay_seconds`. None = preserve live value;
+    /// Some(n) = update. Bound by TA-19 at canonical digest position 22.
+    /// APPENDED per F-14 APPEND-ONLY rule for Borsh stability.
+    pub operator_grant_delay_seconds: Option<u64>,
 }
 
 impl PendingPolicyUpdate {
@@ -153,7 +159,8 @@ impl PendingPolicyUpdate {
         + (1 + 8) // stable_balance_floor [TA-12, Phase 5]
         + (1 + 8) // per_recipient_daily_cap_usd [TA-14, Phase 5]
         + (1 + 1) // cosign_required Option<bool> [G6, 2026-05-18 audit]
-        + (1 + 32); // cosign_session_pubkey Option<Pubkey> [D-5, 2026-05-19 audit, F-RP3-1]
+        + (1 + 32) // cosign_session_pubkey Option<Pubkey> [D-5, 2026-05-19 audit, F-RP3-1]
+        + (1 + 8); // operator_grant_delay_seconds Option<u64> [F-Q6 2026-06-02]
 
     /// Returns true if the timelock period has expired and the update
     /// can be applied.

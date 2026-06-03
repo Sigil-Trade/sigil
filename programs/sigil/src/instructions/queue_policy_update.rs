@@ -98,6 +98,12 @@ pub fn handler(
     // fires at `reactivate_vault` when the operation grafts a new agent
     // at FULL_CAPABILITY (see `reactivate_vault.rs`).
     cosign_session_pubkey: Option<Pubkey>,
+    // F-Q6 (2026-06-02): owner-controlled OPERATOR-grant delay (seconds).
+    // None = pass through from live policy; Some(n) = update. Non-elevated —
+    // lowering never breaches the security floor (single-key is floored at
+    // max(., 600); cosign/multisig always need >=2 factors). Bound by TA-19
+    // (digest, position 22) and gated by timelock_duration like every policy field.
+    operator_grant_delay_seconds: Option<u64>,
     // TA-09 (Phase 3): the cosigning session pubkey. `Pubkey::default()`
     // means "no cosign required" (non-elevated mutation). For elevated
     // mutations the caller MUST pass a non-default pubkey AND include
@@ -273,6 +279,9 @@ pub fn handler(
     // TA-14 (Phase 5): merged-effective per_recipient_daily_cap_usd.
     let eff_per_recipient_daily_cap_usd =
         per_recipient_daily_cap_usd.unwrap_or(policy.per_recipient_daily_cap_usd);
+    // F-Q6 (2026-06-02): merged-effective operator_grant_delay_seconds.
+    let eff_operator_grant_delay_seconds =
+        operator_grant_delay_seconds.unwrap_or(policy.operator_grant_delay_seconds);
     // G6 (audit 2026-05-18 cosign opt-in): merged-effective cosign_required.
     // None = pass through from live; Some(new) = the queued value. The
     // elevation check below uses BOTH the live and effective values to
@@ -522,11 +531,10 @@ pub fn handler(
         // silently flip the gate between owner approval and on-chain
         // landing.
         cosign_session_pubkey: eff_cosign_session_pubkey,
-        // F-Q6 (2026-06-02): operator_grant_delay_seconds bound at canonical
-        // position 22. queue_policy_update does NOT change this field in A1
-        // (not yet an arg) — read live policy so the recomputed digest matches
-        // the owner's signed digest. Stage B makes it configurable (eff_*).
-        operator_grant_delay_seconds: policy.operator_grant_delay_seconds,
+        // F-Q6 (2026-06-02): merged-effective operator_grant_delay_seconds at
+        // canonical position 22 — Stage B made it configurable. The owner's
+        // signed digest binds the value they intend to apply (pending-or-live).
+        operator_grant_delay_seconds: eff_operator_grant_delay_seconds,
     });
     require!(
         recomputed_digest == new_policy_preview_digest,
@@ -572,6 +580,9 @@ pub fn handler(
     pending.stable_balance_floor = stable_balance_floor;
     // TA-14 (Phase 5): persist optional per_recipient_daily_cap_usd update.
     pending.per_recipient_daily_cap_usd = per_recipient_daily_cap_usd;
+    // F-Q6 (2026-06-02): persist optional operator_grant_delay_seconds update.
+    // None passes the live value through at apply time.
+    pending.operator_grant_delay_seconds = operator_grant_delay_seconds;
     // G6 (audit 2026-05-18 cosign opt-in): persist optional cosign_required
     // update. apply_pending_policy reads this and writes through to
     // `policy.cosign_required` before the second-pass TA-19 digest

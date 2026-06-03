@@ -285,6 +285,13 @@ pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
     if let Some(cap) = pending.per_recipient_daily_cap_usd {
         policy.per_recipient_daily_cap_usd = cap;
     }
+    // F-Q6 (2026-06-02): apply optional operator_grant_delay_seconds update.
+    // The second-pass TA-19 digest below reads the live (post-merge) value at
+    // canonical position 22, so a tampered pending PDA that altered it between
+    // queue and apply produces a digest mismatch.
+    if let Some(delay) = pending.operator_grant_delay_seconds {
+        policy.operator_grant_delay_seconds = delay;
+    }
     // G6 (audit 2026-05-18 cosign opt-in): apply optional cosign_required
     // update. The queue handler classified the toggle:
     //   - false→true (enable) is non-elevated (safety improvement).

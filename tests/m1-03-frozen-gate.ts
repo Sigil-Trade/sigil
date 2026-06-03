@@ -38,7 +38,10 @@ import {
   SYSVAR_SLOT_HASHES_PUBKEY,
   LAMPORTS_PER_SOL,
 } from "@solana/web3.js";
-import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import {
+  TOKEN_PROGRAM_ID,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+} from "@solana/spl-token";
 import { expect } from "chai";
 import BN from "bn.js";
 import {
@@ -226,7 +229,9 @@ describe("M1-03: systemic frozen-gate", () => {
     const code = await expectCode(
       register(vault, policy, overlay, Keypair.generate().publicKey),
     );
-    expect(code, "register on frozen → VaultNotActive").to.equal(VAULT_NOT_ACTIVE);
+    expect(code, "register on frozen → VaultNotActive").to.equal(
+      VAULT_NOT_ACTIVE,
+    );
   });
 
   it("GATED unpause_agent: frozen vault rejects re-enabling an agent → 6000", async () => {
@@ -245,7 +250,9 @@ describe("M1-03: systemic frozen-gate", () => {
         .accounts({ owner: owner.publicKey, vault, policy } as any)
         .rpc(),
     );
-    expect(code, "unpause on frozen → VaultNotActive").to.equal(VAULT_NOT_ACTIVE);
+    expect(code, "unpause on frozen → VaultNotActive").to.equal(
+      VAULT_NOT_ACTIVE,
+    );
   });
 
   it("GATED promote_graylist_destination: frozen vault rejects whitelisting → 6000", async () => {
@@ -258,7 +265,9 @@ describe("M1-03: systemic frozen-gate", () => {
         .accounts({ owner: owner.publicKey, vault, policy } as any)
         .rpc(),
     );
-    expect(code, "promote on frozen → VaultNotActive").to.equal(VAULT_NOT_ACTIVE);
+    expect(code, "promote on frozen → VaultNotActive").to.equal(
+      VAULT_NOT_ACTIVE,
+    );
   });
 
   it("GATED queue_policy_update: frozen vault rejects staging a policy update → 6000", async () => {
@@ -266,15 +275,35 @@ describe("M1-03: systemic frozen-gate", () => {
     await register(vault, policy, overlay, Keypair.generate().publicKey);
     await freeze(vault);
     const newDestination = Keypair.generate().publicKey;
-    const queueDigest = await fetchAndComputeQueueDigest(program, policy, vault, {
-      allowedDestinations: [newDestination],
-    });
+    const queueDigest = await fetchAndComputeQueueDigest(
+      program,
+      policy,
+      vault,
+      {
+        allowedDestinations: [newDestination],
+      },
+    );
     const code = await expectCode(
       program.methods
         .queuePolicyUpdate(
-          null, null, null, null, null, null, null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
           [newDestination], // allowedDestinations
-          null, null, null, null, null, null, null, null, null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
           PublicKey.default, // cosignSession (non-elevated)
           queueDigest,
         )
@@ -325,15 +354,35 @@ describe("M1-03: systemic frozen-gate", () => {
     await register(vault, policy, overlay, Keypair.generate().publicKey);
     const pendingPolicy = pendingPolicyPda(vault);
     const newDestination = Keypair.generate().publicKey;
-    const queueDigest = await fetchAndComputeQueueDigest(program, policy, vault, {
-      allowedDestinations: [newDestination],
-    });
+    const queueDigest = await fetchAndComputeQueueDigest(
+      program,
+      policy,
+      vault,
+      {
+        allowedDestinations: [newDestination],
+      },
+    );
     // Queue on Active.
     await program.methods
       .queuePolicyUpdate(
-        null, null, null, null, null, null, null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
         [newDestination],
-        null, null, null, null, null, null, null, null, null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
         PublicKey.default,
         queueDigest,
       )
@@ -351,7 +400,12 @@ describe("M1-03: systemic frozen-gate", () => {
     const code = await expectCode(
       program.methods
         .applyPendingPolicy()
-        .accounts({ owner: owner.publicKey, vault, policy, pendingPolicy } as any)
+        .accounts({
+          owner: owner.publicKey,
+          vault,
+          policy,
+          pendingPolicy,
+        } as any)
         .rpc(),
     );
     expect(code, "apply policy on frozen → VaultNotActive").to.equal(
@@ -360,7 +414,9 @@ describe("M1-03: systemic frozen-gate", () => {
   });
 
   it("GATED apply_agent_permissions_update: queued-then-frozen update cannot apply → 6000", async () => {
-    const { vault, policy, overlay, auditSuccess } = await initVault(new BN(9606));
+    const { vault, policy, overlay, auditSuccess } = await initVault(
+      new BN(9606),
+    );
     const agent = Keypair.generate();
     await register(vault, policy, overlay, agent.publicKey);
     const pendingAgentPerms = pendingAgentPermsPda(vault, agent.publicKey);
@@ -397,7 +453,11 @@ describe("M1-03: systemic frozen-gate", () => {
         } as any)
         .remainingAccounts([
           { pubkey: auditSuccess, isSigner: false, isWritable: true },
-          { pubkey: SYSVAR_SLOT_HASHES_PUBKEY, isSigner: false, isWritable: false },
+          {
+            pubkey: SYSVAR_SLOT_HASHES_PUBKEY,
+            isSigner: false,
+            isWritable: false,
+          },
         ])
         .rpc(),
     );
@@ -434,7 +494,9 @@ describe("M1-03: systemic frozen-gate", () => {
       .accounts({ vault, policy, owner: owner.publicKey } as any)
       .rpc();
     const v = await program.account.agentVault.fetch(vault);
-    expect((v as any).observeOnly, "vault went inert while frozen").to.equal(true);
+    expect((v as any).observeOnly, "vault went inert while frozen").to.equal(
+      true,
+    );
   });
 
   it("EXCEPTION revoke_agent: frozen vault may still remove an agent", async () => {
@@ -483,15 +545,35 @@ describe("M1-03: systemic frozen-gate", () => {
     await register(vault, policy, overlay, Keypair.generate().publicKey);
     const pendingPolicy = pendingPolicyPda(vault);
     const newDestination = Keypair.generate().publicKey;
-    const queueDigest = await fetchAndComputeQueueDigest(program, policy, vault, {
-      allowedDestinations: [newDestination],
-    });
+    const queueDigest = await fetchAndComputeQueueDigest(
+      program,
+      policy,
+      vault,
+      {
+        allowedDestinations: [newDestination],
+      },
+    );
     // Queue on Active, then freeze, then cancel while frozen.
     await program.methods
       .queuePolicyUpdate(
-        null, null, null, null, null, null, null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
         [newDestination],
-        null, null, null, null, null, null, null, null, null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
         PublicKey.default,
         queueDigest,
       )
@@ -509,9 +591,10 @@ describe("M1-03: systemic frozen-gate", () => {
       .accounts({ owner: owner.publicKey, vault, policy, pendingPolicy } as any)
       .rpc();
     // Pending PDA closed (rent reclaimed) → account no longer exists.
-    expect(svm.getAccount(pendingPolicy), "pending closed while frozen").to.equal(
-      null,
-    );
+    expect(
+      svm.getAccount(pendingPolicy),
+      "pending closed while frozen",
+    ).to.equal(null);
   });
 
   it("EXCEPTION deposit_funds: frozen vault may still receive a deposit", async () => {
@@ -576,11 +659,16 @@ describe("M1-03: systemic frozen-gate", () => {
     // Revoke the LAST agent → vault auto-freezes (FreezeReason::AutoRevoke).
     await program.methods
       .revokeAgent(a1.publicKey)
-      .accounts({ owner: owner.publicKey, vault, policy, agentSpendOverlay: overlay } as any)
+      .accounts({
+        owner: owner.publicKey,
+        vault,
+        policy,
+        agentSpendOverlay: overlay,
+      } as any)
       .rpc();
     const frozen = await program.account.agentVault.fetch(vault);
-    expect((frozen as any).status.frozen, "auto-frozen at zero agents").to.not.be
-      .undefined;
+    expect((frozen as any).status.frozen, "auto-frozen at zero agents").to.not
+      .be.undefined;
 
     // register_agent is now gated → cannot add an agent back directly.
     const blocked = await expectCode(
@@ -599,7 +687,7 @@ describe("M1-03: systemic frozen-gate", () => {
       .accounts({ owner: owner.publicKey, vault } as any)
       .rpc();
     const recovered = await program.account.agentVault.fetch(vault);
-    expect((recovered as any).status.active, "vault recovered to Active").to.not.be
-      .undefined;
+    expect((recovered as any).status.active, "vault recovered to Active").to.not
+      .be.undefined;
   });
 });

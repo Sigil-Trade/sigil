@@ -3901,6 +3901,12 @@
           }
         },
         {
+          "name": "operator_grant_delay_seconds",
+          "type": {
+            "option": "u64"
+          }
+        },
+        {
           "name": "cosign_session",
           "type": "pubkey"
         },
@@ -8656,6 +8662,17 @@
             ],
             "type": {
               "option": "pubkey"
+            }
+          },
+          {
+            "name": "operator_grant_delay_seconds",
+            "docs": [
+              "F-Q6 (2026-06-02): optional update to operator_grant_delay_seconds.",
+              "None = preserve live value; Some(n) = update. Bound by TA-19 at",
+              "canonical digest position 22. APPENDED per F-14 APPEND-ONLY rule."
+            ],
+            "type": {
+              "option": "u64"
             }
           }
         ]

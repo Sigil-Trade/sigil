@@ -3907,6 +3907,12 @@ export type Sigil = {
           }
         },
         {
+          "name": "operatorGrantDelaySeconds",
+          "type": {
+            "option": "u64"
+          }
+        },
+        {
           "name": "cosignSession",
           "type": "pubkey"
         },
@@ -8662,6 +8668,17 @@ export type Sigil = {
             ],
             "type": {
               "option": "pubkey"
+            }
+          },
+          {
+            "name": "operatorGrantDelaySeconds",
+            "docs": [
+              "F-Q6 (2026-06-02): optional update to operatorGrantDelaySeconds.",
+              "None = preserve live value; Some(n) = update. Bound by TA-19 at",
+              "canonical digest position 22. APPENDED per F-14 APPEND-ONLY rule."
+            ],
+            "type": {
+              "option": "u64"
             }
           }
         ]

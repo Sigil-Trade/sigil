@@ -260,6 +260,7 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
         null, // stableBalanceFloor
         null, // perRecipientDailyCapUsd
         null, // cosignRequired
+        null,
         null, // cosignSessionPubkey (D-5: pass-through from live policy)
         PublicKey.default, // cosignSession (non-elevated)
         queueDigest,
@@ -618,6 +619,7 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
         null, // stableBalanceFloor
         null, // perRecipientDailyCapUsd
         false, // cosignRequired: Some(false) — DISABLES (elevated)
+        null,
         null, // cosignSessionPubkey (D-5: pass-through)
         cosigner.publicKey, // cosignSession — distinct from owner, non-default
         queueDigest,
@@ -823,6 +825,7 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
         null,
         null,
         true, // cosign_required: Some(true) — ENABLES (non-elevated)
+        null,
         null, // cosign_session_pubkey (D-5: pass-through)
         PublicKey.default, // cosign_session: NONE required
         queueDigest,

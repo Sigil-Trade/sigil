@@ -207,6 +207,8 @@ pub mod sigil {
         // cosign gate, any other pubkey enables it). Bound by TA-19 at
         // canonical digest position 22.
         cosign_session_pubkey: Option<Pubkey>,
+        // F-Q6 (2026-06-02): owner-configurable OPERATOR-grant delay (seconds).
+        operator_grant_delay_seconds: Option<u64>,
         cosign_session: Pubkey,
         new_policy_preview_digest: [u8; 32],
     ) -> Result<()> {
@@ -229,6 +231,7 @@ pub mod sigil {
             per_recipient_daily_cap_usd,
             cosign_required,
             cosign_session_pubkey,
+            operator_grant_delay_seconds,
             cosign_session,
             new_policy_preview_digest,
         )

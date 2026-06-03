@@ -186,6 +186,12 @@ export type PendingPolicyUpdate = {
    * APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
    */
   cosignSessionPubkey: Option<Address>;
+  /**
+   * F-Q6 (2026-06-02): optional update to operator_grant_delay_seconds.
+   * None = preserve live value; Some(n) = update. Bound by TA-19 at
+   * canonical digest position 22. APPENDED per F-14 APPEND-ONLY rule.
+   */
+  operatorGrantDelaySeconds: Option<bigint>;
 };
 
 export type PendingPolicyUpdateArgs = {
@@ -310,6 +316,12 @@ export type PendingPolicyUpdateArgs = {
    * APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
    */
   cosignSessionPubkey: OptionOrNullable<Address>;
+  /**
+   * F-Q6 (2026-06-02): optional update to operator_grant_delay_seconds.
+   * None = preserve live value; Some(n) = update. Bound by TA-19 at
+   * canonical digest position 22. APPENDED per F-14 APPEND-ONLY rule.
+   */
+  operatorGrantDelaySeconds: OptionOrNullable<number | bigint>;
 };
 
 /** Gets the encoder for {@link PendingPolicyUpdateArgs} account data. */
@@ -345,6 +357,7 @@ export function getPendingPolicyUpdateEncoder(): Encoder<PendingPolicyUpdateArgs
       ["perRecipientDailyCapUsd", getOptionEncoder(getU64Encoder())],
       ["cosignRequired", getOptionEncoder(getBooleanEncoder())],
       ["cosignSessionPubkey", getOptionEncoder(getAddressEncoder())],
+      ["operatorGrantDelaySeconds", getOptionEncoder(getU64Encoder())],
     ]),
     (value) => ({
       ...value,
@@ -385,6 +398,7 @@ export function getPendingPolicyUpdateDecoder(): Decoder<PendingPolicyUpdate> {
     ["perRecipientDailyCapUsd", getOptionDecoder(getU64Decoder())],
     ["cosignRequired", getOptionDecoder(getBooleanDecoder())],
     ["cosignSessionPubkey", getOptionDecoder(getAddressDecoder())],
+    ["operatorGrantDelaySeconds", getOptionDecoder(getU64Decoder())],
   ]);
 }
 
