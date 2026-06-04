@@ -68,6 +68,8 @@ import {
   TestEnv,
   LiteSVM,
   FailedTransactionMetadata,
+  MOCK_DEFI_PROGRAM_ID,
+  buildMockDefiNoopIx,
 } from "./helpers/litesvm-setup";
 
 const FULL_CAPABILITY = 2; // CAPABILITY_OPERATOR
@@ -98,6 +100,12 @@ describe("jupiter-integration", () => {
 
   // Jupiter protocol ID used as the "allowed protocol" in policy
   const jupiterProtocol = JUPITER_PROGRAM_ID;
+  // F-Q2: spending sandwiches now require EXACTLY ONE counted DeFi instruction.
+  // The mock swap must therefore be a real, allowlisted, counted DeFi ix —
+  // mock-defi's no-op open_position on MOCK_DEFI_PROGRAM_ID. Both the executed
+  // ix AND the authorized target_protocol must be this program (else
+  // ProtocolMismatch); the vault allowlists it alongside jupiterProtocol.
+  const mockDefiProtocol = MOCK_DEFI_PROGRAM_ID;
 
   // Vault for happy-path tests
   const vaultId = new BN(100);
@@ -122,15 +130,15 @@ describe("jupiter-integration", () => {
    * inspect the DeFi instruction — it only validates policy in
    * validate_and_authorize and records the result in finalize_session.
    *
-   * We use a no-op SystemProgram transfer (0 lamports to self) so the
-   * runtime can actually execute it.
+   * F-Q2: the middle ix must be a COUNTED DeFi instruction (one that reaches
+   * the protocol-allowlist match in validate_and_authorize's spending scan),
+   * so we use mock-defi's no-op open_position on MOCK_DEFI_PROGRAM_ID. It moves
+   * zero tokens (preserving the outcome-based premise that actual spend = 0)
+   * while satisfying the exactly-one-DeFi-ix rule. A SystemProgram no-op is
+   * Infrastructure → not counted → would now fail TooManyDeFiInstructions.
    */
   function createMockSwapInstruction(payer: PublicKey): TransactionInstruction {
-    return SystemProgram.transfer({
-      fromPubkey: payer,
-      toPubkey: payer,
-      lamports: 0,
-    });
+    return buildMockDefiNoopIx(payer);
   }
 
   /**
@@ -206,6 +214,14 @@ describe("jupiter-integration", () => {
         systemProgram: SystemProgram.programId,
         instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
+      // F-Q1a completeness: the mock-defi no-op ix lists the agent signer, and
+      // the agent is the writable fee-payer in the compiled v0 message. validate's
+      // destination-completeness guard reads writability from the compiled message
+      // and requires every writable DeFi meta resolvable in remaining_accounts,
+      // so the agent must be appended (mirrors seal()).
+      .remainingAccounts([
+        { pubkey: agentKp.publicKey, isSigner: false, isWritable: false },
+      ])
       .instruction();
 
     // 3. Mock DeFi instruction (would be Jupiter swap in production)
@@ -298,7 +314,7 @@ describe("jupiter-integration", () => {
         new BN(500_000_000),
         new BN(200_000_000),
         1,
-        [jupiterProtocol],
+        [jupiterProtocol, mockDefiProtocol],
         0,
         100,
         new BN(1800),
@@ -316,7 +332,7 @@ describe("jupiter-integration", () => {
           maxTransactionSizeUsd: new BN(200_000_000),
           maxSlippageBps: 100,
           protocolMode: 1,
-          protocols: [jupiterProtocol],
+          protocols: [jupiterProtocol, mockDefiProtocol],
           allowedDestinations: [],
           timelockDuration: new BN(1800),
           operatingHours: 0x00ffffff,
@@ -392,7 +408,7 @@ describe("jupiter-integration", () => {
         agent,
         usdcMint,
         amount,
-        jupiterProtocol,
+        mockDefiProtocol,
       );
 
       expect(sig.signature).to.be.a("string");
@@ -414,7 +430,7 @@ describe("jupiter-integration", () => {
         agent,
         usdcMint,
         amount,
-        jupiterProtocol,
+        mockDefiProtocol,
       );
 
       const vault = await program.account.agentVault.fetch(vaultPda);
@@ -445,7 +461,7 @@ describe("jupiter-integration", () => {
         agent,
         usdcMint,
         new BN(200_000_000),
-        jupiterProtocol,
+        mockDefiProtocol,
       );
       await sendComposedSwap(
         vaultPda,
@@ -454,7 +470,7 @@ describe("jupiter-integration", () => {
         agent,
         usdcMint,
         new BN(200_000_000),
-        jupiterProtocol,
+        mockDefiProtocol,
       );
 
       // This would exceed the 500 USDC cap if spending were declaration-based,
@@ -466,7 +482,7 @@ describe("jupiter-integration", () => {
         agent,
         usdcMint,
         new BN(50_000_000),
-        jupiterProtocol,
+        mockDefiProtocol,
       );
 
       // Verify vault recorded all transactions (finalize succeeds with actual_spend=0)
@@ -580,7 +596,7 @@ describe("jupiter-integration", () => {
           new BN(500_000_000),
           new BN(200_000_000),
           1,
-          [jupiterProtocol],
+          [jupiterProtocol, mockDefiProtocol],
           0,
           100,
           new BN(1800),
@@ -598,7 +614,7 @@ describe("jupiter-integration", () => {
             maxTransactionSizeUsd: new BN(200_000_000),
             maxSlippageBps: 100,
             protocolMode: 1,
-            protocols: [jupiterProtocol],
+            protocols: [jupiterProtocol, mockDefiProtocol],
             allowedDestinations: [],
             timelockDuration: new BN(1800),
             operatingHours: 0x00ffffff,
@@ -724,7 +740,7 @@ describe("jupiter-integration", () => {
           new BN(100_000_000),
           new BN(60_000_000),
           1,
-          [jupiterProtocol],
+          [jupiterProtocol, mockDefiProtocol],
           0,
           100,
           new BN(1800),
@@ -742,7 +758,7 @@ describe("jupiter-integration", () => {
             maxTransactionSizeUsd: new BN(60_000_000),
             maxSlippageBps: 100,
             protocolMode: 1,
-            protocols: [jupiterProtocol],
+            protocols: [jupiterProtocol, mockDefiProtocol],
             allowedDestinations: [],
             timelockDuration: new BN(1800),
             operatingHours: 0x00ffffff,
@@ -810,7 +826,7 @@ describe("jupiter-integration", () => {
         agent,
         usdcMint,
         new BN(40_000_000),
-        jupiterProtocol,
+        mockDefiProtocol,
         rollingVaultUsdcAta,
       );
 
@@ -825,7 +841,7 @@ describe("jupiter-integration", () => {
         agent,
         usdcMint,
         new BN(40_000_000),
-        jupiterProtocol,
+        mockDefiProtocol,
         rollingVaultUsdcAta,
       );
 
@@ -841,7 +857,7 @@ describe("jupiter-integration", () => {
         agent,
         usdcMint,
         new BN(30_000_000),
-        jupiterProtocol,
+        mockDefiProtocol,
         rollingVaultUsdcAta,
       );
 

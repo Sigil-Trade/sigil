@@ -177,7 +177,7 @@ pub struct PolicyConfig {
     /// (a) the unlock time elapses OR (b) the owner calls
     /// `promote_graylist_destination` to fast-track, spending paths
     /// reject any tx routing value to that destination with
-    /// `ErrGraylistFriction` (6086).
+    /// `ErrGraylistFriction` (6077).
     ///
     /// Tuple is `(destination_pubkey, unlock_unix)`. Bounded ≤10 entries
     /// (max_destinations). When full, additional allowlist adds reject

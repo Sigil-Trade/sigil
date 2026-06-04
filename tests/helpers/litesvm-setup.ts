@@ -34,6 +34,7 @@ import {
 } from "litesvm";
 // @ts-expect-error - bs58@4 ships no type declarations and there is no @types/bs58 installed
 import bs58 from "bs58";
+import BN from "bn.js";
 import { SuccessfulTxSimulationResponse } from "@coral-xyz/anchor/dist/cjs/utils/rpc";
 import * as path from "path";
 import { Sigil } from "../../target/types/sigil";
@@ -55,14 +56,144 @@ const PROGRAM_SO_PATH = path.resolve(__dirname, "../../target/deploy/sigil.so");
 // Mock DeFi test program — a real Anchor program with stable 8-byte
 // discriminators used as a generic constraint-matching target in
 // InstructionConstraints tests.
-const MOCK_DEFI_PROGRAM_ID = new PublicKey(
+export const MOCK_DEFI_PROGRAM_ID = new PublicKey(
   "2pB26qKW73sToF7ETcdhXQTj8biYwAk9TCArVwgHBe24",
 );
+
+// Anchor instruction discriminator: sha256("global:<name>")[0..8].
+//
+// NB: uses an inline `require("crypto")` rather than a file-level `createHash`
+// import. Under the CommonJS output ts-mocha produces, such an import is lowered
+// to a `require` at its source position (far below these module-eval-time disc
+// constants), so a top-level `createHash(...)` here would run before the binding
+// exists. The inline require resolves at call time, which is safe.
+function anchorDisc(name: string): Buffer {
+  return (require("crypto") as typeof import("crypto"))
+    .createHash("sha256")
+    .update(`global:${name}`)
+    .digest()
+    .subarray(0, 8);
+}
+
+// Mock-defi `open_position` discriminator. Carried by `buildMockDefiNoopIx` — a
+// COUNTED DeFi instruction (it reaches the protocol-allowlist match inside
+// validate_and_authorize's spending scan) that moves ZERO stablecoin. Satisfies
+// the F-Q2 `defi_ix_count == 1` requirement on spending sandwiches while
+// preserving outcome-based premises (declared amount may exceed cap but actual
+// spend == 0, so caps are not consumed and the bundle succeeds).
+export const MOCK_DEFI_OPEN_POSITION_DISC = anchorDisc("open_position");
+
+/**
+ * Mock-defi `open_position` ix — true no-op. The MockNoop accounts struct
+ * accepts a single signer; the handler does nothing. This is the canonical
+ * COUNTED-but-zero-spend DeFi instruction used as the middle ix in composed
+ * spending sandwiches `[validate, <this>, finalize]`. Because it targets the
+ * allowlisted MOCK_DEFI_PROGRAM_ID, it increments `defi_ix_count` to exactly 1
+ * (satisfying F-Q2) without moving any tokens.
+ *
+ * NOTE: this is the no-op migration mock (COUNTED-but-zero-spend). The
+ * fund-moving `drain_via_delegation` builder (mock-defi's other ix) is the
+ * `buildMockDefiDrainIx` export below — use that when the per-protocol /
+ * recipient cap must actually CHARGE (it requires actual_spend > 0).
+ */
+export function buildMockDefiNoopIx(signer: PublicKey): TransactionInstruction {
+  return new TransactionInstruction({
+    programId: MOCK_DEFI_PROGRAM_ID,
+    keys: [{ pubkey: signer, isSigner: true, isWritable: false }],
+    data: Buffer.from(MOCK_DEFI_OPEN_POSITION_DISC),
+  });
+}
+
+// Anchor discriminator for mock-defi's `drain_via_delegation` ix.
+export const MOCK_DEFI_DRAIN_DISC = anchorDisc("drain_via_delegation");
+
+/**
+ * Mock-defi `drain_via_delegation(amount)` ix — CPI SPL Token transfer that
+ * moves `amount` OUT of `source` to `destination` using `authority`'s SPL
+ * delegation. In the canonical Sigil sandwich, `validate_and_authorize` runs
+ * `token::approve` granting the agent delegation over the vault's token
+ * account; this ix (between validate and finalize) spends that delegation, so
+ * the vault ATA balance DECREASES by `amount` — which is exactly what
+ * `finalize_session` measures as `actual_spend`. Used by any test that needs a
+ * cap (per-protocol, per-recipient, mint-delta) to genuinely CHARGE.
+ *
+ * The source account's `delegate` must equal `authority` and
+ * `delegated_amount >= amount` for the inner SPL transfer to succeed (validate's
+ * approve establishes this). Wire the accounts exactly as the sandwich does:
+ * source = vault USDC ATA, destination = a token account of the same mint,
+ * authority = the agent (validate-approved delegate).
+ *
+ * `programId` defaults to MOCK_DEFI_PROGRAM_ID. Pass MOCK_DEFI_2_PROGRAM_ID to
+ * route the spend through the SECOND mock program (per-protocol cap
+ * independence tests). The `drain_via_delegation` discriminator is identical
+ * for both programs (Anchor disc = sha256("global:drain_via_delegation"), which
+ * is program-independent), so the same disc + arg layout serves both.
+ */
+export function buildMockDefiDrainIx(
+  source: PublicKey,
+  destination: PublicKey,
+  authority: PublicKey,
+  amount: BN,
+  programId: PublicKey = MOCK_DEFI_PROGRAM_ID,
+): TransactionInstruction {
+  // Anchor wire format: 8-byte disc + Borsh args. For
+  // `drain_via_delegation(amount: u64)` the args buffer is exactly 8 bytes
+  // (u64 LE), total = 16 bytes. Built by hand (mock-defi has no generated TS
+  // bindings in this workspace).
+  const data = Buffer.alloc(16);
+  MOCK_DEFI_DRAIN_DISC.copy(data, 0);
+  data.writeBigUInt64LE(BigInt(amount.toString()), 8);
+  return new TransactionInstruction({
+    programId,
+    keys: [
+      { pubkey: source, isSigner: false, isWritable: true },
+      { pubkey: destination, isSigner: false, isWritable: true },
+      { pubkey: authority, isSigner: true, isWritable: false },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    ],
+    data,
+  });
+}
+
+// Second mock-defi program — a byte-for-byte clone of MOCK_DEFI with a DISTINCT
+// declare_id! (built from tests/fixtures/mock-defi-2-src; committed .so at
+// tests/fixtures/mock-defi-2.so; rebuild via scripts/rebuild-mock-defi-2.sh).
+// It exists so cap tests can load TWO independent allowlisted DeFi programs and
+// prove per-protocol cap INDEPENDENCE — loading mock-defi.so at a second
+// address is rejected by Anchor's runtime declare_id! check, so a second
+// binary with its own program ID is required. Its instructions (open_position
+// no-op + drain_via_delegation) share mock-defi's discriminators, so
+// buildMockDefiNoopIx / buildMockDefiDrainIx work against it when passed this
+// program ID.
+export const MOCK_DEFI_2_PROGRAM_ID = new PublicKey(
+  "6VR8Jnj9vjQhFkTZgShbvS3VJMEXmtsqggBEc3awkiLE",
+);
+
+/** Fund-moving `drain_via_delegation` ix targeting the SECOND mock program. */
+export function buildMockDefiDrain2Ix(
+  source: PublicKey,
+  destination: PublicKey,
+  authority: PublicKey,
+  amount: BN,
+): TransactionInstruction {
+  return buildMockDefiDrainIx(
+    source,
+    destination,
+    authority,
+    amount,
+    MOCK_DEFI_2_PROGRAM_ID,
+  );
+}
 // Mock-defi's compiled .so is a committed fixture at tests/fixtures/.
 // Root Cargo.toml explains why it is not a workspace member (CI tool
 // compatibility — cargo-certora-sbf and feature-flag builds). Rebuild
 // procedure in scripts/rebuild-mock-defi.sh.
 const MOCK_DEFI_SO_PATH = path.resolve(__dirname, "../fixtures/mock-defi.so");
+// Second mock-defi fixture (distinct declare_id!) — see MOCK_DEFI_2_PROGRAM_ID.
+const MOCK_DEFI_2_SO_PATH = path.resolve(
+  __dirname,
+  "../fixtures/mock-defi-2.so",
+);
 
 // ─── Connection proxy ────────────────────────────────────────────────────────
 class LiteSVMConnectionProxy {
@@ -307,6 +438,7 @@ export function createTestEnv(): TestEnv {
 
   svm.addProgramFromFile(PROGRAM_ID, PROGRAM_SO_PATH);
   svm.addProgramFromFile(MOCK_DEFI_PROGRAM_ID, MOCK_DEFI_SO_PATH);
+  svm.addProgramFromFile(MOCK_DEFI_2_PROGRAM_ID, MOCK_DEFI_2_SO_PATH);
 
   const provider = new LiteSVMProvider(svm);
   anchor.setProvider(provider as unknown as Provider);
@@ -691,15 +823,13 @@ export function resetCUMeasurements(): void {
 // the 10,240-byte CPI limit. These helpers compose allocate + extend +
 // populate into a single atomic VersionedTransaction.
 
-import { createHash } from "crypto";
-
 const CONSTRAINTS_SIZE = 35_888;
 const PENDING_CONSTRAINTS_SIZE = 35_944;
 const MAX_CPI_SIZE = 10_240;
 
-function anchorDisc(name: string): Buffer {
-  return createHash("sha256").update(`global:${name}`).digest().subarray(0, 8);
-}
+// `anchorDisc` is defined once near the top of this module (it uses an inline
+// `require("crypto")` so it is safe to call from module-eval-time disc
+// constants regardless of import lowering order).
 
 const ALLOC_CONSTRAINTS_DISC = anchorDisc("allocate_constraints_pda");
 const ALLOC_PENDING_DISC = anchorDisc("allocate_pending_constraints_pda");

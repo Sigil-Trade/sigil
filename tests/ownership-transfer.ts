@@ -66,6 +66,8 @@ import {
   sendVersionedTx,
   TestEnv,
   LiteSVM,
+  MOCK_DEFI_PROGRAM_ID,
+  buildMockDefiNoopIx,
 } from "./helpers/litesvm-setup";
 
 const STANDARD_INIT_DAILY_CAP = new BN(500_000_000);
@@ -125,7 +127,12 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
   let owner: anchor.Wallet;
 
   const feeDestination = Keypair.generate();
-  const jupiterProgramId = Keypair.generate().publicKey;
+  // F-Q2: the seal-pattern spending test needs EXACTLY ONE counted DeFi
+  // instruction whose program equals target_protocol. This "protocol" is used
+  // only as the allowlist entry + authorized target (no identity assertion), so
+  // point it at the real, loaded, counted mock-defi program; the seal sandwich's
+  // middle ix is mock-defi's no-op open_position (zero spend).
+  const jupiterProgramId = MOCK_DEFI_PROGRAM_ID;
 
   // LBL-01 spending tests need the owner to hold USDC (for the deposit step)
   // and the protocol treasury to have a valid ATA (for fee transfers). Both
@@ -807,6 +814,13 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        // F-Q1a completeness: the mock-defi no-op ix lists the agent signer (the
+        // writable fee-payer in the compiled v0 message). validate's
+        // destination-completeness guard requires every writable DeFi meta
+        // resolvable in remaining_accounts, so append the agent (mirrors seal()).
+        .remainingAccounts([
+          { pubkey: ctx.agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -827,10 +841,14 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
         })
         .instruction();
 
+      // F-Q2: a spending sandwich needs EXACTLY ONE counted DeFi instruction
+      // between validate and finalize. mock-defi's no-op open_position is that
+      // ix (zero token movement → actual_spend = 0, only the protocol fee moves).
+      const defiIx = buildMockDefiNoopIx(ctx.agent.publicKey);
       const vaultBalBefore = getTokenBalance(svm, ctx.vaultUsdcAta);
       const txResult = sendVersionedTx(
         svm,
-        [validateIx, finalizeIx],
+        [validateIx, defiIx, finalizeIx],
         ctx.agent,
       );
       expect(txResult).to.exist;

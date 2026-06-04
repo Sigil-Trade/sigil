@@ -33,6 +33,8 @@ import {
   printCUSummary,
   TestEnv,
   LiteSVM,
+  MOCK_DEFI_PROGRAM_ID,
+  buildMockDefiNoopIx,
 } from "./helpers/litesvm-setup";
 import { registerOperatorAgent } from "./helpers/register-operator-agent";
 
@@ -58,7 +60,12 @@ describe("analytics-counters", () => {
   let vaultUsdcAta: PublicKey;
   let feeDestUsdcAta: PublicKey;
 
-  const jupiterProgramId = Keypair.generate().publicKey;
+  // F-Q2: spending sandwiches require EXACTLY ONE counted DeFi instruction, and
+  // the executed DeFi ix's program must equal target_protocol. This "protocol"
+  // is used only as the allowlist entry + authorized target here (no identity
+  // assertion), so point it at the real, loaded, counted mock-defi program; the
+  // sandwich's middle ix is mock-defi's no-op open_position (zero spend).
+  const jupiterProgramId = MOCK_DEFI_PROGRAM_ID;
   const protocolTreasury = new PublicKey(
     "6wrkKTM2pjkcCAbMfRz2j3AXspavu6pq3ePcuJUE3Azp",
   );
@@ -220,40 +227,49 @@ describe("analytics-counters", () => {
   async function buildValidateIx(amount: BN) {
     // Read live policy_version for TOCTOU guard (default 0 if not yet bumped).
     const livePolicy = await program.account.policyConfig.fetch(policyPda);
-    return program.methods
-      .validateAndAuthorize(
-        usdcMint,
-        amount,
-        jupiterProgramId,
-        livePolicy.policyVersion,
-        new BN(0),
-        digestAsArgs(
-          buildExpectedIntentDigest({
-            vault: vaultPda,
-            agent: agent.publicKey,
-            tokenMint: usdcMint,
-            amount,
-            targetProtocol: jupiterProgramId,
-          }),
-        ),
-      )
-      .accountsPartial({
-        agent: agent.publicKey,
-        vault: vaultPda,
-        policy: policyPda,
-        tracker: trackerPda,
-        session: getSessionPda(),
-        vaultTokenAccount: vaultUsdcAta,
-        tokenMintAccount: usdcMint,
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: null,
-        outputStablecoinAccount: null,
-        agentSpendOverlay: overlayPda,
-        tokenProgram: TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-        instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
-      })
-      .instruction();
+    return (
+      program.methods
+        .validateAndAuthorize(
+          usdcMint,
+          amount,
+          jupiterProgramId,
+          livePolicy.policyVersion,
+          new BN(0),
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: vaultPda,
+              agent: agent.publicKey,
+              tokenMint: usdcMint,
+              amount,
+              targetProtocol: jupiterProgramId,
+            }),
+          ),
+        )
+        .accountsPartial({
+          agent: agent.publicKey,
+          vault: vaultPda,
+          policy: policyPda,
+          tracker: trackerPda,
+          session: getSessionPda(),
+          vaultTokenAccount: vaultUsdcAta,
+          tokenMintAccount: usdcMint,
+          protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+          feeDestinationTokenAccount: null,
+          outputStablecoinAccount: null,
+          agentSpendOverlay: overlayPda,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        // F-Q1a completeness: the mock-defi no-op ix lists the agent signer (the
+        // writable fee-payer in the compiled v0 message). validate's
+        // destination-completeness guard requires every writable DeFi meta
+        // resolvable in remaining_accounts, so append the agent (mirrors seal()).
+        .remainingAccounts([
+          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+        ])
+        .instruction()
+    );
   }
 
   async function buildFinalizeIx() {
@@ -278,8 +294,12 @@ describe("analytics-counters", () => {
 
   async function executeSession(amount?: BN): Promise<void> {
     const validateIx = await buildValidateIx(amount ?? new BN(50_000_000));
+    // F-Q2: a spending sandwich needs EXACTLY ONE counted DeFi instruction
+    // between validate and finalize. mock-defi's no-op open_position is that ix
+    // (zero token movement → actual_spend = 0, counters still increment).
+    const defiIx = buildMockDefiNoopIx(agent.publicKey);
     const finalizeIx = await buildFinalizeIx();
-    sendVersionedTx(svm, [validateIx, finalizeIx], agent);
+    sendVersionedTx(svm, [validateIx, defiIx, finalizeIx], agent);
   }
 
   // ─── Tests ───────────────────────────────────────────────────────────────

@@ -72,6 +72,9 @@ import {
   sendVersionedTx,
   TestEnv,
   LiteSVM,
+  MOCK_DEFI_PROGRAM_ID,
+  buildMockDefiNoopIx,
+  buildMockDefiDrainIx,
 } from "./helpers/litesvm-setup";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -80,24 +83,10 @@ const FULL_CAPABILITY = 2; // CAPABILITY_OPERATOR
 
 // Mock-defi (test fixture) — three instructions: open_position (no-op),
 // close_position (no-op), drain_via_delegation (CPI SPL transfer using
-// agent's validate-time delegation).
-const MOCK_DEFI_PROGRAM_ID = new PublicKey(
-  "2pB26qKW73sToF7ETcdhXQTj8biYwAk9TCArVwgHBe24",
-);
-
-// Anchor discriminator bytes (sha256("global:<name>")[0..8]).
-//   open_position:        0x87 0x80 0x2f 0x4d 0x0f 0x98 0xf0 0x31
-//   drain_via_delegation: computed inline below
-function anchorDisc(name: string): Buffer {
-  const crypto = require("crypto") as typeof import("crypto");
-  return crypto
-    .createHash("sha256")
-    .update(`global:${name}`)
-    .digest()
-    .subarray(0, 8);
-}
-const MOCK_DEFI_OPEN_POSITION_DISC = anchorDisc("open_position");
-const MOCK_DEFI_DRAIN_DISC = anchorDisc("drain_via_delegation");
+// agent's validate-time delegation). MOCK_DEFI_PROGRAM_ID, the no-op builder
+// `buildMockDefiNoopIx`, AND the fund-moving `buildMockDefiDrainIx` are all
+// hoisted into litesvm-setup.ts (shared across all spending-sandwich + cap
+// tests post-F-Q2). They are imported above.
 
 // Protocol treasury (hardcoded in programs/sigil/src/state/constants.rs).
 const PROTOCOL_TREASURY = new PublicKey(
@@ -162,54 +151,8 @@ function computeScalarIntentDigest(args: {
 }
 
 // ─── Mock-defi instruction builders ─────────────────────────────────────────
-
-/**
- * Mock-defi `open_position` ix — true no-op. The MockNoop accounts struct
- * accepts a single signer; the handler does nothing. Used as the middle
- * instruction in sandwiches that don't need any actual balance mutation
- * (R-2/R-3/R-4/TA-12).
- */
-function buildMockDefiNoopIx(signer: PublicKey): TransactionInstruction {
-  return new TransactionInstruction({
-    programId: MOCK_DEFI_PROGRAM_ID,
-    keys: [{ pubkey: signer, isSigner: true, isWritable: false }],
-    data: MOCK_DEFI_OPEN_POSITION_DISC,
-  });
-}
-
-/**
- * Mock-defi `drain_via_delegation(amount)` ix — CPI SPL Token transfer.
- *
- * The source token account's delegate field must equal the authority signer
- * (the agent) for the inner SPL transfer to succeed; the validate-time
- * `token::approve` call establishes that delegation. After this ix runs, the
- * source ATA's balance has decreased by `amount` — which is what R-1 + TA-14
- * detect at finalize.
- */
-function buildMockDefiDrainIx(
-  source: PublicKey,
-  destination: PublicKey,
-  authority: PublicKey,
-  amount: BN,
-): TransactionInstruction {
-  // Anchor wire format: 8-byte disc + Borsh-encoded args. For
-  // `drain_via_delegation(amount: u64)`, the args buffer is exactly 8 bytes
-  // (u64 LE). Total = 16 bytes. We construct it by hand because mock-defi's
-  // generated TypeScript bindings are not part of this workspace.
-  const data = Buffer.alloc(16);
-  MOCK_DEFI_DRAIN_DISC.copy(data, 0);
-  data.writeBigUInt64LE(BigInt(amount.toString()), 8);
-  return new TransactionInstruction({
-    programId: MOCK_DEFI_PROGRAM_ID,
-    keys: [
-      { pubkey: source, isSigner: false, isWritable: true },
-      { pubkey: destination, isSigner: false, isWritable: true },
-      { pubkey: authority, isSigner: true, isWritable: false },
-      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-    ],
-    data,
-  });
-}
+// `buildMockDefiNoopIx` (no-op open_position) and `buildMockDefiDrainIx`
+// (fund-moving drain_via_delegation) are both imported from litesvm-setup.ts.
 
 // ─── Suite ─────────────────────────────────────────────────────────────────
 

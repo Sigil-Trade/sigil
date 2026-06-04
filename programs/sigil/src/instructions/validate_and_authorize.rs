@@ -825,6 +825,14 @@ pub fn handler(
     // Shared checks (scan_instruction_shared): SPL/Token-2022 blocking, infrastructure
     // whitelist, protocol allowlist, generic constraints.
     // Spending-only checks (inline): recognized DeFi, ProtocolMismatch, defi_ix_count.
+    //
+    // F-Q2 (defense-in-depth, refactor-resistance): the SPL `Approve` armed
+    // later (also under `is_spending`) MUST NOT arm unless the exactly-one-
+    // DeFi-instruction invariant was checked here first. This flag is hoisted to
+    // the function scope so a future reorder/split of the scan block cannot
+    // re-open the free-delegation window (arming the delegate with no DeFi ix
+    // for finalize to measure).
+    let mut single_defi_ix_verified = false;
     if is_spending {
         let mut defi_ix_count: u8 = 0;
         let mut found_finalize = false;
@@ -903,12 +911,15 @@ pub fn handler(
             iter_count = iter_count.saturating_add(1);
         }
 
-        // DeFi instruction count enforcement
-        if is_stablecoin_input {
-            require!(defi_ix_count <= 1, SigilError::TooManyDeFiInstructions);
-        } else {
-            require!(defi_ix_count == 1, SigilError::TooManyDeFiInstructions);
-        }
+        // DeFi instruction count enforcement (F-Q2): EXACTLY one DeFi ix on BOTH
+        // paths. The stablecoin path was `<= 1`, which allowed a zero-DeFi
+        // spending sandwich to arm the Approve with nothing for finalize to
+        // measure (the "free-delegation window"). The in-window opcode scan
+        // (Transfer/Approve blocked, :702-703) + the unconditional same-tx
+        // finalize revoke made that non-draining, but require exactly one as
+        // defense-in-depth, unifying with the non-stablecoin path.
+        require!(defi_ix_count == 1, SigilError::TooManyDeFiInstructions);
+        single_defi_ix_verified = true;
 
         require!(found_finalize, SigilError::MissingFinalizeInstruction);
     }
@@ -1071,6 +1082,15 @@ pub fn handler(
             ctx.accounts.token_program.to_account_info(),
             cpi_accounts,
             &binding,
+        );
+        // F-Q2 (refactor-resistance): never arm the delegate unless the
+        // exactly-one-DeFi-ix invariant was verified in the scan block above.
+        // Today this is always true when reached (the scan block reverts
+        // otherwise); it fails closed if a future edit moves the Approve ahead
+        // of, or removes, the count check.
+        require!(
+            single_defi_ix_verified,
+            SigilError::TooManyDeFiInstructions
         );
         token::approve(cpi_ctx, delegation_amount)?;
     }

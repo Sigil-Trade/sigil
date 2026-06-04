@@ -46,6 +46,8 @@ import {
   advanceTime,
   TestEnv,
   LiteSVM,
+  MOCK_DEFI_PROGRAM_ID,
+  buildMockDefiNoopIx,
 } from "./helpers/litesvm-setup";
 
 const FULL_CAPABILITY = 2; // CAPABILITY_OPERATOR
@@ -85,6 +87,12 @@ describe("flash-trade-integration", () => {
 
   // Use Flash Trade program ID as the allowed protocol
   const flashProtocol = FLASH_TRADE_PROGRAM_ID;
+  // F-Q2: spending sandwiches require EXACTLY ONE counted DeFi instruction.
+  // The mock action is mock-defi's no-op open_position on MOCK_DEFI_PROGRAM_ID
+  // (a counted, zero-spend DeFi ix). Spending call sites authorize against this
+  // program (target_protocol must equal the executed ix's program), and every
+  // vault allowlists it alongside the nominal protocol.
+  const mockDefiProtocol = MOCK_DEFI_PROGRAM_ID;
 
   // Vault for perp tests (IDs 300+ to avoid collision with other test files)
   const vaultId = new BN(300);
@@ -93,14 +101,15 @@ describe("flash-trade-integration", () => {
   let trackerPda: PublicKey;
   let overlayPda: PublicKey;
   /**
-   * Create a mock DeFi instruction (no-op transfer to self).
+   * Create a mock DeFi instruction. F-Q2: must be a COUNTED DeFi ix (reaches
+   * the protocol-allowlist match in validate_and_authorize's spending scan), so
+   * we use mock-defi's no-op open_position on MOCK_DEFI_PROGRAM_ID. It moves
+   * zero tokens (outcome-based actual spend = 0) while satisfying the
+   * exactly-one-DeFi-ix rule. A SystemProgram no-op is Infrastructure → not
+   * counted → would now fail TooManyDeFiInstructions on spending sandwiches.
    */
   function createMockDefiInstruction(payer: PublicKey): TransactionInstruction {
-    return SystemProgram.transfer({
-      fromPubkey: payer,
-      toPubkey: payer,
-      lamports: 0,
-    });
+    return buildMockDefiNoopIx(payer);
   }
 
   /**
@@ -176,6 +185,13 @@ describe("flash-trade-integration", () => {
         systemProgram: SystemProgram.programId,
         instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
+      // F-Q1a completeness: the mock-defi no-op ix lists the agent signer (the
+      // writable fee-payer in the compiled v0 message). validate's
+      // destination-completeness guard requires every writable DeFi meta
+      // resolvable in remaining_accounts, so append the agent (mirrors seal()).
+      .remainingAccounts([
+        { pubkey: agentKp.publicKey, isSigner: false, isWritable: false },
+      ])
       .instruction();
 
     const mockDefiIx = createMockDefiInstruction(agentKp.publicKey);
@@ -265,7 +281,7 @@ describe("flash-trade-integration", () => {
         new BN(1_000_000_000),
         new BN(500_000_000),
         1,
-        [flashProtocol],
+        [flashProtocol, mockDefiProtocol],
         0,
         100,
         new BN(1800),
@@ -283,7 +299,7 @@ describe("flash-trade-integration", () => {
           maxTransactionSizeUsd: new BN(500_000_000),
           maxSlippageBps: 100,
           protocolMode: 1,
-          protocols: [flashProtocol],
+          protocols: [flashProtocol, mockDefiProtocol],
           allowedDestinations: [],
           timelockDuration: new BN(1800),
           operatingHours: 0x00ffffff,
@@ -356,7 +372,7 @@ describe("flash-trade-integration", () => {
         agent,
         usdcMint,
         amount,
-        flashProtocol,
+        mockDefiProtocol,
       );
 
       expect(sig.signature).to.be.a("string");
@@ -384,7 +400,7 @@ describe("flash-trade-integration", () => {
         agent,
         usdcMint,
         new BN(30_000_000),
-        flashProtocol,
+        mockDefiProtocol,
       );
 
       expect(sig.signature).to.be.a("string");
@@ -461,7 +477,7 @@ describe("flash-trade-integration", () => {
           new BN(1_000_000_000),
           new BN(500_000_000),
           1,
-          [flashProtocol],
+          [flashProtocol, mockDefiProtocol],
           0,
           100,
           new BN(1800),
@@ -479,7 +495,7 @@ describe("flash-trade-integration", () => {
             maxTransactionSizeUsd: new BN(500_000_000),
             maxSlippageBps: 100,
             protocolMode: 1,
-            protocols: [flashProtocol],
+            protocols: [flashProtocol, mockDefiProtocol],
             allowedDestinations: [],
             timelockDuration: new BN(1800),
             operatingHours: 0x00ffffff,
@@ -650,7 +666,7 @@ describe("flash-trade-integration", () => {
           new BN(200_000_000),
           new BN(200_000_000),
           1,
-          [mockProtocol],
+          [mockProtocol, mockDefiProtocol],
           0,
           100,
           new BN(1800),
@@ -668,7 +684,7 @@ describe("flash-trade-integration", () => {
             maxTransactionSizeUsd: new BN(200_000_000),
             maxSlippageBps: 100,
             protocolMode: 1,
-            protocols: [mockProtocol],
+            protocols: [mockProtocol, mockDefiProtocol],
             allowedDestinations: [],
             timelockDuration: new BN(1800),
             operatingHours: 0x00ffffff,
@@ -735,7 +751,7 @@ describe("flash-trade-integration", () => {
         capAgentKp,
         usdcMint,
         new BN(100_000_000),
-        mockProtocol,
+        mockDefiProtocol,
         capVaultUsdcAta,
       );
 
@@ -747,7 +763,7 @@ describe("flash-trade-integration", () => {
         capAgentKp,
         usdcMint,
         new BN(100_000_000),
-        mockProtocol,
+        mockDefiProtocol,
         capVaultUsdcAta,
       );
     });
@@ -764,7 +780,7 @@ describe("flash-trade-integration", () => {
         capAgentKp,
         usdcMint,
         new BN(100_000_000),
-        mockProtocol,
+        mockDefiProtocol,
         capVaultUsdcAta,
       );
 
@@ -776,7 +792,7 @@ describe("flash-trade-integration", () => {
         capAgentKp,
         usdcMint,
         new BN(100_000_000),
-        mockProtocol,
+        mockDefiProtocol,
         capVaultUsdcAta,
       );
 
@@ -808,7 +824,7 @@ describe("flash-trade-integration", () => {
         agent,
         usdcMint,
         new BN(50_000_000), // 50 USDC
-        flashProtocol,
+        mockDefiProtocol,
       );
       expect(sig.signature).to.be.a("string");
     });
@@ -879,7 +895,7 @@ describe("flash-trade-integration", () => {
         agent,
         usdcMint,
         new BN(100_000_000), // 100 USDC (spending)
-        flashProtocol,
+        mockDefiProtocol,
       );
       expect(sig.signature).to.be.a("string");
     });
@@ -907,7 +923,7 @@ describe("flash-trade-integration", () => {
         agent,
         usdcMint,
         new BN(100_000_000), // 100 USDC
-        flashProtocol,
+        mockDefiProtocol,
       );
       expect(sig.signature).to.be.a("string");
     });

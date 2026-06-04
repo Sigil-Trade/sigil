@@ -42,6 +42,8 @@ import {
   printCUSummary,
   TestEnv,
   LiteSVM,
+  MOCK_DEFI_PROGRAM_ID,
+  buildMockDefiNoopIx,
 } from "./helpers/litesvm-setup";
 
 const FULL_CAPABILITY = 2; // CAPABILITY_OPERATOR
@@ -79,6 +81,12 @@ describe("jupiter-lend-integration", () => {
 
   // Use Jupiter Lend program ID as the allowed protocol
   const lendProtocol = JUPITER_LEND_PROGRAM_ID;
+  // F-Q2: spending sandwiches require EXACTLY ONE counted DeFi instruction.
+  // The mock lend action is mock-defi's no-op open_position on
+  // MOCK_DEFI_PROGRAM_ID (counted, zero-spend). Spending (deposit) call sites
+  // authorize against this program; every vault allowlists it alongside
+  // lendProtocol.
+  const mockDefiProtocol = MOCK_DEFI_PROGRAM_ID;
 
   // Vault IDs 500+ to avoid collision with other test files
   const vaultId = new BN(500);
@@ -89,14 +97,15 @@ describe("jupiter-lend-integration", () => {
   let vaultUsdcAta: PublicKey;
 
   /**
-   * Create a mock Lend instruction (no-op transfer to self).
+   * Create a mock Lend instruction. F-Q2: must be a COUNTED DeFi ix (reaches
+   * the protocol-allowlist match in validate_and_authorize's spending scan), so
+   * we use mock-defi's no-op open_position on MOCK_DEFI_PROGRAM_ID. It moves
+   * zero tokens (outcome-based actual spend = 0) while satisfying the
+   * exactly-one-DeFi-ix rule. A SystemProgram no-op is Infrastructure → not
+   * counted → would now fail TooManyDeFiInstructions on spending sandwiches.
    */
   function createMockLendInstruction(payer: PublicKey): TransactionInstruction {
-    return SystemProgram.transfer({
-      fromPubkey: payer,
-      toPubkey: payer,
-      lamports: 0,
-    });
+    return buildMockDefiNoopIx(payer);
   }
 
   /**
@@ -173,6 +182,13 @@ describe("jupiter-lend-integration", () => {
         systemProgram: SystemProgram.programId,
         instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
+      // F-Q1a completeness: the mock-defi no-op ix lists the agent signer (the
+      // writable fee-payer in the compiled v0 message). validate's
+      // destination-completeness guard requires every writable DeFi meta
+      // resolvable in remaining_accounts, so append the agent (mirrors seal()).
+      .remainingAccounts([
+        { pubkey: agentKp.publicKey, isSigner: false, isWritable: false },
+      ])
       .instruction();
 
     // 3. Mock Lend instruction
@@ -261,7 +277,7 @@ describe("jupiter-lend-integration", () => {
         new BN(500_000_000),
         new BN(200_000_000),
         1,
-        [lendProtocol],
+        [lendProtocol, mockDefiProtocol],
         0,
         100,
         new BN(1800),
@@ -279,7 +295,7 @@ describe("jupiter-lend-integration", () => {
           maxTransactionSizeUsd: new BN(200_000_000),
           maxSlippageBps: 100,
           protocolMode: 1,
-          protocols: [lendProtocol],
+          protocols: [lendProtocol, mockDefiProtocol],
           allowedDestinations: [],
           timelockDuration: new BN(1800),
           operatingHours: 0x00ffffff,
@@ -354,7 +370,7 @@ describe("jupiter-lend-integration", () => {
         agent,
         usdcMint,
         amount,
-        lendProtocol,
+        mockDefiProtocol,
       );
 
       expect(result.signature).to.be.a("string");
@@ -408,7 +424,7 @@ describe("jupiter-lend-integration", () => {
         agent,
         usdcMint,
         new BN(200_000_000),
-        lendProtocol,
+        mockDefiProtocol,
       );
 
       await sendComposedLend(
@@ -418,7 +434,7 @@ describe("jupiter-lend-integration", () => {
         agent,
         usdcMint,
         new BN(200_000_000),
-        lendProtocol,
+        mockDefiProtocol,
       );
 
       // Would exceed 500 USDC cap if declaration-based, but succeeds
@@ -430,7 +446,7 @@ describe("jupiter-lend-integration", () => {
         agent,
         usdcMint,
         new BN(1_000_000),
-        lendProtocol,
+        mockDefiProtocol,
       );
 
       // Verify all TXs succeeded
@@ -503,7 +519,7 @@ describe("jupiter-lend-integration", () => {
           new BN(500_000_000),
           new BN(200_000_000),
           1,
-          [lendProtocol],
+          [lendProtocol, mockDefiProtocol],
           0,
           100,
           new BN(1800),
@@ -521,7 +537,7 @@ describe("jupiter-lend-integration", () => {
             maxTransactionSizeUsd: new BN(200_000_000),
             maxSlippageBps: 100,
             protocolMode: 1,
-            protocols: [lendProtocol],
+            protocols: [lendProtocol, mockDefiProtocol],
             allowedDestinations: [],
             timelockDuration: new BN(1800),
             operatingHours: 0x00ffffff,
@@ -642,7 +658,7 @@ describe("jupiter-lend-integration", () => {
           new BN(100_000_000),
           new BN(60_000_000),
           1,
-          [lendProtocol],
+          [lendProtocol, mockDefiProtocol],
           0,
           100,
           new BN(1800),
@@ -660,7 +676,7 @@ describe("jupiter-lend-integration", () => {
             maxTransactionSizeUsd: new BN(60_000_000),
             maxSlippageBps: 100,
             protocolMode: 1,
-            protocols: [lendProtocol],
+            protocols: [lendProtocol, mockDefiProtocol],
             allowedDestinations: [],
             timelockDuration: new BN(1800),
             operatingHours: 0x00ffffff,
@@ -719,7 +735,7 @@ describe("jupiter-lend-integration", () => {
         agent,
         usdcMint,
         new BN(40_000_000),
-        lendProtocol,
+        mockDefiProtocol,
         rollingVaultUsdcAta,
         rollingOverlay,
       );
@@ -735,7 +751,7 @@ describe("jupiter-lend-integration", () => {
         agent,
         usdcMint,
         new BN(40_000_000),
-        lendProtocol,
+        mockDefiProtocol,
         rollingVaultUsdcAta,
         rollingOverlay,
       );
@@ -752,7 +768,7 @@ describe("jupiter-lend-integration", () => {
         agent,
         usdcMint,
         new BN(30_000_000),
-        lendProtocol,
+        mockDefiProtocol,
         rollingVaultUsdcAta,
         rollingOverlay,
       );

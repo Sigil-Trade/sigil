@@ -52,6 +52,11 @@ import {
   printCUSummary,
   TestEnv,
   LiteSVM,
+  MOCK_DEFI_PROGRAM_ID,
+  MOCK_DEFI_2_PROGRAM_ID,
+  buildMockDefiNoopIx,
+  buildMockDefiDrainIx,
+  buildMockDefiDrain2Ix,
 } from "./helpers/litesvm-setup";
 
 const FULL_CAPABILITY = 2; // CAPABILITY_OPERATOR
@@ -94,8 +99,39 @@ describe("sigil", () => {
     return (pol as any).policyVersion ?? new BN(0);
   }
 
+  // F-Q2 drain sizing. validate_and_authorize arms the agent's SPL delegation
+  // for only `amount - protocol_fee - developer_fee` (validate_and_authorize.rs
+  // :995-1000) — the fees are CPI'd out of the vault ATA up front. A drain ix
+  // can therefore move at most that delegated amount; draining the full
+  // declared `amount` would exceed the delegation and the inner SPL Transfer
+  // would fail with "insufficient funds". finalize then measures
+  // actual_spend = total_decrease - fees = the DRAIN amount (finalize_session.rs
+  // :328-350), so draining the full delegation makes actual_spend equal exactly
+  // `amount - fees` and the per-protocol cap charges that. The per-protocol-cap
+  // and TA-13 vaults are created with developer_fee_rate = 0, so the only fee is
+  // the hardcoded protocol fee: ceil(amount * 200 / 1_000_000) (PROTOCOL_FEE_RATE
+  // / FEE_RATE_DENOMINATOR, ceiling division — mirrors state/mod.rs::ceil_fee).
+  const PROTOCOL_FEE_RATE_BN = new BN(200);
+  const FEE_RATE_DENOMINATOR_BN = new BN(1_000_000);
+  const netDrainAmount = (amount: BN): BN => {
+    // ceil(amount * rate / denom) = (amount*rate + denom - 1) / denom
+    const protocolFee = amount
+      .mul(PROTOCOL_FEE_RATE_BN)
+      .add(FEE_RATE_DENOMINATOR_BN.subn(1))
+      .div(FEE_RATE_DENOMINATOR_BN);
+    return amount.sub(protocolFee);
+  };
+
   // Allowed protocol (fake Jupiter program ID for testing)
-  const jupiterProgramId = Keypair.generate().publicKey;
+  // F-Q2: spending sandwiches need EXACTLY ONE counted DeFi instruction whose
+  // program equals target_protocol. This outer "protocol" is used only as the
+  // allowlist entry + authorized target by the simple validate/finalize tests
+  // (the per-protocol-cap and TA-13 blocks declare their own scoped protocol
+  // keypairs). It carries no identity assertion beyond "policy.protocols[0]
+  // equals it", which still holds, so point it at the real, loaded, counted
+  // mock-defi program; the sandwiches' middle ix is mock-defi's no-op
+  // open_position (zero spend, outcome-based premises preserved).
+  const jupiterProgramId = MOCK_DEFI_PROGRAM_ID;
 
   // Protocol treasury (must match hardcoded constant in program)
   const protocolTreasury = new PublicKey(
@@ -1296,6 +1332,13 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        // F-Q1a completeness: the mock-defi no-op ix lists the agent signer (the
+        // writable fee-payer in the compiled v0 message). validate's
+        // destination-completeness guard requires every writable DeFi meta
+        // resolvable in remaining_accounts, so append the agent (mirrors seal()).
+        .remainingAccounts([
+          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -1316,10 +1359,19 @@ describe("sigil", () => {
         })
         .instruction();
 
+      // F-Q2: a spending sandwich needs EXACTLY ONE counted DeFi instruction
+      // between validate and finalize. mock-defi's no-op open_position is that ix
+      // (zero token movement → balance delta stays the protocol fee only).
+      const defiIx = buildMockDefiNoopIx(agent.publicKey);
+
       // P0 Finding 1: Verify vault balance before/after composed TX
       const vaultBalBefore = getTokenBalance(svm, vaultUsdcAta);
 
-      const txResult = sendVersionedTx(svm, [validateIx, finalizeIx], agent);
+      const txResult = sendVersionedTx(
+        svm,
+        [validateIx, defiIx, finalizeIx],
+        agent,
+      );
       recordCU("validate+finalize:stablecoin", txResult);
 
       // P0 Finding 1: Vault balance delta verification (outcome-based spending)
@@ -1394,7 +1446,18 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        // F-Q1a completeness: append the agent fee-payer (writable in the
+        // compiled message, referenced by the mock-defi no-op ix). Mirrors seal().
+        .remainingAccounts([
+          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
+
+      // F-Q2: the counted DeFi ix that sits between validate and finalize so the
+      // spending sandwich satisfies defi_ix_count == 1. The post-finalize scan
+      // tests append THEIR extra ix AFTER finalize, leaving this as the sole
+      // mid-sandwich DeFi instruction.
+      const defiIx = buildMockDefiNoopIx(agent.publicKey);
 
       const finalizeIx = await program.methods
         .finalizeSession()
@@ -1414,28 +1477,35 @@ describe("sigil", () => {
         })
         .instruction();
 
-      return { validateIx, finalizeIx };
+      return { validateIx, defiIx, finalizeIx };
     }
 
     it("succeeds with nothing after finalize", async () => {
-      const { validateIx, finalizeIx } = await buildValidateFinalizePair();
-      const txResult = sendVersionedTx(svm, [validateIx, finalizeIx], agent);
+      const { validateIx, defiIx, finalizeIx } =
+        await buildValidateFinalizePair();
+      const txResult = sendVersionedTx(
+        svm,
+        [validateIx, defiIx, finalizeIx],
+        agent,
+      );
       expect(txResult).to.exist;
     });
 
     it("allows ComputeBudget after finalize", async () => {
-      const { validateIx, finalizeIx } = await buildValidateFinalizePair();
+      const { validateIx, defiIx, finalizeIx } =
+        await buildValidateFinalizePair();
       const cbIx = ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 });
       const txResult = sendVersionedTx(
         svm,
-        [validateIx, finalizeIx, cbIx],
+        [validateIx, defiIx, finalizeIx, cbIx],
         agent,
       );
       expect(txResult).to.exist;
     });
 
     it("allows SystemProgram after finalize", async () => {
-      const { validateIx, finalizeIx } = await buildValidateFinalizePair();
+      const { validateIx, defiIx, finalizeIx } =
+        await buildValidateFinalizePair();
       const sysIx = SystemProgram.transfer({
         fromPubkey: agent.publicKey,
         toPubkey: agent.publicKey,
@@ -1443,14 +1513,15 @@ describe("sigil", () => {
       });
       const txResult = sendVersionedTx(
         svm,
-        [validateIx, finalizeIx, sysIx],
+        [validateIx, defiIx, finalizeIx, sysIx],
         agent,
       );
       expect(txResult).to.exist;
     });
 
     it("rejects SPL Transfer after finalize (rejected at validate or post-finalize scan)", async () => {
-      const { validateIx, finalizeIx } = await buildValidateFinalizePair();
+      const { validateIx, defiIx, finalizeIx } =
+        await buildValidateFinalizePair();
       // Craft a top-level SPL Token transfer instruction (disc = 3)
       const splTransferIx = {
         programId: TOKEN_PROGRAM_ID,
@@ -1462,7 +1533,11 @@ describe("sigil", () => {
         data: Buffer.from([3, 0, 0, 0, 0, 0, 0, 0, 0]), // Transfer disc + 0 amount
       };
       try {
-        sendVersionedTx(svm, [validateIx, finalizeIx, splTransferIx], agent);
+        sendVersionedTx(
+          svm,
+          [validateIx, defiIx, finalizeIx, splTransferIx],
+          agent,
+        );
         expect.fail("Should have thrown");
       } catch (err: any) {
         // UnauthorizedPostFinalizeInstruction (code: 6049 post-M1-04 — shifted
@@ -1600,9 +1675,12 @@ describe("sigil", () => {
 
     it("standalone validate rejects without finalize (cap check moved to finalize)", async () => {
       // Outcome-based model: per-tx cap checks are in finalize_session, not validate.
-      // A standalone validate (no finalize) fails with MissingFinalizeInstruction.
+      // A spending validate with its DeFi ix but NO finalize fails with
+      // MissingFinalizeInstruction. F-Q2: the sandwich must carry EXACTLY ONE
+      // counted DeFi ix, so the bundle is [validate, mock_defi] (no finalize) —
+      // defi_ix_count == 1 passes, then the missing finalize is the sole defect.
       try {
-        await program.methods
+        const validateIx = await program.methods
           .validateAndAuthorize(
             usdcMint,
             new BN(200_000_000), // would exceed max_transaction_size — but checked in finalize now
@@ -1635,8 +1713,14 @@ describe("sigil", () => {
             systemProgram: SystemProgram.programId,
             instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           } as any)
-          .signers([agent])
-          .rpc();
+          // F-Q1a completeness: append the agent fee-payer (referenced writable
+          // by the mock-defi no-op ix). Mirrors seal().
+          .remainingAccounts([
+            { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+          ])
+          .instruction();
+        const defiIx = buildMockDefiNoopIx(agent.publicKey);
+        sendVersionedTx(svm, [validateIx, defiIx], agent);
         expect.fail("Should have thrown");
       } catch (err: any) {
         expectSigilError(err, {
@@ -1648,9 +1732,12 @@ describe("sigil", () => {
     it("standalone validate rejects without finalize (daily cap check moved to finalize)", async () => {
       // Outcome-based model: daily cap checks are in finalize_session, not validate.
       // Validate no longer records spend or checks caps — those use actual balance delta.
-      // A standalone validate (no finalize) fails with MissingFinalizeInstruction.
+      // A spending validate with its DeFi ix but NO finalize fails with
+      // MissingFinalizeInstruction. F-Q2: the bundle is [validate, mock_defi]
+      // (no finalize) so defi_ix_count == 1 passes and the missing finalize is
+      // the sole defect.
       try {
-        await program.methods
+        const validateIx = await program.methods
           .validateAndAuthorize(
             usdcMint,
             new BN(100_000_000),
@@ -1683,8 +1770,14 @@ describe("sigil", () => {
             systemProgram: SystemProgram.programId,
             instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           } as any)
-          .signers([agent])
-          .rpc();
+          // F-Q1a completeness: append the agent fee-payer (referenced writable
+          // by the mock-defi no-op ix). Mirrors seal().
+          .remainingAccounts([
+            { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+          ])
+          .instruction();
+        const defiIx = buildMockDefiNoopIx(agent.publicKey);
+        sendVersionedTx(svm, [validateIx, defiIx], agent);
         expect.fail("Should have thrown");
       } catch (err: any) {
         expectSigilError(err, {
@@ -2485,6 +2578,11 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        // F-Q1a completeness: append the agent fee-payer (referenced writable by
+        // the mock-defi no-op ix). Mirrors seal().
+        .remainingAccounts([
+          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -2505,7 +2603,13 @@ describe("sigil", () => {
         })
         .instruction();
 
-      const feeResult = sendVersionedTx(svm, [validateIx, finalizeIx], agent);
+      // F-Q2: counted DeFi ix between validate and finalize (zero spend).
+      const defiIx = buildMockDefiNoopIx(agent.publicKey);
+      const feeResult = sendVersionedTx(
+        svm,
+        [validateIx, defiIx, finalizeIx],
+        agent,
+      );
       recordCU("validate+finalize:with_fees", feeResult);
 
       // Verify vault stats updated
@@ -2629,6 +2733,11 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        // F-Q1a completeness: append the agent fee-payer (referenced writable by
+        // the mock-defi no-op ix). Mirrors seal().
+        .remainingAccounts([
+          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -2649,16 +2758,22 @@ describe("sigil", () => {
         })
         .instruction();
 
-      sendVersionedTx(svm, [validateIx, finalizeIx], agent);
+      // F-Q2: counted DeFi ix between validate and finalize (zero spend).
+      const defiIx = buildMockDefiNoopIx(agent.publicKey);
+      sendVersionedTx(svm, [validateIx, defiIx, finalizeIx], agent);
 
       // developer fee = 10_000_000 * 500 / 1_000_000 = 5000
       const vault = await program.account.agentVault.fetch(feeVaultPda);
       expect(vault.totalFeesCollected.toNumber()).to.equal(5000);
     });
 
-    it("zero-DeFi finalize always tracks developer fees in total_fees_collected", async () => {
+    it("zero-spend finalize always tracks developer fees in total_fees_collected", async () => {
       // After removing the success param, fees are always tracked in accounting
-      // even when no DeFi instruction ran (fee drain fix).
+      // even when the DeFi leg moved nothing (fee drain fix). F-Q2: a spending
+      // sandwich must carry EXACTLY ONE counted DeFi ix, so the bundle is
+      // [validate, mock_defi(noop), finalize]; the no-op moves zero tokens so
+      // actual_spend = 0 and the fee-only accounting path is exercised — exactly
+      // the case this test pins.
       [feeSessionPda] = PublicKey.findProgramAddressSync(
         [
           Buffer.from("session"),
@@ -2672,7 +2787,7 @@ describe("sigil", () => {
       const vaultBefore = await program.account.agentVault.fetch(feeVaultPda);
       const feesBefore = vaultBefore.totalFeesCollected.toNumber();
 
-      // Compose validate+finalize atomically (no DeFi instruction between them)
+      // Compose validate + mock_defi(noop) + finalize atomically
       const validateIx = await program.methods
         .validateAndAuthorize(
           usdcMint,
@@ -2706,6 +2821,11 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        // F-Q1a completeness: append the agent fee-payer (referenced writable by
+        // the mock-defi no-op ix). Mirrors seal().
+        .remainingAccounts([
+          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -2726,7 +2846,9 @@ describe("sigil", () => {
         })
         .instruction();
 
-      sendVersionedTx(svm, [validateIx, finalizeIx], agent);
+      // F-Q2: counted DeFi ix between validate and finalize (zero spend).
+      const defiIx = buildMockDefiNoopIx(agent.publicKey);
+      sendVersionedTx(svm, [validateIx, defiIx, finalizeIx], agent);
 
       const vault = await program.account.agentVault.fetch(feeVaultPda);
       // Developer fees ALWAYS tracked now (fee drain fix — accounting matches reality)
@@ -2966,6 +3088,15 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        // F-Q1a completeness: append the agent fee-payer (referenced writable by
+        // the mock-defi no-op ix). Mirrors seal().
+        .remainingAccounts([
+          {
+            pubkey: lifecycleAgent.publicKey,
+            isSigner: false,
+            isWritable: false,
+          },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -2986,7 +3117,9 @@ describe("sigil", () => {
         })
         .instruction();
 
-      sendVersionedTx(svm, [validateIx, finalizeIx], lifecycleAgent);
+      // F-Q2: counted DeFi ix between validate and finalize (zero spend).
+      const defiIx = buildMockDefiNoopIx(lifecycleAgent.publicKey);
+      sendVersionedTx(svm, [validateIx, defiIx, finalizeIx], lifecycleAgent);
 
       // Session should be closed after atomic validate+finalize. Verify
       // by raw LiteSVM account lookup (see first site for context).
@@ -3032,6 +3165,15 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        // F-Q1a completeness: append the agent fee-payer (referenced writable by
+        // the mock-defi no-op ix). Mirrors seal().
+        .remainingAccounts([
+          {
+            pubkey: lifecycleAgent.publicKey,
+            isSigner: false,
+            isWritable: false,
+          },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -3053,7 +3195,10 @@ describe("sigil", () => {
         .instruction();
 
       try {
-        sendVersionedTx(svm, [validateIx, finalizeIx], lifecycleAgent);
+        // F-Q2: counted DeFi ix so validate passes and finalize reaches the
+        // InvalidSession check (wrong rent recipient). Zero spend.
+        const defiIx = buildMockDefiNoopIx(lifecycleAgent.publicKey);
+        sendVersionedTx(svm, [validateIx, defiIx, finalizeIx], lifecycleAgent);
         expect.fail("Should have thrown");
       } catch (err: any) {
         expectSigilError(err, { name: "InvalidSession" });
@@ -3096,6 +3241,15 @@ describe("sigil", () => {
             systemProgram: SystemProgram.programId,
             instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           })
+          // F-Q1a completeness: append the agent fee-payer (referenced writable
+          // by the mock-defi no-op ix). Mirrors seal().
+          .remainingAccounts([
+            {
+              pubkey: lifecycleAgent.publicKey,
+              isSigner: false,
+              isWritable: false,
+            },
+          ])
           .instruction();
 
         const finalizeIx = await program.methods
@@ -3116,7 +3270,9 @@ describe("sigil", () => {
           })
           .instruction();
 
-        sendVersionedTx(svm, [validateIx, finalizeIx], lifecycleAgent);
+        // F-Q2: counted DeFi ix between validate and finalize (zero spend).
+        const defiIx = buildMockDefiNoopIx(lifecycleAgent.publicKey);
+        sendVersionedTx(svm, [validateIx, defiIx, finalizeIx], lifecycleAgent);
       }
 
       const vault = await program.account.agentVault.fetch(lifecycleVaultPda);
@@ -3877,6 +4033,11 @@ describe("sigil", () => {
             systemProgram: SystemProgram.programId,
             instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           })
+          // F-Q1a completeness: append the agent fee-payer (referenced writable
+          // by the mock-defi no-op ix). Mirrors seal().
+          .remainingAccounts([
+            { pubkey: ringAgent.publicKey, isSigner: false, isWritable: false },
+          ])
           .instruction();
 
         const finalizeIx = await program.methods
@@ -3897,11 +4058,14 @@ describe("sigil", () => {
           })
           .instruction();
 
-        sendVersionedTx(svm, [validateIx, finalizeIx], ringAgent);
+        // F-Q2: counted DeFi ix between validate and finalize (zero spend).
+        const defiIx = buildMockDefiNoopIx(ringAgent.publicKey);
+        sendVersionedTx(svm, [validateIx, defiIx, finalizeIx], ringAgent);
       }
 
-      // Outcome-based model: no DeFi instruction → actual_spend = 0 per TX.
-      // Tracker buckets remain empty (no recorded spend), but total_transactions increments.
+      // Outcome-based model: the no-op DeFi ix moves nothing → actual_spend = 0
+      // per TX. Tracker buckets remain empty (no recorded spend), but
+      // total_transactions increments.
       const vault = await program.account.agentVault.fetch(ringVaultPda);
       expect(vault.totalTransactions.toNumber()).to.equal(51);
     });
@@ -4069,6 +4233,15 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        // F-Q1a completeness: append the agent fee-payer (referenced writable by
+        // the mock-defi no-op ix). Mirrors seal().
+        .remainingAccounts([
+          {
+            pubkey: feeEdgeAgent.publicKey,
+            isSigner: false,
+            isWritable: false,
+          },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -4089,7 +4262,10 @@ describe("sigil", () => {
         })
         .instruction();
 
-      sendVersionedTx(svm, [validateIx, finalizeIx], feeEdgeAgent);
+      // F-Q2: counted DeFi ix between validate and finalize (zero spend; the
+      // protocol fee is collected at validate, independent of the DeFi leg).
+      const defiIx = buildMockDefiNoopIx(feeEdgeAgent.publicKey);
+      sendVersionedTx(svm, [validateIx, defiIx, finalizeIx], feeEdgeAgent);
 
       // Vault lost 1 unit (protocol fee), treasury gained 1 unit
       const vaultBalAfter = getTokenBalance(svm, feeEdgeVaultUsdcAta);
@@ -4144,6 +4320,15 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        // F-Q1a completeness: append the agent fee-payer (referenced writable by
+        // the mock-defi no-op ix). Mirrors seal().
+        .remainingAccounts([
+          {
+            pubkey: feeEdgeAgent.publicKey,
+            isSigner: false,
+            isWritable: false,
+          },
+        ])
         .instruction();
 
       const finalizeIx1 = await program.methods
@@ -4164,7 +4349,9 @@ describe("sigil", () => {
         })
         .instruction();
 
-      sendVersionedTx(svm, [validateIx1, finalizeIx1], feeEdgeAgent);
+      // F-Q2: counted DeFi ix between validate and finalize (zero spend).
+      const defiIx1 = buildMockDefiNoopIx(feeEdgeAgent.publicKey);
+      sendVersionedTx(svm, [validateIx1, defiIx1, finalizeIx1], feeEdgeAgent);
 
       // Test amount = 5000: ceil(5000 * 200 / 1_000_000) = 1 (exact division, same result)
       // Capture vault balance BEFORE validate (fee collected during validate)
@@ -4203,6 +4390,15 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        // F-Q1a completeness: append the agent fee-payer (referenced writable by
+        // the mock-defi no-op ix). Mirrors seal().
+        .remainingAccounts([
+          {
+            pubkey: feeEdgeAgent.publicKey,
+            isSigner: false,
+            isWritable: false,
+          },
+        ])
         .instruction();
 
       const finalizeIx2 = await program.methods
@@ -4223,7 +4419,9 @@ describe("sigil", () => {
         })
         .instruction();
 
-      sendVersionedTx(svm, [validateIx2, finalizeIx2], feeEdgeAgent);
+      // F-Q2: counted DeFi ix between validate and finalize (zero spend).
+      const defiIx2 = buildMockDefiNoopIx(feeEdgeAgent.publicKey);
+      sendVersionedTx(svm, [validateIx2, defiIx2, finalizeIx2], feeEdgeAgent);
 
       // Vault balance should decrease by exactly 1 (protocol fee deducted during validate)
       const vaultBalAfter = getTokenBalance(svm, feeEdgeVaultUsdcAta);
@@ -6429,9 +6627,26 @@ describe("sigil", () => {
     const protoCapOwner = Keypair.generate();
     const protoCapAgent = Keypair.generate();
     const protoCapFee = Keypair.generate();
-    const protocolA = Keypair.generate().publicKey;
-    const protocolB = Keypair.generate().publicKey;
+    // F-Q2 migration: per-protocol caps charge `actual_spend` (the measured
+    // vault-ATA balance delta at finalize), so the sandwich's middle ix must
+    // be a REAL fund-moving drain whose program == the authorized
+    // target_protocol (the cap keys off `session.authorized_protocol`). The two
+    // protocols must therefore be the two LOADED mock programs (MOCK_DEFI +
+    // MOCK_DEFI_2), not arbitrary pubkeys — an arbitrary pubkey is not an
+    // executable program, so a drain ix targeting it would fail to invoke.
+    // protocolA = MOCK_DEFI (single-protocol tests), protocolB = MOCK_DEFI_2
+    // (the "other protocol still has room" independence test).
+    const protocolA = MOCK_DEFI_PROGRAM_ID;
+    const protocolB = MOCK_DEFI_2_PROGRAM_ID;
     const protoCapVaultId = new BN(900);
+    // Drain destination — a fresh-keypair USDC ATA. The destination need NOT be
+    // allowlisted: validate's destination check (destination_check.rs) is
+    // resolve-required, not allowlist-required — a resolved, non-allowlisted
+    // token account is treated as a transient route hop and SKIPPED. It must,
+    // however, be passed in validate's remaining_accounts (else
+    // DestinationAccountUnresolvable).
+    const protoCapDrainDest = Keypair.generate();
+    let pcDrainDestUsdc: PublicKey;
     // G3a audit fix (§RP-2 2026-05-18 HIGH-1): protocol_caps weakening
     // (any cap → 0, or any cap raised, or has_protocol_caps → false) is
     // now classified as an elevated mutation by queue_policy_update. The
@@ -6507,6 +6722,17 @@ describe("sigil", () => {
         pcVaultUsdc,
         owner.publicKey,
         5_000_000_000n,
+      );
+
+      // Drain destination ATA (receives the drained USDC each spend). Owner is
+      // a throwaway keypair — intentionally NOT in allowed_destinations (the
+      // sink-scoped check skips non-allowlisted route hops; see comment at the
+      // protoCapDrainDest declaration).
+      pcDrainDestUsdc = createAtaHelper(
+        svm,
+        protoCapOwner,
+        usdcMint,
+        protoCapDrainDest.publicKey,
       );
 
       // Initialize vault with 2 protocols + per-protocol caps:
@@ -6670,7 +6896,43 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        // F-Q1a completeness: the drain ix's writable metas (source vault ATA +
+        // drain destination) plus the agent fee-payer (writable in the compiled
+        // v0 message) must be resolvable in validate's remaining_accounts, or
+        // validate rejects with DestinationAccountUnresolvable. Passed
+        // read-only here — they are resolved/classified, not authorized.
+        .remainingAccounts([
+          { pubkey: pcVaultUsdc, isSigner: false, isWritable: false },
+          { pubkey: pcDrainDestUsdc, isSigner: false, isWritable: false },
+          {
+            pubkey: protoCapAgent.publicKey,
+            isSigner: false,
+            isWritable: false,
+          },
+        ])
         .instruction();
+
+      // Real fund-moving DeFi ix: drain `amount` USDC out of the vault to the
+      // throwaway destination, using the agent's validate-time SPL delegation.
+      // The drain's program MUST equal the authorized target_protocol (the cap
+      // keys off session.authorized_protocol), so route through MOCK_DEFI_2's
+      // builder when targeting protocolB, else MOCK_DEFI's. This makes
+      // `actual_spend == amount` at finalize so the per-protocol cap genuinely
+      // charges (a no-op would move 0 and the cap would never fire).
+      const drainAmount = netDrainAmount(amount);
+      const drainIx = protocol.equals(MOCK_DEFI_2_PROGRAM_ID)
+        ? buildMockDefiDrain2Ix(
+            pcVaultUsdc,
+            pcDrainDestUsdc,
+            protoCapAgent.publicKey,
+            drainAmount,
+          )
+        : buildMockDefiDrainIx(
+            pcVaultUsdc,
+            pcDrainDestUsdc,
+            protoCapAgent.publicKey,
+            drainAmount,
+          );
 
       const finalizeIx = await program.methods
         .finalizeSession()
@@ -6690,7 +6952,11 @@ describe("sigil", () => {
         })
         .instruction();
 
-      return sendVersionedTx(svm, [validateIx, finalizeIx], protoCapAgent);
+      return sendVersionedTx(
+        svm,
+        [validateIx, drainIx, finalizeIx],
+        protoCapAgent,
+      );
     };
 
     it("happy path: spend under protocol cap succeeds", async () => {
@@ -6698,6 +6964,21 @@ describe("sigil", () => {
       // composeSpend returns Promise<VersionedTxResult> (uses await on
       // .instruction() internally). Must await to surface tx rejection.
       await composeSpend(protocolA, new BN(50_000_000));
+    });
+
+    it("over-cap spend on a protocol reverts ErrDailyCapExceeded (F-Q2 review F1)", async () => {
+      // Coverage gap closed: this describe otherwise only proves under-cap
+      // success + bypass. protocolA cap = 100 USDC; a 150 USDC spend (net
+      // ~149.97 after the 0.02% fee) exceeds it at finalize → a GENUINE
+      // per-protocol revert (149.97 alone > 100, so it reverts regardless of
+      // the ~50 already in the rolling counter from the happy path).
+      try {
+        await composeSpend(protocolA, new BN(150_000_000));
+        expect.fail("over-cap spend must revert (per-protocol cap exceeded)");
+      } catch (err: any) {
+        if (err?.message?.startsWith("over-cap spend must revert")) throw err;
+        expectSigilError(err, { name: "ErrDailyCapExceeded" });
+      }
     });
 
     it("other protocol still has room", async () => {
@@ -7108,13 +7389,22 @@ describe("sigil", () => {
     const ta13Owner = Keypair.generate();
     const ta13Agent = Keypair.generate();
     const ta13Fee = Keypair.generate();
-    const jupiterProtocol = Keypair.generate().publicKey;
-    const driftProtocol = Keypair.generate().publicKey;
+    // F-Q2 migration: the per-protocol cap charges `actual_spend` (measured
+    // balance delta), so the sandwich middle ix must be a REAL drain whose
+    // program == the authorized target_protocol. Both protocols must be LOADED
+    // mock programs. jupiterProtocol = MOCK_DEFI (scenarios 1/3/4/5),
+    // driftProtocol = MOCK_DEFI_2 (scenario 2 — per-protocol independence).
+    const jupiterProtocol = MOCK_DEFI_PROGRAM_ID;
+    const driftProtocol = MOCK_DEFI_2_PROGRAM_ID;
     const ta13VaultId = new BN(913);
     // G3a audit fix (§RP-2 2026-05-18 HIGH-1): see protoCapCosigner above.
     // S3 disables has_protocol_caps; S5 sets a per-protocol cap to 0 —
     // both weakenings that require cosign under TA-09.
     const ta13Cosigner = Keypair.generate();
+    // F-Q2 drain destination (throwaway, intentionally NOT allowlisted — the
+    // sink-scoped check skips non-allowlisted route hops; it only needs to be
+    // resolvable in validate's remaining_accounts).
+    const ta13DrainDest = Keypair.generate();
     let ta13Vault: PublicKey;
     let ta13Policy: PublicKey;
     let ta13Tracker: PublicKey;
@@ -7122,6 +7412,7 @@ describe("sigil", () => {
     let ta13OwnerUsdc: PublicKey;
     let ta13VaultUsdc: PublicKey;
     let ta13FeeUsdc: PublicKey;
+    let ta13DrainDestUsdc: PublicKey;
     let ta13PendingPda: PublicKey;
 
     before(async () => {
@@ -7184,6 +7475,14 @@ describe("sigil", () => {
         ta13VaultUsdc,
         owner.publicKey,
         5_000_000_000n,
+      );
+
+      // F-Q2 drain destination ATA — receives the drained USDC each spend.
+      ta13DrainDestUsdc = createAtaHelper(
+        svm,
+        ta13Owner,
+        usdcMint,
+        ta13DrainDest.publicKey,
       );
 
       // F-15 fixture: daily_cap=$1000, max_tx=$501, protocols=[Jupiter, Drift],
@@ -7292,7 +7591,35 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        // F-Q1a completeness: the drain ix's writable metas (vault ATA + drain
+        // dest) plus the agent fee-payer must be resolvable in validate's
+        // remaining_accounts (else DestinationAccountUnresolvable). Read-only
+        // here — resolved/classified, not authorized.
+        .remainingAccounts([
+          { pubkey: ta13VaultUsdc, isSigner: false, isWritable: false },
+          { pubkey: ta13DrainDestUsdc, isSigner: false, isWritable: false },
+          { pubkey: ta13Agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
+      // Real fund-moving DeFi ix: drain `amount` USDC out of the vault. The
+      // drain's program MUST equal the authorized target_protocol (the cap keys
+      // off session.authorized_protocol), so route through MOCK_DEFI_2's builder
+      // when targeting driftProtocol, else MOCK_DEFI's. actual_spend == amount,
+      // so the per-protocol cap genuinely charges.
+      const drainAmount = netDrainAmount(amount);
+      const drainIx = protocol.equals(MOCK_DEFI_2_PROGRAM_ID)
+        ? buildMockDefiDrain2Ix(
+            ta13VaultUsdc,
+            ta13DrainDestUsdc,
+            ta13Agent.publicKey,
+            drainAmount,
+          )
+        : buildMockDefiDrainIx(
+            ta13VaultUsdc,
+            ta13DrainDestUsdc,
+            ta13Agent.publicKey,
+            drainAmount,
+          );
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
@@ -7310,26 +7637,35 @@ describe("sigil", () => {
           outputStablecoinAccount: null,
         })
         .instruction();
-      return sendVersionedTx(svm, [validateIx, finalizeIx], ta13Agent);
+      return sendVersionedTx(
+        svm,
+        [validateIx, drainIx, finalizeIx],
+        ta13Agent,
+      );
     };
 
     // SCENARIO 1: spend $500 on Jupiter (at cap), then $1 more Jupiter
     // → ErrDailyCapExceeded (6095). Global daily_cap=$1000 not yet hit.
     it("scenario 1: spending exactly cap then $1 more on same protocol → ErrDailyCapExceeded", async () => {
-      // First $500 on Jupiter — exactly hits the cap, succeeds.
+      // First $500 on Jupiter — fills the per-protocol cap (net of the protocol
+      // fee, actual_spend ≈ $499.90), succeeds.
       await ta13Spend(jupiterProtocol, new BN(500_000_000));
-      // Next $1 — exceeds Jupiter cap of $500.
+      // Next $1 — pushes the Jupiter rolling counter over the $500 cap.
+      // Capture the thrown error OUTSIDE the assertion so a NON-revert is a
+      // real failure: `expect.fail` must NOT live inside the catch (its own
+      // AssertionError message contains "6095" and would vacuously satisfy the
+      // include-check below — a false green). Instead, assert a throw occurred,
+      // then assert it is the per-protocol cap error.
+      // Strict typed assertion (F-Q2 review F2 fix): bind the exact
+      // ErrDailyCapExceeded (6086) via the authoritative error map and reject
+      // ANY other error. The prior loose `includes("6095")` accepted
+      // ErrPendingOwnershipNotReady (6095, unrelated) — a latent false-green.
       try {
         await ta13Spend(jupiterProtocol, new BN(1_000_000));
-        expect.fail("Expected ErrDailyCapExceeded (6095) but spend succeeded");
+        expect.fail("second spend must revert (per-protocol cap exceeded)");
       } catch (err: any) {
-        // The new dedicated error variant for per-protocol rolling cap.
-        const msg = err?.message ?? String(err);
-        expect(msg).to.satisfy(
-          (m: string) =>
-            m.includes("ErrDailyCapExceeded") || m.includes("6095"),
-          `expected ErrDailyCapExceeded (6095), got: ${msg}`,
-        );
+        if (err?.message?.startsWith("second spend must revert")) throw err;
+        expectSigilError(err, { name: "ErrDailyCapExceeded" });
       }
     });
 
