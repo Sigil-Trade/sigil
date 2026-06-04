@@ -72,7 +72,6 @@ pub struct PolicyConfig {
     // pre-launch digest-version bump — it shifts canonical-digest fields 13..22
     // down by one byte; the SDK encoder + IDL + Codama decoder are updated in
     // lockstep (M1-04 step 5b).
-
     /// Whether a pending policy update PDA exists for this vault.
     /// Set true by queue_policy_update, false by apply/cancel_pending_policy.
     pub has_pending_policy: bool,

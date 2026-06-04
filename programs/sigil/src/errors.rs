@@ -184,7 +184,6 @@ pub enum SigilError {
     ProtocolCapsMismatch,
 
     // --- Vault cleanup guard errors ---
-
     #[msg("Pending policy update must be applied or cancelled before closing vault")]
     PendingPolicyExists,
 
@@ -713,7 +712,9 @@ pub enum SigilError {
     /// delay could exceed the apply-time freshness ceiling and leave an
     /// OPERATOR grant permanently unapplyable (a tier-2 liveness brick), so it
     /// is rejected at configuration time.
-    #[msg("operator_grant_delay_seconds exceeds the maximum (48h) — would brick grant applicability")]
+    #[msg(
+        "operator_grant_delay_seconds exceeds the maximum (48h) — would brick grant applicability"
+    )]
     ErrOperatorGrantDelayTooLong,
 
     /// 6109 — F-Q6: `vault.owner_type` held a value outside the recognized
@@ -733,6 +734,8 @@ pub enum SigilError {
     /// masking the anomaly and — with `ceil_fee`'s round-up — letting small spends
     /// round to 0 and skip the caps. Now rejected fail-closed rather than
     /// under-counting the spend. Certora conservation proof tracked for M2.
-    #[msg("finalize spend accounting underflow: collected fees exceed realized stablecoin outflow")]
+    #[msg(
+        "finalize spend accounting underflow: collected fees exceed realized stablecoin outflow"
+    )]
     SpendAccountingUnderflow,
 }

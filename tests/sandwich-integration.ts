@@ -952,7 +952,9 @@ describe("sandwich-integration (Phase 6.1)", () => {
         throw new Error(`setup: non-canonical balance ${bal} != 200000000000`);
       }
       if (nonCanonical.equals(ctx.vaultUsdcAta)) {
-        throw new Error("setup: fabricated account must not be the canonical ATA");
+        throw new Error(
+          "setup: fabricated account must not be the canonical ATA",
+        );
       }
 
       const sandwichOpts: SandwichOpts = {
@@ -997,7 +999,13 @@ describe("sandwich-integration (Phase 6.1)", () => {
         ctx.vault,
         true, // vault is a PDA (off-curve)
       );
-      setRawTokenAccount(svm, usdtAta, DEVNET_USDT_MINT, ctx.vault, 60_000_000n);
+      setRawTokenAccount(
+        svm,
+        usdtAta,
+        DEVNET_USDT_MINT,
+        ctx.vault,
+        60_000_000n,
+      );
 
       const sandwichOpts: SandwichOpts = {
         ctx,
@@ -1034,7 +1042,13 @@ describe("sandwich-integration (Phase 6.1)", () => {
         ctx.vault,
         true,
       );
-      setRawTokenAccount(svm, usdtAta, DEVNET_USDT_MINT, ctx.vault, 60_000_000n);
+      setRawTokenAccount(
+        svm,
+        usdtAta,
+        DEVNET_USDT_MINT,
+        ctx.vault,
+        60_000_000n,
+      );
 
       // usdtAta is deliberately NOT in finalizeRemainingAccounts.
       const sandwichOpts: SandwichOpts = {

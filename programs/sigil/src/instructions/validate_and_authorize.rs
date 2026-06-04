@@ -10,7 +10,6 @@ use crate::events::{ActionAuthorized, FeesCollected};
 use crate::state::*;
 use crate::utils::destination_check::enforce_destination_allowlist;
 
-
 /// Maximum instructions to scan from any sysvar introspection loop.
 ///
 /// Solana's per-tx instruction count is bounded at 64 by the v0 transaction
@@ -1088,10 +1087,7 @@ pub fn handler(
         // Today this is always true when reached (the scan block reverts
         // otherwise); it fails closed if a future edit moves the Approve ahead
         // of, or removes, the count check.
-        require!(
-            single_defi_ix_verified,
-            SigilError::TooManyDeFiInstructions
-        );
+        require!(single_defi_ix_verified, SigilError::TooManyDeFiInstructions);
         token::approve(cpi_ctx, delegation_amount)?;
     }
 

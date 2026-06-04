@@ -748,10 +748,9 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
         // Deriving from the candidate's own mint + `info.owner` keeps this
         // correct under the devnet-testing escape hatch and for whichever token
         // program owns the account.
-        let is_canonical_vault_ata =
-            |key: Pubkey, mint: &Pubkey, token_program: &Pubkey| -> bool {
-                key == get_associated_token_address_with_program_id(&vault_key, mint, token_program)
-            };
+        let is_canonical_vault_ata = |key: Pubkey, mint: &Pubkey, token_program: &Pubkey| -> bool {
+            key == get_associated_token_address_with_program_id(&vault_key, mint, token_program)
+        };
 
         // CRITICAL H-2 fix (audit 2026-05-19): Anchor 0.32.1 does NOT
         // auto-reload `Account<TokenAccount>` after CPI. Reading
@@ -1085,10 +1084,9 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
                 crate::state::post_assertions::AssertionMode::Absolute => {
                     // Phase B1: check current value against expected_value
                     let expected = &entry.expected_value[..len];
-                    let operator = crate::state::assertions::ConstraintOperator::try_from(
-                        entry.operator,
-                    )
-                    .map_err(|_| error!(SigilError::InvalidConstraintOperator))?;
+                    let operator =
+                        crate::state::assertions::ConstraintOperator::try_from(entry.operator)
+                            .map_err(|_| error!(SigilError::InvalidConstraintOperator))?;
 
                     // Phase B3 CrossFieldLte branch DELETED in Phase 1 Option A demolition.
                     // Standard absolute comparison (B1) is now the sole path.

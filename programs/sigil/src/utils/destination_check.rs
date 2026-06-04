@@ -202,12 +202,9 @@ pub fn enforce_destination_allowlist<'info>(
             // this token account into `remaining_accounts`.
             if *owner_program == TOKEN_2022_PROGRAM_ID {
                 let mint_key = token_mint;
-                let mint_info = match remaining_accounts.iter().find(|ai| ai.key == &mint_key)
-                {
+                let mint_info = match remaining_accounts.iter().find(|ai| ai.key == &mint_key) {
                     Some(info) => info,
-                    None => {
-                        return Err(error!(SigilError::ErrToken2022OutputMintUnresolvable))
-                    }
+                    None => return Err(error!(SigilError::ErrToken2022OutputMintUnresolvable)),
                 };
                 // Fake-mint guard: a real Token-2022 token account's mint is
                 // ALWAYS owned by the Token-2022 program. A System-owned decoy

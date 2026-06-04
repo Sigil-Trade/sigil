@@ -204,7 +204,11 @@ describe("seal() M3-01 stable-floor satisfier wiring", () => {
     } as any;
     const usdtAta = await deriveAta(VAULT, USDT_MINT_DEVNET);
     const result = await seal(
-      baseParams({ instructions: [classicIx], rpc, cachedState: makeCachedState(0n) }),
+      baseParams({
+        instructions: [classicIx],
+        rpc,
+        cachedState: makeCachedState(0n),
+      }),
     );
     expect(gmaCalls, "floor disabled → no floor fetch").to.equal(0);
     const keys = decodeStaticAccounts(result.transaction.messageBytes);

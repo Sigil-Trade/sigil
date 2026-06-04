@@ -267,9 +267,18 @@ mod operator_grant_tier_tests {
     fn single_key_never_instant_eligible() {
         // The whole point: a single key cannot instantly seat an OPERATOR,
         // even at the default delay of 0 (floored to 600).
-        assert!(!operator_grant_is_instant_eligible(OperatorGrantTier::SingleKey, 0));
-        assert!(!operator_grant_is_instant_eligible(OperatorGrantTier::SingleKey, 600));
-        assert!(!operator_grant_is_instant_eligible(OperatorGrantTier::SingleKey, 10_000));
+        assert!(!operator_grant_is_instant_eligible(
+            OperatorGrantTier::SingleKey,
+            0
+        ));
+        assert!(!operator_grant_is_instant_eligible(
+            OperatorGrantTier::SingleKey,
+            600
+        ));
+        assert!(!operator_grant_is_instant_eligible(
+            OperatorGrantTier::SingleKey,
+            10_000
+        ));
     }
 
     #[test]
@@ -278,7 +287,10 @@ mod operator_grant_tier_tests {
             assert!(operator_grant_is_instant_eligible(tier, 0));
             assert!(!operator_grant_is_instant_eligible(tier, 1));
             assert!(!operator_grant_is_instant_eligible(tier, 600));
-            assert!(!operator_grant_is_instant_eligible(tier, MAX_OPERATOR_GRANT_DELAY));
+            assert!(!operator_grant_is_instant_eligible(
+                tier,
+                MAX_OPERATOR_GRANT_DELAY
+            ));
         }
     }
 
