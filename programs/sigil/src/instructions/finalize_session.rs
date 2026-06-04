@@ -3,6 +3,7 @@ use anchor_lang::solana_program::instruction::get_stack_height;
 use anchor_lang::solana_program::sysvar::instructions::{
     load_current_index_checked, load_instruction_at_checked,
 };
+use anchor_spl::associated_token::get_associated_token_address_with_program_id;
 use anchor_spl::token::{self, Revoke, Token, TokenAccount};
 
 use anchor_lang::accounts::account_loader::AccountLoader;
@@ -722,6 +723,36 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
     if stable_floor_policy.stable_balance_floor > 0 {
         let mut combined_stable_balance: u64 = 0;
 
+        // M3-01 (Option 2): canonical-ATA pin. A vault-owned stablecoin balance
+        // counts toward the floor ONLY if the account is the vault's CANONICAL
+        // associated token account for its own mint + token-program (re-derived
+        // on-chain from the candidate's own bytes). This narrows the floor to
+        // exactly one canonical ATA per stablecoin mint, so a second vault-owned
+        // token account for the same mint cannot inflate the sum (the over-count
+        // surface a non-canonical account would otherwise open).
+        //
+        // INTENDED, FAIL-SAFE narrowing: a stablecoin balance held in a
+        // NON-canonical (non-ATA) account is deliberately NOT counted. This only
+        // makes the sum SMALLER, so `require!(combined >= floor)` fires more
+        // eagerly (stricter) — never a bypass. It cannot brick custody: owner
+        // withdraw/freeze paths do not run this check, so the owner always keeps
+        // control; at worst an unusual vault that parks reserves outside its ATA
+        // sees agent spends over-blocked until it moves them in. Skipped, never
+        // reverted.
+        //
+        // SCOPE: USDC/USDT are legacy SPL Token, and typed Sources 1+2
+        // (`Account<TokenAccount>`) are SPL-only by construction. Adding a
+        // Token-2022 stablecoin to `is_stablecoin_mint` would also require a
+        // Token-2022-aware typed source AND a Token-2022-aware SDK ATA
+        // derivation (deriveAta is legacy-SPL-only) — tracked, not in scope.
+        // Deriving from the candidate's own mint + `info.owner` keeps this
+        // correct under the devnet-testing escape hatch and for whichever token
+        // program owns the account.
+        let is_canonical_vault_ata =
+            |key: Pubkey, mint: &Pubkey, token_program: &Pubkey| -> bool {
+                key == get_associated_token_address_with_program_id(&vault_key, mint, token_program)
+            };
+
         // CRITICAL H-2 fix (audit 2026-05-19): Anchor 0.32.1 does NOT
         // auto-reload `Account<TokenAccount>` after CPI. Reading
         // `acct.amount` returns the PRE-CPI cached value. For the
@@ -749,7 +780,10 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
                 let mut mint_bytes = [0u8; 32];
                 mint_bytes.copy_from_slice(&data[0..32]);
                 let mint = Pubkey::new_from_array(mint_bytes);
-                if owner == vault_key && is_stablecoin_mint(&mint) {
+                if owner == vault_key
+                    && is_stablecoin_mint(&mint)
+                    && is_canonical_vault_ata(info.key(), &mint, info.owner)
+                {
                     let mut amount_bytes = [0u8; 8];
                     amount_bytes.copy_from_slice(&data[64..72]);
                     let amount = u64::from_le_bytes(amount_bytes);
@@ -778,7 +812,10 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
                     let mut mint_bytes = [0u8; 32];
                     mint_bytes.copy_from_slice(&data[0..32]);
                     let mint = Pubkey::new_from_array(mint_bytes);
-                    if owner == vault_key && is_stablecoin_mint(&mint) {
+                    if owner == vault_key
+                        && is_stablecoin_mint(&mint)
+                        && is_canonical_vault_ata(info.key(), &mint, info.owner)
+                    {
                         let mut amount_bytes = [0u8; 8];
                         amount_bytes.copy_from_slice(&data[64..72]);
                         let amount = u64::from_le_bytes(amount_bytes);
@@ -843,7 +880,10 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
             let mut owner_bytes = [0u8; 32];
             owner_bytes.copy_from_slice(&data[32..64]);
             let owner = Pubkey::new_from_array(owner_bytes);
-            if owner != vault_key || !is_stablecoin_mint(&mint) {
+            if owner != vault_key
+                || !is_stablecoin_mint(&mint)
+                || !is_canonical_vault_ata(info.key(), &mint, info.owner)
+            {
                 continue;
             }
             let mut amount_bytes = [0u8; 8];

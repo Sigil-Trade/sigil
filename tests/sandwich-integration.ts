@@ -75,6 +75,8 @@ import {
   MOCK_DEFI_PROGRAM_ID,
   buildMockDefiNoopIx,
   buildMockDefiDrainIx,
+  getTokenBalance,
+  setRawTokenAccount,
 } from "./helpers/litesvm-setup";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -915,6 +917,63 @@ describe("sandwich-integration (Phase 6.1)", () => {
         sendVersionedTx(svm, [validateIx, noopIx, finalizeIx], ctx.agent);
         expect.fail("Expected TA-12 stable_balance_floor to revert");
       } catch (err: any) {
+        expectSigilError(err, { name: "ErrStableFloorViolation" });
+      }
+    });
+
+    it("ignores a non-canonical vault-owned USDC account (M3-01 canonical-ATA pin)", async () => {
+      // The canonical USDC ATA holds 600 (< floor). A SECOND vault-owned USDC
+      // token account (authority == vault, mint == USDC, but NOT the canonical
+      // ATA) holds 200K — alone enough to clear the 100K floor. If the floor
+      // counted non-canonical accounts, combined (600 + 200K) >= 100K and the
+      // sandwich would PASS. The M3-01 canonical-ATA pin counts ONLY the
+      // canonical ATA (600), so it must still revert — proving the 200K in the
+      // non-canonical account is ignored. Direction is fail-safe: skipping the
+      // account makes the sum smaller (stricter), never a bypass.
+      const floor = new BN(100_000_000_000); // 100K USDC face value
+      const ctx = await freshVault({
+        stableBalanceFloor: floor,
+        depositAmount: new BN(600_000_000), // 600 USDC in the canonical ATA
+      });
+
+      // Fabricate a non-canonical vault-owned USDC token account funded to 200K.
+      const nonCanonical = Keypair.generate().publicKey;
+      setRawTokenAccount(
+        svm,
+        nonCanonical,
+        DEVNET_USDC_MINT,
+        ctx.vault,
+        200_000_000_000n,
+      );
+      // Sanity: the account really holds 200K (so a revert means "ignored", not
+      // "empty"), and it is NOT the canonical ATA.
+      const bal = getTokenBalance(svm, nonCanonical);
+      if (bal !== 200_000_000_000n) {
+        throw new Error(`setup: non-canonical balance ${bal} != 200000000000`);
+      }
+      if (nonCanonical.equals(ctx.vaultUsdcAta)) {
+        throw new Error("setup: fabricated account must not be the canonical ATA");
+      }
+
+      const sandwichOpts: SandwichOpts = {
+        ctx,
+        amount: new BN(50_000_000),
+        finalizeRemainingAccounts: [
+          { pubkey: nonCanonical, isSigner: false, isWritable: false },
+        ],
+      };
+
+      const validateIx = await buildValidateIx(sandwichOpts);
+      const noopIx = buildMockDefiNoopIx(ctx.agent.publicKey);
+      const finalizeIx = await buildFinalizeIx(sandwichOpts);
+
+      try {
+        sendVersionedTx(svm, [validateIx, noopIx, finalizeIx], ctx.agent);
+        expect.fail(
+          "floor must ignore the non-canonical account and revert (canonical-ATA pin)",
+        );
+      } catch (err: any) {
+        if (err?.message?.startsWith("floor must ignore")) throw err;
         expectSigilError(err, { name: "ErrStableFloorViolation" });
       }
     });

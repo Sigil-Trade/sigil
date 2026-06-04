@@ -655,6 +655,47 @@ export function getTokenBalance(svm: LiteSVM, ata: PublicKey): bigint {
   return decoded.amount;
 }
 
+/**
+ * Create a NON-canonical (non-ATA) SPL token account at an arbitrary address,
+ * with the given mint + authority + amount, by writing raw bytes. Used to prove
+ * the M3-01 stable-floor canonical-ATA pin: such an account is vault-owned and a
+ * stablecoin mint, but is NOT the canonical ATA, so the floor must IGNORE it.
+ */
+export function setRawTokenAccount(
+  svm: LiteSVM,
+  address: PublicKey,
+  mint: PublicKey,
+  authority: PublicKey,
+  amount: bigint,
+): void {
+  const data = Buffer.alloc(AccountLayout.span);
+  AccountLayout.encode(
+    {
+      mint,
+      owner: authority,
+      amount,
+      delegateOption: 0,
+      delegate: PublicKey.default,
+      state: 1, // AccountState.Initialized
+      isNativeOption: 0,
+      isNative: 0n,
+      delegatedAmount: 0n,
+      closeAuthorityOption: 0,
+      closeAuthority: PublicKey.default,
+    },
+    data,
+  );
+  const rentExempt = Number(
+    svm.minimumBalanceForRentExemption(BigInt(AccountLayout.span)),
+  );
+  svm.setAccount(address, {
+    lamports: rentExempt,
+    data,
+    owner: TOKEN_PROGRAM_ID,
+    executable: false,
+  });
+}
+
 // ─── Account helpers ─────────────────────────────────────────────────────────
 
 export function accountExists(svm: LiteSVM, address: PublicKey): boolean {
