@@ -1,6 +1,6 @@
 # M3 — Async / Perps Custody Hardening (read-only)
 
-**Created:** 2026-06-02 · **Branch:** `revamp/onchain-m1` · **Status:** PLANNED (design locked; not started)
+**Created:** 2026-06-02 · **Branch:** `revamp/onchain-m1` · **Status:** IN PROGRESS — **M3-01 DONE** (2026-06-04, `67e2b856` / `6534dba5` / `66a6ee83`); M3-02/03/04 remain PLANNED (design locked; not started)
 **Origin:** the on-chain-model first-principles validation (2026-06-02). See `ENFORCEMENT_MODEL.md`
 and the async-settlement / CPI-depth research. This milestone operationalizes one verdict from
 that arc:
@@ -75,20 +75,32 @@ bounds drain regardless of which async venue or settlement timing is involved (i
 `finalize_session.rs:671-673` names "per-protocol cap evasion via async fulfillment" as a threat it
 catches).
 
-**Current state (verified):** opt-in — `finalize_session.rs:694` gates the whole check on
+> **DONE 2026-06-04** — `67e2b856` (finalize canonical-ATA pin) + `6534dba5` (seal() SDK satisfier
+> feeds the *other* stablecoin ATA into Source 3) + `66a6ee83` (err relabel 6094→**6085**
+> `ErrStableFloorViolation`). The combined USDC+USDT floor is now **fed on the seal path and
+> canonical-ATA-pinned**: finalize pins each stablecoin balance to its single derivable canonical
+> vault ATA (a non-canonical vault-owned account funded above the floor is ignored, so the sandwich
+> still reverts — proving the pin, not just no-regression). Change (b) below SHIPPED as written.
+> **Change (a) "forced onboarding" was REJECTED by Kaleb — the floor stays OPT-IN, never forced**
+> (default 0 = skip; on-chain `require!` is the sole enforcer when set; SDK satisfier is warn-and-
+> proceed on RPC miss because a floor-miss is fail-safe/over-strict, never loss of funds). Evidence:
+> full LiteSVM 503/5/0, kit 1868/0, cargo 166/0. M3-02/03/04 below remain PLANNED.
+
+**Current state (verified — PRE-FIX baseline; see DONE note above):** opt-in — `finalize_session.rs:694` gates the whole check on
 `stable_balance_floor > 0` (default 0 = skip). Sources 1+2 (typed `vault_token_account` +
 `output_stablecoin_account`, raw post-CPI re-read, `:713-763`) are **alive on seal** post-F-Q1a.
 Source 3 (`ctx.remaining_accounts`, `:765-829`) — the *other* stablecoin ATA for the combined
 USDC+USDT sum — depends on the caller feeding it.
 
 **Changes:**
-- (a) **Forced onboarding decision:** SDK refuses to build a funded+armed vault unless the owner
-  sets `stable_balance_floor` or explicitly waives it (logged) — reuse the F-Q5 fail-closed-
-  onboarding pattern (`sdk/kit/.../create-vault.ts`). Optional on-chain `require!` for vaults that
-  route to async venues.
+- (a) ~~**Forced onboarding decision:** SDK refuses to build a funded+armed vault unless the owner
+  sets `stable_balance_floor` or explicitly waives it (logged).~~ **REJECTED by Kaleb — the floor
+  stays OPT-IN, never forced.** No fail-closed onboarding and no on-chain `require!` were added; the
+  floor enforces only when the owner sets it (default 0 = skip).
 - (b) **Complete the combined-stablecoin sum on seal:** extend the F-Q1a `seal()` satisfier so it
   feeds the vault's *other* stablecoin ATA (USDT when the session is USDC, etc.) into finalize's
   `remaining_accounts` (Source 3), making the USDC+USDT floor non-omittable on the seal path.
+  **SHIPPED `6534dba5`** (+ canonical-ATA pin `67e2b856`).
 
 **Accept / test:** LiteSVM (seal-path) — a sandwiched spend that drops the **combined** stablecoin
 balance below the floor reverts (`ErrStableFloorViolation`) with both vault stablecoin ATAs present;
