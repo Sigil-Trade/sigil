@@ -977,6 +977,82 @@ describe("sandwich-integration (Phase 6.1)", () => {
         expectSigilError(err, { name: "ErrStableFloorViolation" });
       }
     });
+
+    it("counts the COMBINED USDC+USDT balance across both canonical ATAs (passes above floor)", async () => {
+      // Vault holds 60 USDC in the canonical USDC ATA + 60 (USDC-equiv) in the
+      // canonical USDT ATA = 120 combined, above the 100 USDC floor. Feeding
+      // both canonical ATAs (USDC via the named vaultTokenAccount = Source 1;
+      // USDT via Source 3) the floor sums 120 >= 100 and the sandwich PASSES —
+      // proving the combined-stablecoin guarantee (change b): floor sees BOTH.
+      // Small amounts keep the shared test-mint source from exhausting.
+      const floor = new BN(100_000_000); // 100 USDC
+      const ctx = await freshVault({
+        stableBalanceFloor: floor,
+        depositAmount: new BN(60_000_000), // 60 USDC in the canonical ATA
+      });
+      // Fund the vault's CANONICAL USDT ATA with 60 (raw bytes — the floor reads
+      // the token account's own fields, no USDT mint account / deposit needed).
+      const usdtAta = getAssociatedTokenAddressSync(
+        DEVNET_USDT_MINT,
+        ctx.vault,
+        true, // vault is a PDA (off-curve)
+      );
+      setRawTokenAccount(svm, usdtAta, DEVNET_USDT_MINT, ctx.vault, 60_000_000n);
+
+      const sandwichOpts: SandwichOpts = {
+        ctx,
+        amount: new BN(50_000_000),
+        finalizeRemainingAccounts: [
+          { pubkey: usdtAta, isSigner: false, isWritable: false },
+        ],
+      };
+      const validateIx = await buildValidateIx(sandwichOpts);
+      const noopIx = buildMockDefiNoopIx(ctx.agent.publicKey);
+      const finalizeIx = await buildFinalizeIx(sandwichOpts);
+
+      try {
+        sendVersionedTx(svm, [validateIx, noopIx, finalizeIx], ctx.agent);
+      } catch (err: any) {
+        throw new Error(
+          `combined floor should PASS (120K >= 100K) but reverted: ${err?.message ?? err}`,
+        );
+      }
+    });
+
+    it("under-counts and reverts (fail-safe) when the other stablecoin ATA is omitted", async () => {
+      // Same 60 USDC + 60 USDT vault + 100 USDC floor, but the USDT ATA is NOT
+      // fed to finalize. The floor sees only the 60 USDC (Source 1) → 60 < 100 →
+      // reverts. Omission is fail-safe (stricter), never a bypass — and this is
+      // exactly why the seal() satisfier (change b) feeds the other ATA.
+      const floor = new BN(100_000_000); // 100 USDC
+      const ctx = await freshVault({
+        stableBalanceFloor: floor,
+        depositAmount: new BN(60_000_000), // 60 USDC
+      });
+      const usdtAta = getAssociatedTokenAddressSync(
+        DEVNET_USDT_MINT,
+        ctx.vault,
+        true,
+      );
+      setRawTokenAccount(svm, usdtAta, DEVNET_USDT_MINT, ctx.vault, 60_000_000n);
+
+      // usdtAta is deliberately NOT in finalizeRemainingAccounts.
+      const sandwichOpts: SandwichOpts = {
+        ctx,
+        amount: new BN(50_000_000),
+      };
+      const validateIx = await buildValidateIx(sandwichOpts);
+      const noopIx = buildMockDefiNoopIx(ctx.agent.publicKey);
+      const finalizeIx = await buildFinalizeIx(sandwichOpts);
+
+      try {
+        sendVersionedTx(svm, [validateIx, noopIx, finalizeIx], ctx.agent);
+        expect.fail("omitting the USDT ATA must under-count and revert");
+      } catch (err: any) {
+        if (err?.message?.startsWith("omitting the USDT")) throw err;
+        expectSigilError(err, { name: "ErrStableFloorViolation" });
+      }
+    });
   });
 
   // ─── 6. TA-14 per-recipient daily cap exceeded ───────────────────────────

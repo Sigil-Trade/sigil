@@ -387,6 +387,57 @@ export function resolveT22OutputMintMetas(
   return metas;
 }
 
+/**
+ * M3-01 satisfier helper (derivation half) — the vault's canonical USDC + USDT
+ * associated token accounts that finalize's `stable_balance_floor` must see.
+ *
+ * The on-chain floor (finalize_session) sums the vault's combined USDC+USDT
+ * balance and counts ONLY each stablecoin's CANONICAL ATA (M3-01 pin). Sources
+ * 1+2 (the named vaultTokenAccount + outputStablecoinAccount) cover the session
+ * token and — sometimes — USDC, so a vault that holds reserve in the OTHER
+ * stablecoin would under-count and falsely revert. This derives both canonical
+ * stablecoin ATAs and drops any already present on finalize (a named account or
+ * the F-Q1a writable set); the remainder are fed to finalize's
+ * remaining_accounts (on-chain "Source 3").
+ *
+ * Pure derivation (no RPC) — existence is checked separately — so it is
+ * trivially testable. `deriveAta` is legacy-SPL (correct for the current
+ * USDC/USDT mints; a Token-2022 stablecoin would need a T22-aware derivation,
+ * matching the on-chain SCOPE note in finalize_session.rs).
+ */
+export async function deriveStablecoinFloorCandidates(
+  vault: Address,
+  usdcMint: Address,
+  usdtMint: Address,
+  alreadyPresent: ReadonlySet<Address>,
+): Promise<Address[]> {
+  const [usdcAta, usdtAta] = await Promise.all([
+    deriveAta(vault, usdcMint),
+    deriveAta(vault, usdtMint),
+  ]);
+  return [usdcAta, usdtAta].filter((ata) => !alreadyPresent.has(ata));
+}
+
+/**
+ * M3-01 satisfier helper (existence half) — given the fetched candidate
+ * accounts (parallel to `candidates`), return the EXISTING ones as READONLY
+ * metas for finalize's remaining_accounts. A non-existent ATA is harmless
+ * on-chain (the floor skips any non-token-program account), but we omit it to
+ * save wire bytes. Mirrors the F-Q4 `resolveT22OutputMintMetas` existence gate.
+ */
+export function resolveStablecoinFloorMetas(
+  fetched: ReadonlyArray<FetchedAccount>,
+  candidates: ReadonlyArray<Address>,
+): ReadonlyMeta[] {
+  const metas: ReadonlyMeta[] = [];
+  for (let i = 0; i < candidates.length; i++) {
+    if (fetched[i]?.exists) {
+      metas.push({ address: candidates[i], role: AccountRole.READONLY });
+    }
+  }
+  return metas;
+}
+
 // ACTION_TYPE_KEYS removed — ActionType enum eliminated in v6.
 // Spending is now determined by amount > 0n.
 
@@ -1027,6 +1078,73 @@ export async function seal(params: SealParams): Promise<SealResult> {
     outputStablecoinAccount,
   });
 
+  // M3-01: feed the vault's other canonical stablecoin ATA(s) into finalize so
+  // the combined USDC+USDT stable_balance_floor sees the vault's FULL stablecoin
+  // holdings. On-chain Sources 1+2 only cover the session token + the output
+  // stablecoin, so a vault holding reserve in the OTHER stablecoin would
+  // under-count and falsely revert ErrStableFloorViolation. Only canonical ATAs
+  // count on-chain (M3-01 pin), so feeding exactly those is sufficient + minimal.
+  // Gated on stable_balance_floor > 0 — the default (no floor) adds no accounts
+  // and no RPC. Existence-checked + de-duped against named/fed metas.
+  let stablecoinFloorMetas: ReadonlyMeta[] = [];
+  // Coerce defensively: the resolver always decodes this as a bigint, but a
+  // hand-built cachedState could pass a number/null (the pending-mutation form
+  // of this field uses null). BigInt(x ?? 0n) gates correctly for all of them
+  // so the satisfier never SILENTLY skips when a floor is actually set.
+  if (BigInt(state.policy.stableBalanceFloor ?? 0n) > 0n) {
+    const usdcMintForFloor =
+      net === "devnet" ? USDC_MINT_DEVNET : USDC_MINT_MAINNET;
+    const usdtMintForFloor =
+      net === "devnet" ? USDT_MINT_DEVNET : USDT_MINT_MAINNET;
+    const alreadyPresent = new Set<Address>([
+      vaultTokenAccount,
+      ...(outputStablecoinAccount ? [outputStablecoinAccount] : []),
+      ...defiWritableReadonlyMetas.map((m) => m.address),
+    ]);
+    const floorCandidates = await deriveStablecoinFloorCandidates(
+      params.vault,
+      usdcMintForFloor,
+      usdtMintForFloor,
+      alreadyPresent,
+    );
+    if (floorCandidates.length > 0) {
+      try {
+        const fetchedFloor = await fetchEncodedAccounts(
+          params.rpc,
+          floorCandidates,
+        );
+        // fetchEncodedAccounts is contractually length-preserving; if a
+        // malformed RPC response ever returned fewer entries, the index-parallel
+        // existence filter would drop an ATA silently. Surface it (the drop is
+        // still fail-safe: a missing ATA only makes the floor stricter).
+        if (fetchedFloor.length !== floorCandidates.length) {
+          warnings.push(
+            `M3-01 stable-floor: RPC returned ${fetchedFloor.length} of ` +
+              `${floorCandidates.length} requested stablecoin ATA(s); any ` +
+              `omitted ATA is dropped from the floor (over-strict, never a bypass).`,
+          );
+        }
+        stablecoinFloorMetas = resolveStablecoinFloorMetas(
+          fetchedFloor,
+          floorCandidates,
+        );
+      } catch (err: unknown) {
+        // Resilient, NOT silent: the on-chain floor still enforces — feeding no
+        // extra ATA only makes it stricter (fail-safe), never a bypass. Surface
+        // a warning so a vault holding reserve in the OTHER stablecoin can
+        // explain a possible on-chain ErrStableFloorViolation. Mirrors the
+        // output-stablecoin ATA existence check above.
+        const cause = redactCause(err);
+        warnings.push(
+          `M3-01 stable-floor ATA resolution failed due to RPC error (${cause.message ?? cause.name ?? cause.code ?? "unknown"}). ` +
+            `Proceeding without the extra stablecoin ATA(s); if this vault holds ` +
+            `reserve in the non-session stablecoin, finalize may revert ` +
+            `ErrStableFloorViolation. Retry once the RPC is reachable.`,
+        );
+      }
+    }
+  }
+
   // F-Q1a satisfier: finalize's per-recipient cap + floor sum walk the SAME
   // DeFi metas and resolve them in finalize's own remaining_accounts, so the
   // writable accounts must reach finalize too (validate and finalize each carry
@@ -1036,6 +1154,7 @@ export async function seal(params: SealParams): Promise<SealResult> {
     accounts: [
       ...(finalizeIxBase.accounts ?? []),
       ...defiWritableReadonlyMetas,
+      ...stablecoinFloorMetas,
     ],
   };
 
