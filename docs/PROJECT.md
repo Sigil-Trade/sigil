@@ -28,7 +28,7 @@ This design has a deliberate secondary benefit: new DeFi protocol integrations r
 
 | Network | Program ID                                     |
 | ------- | ---------------------------------------------- |
-| Devnet  | `4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL` |
+| Devnet  | `7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK` |
 | Mainnet | Not yet deployed                               |
 
 The program ID is declared at `programs/sigil/src/lib.rs:16` (`declare_id!`) and registered in `Anchor.toml:9` under `[programs.devnet]`.

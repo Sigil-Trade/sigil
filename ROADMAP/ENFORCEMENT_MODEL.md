@@ -4,7 +4,7 @@
 
 **Status:** AUTHORITATIVE. This document is the single source of truth that re-grounds milestones M1-01 .. M2. It supersedes the prior narrative in `agent-middleware/CLAUDE.md` ("Formally Verified Invariants", "Stablecoin-only ... No oracles", "outcome-based" claims) wherever they conflict.
 **Verification basis:** All code claims below were read against branch `revamp/onchain-m1` @ `c2ac2cb8` (NOT the brief's `revamp/v2-2026-05`). Every file:line citation in this spec was opened and confirmed this audit. Where a locked council decision asserted a code fact, that fact was independently re-verified; one correction is flagged inline (see §6, Q6 note).
-**Program ID (devnet):** `4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL`
+**Program ID (devnet):** `7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK`
 
 ---
 

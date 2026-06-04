@@ -19,11 +19,11 @@ Stage 0 produced the plan. Stage 1 executes the demolition listed in REVAMP_PLAN
 - Instruction count in `lib.rs`: 36 public entrypoints (4 of which are escrow)
 - IDL committed at `target/idl/sigil.json`, types at `target/types/sigil.ts`
 
-Demolition occurs on `revamp/v2-2026-05` (forked from `main`). Devnet program ID `4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL` is NOT redeployed; Stage 6 handles the new program ID.
+Demolition occurs on `revamp/v2-2026-05` (forked from `main`). Devnet program ID `7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK` is NOT redeployed; Stage 6 handles the new program ID.
 
 ### 1.5 Pre-V2 PDA safety
 
-V2 ships under a **NEW program ID** at Stage 6 (per REVAMP_PLAN.md). The devnet program ID `4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL` is **NOT redeployed in-place** — doing so would corrupt every existing PDA because:
+V2 ships under a **NEW program ID** at Stage 6 (per REVAMP_PLAN.md). The devnet program ID `7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK` is **NOT redeployed in-place** — doing so would corrupt every existing PDA because:
 
 1. Account schemas changed (`InstructionConstraints.strict_mode` byte removed, `_padding` grew, `AgentVault.active_escrow_count` removed, escrow accounts no longer exist).
 2. Anchor discriminators changed for every modified account type.

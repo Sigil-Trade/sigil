@@ -10,7 +10,7 @@
 | Field | Value |
 |---|---|
 | New devnet program ID | `7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK` |
-| Old devnet program ID (still deployed) | `4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL` |
+| Old devnet program ID (still deployed) | `7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK` |
 | Upgrade authority | `6wrkKTM2pjkcCAbMfRz2j3AXspavu6pq3ePcuJUE3Azp` (user wallet) |
 | Deploy signature | `3unnEpZ95tWdFf2FtB7r7CYo7qddhZjfdQEYy3FofMWzBP9T8BTeWsto297ShTR2MfHBqog4HApsCcnHZz2xnmRL` |
 | Deploy slot | 464,842,770 |
@@ -121,9 +121,9 @@ The Phase 10b prep doc mentioned creating a new devnet ALT with
 transactions work without ALT, just larger. Defer until needed for a
 specific routing test.
 
-### Old program at `4ZeVCqnj…` recovery
+### Old program at `7FtAXUcr…` recovery
 
-The old devnet program at `4ZeVCqnj…` is owned by Squads V4 vault PDA
+The old devnet program at `7FtAXUcr…` is owned by Squads V4 vault PDA
 authority — user wallet cannot upgrade or close it. If devnet rent
 reclamation is desired, the Squads V4 multisig would need to execute
 `solana program close`. NOT urgent — old program coexists with new
@@ -131,7 +131,7 @@ one; the SDK now targets `7FtAXUcr…` exclusively.
 
 ### Vaults under old program
 
-Any existing devnet vaults under `4ZeVCqnj…` continue to be accessible
+Any existing devnet vaults under `7FtAXUcr…` continue to be accessible
 only via direct on-chain calls to that program ID. The SDK / dashboard
 now talk to `7FtAXUcr…`. There is NO automatic migration — by design,
 since Sigil's PDA model is per-program-ID.
@@ -141,7 +141,7 @@ since Sigil's PDA model is per-program-ID.
 If something is wrong with the new deploy:
 1. `git revert b58a6678` to restore old declare_id + treasury
 2. Re-build + verify hash matches the prior committed .so
-3. Old program at `4ZeVCqnj…` continues to be deployed — no rollback needed there
+3. Old program at `7FtAXUcr…` continues to be deployed — no rollback needed there
 4. New program at `7FtAXUcr…` can be FROZEN (irrevocable) via
    `solana program set-upgrade-authority 7FtAXUcr… --final --keypair ~/.config/solana/id.json`
    to prevent further upgrades while leaving rent locked, OR

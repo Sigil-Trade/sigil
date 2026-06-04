@@ -3,7 +3,7 @@
 **For:** Engineer-agent dispatches, phase by phase, against `revamp/v2-2026-05`.
 **Branch state at start:** commit `554796e`, 8 commits ahead of `main`.
 **Repo:** `/Users/kalebrupe/Downloads/Middleware-Agent-Layer/agent-middleware/` only.
-**Devnet V1 (untouched):** `4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL`.
+**Devnet V1 (untouched):** `7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK`.
 
 Three independent audits + Maestro re-verification + Solana-runtime verification produced ~45 patches against the prior plan map. This document is the consolidated, hardened version. All known plan defects fixed. Ready for execution.
 
@@ -19,7 +19,7 @@ Three independent audits + Maestro re-verification + Solana-runtime verification
 | **L-4** | Frontend out of scope. `dashboard/` + `Sigil-Smart-Wallet/` untouched. SDK read helpers in `sdk/kit/src/dashboard/` may be updated. | User 2026-05-17 |
 | **L-5** | NO push to remote without explicit per-push consultation. NO `--no-verify`. NO `--no-gpg-sign`. | Standing |
 | **L-6** | NO work outside `agent-middleware/`. **Exception:** memory writes to `~/.claude/projects/-Users-kalebrupe/memory/project_sigil_*.md` are permitted and required under L-9. No other paths outside. | Standing + Audit #2 F-28 |
-| **L-7** | NO upgrade in-place of devnet program `4ZeVCqnj…`. Fresh program ID at Phase 10. | Schema-shift safety |
+| **L-7** | NO upgrade in-place of devnet program `7FtAXUcr…`. Fresh program ID at Phase 10. | Schema-shift safety |
 | **L-8** | Devnet only. No mainnet transactions of any kind. | Standing |
 | **L-9** | Docs + memory updated phase-by-phase, not at the end. | User 2026-05-17 |
 | **L-10** | TA-17 = AgentEntry.consecutive_failures auto-revoke (NOT SessionAuthority). | Audit #1 C-8 |
@@ -1650,7 +1650,7 @@ Report: 800 words.
 ```
 WORKING ON: revamp/v2-2026-05 post Phase 9.
 
-GOAL: Deploy V2 to devnet under fresh program ID. Existing devnet 4ZeVCqnj…
+GOAL: Deploy V2 to devnet under fresh program ID. Existing devnet 7FtAXUcr…
 untouched as V1 reference.
 
 TASKS:
@@ -1673,7 +1673,7 @@ TASKS:
    In programs/sigil/src/lib.rs after declare_id!:
    ```
    const V1_PROGRAM_ID_BYTES: [u8; 32] = [
-       /* 32 bytes of "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL" — compute via:
+       /* 32 bytes of "7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK" — compute via:
           solana-keygen pubkey can decode bs58 if needed, OR hardcode the bytes
           from the Solana toolchain pubkey output */
    ];
@@ -1695,7 +1695,7 @@ TASKS:
    ```
    ALSO add shell-level guard as belt-and-suspenders in scripts/deploy-devnet.sh:
    ```
-   if grep -q '4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL' programs/sigil/src/lib.rs; then
+   if grep -q '7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK' programs/sigil/src/lib.rs; then
      echo "REFUSE deploy with V1 ID"
      exit 1
    fi
@@ -1759,7 +1759,7 @@ TASKS:
 §RP REVIEW:
 - silent-failure-hunter prompt: "Verify NO SDK consumer hardcodes the old V1
   program ID. Verify the compile_error! guard fires if declare_id! is set to
-  4ZeVCqnj... (test by temporarily setting it back, observe build failure).
+  7FtAXUcr... (test by temporarily setting it back, observe build failure).
   Verify the shell-guard in deploy-devnet.sh actually exits non-zero. Verify
   deployment record captures everything needed to reproduce the deploy."
 - code-reviewer prompt: "Verify Anchor.toml [programs.localnet] AND

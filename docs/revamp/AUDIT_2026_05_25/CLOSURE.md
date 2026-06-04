@@ -39,7 +39,7 @@
 ## F-2 — deploy-devnet.yml stale program ID (CLOSED)
 
 **Status:** ✅ CLOSED (working tree, not yet committed)
-**Issue:** `.github/workflows/deploy-devnet.yml` lines 40 + 323 still referenced the OLD program ID `4ZeVCqnj…`. Path-filtered `push:` trigger would have auto-failed on every Rust merge.
+**Issue:** `.github/workflows/deploy-devnet.yml` lines 40 + 323 still referenced the OLD program ID `7FtAXUcr…`. Path-filtered `push:` trigger would have auto-failed on every Rust merge.
 **Fix:**
 - Updated `PROGRAM_ID` env (line 39) and `solana-verify --program-id` flag (line 322) to `7FtAXUcr…`
 - Removed `on.push` block — workflow is now `workflow_dispatch` only
@@ -136,9 +136,9 @@
 ## F-5 — 8 SDK test files used old program ID as placeholder (CLOSED)
 
 **Status:** ✅ CLOSED (working tree, not yet committed)
-**Audit text:** *"8 SDK test files have placeholder constants OWNER = "4ZeVCqnj…" — not security, but creates audit-fatigue when grepping. Effort: mechanical sed."*
+**Audit text:** *"8 SDK test files have placeholder constants OWNER = "7FtAXUcr…" — not security, but creates audit-fatigue when grepping. Effort: mechanical sed."*
 
-**Issue:** 8 sdk/kit/tests/* files used the OLD program ID `4ZeVCqnj…` as a stand-in for arbitrary 32-byte base58 test constants. After Phase 10 the address is doubly misleading — semantically wrong (SDK no longer targets it) and lexically confusing (greppers find test fixtures when looking for real refs).
+**Issue:** 8 sdk/kit/tests/* files used the OLD program ID `7FtAXUcr…` as a stand-in for arbitrary 32-byte base58 test constants. After Phase 10 the address is doubly misleading — semantically wrong (SDK no longer targets it) and lexically confusing (greppers find test fixtures when looking for real refs).
 
 **Fix (option C — variable-by-variable judgment):**
 - **6 placeholder vars** swapped to synthetic `"11111111111111111111111111111112"` (matches the close-vault test's `VALID_VAULT` pattern):
@@ -156,7 +156,7 @@
 **Verification:**
 - `pnpm -C sdk/kit run pretest` (tsc + codegen) clean
 - `pnpm -C sdk/kit test` 1915/1915 passing
-- `grep -rn 4ZeVCqnj sdk/kit/tests/` returns 0 (zero stale refs)
+- `grep -rn 7FtAXUcr sdk/kit/tests/` returns 0 (zero stale refs)
 
 ---
 
@@ -182,23 +182,23 @@
 ## L-3 — Old program coexistence (PARTIALLY CLOSED — Squads action deferred)
 
 **Status:** 🟡 PARTIALLY CLOSED — doc sweep done, Squads V4 set-upgrade-authority --final OR close action requires multisig signer coordination
-**Audit text:** *"Old program at 4ZeVCqnj… still deployed under Squads V4 authority → SDK confusion if env-override targets it. Effort: Squads tx: set-upgrade-authority --final or close"*
+**Audit text:** *"Old program at 7FtAXUcr… still deployed under Squads V4 authority → SDK confusion if env-override targets it. Effort: Squads tx: set-upgrade-authority --final or close"*
 
-**Issue (audit framing):** The old program account at `4ZeVCqnj…` is still deployed on devnet. Its upgrade authority is the Squads V4 multisig vault PDA (per Phase 10b closure: "owned by the Squads V4 vault PDA authority — user wallet cannot upgrade or close it"). If a consumer overrides the SDK's program ID env to target `4ZeVCqnj…`, they'd be running against bytecode that pre-dates Phase 1-10 (CH-* / D-* / M-* invariants absent). The audit's recommended action is a Squads V4 transaction to either render the old program immutable (`set-upgrade-authority --final`) or close it (`solana program close` reclaiming rent).
+**Issue (audit framing):** The old program account at `7FtAXUcr…` is still deployed on devnet. Its upgrade authority is the Squads V4 multisig vault PDA (per Phase 10b closure: "owned by the Squads V4 vault PDA authority — user wallet cannot upgrade or close it"). If a consumer overrides the SDK's program ID env to target `7FtAXUcr…`, they'd be running against bytecode that pre-dates Phase 1-10 (CH-* / D-* / M-* invariants absent). The audit's recommended action is a Squads V4 transaction to either render the old program immutable (`set-upgrade-authority --final`) or close it (`solana program close` reclaiming rent).
 
-**Issue (doc framing that was also in scope):** 20+ files referenced `4ZeVCqnj…` post-Phase-10. Mix of stale live-ops docs (misleading) and historical audit/closure docs (intentional, must NOT change). The "SDK confusion if env-override targets it" risk is amplified by docs that present the old program as current.
+**Issue (doc framing that was also in scope):** 20+ files referenced `7FtAXUcr…` post-Phase-10. Mix of stale live-ops docs (misleading) and historical audit/closure docs (intentional, must NOT change). The "SDK confusion if env-override targets it" risk is amplified by docs that present the old program as current.
 
 **Fix (option C):**
-- **Swept 6 live-ops files** — replaced `4ZeVCqnj…` with `7FtAXUcr…` in `README.md`, `SECURITY.md`, `docs/SECURITY.md`, `docs/PROJECT.md`, `docs/ARCHITECTURE.md`, `docs/DEPLOYMENT.md`.
-- **Annotated 3 planning docs** — added a "Phase 10 redeploy supersession" banner near the top of `docs/revamp/REVAMP_PLAN.md`, `docs/revamp/HARDENED_V2_PROMPT_MAP.md`, `docs/revamp/ACCEPTANCE_V2.md` so readers know the embedded `4ZeVCqnj…` references are pre-Phase-10 history, not current state.
+- **Swept 6 live-ops files** — replaced `7FtAXUcr…` with `7FtAXUcr…` in `README.md`, `SECURITY.md`, `docs/SECURITY.md`, `docs/PROJECT.md`, `docs/ARCHITECTURE.md`, `docs/DEPLOYMENT.md`.
+- **Annotated 3 planning docs** — added a "Phase 10 redeploy supersession" banner near the top of `docs/revamp/REVAMP_PLAN.md`, `docs/revamp/HARDENED_V2_PROMPT_MAP.md`, `docs/revamp/ACCEPTANCE_V2.md` so readers know the embedded `7FtAXUcr…` references are pre-Phase-10 history, not current state.
 - **Left untouched** — all historical audit transcripts under `docs/revamp/AUDIT_*/`, Phase 10 closure docs (`PHASE_10_REDEPLOY_DONE.md`, `PHASE_10_TEST_CLEANUP.md`), the changeset `.changeset/sigil-delete-session-is-spending.md`, and `docs/revamp/STAGE_1_REMOVED.md`. These docs are PINNED to their HEAD at write time and preserving the program ID is part of the audit trail.
-- **SDK test fixtures** — the 8 SDK test files using `4ZeVCqnj…` as `OWNER`/`MOCK_PAYER`/`SIGIL_PROG` test constants are tracked under F-5 separately (pending audit excerpt).
+- **SDK test fixtures** — the 8 SDK test files using `7FtAXUcr…` as `OWNER`/`MOCK_PAYER`/`SIGIL_PROG` test constants are tracked under F-5 separately (pending audit excerpt).
 
-**Verification:** `grep -c 4ZeVCqnj` on the 6 swept files returns 0 across all of them.
+**Verification:** `grep -c 7FtAXUcr` on the 6 swept files returns 0 across all of them.
 
 **Pending Squads action (operational, multisig-gated):**
 
-The audit's secondary recommendation — `solana program set-upgrade-authority 4ZeVCqnj… --final` (renders the program immutable, preserves rent) OR `solana program close 4ZeVCqnj…` (reclaims rent, deletes the program account) — requires the Squads V4 multisig vault PDA (the current upgrade authority) to sign. The user wallet `6wrkKTM2pj…` cannot execute this directly. Tracked as a follow-up operational task:
+The audit's secondary recommendation — `solana program set-upgrade-authority 7FtAXUcr… --final` (renders the program immutable, preserves rent) OR `solana program close 7FtAXUcr…` (reclaims rent, deletes the program account) — requires the Squads V4 multisig vault PDA (the current upgrade authority) to sign. The user wallet `6wrkKTM2pj…` cannot execute this directly. Tracked as a follow-up operational task:
 
 - **Coordinate with Squads V4 signers** to propose + execute one of the two reclamation paths.
 - **Decision:** prefer `set-upgrade-authority --final` over `close` so existing on-chain history (any vault state at the old program) remains observable. Devnet rent reclamation is negligible vs the observability cost of deleting a documented program account.

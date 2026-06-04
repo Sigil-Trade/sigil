@@ -6,7 +6,7 @@ You will need to click "Merge" manually after CI is green and review is approved
 
 If your PR touches `programs/sigil/`, expect the staging program (STAGSigi...)
 to be redeployed to devnet automatically after merge. The production program
-(4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL) is NEVER deployed by CI —
+(7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK) is NEVER deployed by CI —
 mainnet upgrades go through the Squads V4 multisig flow (see docs/DEPLOYMENT.md).
 -->
 

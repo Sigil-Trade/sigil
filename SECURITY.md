@@ -67,7 +67,7 @@ npx tsx scripts/verify-program.ts --cluster devnet
 
 # Or directly with solana-verify CLI
 solana-verify verify-from-repo \
-  --program-id 4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL \
+  --program-id 7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK \
   --library-name sigil \
   --mount-path programs/sigil \
   --url https://api.devnet.solana.com
@@ -76,7 +76,7 @@ solana-verify verify-from-repo \
 ### Check Upgrade Authority
 
 ```bash
-solana program show 4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL --url devnet
+solana program show 7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK --url devnet
 ```
 
 ## Program Upgrade Authority
@@ -95,7 +95,7 @@ solana program show 4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL --url devnet
    - Option B: Renounce upgrade authority (program becomes immutable)
 3. **Verification**: Anyone can check the current upgrade authority:
    ```bash
-   solana program show 4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL
+   solana program show 7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK
    ```
 
 ### SDK Verification (Optional)

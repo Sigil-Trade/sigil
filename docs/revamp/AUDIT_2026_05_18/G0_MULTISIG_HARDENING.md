@@ -7,7 +7,7 @@
 
 ## What we're doing in plain English
 
-Right now, the on-chain Sigil program at `4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL` can be updated (or replaced) by whatever single keypair Kaleb used to deploy it. If that one key is compromised, an attacker can deploy a malicious version of the Sigil program that drains every vault using it. There is no recovery from this.
+Right now, the on-chain Sigil program at `7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK` can be updated (or replaced) by whatever single keypair Kaleb used to deploy it. If that one key is compromised, an attacker can deploy a malicious version of the Sigil program that drains every vault using it. There is no recovery from this.
 
 The fix: transfer the **program upgrade authority** from your single key to the Squads multisig you created (`7tvi5yJZyjpxXnbPTcR42mKVK7qbnjRjViTXv1rckNsy`, threshold 3-of-5). After this transfer, deploying ANY update to Sigil requires 3 of your 5 multisig members to sign. A single compromised key is no longer catastrophic.
 
@@ -16,7 +16,7 @@ The fix: transfer the **program upgrade authority** from your single key to the 
 Run this to see who currently controls upgrades:
 
 ```bash
-solana program show 4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL
+solana program show 7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK
 ```
 
 Output will include an `Authority` line. Note that pubkey down — that's your current upgrade authority. If it's your personal devnet wallet, this section will close that risk.
@@ -31,7 +31,7 @@ Then run:
 
 ```bash
 solana program set-upgrade-authority \
-  4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL \
+  7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK \
   --new-upgrade-authority 7tvi5yJZyjpxXnbPTcR42mKVK7qbnjRjViTXv1rckNsy \
   --skip-new-upgrade-authority-signer-check \
   --url https://api.devnet.solana.com
@@ -39,13 +39,13 @@ solana program set-upgrade-authority \
 
 A few notes:
 - `--skip-new-upgrade-authority-signer-check` is intentional. The new authority (your Squads multisig) is a PDA — it cannot sign with a single key. This flag tells the CLI "I'm transferring TO a multisig, don't require it to co-sign the transfer."
-- `--url https://api.devnet.solana.com` if your Sigil program is on devnet (per the program ID `4ZeVCqnj...` registered there). Adjust if you're on a different cluster.
+- `--url https://api.devnet.solana.com` if your Sigil program is on devnet (per the program ID `7FtAXUcr...` registered there). Adjust if you're on a different cluster.
 - The transaction will be signed by your current upgrade authority keypair (whichever Solana CLI has configured as default — verify with `solana config get` first).
 
 ## Verification — after you transfer
 
 ```bash
-solana program show 4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL
+solana program show 7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK
 ```
 
 The `Authority` line should now read `7tvi5yJZyjpxXnbPTcR42mKVK7qbnjRjViTXv1rckNsy`. If it does — **G0 is closed.**
@@ -93,15 +93,15 @@ This is the **cheapest, highest-impact** fix in the entire audit. Five minutes o
 
 **Status:** ✅ CLOSED
 
-- **Program ID:** `4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL` (devnet)
+- **Program ID:** `7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK` (devnet)
 - **Old authority:** `6wrkKTM2pjkcCAbMfRz2j3AXspavu6pq3ePcuJUE3Azp` (Kaleb's default keypair at `~/.config/solana/id.json`)
 - **New authority:** `7tvi5yJZyjpxXnbPTcR42mKVK7qbnjRjViTXv1rckNsy` (Squads V4 multisig "Sigil", 3-of-5 threshold)
 - **Cluster:** devnet (`https://api.devnet.solana.com`)
 - **Transaction executed via:** `solana program set-upgrade-authority` from the agent-middleware session
 
-**Verification (`solana program show 4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL --url https://api.devnet.solana.com`):**
+**Verification (`solana program show 7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK --url https://api.devnet.solana.com`):**
 ```
-Program Id: 4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL
+Program Id: 7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK
 Owner: BPFLoaderUpgradeab1e11111111111111111111111
 ProgramData Address: FeBb2ZC8W3CHRLgPTFgWzX3YbFPM1TwL7rCFzswxZ8Df
 Authority: 7tvi5yJZyjpxXnbPTcR42mKVK7qbnjRjViTXv1rckNsy

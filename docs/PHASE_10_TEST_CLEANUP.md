@@ -159,7 +159,7 @@ User confirmed prior session:
 If Phase 10b causes devnet integration test failures:
 1. Revert the SDK `network.ts` devnet entry
 2. Old ALT (if any) remains usable until manually frozen
-3. The old program ID `4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL` stays deployed at devnet; redeploy is Phase 10 (separate)
+3. The old program ID `7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK` stays deployed at devnet; redeploy is Phase 10 (separate)
 
 ---
 
@@ -223,9 +223,9 @@ ALL of these must be true before deploying:
 
 ### Rollback (if Phase 10 fails)
 
-The old program ID `4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL` stays deployed during the redeploy — the new ID is independent. If the new deploy fails or behaves unexpectedly:
+The old program ID `7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK` stays deployed during the redeploy — the new ID is independent. If the new deploy fails or behaves unexpectedly:
 
-1. Revert `declare_id!()` in `programs/sigil/src/lib.rs` to `4ZeVCqnj…`
+1. Revert `declare_id!()` in `programs/sigil/src/lib.rs` to `7FtAXUcr…`
 2. Revert `Anchor.toml` `[programs.devnet]`
 3. Revert `sdk/kit/src/network.ts` devnet entry
 4. Run `anchor build --no-idl` + `git checkout -- target/idl/ target/types/`

@@ -14,7 +14,7 @@ Principle: **ARCHIVE, don't hard-delete** (move to `docs/_archive/<date>/` or a 
 | `docs/ONCHAIN-FEATURE-INVENTORY.md` | 18KB | KEEP — but re-derive from code post-constraints-removal |
 | `docs/INSTRUCTIONS.md` | 36KB | KEEP — coding guardrails (overlaps root CLAUDE.md → dedup) |
 | `docs/revamp/THREAT_MODEL_V2.md` | 66KB | KEEP as threat-model source (verify; trim) |
-| `docs/revamp/INTERFACES_V2.md` | 28KB | KEEP — ID/program-ID registry (reconcile 4ZeVCq vs 7FtAXUcr) |
+| `docs/revamp/INTERFACES_V2.md` | 28KB | KEEP — ID/program-ID registry (reconcile 7FtAXU vs 7FtAXUcr) |
 | `docs/revamp/ERROR_CODE_ALLOCATION_V2.md` | 17KB | KEEP — error allocation source |
 | `docs/revamp/AUDIT_2026_05_25/research/*` | ~140KB | **KEEP — feeds golden goose** (M1_LIGHTHOUSE, Squads, Kamino, Drift, formal-methods, audit-mining) |
 

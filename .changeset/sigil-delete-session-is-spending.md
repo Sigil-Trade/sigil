@@ -11,7 +11,7 @@ consumers now derive directly from `authorized_amount`. The
 off-chain consumers should check `amount > 0` instead.
 
 This is a breaking event/account change. Shipped under the V2 program
-ID at Stage 6 (no in-place upgrade of devnet `4ZeVCqnj...`).
+ID at Stage 6 (no in-place upgrade of devnet `7FtAXUcr...`).
 
 The SDK `isSpendingAction()` and `ACTION_TYPE_NAMES_BY_INDEX` helpers
 were also deleted — they were marked zombie code for legacy indexer

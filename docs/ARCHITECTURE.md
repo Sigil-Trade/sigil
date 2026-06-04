@@ -302,7 +302,7 @@ instance-level vault and agent state caching.
 - **Anchor**: `0.32.1` — `programs/sigil/Cargo.toml:25`, `Anchor.toml:2`
 - **Rust toolchain**: `1.89.0` (stable) — `rust-toolchain.toml:2`
 - **Solana program SDK**: `>=2` — `programs/sigil/Cargo.toml:27`
-- **Devnet program ID**: `4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL` — `Anchor.toml:9`, `programs/sigil/src/lib.rs:16`
+- **Devnet program ID**: `7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK` — `Anchor.toml:9`, `programs/sigil/src/lib.rs:16`
 - **Bytemuck**: `1.14` with `derive` + `min_const_generics` — required by zero-copy account types — `programs/sigil/Cargo.toml:28`
 - **Blake3**: `=1.5.5` (pinned) — discriminator computation; pinned to avoid edition 2024 incompatibility with BPF platform-tools — `programs/sigil/Cargo.toml:31-33`
 - **TypeScript SDK**: `sdk/kit/` — ESM-only, peer dep `@solana/kit ^6.2.0` — `sdk/kit/package.json:63`

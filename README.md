@@ -195,7 +195,7 @@ import { seal } from "@usesigil/kit";
 
 | Network | Program ID                                                                                                                                        |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Devnet  | [`4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL`](https://explorer.solana.com/address/4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL?cluster=devnet) |
+| Devnet  | [`7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK`](https://explorer.solana.com/address/7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK?cluster=devnet) |
 
 ## Development
 

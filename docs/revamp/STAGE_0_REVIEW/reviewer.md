@@ -226,7 +226,7 @@ Either is a design change. The LOCKED dispositions in §11 don't acknowledge thi
 **Recommended fix:**
 Document the sequencing in §14 Stage 6 explicitly. Recommend (a): "Stage 5C — Create Squads V4 mainnet multisig (parallel with Stage 5 formal verification). Hard-code into constants.rs at the start of Stage 6. Auditor reviews the post-hard-code source." OR move the hard-code to a runtime-pinned, freeze-once TierRegistry entry per (b) and update §11.
 
-This also flags whether Sigil intends a separate devnet vault vs mainnet vault — the doc set is silent on this. Devnet `4ZeVCqnj...` orphaning per §14 Stage 6F implies a fresh mainnet program ID; the devnet vault was never set up at all per the doc. Need a devnet Squads V4 vault for Stage 5 audit prep.
+This also flags whether Sigil intends a separate devnet vault vs mainnet vault — the doc set is silent on this. Devnet `7FtAXUcr...` orphaning per §14 Stage 6F implies a fresh mainnet program ID; the devnet vault was never set up at all per the doc. Need a devnet Squads V4 vault for Stage 5 audit prep.
 
 ---
 

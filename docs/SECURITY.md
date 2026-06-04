@@ -1,7 +1,7 @@
 # Sigil Security Specification
 
 > Formal specification for external auditors. Covers the on-chain Anchor program
-> (`4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL`), its invariants, access
+> (`7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK`), its invariants, access
 > control model, PDA derivation paths, error catalog, and trust assumptions.
 >
 > Program: `programs/sigil/` — Anchor 0.32.1, Rust 1.89.0

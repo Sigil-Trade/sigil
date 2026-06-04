@@ -546,7 +546,7 @@ The Sigil v2 revamp is structured as 7 stages, each producing a tagged git basel
 - **6C:** Squads V4 multisig deployment + upgrade authority transfer (3-of-5, 24-72hr timelock, autonomous mode).
 - **6D:** TierRegistry deployment (D-06: 4-of-5 multisig threshold).
 - **6E:** [FUNDING-GATED] Bug bounty live ($50K-$150K reserve locked in Immunefi).
-- **6F:** Mainnet program-ID generated (NOT the devnet `4ZeVCqnj...` — new program ID per Stage 6 redeploy plan).
+- **6F:** Mainnet program-ID generated (NOT the devnet `7FtAXUcr...` — new program ID per Stage 6 redeploy plan).
 **Acceptance gate:** git tag `stage-6-baseline`. All Stage 6 sub-deliverables green.
 
 ### Stage 7 — Mainnet GA
@@ -572,7 +572,7 @@ Cataloged risks with mitigation strategy + owner. Each risk maps to one or more 
 | R6 | Durable nonce replay attack (Drift April 2026 $285M precedent) | HIGH | MEDIUM | K2 session nonce + TA-15 N1 temporal binding (slot+blockhash) | Stage 2 |
 | R7 | Owner policy underspecification (contrarian Arg 5) | HIGH | HIGH (default-policy ~60% per Maestro data) | Workflow mitigations M-T21-1..4 in [THREAT_MODEL_V2.md §6](./THREAT_MODEL_V2.md#6-workflow-mitigations-m-t21-14) | Stage 4 (SDK + dashboard) |
 | R8 | Tier-promotion attack (T3 → T1 via malicious upgrade) | **STALE — superseded by L-1: no tier model under Option A; this risk class does not apply.** | n/a | n/a | n/a |
-| R9 | Pre-V2 PDA decode catastrophic (in-place upgrade) | CATASTROPHIC | MEDIUM (operational) | Stage 6 deploys under NEW program ID; devnet `4ZeVCqnj...` orphaned | Stage 6 |
+| R9 | Pre-V2 PDA decode catastrophic (in-place upgrade) | CATASTROPHIC | MEDIUM (operational) | Stage 6 deploys under NEW program ID; devnet `7FtAXUcr...` orphaned | Stage 6 |
 | R10 | K6 silent emit failure (highest-leverage single dep per Architect) | HIGH | LOW (load-bearing test coverage) | Stage 2 explicit emit assertions + CI static check | Stage 2 |
 | R11 | Pyth oracle staleness | OUT-OF-SCOPE V1 | n/a | D-09: folded into N1 TA-15 temporal binding | v1.1 |
 | R12 | Stablecoin depeg (USDC SVB 2023 precedent) | HIGH | LOW | D-03: unit of account = USDC face value at 1:1 (documented); no oracle | accepted |

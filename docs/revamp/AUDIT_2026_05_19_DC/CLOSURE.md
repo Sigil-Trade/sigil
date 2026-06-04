@@ -37,7 +37,7 @@ e0aabca fix(sdk-kit): DC1-DC14 P0 batch A — SIZE constants + event aliases + e
 
 | ID | Finding | Verdict | Disposition |
 |---|---|---|---|
-| **C-1** | declare_id ≠ keypair-derived pubkey (`H2Hxvpig…` vs `4ZeVCqnj…`) | CONFIRMED | **DEFERRED to Phase 10 redeploy** — fresh program ID + keypair will be generated for mainnet. Documented as Phase 10 prerequisite. |
+| **C-1** | declare_id ≠ keypair-derived pubkey (`H2Hxvpig…` vs `7FtAXUcr…`) | CONFIRMED | **DEFERRED to Phase 10 redeploy** — fresh program ID + keypair will be generated for mainnet. Documented as Phase 10 prerequisite. |
 | **C-2** | SPEND_TRACKER_SIZE 2840→3328 in SDK | CONFIRMED | **RESOLVED** in `e0aabca` (preview-create-vault.ts:111). |
 | **C-3** | AGENT_SPEND_OVERLAY_SIZE 2528→2688 in SDK | CONFIRMED | **RESOLVED** in `e0aabca` (preview-create-vault.ts:118). |
 | **C-4** | `getPermissionEscalationLatency` filters dead event `AgentPermissionsUpdated` | CONFIRMED (wider: 3 SDK files + 3 test fixtures) | **RESOLVED** in `e0aabca`. Migrated all 4 SDK call-sites + 6 test fixture lines to `AgentPermissionsChangeApplied`. PolicyUpdated → PolicyChangeApplied migration also included (event-analytics + security-analytics + audit-trail). |

@@ -31,7 +31,7 @@ All artifacts produced under this document go through the §RP Review Protocol p
 
 ## 2. V1 Acceptance Scope (Option A, L-2 + L-8 2026-05-17)
 
-**V1 (devnet only — fresh program ID at Stage 10, NOT the existing `4ZeVCqnj…` per L-7):**
+**V1 (devnet only — fresh program ID at Stage 10, NOT the existing `7FtAXUcr…` per L-7):**
 - All on-chain primitives implemented and tested per Phases 1-9 acceptance gates.
 - LiteSVM + Surfpool tests passing.
 - Adversarial §RP review fan complete every phase (silent-failure-hunter + code-reviewer + reverify).
@@ -410,7 +410,7 @@ Deployment steps:
 </del>
 
 ### 15.4 Stage 6F — Mainnet program deploy
-- [ ] Generate new mainnet program ID (do NOT reuse devnet `4ZeVCqnj...` — would corrupt V1 PDAs).
+- [ ] Generate new mainnet program ID (do NOT reuse devnet `7FtAXUcr...` — would corrupt V1 PDAs).
 - [ ] Build program: `anchor build --no-idl` on `stage-5-baseline` commit.
 - [ ] Regenerate IDL: `RUSTUP_TOOLCHAIN=nightly anchor idl build`.
 - [ ] Canonicalize IDL: `jq -S . target/idl/sigil.json > target/idl/sigil.canonical.json`.

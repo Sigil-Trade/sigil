@@ -37,7 +37,7 @@ env:
   SOLANA_VERSION: "v2.1.14"
   ANCHOR_VERSION: "0.32.1"
   NODE_VERSION: "24"
-  PROGRAM_ID: "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL"
+  PROGRAM_ID: "7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK"
 
 jobs:
   # ────────────────────────────────────────────────────────────────
@@ -320,7 +320,7 @@ jobs:
           set -e
           solana-verify verify-from-repo \
             https://github.com/Sigil-Trade/sigil \
-            --program-id 4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL \
+            --program-id 7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK \
             --library-name sigil \
             --mount-path . \
             --url "${VERIFY_RPC:-https://api.devnet.solana.com}"
