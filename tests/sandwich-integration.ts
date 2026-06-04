@@ -892,7 +892,7 @@ describe("sandwich-integration (Phase 6.1)", () => {
   // ─── 5. TA-12 stable_balance_floor violated ──────────────────────────────
 
   describe("TA-12 stable_balance_floor: combined USDC+USDT below configured floor", () => {
-    it("rejects with ErrStableFloorViolation (6094)", async () => {
+    it("rejects with ErrStableFloorViolation (6085)", async () => {
       // Deposit 600 USDC (default). Configure floor = 100K USDC — comfortably
       // above the current balance. After the sandwich's fee CPI (~10K micros
       // for a 50 USDC declared amount) runs, combined stable balance is still

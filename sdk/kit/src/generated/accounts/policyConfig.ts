@@ -269,7 +269,7 @@ export type PolicyConfig = {
    * rolling-cap + per-agent + per-protocol bookkeeping), the handler
    * re-reads the vault's USDC + USDT token-account balances and
    * asserts their sum is ≥ this value. If not, it rejects with
-   * `ErrStableFloorViolation` (6094).
+   * `ErrStableFloorViolation` (6085).
    *
    * This is the LAST defensive line — no combination of attacks (CPI
    * drain, per-protocol cap bypass via async fulfillment, fee
@@ -577,7 +577,7 @@ export type PolicyConfigArgs = {
    * rolling-cap + per-agent + per-protocol bookkeeping), the handler
    * re-reads the vault's USDC + USDT token-account balances and
    * asserts their sum is ≥ this value. If not, it rejects with
-   * `ErrStableFloorViolation` (6094).
+   * `ErrStableFloorViolation` (6085).
    *
    * This is the LAST defensive line — no combination of attacks (CPI
    * drain, per-protocol cap bypass via async fulfillment, fee

@@ -1365,7 +1365,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   // §RP-1 V5: added Phase 5 mappings missing from the SDK error table.
   // Source of truth: programs/sigil/src/errors.rs:407-451 + IDL.
 
-  /** 6094 — TA-12: combined USDC+USDT vault balance dropped below the
+  /** 6085 — TA-12: combined USDC+USDT vault balance dropped below the
    * owner-configured `policy.stable_balance_floor`. The HARD reserve —
    * no combination of attacks (CPI drain, per-protocol cap bypass, fee
    * inflation) may drain the vault below this line. Asserted in both
