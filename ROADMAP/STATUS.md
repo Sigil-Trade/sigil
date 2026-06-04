@@ -39,7 +39,7 @@
 - **Full first-principles enforcement audit + 5-perspective council + my verification** (2026-06-01)
   → `ENFORCEMENT_MODEL.md` + `ENFORCEMENT_MODEL_DECISIONS.md` (authoritative spec; DRAFT, untracked).
   Re-grounds M1-01..M2 as `F-Qx`. Kaleb ratified Q1-Q9 with overrides; verification right-sized
-  inflated severities (F-Q2 refuted-as-drain → deferred; F-Q6 HIGH-not-CRIT; F-Q9 LOW).
+  inflated severities (F-Q2 refuted-as-drain, deferred then SHIPPED `39c0c608` as defense-in-depth; F-Q6 HIGH-not-CRIT, done; F-Q9 LOW, fixed `76e0ccc7`).
 - **F-Q1a shipped** = the M1-01 row above (commit `3ed911bd`).
 - **On-chain model first-principles validation** (2026-06-02; 9 research agents) → VERDICT: the
   atomic sandwich is the correct core (**#1** for the JTBD; nothing strictly dominates it). Sigil is
