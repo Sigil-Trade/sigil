@@ -1,3 +1,5 @@
+> ⚠️ **SUPERSEDED — HISTORICAL V2 DESIGN ARCHIVE** (branch `revamp/v2-2026-05`). The current source of truth is **`ROADMAP/`** + the shipped program source. **Stale below:** the TA-08 Token-2022 allowlist is listed as 3 items including `NonTransferable` — F-Q4 (`b710f6a9`) **removed `NonTransferable`**; the live accept-set is **`MemoTransfer` + `MetadataPointer` only** (`programs/sigil/src/utils/token2022_extension.rs`). See [`README.md`](./README.md).
+
 # Sigil V2 Hardened Execution Prompt Map (FINAL)
 
 **For:** Engineer-agent dispatches, phase by phase, against `revamp/v2-2026-05`.

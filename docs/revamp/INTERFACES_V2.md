@@ -1,3 +1,5 @@
+> ⚠️ **SUPERSEDED — HISTORICAL V2 DESIGN ARCHIVE** (branch `revamp/v2-2026-05`). The current source of truth is **`ROADMAP/`** + the shipped program source. **Stale below:** the TA-08 Token-2022 allowlist is listed as 3 items including `NonTransferable` — F-Q4 (`b710f6a9`) **removed `NonTransferable`**; the live accept-set is **`MemoTransfer` + `MetadataPointer` only** (`programs/sigil/src/utils/token2022_extension.rs`). See [`README.md`](./README.md).
+
 # INTERFACES_V2.md — Sigil v2 ID Registry
 
 **Status:** Source of truth for all IDs used across Stage 0+ docs (K1-K7, TA-01..TA-19 with TA-16 DELETED, AC-1..AC-11, D-01..D-09, plus T-21 / T-DoS-1/2 / T-K6-1 / Def-1..Def-6).
