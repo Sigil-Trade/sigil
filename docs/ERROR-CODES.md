@@ -85,7 +85,7 @@ Source of truth: `target/idl/sigil.json` (regenerate this file by running `bash 
 | 6076 | `ErrCooldownActive` | Agent cooldown period has not elapsed since the last action |
 | 6077 | `ErrGraylistFriction` | Destination is graylisted (24h friction window — awaiting promote_graylist_destination or unlock) |
 | 6078 | `ErrGraylistFull` | Destination graylist is full (max 10 entries) — wait for an existing entry to unlock or promote |
-| 6079 | `ErrToken2022ExtensionForbidden` | Token-2022 mint has a forbidden extension (only MemoTransfer + MetadataPointer + NonTransferable allowed) |
+| 6079 | `ErrToken2022ExtensionForbidden` | Token-2022 mint has a forbidden extension (only MemoTransfer + MetadataPointer allowed) |
 | 6080 | `ErrCosignRequired` | Elevated policy mutation requires an owner-signed cosigning session |
 | 6081 | `ErrAutoRevoked` | Agent capability auto-revoked after consecutive policy-violation failures; owner must re-enable |
 | 6082 | `ErrSandwichIntegrity` | Bundle integrity violation: multiple validate_and_authorize instructions for the same (vault, agent, mint) tuple in one transaction |

@@ -6290,7 +6290,7 @@ export type Sigil = {
     {
       "code": 6079,
       "name": "errToken2022ExtensionForbidden",
-      "msg": "Token-2022 mint has a forbidden extension (only MemoTransfer + MetadataPointer + NonTransferable allowed)"
+      "msg": "Token-2022 mint has a forbidden extension (only MemoTransfer + MetadataPointer allowed)"
     },
     {
       "code": 6080,

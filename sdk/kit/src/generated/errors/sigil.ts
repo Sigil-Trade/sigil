@@ -172,7 +172,7 @@ export const SIGIL_ERROR__ERR_COOLDOWN_ACTIVE = 0x17bc; // 6076
 export const SIGIL_ERROR__ERR_GRAYLIST_FRICTION = 0x17bd; // 6077
 /** ErrGraylistFull: Destination graylist is full (max 10 entries) — wait for an existing entry to unlock or promote */
 export const SIGIL_ERROR__ERR_GRAYLIST_FULL = 0x17be; // 6078
-/** ErrToken2022ExtensionForbidden: Token-2022 mint has a forbidden extension (only MemoTransfer + MetadataPointer + NonTransferable allowed) */
+/** ErrToken2022ExtensionForbidden: Token-2022 mint has a forbidden extension (only MemoTransfer + MetadataPointer allowed) */
 export const SIGIL_ERROR__ERR_TOKEN2022_EXTENSION_FORBIDDEN = 0x17bf; // 6079
 /** ErrCosignRequired: Elevated policy mutation requires an owner-signed cosigning session */
 export const SIGIL_ERROR__ERR_COSIGN_REQUIRED = 0x17c0; // 6080
@@ -399,7 +399,7 @@ if (process.env.NODE_ENV !== "production") {
     [SIGIL_ERROR__ERR_SANDWICH_INTEGRITY]: `Bundle integrity violation: multiple validate_and_authorize instructions for the same (vault, agent, mint) tuple in one transaction`,
     [SIGIL_ERROR__ERR_SESSION_NONCE_MISMATCH]: `Session nonce mismatch — caller's expected_nonce does not match the session's stored nonce (durable-nonce replay defense)`,
     [SIGIL_ERROR__ERR_STABLE_FLOOR_VIOLATION]: `Stable balance floor violated — combined USDC+USDT balance dropped below policy.stable_balance_floor`,
-    [SIGIL_ERROR__ERR_TOKEN2022_EXTENSION_FORBIDDEN]: `Token-2022 mint has a forbidden extension (only MemoTransfer + MetadataPointer + NonTransferable allowed)`,
+    [SIGIL_ERROR__ERR_TOKEN2022_EXTENSION_FORBIDDEN]: `Token-2022 mint has a forbidden extension (only MemoTransfer + MetadataPointer allowed)`,
     [SIGIL_ERROR__ERR_TOKEN2022_OUTPUT_MINT_UNRESOLVABLE]: `Vault-owned Token-2022 output ATA's mint is absent from remaining_accounts or not Token-2022-owned — cannot vet extensions`,
     [SIGIL_ERROR__ERR_TOO_MANY_REVOKE_PAIRS]: `freeze_internal MAX_REVOKE_PAIRS = 10 exceeded (Council ISC-136)`,
     [SIGIL_ERROR__INSUFFICIENT_BALANCE]: `Insufficient vault balance for withdrawal`,

@@ -350,10 +350,14 @@ pub enum SigilError {
     ErrGraylistFull,
 
     /// 6079 — TA-08: Token-2022 extension blocked. Deposit allowlists exactly
-    /// 3 extensions (MemoTransfer, MetadataPointer, NonTransferable). Anything
-    /// else — including future-added extensions — rejects with this code.
-    /// Forward-secure: unknown extension type IDs reject (do not skip).
-    #[msg("Token-2022 mint has a forbidden extension (only MemoTransfer + MetadataPointer + NonTransferable allowed)")]
+    /// 2 extensions (MemoTransfer, MetadataPointer). Anything else — including
+    /// NonTransferable (F-Q4 removed it: a mint a vault acquires but could
+    /// never move out is a custody trap) and future-added extensions — rejects
+    /// with this code. Forward-secure: unknown extension type IDs reject (do
+    /// not skip).
+    #[msg(
+        "Token-2022 mint has a forbidden extension (only MemoTransfer + MetadataPointer allowed)"
+    )]
     ErrToken2022ExtensionForbidden,
 
     /// 6080 — TA-09: cosign required for elevated policy mutations. Raising

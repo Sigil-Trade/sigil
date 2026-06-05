@@ -2,7 +2,7 @@
 // Regenerate via `pnpm -C sdk/kit codegen:errors` after IDL changes.
 //
 // Source: agent-middleware/target/idl/sigil.json
-// Generated: 2026-06-03T21:39:28.729Z
+// Generated: 2026-06-05T16:51:50.897Z
 // Codes: 111 (min 6000, max 6110)
 
 /** Pure IDL projection of every Anchor error variant. */
@@ -100,7 +100,7 @@ export const IDL_ERROR_MAP: Readonly<Record<number, IdlErrorEntry>> =
     6076: { code: 6076, name: "ErrCooldownActive", msg: "Agent cooldown period has not elapsed since the last action" },
     6077: { code: 6077, name: "ErrGraylistFriction", msg: "Destination is graylisted (24h friction window — awaiting promote_graylist_destination or unlock)" },
     6078: { code: 6078, name: "ErrGraylistFull", msg: "Destination graylist is full (max 10 entries) — wait for an existing entry to unlock or promote" },
-    6079: { code: 6079, name: "ErrToken2022ExtensionForbidden", msg: "Token-2022 mint has a forbidden extension (only MemoTransfer + MetadataPointer + NonTransferable allowed)" },
+    6079: { code: 6079, name: "ErrToken2022ExtensionForbidden", msg: "Token-2022 mint has a forbidden extension (only MemoTransfer + MetadataPointer allowed)" },
     6080: { code: 6080, name: "ErrCosignRequired", msg: "Elevated policy mutation requires an owner-signed cosigning session" },
     6081: { code: 6081, name: "ErrAutoRevoked", msg: "Agent capability auto-revoked after consecutive policy-violation failures; owner must re-enable" },
     6082: { code: 6082, name: "ErrSandwichIntegrity", msg: "Bundle integrity violation: multiple validate_and_authorize instructions for the same (vault, agent, mint) tuple in one transaction" },

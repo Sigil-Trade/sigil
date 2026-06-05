@@ -1272,14 +1272,14 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   6079: {
     name: "ErrToken2022ExtensionForbidden",
     message:
-      "Token-2022 mint has a forbidden extension. Only MemoTransfer, MetadataPointer, and NonTransferable extensions are permitted at deposit.",
+      "Token-2022 mint has a forbidden extension. Only MemoTransfer and MetadataPointer extensions are permitted at deposit.",
     category: "INPUT_VALIDATION",
     retryable: false,
     recovery_actions: [
       {
         action: "use_supported_mint",
         description:
-          "Use a Token-2022 mint with no extensions, or one limited to MemoTransfer/MetadataPointer/NonTransferable.",
+          "Use a Token-2022 mint with no extensions, or one limited to MemoTransfer/MetadataPointer.",
       },
     ],
   },

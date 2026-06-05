@@ -80,8 +80,8 @@ pub fn handler(ctx: Context<DepositFunds>, amount: u64) -> Result<()> {
 
     // TA-08 (Phase 3 pre-execution guard #5): if the pinned mint is a
     // Token-2022 mint, walk its TLV blob and reject any extension that is
-    // not on the V1 allowlist (MemoTransfer / NonTransferable /
-    // MetadataPointer — exactly 3 IDs). Forward-secure: unknown extension
+    // not on the V1 allowlist (MemoTransfer / MetadataPointer — exactly
+    // 2 IDs; F-Q4 removed NonTransferable). Forward-secure: unknown extension
     // type IDs reject. This is layered with the runtime opcode blocklist
     // in `validate_and_authorize.rs` (per F-5); both layers are required.
     //
