@@ -1,6 +1,9 @@
 # Auto-generated code — formatted by codama.mjs, not prettier
 sdk/kit/src/generated/
 
+# Auto-generated error map — written by sdk/kit/scripts/gen-error-map.ts, not prettier
+sdk/kit/src/errors/agent-errors.generated.ts
+
 # Committed IDL + generated types (derived from anchor build, not hand-written)
 # Kept in git for reproducibility; must not be reformatted by prettier because
 # the shape is controlled by Anchor's IDL emitter + `anchor idl type`.
