@@ -440,7 +440,12 @@ jobs:
             tests/audit-log-burst.ts \
             tests/audit-log-coverage.ts \
             tests/ownership-transfer.ts \
-            tests/ownership-transfer-multisig.ts
+            tests/ownership-transfer-multisig.ts \
+            tests/f10-timelocked-admin.ts \
+            tests/fq6-operator-grant-tiers.ts \
+            tests/intent-digest-parity.ts \
+            tests/m1-03-frozen-gate.ts \
+            tests/pen-cross-1-absorption.ts
 
       - name: Check for IDL drift
         run: |
