@@ -1,5 +1,7 @@
 # Sigil — Guard-Spine & Custody Architecture (Design, 2026-06-05)
 
+> **⚠️ §8 SUPERSEDED (2026-06-06).** The "§8 revised design" (scoped executor + re-instated per-protocol owner-pin) is **INVALIDATED** — it violates the hard constraints (Sigil holds nothing; no curated list; fully agnostic). **DO NOT IMPLEMENT §8.** A 33-agent source-grounded reset replaced it; see `ROADMAP/AGNOSTIC_RESET_FINDINGS_2026-06-06.md` for the findings + the decision fork. §0–§7 remain useful reference (esp. the current-code map and the honeypot taxonomy).
+
 **Status:** DESIGN / report-only (no program code changed in this phase).
 **Branch/HEAD at authoring:** `revamp/onchain-m1`, HEAD `4e4b547a` (+ this doc).
 **Supersedes:** the M3-02 "owner-pin" plan in `ROADMAP/M3_ASYNC_HARDENING.md` (the owner-pin is replaced by the native-delegate + mandatory-outcome-guard model below).

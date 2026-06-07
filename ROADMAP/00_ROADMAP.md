@@ -1,5 +1,7 @@
 # Sigil On-Chain Roadmap — Master Plan
 
+> **▶ SUPERSEDED-IN-PART by `UNIFIED_PLAN_2026-06-06.md` (current forward plan).** M1 (this plan's base) is **functionally DONE** and preserved as the foundation. The governing rule below — *"nothing outward until the base is 100%"* (line 6 / §5) — is **RETIRED**: validated demand + the vault-conservation reset moved the priority to the outward product layer (audit-export wedge, activity, positions, control-UX), and M1 already satisfies the control demand. M2/M3's remaining items are reconciled (mostly superseded) in the unified plan §2. Read it first; treat the milestones below as the (largely shipped) M1 record + a parked M2/M3 design archive.
+
 **Status:** PLAN (no code written by these docs — approval artifact)
 **Created:** 2026-05-30
 **Mode:** Plan-everything-first (full design approved before any code)
