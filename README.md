@@ -9,7 +9,7 @@
 Your policies are enforced by Solana validators, not software promises.
 
 [![CI](https://github.com/Sigil-Trade/sigil/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Sigil-Trade/sigil/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-2802-brightgreen)
+![Tests](https://img.shields.io/badge/tests-2624-brightgreen)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 
 </div>
@@ -206,7 +206,7 @@ anchor build --no-idl
 # Generate IDL separately (requires nightly Rust — anchor-syn 0.32.1 bug)
 RUSTUP_TOOLCHAIN=nightly anchor idl build -o target/idl/sigil.json
 
-# Run on-chain tests (673 LiteSVM tests — no validator needed)
+# Run on-chain tests (523 LiteSVM tests — no validator needed)
 npx ts-mocha -p ./tsconfig.json -t 300000 \
   tests/sigil.ts tests/jupiter-integration.ts \
   tests/flash-trade-integration.ts tests/security-exploits.ts \
@@ -224,28 +224,27 @@ cargo fmt --check --manifest-path programs/sigil/Cargo.toml
 
 | Suite                                                                                                    | Tests    |
 | -------------------------------------------------------------------------------------------------------- | -------- |
-| Core vault management & permission engine                                                                | 116      |
-| Missing-coverage gap-fill (DC audit 2026-05-19)                                                          | 13       |
+| Core vault management & permission engine                                                                | 117      |
+| Missing-coverage gap-fill (DC audit 2026-05-19)                                                          | 12       |
 | Jupiter integration (composed swaps)                                                                     | 8        |
 | Jupiter Lend integration (deposit/withdraw)                                                              | 6        |
 | Flash Trade integration (leveraged perps)                                                                | 15       |
-| Security exploit scenarios                                                                               | 171      |
-| Instruction constraints (generic enforcement)                                                            | 70       |
+| Security exploit scenarios                                                                               | 170      |
 | Escrow integration (deposit/settle/refund)                                                               | 0        |
-| TOCTOU security (policy version + timelock)                                                              | 7        |
+| TOCTOU security (policy version + timelock)                                                              | 6        |
 | Analytics counters (failed TX + per-agent TX count)                                                      | 7        |
 | Post-execution assertions E2E (DELETED in Phase 1 Option A demolition — CrossFieldLte primitive removed) | 0        |
 | Devnet integration tests (real network)                                                                  | 64       |
-| Surfpool integration tests (local Surfnet)                                                               | 53       |
+| Surfpool integration tests (local Surfnet)                                                               | 49       |
 | Platform client tests (`@usesigil/platform`)                                                             | 17       |
 | Custody adapters (`@usesigil/custody`)                                                                   | 96       |
-| Kit-native SDK (`@usesigil/kit` — includes merged core + dashboard)                                      | 1809     |
+| Kit-native SDK (`@usesigil/kit` — includes merged core + dashboard)                                      | 1785     |
 | Kit SDK devnet tests (`@usesigil/kit` devnet)                                                            | 33       |
 | Plugins (`@usesigil/plugins`)                                                                            | 14       |
-| Rust unit tests (cargo test)                                                                             | 244      |
+| Rust unit tests (cargo test)                                                                             | 166      |
 | Devnet extended scenarios (flash-trade + stress)                                                         | 43       |
 | Trident fuzz tests (1K iterations)                                                                       | 16       |
-| **Total**                                                                                                | **2802** |
+| **Total**                                                                                                | **2624** |
 
 ## Security
 

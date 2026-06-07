@@ -2,13 +2,13 @@
   "suites": [
     {
       "name": "Core vault management & permission engine",
-      "count": 116,
+      "count": 117,
       "onChain": true,
       "claudePattern": "tests/sigil.ts` (ts-mocha + LiteSVM, no validator needed, %d tests)"
     },
     {
       "name": "Missing-coverage gap-fill (DC audit 2026-05-19)",
-      "count": 13,
+      "count": 12,
       "onChain": true,
       "claudePattern": "tests/missing-coverage.ts` (ts-mocha + LiteSVM, %d tests — happy-paths + TA-17 auto-revoke + PEN-8b cosign-gate + D-5 negative cases)"
     },
@@ -32,7 +32,7 @@
     },
     {
       "name": "Security exploit scenarios",
-      "count": 171,
+      "count": 170,
       "onChain": true,
       "claudePattern": "tests/security-exploits.ts` (ts-mocha + LiteSVM, %d tests)"
     },
@@ -44,7 +44,7 @@
     },
     {
       "name": "TOCTOU security (policy version + timelock)",
-      "count": 7,
+      "count": 6,
       "onChain": true,
       "claudePattern": "tests/toctou-security.ts` (ts-mocha + LiteSVM, %d tests)"
     },
@@ -67,7 +67,7 @@
     },
     {
       "name": "Surfpool integration tests (local Surfnet)",
-      "count": 53,
+      "count": 49,
       "surfpool": true,
       "claudePattern": "tests/surfpool-integration.ts` (ts-mocha + Surfnet, %d tests)"
     },
@@ -85,7 +85,7 @@
     },
     {
       "name": "Kit-native SDK (`@usesigil/kit` — includes merged core + dashboard)",
-      "count": 1809,
+      "count": 1785,
       "ciStepName": "Kit SDK tests",
       "claudePattern": "sdk/kit/tests/` (mocha + tsx, %d tests — core + dashboard + errors + agent-bootstrap + preview-create-vault + audit-2026-05-23 remediation suites)"
     },
@@ -103,7 +103,7 @@
     },
     {
       "name": "Rust unit tests (cargo test)",
-      "count": 244,
+      "count": 166,
       "onChain": true,
       "claudePattern": "cargo test --manifest-path programs/sigil/Cargo.toml` (%d tests — Phase 8 + audit-2026-05-23 grew this from 110 to 244 via state-pin + canonical-encoder + intent-digest unit tests)"
     },
