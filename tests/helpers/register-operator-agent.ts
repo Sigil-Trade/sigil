@@ -122,17 +122,15 @@ export async function registerOperatorAgent(
   advanceTime(svm, effectiveDelay + 1);
 
   // 3. Apply the grant.
-  let apply = program.methods
-    .applyAgentGrant()
-    .accounts({
-      owner,
-      vault,
-      policy,
-      pending,
-      agentSpendOverlay: overlay,
-      auditLogSuccess: auditSuccess,
-      slotHashesSysvar: SYSVAR_SLOT_HASHES_PUBKEY,
-    } as any);
+  let apply = program.methods.applyAgentGrant().accounts({
+    owner,
+    vault,
+    policy,
+    pending,
+    agentSpendOverlay: overlay,
+    auditLogSuccess: auditSuccess,
+    slotHashesSysvar: SYSVAR_SLOT_HASHES_PUBKEY,
+  } as any);
   if (extraSigners.length) apply = apply.signers(extraSigners);
   await apply.rpc();
 }

@@ -229,4 +229,3 @@ describe("inspector", () => {
     expect(result.estimatedValue).to.equal(0n);
   });
 });
-

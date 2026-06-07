@@ -202,12 +202,15 @@ describe("errors.rs doc self-citations match positional codes", () => {
       checked++;
       const cited = Number(dm[1]);
       if (cited !== code) {
-        mismatches.push(`${v.name}: cites ${cited} but positional code is ${code}`);
+        mismatches.push(
+          `${v.name}: cites ${cited} but positional code is ${code}`,
+        );
       }
     });
-    expect(checked, "expected several numbered self-citations").to.be.greaterThan(
-      10,
-    );
+    expect(
+      checked,
+      "expected several numbered self-citations",
+    ).to.be.greaterThan(10);
     expect(
       mismatches,
       `errors.rs doc self-citation drift: ${mismatches.join("; ")}`,

@@ -394,19 +394,14 @@ export async function resolveVaultState(
 
   // 1. Derive PDAs + stablecoin ATAs in parallel
   // M1-04: constraints PDA removed from the resolve flow (constraints engine gone).
-  const [
-    [policyPda],
-    [trackerPda],
-    [overlayPda],
-    vaultUsdcAta,
-    vaultUsdtAta,
-  ] = await Promise.all([
-    getPolicyPDA(vault),
-    getTrackerPDA(vault),
-    getAgentOverlayPDA(vault, 0),
-    deriveAta(vault, usdcMint),
-    deriveAta(vault, usdtMint),
-  ]);
+  const [[policyPda], [trackerPda], [overlayPda], vaultUsdcAta, vaultUsdtAta] =
+    await Promise.all([
+      getPolicyPDA(vault),
+      getTrackerPDA(vault),
+      getAgentOverlayPDA(vault, 0),
+      deriveAta(vault, usdcMint),
+      deriveAta(vault, usdtMint),
+    ]);
 
   // 2. Single batch fetch (one RPC round-trip — 6 accounts)
   const encoded = await fetchEncodedAccounts(rpc, [

@@ -440,13 +440,23 @@ describe("audit-log-burst (Phase 7.1)", () => {
       const agent = Keypair.generate();
       await program.methods
         .registerAgent(agent.publicKey, CAPABILITY_OBSERVER, new BN(0))
-        .accounts({ owner: owner.publicKey, vault, policy, agentSpendOverlay: overlay } as any)
+        .accounts({
+          owner: owner.publicKey,
+          vault,
+          policy,
+          agentSpendOverlay: overlay,
+        } as any)
         .rpc();
       writes.push(DISC_REGISTER_AGENT);
       if (prevAgent) {
         await program.methods
           .revokeAgent(prevAgent.publicKey)
-          .accounts({ owner: owner.publicKey, vault, policy, agentSpendOverlay: overlay } as any)
+          .accounts({
+            owner: owner.publicKey,
+            vault,
+            policy,
+            agentSpendOverlay: overlay,
+          } as any)
           .rpc();
         writes.push(DISC_REVOKE_AGENT);
       }
@@ -455,7 +465,12 @@ describe("audit-log-burst (Phase 7.1)", () => {
     // Final revoke removes the last agent → vault auto-freezes here (terminal op).
     await program.methods
       .revokeAgent(prevAgent!.publicKey)
-      .accounts({ owner: owner.publicKey, vault, policy, agentSpendOverlay: overlay } as any)
+      .accounts({
+        owner: owner.publicKey,
+        vault,
+        policy,
+        agentSpendOverlay: overlay,
+      } as any)
       .rpc();
     writes.push(DISC_REVOKE_AGENT);
 
@@ -515,13 +530,23 @@ describe("audit-log-burst (Phase 7.1)", () => {
       const agent = Keypair.generate();
       await program.methods
         .registerAgent(agent.publicKey, CAPABILITY_OBSERVER, new BN(0))
-        .accounts({ owner: owner.publicKey, vault, policy, agentSpendOverlay: overlay } as any)
+        .accounts({
+          owner: owner.publicKey,
+          vault,
+          policy,
+          agentSpendOverlay: overlay,
+        } as any)
         .rpc();
       writes.push(DISC_REGISTER_AGENT);
       if (prevAgent) {
         await program.methods
           .revokeAgent(prevAgent.publicKey)
-          .accounts({ owner: owner.publicKey, vault, policy, agentSpendOverlay: overlay } as any)
+          .accounts({
+            owner: owner.publicKey,
+            vault,
+            policy,
+            agentSpendOverlay: overlay,
+          } as any)
           .rpc();
         writes.push(DISC_REVOKE_AGENT);
       }
@@ -529,7 +554,12 @@ describe("audit-log-burst (Phase 7.1)", () => {
     }
     await program.methods
       .revokeAgent(prevAgent!.publicKey)
-      .accounts({ owner: owner.publicKey, vault, policy, agentSpendOverlay: overlay } as any)
+      .accounts({
+        owner: owner.publicKey,
+        vault,
+        policy,
+        agentSpendOverlay: overlay,
+      } as any)
       .rpc();
     writes.push(DISC_REVOKE_AGENT);
 

@@ -175,7 +175,14 @@ describe("F-Q6 — OPERATOR-grant authorization tiering (per-tier behavior)", ()
       } as any)
       .rpc();
 
-    return { vaultPda, policy, overlay, pendingAgentGrant, pendingPolicy, auditSuccess };
+    return {
+      vaultPda,
+      policy,
+      overlay,
+      pendingAgentGrant,
+      pendingPolicy,
+      auditSuccess,
+    };
   }
 
   /**
@@ -199,8 +206,7 @@ describe("F-Q6 — OPERATOR-grant authorization tiering (per-tier behavior)", ()
       v.vaultPda,
       {
         cosignSessionPubkey: override.cosignSessionPubkey ?? null,
-        operatorGrantDelaySeconds:
-          override.operatorGrantDelaySeconds ?? null,
+        operatorGrantDelaySeconds: override.operatorGrantDelaySeconds ?? null,
       },
     );
     await program.methods
@@ -252,7 +258,12 @@ describe("F-Q6 — OPERATOR-grant authorization tiering (per-tier behavior)", ()
 
   /** Build a `register_agent` rpc promise (optionally with an inline cosigner). */
   function registerAgentRpc(
-    v: { vaultPda: PublicKey; policy: PublicKey; overlay: PublicKey; auditSuccess: PublicKey },
+    v: {
+      vaultPda: PublicKey;
+      policy: PublicKey;
+      overlay: PublicKey;
+      auditSuccess: PublicKey;
+    },
     agent: PublicKey,
     capability: number,
     cosigner?: { keypair?: Keypair; pubkey: PublicKey; isSigner: boolean },
@@ -269,16 +280,26 @@ describe("F-Q6 — OPERATOR-grant authorization tiering (per-tier behavior)", ()
       } as any);
     if (cosigner) {
       m = m.remainingAccounts([
-        { pubkey: cosigner.pubkey, isSigner: cosigner.isSigner, isWritable: false },
+        {
+          pubkey: cosigner.pubkey,
+          isSigner: cosigner.isSigner,
+          isWritable: false,
+        },
       ]);
-      if (cosigner.keypair && cosigner.isSigner) m = m.signers([cosigner.keypair]);
+      if (cosigner.keypair && cosigner.isSigner)
+        m = m.signers([cosigner.keypair]);
     }
     return m.rpc();
   }
 
   /** queue_agent_grant (OPERATOR) — owner-only. */
   function queueAgentGrantRpc(
-    v: { vaultPda: PublicKey; policy: PublicKey; pendingAgentGrant: PublicKey; auditSuccess: PublicKey },
+    v: {
+      vaultPda: PublicKey;
+      policy: PublicKey;
+      pendingAgentGrant: PublicKey;
+      auditSuccess: PublicKey;
+    },
     agent: PublicKey,
   ): Promise<string> {
     return program.methods
@@ -296,9 +317,13 @@ describe("F-Q6 — OPERATOR-grant authorization tiering (per-tier behavior)", ()
   }
 
   /** apply_agent_grant — owner-only. */
-  function applyAgentGrantRpc(
-    v: { vaultPda: PublicKey; policy: PublicKey; pendingAgentGrant: PublicKey; overlay: PublicKey; auditSuccess: PublicKey },
-  ): Promise<string> {
+  function applyAgentGrantRpc(v: {
+    vaultPda: PublicKey;
+    policy: PublicKey;
+    pendingAgentGrant: PublicKey;
+    overlay: PublicKey;
+    auditSuccess: PublicKey;
+  }): Promise<string> {
     return program.methods
       .applyAgentGrant()
       .accounts({
@@ -337,9 +362,9 @@ describe("F-Q6 — OPERATOR-grant authorization tiering (per-tier behavior)", ()
     agent: PublicKey,
   ): Promise<number | undefined> {
     const vault: any = await program.account.agentVault.fetch(vaultPda);
-    const entry = (vault.agents as ReadonlyArray<{ pubkey: PublicKey; capability: number }>).find(
-      (a) => a.pubkey.toBase58() === agent.toBase58(),
-    );
+    const entry = (
+      vault.agents as ReadonlyArray<{ pubkey: PublicKey; capability: number }>
+    ).find((a) => a.pubkey.toBase58() === agent.toBase58());
     return entry?.capability;
   }
 
@@ -370,7 +395,9 @@ describe("F-Q6 — OPERATOR-grant authorization tiering (per-tier behavior)", ()
     const v = await freshVault(6202);
     const agent = Keypair.generate().publicKey;
     await registerAgentRpc(v, agent, CAPABILITY_OBSERVER);
-    expect(await agentCapability(v.vaultPda, agent)).to.equal(CAPABILITY_OBSERVER);
+    expect(await agentCapability(v.vaultPda, agent)).to.equal(
+      CAPABILITY_OBSERVER,
+    );
   });
 
   it("ISC-59b SingleKey: queue → advance past the 600s floor → apply → OPERATOR seated", async () => {
@@ -379,7 +406,9 @@ describe("F-Q6 — OPERATOR-grant authorization tiering (per-tier behavior)", ()
     await queueAgentGrantRpc(v, agent);
     advanceTime(svm, SINGLE_KEY_OPERATOR_DELAY_FLOOR + 1);
     await applyAgentGrantRpc(v);
-    expect(await agentCapability(v.vaultPda, agent)).to.equal(CAPABILITY_OPERATOR);
+    expect(await agentCapability(v.vaultPda, agent)).to.equal(
+      CAPABILITY_OPERATOR,
+    );
   });
 
   it("ISC-59c SingleKey: apply BEFORE the 600s floor elapses → TimelockNotExpired (6022) [the delay is real]", async () => {
@@ -407,7 +436,9 @@ describe("F-Q6 — OPERATOR-grant authorization tiering (per-tier behavior)", ()
       pubkey: cosigner.publicKey,
       isSigner: true,
     });
-    expect(await agentCapability(v.vaultPda, agent)).to.equal(CAPABILITY_OPERATOR);
+    expect(await agentCapability(v.vaultPda, agent)).to.equal(
+      CAPABILITY_OPERATOR,
+    );
   });
 
   // ── ISC-61 — CosignBound C-1: the inline signer MUST be the BOUND cosigner ─
@@ -546,7 +577,9 @@ describe("F-Q6 — OPERATOR-grant authorization tiering (per-tier behavior)", ()
       pubkey: cosigner.publicKey,
       isSigner: true,
     });
-    expect(await agentCapability(v.vaultPda, agent)).to.equal(CAPABILITY_OPERATOR);
+    expect(await agentCapability(v.vaultPda, agent)).to.equal(
+      CAPABILITY_OPERATOR,
+    );
   });
 
   // ── ISC-64 — owner_type fail-safe ─────────────────────────────────────────

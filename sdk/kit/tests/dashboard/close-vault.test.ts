@@ -256,9 +256,8 @@ describe("close-vault pending-PDA drain helpers", () => {
   });
 
   it("findPendingOwnerPda + findPendingAgentGrantPda are deterministic and distinct", async () => {
-    const { findPendingOwnerPda, findPendingAgentGrantPda } = await import(
-      "../../src/dashboard/close-vault.js"
-    );
+    const { findPendingOwnerPda, findPendingAgentGrantPda } =
+      await import("../../src/dashboard/close-vault.js");
 
     const ownerPda1 = await findPendingOwnerPda(VALID_VAULT);
     const ownerPda2 = await findPendingOwnerPda(VALID_VAULT);

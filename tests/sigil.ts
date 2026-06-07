@@ -7637,11 +7637,7 @@ describe("sigil", () => {
           outputStablecoinAccount: null,
         })
         .instruction();
-      return sendVersionedTx(
-        svm,
-        [validateIx, drainIx, finalizeIx],
-        ta13Agent,
-      );
+      return sendVersionedTx(svm, [validateIx, drainIx, finalizeIx], ta13Agent);
     };
 
     // SCENARIO 1: spend $500 on Jupiter (at cap), then $1 more Jupiter
