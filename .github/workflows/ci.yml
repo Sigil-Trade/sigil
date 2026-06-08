@@ -454,6 +454,12 @@ jobs:
           # tests/_canary.js is a temporary diagnostic root-hook that flags if
           # bn.js gets corrupted within any single file's process.
           set +e
+          # Enlarge V8's young generation so short-lived BN/buffer objects rarely
+          # trigger a scavenge GC. #171's corruption happens when V8 *moves* an
+          # object litesvm holds a raw pointer to during GC; fewer moves => less
+          # corruption. Combined with per-file isolation, this is the cheap first
+          # attempt before falling back to --grep run-sharding for heavy files.
+          export NODE_OPTIONS="--max-semi-space-size=512"
           FILES=(
             tests/sigil.ts
             tests/jupiter-integration.ts
