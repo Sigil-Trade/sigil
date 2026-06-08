@@ -282,13 +282,11 @@ pub fn handler(
     let eff_developer_fee_rate = developer_fee_rate.unwrap_or(policy.developer_fee_rate);
     let eff_protocol_mode = protocol_mode.unwrap_or(policy.protocol_mode);
     let eff_protocols_owned: Vec<Pubkey> = protocols
-        .as_ref()
-        .map(|v| v.clone())
+        .clone()
         .unwrap_or_else(|| policy.protocols.clone());
     let eff_dest_mode = destination_mode.unwrap_or(policy.destination_mode);
     let eff_destinations_owned: Vec<Pubkey> = allowed_destinations
-        .as_ref()
-        .map(|v| v.clone())
+        .clone()
         .unwrap_or_else(|| policy.allowed_destinations.clone());
     let eff_timelock = timelock_duration.unwrap_or(policy.timelock_duration);
     let eff_session_expiry = session_expiry_seconds.unwrap_or(policy.session_expiry_seconds);

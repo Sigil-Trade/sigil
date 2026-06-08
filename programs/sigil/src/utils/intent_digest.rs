@@ -19,29 +19,14 @@
 //!
 //! ## Canonical encoding (FIXED — DO NOT REORDER)
 //!
-//!   1. magic_prefix: `b"SIG1"`                          (4 bytes — D-6)
-//!   2. intent_version: u8 = 2                          (1 byte —
-//!                                                       v2 reserves
-//!                                                       discriminant for
-//!                                                       Bucket 2 format;
-//!                                                       v1 was the prior
-//!                                                       client-only digest
-//!                                                       without magic
-//!                                                       prefix)
-//!   3. network_id: u8                                  (1 byte;
-//!                                                       0=devnet,
-//!                                                       1=mainnet —
-//!                                                       binds AL4)
-//!   4. vault: Pubkey                                    (32 bytes)
-//!   5. agent: Pubkey                                    (32 bytes —
-//!                                                       agent IDENTITY,
-//!                                                       not signer)
-//!   6. token_mint: Pubkey                               (32 bytes)
-//!   7. amount: u64 LE                                   (8 bytes)
-//!   8. target_protocol: Pubkey                          (32 bytes; system
-//!                                                       program if the
-//!                                                       caller omitted
-//!                                                       `targetProtocol`)
+//!   1. magic_prefix: `b"SIG1"` (4 bytes — D-6)
+//!   2. intent_version: u8 = 2 (1 byte — v2 reserves discriminant for Bucket 2 format; v1 was the prior client-only digest without magic prefix)
+//!   3. network_id: u8 (1 byte; 0=devnet, 1=mainnet — binds AL4)
+//!   4. vault: Pubkey (32 bytes)
+//!   5. agent: Pubkey (32 bytes — agent IDENTITY, not signer)
+//!   6. token_mint: Pubkey (32 bytes)
+//!   7. amount: u64 LE (8 bytes)
+//!   8. target_protocol: Pubkey (32 bytes; system program if the caller omitted `targetProtocol`)
 //!
 //! Total fixed size: 4 + 1 + 1 + 32 + 32 + 32 + 8 + 32 = 142 bytes.
 //!

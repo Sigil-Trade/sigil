@@ -20,8 +20,10 @@
 //! 9. `timelock_duration: u64`        (8 bytes, LE)
 //! 10. `session_expiry_seconds: u64`  (8 bytes, LE)
 //! 11. `observe_only: bool`           (1 byte, 0 or 1)
+//!
 //! M1-04 (digest-version bump): field 12 `has_constraints` REMOVED with the
 //! constraints engine; fields below renumbered (was 13..22, now 12..21).
+//!
 //! 12. `has_post_assertions: u8`      (1 byte)
 //! 13. `created_at_slot: u64`         (8 bytes, LE) — PEN-CROSS-2 (Phase 2 close-up)
 //! 14. `operating_hours: u32`         (4 bytes, LE) — TA-05 (Phase 3 pre-exec)

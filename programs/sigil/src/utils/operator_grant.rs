@@ -33,8 +33,9 @@ use crate::state::OWNER_TYPE_MULTISIG;
 /// Forced minimum OPERATOR-grant delay for a single-key vault (seconds) — 10
 /// minutes. The time-delay IS the missing 2nd authorization factor: a phished
 /// single owner key cannot INSTANTLY seat an OPERATOR — the owner gets a
-/// >=10-minute window to detect the queued grant and `cancel_agent_grant`.
-/// Cosign/multisig vaults already carry a 2nd factor, so they are NOT floored.
+/// 10-minute-or-longer window to detect the queued grant and `cancel_agent_grant`.
+///
+/// > Cosign/multisig vaults already carry a 2nd factor, so they are NOT floored.
 pub const SINGLE_KEY_OPERATOR_DELAY_FLOOR: u64 = 600;
 
 /// Maximum owner-configurable OPERATOR-grant delay (seconds) — 48h.
