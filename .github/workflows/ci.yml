@@ -378,10 +378,31 @@ jobs:
           key: anchor-${{ runner.os }}-${{ hashFiles('programs/sigil/Cargo.lock') }}
           restore-keys: anchor-${{ runner.os }}-
 
+      - name: Cache Solana toolchain
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.local/share/solana
+          key: solana-${{ runner.os }}-${{ env.SOLANA_VERSION }}
+
       - name: Install Solana CLI
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          sh -c "$(curl -sSfL https://release.anza.xyz/${{ env.SOLANA_VERSION }}/install)"
-          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+          # Idempotent (restored from cache when SOLANA_VERSION is unchanged) +
+          # authenticated + retried with backoff, so a transient GitHub rate
+          # limit on the Anza installer's release fetch on a cold cache cannot
+          # red the gate. This was the cause of the intermittent
+          # "On-Chain Tests (LiteSVM)" failure.
+          SOLANA_BIN="$HOME/.local/share/solana/install/active_release/bin"
+          if [ ! -x "$SOLANA_BIN/solana" ]; then
+            for attempt in 1 2 3 4 5; do
+              sh -c "$(curl -sSfL https://release.anza.xyz/${{ env.SOLANA_VERSION }}/install)" && break
+              echo "Solana install attempt $attempt failed; retrying in $((attempt * 15))s..."
+              sleep $((attempt * 15))
+            done
+          fi
+          echo "$SOLANA_BIN" >> "$GITHUB_PATH"
 
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y pkg-config libudev-dev
@@ -518,10 +539,31 @@ jobs:
           key: build-verify-${{ runner.os }}-${{ hashFiles('programs/sigil/Cargo.lock') }}
           restore-keys: build-verify-${{ runner.os }}-
 
+      - name: Cache Solana toolchain
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.local/share/solana
+          key: solana-${{ runner.os }}-${{ env.SOLANA_VERSION }}
+
       - name: Install Solana CLI
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          sh -c "$(curl -sSfL https://release.anza.xyz/${{ env.SOLANA_VERSION }}/install)"
-          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+          # Idempotent (restored from cache when SOLANA_VERSION is unchanged) +
+          # authenticated + retried with backoff, so a transient GitHub rate
+          # limit on the Anza installer's release fetch on a cold cache cannot
+          # red the gate. This was the cause of the intermittent
+          # "On-Chain Tests (LiteSVM)" failure.
+          SOLANA_BIN="$HOME/.local/share/solana/install/active_release/bin"
+          if [ ! -x "$SOLANA_BIN/solana" ]; then
+            for attempt in 1 2 3 4 5; do
+              sh -c "$(curl -sSfL https://release.anza.xyz/${{ env.SOLANA_VERSION }}/install)" && break
+              echo "Solana install attempt $attempt failed; retrying in $((attempt * 15))s..."
+              sleep $((attempt * 15))
+            done
+          fi
+          echo "$SOLANA_BIN" >> "$GITHUB_PATH"
 
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y pkg-config libudev-dev
@@ -618,10 +660,31 @@ jobs:
           key: surfpool-anchor-${{ runner.os }}-${{ hashFiles('programs/sigil/Cargo.lock') }}
           restore-keys: surfpool-anchor-${{ runner.os }}-
 
+      - name: Cache Solana toolchain
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.local/share/solana
+          key: solana-${{ runner.os }}-${{ env.SOLANA_VERSION }}
+
       - name: Install Solana CLI
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          sh -c "$(curl -sSfL https://release.anza.xyz/${{ env.SOLANA_VERSION }}/install)"
-          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+          # Idempotent (restored from cache when SOLANA_VERSION is unchanged) +
+          # authenticated + retried with backoff, so a transient GitHub rate
+          # limit on the Anza installer's release fetch on a cold cache cannot
+          # red the gate. This was the cause of the intermittent
+          # "On-Chain Tests (LiteSVM)" failure.
+          SOLANA_BIN="$HOME/.local/share/solana/install/active_release/bin"
+          if [ ! -x "$SOLANA_BIN/solana" ]; then
+            for attempt in 1 2 3 4 5; do
+              sh -c "$(curl -sSfL https://release.anza.xyz/${{ env.SOLANA_VERSION }}/install)" && break
+              echo "Solana install attempt $attempt failed; retrying in $((attempt * 15))s..."
+              sleep $((attempt * 15))
+            done
+          fi
+          echo "$SOLANA_BIN" >> "$GITHUB_PATH"
 
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y pkg-config libudev-dev
