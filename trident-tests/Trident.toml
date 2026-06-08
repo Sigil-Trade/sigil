@@ -2,5 +2,17 @@
 # Fuzzing iterations
 fuzzing_with_stats = true
 
+# Trident 0.12 loads the program-under-test as an SBF binary into its in-process
+# SVM. Without this entry NO program is deployed, so every sigil transaction
+# fails at account-load time and Trident hits an unimplemented `FeesOnly`
+# branch (`todo!()` at trident-fuzz client.rs:422) — panicking on the FIRST
+# transaction and making the whole harness a no-op. The address MUST match
+# `declare_id!` in programs/sigil/src/lib.rs and the .so must be a fresh
+# `anchor build` / `cargo build-sbf` artifact. Path is resolved relative to
+# this Trident.toml's directory (trident-tests/).
+[[fuzz.programs]]
+address = "7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK"
+program = "../target/deploy/sigil.so"
+
 [test]
 # Trident v0.12 config

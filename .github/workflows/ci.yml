@@ -827,7 +827,7 @@ jobs:
   # ──────────────────────────────────────────────────────────────
   # Job 5: Formal verification (Certora Solana Prover)
   #
-  # BLOCKING — all 16 rules must pass (16/16 Verified).
+  # BLOCKING — all 21 rules must pass (21/21 Verified).
   #
   # Uses platform-tools v1.51 (Rust 1.84.1+) via the conf file's
   # cargo_tools_version field. This resolves the Cargo.lock v4
@@ -916,6 +916,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
+            ~/.cargo/bin
             trident-tests/target
           key: trident-${{ runner.os }}-${{ hashFiles('trident-tests/Cargo.lock') }}
           restore-keys: trident-${{ runner.os }}-
@@ -923,12 +924,54 @@ jobs:
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y pkg-config libudev-dev
 
+      # Trident loads the program-under-test as an SBF .so at runtime (see
+      # trident-tests/Trident.toml [[fuzz.programs]]). Without a freshly-built
+      # sigil.so the harness panics on the first tx — so build it here, same
+      # toolchain pattern as on-chain-tests/surfpool.
+      - name: Cache Solana toolchain
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.local/share/solana
+          key: solana-${{ runner.os }}-${{ env.SOLANA_VERSION }}
+
+      - name: Install Solana CLI
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SOLANA_BIN="$HOME/.local/share/solana/install/active_release/bin"
+          if [ ! -x "$SOLANA_BIN/solana" ]; then
+            for attempt in 1 2 3 4 5; do
+              sh -c "$(curl -sSfL https://release.anza.xyz/${{ env.SOLANA_VERSION }}/install)" && break
+              echo "Solana install attempt $attempt failed; retrying in $((attempt * 15))s..."
+              sleep $((attempt * 15))
+            done
+          fi
+          echo "$SOLANA_BIN" >> "$GITHUB_PATH"
+
+      - name: Install Anchor CLI
+        run: |
+          if ! command -v anchor &> /dev/null; then
+            cargo install --git https://github.com/coral-xyz/anchor --tag v${{ env.ANCHOR_VERSION }} anchor-cli --locked --force
+          fi
+
+      - name: Build program (.so for the fuzz harness to load)
+        run: anchor build --no-idl
+
+      - name: Restore committed IDL
+        run: git checkout -- target/idl/ target/types/
+
       - name: Compile fuzz harness
         working-directory: trident-tests
         run: cargo build --release --bin fuzz_0
 
       - name: Run fuzz test (1000 iterations, 100 flows each)
         working-directory: trident-tests
+        # TRIDENT_WITH_EXIT_CODE=1 makes the harness return non-zero on a panic
+        # or invariant violation. Without it the binary exits 0 even when every
+        # iteration panics (the false-green this gate previously had).
+        env:
+          TRIDENT_WITH_EXIT_CODE: "1"
         run: |
           timeout 600 ./target/release/fuzz_0 || EXIT=$?
           if [ "${EXIT:-0}" -eq 124 ]; then
