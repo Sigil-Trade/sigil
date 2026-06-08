@@ -433,6 +433,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build SDK packages (tests import @usesigil/kit dist)
+        run: pnpm -r run build
+
       - name: Build program
         run: anchor build --no-idl
 
@@ -720,6 +723,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Build SDK packages (tests import @usesigil/kit dist)
+        run: pnpm -r run build
 
       - name: Build program
         run: anchor build --no-idl
