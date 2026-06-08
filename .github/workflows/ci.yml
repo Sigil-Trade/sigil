@@ -350,6 +350,11 @@ jobs:
             -A clippy::too_many_arguments \
             -A ambiguous_glob_reexports
 
+      - name: Run Rust unit tests (cargo test --lib)
+        # 166 in-program #[test] unit tests. Previously only exercised by the
+        # now-retired revamp-ci.yml; gated here so they protect main.
+        run: cargo test --manifest-path programs/sigil/Cargo.toml --lib
+
   # ──────────────────────────────────────────────────────────────
   # Job 3: On-chain tests (LiteSVM in-process, no validator)
   # ──────────────────────────────────────────────────────────────
@@ -949,6 +954,27 @@ jobs:
   # ──────────────────────────────────────────────────────────────
   # Gate: All checks must pass before merge
   # ──────────────────────────────────────────────────────────────
+  ci-lint:
+    name: CI Lint (pin Action refs to SHAs)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Reject mutable Action refs in all workflow files
+        # Supply-chain hardening: every `uses:` must pin a 40-char commit SHA.
+        # PCRE negative lookahead flags any @ref that is not exactly 40 hex chars
+        # (catches @v4, @main, @v6.0.6, ...). Salvaged from the retired revamp-ci.yml.
+        run: |
+          set -euo pipefail
+          OUT=$(find .github/workflows/ -name '*.yml' -print0 \
+            | xargs -0 grep -HnP 'uses:\s+\S+@(?![0-9a-f]{40}\b)\S+' || true)
+          if [ -n "$OUT" ]; then
+            echo "::error::Mutable Action refs detected - pin every uses: to a 40-char SHA:"
+            echo "$OUT"
+            exit 1
+          fi
+          echo "::notice::All workflow uses: references are pinned to 40-char SHAs."
+
   security-gate:
     name: Security Gate
     runs-on: ubuntu-latest
@@ -963,6 +989,7 @@ jobs:
       - security-scan
       - formal-verification
       - fuzz-test
+      - ci-lint
     steps:
       - name: Check all jobs passed
         run: |
@@ -976,6 +1003,7 @@ jobs:
           echo "  security-scan:         ${{ needs.security-scan.result }}"
           echo "  formal-verification:   ${{ needs.formal-verification.result }}"
           echo "  fuzz-test:             ${{ needs.fuzz-test.result }}"
+          echo "  ci-lint:               ${{ needs.ci-lint.result }}"
           echo ""
           echo "Path filter outputs:"
           echo "  any-ts:  ${{ needs.changes.outputs.any-ts }}"
@@ -994,6 +1022,12 @@ jobs:
           # security-scan must always succeed (runs unconditionally)
           if [ "${{ needs.security-scan.result }}" != "success" ]; then
             echo "::error::security-scan did not succeed"
+            FAILED=1
+          fi
+
+          # ci-lint must always succeed (runs unconditionally)
+          if [ "${{ needs.ci-lint.result }}" != "success" ]; then
+            echo "::error::ci-lint did not succeed"
             FAILED=1
           fi
 
