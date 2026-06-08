@@ -1048,6 +1048,16 @@ jobs:
         run: |
           node -e "const BN=require('bn.js'); console.log('ARCH', process.arch, process.platform, process.version); console.log('RESOLVE', require.resolve('bn.js')); console.log('NUM', JSON.stringify(new BN(500000000).toString())); const b=Buffer.from('0065cd1d00000000','hex'); console.log('BUF', JSON.stringify(new BN(b,'le').toString())); console.log('READBIG', b.readBigUInt64LE(0).toString()); try{const bb=require('bigint-buffer'); console.log('BB_RESOLVE', require.resolve('bigint-buffer')); console.log('BB_LE', String(bb.toBigIntLE(b)));}catch(e){console.log('BB_ERR', e.message);}"
 
+      - name: Build SDK packages (match on-chain-tests env)
+        run: pnpm -r run build
+
+      - name: ts-mocha host-side digest diagnostic (no .so needed)
+        run: |
+          echo "=== separator under ts-node ==="
+          npx ts-node -e "import BN from 'bn.js'; console.log('TSNODE_SEP', JSON.stringify(new BN(500_000_000).toString()))" 2>&1 | grep -iE 'TSNODE_SEP|NaN|Error' || true
+          echo "=== intent-digest-parity via ts-mocha ==="
+          npx ts-mocha -p ./tsconfig.json -t 120000 tests/intent-digest-parity.ts 2>&1 | grep -iE 'passing|failing|NaN|Cannot convert|AssertionError' | tail -20 || true
+
   security-gate:
     name: Security Gate
     runs-on: ubuntu-latest
