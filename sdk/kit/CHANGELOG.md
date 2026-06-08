@@ -1,6 +1,8 @@
 # @usesigil/kit
 
-## 0.16.0 (unreleased — Phase 9 SDK redesign)
+## 0.16.0
+
+### Phase 9 SDK redesign — engineering notes
 
 Phase 9 of the Sigil V2 program brings the SDK fully in sync with the
 on-chain layer (Phases 1-8) and stages the AL3/AL4/AL2 envelope
@@ -94,6 +96,313 @@ breaks for existing mainnet integrations in 0.16.x.
   methods currently bypass the mainnet confirmation gate — agent-call
   paths only). Decide before v1.0 whether owner paths need separate
   confirmation semantics or should adopt the agent gate.
+
+### Minor Changes
+
+- [#280](https://github.com/Sigil-Trade/sigil/pull/280) [`f320582`](https://github.com/Sigil-Trade/sigil/commit/f320582eba9331c7d5c61ebae502cf42487753bd) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - feat(kit): C1 — `previewCreateVault(config)` typed SDK primitive
+
+  Single SDK call that wraps the existing `buildOwnerTransaction()` +
+  `createVault()` primitives and returns everything the dashboard
+  split-screen `/onboard` page needs to render rent + cost + PDA list AND
+  hand the FE the unsigned transaction in one call.
+
+  Returns `CreateVaultPreview`:
+  - `pdaList` — the 4 PDAs `initialize_vault` creates (AgentVault,
+    PolicyConfig, SpendTracker, AgentSpendOverlay), each with address,
+    bump, sizeBytes mirrored from `<Account>::SIZE`, and rentLamports.
+  - `rentLamports` — sum of pdaList rents.
+  - `computeUnits` — defaults to `CU_VAULT_CREATION` (400,000).
+  - `feeLamports` — `priorityFeeMicroLamports × computeUnits / 1_000_000n`
+    via explicit BigInt math (no number/bigint mixing).
+  - `totalCostUsd` — `(rentLamports + feeLamports) × solPriceUsd / 1e9n`
+    in 6-decimal USD base units; mul-before-divide preserves precision.
+  - `vaultAddress` — same as `pdaList[0].address`.
+  - `unsignedTxBytes` — wire-encoded versioned transaction; pass to wallet
+    adapter for signing.
+  - `txSizeBytes` — byte size of the wire tx; ≤ 1232 (Solana hard limit).
+  - `lastValidBlockHeight` — FE detects stale blockhash before sign.
+  - `warnings?` — soft signals (`daily_cap_zero`, `daily_cap_unusually_high`,
+    `no_protocols_approved`, `max_tx_exceeds_daily_cap`); sorted by code
+    ascending so React keys stay stable on re-type. Returns `undefined`
+    when none fire.
+
+  API takes `Address` (not `TransactionSigner`) for both `owner` and
+  `agentAddress` — preview never signs. Internally constructs
+  `createNoopSigner` to satisfy `buildOwnerTransaction`.
+
+  `solPriceUsd: bigint` (6-decimal USD per SOL) is REQUIRED — kit has no
+  oracle, and a hidden default would silently misrepresent total cost.
+
+  Hard on-chain limits surface as early `RangeError` throws (not warnings):
+  `timelockDuration < 1800`, `developerFeeRate > 500`, `protocols.length > 10`,
+  `allowedDestinations.length > 10`. Negative bigints throw `RangeError`.
+  Bad RPC responses (`getMinimumBalanceForRentExemption` returning 0n /
+  non-bigint) throw typed `SigilSdkDomainError`.
+
+  The returned object is `Object.freeze`d; nested arrays are also frozen.
+  Two parallel previews share `altCache` + `getBlockhashCache` without
+  corruption.
+
+  Closes FE↔BE Contract v2.2 commitment **C1**. Unblocks the dashboard
+  split-screen `/onboard` (PR [#38](https://github.com/Sigil-Trade/sigil/issues/38)).
+
+  60 new tests in `sdk/kit/tests/preview-create-vault.test.ts` covering
+  public surface, PDA derivation, account sizes, cost math, warning
+  rules, input validation, determinism + immutability, tx integrity, and
+  RPC failure handling. Total kit suite now 1,673 tests (was 1,613).
+
+- [#278](https://github.com/Sigil-Trade/sigil/pull/278) [`007a504`](https://github.com/Sigil-Trade/sigil/commit/007a504758286f71f3e8c15409e70c97a92de893) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - Lane A — FE↔BE contract v2.2 commitments C6 + C2 + C5.
+
+  ### C6 — Protocol registry + tier resolver primitives
+
+  New public surface on `@usesigil/kit`:
+  - `PROTOCOL_ANNOTATIONS: readonly ProtocolAnnotation[]` — 7 hand-curated
+    Verified-tier protocol annotations (Jupiter, Flash Trade, Jupiter
+    Lend/Earn/Borrow, Drift, Kamino). Migrated byte-identical from the
+    dashboard's local registry so the dashboard can swap its import in a
+    one-line change.
+  - `VERIFIED_PROGRAMS: ReadonlySet<string>` — O(1) membership helper
+    derived from the annotations at module load.
+  - `lookupProtocolAnnotation(programId): ProtocolAnnotation | null` —
+    sync registry lookup.
+  - `resolveProtocolTier(programId, checkConstrainability): Promise<ProtocolTrustTier>` —
+    composed three-tier resolver. Verified programs short-circuit
+    synchronously; unknown programs fall through to a caller-injected
+    async probe (returns `"unverified"` when constrainable, otherwise
+    `"non-constrainable"`).
+  - `ProtocolAnnotation`, `ProtocolTrustTier`, `ConstrainabilityResult`
+    (discriminated union), `CheckConstrainabilityFn`,
+    `NonConstrainableReason`, `IdlSource` types.
+
+  Kit does NOT depend on `@sigil-trade/constraints` — the constrainability
+  check is caller-injected. Dashboard / MCP / mobile / CLI each wire
+  their own IDL-fetch backend; kit ships the classification logic.
+
+  ### C2 — DxError.onChainReverted + categorizeDxError
+  - `DxError` gains a required `onChainReverted: boolean` field. Always
+    populated by `toDxError()`; set true when the resolved code falls in
+    the Anchor on-chain range [6000, 6074]. FE renders specific
+    "vault's rules prevented this" messaging when true, generic error
+    otherwise.
+  - `categorizeDxError(e): DxErrorCategory` — helper mapping code to one
+    of four stable strings: `"program" | "user" | "network" | "unknown"`.
+    Named `categorizeDxError` (not `categorizeError`) to avoid collision
+    with the pre-existing `categorizeError(AgentError): SigilErrorCategory`
+    at `src/agent-errors.ts`.
+  - `isOnChainReverted(code): boolean` — public helper for the specific
+    6000-range check.
+  - `DX_ERROR_CODE_UNMAPPED` now re-exported from `@usesigil/kit/dashboard`.
+  - `PostAssertionValidationError` + `FlashTradeLeverageOutOfRangeError`
+    classes gained `onChainReverted: false` (they're client-side
+    validation errors, thrown before any RPC round-trip).
+
+  ### C5 — composeAgentBootstrap + getHandoffPromptTemplate
+  - `composeAgentBootstrap(config): AgentBootstrap` — fills the canonical
+    handoff-prompt template with vault-specific data. Returns
+    `{ agentWallet, vaultPubkey, onboardingPrompt, capabilities }`.
+    Deterministic: same input → byte-identical output.
+  - `getHandoffPromptTemplate(): string` — returns the raw template with
+    `${placeholder}` slots. For callers doing their own substitution.
+  - `capabilityTierToNames(tier): readonly string[]` — maps the 0/1/2
+    capability tier to friendly names. Exported from what was previously
+    an unexported internal constant in `advanced-analytics.ts`.
+  - `AgentBootstrap` + `AgentBootstrapConfig` types.
+
+  Template is prompt-injection safe — single-pass regex substitution
+  blocks both `$&`-style back-reference attacks AND `${placeholder}`
+  nested-value attacks. Validated with adversarial tests.
+
+  ### Breaking
+  - **`engines.node`** bumped from `>=18.0.0` to `>=20.10.0`. Required
+    because `with { type: "json" }` import attributes (used by the
+    protocol-registry) are a SyntaxError on Node < 20.10. Node 18 is
+    EOL upstream (April 2025) so this matches the runtime floor anyway.
+  - **`DxError.onChainReverted`** is a new required field. All internal
+    kit callers route through `toDxError()` which sets it; external
+    consumers constructing `DxError` literals (none found in audit) must
+    add the field. Two sibling classes (`PostAssertionValidationError`,
+    `FlashTradeLeverageOutOfRangeError`) updated in this release.
+  - **`ConstrainabilityResult`** is now a discriminated union on
+    `constrainable`. Consumers constructing results must provide
+    `idlSource` when `constrainable: true` and `reason` when
+    `constrainable: false`. Compile-time enforcement of the iff-invariant
+    the prose docstring previously described.
+
+  ### Test coverage
+
+  79 new tests in `sdk/kit/tests/`:
+  - `protocol-registry.test.ts` (15) — registry structural integrity
+  - `protocol-tier.test.ts` (7) — tier resolver behavior + error propagation
+  - `dashboard/errors-categorize.test.ts` (32) — DxError range boundaries
+  - `agent-bootstrap.test.ts` (25) — template determinism + substitution +
+    injection resistance + input validation
+
+  Baseline 1590 → 1613 → 1613 (after union narrowing) → 1675 passing.
+
+  Counts manifest + CI updated.
+
+- [#275](https://github.com/Sigil-Trade/sigil/pull/275) [`c3760ae`](https://github.com/Sigil-Trade/sigil/commit/c3760ae28857f3295637e16ef5efa651127082da) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - Add post-execution assertion mutation surface (Phase 2 phantom cleanup).
+
+  New public APIs on `@usesigil/kit`:
+  - **`createPostAssertions(rpc, vault, owner, network, entries, opts)`** —
+    writes a `PostExecutionAssertions` PDA with 1..=4 entries. Validates
+    client-side before the RPC round-trip; invalid input throws
+    `PostAssertionValidationError` with typed `validationCode` + `entryIndex`
+    so FE callers can pinpoint the bad entry.
+  - **`closePostAssertions(rpc, vault, owner, network, opts)`** — closes the
+    PDA and refunds rent. After close, `has_post_assertions` flips 0 on
+    PolicyConfig and `finalize_session` skips the post-assertion scan.
+  - **`validatePostAssertionEntries(entries)`** — pure client-side validator
+    mirroring on-chain `validate_entries()`. Exported from
+    `@usesigil/kit/dashboard`.
+  - **`PostAssertionValidationError`** — structurally DxError-compatible
+    (`code: number = 7008`, `message`, `recovery: string[]`) plus typed
+    `validationCode` + `entryIndex`. The mutation wrappers do NOT wrap via
+    `toDxError` — FE receives typed fields intact.
+
+  New `@usesigil/kit/post-assertions` subpath:
+  - **`leverageCapLteBps({ ... })`** — generic CrossFieldLte builder. Enforces
+    `field_A × 10000 ≤ maxBps × field_B` on-chain (u128 safe math, no division).
+  - **`JupiterPerpsPostAssertionUnsupportedError`** — thrown at authoring time
+    when the target account is owned by Jupiter Perpetuals. Jupiter Perps uses
+    a 2-tx keeper-fulfillment model that silently bypasses post-execution
+    assertions. Jupiter Perps remains fully supported via pre-execution
+    `InstructionConstraints` (via `@sigil-trade/constraints`).
+  - **`flashTradeLeverageCap({ positionAccount, maxLeverage })`** —
+    one-call convenience for Flash Trade leverage caps. Offsets pinned to the
+    `flash-sdk@^15.14.1` Perpetuals IDL with a drift-check unit test that
+    fails on any flash-sdk bump that shifts `size_usd` or `collateral_usd`.
+
+  No breaking changes. Existing mutation + authoring surfaces unchanged.
+
+- [#314](https://github.com/Sigil-Trade/sigil/pull/314) [`6810d4b`](https://github.com/Sigil-Trade/sigil/commit/6810d4bf8bb67329da4054e5ce418b4ac7593e39) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - feat(kit): buildUnsigned() composer for offline signing (S21)
+
+  A new public composer that builds an unsigned Solana transaction from
+  plain instructions and a `feePayer: Address` (no `TransactionSigner`
+  required). Fills the gap between `buildOwnerTransaction` (requires a
+  signer) and the multisig / CLI / cost-preview use cases that need raw
+  unsigned bytes.
+
+  **API**
+
+  ```typescript
+  import { buildUnsigned } from "@usesigil/kit";
+
+  const result = await buildUnsigned({
+    rpc,
+    feePayer: payerAddress,
+    instructions,
+    // Optional:
+    computeUnitLimit,
+    computeUnitPrice,
+    addressLookupTables,
+    blockhash,
+    simulate: true, // populates estimatedComputeUnits
+  });
+
+  result.unsignedTxBytes; // Uint8Array — ready for offline signer
+  result.instructions; // by-reference (do not mutate)
+  result.estimatedComputeUnits; // present iff simulate=true succeeded
+  result.feePayer;
+  result.recentBlockhash;
+  result.lastValidBlockHeight;
+  result.message; // decoded compiled message for inspection
+  ```
+
+  **Three primary use cases**
+  1. **Squads multisig** — submit `unsignedTxBytes` as a Squad proposal;
+     signers from the multisig sign asynchronously.
+  2. **CLI cold-key signing** — pipe the buffer to `solana sign-tx` for
+     offline signing.
+  3. **Client-side cost preview** — caller decodes the buffer / reads
+     `estimatedComputeUnits` to estimate CU + fee before submission.
+
+  **How this differs from `buildOwnerTransaction`**
+  - `buildOwnerTransaction` requires a `TransactionSigner` for the owner;
+    `buildUnsigned` accepts a plain `Address` (uses `createNoopSigner`
+    internally).
+  - `buildOwnerTransaction` returns `{ transaction, txSizeBytes,
+wireBase64, blockhash }`; `buildUnsigned` returns `unsignedTxBytes`
+    (decoded) + the original `instructions[]` + a decoded `message`
+    for inspection.
+
+  11 unit tests cover wire layout, decode round-trip, simulate behavior,
+  and signature-slot zeroing.
+
+- [#313](https://github.com/Sigil-Trade/sigil/pull/313) [`339855c`](https://github.com/Sigil-Trade/sigil/commit/339855c14679c514aad4c0b07993baee486bae72) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - feat(kit): OwnerClient.getAgentDetail / getRiskMetrics / getAuditTrail (S10/S11/S12)
+
+  Three new read-method wrappers on `OwnerClient` for the AgentShield V1
+  dashboard surface. Each is a thin convenience layer over an existing SDK
+  function — no new RPC patterns, no new on-chain reads.
+
+  **S10 — `getAgentDetail(agent: Address): Promise<AgentData>`**
+  Single-agent detail wrapper around `getAgentProfile()` (from
+  `agent-analytics.ts`) + the same 100-event activity enrichment fetch
+  used by `getAgents()`. Returns the dashboard-friendly `AgentData` shape
+  for one agent (same fields as one entry in `getAgents()`). Throws via
+  `toDxError` mapped from `SIGIL_ERROR__SDK__INVALID_PARAMS` when the
+  agent is not registered in the vault. Activity enrichment fails open to
+  empty last-action fields, matching the existing `getAgents()` pattern.
+
+  **S11 — `getRiskMetrics(): Promise<RiskMetrics>`**
+  Combines `getSpendingVelocity()` + `evaluateAlertConditions()` into a
+  single risk-tilt summary. Returns:
+  - `capVelocity` — % of daily cap projected to be consumed in 24h at the
+    current rate (0 when no cap configured).
+  - `spendingVelocity` — current rate in 6-decimal USD base units / hour.
+  - `riskLevel` — four-level UI badge (`low` / `elevated` / `high` /
+    `critical`) derived from the highest-severity active alert.
+  - `isAccelerating` / `timeToCapSeconds` — passed through from
+    `getSpendingVelocity`.
+
+  One state resolution. No activity fetch.
+
+  **S12 — `getAuditTrail(opts?): Promise<AuditTrailEntry[]>`**
+  Filters `getVaultActivity()` to the governance/security subset
+  (`policy` / `agent` / `security` / `escrow` categories — trades,
+  deposits, withdrawals, and fee accruals are excluded). Each entry
+  exposes `timestamp` (Unix ms), `eventType`, `eventName`, `actor`,
+  `details`, `txSignature`, plus `toJSON()`. Optional `{ limit, since }`
+  controls fetch size and post-filter timestamp lower bound (Unix ms).
+
+  Three new test files (`get-agent-detail.test.ts`, `get-risk-metrics.test.ts`,
+  `get-audit-trail.test.ts`) covering the pure `build*` helpers plus
+  `OwnerClient` method wiring — 36 new tests total, kit suite now 1,781
+  passing (was 1,745).
+
+- [#295](https://github.com/Sigil-Trade/sigil/pull/295) [`a6b7731`](https://github.com/Sigil-Trade/sigil/commit/a6b77319b7f2a76e27a47969318bc65cd2737b7b) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - refactor(sigil): delete `is_spending` byte from ConstraintEntry (M2 Option A)
+
+  The `is_spending: u8` field on `ConstraintEntry` was effectively dead
+  code at runtime — `validate_and_authorize.rs:134` derives spending
+  classification from `amount > 0`, never reading the per-entry field.
+  The Borsh-struct field is removed; the corresponding zero-copy byte
+  at offset 554 is renamed to `_reserved_was_is_spending` to preserve
+  the 560-byte `ConstraintEntryZC` size invariant. Existing on-chain
+  PDAs are unaffected (the byte is now ignored runtime-wide).
+
+  **Side effect / latent fix:** 21 previously-broken tests in
+  `tests/instruction-constraints.ts` now pass (29→50). They were
+  failing because they constructed entries without the `is_spending`
+  field, hitting the now-removed validator at `state/constraints.rs:309-312`.
+
+  **Codama regen impact:** `sdk/kit/src/generated/types/constraintEntry.ts`
+  no longer has `isSpending: number`; codama also produced 16 new
+  PDA-derivation helpers in `sdk/kit/src/generated/pdas/` (unrelated
+  positive cosmetic refactor from the regen).
+
+  **Coordination with PR 9** (`feat/sigil-account-constraint-writable-required`):
+  PR 9 was branched off this PR; merge order is mandatory **PR 8 → PR 9**
+  to avoid `state/constraints.rs` conflict. PR 9 has been pre-rebased
+  locally onto this PR's amend (Jupiter slippage non-spending bypass fix).
+
+  **Follow-up amend on this branch (`a24d0a2`):** closes a Pentester MED
+  finding — the non-spending forward scan in `validate_and_authorize.rs`
+  was missing the `verify_jupiter_slippage` call. Now `enforce_jupiter_slippage_if_jupiter`
+  is called from BOTH spending and non-spending forward-scan branches.
+
+  No SDK API surface change. The `ConstraintEntry` Borsh layout shrinks
+  by 1 byte at the encoder level; codama-generated codecs handle this
+  transparently for all consumers.
 
 ## 0.15.0
 

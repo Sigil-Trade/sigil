@@ -1,5 +1,12 @@
 # @usesigil/plugins
 
+## 13.0.0
+
+### Patch Changes
+
+- Updated dependencies [[`f320582`](https://github.com/Sigil-Trade/sigil/commit/f320582eba9331c7d5c61ebae502cf42487753bd), [`007a504`](https://github.com/Sigil-Trade/sigil/commit/007a504758286f71f3e8c15409e70c97a92de893), [`c3760ae`](https://github.com/Sigil-Trade/sigil/commit/c3760ae28857f3295637e16ef5efa651127082da), [`6810d4b`](https://github.com/Sigil-Trade/sigil/commit/6810d4bf8bb67329da4054e5ce418b4ac7593e39), [`339855c`](https://github.com/Sigil-Trade/sigil/commit/339855c14679c514aad4c0b07993baee486bae72), [`a6b7731`](https://github.com/Sigil-Trade/sigil/commit/a6b77319b7f2a76e27a47969318bc65cd2737b7b)]:
+  - @usesigil/kit@0.16.0
+
 ## 12.0.0
 
 ### Patch Changes
