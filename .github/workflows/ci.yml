@@ -1024,6 +1024,30 @@ jobs:
           fi
           echo "::notice::All workflow uses: references are pinned to 40-char SHAs."
 
+  # TEMPORARY diagnostic (remove after root-cause): the On-Chain Tests job
+  # fails on x64 Linux with u64 values stringifying as "<digits>NaN", which does
+  # not reproduce on arm64 macOS. This job logs the actual runner behavior.
+  diag-u64:
+    name: DIAG u64 (temporary)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install pnpm
+        uses: pnpm/action-setup@91ab88e2619ed1f46221f0ba42d1492c02baf788 # v6.0.6
+        with:
+          version: 10.7.1
+      - name: Install Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: u64 runtime diagnostic
+        run: |
+          node -e "const BN=require('bn.js'); console.log('ARCH', process.arch, process.platform, process.version); console.log('RESOLVE', require.resolve('bn.js')); console.log('NUM', JSON.stringify(new BN(500000000).toString())); const b=Buffer.from('0065cd1d00000000','hex'); console.log('BUF', JSON.stringify(new BN(b,'le').toString())); console.log('READBIG', b.readBigUInt64LE(0).toString()); try{const bb=require('bigint-buffer'); console.log('BB_RESOLVE', require.resolve('bigint-buffer')); console.log('BB_LE', String(bb.toBigIntLE(b)));}catch(e){console.log('BB_ERR', e.message);}"
+
   security-gate:
     name: Security Gate
     runs-on: ubuntu-latest
