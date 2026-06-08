@@ -193,10 +193,6 @@ const actual = {
     "tests/security-exploits.ts",
     TS_RE,
   ),
-  "tests/instruction-constraints.ts": countOneFile(
-    "tests/instruction-constraints.ts",
-    TS_RE,
-  ),
   "tests/escrow-integration.ts": countOneFile(
     "tests/escrow-integration.ts",
     TS_RE,

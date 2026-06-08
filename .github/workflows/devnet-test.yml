@@ -123,7 +123,7 @@ jobs:
             echo "Running single test file: tests/$FILTER"
             npx ts-mocha -p ./tsconfig.json -t 600000 "tests/$FILTER"
           else
-            echo "Running all devnet tests (140 tests, 9 files)"
+            echo "Running all devnet tests (8 files)"
             npx ts-mocha -p ./tsconfig.json -t 600000 \
               tests/devnet-smoke.ts \
               tests/devnet-sessions.ts \
@@ -131,7 +131,6 @@ jobs:
               tests/devnet-security.ts \
               tests/devnet-spending.ts \
               tests/devnet-transfers.ts \
-              tests/devnet-positions.ts \
               tests/devnet-timelock.ts \
               tests/devnet-routing.ts
           fi

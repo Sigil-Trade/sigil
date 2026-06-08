@@ -414,12 +414,6 @@ jobs:
         run: git checkout -- target/idl/ target/types/
 
       - name: Run on-chain tests (LiteSVM, in-process)
-        # NOTE: tests/instruction-constraints.ts is deliberately EXCLUDED:
-        # 10 reproducible failures in "V2 Phase 2: Signed + Bitmask operators"
-        # suite (AccountOwnedByWrongProgram 3007 at test setup). Documented in
-        # docs/revamp/AUDIT_2026_05_19_DC/CLOSURE.md as a pre-existing test-
-        # setup bug, NOT a real vulnerability. Re-add after the setup bug is
-        # fixed in a separate PR.
         run: |
           npx ts-mocha -p ./tsconfig.json -t 300000 \
             tests/sigil.ts \

@@ -47,8 +47,7 @@
  *
  * This is COVERAGE not behavioral — minimal setup, one assertion per
  * disc. Behavioral correctness of each handler lives in its own
- * dedicated test (e.g. `tests/instruction-constraints.ts` for
- * applyConstraintsUpdate). The audit-log emit is a separate concern
+ * dedicated test for that handler. The audit-log emit is a separate concern
  * that we surface here in isolation.
  */
 
