@@ -442,33 +442,61 @@ jobs:
       - name: Restore committed IDL (cache may contain stale version)
         run: git checkout -- target/idl/ target/types/
 
-      - name: Run on-chain tests (LiteSVM, in-process)
+      - name: Run on-chain tests (LiteSVM, isolated per file)
         run: |
-          npx ts-mocha -p ./tsconfig.json -t 300000 \
-            tests/sigil.ts \
-            tests/jupiter-integration.ts \
-            tests/jupiter-lend-integration.ts \
-            tests/flash-trade-integration.ts \
-            tests/security-exploits.ts \
-            tests/cu-budget.ts \
-            tests/analytics-counters.ts \
-            tests/missing-coverage.ts \
-            tests/policy-digest-invariant.ts \
-            tests/post-assertions-r-variants.ts \
-            tests/post-assertions-sandwich.ts \
-            tests/sandwich-integration.ts \
-            tests/sysvar-scan-bound.ts \
-            tests/toctou-security.ts \
-            tests/audit-log.ts \
-            tests/audit-log-burst.ts \
-            tests/audit-log-coverage.ts \
-            tests/ownership-transfer.ts \
-            tests/ownership-transfer-multisig.ts \
-            tests/f10-timelocked-admin.ts \
-            tests/fq6-operator-grant-tiers.ts \
-            tests/intent-digest-parity.ts \
-            tests/m1-03-frozen-gate.ts \
+          # Each file runs in its OWN process to work around an upstream litesvm
+          # x64 NAPI V8-heap corruption (LiteSVM issue #171): on x86_64-Linux the
+          # native binding corrupts unrelated JS heap objects after enough VM
+          # operations accumulate in one process (manifesting as bn.js toString
+          # returning "<digits>NaN"). main's 6-file single process stays under
+          # that threshold and is green; this branch's 24-file single process
+          # crosses it. Per-file processes keep each run well under the threshold.
+          # tests/_canary.js is a temporary diagnostic root-hook that flags if
+          # bn.js gets corrupted within any single file's process.
+          set +e
+          FILES=(
+            tests/sigil.ts
+            tests/jupiter-integration.ts
+            tests/jupiter-lend-integration.ts
+            tests/flash-trade-integration.ts
+            tests/security-exploits.ts
+            tests/cu-budget.ts
+            tests/analytics-counters.ts
+            tests/missing-coverage.ts
+            tests/policy-digest-invariant.ts
+            tests/post-assertions-r-variants.ts
+            tests/post-assertions-sandwich.ts
+            tests/sandwich-integration.ts
+            tests/sysvar-scan-bound.ts
+            tests/toctou-security.ts
+            tests/audit-log.ts
+            tests/audit-log-burst.ts
+            tests/audit-log-coverage.ts
+            tests/ownership-transfer.ts
+            tests/ownership-transfer-multisig.ts
+            tests/f10-timelocked-admin.ts
+            tests/fq6-operator-grant-tiers.ts
+            tests/intent-digest-parity.ts
+            tests/m1-03-frozen-gate.ts
             tests/pen-cross-1-absorption.ts
+          )
+          FAILED=()
+          for f in "${FILES[@]}"; do
+            echo "::group::$f"
+            npx ts-mocha -p ./tsconfig.json -t 300000 --require ./tests/_canary.js "$f"
+            if [ $? -ne 0 ]; then
+              echo "FAIL $f"
+              FAILED+=("$f")
+            else
+              echo "PASS $f"
+            fi
+            echo "::endgroup::"
+          done
+          if [ ${#FAILED[@]} -ne 0 ]; then
+            echo "::error::On-chain tests failed in ${#FAILED[@]} file(s): ${FAILED[*]}"
+            exit 1
+          fi
+          echo "All ${#FILES[@]} on-chain test files passed (isolated per process)."
 
       - name: Check for IDL drift
         run: |
