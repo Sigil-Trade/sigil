@@ -848,16 +848,19 @@ export async function seatOperatorAgent(
     .instruction();
   await sendVersionedTx(env.connection, [queueIx], env.payer, signers);
 
-  // 2. Advance the live Surfnet clock past the single-key delay floor.
-  //    getClock().timestamp is SECONDS; surfnet absoluteTimestamp is
-  //    MILLISECONDS (confirmed by suite 7's "absoluteTimestamp is in
-  //    milliseconds" + the PASSING suite-9 reactivate form). Anchor to the
-  //    on-chain clock (NOT Date.now()) so the jump is drift-safe.
-  const clock = await getClock(env.connection);
-  await timeTravel(env.connection, {
-    absoluteTimestamp:
-      (clock.timestamp + SINGLE_KEY_OPERATOR_DELAY_FLOOR + 1) * 1000,
-  });
+  // 2. Advance past the single-key OPERATOR delay floor (600s) by SLOT, NOT
+  //    timestamp. The Surfnet slot tracks the devnet datasource and outruns the
+  //    timestamp-derived slot, so an `absoluteTimestamp` jump resets the slot
+  //    BEHIND `queued_at_slot` and apply_agent_grant.rs:147
+  //    `clock.slot.checked_sub(queued_at_slot)` UNDERFLOWS (Overflow, 6020). An
+  //    `absoluteSlot` jump advances the derived timestamp too (~100ms/slot at
+  //    the CI `--slot-time 100`), so +7000 slots ≈ +700s clears the 600s
+  //    timelock while keeping the slot monotonically ahead of queued_at_slot
+  //    (Δ ≈ 7000, far under the ~700k freshness ceiling). Verified via a local
+  //    cheatcode probe: absoluteSlot +6020 advanced slot +6019 and ts +602s.
+  //    (timeTravel accepts exactly one key, so slot+timestamp can't be combined.)
+  const queuedSlot = await env.connection.getSlot("confirmed");
+  await timeTravel(env.connection, { absoluteSlot: queuedSlot + 7000 });
 
   // 3. Apply the grant.
   const applyIx = await methods
