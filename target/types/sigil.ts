@@ -4073,7 +4073,7 @@ export type Sigil = {
       "docs": [
         "TA-17 (Phase 3): record an on-chain policy-violation failure for",
         "an agent. Owner-only. `error_code` MUST be in the policy-violation",
-        "range (6083-6100); external codes (CU exhaustion, auth, init)",
+        "range (6074-6091); external codes (CU exhaustion, auth, init)",
         "reject with InvalidPermissions.",
         "",
         "When `agent.consecutive_failures >= policy.auto_revoke_threshold`,",
@@ -6618,7 +6618,7 @@ export type Sigil = {
               "it is incremented by the owner-only `record_agent_violation` ix,",
               "called by an off-chain monitor after observing a failed seal whose",
               "reject reason is an on-chain policy code (numeric range",
-              "POLICY_VIOLATION_RANGE = 6083..=6100 — see `state/mod.rs::is_policy_violation_code`).",
+              "POLICY_VIOLATION_RANGE = 6074..=6091 — see `state/mod.rs::is_policy_violation_code`).",
               "Reset to 0 inside `validate_and_authorize` on a successful seal.",
               "When `>= policy.auto_revoke_threshold`, the agent's capability is",
               "set to CAPABILITY_DISABLED and an `AgentAutoRevoked` event is",
@@ -7290,11 +7290,17 @@ export type Sigil = {
           {
             "name": "ownerType",
             "docs": [
-              "F-Q6 (2026-06-02): owner-account-type discriminant — 0 = single-key",
-              "EOA, 1 = N-of-M multisig (Squads V4). Set once from an on-chain-verified",
-              "fact at the ownership-transfer site; NOT bound by any digest; a wrong",
-              "value fails SAFE to the single-key delayed-grant path in register_agent.",
-              "Placed before vault_authority so the LBL-01 seed-key stays the final 32 bytes."
+              "F-Q6 (2026-06-02) — owner-account-type discriminant: 0 = single-key EOA",
+              "(`OWNER_TYPE_EOA`), 1 = N-of-M multisig / Squads V4 (`OWNER_TYPE_MULTISIG`).",
+              "Set ONCE per owner from an on-chain-VERIFIED fact: `initialize_vault` = 0,",
+              "`accept_ownership_transfer` (EOA) = 0, `accept_ownership_transfer_multisig`",
+              "= 1. NOT bound by any digest — it is program-set (not owner-supplied), and",
+              "a stale/wrong value fails SAFE to the single-key delayed-grant path in",
+              "`register_agent`. Validated `<= OWNER_TYPE_MULTISIG` at the read site.",
+              "",
+              "Placed BEFORE `vault_authority` so the LBL-01 seed-key remains the final",
+              "32 bytes (the SDK resolver reads it at `SIZE - 32`). Pre-launch — no",
+              "deployed vaults constrain byte placement."
             ],
             "type": "u8"
           },
@@ -8693,9 +8699,10 @@ export type Sigil = {
           {
             "name": "operatorGrantDelaySeconds",
             "docs": [
-              "F-Q6 (2026-06-02): optional update to operatorGrantDelaySeconds.",
-              "None = preserve live value; Some(n) = update. Bound by TA-19 at",
-              "canonical digest position 22. APPENDED per F-14 APPEND-ONLY rule."
+              "F-Q6 (2026-06-02): optional update to",
+              "`PolicyConfig.operator_grant_delay_seconds`. None = preserve live value;",
+              "Some(n) = update. Bound by TA-19 at canonical digest position 22.",
+              "APPENDED per F-14 APPEND-ONLY rule for Borsh stability."
             ],
             "type": {
               "option": "u64"
@@ -9046,7 +9053,7 @@ export type Sigil = {
               "(a) the unlock time elapses OR (b) the owner calls",
               "`promote_graylist_destination` to fast-track, spending paths",
               "reject any tx routing value to that destination with",
-              "`ErrGraylistFriction` (6086).",
+              "`ErrGraylistFriction` (6077).",
               "",
               "Tuple is `(destination_pubkey, unlock_unix)`. Bounded ≤10 entries",
               "(max_destinations). When full, additional allowlist adds reject",
@@ -9091,7 +9098,7 @@ export type Sigil = {
               "Owner-configurable in range 3..=20; out-of-range values rejected",
               "at policy-write time with `InvalidPermissions`. Default 5.",
               "",
-              "Only on-chain policy-violation codes (6083-6100) count — see",
+              "Only on-chain policy-violation codes (6074-6091) count — see",
               "`POLICY_VIOLATION_RANGE` in finalize_session. External codes",
               "(CU exhaustion, nonce desync, auth) do NOT increment.",
               "",
@@ -9217,9 +9224,16 @@ export type Sigil = {
             "name": "operatorGrantDelaySeconds",
             "docs": [
               "F-Q6 (2026-06-02): owner-configured delay (in seconds) before an",
-              "OPERATOR capability grant takes effect. Default 0. Bound by TA-19",
-              "at canonical digest position 22 so a tampered SDK or pending-PDA",
-              "mutation cannot silently lower it. APPENDED per F-14 APPEND-ONLY rule."
+              "OPERATOR capability grant takes effect. Default 0. An owner-set",
+              "security control gating OPERATOR seating — bound by TA-19 at canonical",
+              "digest position 22 so a tampered SDK or pending-PDA mutation cannot",
+              "silently lower it between owner approval and on-chain landing.",
+              "Changeable only via the timelocked `queue_policy_update` path (so",
+              "lowering it is itself delayed). The single-key forced floor",
+              "(`max(field, 600)`) and per-tier grant logic live in `register_agent`",
+              "/ `queue_agent_grant`.",
+              "",
+              "APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability."
             ],
             "type": "u64"
           }
@@ -9803,9 +9817,16 @@ export type Sigil = {
             "docs": [
               "F-Q8 — the vault stablecoin ATA pinned at validate for the",
               "non-stablecoin-input outcome check. finalize_session asserts the",
-              "measured account == this pubkey, blocking substitution of a",
-              "different vault-owned stablecoin ATA. Pubkey::default() on the",
-              "stablecoin-input path. Appended at END (SIZE 515 → 547)."
+              "account it measures has THIS exact pubkey, so a compromised agent",
+              "cannot substitute a different vault-owned stablecoin ATA (whose",
+              "owner+mint also pass) to spoof the `current > before` return check.",
+              "Set to output_stablecoin_account.key() on the non-stablecoin-input",
+              "spending path; Pubkey::default() otherwise (stablecoin-input uses",
+              "vault_token_account, already pinned via delegation_token_account).",
+              "",
+              "**APPEND-ONLY**: new field at the END of SessionAuthority. SIZE grows",
+              "by 32 bytes (515 → 547). Sessions are init/close per cycle, so no",
+              "migration is required."
             ],
             "type": "pubkey"
           }
@@ -9910,7 +9931,7 @@ export type Sigil = {
               "\"zeroed, no enforcement yet\" — this was stale. The enforcement",
               "has lived in `finalize_session` since Phase 2; this comment was",
               "the only artifact suggesting otherwise. Phase 5 ratifies the",
-              "existing require! with the dedicated `ErrDailyCapExceeded` (6095)",
+              "existing require! with the dedicated `ErrDailyCapExceeded` (6086)",
               "error code so off-chain monitors can disambiguate the \"rolling",
               "24h cap hit\" semantic from the legacy \"slot allocation exhausted\"",
               "path (which still returns `ProtocolCapExceeded` from inside",
