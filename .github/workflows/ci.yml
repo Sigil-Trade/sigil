@@ -47,6 +47,10 @@ env:
   SOLANA_VERSION: "v2.1.14"
   ANCHOR_VERSION: "0.32.1"
   NODE_VERSION: "24"
+  # Pin surfpool: v1.3.x changed transaction handling ("Unknown action
+  # 'undefined'") and broke the integration suite; v1.2.1 is main's last-green
+  # version. Unpinned `curl | bash` (latest) is non-deterministic for a gate.
+  SURFPOOL_VERSION: "v1.2.1"
 
 jobs:
   # ──────────────────────────────────────────────────────────────
@@ -747,12 +751,19 @@ jobs:
             cargo install --git https://github.com/coral-xyz/anchor --tag v${{ env.ANCHOR_VERSION }} anchor-cli --locked --force
           fi
 
-      - name: Install Surfpool CLI
+      - name: Install Surfpool CLI (pinned)
         run: |
+          # Pinned to SURFPOOL_VERSION (see env block) instead of the unpinned
+          # `curl https://run.surfpool.run | bash` (latest), which pulled v1.3.1
+          # and broke the suite. Download the exact release tarball.
           if ! command -v surfpool &> /dev/null; then
-            curl -sL https://run.surfpool.run/ | bash
-            echo "$HOME/.local/bin" >> $GITHUB_PATH
+            mkdir -p "$HOME/.local/bin"
+            curl -sSfL "https://github.com/solana-foundation/surfpool/releases/download/${{ env.SURFPOOL_VERSION }}/surfpool-linux-x64.tar.gz" \
+              | tar -xz -C "$HOME/.local/bin"
+            chmod +x "$HOME/.local/bin/surfpool"
           fi
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          surfpool --version || true
 
       - name: Install pnpm
         uses: pnpm/action-setup@91ab88e2619ed1f46221f0ba42d1492c02baf788 # v6.0.6
