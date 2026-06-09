@@ -28,7 +28,6 @@ import {
 import { expect } from "chai";
 import BN from "bn.js";
 import {
-  initVaultPreviewDigest,
   fetchAndComputeQueueDigest,
   siblingHandlerDigest,
 } from "./helpers/policy-digest";
@@ -64,6 +63,7 @@ import {
   surfnetRpc,
   ensureMintExists,
   setupVaultWithAgent,
+  initVaultInline,
   expectTxError,
   VaultSetupResult,
   VersionedTxResult,
@@ -146,51 +146,16 @@ describe("surfpool-integration", function () {
     });
 
     it("creates vault with correct state", async () => {
-      const dailyCap = new BN(500_000_000); // 500 USDC
-      const maxTxSize = new BN(100_000_000); // 100 USDC
-
-      await program.methods
-        .initializeVault(
-          vaultId,
-          dailyCap,
-          maxTxSize,
-          1,
-          [],
-          0,
-          100,
-          new BN(1800),
-          [],
-          [],
-          false, // observeOnly (Phase 2 TA-19)
-          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
-          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
-          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
-          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
-          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
-          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
-          initVaultPreviewDigest({
-            dailySpendingCapUsd: dailyCap,
-            maxTransactionSizeUsd: maxTxSize,
-            maxSlippageBps: 100,
-            protocolMode: 1,
-            protocols: [],
-            allowedDestinations: [],
-            timelockDuration: new BN(1800),
-            operatingHours: 0x00ffffff,
-            autoPromoteGrays: false,
-            autoRevokeThreshold: 5,
-          }),
-        )
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: vaultPda,
-          policy: policyPda,
-          tracker: trackerPda,
-          agentSpendOverlay: overlayPda,
-          feeDestination: feeDestination.publicKey,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
+      await initVaultInline(
+        env,
+        program,
+        vaultId,
+        vaultPda,
+        policyPda,
+        trackerPda,
+        overlayPda,
+        feeDestination.publicKey,
+      );
 
       const vault = await program.account.agentVault.fetch(vaultPda);
       expect(vault.owner.toString()).to.equal(env.payer.publicKey.toString());
@@ -356,48 +321,16 @@ describe("surfpool-integration", function () {
       );
 
       // Initialize vault
-      await program.methods
-        .initializeVault(
-          vaultId,
-          new BN(500_000_000),
-          new BN(100_000_000),
-          1,
-          [],
-          0,
-          100,
-          new BN(1800),
-          [],
-          [],
-          false, // observeOnly (Phase 2 TA-19)
-          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
-          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
-          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
-          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
-          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
-          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
-          initVaultPreviewDigest({
-            dailySpendingCapUsd: new BN(500_000_000),
-            maxTransactionSizeUsd: new BN(100_000_000),
-            maxSlippageBps: 100,
-            protocolMode: 1,
-            protocols: [],
-            allowedDestinations: [],
-            timelockDuration: new BN(1800),
-            operatingHours: 0x00ffffff,
-            autoPromoteGrays: false,
-            autoRevokeThreshold: 5,
-          }),
-        )
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: vaultPda,
-          policy: policyPda,
-          tracker: trackerPda,
-          agentSpendOverlay: overlayPda,
-          feeDestination: feeDestination.publicKey,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
+      await initVaultInline(
+        env,
+        program,
+        vaultId,
+        vaultPda,
+        policyPda,
+        trackerPda,
+        overlayPda,
+        feeDestination.publicKey,
+      );
 
       await program.methods
         .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
@@ -670,48 +603,16 @@ describe("surfpool-integration", function () {
         program.programId,
       );
 
-      await program.methods
-        .initializeVault(
-          vaultId,
-          new BN(500_000_000),
-          new BN(100_000_000),
-          1,
-          [],
-          0,
-          100,
-          new BN(1800),
-          [],
-          [],
-          false, // observeOnly (Phase 2 TA-19)
-          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
-          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
-          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
-          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
-          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
-          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
-          initVaultPreviewDigest({
-            dailySpendingCapUsd: new BN(500_000_000),
-            maxTransactionSizeUsd: new BN(100_000_000),
-            maxSlippageBps: 100,
-            protocolMode: 1,
-            protocols: [],
-            allowedDestinations: [],
-            timelockDuration: new BN(1800),
-            operatingHours: 0x00ffffff,
-            autoPromoteGrays: false,
-            autoRevokeThreshold: 5,
-          }),
-        )
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: vaultPda,
-          policy: policyPda,
-          tracker: trackerPda,
-          agentSpendOverlay: overlayPda,
-          feeDestination: feeDestination.publicKey,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
+      await initVaultInline(
+        env,
+        program,
+        vaultId,
+        vaultPda,
+        policyPda,
+        trackerPda,
+        overlayPda,
+        feeDestination.publicKey,
+      );
 
       await program.methods
         .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
@@ -1012,48 +913,16 @@ describe("surfpool-integration", function () {
         program.programId,
       );
 
-      await program.methods
-        .initializeVault(
-          vaultId,
-          new BN(500_000_000),
-          new BN(100_000_000),
-          1,
-          [],
-          0,
-          100,
-          new BN(1800),
-          [],
-          [],
-          false, // observeOnly (Phase 2 TA-19)
-          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
-          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
-          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
-          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
-          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
-          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
-          initVaultPreviewDigest({
-            dailySpendingCapUsd: new BN(500_000_000),
-            maxTransactionSizeUsd: new BN(100_000_000),
-            maxSlippageBps: 100,
-            protocolMode: 1,
-            protocols: [],
-            allowedDestinations: [],
-            timelockDuration: new BN(1800),
-            operatingHours: 0x00ffffff,
-            autoPromoteGrays: false,
-            autoRevokeThreshold: 5,
-          }),
-        )
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: vaultPda,
-          policy: policyPda,
-          tracker: trackerPda,
-          agentSpendOverlay: overlayPda,
-          feeDestination: feeDestination.publicKey,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
+      await initVaultInline(
+        env,
+        program,
+        vaultId,
+        vaultPda,
+        policyPda,
+        trackerPda,
+        overlayPda,
+        feeDestination.publicKey,
+      );
 
       await program.methods
         .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
@@ -1219,48 +1088,16 @@ describe("surfpool-integration", function () {
         program.programId,
       );
 
-      await program.methods
-        .initializeVault(
-          vaultId,
-          new BN(500_000_000),
-          new BN(100_000_000),
-          1,
-          [],
-          0,
-          100,
-          new BN(1800),
-          [],
-          [],
-          false, // observeOnly (Phase 2 TA-19)
-          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
-          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
-          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
-          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
-          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
-          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
-          initVaultPreviewDigest({
-            dailySpendingCapUsd: new BN(500_000_000),
-            maxTransactionSizeUsd: new BN(100_000_000),
-            maxSlippageBps: 100,
-            protocolMode: 1,
-            protocols: [],
-            allowedDestinations: [],
-            timelockDuration: new BN(1800),
-            operatingHours: 0x00ffffff,
-            autoPromoteGrays: false,
-            autoRevokeThreshold: 5,
-          }),
-        )
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: vaultPda,
-          policy: policyPda,
-          tracker: trackerPda,
-          agentSpendOverlay: overlayPda,
-          feeDestination: feeDestination.publicKey,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
+      await initVaultInline(
+        env,
+        program,
+        vaultId,
+        vaultPda,
+        policyPda,
+        trackerPda,
+        overlayPda,
+        feeDestination.publicKey,
+      );
 
       await program.methods
         .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
@@ -1395,48 +1232,17 @@ describe("surfpool-integration", function () {
         program.programId,
       );
 
-      const tx = await program.methods
-        .initializeVault(
-          profileVaultId,
-          new BN(500_000_000),
-          new BN(100_000_000),
-          1,
-          [],
-          0,
-          100,
-          new BN(1800),
-          [],
-          [],
-          false, // observeOnly (Phase 2 TA-19)
-          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
-          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
-          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
-          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
-          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
-          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
-          initVaultPreviewDigest({
-            dailySpendingCapUsd: new BN(500_000_000),
-            maxTransactionSizeUsd: new BN(100_000_000),
-            maxSlippageBps: 100,
-            protocolMode: 1,
-            protocols: [],
-            allowedDestinations: [],
-            timelockDuration: new BN(1800),
-            operatingHours: 0x00ffffff,
-            autoPromoteGrays: false,
-            autoRevokeThreshold: 5,
-          }),
-        )
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: profilePdas.vaultPda,
-          policy: profilePdas.policyPda,
-          tracker: profilePdas.trackerPda,
-          agentSpendOverlay: profileOverlay,
-          feeDestination: feeDestination.publicKey,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
+      const initResult = await initVaultInline(
+        env,
+        program,
+        profileVaultId,
+        profilePdas.vaultPda,
+        profilePdas.policyPda,
+        profilePdas.trackerPda,
+        profileOverlay,
+        feeDestination.publicKey,
+      );
+      const tx = initResult.signature;
 
       try {
         const profile = await profileTransaction(
@@ -1492,48 +1298,16 @@ describe("surfpool-integration", function () {
         program.programId,
       );
 
-      await program.methods
-        .initializeVault(
-          testVaultId,
-          new BN(500_000_000),
-          new BN(100_000_000),
-          1,
-          [],
-          0,
-          100,
-          new BN(1800),
-          [],
-          [],
-          false, // observeOnly (Phase 2 TA-19)
-          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
-          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
-          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
-          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
-          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
-          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
-          initVaultPreviewDigest({
-            dailySpendingCapUsd: new BN(500_000_000),
-            maxTransactionSizeUsd: new BN(100_000_000),
-            maxSlippageBps: 100,
-            protocolMode: 1,
-            protocols: [],
-            allowedDestinations: [],
-            timelockDuration: new BN(1800),
-            operatingHours: 0x00ffffff,
-            autoPromoteGrays: false,
-            autoRevokeThreshold: 5,
-          }),
-        )
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: pdas.vaultPda,
-          policy: pdas.policyPda,
-          tracker: pdas.trackerPda,
-          agentSpendOverlay: persistOverlay,
-          feeDestination: feeDestination.publicKey,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
+      await initVaultInline(
+        env,
+        program,
+        testVaultId,
+        pdas.vaultPda,
+        pdas.policyPda,
+        pdas.trackerPda,
+        persistOverlay,
+        feeDestination.publicKey,
+      );
 
       // State persists — fetch should work
       const vault = await program.account.agentVault.fetch(pdas.vaultPda);
@@ -1564,48 +1338,16 @@ describe("surfpool-integration", function () {
         program.programId,
       );
 
-      await program.methods
-        .initializeVault(
-          preResetVaultId,
-          new BN(500_000_000),
-          new BN(100_000_000),
-          1,
-          [],
-          0,
-          100,
-          new BN(1800),
-          [],
-          [],
-          false, // observeOnly (Phase 2 TA-19)
-          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
-          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
-          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
-          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
-          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
-          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
-          initVaultPreviewDigest({
-            dailySpendingCapUsd: new BN(500_000_000),
-            maxTransactionSizeUsd: new BN(100_000_000),
-            maxSlippageBps: 100,
-            protocolMode: 1,
-            protocols: [],
-            allowedDestinations: [],
-            timelockDuration: new BN(1800),
-            operatingHours: 0x00ffffff,
-            autoPromoteGrays: false,
-            autoRevokeThreshold: 5,
-          }),
-        )
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: pdas.vaultPda,
-          policy: pdas.policyPda,
-          tracker: pdas.trackerPda,
-          agentSpendOverlay: resetOverlay,
-          feeDestination: feeDestination.publicKey,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
+      await initVaultInline(
+        env,
+        program,
+        preResetVaultId,
+        pdas.vaultPda,
+        pdas.policyPda,
+        pdas.trackerPda,
+        resetOverlay,
+        feeDestination.publicKey,
+      );
 
       // Reset network
       await resetNetwork(env.connection);
@@ -1651,48 +1393,16 @@ describe("surfpool-integration", function () {
         program.programId,
       );
 
-      await program.methods
-        .initializeVault(
-          postResetVaultId,
-          new BN(500_000_000),
-          new BN(100_000_000),
-          1,
-          [],
-          0,
-          100,
-          new BN(1800),
-          [],
-          [],
-          false, // observeOnly (Phase 2 TA-19)
-          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
-          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
-          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
-          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
-          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
-          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
-          initVaultPreviewDigest({
-            dailySpendingCapUsd: new BN(500_000_000),
-            maxTransactionSizeUsd: new BN(100_000_000),
-            maxSlippageBps: 100,
-            protocolMode: 1,
-            protocols: [],
-            allowedDestinations: [],
-            timelockDuration: new BN(1800),
-            operatingHours: 0x00ffffff,
-            autoPromoteGrays: false,
-            autoRevokeThreshold: 5,
-          }),
-        )
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: pdas.vaultPda,
-          policy: pdas.policyPda,
-          tracker: pdas.trackerPda,
-          agentSpendOverlay: postResetOverlay,
-          feeDestination: feeDestination.publicKey,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
+      await initVaultInline(
+        env,
+        program,
+        postResetVaultId,
+        pdas.vaultPda,
+        pdas.policyPda,
+        pdas.trackerPda,
+        postResetOverlay,
+        feeDestination.publicKey,
+      );
 
       const vault = await program.account.agentVault.fetch(pdas.vaultPda);
       expect(vault.vaultId.toNumber()).to.equal(postResetVaultId.toNumber());
@@ -1728,48 +1438,16 @@ describe("surfpool-integration", function () {
       );
 
       // Create vault WITH timelock (1800 seconds = MIN_TIMELOCK_DURATION)
-      await program.methods
-        .initializeVault(
-          vaultId,
-          new BN(500_000_000),
-          new BN(100_000_000),
-          1,
-          [],
-          0,
-          100,
-          new BN(1800),
-          [],
-          [],
-          false, // observeOnly (Phase 2 TA-19)
-          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
-          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
-          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
-          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
-          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
-          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
-          initVaultPreviewDigest({
-            dailySpendingCapUsd: new BN(500_000_000),
-            maxTransactionSizeUsd: new BN(100_000_000),
-            maxSlippageBps: 100,
-            protocolMode: 1,
-            protocols: [],
-            allowedDestinations: [],
-            timelockDuration: new BN(1800),
-            operatingHours: 0x00ffffff,
-            autoPromoteGrays: false,
-            autoRevokeThreshold: 5,
-          }),
-        )
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: vaultPda,
-          policy: policyPda,
-          tracker: trackerPda,
-          agentSpendOverlay: timelockOverlay,
-          feeDestination: feeDestination.publicKey,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
+      await initVaultInline(
+        env,
+        program,
+        vaultId,
+        vaultPda,
+        policyPda,
+        trackerPda,
+        timelockOverlay,
+        feeDestination.publicKey,
+      );
     });
 
     it("queue + time travel + apply succeeds", async () => {

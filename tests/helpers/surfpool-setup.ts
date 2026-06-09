@@ -31,6 +31,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { execSync } from "child_process";
 import { initVaultPreviewDigest } from "./policy-digest";
+import { SIGIL_ERRORS } from "./strict-errors";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -148,10 +149,13 @@ async function deployLocalProgram(connection: Connection): Promise<void> {
     JSON.stringify(Array.from(deployer.secretKey)),
   );
 
-  // 2. Fund deployer (need ~5 SOL for deploy buffer)
+  // 2. Fund deployer. Deploying the ~1.27MB sigil.so allocates a buffer
+  //    (~8.9 SOL rent) AND the programdata account (~8.9 SOL) before the
+  //    buffer lamports are reclaimed, so the deployer needs ~18 SOL peak.
+  //    Fund 30 SOL for headroom across the 3 deploy retries.
   await surfnetRpc(connection, "surfnet_setAccount", [
     deployer.publicKey.toString(),
-    { lamports: 10 * LAMPORTS_PER_SOL },
+    { lamports: 30 * LAMPORTS_PER_SOL },
   ]);
 
   // 3. Change program upgrade authority to our deployer
@@ -191,7 +195,8 @@ async function deployLocalProgram(connection: Connection): Promise<void> {
   let lastErr: unknown;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      execSync(deployCmd, { stdio: "pipe", timeout: 120_000 });
+      // Deploying ~1.27MB takes ~1250 chunk writes; allow up to 5 min/attempt.
+      execSync(deployCmd, { stdio: "pipe", timeout: 300_000 });
       return;
     } catch (err) {
       lastErr = err;
@@ -453,107 +458,17 @@ export async function getProfilesByTag(
 // ─── Anchor error code → name lookup ─────────────────────────────────────────
 
 /**
- * Sigil custom error codes (6000-6078, post-Phase-1 Option A compaction)
- * mapped to Anchor error names. Source of truth:
- * `programs/sigil/src/errors.rs` (declaration order = numeric code).
- *
- * Surfnet does NOT return program logs for failed TXs via getTransaction(),
- * so we must decode the numeric error code to include the name in errors.
- *
- * Phase 1 Option A demolition (2026-05-17): SwapSlippageExceeded (was 6030)
- * and InvalidJupiterInstruction (was 6031) DELETED. All codes from 6030
- * onward shifted DOWN by 2. Compaction also removed escrow errors
- * (formerly 6039-6044) and ActiveEscrowsExist (formerly 6057) in v2 revamp
- * Stage 1.
- *
- * Canonical name→code map lives at:
- *   - `sdk/kit/src/testing/errors/names.generated.ts` (regenerated from IDL)
- *   - `tests/helpers/strict-errors.ts` (mirror used by LiteSVM suite)
- * If this table drifts from those, decoded errors will print the wrong name.
+ * Surfnet does NOT return program logs for failed TXs via getTransaction(), so
+ * we decode the numeric Custom code to a name. This map is DERIVED from the
+ * canonical, CI-drift-checked `SIGIL_ERRORS` (tests/helpers/strict-errors.ts, a
+ * mirror of sdk/kit/src/testing/errors/names.generated.ts) — never hand-
+ * maintained here, so it cannot drift from the on-chain error numbering. The
+ * previous hand-written table had drifted (e.g. 6071 mislabeled
+ * OrphanPdaWrongOwner; it is PolicyPreviewMismatch).
  */
-const SIGIL_ERROR_NAMES: Record<number, string> = {
-  6000: "VaultNotActive",
-  6001: "UnauthorizedAgent",
-  6002: "UnauthorizedOwner",
-  6003: "UnsupportedToken",
-  6004: "ProtocolNotAllowed",
-  6005: "TransactionTooLarge",
-  6006: "SpendingCapExceeded",
-  6007: "SessionNotAuthorized",
-  6008: "InvalidSession",
-  6009: "TooManyAllowedProtocols",
-  6010: "AgentAlreadyRegistered",
-  6011: "NoAgentRegistered",
-  6012: "VaultNotFrozen",
-  6013: "VaultAlreadyClosed",
-  6014: "InsufficientBalance",
-  6015: "DeveloperFeeTooHigh",
-  6016: "InvalidFeeDestination",
-  6017: "InvalidProtocolTreasury",
-  6018: "InvalidAgentKey",
-  6019: "AgentIsOwner",
-  6020: "Overflow",
-  6021: "InvalidTokenAccount",
-  6022: "TimelockNotExpired",
-  6023: "NoTimelockConfigured",
-  6024: "DestinationNotAllowed",
-  6025: "TooManyDestinations",
-  6026: "InvalidProtocolMode",
-  6027: "CpiCallNotAllowed",
-  6028: "MissingFinalizeInstruction",
-  6029: "NonTrackedSwapMustReturnStablecoin",
-  // SwapSlippageExceeded (was 6030) + InvalidJupiterInstruction (was 6031) DELETED
-  // in Phase 1 Option A demolition. Codes from 6030 onward shifted down by 2.
-  6030: "UnauthorizedTokenTransfer",
-  6031: "SlippageBpsTooHigh",
-  6032: "ProtocolMismatch",
-  6033: "TooManyDeFiInstructions",
-  6034: "MaxAgentsReached",
-  6035: "InsufficientPermissions",
-  6036: "InvalidPermissions",
-  6037: "InvalidConstraintConfig",
-  6038: "ConstraintViolated",
-  6039: "InvalidConstraintsPda",
-  6040: "InvalidPendingConstraintsPda",
-  6041: "AgentSpendLimitExceeded",
-  6042: "OverlaySlotExhausted",
-  6043: "AgentSlotNotFound",
-  6044: "UnauthorizedTokenApproval",
-  6045: "InvalidSessionExpiry",
-  6046: "UnconstrainedProgramBlocked",
-  6047: "ProtocolCapExceeded",
-  6048: "ProtocolCapsMismatch",
-  6049: "ConstraintsNotClosed",
-  6050: "PendingPolicyExists",
-  6051: "AgentPaused",
-  6052: "AgentAlreadyPaused",
-  6053: "AgentNotPaused",
-  6054: "UnauthorizedPostFinalizeInstruction",
-  6055: "UnexpectedBalanceDecrease",
-  6056: "TimelockTooShort",
-  6057: "PolicyVersionMismatch",
-  6058: "ActiveSessionsExist",
-  6059: "PostAssertionFailed",
-  6060: "InvalidPostAssertionIndex",
-  6061: "UnauthorizedPreValidateInstruction",
-  6062: "SnapshotNotCaptured",
-  6063: "InvalidConstraintOperator",
-  6064: "ZeroCopyVaultMismatch",
-  6065: "BlockedSplOpcode",
-  6066: "QueuedUpdateExpired",
-  6067: "AccountWritabilityMismatch",
-  6068: "SysvarScanBoundExceeded",
-  6069: "AsyncFulfillmentNotPermitted",
-  6070: "ConstraintsAlreadyPopulated",
-  6071: "OrphanPdaWrongOwner",
-  6072: "OrphanPdaPopulated",
-  6073: "ConfidentialTransferBlocked",
-  6074: "PermanentDelegateBlocked",
-  6075: "TransferHookBlocked",
-  6076: "LamportDrainBlocked",
-  6077: "BatchInstructionBlocked",
-  6078: "InvalidDestinationMode",
-};
+const SIGIL_ERROR_NAMES: Record<number, string> = Object.fromEntries(
+  Object.entries(SIGIL_ERRORS).map(([name, code]) => [code, name]),
+);
 
 /**
  * Extract custom error code from Solana transaction error and resolve to name.
@@ -635,6 +550,132 @@ export async function sendVersionedTx(
     slot: txDetails?.slot ?? 0,
     logs: txDetails?.meta?.logMessages ?? [],
   };
+}
+
+// ─── initialize_vault slot-bound sender (PEN-CROSS-2 aware) ─────────────────
+
+/**
+ * Send an `initialize_vault` transaction whose owner-signed preview digest is
+ * bound to the slot the tx actually executes in.
+ *
+ * WHY: `initialize_vault` (programs/sigil/src/instructions/initialize_vault.rs:
+ * 202-256) captures `Clock::get()?.slot` at handler entry, recomputes the
+ * policy-preview digest with that slot at canonical position 14 (PEN-CROSS-2
+ * close+reinit replay defense), and `require!`s exact equality with the
+ * owner-signed `preview_digest` (else `PolicyPreviewMismatch`, code 6071).
+ *
+ * LiteSVM freezes the clock at 0 so a digest signed for slot 0 matches. A live
+ * Surfnet clock advances (it tracks the devnet datasource), so the slot read by
+ * the caller can differ from the slot the tx lands in. This mirrors the
+ * production SDK (sdk/kit/src/create-vault.ts:350): read the current slot, sign
+ * the digest for it, submit, and on a 6071 mismatch re-read the slot and retry.
+ * All other errors propagate immediately (no masking).
+ *
+ * @param buildIx receives the slot to bind into the digest and returns the
+ *                fully-built `initialize_vault` instruction.
+ */
+export async function sendInitVault(
+  env: SurfpoolTestEnv,
+  buildIx: (createdAtSlot: number) => Promise<TransactionInstruction>,
+  signers: Keypair[] = [],
+  maxAttempts: number = 24,
+): Promise<VersionedTxResult> {
+  // A promptly-submitted tx lands one block after the slot we read (empirically
+  // exec == getSlot()+1 in both `clock` and `transaction` block-production
+  // modes). We bind to base+1 first; the offset cycle absorbs 0-/2-/3-slot drift
+  // (e.g. a slower CI runner) while the datasource clock advances under us.
+  const offsets = [1, 2, 0, 3];
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const base = await env.connection.getSlot("confirmed");
+    const createdAtSlot = base + offsets[attempt % offsets.length];
+    const ix = await buildIx(createdAtSlot);
+    try {
+      return await sendVersionedTx(env.connection, [ix], env.payer, signers);
+    } catch (e: any) {
+      const msg = String(e?.message ?? e);
+      // 6071 = PolicyPreviewMismatch: the live clock advanced between getSlot()
+      // and execution. Re-read the slot and retry. Any other error is real.
+      if (
+        msg.includes('"Custom":6071') ||
+        msg.includes("PolicyPreviewMismatch")
+      ) {
+        lastErr = e;
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw new Error(
+    `initialize_vault: clock kept advancing past the signed slot after ${maxAttempts} attempts. Last error: ${lastErr}`,
+  );
+}
+
+/**
+ * Standard inline vault init used across the Surfpool suites: the default
+ * policy (500 USDC daily cap, 100 USDC max tx, ALLOWLIST mode, no protocols,
+ * 30-min timelock, all-hours). Routes through `sendInitVault` so the owner-
+ * signed preview digest is bound to the live execution slot (PEN-CROSS-2) with
+ * retry — the only correct way to init on a live Surfnet clock. Returns the
+ * send result so callers (e.g. CU profiling) can read the signature.
+ */
+export async function initVaultInline(
+  env: SurfpoolTestEnv,
+  program: Program<any>,
+  vaultId: BN,
+  vaultPda: PublicKey,
+  policyPda: PublicKey,
+  trackerPda: PublicKey,
+  overlayPda: PublicKey,
+  feeDestination: PublicKey,
+): Promise<VersionedTxResult> {
+  const dailyCap = new BN(500_000_000);
+  const maxTx = new BN(100_000_000);
+  return sendInitVault(env, (createdAtSlot) =>
+    (program.methods as any)
+      .initializeVault(
+        vaultId,
+        dailyCap,
+        maxTx,
+        1,
+        [],
+        0,
+        100,
+        new BN(1800),
+        [],
+        [],
+        false, // observeOnly
+        0x00ffffff, // operating_hours (all 24h)
+        false, // auto_promote_grays
+        5, // auto_revoke_threshold
+        new BN(0), // stable_balance_floor
+        new BN(0), // per_recipient_daily_cap_usd
+        false, // cosign_required
+        initVaultPreviewDigest({
+          dailySpendingCapUsd: dailyCap,
+          maxTransactionSizeUsd: maxTx,
+          maxSlippageBps: 100,
+          protocolMode: 1,
+          protocols: [],
+          allowedDestinations: [],
+          timelockDuration: new BN(1800),
+          operatingHours: 0x00ffffff,
+          autoPromoteGrays: false,
+          autoRevokeThreshold: 5,
+          createdAtSlot,
+        }),
+      )
+      .accounts({
+        owner: env.payer.publicKey,
+        vault: vaultPda,
+        policy: policyPda,
+        tracker: trackerPda,
+        agentSpendOverlay: overlayPda,
+        feeDestination,
+        systemProgram: SystemProgram.programId,
+      })
+      .instruction(),
+  );
 }
 
 // ─── PDA derivation (reused from devnet-setup pattern) ──────────────────────
@@ -785,49 +826,58 @@ export async function setupVaultWithAgent(
   // behavior is identical (same methods, same args, same `.rpc()`). Do NOT
   // touch the argument chains themselves.
   const methods = program.methods as any;
-  await methods
-    .initializeVault(
-      vaultId,
-      dailyCap,
-      maxTxSize,
-      1,
-      opts.protocols ?? [],
-      developerFeeRate,
-      maxSlippageBps,
-      timelockDuration,
-      allowedDestinations,
-      protocolCaps,
-      false, // observeOnly (Phase 2 TA-19)
-      0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
-      false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
-      5, // auto_revoke_threshold (TA-17 Phase 3 — default)
-      new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
-      new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
-      false, // cosign_required (G6 audit 2026-05-18 — opt-in, default off)
-      initVaultPreviewDigest({
-        dailySpendingCapUsd: dailyCap,
-        maxTransactionSizeUsd: maxTxSize,
-        maxSlippageBps: maxSlippageBps,
-        protocolMode: 1,
-        protocols: opts.protocols ?? [],
-        allowedDestinations: allowedDestinations,
-        timelockDuration: timelockDuration,
-        operatingHours: 0x00ffffff,
-        autoPromoteGrays: false,
-        autoRevokeThreshold: 5,
-      }),
-    )
-    .accounts({
-      owner: owner.publicKey,
-      vault: pdas.vaultPda,
-      policy: pdas.policyPda,
-      tracker: pdas.trackerPda,
-      agentSpendOverlay: overlayPda,
-      feeDestination: feeDestination.publicKey,
-      systemProgram: SystemProgram.programId,
-    } as any)
-    .signers(owner === env.payer ? [] : [owner])
-    .rpc();
+  await sendInitVault(
+    env,
+    (createdAtSlot) =>
+      methods
+        .initializeVault(
+          vaultId,
+          dailyCap,
+          maxTxSize,
+          1,
+          opts.protocols ?? [],
+          developerFeeRate,
+          maxSlippageBps,
+          timelockDuration,
+          allowedDestinations,
+          protocolCaps,
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosign_required (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: dailyCap,
+            maxTransactionSizeUsd: maxTxSize,
+            maxSlippageBps: maxSlippageBps,
+            protocolMode: 1,
+            protocols: opts.protocols ?? [],
+            allowedDestinations: allowedDestinations,
+            timelockDuration: timelockDuration,
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+            // PEN-CROSS-2: bind the owner-signed digest to the slot
+            // initialize_vault will execute in. LiteSVM froze the clock at 0; a
+            // live Surfnet clock advances, so sendInitVault re-reads + retries
+            // on a 6071 mismatch (mirrors create-vault.ts:350).
+            createdAtSlot,
+          }),
+        )
+        .accounts({
+          owner: owner.publicKey,
+          vault: pdas.vaultPda,
+          policy: pdas.policyPda,
+          tracker: pdas.trackerPda,
+          agentSpendOverlay: overlayPda,
+          feeDestination: feeDestination.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .instruction(),
+    owner === env.payer ? [] : [owner],
+  );
 
   if (!skipAgent) {
     await methods
