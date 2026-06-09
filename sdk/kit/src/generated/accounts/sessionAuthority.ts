@@ -172,9 +172,16 @@ export type SessionAuthority = {
   /**
    * F-Q8 — the vault stablecoin ATA pinned at validate for the
    * non-stablecoin-input outcome check. finalize_session asserts the
-   * measured account == this pubkey, blocking substitution of a
-   * different vault-owned stablecoin ATA. Pubkey::default() on the
-   * stablecoin-input path. Appended at END (SIZE 515 → 547).
+   * account it measures has THIS exact pubkey, so a compromised agent
+   * cannot substitute a different vault-owned stablecoin ATA (whose
+   * owner+mint also pass) to spoof the `current > before` return check.
+   * Set to output_stablecoin_account.key() on the non-stablecoin-input
+   * spending path; Pubkey::default() otherwise (stablecoin-input uses
+   * vault_token_account, already pinned via delegation_token_account).
+   *
+   * **APPEND-ONLY**: new field at the END of SessionAuthority. SIZE grows
+   * by 32 bytes (515 → 547). Sessions are init/close per cycle, so no
+   * migration is required.
    */
   outputStablecoinAccount: Address;
 };
@@ -295,9 +302,16 @@ export type SessionAuthorityArgs = {
   /**
    * F-Q8 — the vault stablecoin ATA pinned at validate for the
    * non-stablecoin-input outcome check. finalize_session asserts the
-   * measured account == this pubkey, blocking substitution of a
-   * different vault-owned stablecoin ATA. Pubkey::default() on the
-   * stablecoin-input path. Appended at END (SIZE 515 → 547).
+   * account it measures has THIS exact pubkey, so a compromised agent
+   * cannot substitute a different vault-owned stablecoin ATA (whose
+   * owner+mint also pass) to spoof the `current > before` return check.
+   * Set to output_stablecoin_account.key() on the non-stablecoin-input
+   * spending path; Pubkey::default() otherwise (stablecoin-input uses
+   * vault_token_account, already pinned via delegation_token_account).
+   *
+   * **APPEND-ONLY**: new field at the END of SessionAuthority. SIZE grows
+   * by 32 bytes (515 → 547). Sessions are init/close per cycle, so no
+   * migration is required.
    */
   outputStablecoinAccount: Address;
 };

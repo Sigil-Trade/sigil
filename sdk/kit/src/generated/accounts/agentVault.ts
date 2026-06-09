@@ -155,11 +155,17 @@ export type AgentVault = {
    */
   freezeReason: number;
   /**
-   * F-Q6 (2026-06-02): owner-account-type discriminant — 0 = single-key
-   * EOA, 1 = N-of-M multisig (Squads V4). Set once from an on-chain-verified
-   * fact at the ownership-transfer site; NOT bound by any digest; a wrong
-   * value fails SAFE to the single-key delayed-grant path in register_agent.
-   * Placed before vault_authority so the LBL-01 seed-key stays the final 32 bytes.
+   * F-Q6 (2026-06-02) — owner-account-type discriminant: 0 = single-key EOA
+   * (`OWNER_TYPE_EOA`), 1 = N-of-M multisig / Squads V4 (`OWNER_TYPE_MULTISIG`).
+   * Set ONCE per owner from an on-chain-VERIFIED fact: `initialize_vault` = 0,
+   * `accept_ownership_transfer` (EOA) = 0, `accept_ownership_transfer_multisig`
+   * = 1. NOT bound by any digest — it is program-set (not owner-supplied), and
+   * a stale/wrong value fails SAFE to the single-key delayed-grant path in
+   * `register_agent`. Validated `<= OWNER_TYPE_MULTISIG` at the read site.
+   *
+   * Placed BEFORE `vault_authority` so the LBL-01 seed-key remains the final
+   * 32 bytes (the SDK resolver reads it at `SIZE - 32`). Pre-launch — no
+   * deployed vaults constrain byte placement.
    */
   ownerType: number;
   /**
@@ -284,11 +290,17 @@ export type AgentVaultArgs = {
    */
   freezeReason: number;
   /**
-   * F-Q6 (2026-06-02): owner-account-type discriminant — 0 = single-key
-   * EOA, 1 = N-of-M multisig (Squads V4). Set once from an on-chain-verified
-   * fact at the ownership-transfer site; NOT bound by any digest; a wrong
-   * value fails SAFE to the single-key delayed-grant path in register_agent.
-   * Placed before vault_authority so the LBL-01 seed-key stays the final 32 bytes.
+   * F-Q6 (2026-06-02) — owner-account-type discriminant: 0 = single-key EOA
+   * (`OWNER_TYPE_EOA`), 1 = N-of-M multisig / Squads V4 (`OWNER_TYPE_MULTISIG`).
+   * Set ONCE per owner from an on-chain-VERIFIED fact: `initialize_vault` = 0,
+   * `accept_ownership_transfer` (EOA) = 0, `accept_ownership_transfer_multisig`
+   * = 1. NOT bound by any digest — it is program-set (not owner-supplied), and
+   * a stale/wrong value fails SAFE to the single-key delayed-grant path in
+   * `register_agent`. Validated `<= OWNER_TYPE_MULTISIG` at the read site.
+   *
+   * Placed BEFORE `vault_authority` so the LBL-01 seed-key remains the final
+   * 32 bytes (the SDK resolver reads it at `SIZE - 32`). Pre-launch — no
+   * deployed vaults constrain byte placement.
    */
   ownerType: number;
   /**

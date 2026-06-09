@@ -221,7 +221,7 @@ export type PolicyConfig = {
    * (a) the unlock time elapses OR (b) the owner calls
    * `promote_graylist_destination` to fast-track, spending paths
    * reject any tx routing value to that destination with
-   * `ErrGraylistFriction` (6086).
+   * `ErrGraylistFriction` (6077).
    *
    * Tuple is `(destination_pubkey, unlock_unix)`. Bounded ≤10 entries
    * (max_destinations). When full, additional allowlist adds reject
@@ -254,7 +254,7 @@ export type PolicyConfig = {
    * Owner-configurable in range 3..=20; out-of-range values rejected
    * at policy-write time with `InvalidPermissions`. Default 5.
    *
-   * Only on-chain policy-violation codes (6083-6100) count — see
+   * Only on-chain policy-violation codes (6074-6091) count — see
    * `POLICY_VIOLATION_RANGE` in finalize_session. External codes
    * (CU exhaustion, nonce desync, auth) do NOT increment.
    *
@@ -365,9 +365,16 @@ export type PolicyConfig = {
   cosignSessionPubkey: Address;
   /**
    * F-Q6 (2026-06-02): owner-configured delay (in seconds) before an
-   * OPERATOR capability grant takes effect. Default 0. Bound by TA-19
-   * at canonical digest position 22 so a tampered SDK or pending-PDA
-   * mutation cannot silently lower it. APPENDED per F-14 APPEND-ONLY rule.
+   * OPERATOR capability grant takes effect. Default 0. An owner-set
+   * security control gating OPERATOR seating — bound by TA-19 at canonical
+   * digest position 22 so a tampered SDK or pending-PDA mutation cannot
+   * silently lower it between owner approval and on-chain landing.
+   * Changeable only via the timelocked `queue_policy_update` path (so
+   * lowering it is itself delayed). The single-key forced floor
+   * (`max(field, 600)`) and per-tier grant logic live in `register_agent`
+   * / `queue_agent_grant`.
+   *
+   * APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
    */
   operatorGrantDelaySeconds: bigint;
 };
@@ -529,7 +536,7 @@ export type PolicyConfigArgs = {
    * (a) the unlock time elapses OR (b) the owner calls
    * `promote_graylist_destination` to fast-track, spending paths
    * reject any tx routing value to that destination with
-   * `ErrGraylistFriction` (6086).
+   * `ErrGraylistFriction` (6077).
    *
    * Tuple is `(destination_pubkey, unlock_unix)`. Bounded ≤10 entries
    * (max_destinations). When full, additional allowlist adds reject
@@ -562,7 +569,7 @@ export type PolicyConfigArgs = {
    * Owner-configurable in range 3..=20; out-of-range values rejected
    * at policy-write time with `InvalidPermissions`. Default 5.
    *
-   * Only on-chain policy-violation codes (6083-6100) count — see
+   * Only on-chain policy-violation codes (6074-6091) count — see
    * `POLICY_VIOLATION_RANGE` in finalize_session. External codes
    * (CU exhaustion, nonce desync, auth) do NOT increment.
    *
@@ -673,9 +680,16 @@ export type PolicyConfigArgs = {
   cosignSessionPubkey: Address;
   /**
    * F-Q6 (2026-06-02): owner-configured delay (in seconds) before an
-   * OPERATOR capability grant takes effect. Default 0. Bound by TA-19
-   * at canonical digest position 22 so a tampered SDK or pending-PDA
-   * mutation cannot silently lower it. APPENDED per F-14 APPEND-ONLY rule.
+   * OPERATOR capability grant takes effect. Default 0. An owner-set
+   * security control gating OPERATOR seating — bound by TA-19 at canonical
+   * digest position 22 so a tampered SDK or pending-PDA mutation cannot
+   * silently lower it between owner approval and on-chain landing.
+   * Changeable only via the timelocked `queue_policy_update` path (so
+   * lowering it is itself delayed). The single-key forced floor
+   * (`max(field, 600)`) and per-tier grant logic live in `register_agent`
+   * / `queue_agent_grant`.
+   *
+   * APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
    */
   operatorGrantDelaySeconds: number | bigint;
 };

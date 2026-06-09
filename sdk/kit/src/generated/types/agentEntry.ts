@@ -46,7 +46,7 @@ export type AgentEntry = {
    * it is incremented by the owner-only `record_agent_violation` ix,
    * called by an off-chain monitor after observing a failed seal whose
    * reject reason is an on-chain policy code (numeric range
-   * POLICY_VIOLATION_RANGE = 6083..=6100 — see `state/mod.rs::is_policy_violation_code`).
+   * POLICY_VIOLATION_RANGE = 6074..=6091 — see `state/mod.rs::is_policy_violation_code`).
    * Reset to 0 inside `validate_and_authorize` on a successful seal.
    * When `>= policy.auto_revoke_threshold`, the agent's capability is
    * set to CAPABILITY_DISABLED and an `AgentAutoRevoked` event is
@@ -82,7 +82,7 @@ export type AgentEntryArgs = {
    * it is incremented by the owner-only `record_agent_violation` ix,
    * called by an off-chain monitor after observing a failed seal whose
    * reject reason is an on-chain policy code (numeric range
-   * POLICY_VIOLATION_RANGE = 6083..=6100 — see `state/mod.rs::is_policy_violation_code`).
+   * POLICY_VIOLATION_RANGE = 6074..=6091 — see `state/mod.rs::is_policy_violation_code`).
    * Reset to 0 inside `validate_and_authorize` on a successful seal.
    * When `>= policy.auto_revoke_threshold`, the agent's capability is
    * set to CAPABILITY_DISABLED and an `AgentAutoRevoked` event is

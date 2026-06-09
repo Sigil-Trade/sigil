@@ -187,9 +187,10 @@ export type PendingPolicyUpdate = {
    */
   cosignSessionPubkey: Option<Address>;
   /**
-   * F-Q6 (2026-06-02): optional update to operator_grant_delay_seconds.
-   * None = preserve live value; Some(n) = update. Bound by TA-19 at
-   * canonical digest position 22. APPENDED per F-14 APPEND-ONLY rule.
+   * F-Q6 (2026-06-02): optional update to
+   * `PolicyConfig.operator_grant_delay_seconds`. None = preserve live value;
+   * Some(n) = update. Bound by TA-19 at canonical digest position 22.
+   * APPENDED per F-14 APPEND-ONLY rule for Borsh stability.
    */
   operatorGrantDelaySeconds: Option<bigint>;
 };
@@ -317,9 +318,10 @@ export type PendingPolicyUpdateArgs = {
    */
   cosignSessionPubkey: OptionOrNullable<Address>;
   /**
-   * F-Q6 (2026-06-02): optional update to operator_grant_delay_seconds.
-   * None = preserve live value; Some(n) = update. Bound by TA-19 at
-   * canonical digest position 22. APPENDED per F-14 APPEND-ONLY rule.
+   * F-Q6 (2026-06-02): optional update to
+   * `PolicyConfig.operator_grant_delay_seconds`. None = preserve live value;
+   * Some(n) = update. Bound by TA-19 at canonical digest position 22.
+   * APPENDED per F-14 APPEND-ONLY rule for Borsh stability.
    */
   operatorGrantDelaySeconds: OptionOrNullable<number | bigint>;
 };

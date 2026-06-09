@@ -85,7 +85,7 @@ export type SpendTracker = {
    * "zeroed, no enforcement yet" — this was stale. The enforcement
    * has lived in `finalize_session` since Phase 2; this comment was
    * the only artifact suggesting otherwise. Phase 5 ratifies the
-   * existing require! with the dedicated `ErrDailyCapExceeded` (6095)
+   * existing require! with the dedicated `ErrDailyCapExceeded` (6086)
    * error code so off-chain monitors can disambiguate the "rolling
    * 24h cap hit" semantic from the legacy "slot allocation exhausted"
    * path (which still returns `ProtocolCapExceeded` from inside
@@ -143,7 +143,7 @@ export type SpendTrackerArgs = {
    * "zeroed, no enforcement yet" — this was stale. The enforcement
    * has lived in `finalize_session` since Phase 2; this comment was
    * the only artifact suggesting otherwise. Phase 5 ratifies the
-   * existing require! with the dedicated `ErrDailyCapExceeded` (6095)
+   * existing require! with the dedicated `ErrDailyCapExceeded` (6086)
    * error code so off-chain monitors can disambiguate the "rolling
    * 24h cap hit" semantic from the legacy "slot allocation exhausted"
    * path (which still returns `ProtocolCapExceeded` from inside
