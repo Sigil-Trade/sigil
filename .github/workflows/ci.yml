@@ -358,8 +358,16 @@ jobs:
   # ──────────────────────────────────────────────────────────────
   # Job 3: On-chain tests (LiteSVM in-process, no validator)
   # ──────────────────────────────────────────────────────────────
-  on-chain-tests:
-    name: On-Chain Tests (LiteSVM)
+  # ──────────────────────────────────────────────────────────────
+  # Job 3a: Build program (.so) — x86_64
+  #
+  # Agave/Solana publishes no aarch64-unknown-linux-gnu SBF toolchain, so the
+  # program MUST be compiled on x64. The resulting BPF .so is host-arch-
+  # independent and is consumed by the arm64 on-chain-tests job below (which
+  # runs the litesvm suite on the arm64 binding to avoid LiteSVM/litesvm#171).
+  # ──────────────────────────────────────────────────────────────
+  build-program:
+    name: Build Program (.so)
     needs: changes
     if: needs.changes.outputs.rust == 'true' || github.event_name == 'push'
     runs-on: ubuntu-latest
@@ -397,8 +405,7 @@ jobs:
           # Idempotent (restored from cache when SOLANA_VERSION is unchanged) +
           # authenticated + retried with backoff, so a transient GitHub rate
           # limit on the Anza installer's release fetch on a cold cache cannot
-          # red the gate. This was the cause of the intermittent
-          # "On-Chain Tests (LiteSVM)" failure.
+          # red the gate.
           SOLANA_BIN="$HOME/.local/share/solana/install/active_release/bin"
           if [ ! -x "$SOLANA_BIN/solana" ]; then
             for attempt in 1 2 3 4 5; do
@@ -419,70 +426,11 @@ jobs:
             cargo install --git https://github.com/coral-xyz/anchor --tag v${{ env.ANCHOR_VERSION }} anchor-cli --locked --force
           fi
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@91ab88e2619ed1f46221f0ba42d1492c02baf788 # v6.0.6
-        with:
-          version: 10.7.1
-
-      - name: Install Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: "pnpm"
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build SDK packages (tests import @usesigil/kit dist)
-        run: pnpm -r run build
-
       - name: Build program
         run: anchor build --no-idl
 
       - name: Restore committed IDL (cache may contain stale version)
         run: git checkout -- target/idl/ target/types/
-
-      # Bun runs the LiteSVM suite on JavaScriptCore (not V8), structurally
-      # avoiding the x86_64 V8-GC heap corruption in litesvm's NAPI binding
-      # (LiteSVM/litesvm#171) — the bug that produced bn.js "<digits>NaN" under
-      # the full suite on x64 Node. Node/pnpm still drive install + SDK build;
-      # only test execution moves to Bun (proven pattern: Meteora CI).
-      - name: Install Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: "1.3.10"
-
-      - name: Run on-chain tests (LiteSVM, in-process via Bun)
-        run: |
-          # Run under Bun (JavaScriptCore, not V8) to avoid litesvm #171. The
-          # full 503-test suite was validated under Bun locally with the canary
-          # reporting zero corruption. Canary (tests/_canary.js) stays for now to
-          # assert no corruption on x64 CI (remove once confirmed green).
-          bunx ts-mocha -p ./tsconfig.json -t 300000 --require ./tests/_canary.js \
-            tests/sigil.ts \
-            tests/jupiter-integration.ts \
-            tests/jupiter-lend-integration.ts \
-            tests/flash-trade-integration.ts \
-            tests/security-exploits.ts \
-            tests/cu-budget.ts \
-            tests/analytics-counters.ts \
-            tests/missing-coverage.ts \
-            tests/policy-digest-invariant.ts \
-            tests/post-assertions-r-variants.ts \
-            tests/post-assertions-sandwich.ts \
-            tests/sandwich-integration.ts \
-            tests/sysvar-scan-bound.ts \
-            tests/toctou-security.ts \
-            tests/audit-log.ts \
-            tests/audit-log-burst.ts \
-            tests/audit-log-coverage.ts \
-            tests/ownership-transfer.ts \
-            tests/ownership-transfer-multisig.ts \
-            tests/f10-timelocked-admin.ts \
-            tests/fq6-operator-grant-tiers.ts \
-            tests/intent-digest-parity.ts \
-            tests/m1-03-frozen-gate.ts \
-            tests/pen-cross-1-absorption.ts
 
       - name: Check for IDL drift
         run: |
@@ -527,6 +475,88 @@ jobs:
           else
             echo "IDL generation skipped (nightly toolchain not available or build failed). Not blocking."
           fi
+
+      - name: Upload program artifact (.so)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sigil-program-so
+          path: target/deploy/sigil.so
+          if-no-files-found: error
+          retention-days: 1
+
+  # ──────────────────────────────────────────────────────────────
+  # Job 3: On-chain tests (LiteSVM in-process) — arm64
+  #
+  # litesvm's x86_64-linux-gnu NAPI binding corrupts the V8/JSC heap under our
+  # full suite's cumulative VM operations (LiteSVM/litesvm#171 — reproduced
+  # under BOTH Node and Bun on x64). The arm64 binding is unaffected. The .so
+  # is built on x64 (build-program) and downloaded here; BPF is host-arch-
+  # independent, so program behavior is identical. No Rust/Solana/Anchor here.
+  # ──────────────────────────────────────────────────────────────
+  on-chain-tests:
+    name: On-Chain Tests (LiteSVM)
+    needs: [changes, build-program]
+    if: needs.changes.outputs.rust == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@91ab88e2619ed1f46221f0ba42d1492c02baf788 # v6.0.6
+        with:
+          version: 10.7.1
+
+      - name: Install Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build SDK packages (tests import @usesigil/kit dist)
+        run: pnpm -r run build
+
+      - name: Download program artifact (.so built on x64)
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: sigil-program-so
+          path: target/deploy/
+
+      - name: Run on-chain tests (LiteSVM, in-process)
+        run: |
+          # Runs on arm64 to avoid the litesvm x86_64 NAPI heap corruption
+          # (LiteSVM/litesvm#171), reproduced on x64 under both Node and Bun.
+          # The .so was built on x64 (build-program) and downloaded above.
+          # The bn.js canary (tests/_canary.js) asserts no corruption across the
+          # run (temporary; remove once arm64 is confirmed green).
+          npx ts-mocha -p ./tsconfig.json -t 300000 --require ./tests/_canary.js \
+            tests/sigil.ts \
+            tests/jupiter-integration.ts \
+            tests/jupiter-lend-integration.ts \
+            tests/flash-trade-integration.ts \
+            tests/security-exploits.ts \
+            tests/cu-budget.ts \
+            tests/analytics-counters.ts \
+            tests/missing-coverage.ts \
+            tests/policy-digest-invariant.ts \
+            tests/post-assertions-r-variants.ts \
+            tests/post-assertions-sandwich.ts \
+            tests/sandwich-integration.ts \
+            tests/sysvar-scan-bound.ts \
+            tests/toctou-security.ts \
+            tests/audit-log.ts \
+            tests/audit-log-burst.ts \
+            tests/audit-log-coverage.ts \
+            tests/ownership-transfer.ts \
+            tests/ownership-transfer-multisig.ts \
+            tests/f10-timelocked-admin.ts \
+            tests/fq6-operator-grant-tiers.ts \
+            tests/intent-digest-parity.ts \
+            tests/m1-03-frozen-gate.ts \
+            tests/pen-cross-1-absorption.ts
 
   # ──────────────────────────────────────────────────────────────
   # Job 3b: Build verification (feature flag safety net)
