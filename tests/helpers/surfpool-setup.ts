@@ -39,6 +39,18 @@ const PROGRAM_ID = new PublicKey(
   "7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK",
 );
 
+/**
+ * Mock-DeFi fixture program (counted-zero-spend noop) — mirrors litesvm-setup.ts.
+ * Allowlisted as the default protocol so active (non-observe_only) vaults satisfy
+ * F-11 (initialize_vault.rs:188: an active vault must have >=1 protocol OR
+ * destination on the allowlist). Allowlisting the pubkey is enough for
+ * initialize_vault to succeed; the fixture .so only needs to be DEPLOYED to the
+ * Surfnet before a spending sandwich actually targets it (follow-up work).
+ */
+const MOCK_DEFI_PROGRAM_ID = new PublicKey(
+  "2pB26qKW73sToF7ETcdhXQTj8biYwAk9TCArVwgHBe24",
+);
+
 const SURFPOOL_RPC_URL =
   process.env.SURFPOOL_RPC_URL || "http://localhost:8899";
 
@@ -638,7 +650,7 @@ export async function initVaultInline(
         dailyCap,
         maxTx,
         1,
-        [],
+        [MOCK_DEFI_PROGRAM_ID],
         0,
         100,
         new BN(1800),
@@ -656,7 +668,7 @@ export async function initVaultInline(
           maxTransactionSizeUsd: maxTx,
           maxSlippageBps: 100,
           protocolMode: 1,
-          protocols: [],
+          protocols: [MOCK_DEFI_PROGRAM_ID],
           allowedDestinations: [],
           timelockDuration: new BN(1800),
           operatingHours: 0x00ffffff,
@@ -835,7 +847,7 @@ export async function setupVaultWithAgent(
           dailyCap,
           maxTxSize,
           1,
-          opts.protocols ?? [],
+          opts.protocols ?? [MOCK_DEFI_PROGRAM_ID],
           developerFeeRate,
           maxSlippageBps,
           timelockDuration,
@@ -853,7 +865,7 @@ export async function setupVaultWithAgent(
             maxTransactionSizeUsd: maxTxSize,
             maxSlippageBps: maxSlippageBps,
             protocolMode: 1,
-            protocols: opts.protocols ?? [],
+            protocols: opts.protocols ?? [MOCK_DEFI_PROGRAM_ID],
             allowedDestinations: allowedDestinations,
             timelockDuration: timelockDuration,
             operatingHours: 0x00ffffff,
@@ -880,15 +892,22 @@ export async function setupVaultWithAgent(
   );
 
   if (!skipAgent) {
-    await methods
+    // Route through sendVersionedTx (not .rpc()) so a real failure surfaces as
+    // {Custom:N} instead of the anchor x web3.js "Unknown action 'undefined'" mask.
+    const registerIx = await methods
       .registerAgent(agent.publicKey, agentCapability, agentSpendingLimit)
       .accounts({
         owner: owner.publicKey,
         vault: pdas.vaultPda,
         agentSpendOverlay: overlayPda,
-      } as any)
-      .signers(owner === env.payer ? [] : [owner])
-      .rpc();
+      })
+      .instruction();
+    await sendVersionedTx(
+      env.connection,
+      [registerIx],
+      env.payer,
+      owner === env.payer ? [] : [owner],
+    );
   }
 
   const vaultUsdcAta = await fundWithTokens(
