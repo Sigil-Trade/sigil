@@ -63,6 +63,7 @@ import {
   surfnetRpc,
   ensureMintExists,
   setupVaultWithAgent,
+  seatOperatorAgent,
   initVaultInline,
   expectTxError,
   VaultSetupResult,
@@ -165,14 +166,16 @@ describe("surfpool-integration", function () {
 
     it("registers agent and deposits USDC", async () => {
       // Register agent
-      await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: vaultPda,
-          agentSpendOverlay: overlayPda,
-        } as any)
-        .rpc();
+      // F-Q6: OPERATOR (FULL_CAPABILITY=2) on a single-key vault must be seated
+      // via the queue → time-travel → apply timelock path (an instant
+      // register_agent reverts with ErrOperatorGrantRequiresTimelock, 6107).
+      await seatOperatorAgent(
+        env,
+        program,
+        env.payer.publicKey,
+        vaultPda,
+        agent.publicKey,
+      );
 
       const vault = await program.account.agentVault.fetch(vaultPda);
       expect(vault.agents[0].pubkey.toString()).to.equal(
@@ -332,14 +335,16 @@ describe("surfpool-integration", function () {
         feeDestination.publicKey,
       );
 
-      await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: vaultPda,
-          agentSpendOverlay: overlayPda,
-        } as any)
-        .rpc();
+      // F-Q6: OPERATOR (FULL_CAPABILITY=2) on a single-key vault must be seated
+      // via the queue → time-travel → apply timelock path (an instant
+      // register_agent reverts with ErrOperatorGrantRequiresTimelock, 6107).
+      await seatOperatorAgent(
+        env,
+        program,
+        env.payer.publicKey,
+        vaultPda,
+        agent.publicKey,
+      );
 
       vaultUsdcAta = getAssociatedTokenAddressSync(
         DEVNET_USDC_MINT,
@@ -614,14 +619,16 @@ describe("surfpool-integration", function () {
         feeDestination.publicKey,
       );
 
-      await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: vaultPda,
-          agentSpendOverlay: overlayPda,
-        } as any)
-        .rpc();
+      // F-Q6: OPERATOR (FULL_CAPABILITY=2) on a single-key vault must be seated
+      // via the queue → time-travel → apply timelock path (an instant
+      // register_agent reverts with ErrOperatorGrantRequiresTimelock, 6107).
+      await seatOperatorAgent(
+        env,
+        program,
+        env.payer.publicKey,
+        vaultPda,
+        agent.publicKey,
+      );
 
       vaultUsdcAta = getAssociatedTokenAddressSync(
         DEVNET_USDC_MINT,
@@ -924,14 +931,16 @@ describe("surfpool-integration", function () {
         feeDestination.publicKey,
       );
 
-      await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: vaultPda,
-          agentSpendOverlay: overlayPda,
-        } as any)
-        .rpc();
+      // F-Q6: OPERATOR (FULL_CAPABILITY=2) on a single-key vault must be seated
+      // via the queue → time-travel → apply timelock path (an instant
+      // register_agent reverts with ErrOperatorGrantRequiresTimelock, 6107).
+      await seatOperatorAgent(
+        env,
+        program,
+        env.payer.publicKey,
+        vaultPda,
+        agent.publicKey,
+      );
     });
 
     it("funds vault with USDC via surfnet_setTokenAccount", async () => {
@@ -1099,14 +1108,16 @@ describe("surfpool-integration", function () {
         feeDestination.publicKey,
       );
 
-      await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: vaultPda,
-          agentSpendOverlay: overlayPda,
-        } as any)
-        .rpc();
+      // F-Q6: OPERATOR (FULL_CAPABILITY=2) on a single-key vault must be seated
+      // via the queue → time-travel → apply timelock path (an instant
+      // register_agent reverts with ErrOperatorGrantRequiresTimelock, 6107).
+      await seatOperatorAgent(
+        env,
+        program,
+        env.payer.publicKey,
+        vaultPda,
+        agent.publicKey,
+      );
 
       vaultUsdcAta = getAssociatedTokenAddressSync(
         DEVNET_USDC_MINT,
@@ -1743,16 +1754,19 @@ describe("surfpool-integration", function () {
     before(async () => {
       setup = await setupVaultWithAgent(env, program);
 
-      // Register a second agent for pause isolation tests
+      // Register a second agent for pause isolation tests. F-Q6: OPERATOR on a
+      // single-key vault is seated via the queue → time-travel → apply timelock
+      // path (instant register reverts with ErrOperatorGrantRequiresTimelock,
+      // 6107). agent2 must be a true OPERATOR — the isolation test exercises its
+      // ability to operate, so Observer would not suffice.
       agent2 = await createWallet(env.connection, "agent2", 10);
-      await program.methods
-        .registerAgent(agent2.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: setup.vaultPda,
-          agentSpendOverlay: setup.overlayPda,
-        } as any)
-        .rpc();
+      await seatOperatorAgent(
+        env,
+        program,
+        env.payer.publicKey,
+        setup.vaultPda,
+        agent2.publicKey,
+      );
     });
 
     it("freeze_vault blocks validate+finalize", async () => {
@@ -2952,11 +2966,18 @@ describe("surfpool-integration", function () {
     it("register 11th agent fails with MaxAgentsReached", async () => {
       const maxSetup = await setupVaultWithAgent(env, program);
 
-      // Register agents 2-10 (agent 1 already registered by setup)
+      // Register agents 2-10 (agent 1 already registered by setup). These are
+      // pure count-fillers — never used for an OPERATOR action — so seat them as
+      // Observer (capability 1), which is instant-eligible (no F-Q6 timelock).
+      // MaxAgentsReached is checked at register_agent.rs:125, BEFORE the OPERATOR
+      // gate at :140, so the cap is capability-agnostic and the 11th-agent
+      // assertion below still fires with the exact same error. (Capability levels:
+      // 0=Disabled, 1=Observer, 2=Operator.)
+      const OBSERVER_CAPABILITY = 1;
       for (let i = 2; i <= 10; i++) {
         const extra = await createWallet(env.connection, `maxAgent${i}`, 2);
         const regIx = await program.methods
-          .registerAgent(extra.publicKey, FULL_CAPABILITY, new BN(0))
+          .registerAgent(extra.publicKey, OBSERVER_CAPABILITY, new BN(0))
           .accounts({
             owner: env.payer.publicKey,
             vault: maxSetup.vaultPda,

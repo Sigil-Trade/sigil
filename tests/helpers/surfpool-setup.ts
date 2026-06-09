@@ -20,6 +20,7 @@ import {
   TransactionMessage,
   VersionedTransaction,
   SYSVAR_INSTRUCTIONS_PUBKEY,
+  SYSVAR_SLOT_HASHES_PUBKEY,
 } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
@@ -754,6 +755,126 @@ export function deriveOverlayPda(
   return overlayPda;
 }
 
+// ─── OPERATOR-grant seating (F-Q6 timelock path) ────────────────────────────
+
+/** CAPABILITY_OPERATOR (state/vault.rs) — the full-access agent capability. */
+export const CAPABILITY_OPERATOR = 2;
+
+/**
+ * SINGLE_KEY_OPERATOR_DELAY_FLOOR (programs/sigil/src/utils/operator_grant.rs).
+ * A single-key vault's OPERATOR grant is floored at this delay (the forced
+ * 2nd authorization factor). Kept in sync with the Rust constant; the helper
+ * advances `floor + 1`s past it.
+ */
+export const SINGLE_KEY_OPERATOR_DELAY_FLOOR = 600;
+
+/**
+ * Seat an OPERATOR-class agent on a SINGLE-KEY vault via the timelocked
+ * queue → advance → apply path — the Surfpool analogue of the LiteSVM
+ * `tests/helpers/register-operator-agent.ts`.
+ *
+ * After F-Q6 (register_agent.rs:140), `register_agent` REJECTS an instant
+ * OPERATOR grant on a single-key vault (`ErrOperatorGrantRequiresTimelock`,
+ * 6107). Test setups that previously did an instant `registerAgent(OPERATOR)`
+ * swap to this helper, which:
+ *   1. `queue_agent_grant(agent, OPERATOR, limit)` — stores a pending grant
+ *      with `min_delay_seconds = effective_delay` (600s for a single-key vault
+ *      at the default 0 configured delay).
+ *   2. `timeTravel` the live Surfnet clock past the timelock (floor + 1s). The
+ *      apply-time freshness ceiling is SLOT-based (700_000 slots ~78h,
+ *      apply_agent_grant.rs:149); a timestamp-only jump advances only a few
+ *      slots, so the ceiling is never threatened (same pattern as the PASSING
+ *      suite-7 policy-apply and suite-9 reactivate flows).
+ *   3. `apply_agent_grant()` — pushes the agent into `vault.agents`.
+ *
+ * Both ix are built via `.instruction()` and sent through `sendVersionedTx`
+ * (NOT `.rpc()`) so a real revert surfaces as `{Custom:N}` instead of the
+ * anchor x web3.js "Unknown action 'undefined'" mask. Every PDA
+ * (policy / pending_agent_grant / agent_spend overlay / audit_success) is
+ * derived locally from `vault`, so callers pass only the high-level context.
+ *
+ * Cosign/multisig vaults seat an OPERATOR INSTANTLY — call `registerAgent`
+ * directly for those. This helper is specifically the single-key substitute.
+ * Callers asserting a REJECT must NOT use this helper (it propagates the revert).
+ *
+ * @param signers Extra signers when `owner` is not the provider wallet
+ *                (the provider/payer auto-signs as fee payer). Pass the owner
+ *                Keypair here in that case (mirrors the inline register block's
+ *                `owner === env.payer ? [] : [owner]`).
+ */
+export async function seatOperatorAgent(
+  env: SurfpoolTestEnv,
+  program: Program<any>,
+  owner: PublicKey,
+  vault: PublicKey,
+  agent: PublicKey,
+  spendingLimitUsd: BN | number = 0,
+  signers: Keypair[] = [],
+): Promise<void> {
+  const spendingLimit = new BN(spendingLimitUsd);
+  const programId = program.programId;
+
+  // Every PDA is derived from the vault PDA directly. policy / pending /
+  // audit_success are all seeded by `vault` (not owner+vault_id), so the
+  // caller need not pass vault_id.
+  const [policy] = PublicKey.findProgramAddressSync(
+    [Buffer.from("policy"), vault.toBuffer()],
+    programId,
+  );
+  const [pending] = PublicKey.findProgramAddressSync(
+    [Buffer.from("pending_agent_grant"), vault.toBuffer()],
+    programId,
+  );
+  const overlay = deriveOverlayPda(vault, programId);
+  const [auditSuccess] = PublicKey.findProgramAddressSync(
+    [Buffer.from("audit_success"), vault.toBuffer()],
+    programId,
+  );
+
+  const methods = program.methods as any;
+
+  // 1. Queue the OPERATOR grant.
+  const queueIx = await methods
+    .queueAgentGrant(agent, CAPABILITY_OPERATOR, spendingLimit)
+    .accounts({
+      owner,
+      vault,
+      policy,
+      pending,
+      auditLogSuccess: auditSuccess,
+      slotHashesSysvar: SYSVAR_SLOT_HASHES_PUBKEY,
+      systemProgram: SystemProgram.programId,
+    })
+    .instruction();
+  await sendVersionedTx(env.connection, [queueIx], env.payer, signers);
+
+  // 2. Advance the live Surfnet clock past the single-key delay floor.
+  //    getClock().timestamp is SECONDS; surfnet absoluteTimestamp is
+  //    MILLISECONDS (confirmed by suite 7's "absoluteTimestamp is in
+  //    milliseconds" + the PASSING suite-9 reactivate form). Anchor to the
+  //    on-chain clock (NOT Date.now()) so the jump is drift-safe.
+  const clock = await getClock(env.connection);
+  await timeTravel(env.connection, {
+    absoluteTimestamp:
+      (clock.timestamp + SINGLE_KEY_OPERATOR_DELAY_FLOOR + 1) * 1000,
+  });
+
+  // 3. Apply the grant.
+  const applyIx = await methods
+    .applyAgentGrant()
+    .accounts({
+      owner,
+      vault,
+      policy,
+      pending,
+      agentSpendOverlay: overlay,
+      auditLogSuccess: auditSuccess,
+      slotHashesSysvar: SYSVAR_SLOT_HASHES_PUBKEY,
+    })
+    .instruction();
+  await sendVersionedTx(env.connection, [applyIx], env.payer, signers);
+}
+
 // ─── Vault setup helper ─────────────────────────────────────────────────────
 
 export interface SetupVaultOpts {
@@ -892,22 +1013,41 @@ export async function setupVaultWithAgent(
   );
 
   if (!skipAgent) {
-    // Route through sendVersionedTx (not .rpc()) so a real failure surfaces as
-    // {Custom:N} instead of the anchor x web3.js "Unknown action 'undefined'" mask.
-    const registerIx = await methods
-      .registerAgent(agent.publicKey, agentCapability, agentSpendingLimit)
-      .accounts({
-        owner: owner.publicKey,
-        vault: pdas.vaultPda,
-        agentSpendOverlay: overlayPda,
-      })
-      .instruction();
-    await sendVersionedTx(
-      env.connection,
-      [registerIx],
-      env.payer,
-      owner === env.payer ? [] : [owner],
-    );
+    const agentSigners = owner === env.payer ? [] : [owner];
+    if (agentCapability >= CAPABILITY_OPERATOR) {
+      // F-Q6: this vault is single-key (cosign_required=false above), so an
+      // OPERATOR (>=2) grant cannot be seated instantly via register_agent
+      // (ErrOperatorGrantRequiresTimelock, 6107). Seat it through the
+      // queue → time-travel → apply timelock path instead.
+      await seatOperatorAgent(
+        env,
+        program,
+        owner.publicKey,
+        pdas.vaultPda,
+        agent.publicKey,
+        agentSpendingLimit,
+        agentSigners,
+      );
+    } else {
+      // Observer (1) / Disabled (0) are instant-eligible — direct register.
+      // Route through sendVersionedTx (not .rpc()) so a real failure surfaces
+      // as {Custom:N} instead of the anchor x web3.js "Unknown action
+      // 'undefined'" mask.
+      const registerIx = await methods
+        .registerAgent(agent.publicKey, agentCapability, agentSpendingLimit)
+        .accounts({
+          owner: owner.publicKey,
+          vault: pdas.vaultPda,
+          agentSpendOverlay: overlayPda,
+        })
+        .instruction();
+      await sendVersionedTx(
+        env.connection,
+        [registerIx],
+        env.payer,
+        agentSigners,
+      );
+    }
   }
 
   const vaultUsdcAta = await fundWithTokens(
