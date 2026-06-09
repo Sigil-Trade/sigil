@@ -938,10 +938,19 @@ jobs:
       - name: Run Certora Solana Prover
         env:
           CERTORAKEY: ${{ secrets.CERTORAKEY }}
+          GH_ACTOR: ${{ github.actor }}
+          IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
         run: |
+          # A missing key is only legitimate on Dependabot / forked-PR runs (no
+          # secret access). On a trusted run it is a real failure — formal
+          # verification must not be silently skipped (F6 gate-bypass fix).
           if [ -z "$CERTORAKEY" ]; then
-            echo "::warning::CERTORAKEY not available (Dependabot PR). Skipping formal verification."
-            exit 0
+            if [ "$GH_ACTOR" = "dependabot[bot]" ] || [ "$IS_FORK" = "true" ]; then
+              echo "::warning::CERTORAKEY unavailable on Dependabot/fork PR; skipping formal verification."
+              exit 0
+            fi
+            echo "::error::CERTORAKEY is not set on a trusted run; refusing to skip formal verification."
+            exit 1
           fi
           source .certora-venv/bin/activate
           certoraSolanaProver certora/conf/sigil.conf
@@ -1110,6 +1119,7 @@ jobs:
       - changes
       - build-lint-test
       - rust-checks
+      - build-program
       - on-chain-tests
       - build-verification
       - surfpool-integration
@@ -1173,11 +1183,12 @@ jobs:
             fi
           fi
 
-          # rust-checks, on-chain-tests, build-verification, surfpool-integration, fuzz-test: required when Rust files changed
+          # rust-checks, build-program, on-chain-tests, build-verification, surfpool-integration, fuzz-test: required when Rust files changed
           RUST_CHANGED="${{ needs.changes.outputs.rust }}"
-          for job_name in rust-checks on-chain-tests build-verification surfpool-integration fuzz-test; do
+          for job_name in rust-checks build-program on-chain-tests build-verification surfpool-integration fuzz-test; do
             case "$job_name" in
               rust-checks)           result="${{ needs.rust-checks.result }}" ;;
+              build-program)         result="${{ needs.build-program.result }}" ;;
               on-chain-tests)        result="${{ needs.on-chain-tests.result }}" ;;
               build-verification)    result="${{ needs.build-verification.result }}" ;;
               surfpool-integration)  result="${{ needs.surfpool-integration.result }}" ;;

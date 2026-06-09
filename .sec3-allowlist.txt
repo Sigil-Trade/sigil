@@ -27,11 +27,6 @@ MaliciousSimulation
 # oracle.rs by owner program ID and expected feed pubkey.
 UnvalidatedAccount
 
-# X-Ray embeds ==============VULNERABLE: inline within source code lines,
-# producing fragments that lack the category keyword. These orphan lines
-# are part of the same UnvalidatedAccount findings above.
-==============VULNERABLE:
-
 # --- anchorVersionTooOld ---
 # X-Ray flags anchor_lang < latest as "anchorVersionTooOld". Sigil
 # uses Anchor 0.32.1, which is the latest stable release compatible with

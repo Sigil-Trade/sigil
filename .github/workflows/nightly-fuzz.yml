@@ -23,7 +23,10 @@ jobs:
   extended-fuzz:
     name: Extended Fuzz (Trident, 50K iterations)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
+    env:
+      SOLANA_VERSION: "v2.1.14"
+      ANCHOR_VERSION: "0.32.1"
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -46,12 +49,52 @@ jobs:
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y pkg-config libudev-dev
 
+      # Trident loads the program-under-test as an SBF .so at runtime (see
+      # trident-tests/Trident.toml [[fuzz.programs]]). Without a freshly-built
+      # sigil.so the harness fuzzes nothing — mirror the ci.yml fuzz-test job.
+      - name: Cache Solana toolchain
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.local/share/solana
+          key: solana-${{ runner.os }}-${{ runner.arch }}-${{ env.SOLANA_VERSION }}
+
+      - name: Install Solana CLI
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SOLANA_BIN="$HOME/.local/share/solana/install/active_release/bin"
+          if [ ! -x "$SOLANA_BIN/solana" ]; then
+            for attempt in 1 2 3 4 5; do
+              sh -c "$(curl -sSfL https://release.anza.xyz/${{ env.SOLANA_VERSION }}/install)" && break
+              echo "Solana install attempt $attempt failed; retrying in $((attempt * 15))s..."
+              sleep $((attempt * 15))
+            done
+          fi
+          echo "$SOLANA_BIN" >> "$GITHUB_PATH"
+
+      - name: Install Anchor CLI
+        run: |
+          if ! command -v anchor &> /dev/null; then
+            cargo install --git https://github.com/coral-xyz/anchor --tag v${{ env.ANCHOR_VERSION }} anchor-cli --locked --force
+          fi
+
+      - name: Build program (.so for the fuzz harness to load)
+        run: anchor build --no-idl
+
+      - name: Restore committed IDL
+        run: git checkout -- target/idl/ target/types/
+
       - name: Compile fuzz harness
         working-directory: trident-tests
         run: cargo build --release --bin fuzz_0
 
       - name: Run extended fuzz (50K iterations)
         working-directory: trident-tests
+        env:
+          # Without this, a panicking invariant still exits 0 — the run would be
+          # hollow (matches the ci.yml fuzz-test job).
+          TRIDENT_WITH_EXIT_CODE: "1"
         run: |
           timeout 2400 ./target/release/fuzz_0 || EXIT=$?
           if [ "${EXIT:-0}" -eq 124 ]; then
