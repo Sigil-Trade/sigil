@@ -252,6 +252,9 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        .remainingAccounts([
+          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -414,6 +417,9 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        .remainingAccounts([
+          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -486,6 +492,9 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        .remainingAccounts([
+          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       // Without finalize in the tx, should get MissingFinalizeInstruction error
@@ -550,6 +559,9 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        .remainingAccounts([
+          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -702,6 +714,9 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        .remainingAccounts([
+          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -866,6 +881,9 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        .remainingAccounts([
+          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -1045,6 +1063,9 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        .remainingAccounts([
+          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -1203,6 +1224,9 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        .remainingAccounts([
+          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -1932,6 +1956,9 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: setup.overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        .remainingAccounts([
+          { pubkey: setup.agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -2383,6 +2410,13 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: swapSetup.overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        .remainingAccounts([
+          {
+            pubkey: swapSetup.agent.publicKey,
+            isSigner: false,
+            isWritable: false,
+          },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -3093,6 +3127,9 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: setup.overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        .remainingAccounts([
+          { pubkey: setup.agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -3169,6 +3206,9 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: setup.overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        .remainingAccounts([
+          { pubkey: setup.agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
