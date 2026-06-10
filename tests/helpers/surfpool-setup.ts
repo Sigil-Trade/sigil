@@ -30,6 +30,7 @@ import {
 import BN from "bn.js";
 import * as fs from "fs";
 import * as path from "path";
+import * as crypto from "crypto";
 import { execSync } from "child_process";
 import { initVaultPreviewDigest } from "./policy-digest";
 import { SIGIL_ERRORS } from "./strict-errors";
@@ -780,11 +781,31 @@ export const SINGLE_KEY_OPERATOR_DELAY_FLOOR = 600;
  *   1. `queue_agent_grant(agent, OPERATOR, limit)` — stores a pending grant
  *      with `min_delay_seconds = effective_delay` (600s for a single-key vault
  *      at the default 0 configured delay).
- *   2. `timeTravel` the live Surfnet clock past the timelock (floor + 1s). The
- *      apply-time freshness ceiling is SLOT-based (700_000 slots ~78h,
- *      apply_agent_grant.rs:149); a timestamp-only jump advances only a few
- *      slots, so the ceiling is never threatened (same pattern as the PASSING
- *      suite-7 policy-apply and suite-9 reactivate flows).
+ *   2. BACKDATE the pending grant via `surfnet_setAccount` instead of
+ *      `timeTravel`. We rewrite `queued_at` (i64 unix seconds) and
+ *      `queued_at_slot` (u64) INTO THE PAST so the apply passes at the
+ *      NATURAL current clock — no clock jump at all. `apply_agent_grant`
+ *      gates (single-key, cosign_required=false) are: (a) the slot-freshness
+ *      `clock.slot.checked_sub(queued_at_slot)` (apply_agent_grant.rs:144-147),
+ *      which UNDERFLOWS to `Overflow` (6020) if `queued_at_slot > clock.slot`,
+ *      and must stay `< MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN = 700_000`; and
+ *      (b) the timelock `unix_timestamp - queued_at >= min_delay_seconds`
+ *      (apply_agent_grant.rs:157-164). Backdating `queued_at` to
+ *      `now - (min_delay_seconds + 5)` and `queued_at_slot` to `slot - 10`
+ *      satisfies BOTH at the live clock (slot_delta ≈ 10, elapsed ≈
+ *      min_delay+5). The pending content digest is sealed over those two
+ *      fields (state/pending_agent_grant.rs:174-194 canonical encoding), so we
+ *      RECOMPUTE it over the backdated values and re-serialize the account with
+ *      the Anchor coder before writing it back.
+ *
+ *      WHY backdate instead of timeTravel: on the CI surfnet (linux binary
+ *      forking LIVE devnet) the slot is NOT monotonic across `timeTravel` — by
+ *      apply time `clock.slot < pending.queued_at_slot`, so the :147
+ *      `checked_sub` underflows (Overflow, 6020). This is platform-specific
+ *      (NOT reproducible on darwin), i.e. a surfnet clock bug, not our code.
+ *      Backdating runs the apply at the natural clock and avoids the jump
+ *      entirely. This SIMULATES elapsed time for setup (same intent as
+ *      litesvm's `advanceTime`); it weakens NO on-chain assertion.
  *   3. `apply_agent_grant()` — pushes the agent into `vault.agents`.
  *
  * Both ix are built via `.instruction()` and sent through `sendVersionedTx`
@@ -848,19 +869,93 @@ export async function seatOperatorAgent(
     .instruction();
   await sendVersionedTx(env.connection, [queueIx], env.payer, signers);
 
-  // 2. Advance past the single-key OPERATOR delay floor (600s) by SLOT, NOT
-  //    timestamp. The Surfnet slot tracks the devnet datasource and outruns the
-  //    timestamp-derived slot, so an `absoluteTimestamp` jump resets the slot
-  //    BEHIND `queued_at_slot` and apply_agent_grant.rs:147
-  //    `clock.slot.checked_sub(queued_at_slot)` UNDERFLOWS (Overflow, 6020). An
-  //    `absoluteSlot` jump advances the derived timestamp too (~100ms/slot at
-  //    the CI `--slot-time 100`), so +7000 slots ≈ +700s clears the 600s
-  //    timelock while keeping the slot monotonically ahead of queued_at_slot
-  //    (Δ ≈ 7000, far under the ~700k freshness ceiling). Verified via a local
-  //    cheatcode probe: absoluteSlot +6020 advanced slot +6019 and ts +602s.
-  //    (timeTravel accepts exactly one key, so slot+timestamp can't be combined.)
-  const queuedSlot = await env.connection.getSlot("confirmed");
-  await timeTravel(env.connection, { absoluteSlot: queuedSlot + 7000 });
+  // 2. BACKDATE the pending grant via surfnet_setAccount instead of timeTravel.
+  //    On the CI surfnet (linux binary forking live devnet) the slot is NOT
+  //    monotonic across `timeTravel`, so by apply time
+  //    `clock.slot < pending.queued_at_slot` and apply_agent_grant.rs:147
+  //    `clock.slot.checked_sub(queued_at_slot)` UNDERFLOWS (Overflow, 6020).
+  //    Rewriting `queued_at` / `queued_at_slot` into the PAST lets the apply
+  //    pass at the natural current clock with no jump. This SIMULATES elapsed
+  //    time for setup (same intent as litesvm's advanceTime) — it weakens no
+  //    on-chain assertion.
+  //
+  //    The pending content digest (state/pending_agent_grant.rs:174-194) is a
+  //    SHA-256 over the canonical 97-byte encoding that INCLUDES queued_at and
+  //    queued_at_slot, so we recompute it over the backdated values and
+  //    re-serialize the whole account (with discriminator) via the Anchor
+  //    coder before writing it back. All other fields are preserved verbatim.
+  const pendingAccount = await (program.account as any).pendingAgentGrant.fetch(
+    pending,
+  );
+  const { slot, timestamp } = await getClock(env.connection);
+
+  // queued_at: i64 unix seconds. Backdated so elapsed at apply ≈ minDelay + 5
+  // (≥ min_delay_seconds, clearing the timelock at apply_agent_grant.rs:161).
+  // queued_at_slot: u64. Backdated so slot_delta at apply ≈ 10 (≥ 0, no
+  // underflow at :147, and ≪ MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN = 700_000).
+  const backdatedQueuedAt = new BN(
+    timestamp - (Number(pendingAccount.minDelaySeconds) + 5),
+  );
+  const backdatedQueuedAtSlot = new BN(slot - 10);
+
+  // Recompute pending_content_digest over the canonical encoding (97 bytes):
+  //   vault(32) ++ agent(32) ++ capability(u8) ++ spending_limit_usd(u64 LE) ++
+  //   queued_at(i64 LE) ++ min_delay_seconds(u64 LE) ++ queued_at_slot(u64 LE).
+  // Mirrors canonical_bytes_of_pending_agent_grant EXACTLY. Timestamps and
+  // slots are positive, so BN.toArrayLike(le, 8) yields the correct i64/u64 LE
+  // bytes (8-byte width pinned below).
+  const u64le = (v: BN): Buffer => {
+    const b = v.toArrayLike(Buffer, "le", 8);
+    if (b.length !== 8) {
+      throw new Error(`expected 8-byte LE encoding, got ${b.length}`);
+    }
+    return b;
+  };
+  const canonical = Buffer.concat([
+    pendingAccount.vault.toBuffer(), // 32
+    pendingAccount.agent.toBuffer(), // 32
+    Buffer.from([pendingAccount.capability & 0xff]), // 1 (u8)
+    u64le(new BN(pendingAccount.spendingLimitUsd)), // 8 (u64 LE)
+    u64le(backdatedQueuedAt), // 8 (i64 LE, positive)
+    u64le(new BN(pendingAccount.minDelaySeconds)), // 8 (u64 LE)
+    u64le(backdatedQueuedAtSlot), // 8 (u64 LE)
+  ]);
+  if (canonical.length !== 97) {
+    throw new Error(
+      `pending canonical encoding must be 97 bytes, got ${canonical.length}`,
+    );
+  }
+  const newDigest = crypto.createHash("sha256").update(canonical).digest();
+
+  // Re-serialize the account WITH its 8-byte discriminator. Keep every other
+  // field unchanged; only queued_at / queued_at_slot / pending_content_digest
+  // move. The Program-attached coder uses the camelCase account key and fields.
+  const modified = {
+    ...pendingAccount,
+    queuedAt: backdatedQueuedAt,
+    queuedAtSlot: backdatedQueuedAtSlot,
+    pendingContentDigest: Array.from(newDigest),
+  };
+  const data: Buffer = await program.coder.accounts.encode(
+    "pendingAgentGrant",
+    modified,
+  );
+
+  // Preserve the owning program + lamports (rent-exempt) — only the data moves.
+  const existing = await env.connection.getAccountInfo(pending);
+  if (!existing) {
+    throw new Error(
+      `pending_agent_grant ${pending.toString()} not found after queue`,
+    );
+  }
+  await surfnetRpc(env.connection, "surfnet_setAccount", [
+    pending.toString(),
+    {
+      data: data.toString("hex"),
+      owner: existing.owner.toString(),
+      lamports: existing.lamports,
+    },
+  ]);
 
   // 3. Apply the grant.
   const applyIx = await methods
