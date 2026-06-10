@@ -19,12 +19,10 @@ import {
   TransactionInstruction,
   TransactionMessage,
   VersionedTransaction,
-  SYSVAR_INSTRUCTIONS_PUBKEY,
   SYSVAR_SLOT_HASHES_PUBKEY,
 } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
-  ASSOCIATED_TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
 import BN from "bn.js";
@@ -45,12 +43,17 @@ const PROGRAM_ID = new PublicKey(
  * Mock-DeFi fixture program (counted-zero-spend noop) — mirrors litesvm-setup.ts.
  * Allowlisted as the default protocol so active (non-observe_only) vaults satisfy
  * F-11 (initialize_vault.rs:188: an active vault must have >=1 protocol OR
- * destination on the allowlist). Allowlisting the pubkey is enough for
- * initialize_vault to succeed; the fixture .so only needs to be DEPLOYED to the
- * Surfnet before a spending sandwich actually targets it (follow-up work).
+ * destination on the allowlist). The fixture .so is injected into the Surfnet by
+ * `deployMockDefiPrograms` (called from `createSurfpoolTestEnv`), so spending
+ * sandwiches can target it as their counted DeFi instruction.
  */
-const MOCK_DEFI_PROGRAM_ID = new PublicKey(
+export const MOCK_DEFI_PROGRAM_ID = new PublicKey(
   "2pB26qKW73sToF7ETcdhXQTj8biYwAk9TCArVwgHBe24",
+);
+
+/** Non-upgradeable BPF loader — bytecode lives directly in the program account. */
+const BPF_LOADER_2_ID = new PublicKey(
+  "BPFLoader2111111111111111111111111111111111",
 );
 
 const SURFPOOL_RPC_URL =
@@ -222,6 +225,85 @@ async function deployLocalProgram(connection: Connection): Promise<void> {
   throw lastErr;
 }
 
+// ─── Mock-DeFi fixture programs ──────────────────────────────────────────────
+
+/**
+ * Inject a fixture program .so directly as a NON-UPGRADEABLE executable account
+ * (owner = BPFLoader2) via surfnet_setAccount.
+ *
+ * WHY not `solana program deploy`: mock-defi's `declare_id!` has no committed
+ * keypair and the program is not on devnet (nothing to fork / no authority to
+ * swap), so the deployLocalProgram path is impossible for it. Under BPFLoader2
+ * the bytecode lives directly in the program account, so a plain setAccount is
+ * a complete deployment. SPIKE-VALIDATED (2026-06-10, surfpool 1.2.1, CI flags):
+ * after this injection the program invokes and `open_position` executes
+ * ("Program 2pB26q… success", 432 CU). The "setAccount does not update the
+ * compiled program cache" caveat on deployLocalProgram applies to the
+ * UPGRADEABLE loader path only — it does not bite the v2 loader.
+ */
+async function injectFixtureProgram(
+  connection: Connection,
+  programId: PublicKey,
+  soFile: string,
+): Promise<void> {
+  const soPath = path.resolve(__dirname, "../fixtures", soFile);
+  if (!fs.existsSync(soPath)) {
+    throw new Error(`Fixture program not found at ${soPath}`);
+  }
+  const so = fs.readFileSync(soPath);
+  const lamports = await connection.getMinimumBalanceForRentExemption(
+    so.length,
+  );
+  await surfnetRpc(connection, "surfnet_setAccount", [
+    programId.toString(),
+    {
+      data: so.toString("hex"),
+      owner: BPF_LOADER_2_ID.toString(),
+      executable: true,
+      lamports,
+    },
+  ]);
+}
+
+/**
+ * Deploy the mock-DeFi fixture program to the Surfnet (the counted DeFi target
+ * for spending sandwiches). Idempotent — safe to re-run after
+ * surfnet_resetNetwork.
+ */
+export async function deployMockDefiPrograms(
+  connection: Connection,
+): Promise<void> {
+  await injectFixtureProgram(connection, MOCK_DEFI_PROGRAM_ID, "mock-defi.so");
+}
+
+/** Anchor instruction discriminator: sha256("global:<name>")[0..8]. */
+function anchorDisc(name: string): Buffer {
+  return crypto
+    .createHash("sha256")
+    .update(`global:${name}`)
+    .digest()
+    .subarray(0, 8);
+}
+
+/** Mock-defi `open_position` discriminator (COUNTED-but-zero-spend noop). */
+export const MOCK_DEFI_OPEN_POSITION_DISC = anchorDisc("open_position");
+
+/**
+ * Mock-defi `open_position` ix — true no-op (single signer, handler does
+ * nothing). The canonical COUNTED-but-zero-spend DeFi instruction used as the
+ * middle ix in composed spending sandwiches `[validate, <this>, finalize]`:
+ * targeting the allowlisted MOCK_DEFI_PROGRAM_ID increments `defi_ix_count` to
+ * exactly 1 (F-Q2) while moving zero tokens, so `finalize_session` measures
+ * actual_spend == 0. Mirrors litesvm-setup's builder.
+ */
+export function buildMockDefiNoopIx(signer: PublicKey): TransactionInstruction {
+  return new TransactionInstruction({
+    programId: MOCK_DEFI_PROGRAM_ID,
+    keys: [{ pubkey: signer, isSigner: true, isWritable: false }],
+    data: Buffer.from(MOCK_DEFI_OPEN_POSITION_DISC),
+  });
+}
+
 // ─── Test environment ───────────────────────────────────────────────────────
 
 export interface SurfpoolTestEnv {
@@ -241,6 +323,11 @@ export async function createSurfpoolTestEnv(): Promise<SurfpoolTestEnv> {
 
   // Deploy local program (overrides devnet-forked version)
   await deployLocalProgram(connection);
+
+  // Inject the mock-DeFi fixture programs (the counted DeFi targets for
+  // spending sandwiches). Re-runs after surfnet_resetNetwork because suites
+  // re-create the env.
+  await deployMockDefiPrograms(connection);
 
   const payer = Keypair.generate();
 

@@ -38,6 +38,8 @@ import {
 import {
   createSurfpoolTestEnv,
   SurfpoolTestEnv,
+  MOCK_DEFI_PROGRAM_ID,
+  buildMockDefiNoopIx,
   DEVNET_USDC_MINT,
   DEVNET_USDT_MINT,
   PROTOCOL_TREASURY,
@@ -221,7 +223,7 @@ describe("surfpool-integration", function () {
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
           new BN(50_000_000), // 50 USDC
-          program.programId, // dummy protocol
+          MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
           digestAsArgs(
@@ -230,7 +232,7 @@ describe("surfpool-integration", function () {
               agent: agent.publicKey,
               tokenMint: DEVNET_USDC_MINT,
               amount: new BN(50_000_000),
-              targetProtocol: program.programId,
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
             }),
           ),
         )
@@ -272,7 +274,7 @@ describe("surfpool-integration", function () {
 
       const result = await sendVersionedTx(
         env.connection,
-        [validateIx, finalizeIx],
+        [validateIx, buildMockDefiNoopIx(agent.publicKey), finalizeIx],
         agent,
       );
 
@@ -383,7 +385,7 @@ describe("surfpool-integration", function () {
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
           new BN(10_000_000), // 10 USDC
-          program.programId,
+          MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
           digestAsArgs(
@@ -392,7 +394,7 @@ describe("surfpool-integration", function () {
               agent: agent.publicKey,
               tokenMint: DEVNET_USDC_MINT,
               amount: new BN(10_000_000),
-              targetProtocol: program.programId,
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
             }),
           ),
         )
@@ -435,7 +437,7 @@ describe("surfpool-integration", function () {
       // Should succeed — session is created and used in same transaction
       const result = await sendVersionedTx(
         env.connection,
-        [validateIx, finalizeIx],
+        [validateIx, buildMockDefiNoopIx(agent.publicKey), finalizeIx],
         agent,
       );
       expect(result.signature).to.be.a("string");
@@ -455,7 +457,7 @@ describe("surfpool-integration", function () {
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
           new BN(10_000_000),
-          program.programId,
+          MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
           digestAsArgs(
@@ -464,7 +466,7 @@ describe("surfpool-integration", function () {
               agent: agent.publicKey,
               tokenMint: DEVNET_USDC_MINT,
               amount: new BN(10_000_000),
-              targetProtocol: program.programId,
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
             }),
           ),
         )
@@ -488,7 +490,11 @@ describe("surfpool-integration", function () {
 
       // Without finalize in the tx, should get MissingFinalizeInstruction error
       try {
-        await sendVersionedTx(env.connection, [validateIx], agent);
+        await sendVersionedTx(
+          env.connection,
+          [validateIx, buildMockDefiNoopIx(agent.publicKey)],
+          agent,
+        );
         expect.fail("Should have rejected — no finalize instruction");
       } catch (err: any) {
         const errStr = err.message || JSON.stringify(err);
@@ -515,7 +521,7 @@ describe("surfpool-integration", function () {
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
           new BN(5_000_000), // 5 USDC
-          program.programId,
+          MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
           digestAsArgs(
@@ -524,7 +530,7 @@ describe("surfpool-integration", function () {
               agent: agent.publicKey,
               tokenMint: DEVNET_USDC_MINT,
               amount: new BN(5_000_000),
-              targetProtocol: program.programId,
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
             }),
           ),
         )
@@ -566,7 +572,7 @@ describe("surfpool-integration", function () {
 
       const result = await sendVersionedTx(
         env.connection,
-        [validateIx, finalizeIx],
+        [validateIx, buildMockDefiNoopIx(agent.publicKey), finalizeIx],
         agent,
       );
       expect(result.signature).to.be.a("string");
@@ -667,7 +673,7 @@ describe("surfpool-integration", function () {
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
           new BN(25_000_000), // 25 USDC
-          program.programId,
+          MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
           digestAsArgs(
@@ -676,7 +682,7 @@ describe("surfpool-integration", function () {
               agent: agent.publicKey,
               tokenMint: DEVNET_USDC_MINT,
               amount: new BN(25_000_000),
-              targetProtocol: program.programId,
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
             }),
           ),
         )
@@ -716,7 +722,11 @@ describe("surfpool-integration", function () {
         })
         .instruction();
 
-      await sendVersionedTx(env.connection, [validateIx, finalizeIx], agent);
+      await sendVersionedTx(
+        env.connection,
+        [validateIx, buildMockDefiNoopIx(agent.publicKey), finalizeIx],
+        agent,
+      );
 
       const vault = await program.account.agentVault.fetch(vaultPda);
       expect(vault.totalTransactions.toNumber()).to.equal(1);
@@ -827,7 +837,7 @@ describe("surfpool-integration", function () {
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
           new BN(30_000_000), // 30 USDC
-          program.programId,
+          MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
           digestAsArgs(
@@ -836,7 +846,7 @@ describe("surfpool-integration", function () {
               agent: agent.publicKey,
               tokenMint: DEVNET_USDC_MINT,
               amount: new BN(30_000_000),
-              targetProtocol: program.programId,
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
             }),
           ),
         )
@@ -876,7 +886,11 @@ describe("surfpool-integration", function () {
         })
         .instruction();
 
-      await sendVersionedTx(env.connection, [validateIx, finalizeIx], agent);
+      await sendVersionedTx(
+        env.connection,
+        [validateIx, buildMockDefiNoopIx(agent.publicKey), finalizeIx],
+        agent,
+      );
 
       const vault = await program.account.agentVault.fetch(vaultPda);
       expect(vault.totalTransactions.toNumber()).to.equal(2);
@@ -1002,7 +1016,7 @@ describe("surfpool-integration", function () {
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
           new BN(amount),
-          program.programId,
+          MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
           digestAsArgs(
@@ -1011,7 +1025,7 @@ describe("surfpool-integration", function () {
               agent: agent.publicKey,
               tokenMint: DEVNET_USDC_MINT,
               amount: new BN(amount),
-              targetProtocol: program.programId,
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
             }),
           ),
         )
@@ -1051,7 +1065,11 @@ describe("surfpool-integration", function () {
         })
         .instruction();
 
-      await sendVersionedTx(env.connection, [validateIx, finalizeIx], agent);
+      await sendVersionedTx(
+        env.connection,
+        [validateIx, buildMockDefiNoopIx(agent.publicKey), finalizeIx],
+        agent,
+      );
 
       // Check protocol treasury balance increased
       const treasuryBalance =
@@ -1156,7 +1174,7 @@ describe("surfpool-integration", function () {
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
           new BN(20_000_000),
-          program.programId,
+          MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
           digestAsArgs(
@@ -1165,7 +1183,7 @@ describe("surfpool-integration", function () {
               agent: agent.publicKey,
               tokenMint: DEVNET_USDC_MINT,
               amount: new BN(20_000_000),
-              targetProtocol: program.programId,
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
             }),
           ),
         )
@@ -1207,7 +1225,7 @@ describe("surfpool-integration", function () {
 
       const result = await sendVersionedTx(
         env.connection,
-        [validateIx, finalizeIx],
+        [validateIx, buildMockDefiNoopIx(agent.publicKey), finalizeIx],
         agent,
       );
 
@@ -1885,7 +1903,7 @@ describe("surfpool-integration", function () {
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
           new BN(5_000_000),
-          program.programId,
+          MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, setup.policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
           digestAsArgs(
@@ -1894,7 +1912,7 @@ describe("surfpool-integration", function () {
               agent: setup.agent.publicKey,
               tokenMint: DEVNET_USDC_MINT,
               amount: new BN(5_000_000),
-              targetProtocol: program.programId,
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
             }),
           ),
         )
@@ -1936,7 +1954,7 @@ describe("surfpool-integration", function () {
 
       const result = await sendVersionedTx(
         env.connection,
-        [validateIx, finalizeIx],
+        [validateIx, buildMockDefiNoopIx(setup.agent.publicKey), finalizeIx],
         setup.agent,
       );
       expect(result.signature).to.be.a("string");
@@ -2336,7 +2354,7 @@ describe("surfpool-integration", function () {
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
           new BN(5_000_000),
-          program.programId,
+          MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, swapSetup.policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
           digestAsArgs(
@@ -2345,7 +2363,7 @@ describe("surfpool-integration", function () {
               agent: swapSetup.agent.publicKey,
               tokenMint: DEVNET_USDC_MINT,
               amount: new BN(5_000_000),
-              targetProtocol: program.programId,
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
             }),
           ),
         )
@@ -2387,7 +2405,11 @@ describe("surfpool-integration", function () {
 
       const result = await sendVersionedTx(
         env.connection,
-        [validateIx, finalizeIx],
+        [
+          validateIx,
+          buildMockDefiNoopIx(swapSetup.agent.publicKey),
+          finalizeIx,
+        ],
         swapSetup.agent,
       );
       expect(result.signature).to.be.a("string");
@@ -3042,7 +3064,7 @@ describe("surfpool-integration", function () {
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
           new BN(5_000_000),
-          program.programId,
+          MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, setup.policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
           digestAsArgs(
@@ -3051,7 +3073,7 @@ describe("surfpool-integration", function () {
               agent: setup.agent.publicKey,
               tokenMint: DEVNET_USDC_MINT,
               amount: new BN(5_000_000),
-              targetProtocol: program.programId,
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
             }),
           ),
         )
@@ -3093,7 +3115,7 @@ describe("surfpool-integration", function () {
 
       const result = await sendVersionedTx(
         env.connection,
-        [validateIx, finalizeIx],
+        [validateIx, buildMockDefiNoopIx(setup.agent.publicKey), finalizeIx],
         setup.agent,
       );
       expect(result.signature).to.be.a("string");
@@ -3118,7 +3140,7 @@ describe("surfpool-integration", function () {
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
           new BN(5_000_000),
-          program.programId,
+          MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, setup.policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
           digestAsArgs(
@@ -3127,7 +3149,7 @@ describe("surfpool-integration", function () {
               agent: setup.agent.publicKey,
               tokenMint: DEVNET_USDC_MINT,
               amount: new BN(5_000_000),
-              targetProtocol: program.programId,
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
             }),
           ),
         )
@@ -3169,7 +3191,7 @@ describe("surfpool-integration", function () {
 
       const result = await sendVersionedTx(
         env.connection,
-        [validateIx, finalizeIx],
+        [validateIx, buildMockDefiNoopIx(setup.agent.publicKey), finalizeIx],
         setup.agent,
       );
       expect(result.signature).to.be.a("string");
