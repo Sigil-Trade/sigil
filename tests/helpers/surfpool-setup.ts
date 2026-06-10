@@ -48,7 +48,7 @@ const PROGRAM_ID = new PublicKey(
  * sandwiches can target it as their counted DeFi instruction.
  */
 export const MOCK_DEFI_PROGRAM_ID = new PublicKey(
-  "2pB26qKW73sToF7ETcdhXQTj8biYwAk9TCArVwgHBe24",
+  "2heRcfqPUcSiWpH1rAp2Zf4c4ZxfKmKaaVbJWGRa7Qm6",
 );
 
 /** Non-upgradeable BPF loader — bytecode lives directly in the program account. */

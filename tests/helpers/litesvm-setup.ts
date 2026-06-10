@@ -57,7 +57,7 @@ const PROGRAM_SO_PATH = path.resolve(__dirname, "../../target/deploy/sigil.so");
 // discriminators used as a generic constraint-matching target in
 // InstructionConstraints tests.
 export const MOCK_DEFI_PROGRAM_ID = new PublicKey(
-  "2pB26qKW73sToF7ETcdhXQTj8biYwAk9TCArVwgHBe24",
+  "2heRcfqPUcSiWpH1rAp2Zf4c4ZxfKmKaaVbJWGRa7Qm6",
 );
 
 // Anchor instruction discriminator: sha256("global:<name>")[0..8].

@@ -19,7 +19,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
-declare_id!("2pB26qKW73sToF7ETcdhXQTj8biYwAk9TCArVwgHBe24");
+declare_id!("2heRcfqPUcSiWpH1rAp2Zf4c4ZxfKmKaaVbJWGRa7Qm6");
 
 #[program]
 pub mod mock_defi {
