@@ -1988,54 +1988,37 @@ describe("surfpool-integration", function () {
     });
 
     it("non-owner cannot reactivate frozen vault", async () => {
-      // Freeze first
+      // Dedicated vault: freezing the shared `setup` vault here used to leak a
+      // frozen state into the pause/unpause tests below (their fragile cleanup
+      // reactivate could silently fail), so this test owns its vault and never
+      // touches `setup`.
+      const fv = await setupVaultWithAgent(env, program);
       await program.methods
         .freezeVault()
         .accounts({
           owner: env.payer.publicKey,
-          vault: setup.vaultPda,
+          vault: fv.vaultPda,
         } as any)
         .rpc();
 
-      // Non-owner (agent) tries to reactivate
-      // Anchor ConstraintHasOne fires during account validation, BEFORE the
-      // cooldown handler code runs — so the failing path needs no cooldown
-      // advance. Cleanup reactivate below DOES need it.
+      // Non-owner (the agent) tries to reactivate. The `has_one = owner @
+      // SigilError::UnauthorizedOwner` constraint (reactivate_vault.rs:20) fires
+      // during account validation → UnauthorizedOwner (6002), which overrides
+      // the generic Anchor ConstraintHasOne.
       const reactivateIx = await program.methods
         .reactivateVault(null, null)
         .accounts({
-          owner: setup.agent.publicKey,
-          vault: setup.vaultPda,
+          owner: fv.agent.publicKey,
+          vault: fv.vaultPda,
         } as any)
         .instruction();
 
       await expectTxError(
         env.connection,
         [reactivateIx],
-        setup.agent,
-        "2006", // Anchor ConstraintHasOne — framework error, not in SIGIL_ERROR_NAMES
+        fv.agent,
+        "UnauthorizedOwner",
       );
-
-      // Phase 8 Batch 5: advance past 5-min reactivate cooldown before cleanup.
-      {
-        const clock = await getClock(env.connection);
-        await timeTravel(env.connection, {
-          absoluteTimestamp: (clock.timestamp + 301) * 1000,
-        });
-      }
-
-      // Unfreeze for subsequent tests (must succeed or cascade fails)
-      try {
-        await program.methods
-          .reactivateVault(null, null)
-          .accounts({
-            owner: env.payer.publicKey,
-            vault: setup.vaultPda,
-          } as any)
-          .rpc();
-      } catch {
-        // Vault may already be unfrozen if test ordering changes
-      }
     });
 
     it("pause_agent blocks that agent", async () => {
@@ -2135,7 +2118,7 @@ describe("surfpool-integration", function () {
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
           new BN(5_000_000),
-          program.programId,
+          MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, setup.policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
           digestAsArgs(
@@ -2144,7 +2127,7 @@ describe("surfpool-integration", function () {
               agent: agent2.publicKey,
               tokenMint: DEVNET_USDC_MINT,
               amount: new BN(5_000_000),
-              targetProtocol: program.programId,
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
             }),
           ),
         )
@@ -2164,6 +2147,9 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: setup.overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        .remainingAccounts([
+          { pubkey: agent2.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -2186,7 +2172,7 @@ describe("surfpool-integration", function () {
 
       const result = await sendVersionedTx(
         env.connection,
-        [validateIx, finalizeIx],
+        [validateIx, buildMockDefiNoopIx(agent2.publicKey), finalizeIx],
         agent2,
       );
       expect(result.signature).to.be.a("string");
@@ -2219,7 +2205,7 @@ describe("surfpool-integration", function () {
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
           new BN(5_000_000),
-          program.programId,
+          MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, setup.policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
           digestAsArgs(
@@ -2228,7 +2214,7 @@ describe("surfpool-integration", function () {
               agent: setup.agent.publicKey,
               tokenMint: DEVNET_USDC_MINT,
               amount: new BN(5_000_000),
-              targetProtocol: program.programId,
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
             }),
           ),
         )
@@ -2248,6 +2234,9 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: setup.overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        .remainingAccounts([
+          { pubkey: setup.agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -2270,13 +2259,17 @@ describe("surfpool-integration", function () {
 
       const result = await sendVersionedTx(
         env.connection,
-        [validateIx, finalizeIx],
+        [validateIx, buildMockDefiNoopIx(setup.agent.publicKey), finalizeIx],
         setup.agent,
       );
       expect(result.signature).to.be.a("string");
     });
 
     it("frozen vault blocks agent_transfer too", async () => {
+      // Dedicated vault — freezing it must not leak into the shared `setup`
+      // vault that earlier emergency-ops tests rely on.
+      const fv = await setupVaultWithAgent(env, program);
+
       // Create a destination for agent_transfer
       const destWallet = await createWallet(env.connection, "emergDest", 2);
       const destUsdcAta = await fundWithTokens(
@@ -2286,29 +2279,34 @@ describe("surfpool-integration", function () {
         0,
       );
 
-      // Freeze vault
       await program.methods
         .freezeVault()
         .accounts({
           owner: env.payer.publicKey,
-          vault: setup.vaultPda,
+          vault: fv.vaultPda,
         } as any)
         .rpc();
 
-      // agent_transfer should also fail
+      // agent_transfer must also be rejected on a frozen vault. agent_transfer
+      // checks PolicyVersionMismatch (agent_transfer.rs:95) BEFORE VaultNotActive
+      // (:101), so expected_policy_version must be live (setupVaultWithAgent's
+      // OPERATOR seat bumped it) for the tx to reach the VaultNotActive gate.
       const transferIx = await program.methods
-        .agentTransfer(new BN(5_000_000), new BN(0))
+        .agentTransfer(
+          new BN(5_000_000),
+          await readPolicyVersion(program, fv.policyPda),
+        )
         .accounts({
-          agent: setup.agent.publicKey,
-          vault: setup.vaultPda,
-          policy: setup.policyPda,
-          tracker: setup.trackerPda,
-          agentSpendOverlay: setup.overlayPda,
-          vaultTokenAccount: setup.vaultUsdcAta,
+          agent: fv.agent.publicKey,
+          vault: fv.vaultPda,
+          policy: fv.policyPda,
+          tracker: fv.trackerPda,
+          agentSpendOverlay: fv.overlayPda,
+          vaultTokenAccount: fv.vaultUsdcAta,
           tokenMintAccount: DEVNET_USDC_MINT,
           destinationTokenAccount: destUsdcAta,
           feeDestinationTokenAccount: null,
-          protocolTreasuryTokenAccount: setup.protocolTreasuryAta,
+          protocolTreasuryTokenAccount: fv.protocolTreasuryAta,
           tokenProgram: TOKEN_PROGRAM_ID,
         } as any)
         .instruction();
@@ -2316,27 +2314,9 @@ describe("surfpool-integration", function () {
       await expectTxError(
         env.connection,
         [transferIx],
-        setup.agent,
+        fv.agent,
         "VaultNotActive",
       );
-
-      // Phase 8 Batch 5: advance past 5-min reactivate cooldown
-      // (ErrReactivateCooldownActive 6097) before cleanup unfreeze.
-      {
-        const clock = await getClock(env.connection);
-        await timeTravel(env.connection, {
-          absoluteTimestamp: (clock.timestamp + 301) * 1000,
-        });
-      }
-
-      // Unfreeze for any subsequent tests
-      await program.methods
-        .reactivateVault(null, null)
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: setup.vaultPda,
-        } as any)
-        .rpc();
     });
   });
 
