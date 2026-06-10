@@ -534,9 +534,7 @@ jobs:
           # Runs on arm64 to avoid the litesvm x86_64 NAPI heap corruption
           # (LiteSVM/litesvm#171), reproduced on x64 under both Node and Bun.
           # The .so was built on x64 (build-program) and downloaded above.
-          # The bn.js canary (tests/_canary.js) asserts no corruption across the
-          # run (temporary; remove once arm64 is confirmed green).
-          npx ts-mocha -p ./tsconfig.json -t 300000 --require ./tests/_canary.js \
+          npx ts-mocha -p ./tsconfig.json -t 300000 \
             tests/sigil.ts \
             tests/jupiter-integration.ts \
             tests/jupiter-lend-integration.ts \
@@ -835,9 +833,25 @@ jobs:
 
       - name: Run Sec3 X-Ray
         run: |
+          # Capture stdout and stderr to SEPARATE files so X-Ray's progress bar
+          # (carriage-return redraws) can never interleave into — and garble —
+          # the VULNERABLE finding lines. The previous `2>&1 | tee` merged both
+          # streams through one pipe buffer, which non-deterministically
+          # concatenated a progress redraw into an `UnvalidatedAccount` banner
+          # and split the keyword off, so the allowlist could not match it and
+          # the gate flaked RED on byte-identical code. Then normalize CRs to
+          # newlines so any in-stream redraw becomes a clean line break. This
+          # preserves EVERY VULNERABLE line (no finding is dropped → the gate
+          # cannot be hollowed); it only de-garbles them. `|| true` keeps the
+          # original behavior of not failing on X-Ray's own exit code (the
+          # findings check below is the pass/fail authority).
           docker run --rm --volume "$(pwd):/workspace" \
             ghcr.io/sec3-product/x-ray:v0.0.6 \
-            /workspace/programs/sigil 2>&1 | tee xray-report.txt
+            /workspace/programs/sigil > xray-stdout.txt 2> xray-stderr.txt || true
+          cat xray-stdout.txt xray-stderr.txt | tr '\r' '\n' > xray-report.txt
+          echo "::group::X-Ray raw output (stdout+stderr, CR-normalized)"
+          cat xray-report.txt
+          echo "::endgroup::"
 
       - name: Check X-Ray findings
         run: |
@@ -1087,29 +1101,6 @@ jobs:
             exit 1
           fi
           echo "::notice::All workflow uses: references are pinned to 40-char SHAs."
-
-  # TEMPORARY diagnostic (remove after root-cause): the On-Chain Tests job
-  # fails on x64 Linux with u64 values stringifying as "<digits>NaN", which does
-  # not reproduce on arm64 macOS. This job logs the actual runner behavior.
-  diag-u64:
-    name: DIAG u64 (temporary)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: Install pnpm
-        uses: pnpm/action-setup@91ab88e2619ed1f46221f0ba42d1492c02baf788 # v6.0.6
-        with:
-          version: 10.7.1
-      - name: Install Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: "pnpm"
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: native-module bisection probe
-        run: node scripts/probe-u64.js
 
   security-gate:
     name: Security Gate
