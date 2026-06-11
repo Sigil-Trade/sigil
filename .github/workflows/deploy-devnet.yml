@@ -26,8 +26,11 @@ on:
   workflow_dispatch: # Manual trigger for devnet reset recovery or debugging
 
 # Never cancel a deploy mid-flight — incomplete deploys waste SOL
+# Shared with devnet-test.yml (group: devnet-shared-wallet) so a push-triggered
+# deploy and a nightly test run serialize on the one funded devnet wallet
+# instead of racing it. Same string in both workflows is load-bearing.
 concurrency:
-  group: devnet-deploy
+  group: devnet-shared-wallet
   cancel-in-progress: false
 
 permissions:
@@ -326,22 +329,18 @@ jobs:
             --url "${VERIFY_RPC:-https://api.devnet.solana.com}"
 
   # ────────────────────────────────────────────────────────────────
-  # Job 3: Devnet tests — DISABLED
+  # Job 3: Devnet tests (post-deploy)
   #
-  # Disabled 2026-04-03: devnet tests use raw SPL Token Transfer
-  # to simulate DeFi spending, which the instruction scan correctly
-  # blocks (UnauthorizedTokenTransfer 6038). Every run since 2026-03-25
-  # has failed for this reason. The mock-spend pattern is structurally
-  # incompatible with the on-chain instruction scan.
-  #
-  # LiteSVM (364 tests) and Surfpool (59 tests) provide equivalent
-  # coverage in controlled environments. Re-enable when devnet tests
-  # are rewritten to use real DeFi program CPIs (e.g., Jupiter devnet).
-  #
-  # To run manually: gh workflow run devnet-test.yml
+  # Re-enabled 2026-06-10: the 2026-04-03 blocker (raw SPL Token Transfer
+  # mock-spend, correctly rejected by the instruction scan with
+  # UnauthorizedTokenTransfer 6038) is resolved — spending sandwiches now
+  # route through the deployed mock-defi fixture program's
+  # drain_via_delegation/open_position CPIs, OPERATOR seating uses the real
+  # F-Q6 queue→600s→apply path, and initialize_vault binds the live
+  # execution slot. ~110 min runtime (one real 600s wait per file).
   # ────────────────────────────────────────────────────────────────
-  # test:
-  #   name: Devnet Tests (post-deploy)
-  #   needs: deploy
-  #   uses: ./.github/workflows/devnet-test.yml
-  #   secrets: inherit
+  test:
+    name: Devnet Tests (post-deploy)
+    needs: deploy
+    uses: ./.github/workflows/devnet-test.yml
+    secrets: inherit

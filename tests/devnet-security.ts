@@ -28,23 +28,22 @@ import {
   nextVaultId,
   deriveSessionPda,
   createFullVault,
+  applyOperatorGrants,
   authorize,
+  sendVersionedTx,
   fundKeypair,
   ensureStablecoinMint,
   createNonStablecoinMint,
   TEST_USDC_KEYPAIR,
   FullVaultResult,
+  MOCK_DEFI_PROGRAM_ID,
 } from "./helpers/devnet-setup";
 import {
   buildExpectedIntentDigest,
   digestAsArgs,
 } from "./helpers/intent-digest-fixture";
 // Strict error helpers — see MEMORY/WORK/20260420-201121_test-assertion-precision-council/
-import {
-  expectAnchorError,
-  expectOneOfSigilErrors,
-  expectSigilError,
-} from "@usesigil/kit/testing";
+import { expectSigilError } from "./helpers/strict-errors";
 
 describe("devnet-security", () => {
   const { provider, program, connection, owner } = getDevnetProvider();
@@ -53,13 +52,54 @@ describe("devnet-security", () => {
   const agent = Keypair.generate();
   const attacker = Keypair.generate();
   const feeDestination = Keypair.generate();
-  const jupiterProgramId = Keypair.generate().publicKey;
 
   let mint: PublicKey;
   let unregisteredMint: PublicKey; // non-stablecoin mint
   let vault: FullVaultResult;
   let vaultId: BN;
   let agentMintAta: PublicKey; // agent ATA for mock DeFi spend destination
+
+  // Fresh per-test vault+agent pairs for tests 8–14 — pre-created in before()
+  // so all eight OPERATOR grants (shared vault + 7 fresh) share ONE 600s
+  // timelock wait (F-Q6) instead of one wait per test.
+  const FRESH_CONFIGS = [
+    {
+      dailyCap: new BN(500_000_000),
+      maxTx: new BN(50_000_000),
+      deposit: new BN(500_000_000),
+    }, // test 8
+    {
+      dailyCap: new BN(500_000_000),
+      maxTx: new BN(200_000_000),
+      deposit: new BN(500_000_000),
+    }, // test 9
+    {
+      dailyCap: new BN(500_000_000),
+      maxTx: new BN(200_000_000),
+      deposit: new BN(500_000_000),
+    }, // test 10
+    {
+      dailyCap: new BN(500_000_000),
+      maxTx: new BN(200_000_000),
+      deposit: new BN(500_000_000),
+    }, // test 11
+    {
+      dailyCap: new BN(500_000_000),
+      maxTx: new BN(200_000_000),
+      deposit: new BN(500_000_000),
+    }, // test 12
+    {
+      dailyCap: new BN(500_000_000),
+      maxTx: new BN(200_000_000),
+      deposit: new BN(500_000_000),
+    }, // test 13
+    {
+      dailyCap: new BN(500_000_000),
+      maxTx: new BN(50_000_000),
+      deposit: new BN(1_000_000_000),
+    }, // test 14
+  ];
+  let freshPairs: { agent: Keypair; vault: FullVaultResult }[] = [];
 
   before(async () => {
     await fundKeypair(provider, agent.publicKey);
@@ -100,9 +140,38 @@ describe("devnet-security", () => {
       vaultId,
       dailyCap: new BN(100_000_000), // 100 USDC
       maxTx: new BN(50_000_000), // 50 USDC max per tx
-      allowedProtocols: [jupiterProgramId],
+      allowedProtocols: [MOCK_DEFI_PROGRAM_ID],
       depositAmount: new BN(1_000_000_000),
     });
+
+    // Fresh per-test vaults for tests 8–14 (each with its own agent so the
+    // freeze-by-revoke tests can't poison a neighbour).
+    freshPairs = [];
+    for (const cfg of FRESH_CONFIGS) {
+      const freshAgent = Keypair.generate();
+      await fundKeypair(provider, freshAgent.publicKey);
+      const freshVault = await createFullVault({
+        program,
+        connection,
+        owner,
+        agent: freshAgent,
+        feeDestination: feeDestination.publicKey,
+        mint,
+        vaultId: nextVaultId(4),
+        dailyCap: cfg.dailyCap,
+        maxTx: cfg.maxTx,
+        allowedProtocols: [MOCK_DEFI_PROGRAM_ID],
+        depositAmount: cfg.deposit,
+      });
+      freshPairs.push({ agent: freshAgent, vault: freshVault });
+    }
+
+    // F-Q6: every OPERATOR grant above was QUEUED — one batched wait for the
+    // on-chain 600s single-key floor, then apply all eight.
+    await applyOperatorGrants(program, connection, owner, [
+      vault.operatorGrant,
+      ...freshPairs.map((p) => p.vault.operatorGrant),
+    ]);
 
     console.log("  Security test vault:", vault.vaultPda.toString());
     console.log("  Attacker:", attacker.publicKey.toString());
@@ -140,11 +209,16 @@ describe("devnet-security", () => {
           pendingPolicy: vault.pendingPolicyPda,
           systemProgram: SystemProgram.programId,
         } as any)
-        .signers([attacker])
-        .rpc();
+        .instruction()
+        .then((ix) => sendVersionedTx(connection, [ix], attacker));
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectAnchorError(err, { name: "ConstraintSeeds", code: 2006 });
+      // V2 binds owner authority with `has_one = owner @ UnauthorizedOwner`
+      // (e.g. queue_policy_update.rs:18), so a wrong signer reverts the
+      // SPECIFIC UnauthorizedOwner (6002) — not the generic Anchor seeds error.
+      // The vault PDA seeds use vault_authority (immutable), not the live
+      // owner, so a wrong owner can't trigger a seeds mismatch.
+      expectSigilError(err, { name: "UnauthorizedOwner" });
     }
     console.log("    Non-owner queue_policy_update rejected");
   });
@@ -158,11 +232,16 @@ describe("devnet-security", () => {
           vault: vault.vaultPda,
           agentSpendOverlay: vault.overlayPda,
         } as any)
-        .signers([attacker])
-        .rpc();
+        .instruction()
+        .then((ix) => sendVersionedTx(connection, [ix], attacker));
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectAnchorError(err, { name: "ConstraintSeeds", code: 2006 });
+      // V2 binds owner authority with `has_one = owner @ UnauthorizedOwner`
+      // (e.g. queue_policy_update.rs:18), so a wrong signer reverts the
+      // SPECIFIC UnauthorizedOwner (6002) — not the generic Anchor seeds error.
+      // The vault PDA seeds use vault_authority (immutable), not the live
+      // owner, so a wrong owner can't trigger a seeds mismatch.
+      expectSigilError(err, { name: "UnauthorizedOwner" });
     }
     console.log("    Non-owner revoke_agent rejected");
   });
@@ -186,11 +265,16 @@ describe("devnet-security", () => {
           ownerTokenAccount: attackerAta,
           tokenProgram: TOKEN_PROGRAM_ID,
         } as any)
-        .signers([attacker])
-        .rpc();
+        .instruction()
+        .then((ix) => sendVersionedTx(connection, [ix], attacker));
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectAnchorError(err, { name: "ConstraintSeeds", code: 2006 });
+      // V2 binds owner authority with `has_one = owner @ UnauthorizedOwner`
+      // (e.g. queue_policy_update.rs:18), so a wrong signer reverts the
+      // SPECIFIC UnauthorizedOwner (6002) — not the generic Anchor seeds error.
+      // The vault PDA seeds use vault_authority (immutable), not the live
+      // owner, so a wrong owner can't trigger a seeds mismatch.
+      expectSigilError(err, { name: "UnauthorizedOwner" });
     }
     console.log("    Non-owner withdraw_funds rejected");
   });
@@ -207,11 +291,16 @@ describe("devnet-security", () => {
           agentSpendOverlay: vault.overlayPda,
           systemProgram: SystemProgram.programId,
         } as any)
-        .signers([attacker])
-        .rpc();
+        .instruction()
+        .then((ix) => sendVersionedTx(connection, [ix], attacker));
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectAnchorError(err, { name: "ConstraintSeeds", code: 2006 });
+      // V2 binds owner authority with `has_one = owner @ UnauthorizedOwner`
+      // (e.g. queue_policy_update.rs:18), so a wrong signer reverts the
+      // SPECIFIC UnauthorizedOwner (6002) — not the generic Anchor seeds error.
+      // The vault PDA seeds use vault_authority (immutable), not the live
+      // owner, so a wrong owner can't trigger a seeds mismatch.
+      expectSigilError(err, { name: "UnauthorizedOwner" });
     }
     console.log("    Non-owner close_vault rejected");
   });
@@ -223,13 +312,18 @@ describe("devnet-security", () => {
       mint,
       program.programId,
     );
+    // Live policy_version — BN(0) would fire PolicyVersionMismatch BEFORE the
+    // agent-identity check, masking the error this test pins.
+    const livePolicy = await program.account.policyConfig.fetch(
+      vault.policyPda,
+    );
     try {
       await program.methods
         .validateAndAuthorize(
           mint,
           new BN(10_000_000),
-          jupiterProgramId,
-          new BN(0),
+          MOCK_DEFI_PROGRAM_ID,
+          (livePolicy as any).policyVersion,
           new BN(0),
           digestAsArgs(
             buildExpectedIntentDigest({
@@ -237,7 +331,7 @@ describe("devnet-security", () => {
               agent: attacker.publicKey,
               tokenMint: mint,
               amount: new BN(10_000_000),
-              targetProtocol: jupiterProgramId,
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
             }),
           ),
         )
@@ -257,8 +351,8 @@ describe("devnet-security", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         } as any)
-        .signers([attacker])
-        .rpc();
+        .instruction()
+        .then((ix) => sendVersionedTx(connection, [ix], attacker));
       expect.fail("Should have thrown");
     } catch (err: any) {
       expectSigilError(err, { name: "UnauthorizedAgent" });
@@ -298,11 +392,16 @@ describe("devnet-security", () => {
           pendingPolicy: vault.pendingPolicyPda,
           systemProgram: SystemProgram.programId,
         } as any)
-        .signers([agent])
-        .rpc();
+        .instruction()
+        .then((ix) => sendVersionedTx(connection, [ix], agent));
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectAnchorError(err, { name: "ConstraintSeeds", code: 2006 });
+      // V2 binds owner authority with `has_one = owner @ UnauthorizedOwner`
+      // (e.g. queue_policy_update.rs:18), so a wrong signer reverts the
+      // SPECIFIC UnauthorizedOwner (6002) — not the generic Anchor seeds error.
+      // The vault PDA seeds use vault_authority (immutable), not the live
+      // owner, so a wrong owner can't trigger a seeds mismatch.
+      expectSigilError(err, { name: "UnauthorizedOwner" });
     }
     console.log("    Agent queue_policy_update rejected (owner-only)");
   });
@@ -327,7 +426,7 @@ describe("devnet-security", () => {
       vaultTokenAta: vault.vaultTokenAta,
       mint,
       amount: new BN(40_000_000), // 40 USDC
-      protocol: jupiterProgramId,
+      protocol: MOCK_DEFI_PROGRAM_ID,
       protocolTreasuryAta: vault.protocolTreasuryAta,
       mockSpendDestination: agentMintAta,
     });
@@ -349,7 +448,7 @@ describe("devnet-security", () => {
       vaultTokenAta: vault.vaultTokenAta,
       mint,
       amount: new BN(40_000_000),
-      protocol: jupiterProgramId,
+      protocol: MOCK_DEFI_PROGRAM_ID,
       protocolTreasuryAta: vault.protocolTreasuryAta,
       mockSpendDestination: agentMintAta,
     });
@@ -373,7 +472,7 @@ describe("devnet-security", () => {
         vaultTokenAta: vault.vaultTokenAta,
         mint,
         amount: new BN(21_000_000), // 21 USDC — exceeds remaining 20
-        protocol: jupiterProgramId,
+        protocol: MOCK_DEFI_PROGRAM_ID,
         protocolTreasuryAta: vault.protocolTreasuryAta,
         mockSpendDestination: agentMintAta,
       });
@@ -386,24 +485,8 @@ describe("devnet-security", () => {
 
   it("8. aggregate TransactionTooLarge enforced (maxTx=50)", async () => {
     // maxTx=50 USDC for the vault — try 51
-    // Need a fresh vault since the cap on the main vault is spent
-    const freshVaultId = nextVaultId(4);
-    const freshAgent = Keypair.generate();
-    await fundKeypair(provider, freshAgent.publicKey);
-
-    const freshVault = await createFullVault({
-      program,
-      connection,
-      owner,
-      agent: freshAgent,
-      feeDestination: feeDestination.publicKey,
-      mint,
-      vaultId: freshVaultId,
-      dailyCap: new BN(500_000_000),
-      maxTx: new BN(50_000_000), // 50 USDC max per tx
-      allowedProtocols: [jupiterProgramId],
-      depositAmount: new BN(500_000_000),
-    });
+    // Fresh vault (pre-seated in before(): cap on the main vault is spent)
+    const { agent: freshAgent, vault: freshVault } = freshPairs[0];
 
     // Mock spend destination for freshAgent
     const freshAgentAta = await getOrCreateAssociatedTokenAccount(
@@ -432,7 +515,7 @@ describe("devnet-security", () => {
         vaultTokenAta: freshVault.vaultTokenAta,
         mint,
         amount: new BN(51_000_000), // 51 > maxTx=50
-        protocol: jupiterProgramId,
+        protocol: MOCK_DEFI_PROGRAM_ID,
         protocolTreasuryAta: freshVault.protocolTreasuryAta,
         mockSpendDestination: freshAgentAta.address,
       });
@@ -447,23 +530,7 @@ describe("devnet-security", () => {
     // With composed TX model, each authorize() does validate+finalize atomically.
     // The session PDA is created and closed within a single TX, so the same
     // session PDA (same vault+agent+mint) can be reused for subsequent TXes.
-    const freshVaultId = nextVaultId(4);
-    const freshAgent = Keypair.generate();
-    await fundKeypair(provider, freshAgent.publicKey);
-
-    const freshVault = await createFullVault({
-      program,
-      connection,
-      owner,
-      agent: freshAgent,
-      feeDestination: feeDestination.publicKey,
-      mint,
-      vaultId: freshVaultId,
-      dailyCap: new BN(500_000_000),
-      maxTx: new BN(200_000_000),
-      allowedProtocols: [jupiterProgramId],
-      depositAmount: new BN(500_000_000),
-    });
+    const { agent: freshAgent, vault: freshVault } = freshPairs[1];
 
     const sessionPda = deriveSessionPda(
       freshVault.vaultPda,
@@ -484,7 +551,7 @@ describe("devnet-security", () => {
       vaultTokenAta: freshVault.vaultTokenAta,
       mint,
       amount: new BN(10_000_000),
-      protocol: jupiterProgramId,
+      protocol: MOCK_DEFI_PROGRAM_ID,
       protocolTreasuryAta: freshVault.protocolTreasuryAta,
     });
 
@@ -504,7 +571,7 @@ describe("devnet-security", () => {
       vaultTokenAta: freshVault.vaultTokenAta,
       mint,
       amount: new BN(10_000_000),
-      protocol: jupiterProgramId,
+      protocol: MOCK_DEFI_PROGRAM_ID,
       protocolTreasuryAta: freshVault.protocolTreasuryAta,
     });
 
@@ -521,23 +588,7 @@ describe("devnet-security", () => {
   });
 
   it("10. frozen vault blocks validate_and_authorize", async () => {
-    const freshVaultId = nextVaultId(4);
-    const freshAgent = Keypair.generate();
-    await fundKeypair(provider, freshAgent.publicKey);
-
-    const freshVault = await createFullVault({
-      program,
-      connection,
-      owner,
-      agent: freshAgent,
-      feeDestination: feeDestination.publicKey,
-      mint,
-      vaultId: freshVaultId,
-      dailyCap: new BN(500_000_000),
-      maxTx: new BN(200_000_000),
-      allowedProtocols: [jupiterProgramId],
-      depositAmount: new BN(500_000_000),
-    });
+    const { agent: freshAgent, vault: freshVault } = freshPairs[2];
 
     // Freeze vault — revokeAgent removes the agent and freezes if no agents remain.
     // The on-chain constraint checks agent identity before vault status, so
@@ -570,7 +621,7 @@ describe("devnet-security", () => {
         vaultTokenAta: freshVault.vaultTokenAta,
         mint,
         amount: new BN(10_000_000),
-        protocol: jupiterProgramId,
+        protocol: MOCK_DEFI_PROGRAM_ID,
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
@@ -588,23 +639,7 @@ describe("devnet-security", () => {
   });
 
   it("11. frozen vault still allows deposit and withdraw", async () => {
-    const freshVaultId = nextVaultId(4);
-    const freshAgent = Keypair.generate();
-    await fundKeypair(provider, freshAgent.publicKey);
-
-    const freshVault = await createFullVault({
-      program,
-      connection,
-      owner,
-      agent: freshAgent,
-      feeDestination: feeDestination.publicKey,
-      mint,
-      vaultId: freshVaultId,
-      dailyCap: new BN(500_000_000),
-      maxTx: new BN(200_000_000),
-      allowedProtocols: [jupiterProgramId],
-      depositAmount: new BN(500_000_000),
-    });
+    const { agent: freshAgent, vault: freshVault } = freshPairs[3];
 
     // Freeze — revoking the only agent freezes the vault
     await program.methods
@@ -659,24 +694,8 @@ describe("devnet-security", () => {
 
   // ── Routing-aware security tests ──────────────────────────────────────
 
-  it("12. non-stablecoin mint rejected in validate_and_authorize", async () => {
-    const freshVaultId = nextVaultId(4);
-    const freshAgent = Keypair.generate();
-    await fundKeypair(provider, freshAgent.publicKey);
-
-    const freshVault = await createFullVault({
-      program,
-      connection,
-      owner,
-      agent: freshAgent,
-      feeDestination: feeDestination.publicKey,
-      mint,
-      vaultId: freshVaultId,
-      dailyCap: new BN(500_000_000),
-      maxTx: new BN(200_000_000),
-      allowedProtocols: [jupiterProgramId],
-      depositAmount: new BN(500_000_000),
-    });
+  it("12. non-stablecoin deposit rejected — stablecoin-only at deposit boundary", async () => {
+    const { vault: freshVault } = freshPairs[4];
 
     // Deposit unregistered (non-stablecoin) mint into vault
     const unregVaultAta = anchor.utils.token.associatedAddress({
@@ -697,7 +716,16 @@ describe("devnet-security", () => {
       owner.publicKey,
       500_000_000,
     );
-    await program.methods
+    // V2 enforces stablecoin-only at the DEPOSIT boundary: deposit_funds.rs:76
+    // require!s a build-time-pinned mint (USDC/USDT), so depositing a
+    // non-stablecoin reverts ErrMintNotPinned (6074). This is the FIRST line
+    // of defense — non-stablecoin tokens can't enter the vault at all, which
+    // makes the validate-time UnsupportedToken check (defense-in-depth,
+    // covered by the LiteSVM tier) unreachable via the deposit path on the
+    // live binary. (Was "rejected in validate_and_authorize" — the rejection
+    // moved one boundary earlier and got STRICTER.) Versioned send so the
+    // {Custom:6074} surfaces (the .rpc() path would mask it).
+    const depositIx = await program.methods
       .depositFunds(new BN(500_000_000))
       .accounts({
         owner: owner.publicKey,
@@ -709,62 +737,18 @@ describe("devnet-security", () => {
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       } as any)
-      .rpc();
-
-    // Try authorize with unregistered mint and no stablecoin output
-    const sessionPda = deriveSessionPda(
-      freshVault.vaultPda,
-      freshAgent.publicKey,
-      unregisteredMint,
-      program.programId,
-    );
+      .instruction();
     try {
-      await authorize({
-        connection,
-        program,
-        agent: freshAgent,
-        vaultPda: freshVault.vaultPda,
-        policyPda: freshVault.policyPda,
-        trackerPda: freshVault.trackerPda,
-        sessionPda,
-        vaultTokenAta: unregVaultAta,
-        mint: unregisteredMint,
-        amount: new BN(10_000_000),
-        protocol: jupiterProgramId,
-      });
+      await sendVersionedTx(connection, [depositIx], payer);
       expect.fail("Should have thrown");
     } catch (err: any) {
-      // Council decision 2026-04-20: non-stablecoin mint in authorize has two
-      // legitimately-equivalent rejection paths depending on which check
-      // fires first under Anchor's linearize() order:
-      //   - UnsupportedToken (6003): mint is not USDC/USDT
-      //   - InvalidTokenAccount (6022): ATA does not belong to vault/mint
-      // Both are correct specifications of the rejection. The prior "6014"
-      // fallback was a typo — 6014 = AgentAlreadyRegistered, unrelated.
-      // expectOneOfSigilErrors enforces typed names and forbids substrings.
-      expectOneOfSigilErrors(err, ["UnsupportedToken", "InvalidTokenAccount"]);
+      expectSigilError(err, { name: "ErrMintNotPinned" });
     }
-    console.log("    Non-stablecoin mint rejected in validate_and_authorize");
+    console.log("    Non-stablecoin deposit rejected at the deposit boundary");
   });
 
   it("13. frozen vault rejects agent_transfer with stablecoin", async () => {
-    const freshVaultId = nextVaultId(4);
-    const freshAgent = Keypair.generate();
-    await fundKeypair(provider, freshAgent.publicKey);
-
-    const freshVault = await createFullVault({
-      program,
-      connection,
-      owner,
-      agent: freshAgent,
-      feeDestination: feeDestination.publicKey,
-      mint,
-      vaultId: freshVaultId,
-      dailyCap: new BN(500_000_000),
-      maxTx: new BN(200_000_000),
-      allowedProtocols: [jupiterProgramId],
-      depositAmount: new BN(500_000_000),
-    });
+    const { agent: freshAgent, vault: freshVault } = freshPairs[5];
 
     // Freeze vault by revoking the only agent
     await program.methods
@@ -785,9 +769,14 @@ describe("devnet-security", () => {
       dest.publicKey,
     );
 
+    // Live policy_version (the revoke above bumped it again) so the
+    // version check passes and the AGENT-IDENTITY rejection fires.
+    const frozenPolicy = await program.account.policyConfig.fetch(
+      freshVault.policyPda,
+    );
     try {
       await program.methods
-        .agentTransfer(new BN(10_000_000), new BN(0))
+        .agentTransfer(new BN(10_000_000), (frozenPolicy as any).policyVersion)
         .accounts({
           agent: freshAgent.publicKey,
           vault: freshVault.vaultPda,
@@ -801,8 +790,8 @@ describe("devnet-security", () => {
           protocolTreasuryTokenAccount: freshVault.protocolTreasuryAta,
           tokenProgram: TOKEN_PROGRAM_ID,
         } as any)
-        .signers([freshAgent])
-        .rpc();
+        .instruction()
+        .then((ix) => sendVersionedTx(connection, [ix], freshAgent));
       expect.fail("Should have thrown");
     } catch (err: any) {
       // Council decision 2026-04-20 (same as test 10): revokeAgent cascade
@@ -820,23 +809,7 @@ describe("devnet-security", () => {
   });
 
   it("14. max_transaction_size_usd enforced on stablecoin", async () => {
-    const freshVaultId = nextVaultId(4);
-    const freshAgent = Keypair.generate();
-    await fundKeypair(provider, freshAgent.publicKey);
-
-    const freshVault = await createFullVault({
-      program,
-      connection,
-      owner,
-      agent: freshAgent,
-      feeDestination: feeDestination.publicKey,
-      mint,
-      vaultId: freshVaultId,
-      dailyCap: new BN(500_000_000),
-      maxTx: new BN(50_000_000), // 50 USD max per tx
-      allowedProtocols: [jupiterProgramId],
-      depositAmount: new BN(1_000_000_000),
-    });
+    const { agent: freshAgent, vault: freshVault } = freshPairs[6];
 
     // Mock spend destination for freshAgent
     const freshAgentAta = await getOrCreateAssociatedTokenAccount(
@@ -864,7 +837,7 @@ describe("devnet-security", () => {
         vaultTokenAta: freshVault.vaultTokenAta,
         mint,
         amount: new BN(51_000_000), // 51 > maxTx=50
-        protocol: jupiterProgramId,
+        protocol: MOCK_DEFI_PROGRAM_ID,
         protocolTreasuryAta: freshVault.protocolTreasuryAta,
         mockSpendDestination: freshAgentAta.address,
       });

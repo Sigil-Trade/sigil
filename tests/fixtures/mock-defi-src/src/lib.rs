@@ -12,9 +12,12 @@
 //!     `finalize_session` (post-snapshot), which triggers R-1 MintDeltaCap
 //!     and TA-14 per-recipient-cap violations.
 //!
-//! Not deployed to devnet or mainnet. The fixed `declare_id!` is
-//! deterministic across builds so test constraint entries can hard-code the
-//! program ID.
+//! Deployed to DEVNET (manually) at this `declare_id!` so the devnet-*.ts
+//! integration suites can route their V2 spending sandwiches through a real
+//! allowlisted DeFi program. NOT deployed to mainnet. The fixed `declare_id!`
+//! is deterministic across builds so test constraint entries can hard-code the
+//! program ID. Redeploy via `scripts/rebuild-mock-defi.sh` + `solana program
+//! deploy` if it is ever closed (CI preflight in devnet-test.yml checks it).
 
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};

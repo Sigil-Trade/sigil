@@ -10,16 +10,11 @@
  *     Mandatory minimum timelockDuration: 1800 (30 min).
  */
 import * as anchor from "@coral-xyz/anchor";
-import { Program } from "@coral-xyz/anchor";
-import { Sigil } from "../target/types/sigil";
 import {
   Keypair,
   PublicKey,
   SystemProgram,
-  LAMPORTS_PER_SOL,
   SYSVAR_INSTRUCTIONS_PUBKEY,
-  TransactionMessage,
-  VersionedTransaction,
 } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
@@ -44,7 +39,16 @@ import {
   ensureStablecoinMint,
   TEST_USDC_KEYPAIR,
   nextVaultId,
+  sendInitVault,
+  sendVersionedTx,
+  queueOperatorGrant,
+  applyOperatorGrants,
+  waitForClusterTime,
+  buildMockDefiNoopIx,
+  buildQueueDigest,
+  MOCK_DEFI_PROGRAM_ID,
 } from "./helpers/devnet-setup";
+import { expectSigilError } from "./helpers/strict-errors";
 
 describe("devnet-smoke-test", () => {
   const { provider, program, connection, owner } = getDevnetProvider();
@@ -64,7 +68,6 @@ describe("devnet-smoke-test", () => {
   let ownerUsdcAta: PublicKey;
   let vaultUsdcAta: PublicKey;
   let protocolTreasuryUsdcAta: PublicKey;
-  const jupiterProgramId = Keypair.generate().publicKey;
 
   before(async () => {
     console.log("  Owner:", owner.publicKey.toString());
@@ -138,53 +141,58 @@ describe("devnet-smoke-test", () => {
   });
 
   it("1. initialize_vault", async () => {
-    // 11 args (includes maxSlippageBps)
     const [overlayPda] = PublicKey.findProgramAddressSync(
       [Buffer.from("agent_spend"), vaultPda.toBuffer(), Buffer.from([0])],
       program.programId,
     );
-    await program.methods
-      .initializeVault(
-        vaultId,
-        new BN(500_000_000),
-        new BN(100_000_000),
-        1,
-        [jupiterProgramId],
-        0,
-        500,
-        new BN(1800),
-        [],
-        [],
-        false, // observeOnly (Phase 2 TA-19)
-        0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
-        false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
-        5, // auto_revoke_threshold (TA-17 Phase 3 — default)
-        new BN(0), // stable_balance_floor (TA-12 Phase 5 — disabled)
-        new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — disabled)
-        false, // cosign_required (G6 audit 2026-05-18 — not opted in)
-        initVaultPreviewDigest({
-          dailySpendingCapUsd: new BN(500_000_000),
-          maxTransactionSizeUsd: new BN(100_000_000),
-          maxSlippageBps: 500,
-          protocolMode: 1,
-          protocols: [jupiterProgramId],
-          allowedDestinations: [],
-          timelockDuration: new BN(1800),
-          operatingHours: 0x00ffffff,
-          autoPromoteGrays: false,
-          autoRevokeThreshold: 5,
-        }),
-      )
-      .accounts({
-        owner: owner.publicKey,
-        vault: vaultPda,
-        policy: policyPda,
-        tracker: trackerPda,
-        agentSpendOverlay: overlayPda,
-        feeDestination: feeDestination.publicKey,
-        systemProgram: SystemProgram.programId,
-      } as any)
-      .rpc();
+    // PEN-CROSS-2: the owner-signed preview digest must bind the EXACT slot
+    // initialize_vault executes in (else PolicyPreviewMismatch 6071 on a live
+    // clock) — sendInitVault binds + retries.
+    await sendInitVault(connection, (owner as any).payer, (createdAtSlot) =>
+      program.methods
+        .initializeVault(
+          vaultId,
+          new BN(500_000_000),
+          new BN(100_000_000),
+          1,
+          [MOCK_DEFI_PROGRAM_ID],
+          0,
+          500,
+          new BN(1800),
+          [],
+          [],
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — disabled)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — disabled)
+          false, // cosign_required (G6 audit 2026-05-18 — not opted in)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(500_000_000),
+            maxTransactionSizeUsd: new BN(100_000_000),
+            maxSlippageBps: 500,
+            protocolMode: 1,
+            protocols: [MOCK_DEFI_PROGRAM_ID],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+            createdAtSlot,
+          }),
+        )
+        .accounts({
+          owner: owner.publicKey,
+          vault: vaultPda,
+          policy: policyPda,
+          tracker: trackerPda,
+          agentSpendOverlay: overlayPda,
+          feeDestination: feeDestination.publicKey,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .instruction(),
+    );
 
     const vault = await program.account.agentVault.fetch(vaultPda);
     expect(vault.owner.toString()).to.equal(owner.publicKey.toString());
@@ -212,19 +220,24 @@ describe("devnet-smoke-test", () => {
     console.log("    Deposited 100 tokens into vault");
   });
 
-  it("3. register_agent", async () => {
-    const [overlayPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("agent_spend"), vaultPda.toBuffer(), Buffer.from([0])],
-      program.programId,
+  it("3. register_agent (OPERATOR via queue → 600s floor → apply)", async () => {
+    // F-Q6: an instant registerAgent(OPERATOR) on a single-key vault reverts
+    // (ErrOperatorGrantRequiresTimelock 6107). The lawful devnet path is
+    // queue_agent_grant → wait out the on-chain 600s floor → apply_agent_grant.
+    const grant = await queueOperatorGrant(
+      program,
+      connection,
+      owner,
+      vaultPda,
+      agent.publicKey,
+      2, // FULL_CAPABILITY (OPERATOR)
     );
-    await program.methods
-      .registerAgent(agent.publicKey, 2, new BN(0)) // FULL_CAPABILITY
-      .accounts({
-        owner: owner.publicKey,
-        vault: vaultPda,
-        agentSpendOverlay: overlayPda,
-      } as any)
-      .rpc();
+    expect(grant.minDelaySeconds).to.equal(600);
+    console.log(
+      `    OPERATOR grant queued (delay ${grant.minDelaySeconds}s) — waiting it out...`,
+    );
+
+    await applyOperatorGrants(program, connection, owner, [grant]);
 
     const vault = await program.account.agentVault.fetch(vaultPda);
     expect(vault.agents[0].pubkey.toString()).to.equal(
@@ -236,6 +249,9 @@ describe("devnet-smoke-test", () => {
   it("4. queue_policy_update (timelock-gated — verify pending PDA)", async () => {
     // updatePolicy deleted; all mutations go through queue/apply.
     // With timelockDuration=1800, we can't apply in a test — just verify the queue.
+    // queue_policy_update requires the correctly-merged post-change digest
+    // (here: all-null overrides = the live policy re-encoded), else 6071.
+    const queueDigest = await buildQueueDigest(program, policyPda, vaultPda);
     await program.methods
       .queuePolicyUpdate(
         null,
@@ -257,7 +273,7 @@ describe("devnet-smoke-test", () => {
         null,
         null, // cosign_session_pubkey (D-5 Phase 10a-B7)
         PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
-        new Array(32).fill(0), // newPolicyPreviewDigest (Phase 2 TA-19 placeholder)
+        queueDigest,
       )
       .accounts({
         owner: owner.publicKey,
@@ -289,13 +305,18 @@ describe("devnet-smoke-test", () => {
   });
 
   it("5. validate_and_authorize + finalize_session (composed)", async () => {
-    // Build validate instruction
+    // Live policy_version — apply_agent_grant (test 3) bumped it past 0.
+    const livePolicy = await program.account.policyConfig.fetch(policyPda);
+
+    // Build validate instruction. F-Q1a: the tx fee payer (agent) is
+    // compiled-writable in every instruction of the message, so it must be
+    // resolvable from validate's remaining_accounts (else 6105).
     const validateIx = await program.methods
       .validateAndAuthorize(
         usdcMint,
         new BN(50_000_000), // 50 tokens
-        jupiterProgramId,
-        new BN(0),
+        MOCK_DEFI_PROGRAM_ID,
+        (livePolicy as any).policyVersion,
         new BN(0),
         digestAsArgs(
           buildExpectedIntentDigest({
@@ -303,7 +324,7 @@ describe("devnet-smoke-test", () => {
             agent: agent.publicKey,
             tokenMint: usdcMint,
             amount: new BN(50_000_000),
-            targetProtocol: jupiterProgramId,
+            targetProtocol: MOCK_DEFI_PROGRAM_ID,
           }),
         ),
       )
@@ -323,6 +344,9 @@ describe("devnet-smoke-test", () => {
         instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         outputStablecoinAccount: null,
       } as any)
+      .remainingAccounts([
+        { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+      ])
       .instruction();
 
     // Build finalize instruction
@@ -346,18 +370,14 @@ describe("devnet-smoke-test", () => {
       } as any)
       .instruction();
 
-    // Compose into a single versioned transaction
-    const { blockhash } = await connection.getLatestBlockhash();
-    const messageV0 = new TransactionMessage({
-      payerKey: agent.publicKey,
-      recentBlockhash: blockhash,
-      instructions: [validateIx, finalizeIx],
-    }).compileToV0Message();
-
-    const tx = new VersionedTransaction(messageV0);
-    tx.sign([agent]);
-    const sig = await connection.sendTransaction(tx);
-    await connection.confirmTransaction(sig, "confirmed");
+    // Compose [validate, mock-defi noop, finalize] — F-Q2 requires EXACTLY
+    // one counted DeFi instruction in the sandwich. The noop moves no tokens,
+    // so finalize measures actual_spend == 0.
+    await sendVersionedTx(
+      connection,
+      [validateIx, buildMockDefiNoopIx(agent.publicKey), finalizeIx],
+      agent,
+    );
 
     // Session should be closed (finalize closes it)
     const sessionInfo = await connection.getAccountInfo(sessionPda);
@@ -365,10 +385,10 @@ describe("devnet-smoke-test", () => {
 
     const vault = await program.account.agentVault.fetch(vaultPda);
     expect(vault.totalTransactions.toNumber()).to.equal(1);
-    // totalVolume uses actual_spend_tracked; no DeFi ix in compose → 0
+    // totalVolume uses actual_spend_tracked; the noop moves nothing → 0
     expect(vault.totalVolume.toNumber()).to.equal(0);
     console.log(
-      "    Session authorized + finalized in one tx, tx count = 1, volume = 50M",
+      "    Session authorized + finalized in one tx, tx count = 1, volume = 0",
     );
   });
 
@@ -408,19 +428,65 @@ describe("devnet-smoke-test", () => {
     console.log("    Vault frozen via kill switch");
   });
 
-  it("8. reactivate_vault", async () => {
-    // revokeAgent removed the agent, so we must provide a new one
-    await program.methods
-      .reactivateVault(agent.publicKey, 2) // FULL_CAPABILITY
+  it("8. reactivate_vault (after 5-min anti-thrash cooldown)", async () => {
+    // reactivate_vault.rs:127-134 enforces a 300s anti-thrash cooldown from the
+    // freeze (test 7's revoke) — ErrReactivateCooldownActive (6097) until it
+    // elapses. Devnet has no clock cheatcodes, so wait it out against the
+    // cluster clock, reading frozen_at_timestamp from chain for the exact
+    // deadline. The cooldown check precedes the F-Q6 capability gate, so this
+    // wait is also what makes the 6107 assertion below reachable.
+    const REACTIVATE_COOLDOWN_SECONDS = 300;
+    const frozen = await program.account.agentVault.fetch(vaultPda);
+    const frozenAt = Number((frozen as any).frozenAtTimestamp);
+    console.log(
+      `    Frozen at ${frozenAt}; waiting out the ${REACTIVATE_COOLDOWN_SECONDS}s reactivate cooldown...`,
+    );
+    await waitForClusterTime(
+      connection,
+      frozenAt + REACTIVATE_COOLDOWN_SECONDS + 3,
+      "reactivate-cooldown",
+    );
+
+    // Cooldown clear. F-Q6 (reactivate_vault.rs:185-200): re-seating an OPERATOR
+    // (capability 2) during reactivate is the same instant-grant vector as
+    // register_agent — it MUST revert 6107 on a single-key vault. Assert the
+    // gate holds on the live cluster, then reactivate with Observer.
+    const reactivateOperatorIx = await program.methods
+      .reactivateVault(agent.publicKey, 2) // FULL_CAPABILITY — forbidden
       .accounts({
         owner: owner.publicKey,
         vault: vaultPda,
       } as any)
-      .rpc();
+      .instruction();
+    try {
+      await sendVersionedTx(
+        connection,
+        [reactivateOperatorIx],
+        (owner as any).payer,
+      );
+      expect.fail("instant OPERATOR re-grant should have been rejected");
+    } catch (err) {
+      expectSigilError(err, { name: "ErrOperatorGrantRequiresTimelock" });
+    }
+
+    const reactivateObserverIx = await program.methods
+      .reactivateVault(agent.publicKey, 1) // Observer — instant-eligible
+      .accounts({
+        owner: owner.publicKey,
+        vault: vaultPda,
+      } as any)
+      .instruction();
+    await sendVersionedTx(
+      connection,
+      [reactivateObserverIx],
+      (owner as any).payer,
+    );
 
     const vault = await program.account.agentVault.fetch(vaultPda);
     expect(JSON.stringify(vault.status)).to.include("active");
-    console.log("    Vault reactivated");
+    console.log(
+      "    Instant OPERATOR re-grant rejected (6107); reactivated with Observer",
+    );
   });
 
   it("9. withdraw remaining + close_vault", async () => {

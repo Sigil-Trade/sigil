@@ -13,13 +13,12 @@
  *     finalizeSession includes policy and tracker accounts.
  */
 // Strict error helpers — see MEMORY/WORK/20260420-201121_test-assertion-precision-council/
-import { expectAnchorError } from "@usesigil/kit/testing";
+import { expectAnchorError } from "./helpers/strict-errors";
 import * as anchor from "@coral-xyz/anchor";
 import {
   Keypair,
   PublicKey,
   SystemProgram,
-  SYSVAR_INSTRUCTIONS_PUBKEY,
   TransactionMessage,
   VersionedTransaction,
 } from "@solana/web3.js";
@@ -35,7 +34,7 @@ import {
   nextVaultId,
   deriveSessionPda,
   createFullVault,
-  authorize,
+  applyOperatorGrants,
   authorizeAndFinalize,
   buildAuthorizeIx,
   buildFinalizeIx,
@@ -45,6 +44,7 @@ import {
   TEST_USDT_KEYPAIR,
   FullVaultResult,
   PROTOCOL_TREASURY,
+  MOCK_DEFI_PROGRAM_ID,
 } from "./helpers/devnet-setup";
 
 describe("devnet-sessions", () => {
@@ -54,7 +54,6 @@ describe("devnet-sessions", () => {
   const agent = Keypair.generate();
   const feeDestination = Keypair.generate();
   const thirdParty = Keypair.generate();
-  const jupiterProgramId = Keypair.generate().publicKey;
 
   let mintA: PublicKey;
   let mintB: PublicKey;
@@ -91,9 +90,16 @@ describe("devnet-sessions", () => {
       vaultId: nextVaultId(3),
       dailyCap: new BN(500_000_000),
       maxTx: new BN(100_000_000),
-      allowedProtocols: [jupiterProgramId],
+      allowedProtocols: [MOCK_DEFI_PROGRAM_ID],
       depositAmount: new BN(500_000_000),
     });
+
+    // F-Q6: the OPERATOR grant was QUEUED by createFullVault — wait out the
+    // on-chain 600s single-key floor (real time; devnet has no clock
+    // cheatcodes) and apply it. One batched wait for the whole file.
+    await applyOperatorGrants(program, connection, owner, [
+      vault.operatorGrant,
+    ]);
 
     // Create vault ATA + deposit for mintB
     mintBVaultAta = anchor.utils.token.associatedAddress({
@@ -163,7 +169,7 @@ describe("devnet-sessions", () => {
       vaultTokenAta: vault.vaultTokenAta,
       mint: mintA,
       amount: new BN(10_000_000),
-      protocol: jupiterProgramId,
+      protocol: MOCK_DEFI_PROGRAM_ID,
       protocolTreasuryAta: vault.protocolTreasuryAta,
       feeDestinationAta: null,
     });
@@ -202,7 +208,7 @@ describe("devnet-sessions", () => {
       vaultTokenAta: vault.vaultTokenAta,
       mint: mintA,
       amount: new BN(10_000_000),
-      protocol: jupiterProgramId,
+      protocol: MOCK_DEFI_PROGRAM_ID,
       protocolTreasuryAta: vault.protocolTreasuryAta,
       feeDestinationAta: null,
     });
@@ -239,7 +245,7 @@ describe("devnet-sessions", () => {
       vaultTokenAta: vault.vaultTokenAta,
       mint: mintA,
       amount: new BN(10_000_000),
-      protocol: jupiterProgramId,
+      protocol: MOCK_DEFI_PROGRAM_ID,
       protocolTreasuryAta: vault.protocolTreasuryAta,
     });
     const finalizeIx = await buildFinalizeIx({
@@ -304,7 +310,7 @@ describe("devnet-sessions", () => {
       vaultTokenAta: vault.vaultTokenAta,
       mint: mintA,
       amount: new BN(10_000_000),
-      protocol: jupiterProgramId,
+      protocol: MOCK_DEFI_PROGRAM_ID,
       protocolTreasuryAta: vault.protocolTreasuryAta,
       feeDestinationAta: null,
     });
@@ -321,7 +327,7 @@ describe("devnet-sessions", () => {
       vaultTokenAta: mintBVaultAta,
       mint: mintB,
       amount: new BN(10_000_000),
-      protocol: jupiterProgramId,
+      protocol: MOCK_DEFI_PROGRAM_ID,
       protocolTreasuryAta: mintBTreasuryAta,
       feeDestinationAta: null,
     });
