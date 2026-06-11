@@ -63,4 +63,5 @@ export {
   setTransactionMessageFeePayer,
   setTransactionMessageLifetimeUsingBlockhash,
   signTransactionMessageWithSigners,
+  signTransactionWithSigners,
 } from "@solana/kit";

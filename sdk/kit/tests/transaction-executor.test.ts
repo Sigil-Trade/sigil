@@ -1,5 +1,12 @@
 import { expect } from "chai";
-import type { Address, Instruction, Rpc, SolanaRpcApi } from "@solana/kit";
+import type {
+  Address,
+  Instruction,
+  KeyPairSigner,
+  Rpc,
+  SolanaRpcApi,
+} from "@solana/kit";
+import { generateKeyPairSigner } from "@solana/kit";
 import {
   TransactionExecutor,
   type ExecuteTransactionParams,
@@ -11,8 +18,17 @@ import {
 
 // ─── Mock Helpers ────────────────────────────────────────────────────────────
 
+// Drain-detection monitoring address (any valid pubkey — it names a vault
+// account to inspect, independent of who signs the transaction).
 const MOCK_PAYER = "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL" as Address;
 const MOCK_PROGRAM = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" as Address;
+
+// A REAL Kit KeyPairSigner (partial signer). signAndEncode delegates to
+// signTransactionWithSigners, which asserts full-signedness — so the fee payer
+// must be a signer that actually produces an ed25519 signature. An identity
+// stub no longer suffices. Seeded once in the top-level before() hook; the RPC
+// send/confirm path stays mocked, so nothing hits the network.
+let agentSigner: KeyPairSigner;
 const MOCK_SIGNATURE =
   "5wHu1qwD7y5B7TFDx5UKo2KRDwfJpJdHnnRr8KeUQBJGG2ZxVjktjDqfUzE6jR2Kv8Zj";
 
@@ -29,7 +45,7 @@ function baseParams(
   overrides?: Partial<ExecuteTransactionParams>,
 ): ExecuteTransactionParams {
   return {
-    feePayer: MOCK_PAYER,
+    feePayer: agentSigner.address,
     validateIx: mockIx(),
     defiInstructions: [mockIx()],
     finalizeIx: mockIx(),
@@ -64,26 +80,22 @@ function createMockRpc(overrides?: {
   } as unknown as Rpc<SolanaRpcApi>;
 }
 
-function mockAgent() {
-  return {
-    address: MOCK_PAYER,
-    modifyAndSignTransactions: async (txs: unknown[]) => txs,
-    signTransactions: async (txs: unknown[]) => txs,
-  } as any;
-}
-
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe("TransactionExecutor", () => {
+  before(async () => {
+    agentSigner = await generateKeyPairSigner();
+  });
+
   describe("composeTransaction", () => {
     it("produces a compiled transaction object", async () => {
-      const executor = new TransactionExecutor(createMockRpc(), mockAgent());
+      const executor = new TransactionExecutor(createMockRpc(), agentSigner);
       const result = await executor.composeTransaction(baseParams());
       expect(result.compiledTx).to.have.property("messageBytes");
     });
 
     it("uses provided computeUnits override", async () => {
-      const executor = new TransactionExecutor(createMockRpc(), mockAgent());
+      const executor = new TransactionExecutor(createMockRpc(), agentSigner);
       const result = await executor.composeTransaction(
         baseParams({ computeUnits: 1_400_000 }),
       );
@@ -91,7 +103,7 @@ describe("TransactionExecutor", () => {
     });
 
     it("fetches blockhash from RPC", async () => {
-      const executor = new TransactionExecutor(createMockRpc(), mockAgent());
+      const executor = new TransactionExecutor(createMockRpc(), agentSigner);
       const result = await executor.composeTransaction(baseParams());
       expect(result.blockhash.blockhash).to.equal(MOCK_BLOCKHASH.blockhash);
     });
@@ -99,7 +111,7 @@ describe("TransactionExecutor", () => {
 
   describe("simulate", () => {
     it("returns success when simulation succeeds", async () => {
-      const executor = new TransactionExecutor(createMockRpc(), mockAgent());
+      const executor = new TransactionExecutor(createMockRpc(), agentSigner);
       const { compiledTx, computeUnits } =
         await executor.composeTransaction(baseParams());
       const { simulation } = await executor.simulate(
@@ -123,7 +135,7 @@ describe("TransactionExecutor", () => {
           },
         },
       });
-      const executor = new TransactionExecutor(rpc, mockAgent());
+      const executor = new TransactionExecutor(rpc, agentSigner);
       const { compiledTx, computeUnits } =
         await executor.composeTransaction(baseParams());
       const { simulation } = await executor.simulate(
@@ -148,7 +160,7 @@ describe("TransactionExecutor", () => {
           },
         },
       });
-      const executor = new TransactionExecutor(rpc, mockAgent());
+      const executor = new TransactionExecutor(rpc, agentSigner);
       const { compiledTx, computeUnits } =
         await executor.composeTransaction(baseParams());
       const { simulation } = await executor.simulate(
@@ -169,7 +181,7 @@ describe("TransactionExecutor", () => {
           value: { err: null, logs: [], unitsConsumed: 750_000 },
         },
       });
-      const executor = new TransactionExecutor(rpc, mockAgent());
+      const executor = new TransactionExecutor(rpc, agentSigner);
       const { compiledTx, computeUnits } =
         await executor.composeTransaction(baseParams());
       const { recomposedTx } = await executor.simulate(
@@ -188,7 +200,7 @@ describe("TransactionExecutor", () => {
           value: { err: null, logs: [], unitsConsumed: 200_000 },
         },
       });
-      const executor = new TransactionExecutor(rpc, mockAgent());
+      const executor = new TransactionExecutor(rpc, agentSigner);
       const { compiledTx, computeUnits } =
         await executor.composeTransaction(baseParams());
       const { recomposedTx, finalCU } = await executor.simulate(
@@ -204,7 +216,7 @@ describe("TransactionExecutor", () => {
 
   describe("signSendConfirm", () => {
     it("returns signature on success", async () => {
-      const executor = new TransactionExecutor(createMockRpc(), mockAgent());
+      const executor = new TransactionExecutor(createMockRpc(), agentSigner);
       const { compiledTx } = await executor.composeTransaction(baseParams());
       const { signature } = await executor.signSendConfirm(compiledTx);
       expect(signature).to.equal(MOCK_SIGNATURE);
@@ -221,7 +233,7 @@ describe("TransactionExecutor", () => {
           ],
         },
       });
-      const executor = new TransactionExecutor(rpc, mockAgent());
+      const executor = new TransactionExecutor(rpc, agentSigner);
       const { compiledTx } = await executor.composeTransaction(baseParams());
       try {
         await executor.signSendConfirm(compiledTx);
@@ -234,7 +246,7 @@ describe("TransactionExecutor", () => {
 
   describe("executeTransaction", () => {
     it("full happy path returns signature and events", async () => {
-      const executor = new TransactionExecutor(createMockRpc(), mockAgent());
+      const executor = new TransactionExecutor(createMockRpc(), agentSigner);
       const result = await executor.executeTransaction(baseParams());
       expect(result.signature).to.equal(MOCK_SIGNATURE);
       expect(result.events).to.be.an("array");
@@ -253,7 +265,7 @@ describe("TransactionExecutor", () => {
           },
         },
       });
-      const executor = new TransactionExecutor(rpc, mockAgent());
+      const executor = new TransactionExecutor(rpc, agentSigner);
       try {
         await executor.executeTransaction(baseParams());
         expect.fail("Should have thrown");
@@ -269,7 +281,7 @@ describe("TransactionExecutor", () => {
           value: { err: "error", logs: [], unitsConsumed: 0 },
         },
       });
-      const executor = new TransactionExecutor(rpc, mockAgent(), {
+      const executor = new TransactionExecutor(rpc, agentSigner, {
         skipSimulation: true,
       });
       const result = await executor.executeTransaction(baseParams());
@@ -277,7 +289,7 @@ describe("TransactionExecutor", () => {
     });
 
     it("priority fee is wired through to compose", async () => {
-      const executor = new TransactionExecutor(createMockRpc(), mockAgent());
+      const executor = new TransactionExecutor(createMockRpc(), agentSigner);
       const result = await executor.executeTransaction(
         baseParams({ priorityFeeMicroLamports: 50_000 }),
       );
@@ -288,7 +300,7 @@ describe("TransactionExecutor", () => {
       const rpc = createMockRpc({
         statusResult: { value: [null] },
       });
-      const executor = new TransactionExecutor(rpc, mockAgent(), {
+      const executor = new TransactionExecutor(rpc, agentSigner, {
         confirmOptions: { timeoutMs: 100, pollIntervalMs: 20 },
         skipSimulation: true,
       });
@@ -314,7 +326,7 @@ describe("TransactionExecutor", () => {
     }
 
     it("executes normally without vaultMonitoring (backward compat)", async () => {
-      const executor = new TransactionExecutor(createMockRpc(), mockAgent());
+      const executor = new TransactionExecutor(createMockRpc(), agentSigner);
       const result = await executor.executeTransaction(baseParams());
       expect(result.signature).to.equal(MOCK_SIGNATURE);
       expect(result.warnings).to.be.undefined;
@@ -333,7 +345,7 @@ describe("TransactionExecutor", () => {
           },
         },
       });
-      const executor = new TransactionExecutor(rpc, mockAgent());
+      const executor = new TransactionExecutor(rpc, agentSigner);
       const result = await executor.executeTransaction(
         baseParams({
           vaultMonitoring: {
@@ -361,7 +373,7 @@ describe("TransactionExecutor", () => {
           },
         },
       });
-      const executor = new TransactionExecutor(rpc, mockAgent());
+      const executor = new TransactionExecutor(rpc, agentSigner);
       try {
         await executor.executeTransaction(
           baseParams({
@@ -393,7 +405,7 @@ describe("TransactionExecutor", () => {
           },
         },
       });
-      const executor = new TransactionExecutor(rpc, mockAgent());
+      const executor = new TransactionExecutor(rpc, agentSigner);
       const result = await executor.executeTransaction(
         baseParams({
           vaultMonitoring: {

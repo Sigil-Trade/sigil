@@ -13,7 +13,10 @@ import type {
   Base64EncodedWireTransaction,
   TransactionSigner,
 } from "./kit-adapter.js";
-import { getBase64EncodedWireTransaction } from "./kit-adapter.js";
+import {
+  getBase64EncodedWireTransaction,
+  signTransactionWithSigners,
+} from "./kit-adapter.js";
 
 import { SigilSdkDomainError } from "./errors/sdk.js";
 import { SigilRpcError } from "./errors/rpc.js";
@@ -154,10 +157,28 @@ export class BlockhashCache {
 // ─── signAndEncode ───────────────────────────────────────────────────────────
 
 /**
- * Sign a compiled transaction and encode to base64 wire format.
+ * Sign a COMPILED transaction and encode it to base64 wire format.
  *
- * Handles Kit's TransactionSigner interface which may expose
- * `modifyAndSignTransactions` or `signTransactions` (both accept/return arrays).
+ * `signer` may be either kind of Kit transaction signer, and the two kinds
+ * have DIFFERENT return contracts:
+ *
+ *   - A `TransactionModifyingSigner` (`modifyAndSignTransactions`) returns the
+ *     fully-formed signed transaction object directly.
+ *   - A `TransactionPartialSigner` — which includes every `@solana/kit`
+ *     `KeyPairSigner` — returns a `SignatureDictionary`
+ *     (`Record<Address, SignatureBytes>`), NOT a transaction. That dictionary
+ *     must be MERGED into the compiled transaction's `signatures` map to yield
+ *     a sendable transaction.
+ *
+ * The previous implementation called `signTransactions([tx])` and fed
+ * `results[0]` straight to `getBase64EncodedWireTransaction`. For a partial
+ * signer that `results[0]` is a signature dictionary with no `messageBytes`,
+ * so the encoder threw `Cannot read properties of undefined (reading
+ * 'length')`. Delegating to Kit's `signTransactionWithSigners` fixes this: it
+ * categorizes the signer, applies modifying signers then partial signers
+ * (merging their `SignatureDictionary` into `transaction.signatures`), and
+ * asserts the result is fully signed — returning a `SendableTransaction` that
+ * still carries `messageBytes` for the encoder.
  *
  * @returns Base64-encoded wire transaction ready for sendTransaction RPC.
  */
@@ -165,28 +186,51 @@ export async function signAndEncode(
   signer: TransactionSigner,
   compiledTx: unknown,
 ): Promise<Base64EncodedWireTransaction> {
+  // Preserve the prior interface guard: a signer that implements NEITHER
+  // partial- nor modifying-signing is rejected up front with the same domain
+  // error/code as before (rather than surfacing as a raw Kit SolanaError from
+  // inside signTransactionWithSigners, which would filter the signer out and
+  // fail later on a missing-signatures assertion).
   const signerTyped = signer as TransactionSigner & {
-    modifyAndSignTransactions?: (...args: unknown[]) => Promise<unknown[]>;
-    signTransactions?: (...args: unknown[]) => Promise<unknown[]>;
+    modifyAndSignTransactions?: unknown;
+    signTransactions?: unknown;
   };
-  const signFn =
-    signerTyped.modifyAndSignTransactions ?? signerTyped.signTransactions;
-  if (typeof signFn !== "function") {
+  const hasSignMethod =
+    typeof signerTyped.modifyAndSignTransactions === "function" ||
+    typeof signerTyped.signTransactions === "function";
+  if (!hasSignMethod) {
     throw new SigilSdkDomainError(
       SIGIL_ERROR__SDK__SIGNER_INVALID,
       "Signer must implement signTransactions() or modifyAndSignTransactions()",
       { context: { reason: "missing-sign-method" } },
     );
   }
-  const results = await signFn.call(signerTyped, [compiledTx]);
-  if (!Array.isArray(results) || results.length === 0) {
+
+  let signedTx: Awaited<ReturnType<typeof signTransactionWithSigners>>;
+  try {
+    // Handles BOTH signer kinds: modifying signers transform the tx, partial
+    // signers (KeyPairSigner) get their SignatureDictionary merged into
+    // `compiledTx.signatures`. Asserts full-signedness before returning.
+    // `signer` is the broad `TransactionSigner` union; the guard above already
+    // confirmed it is a partial- or modifying-signer (the only kinds
+    // signTransactionWithSigners accepts), so narrow it for the call.
+    signedTx = await signTransactionWithSigners(
+      [signer] as Parameters<typeof signTransactionWithSigners>[0],
+      compiledTx as Parameters<typeof signTransactionWithSigners>[1],
+    );
+  } catch (err) {
+    // A signer that produced no/partial signatures (e.g. wrong signer for this
+    // fee payer) surfaces here as a Kit signatures-missing assertion. Map it to
+    // the established domain error/code so callers' error handling is unchanged.
     throw new SigilSdkDomainError(
       SIGIL_ERROR__SDK__SIGNATURE_INVALID,
-      "signTransactions returned invalid result: expected non-empty array",
-      { context: { reason: "empty-or-non-array" } },
+      `signAndEncode: failed to produce a fully-signed transaction: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+      { context: { reason: "sign-failed" } },
     );
   }
-  const [signedTx] = results;
+
   return getBase64EncodedWireTransaction(
     signedTx as Parameters<typeof getBase64EncodedWireTransaction>[0],
   );

@@ -33,7 +33,10 @@ import { readFileSync } from "node:fs";
 
 import { getInitializeVaultInstructionAsync } from "../generated/instructions/initializeVault.js";
 import { getRegisterAgentInstructionAsync } from "../generated/instructions/registerAgent.js";
+import { getQueueAgentGrantInstructionAsync } from "../generated/instructions/queueAgentGrant.js";
+import { getApplyAgentGrantInstructionAsync } from "../generated/instructions/applyAgentGrant.js";
 import { getDepositFundsInstructionAsync } from "../generated/instructions/depositFunds.js";
+import { fetchPendingAgentGrant } from "../generated/accounts/pendingAgentGrant.js";
 import { inscribe } from "../inscribe.js";
 import { getAgentOverlayPDA, getTrackerPDA } from "../resolve-accounts.js";
 import { computePolicyPreviewDigest } from "../policy/compute-policy-preview-digest.js";
@@ -206,6 +209,173 @@ export async function ensureStablecoinBalance(
   }
 }
 
+// ─── Transient-RPC retry (public-devnet 429 tolerance) ──────────────────────
+
+/**
+ * Run an async RPC read with bounded exponential-backoff retry on transient
+ * RPC-availability errors (429 / Too Many Requests / generic HTTP error). The
+ * public devnet endpoint rate-limits read bursts the same way it does sends, so
+ * raw `getSlot` / `getBlockTime` calls in the provisioning + timelock-wait
+ * paths must tolerate the same flakiness as `sendKitTransaction`. Test-only.
+ */
+async function rpcReadWithRetry<T>(
+  fn: () => Promise<T>,
+  maxAttempts = 6,
+): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      const transient = errorMentions(e, [
+        "429",
+        "Too Many Requests",
+        "HTTP error",
+        "fetch failed",
+        "ETIMEDOUT",
+        "ECONNRESET",
+      ]);
+      if (!transient || attempt === maxAttempts - 1) throw e;
+      lastErr = e;
+      await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
+    }
+  }
+  throw lastErr;
+}
+
+// ─── Operator-grant timelock (F-Q6) ─────────────────────────────────────────
+
+/**
+ * Capability tier 2 = OPERATOR (= FULL_CAPABILITY). Mirrors
+ * `programs/sigil/src/state/mod.rs` `CAPABILITY_OPERATOR` and the
+ * agent-middleware `tests/helpers/devnet-setup.ts` constant.
+ */
+export const CAPABILITY_OPERATOR = 2;
+
+/**
+ * Poll the devnet CLUSTER clock (`getBlockTime`) until it reaches
+ * `deadlineUnix`, then return. On-chain timelocks gate on
+ * `Clock::unix_timestamp` — the stake-weighted cluster clock, which can skew
+ * from wall-time — so we poll it rather than sleeping a fixed wall duration.
+ * Mirrors `tests/helpers/devnet-setup.ts waitForClusterTime`. Bounded by a
+ * wall-clock cap (remaining cluster gap + 180s slack) so a stuck/null
+ * getBlockTime throws an explicit diagnostic instead of spinning until the
+ * mocha hook timeout.
+ */
+async function waitForClusterTime(
+  rpc: Rpc<SolanaRpcApi>,
+  deadlineUnix: number,
+  label = "deadline",
+): Promise<void> {
+  const wallStart = Date.now();
+  let firstClusterTime: number | null = null;
+  let firstPass = true;
+  for (;;) {
+    const slot = await rpcReadWithRetry(() =>
+      rpc.getSlot({ commitment: "confirmed" }).send(),
+    );
+    let clusterTime: number | null = null;
+    try {
+      clusterTime = Number(
+        await rpcReadWithRetry(() => rpc.getBlockTime(slot).send()),
+      );
+    } catch {
+      // getBlockTime can transiently fail for a just-produced slot (the slot
+      // has no recorded block time yet); treat as "not ready" and re-poll.
+      clusterTime = null;
+    }
+    if (clusterTime !== null && !Number.isNaN(clusterTime)) {
+      if (firstClusterTime === null) firstClusterTime = clusterTime;
+      if (clusterTime >= deadlineUnix) return;
+    }
+    const capMs =
+      firstClusterTime !== null
+        ? (deadlineUnix - firstClusterTime + 180) * 1000
+        : 180_000;
+    if (Date.now() - wallStart > capMs) {
+      throw new Error(
+        `waitForClusterTime(${label}): cluster clock never reached ` +
+          `${deadlineUnix} within wall cap (${Math.round(capMs / 1000)}s) — ` +
+          `getBlockTime degraded?`,
+      );
+    }
+    const remaining =
+      clusterTime === null ? 10 : Math.max(deadlineUnix - clusterTime, 1);
+    // First pass sleeps the whole residual in one go; later passes verify in
+    // short steps (the cluster clock can lag wall-time by a few seconds).
+    await new Promise((r) =>
+      setTimeout(
+        r,
+        (firstPass ? remaining + 2 : Math.min(remaining + 1, 10)) * 1000,
+      ),
+    );
+    firstPass = false;
+  }
+}
+
+/**
+ * Seat an OPERATOR-class agent (capability >= CAPABILITY_OPERATOR) via the
+ * lawful F-Q6 timelock path: `queue_agent_grant` → wait the on-chain
+ * single-key timelock floor → `apply_agent_grant`.
+ *
+ * A fresh single-key vault can NEVER seat an OPERATOR instantly —
+ * `register_agent` hard-rejects `capability >= CAPABILITY_OPERATOR` on a
+ * single-factor vault with `ErrOperatorGrantRequiresTimelock` (6107). The
+ * on-chain `SINGLE_KEY_OPERATOR_DELAY_FLOOR` is 600s (the missing 2nd factor);
+ * we read the EXACT `queued_at` + `min_delay_seconds` back from the on-chain
+ * `PendingAgentGrant` PDA (cluster truth, immune to local-clock skew) and wait
+ * out that window against `getBlockTime`, then apply.
+ *
+ * Mirrors `tests/helpers/devnet-setup.ts`
+ * `queueOperatorGrant`/`applyOperatorGrants`.
+ */
+async function seatOperatorAgent(
+  rpc: Rpc<SolanaRpcApi>,
+  owner: KeyPairSigner,
+  vaultAddress: Address,
+  agentAddress: Address,
+  capability: number,
+  spendingLimitUsd: bigint,
+  overlayPDA: Address,
+): Promise<void> {
+  // 1. Queue. The builder auto-derives policy / pending / audit_success /
+  //    slot_hashes / system_program from `vault`.
+  const queueIx = await getQueueAgentGrantInstructionAsync({
+    owner,
+    vault: vaultAddress,
+    agent: agentAddress,
+    capability,
+    spendingLimitUsd,
+  });
+  await sendKitTransaction(rpc, owner, [queueIx as Instruction]);
+
+  // 2. Read the queue-time truth back from the on-chain pending PDA. The
+  //    pending PDA address is the same one the queue builder derived; re-derive
+  //    it the same way for the fetch.
+  const pendingAddr = (queueIx as { accounts: { address: Address }[] })
+    .accounts[3].address; // [owner, vault, policy, pending, ...]
+  const pending = await rpcReadWithRetry(() =>
+    fetchPendingAgentGrant(rpc, pendingAddr),
+  );
+  const queuedAt = Number(pending.data.queuedAt);
+  const minDelaySeconds = Number(pending.data.minDelaySeconds);
+
+  // 3. Wait out the on-chain timelock against the cluster clock. The on-chain
+  //    check is `clock.unix_timestamp - queued_at >= min_delay_seconds`; add a
+  //    few seconds of slack so the apply lands strictly after the boundary.
+  const deadline = queuedAt + minDelaySeconds + 3;
+  await waitForClusterTime(rpc, deadline, "operator-grant-timelock");
+
+  // 4. Apply. The builder auto-derives policy / pending / audit_success /
+  //    slot_hashes from `vault`; only `agentSpendOverlay` must be supplied.
+  const applyIx = await getApplyAgentGrantInstructionAsync({
+    owner,
+    vault: vaultAddress,
+    agentSpendOverlay: overlayPDA,
+  });
+  await sendKitTransaction(rpc, owner, [applyIx as Instruction]);
+}
+
 // ─── Vault Provisioning ─────────────────────────────────────────────────────
 
 export interface ProvisionVaultOpts {
@@ -323,7 +493,9 @@ export async function provisionVault(
   let initLanded = false;
   let lastInitErr: unknown;
   for (let attempt = 0; attempt < 40 && !initLanded; attempt++) {
-    const base = await rpc.getSlot({ commitment: "processed" }).send();
+    const base = await rpcReadWithRetry(() =>
+      rpc.getSlot({ commitment: "processed" }).send(),
+    );
     const createdAtSlot =
       base + BigInt(seedOffsets[attempt % seedOffsets.length]);
     const previewDigest = computePolicyPreviewDigest({
@@ -410,20 +582,40 @@ export async function provisionVault(
     );
   }
 
-  // 3. Build and send registerAgent
-  //    PEN-CROSS-5 (Phase 4 absorption): policy account now required for
-  //    policy_version bump.
-  const registerIx = await getRegisterAgentInstructionAsync({
-    owner,
-    vault: vaultAddress,
-    policy: policyAddress,
-    agentSpendOverlay: overlayPDA,
-    agent: agent.address,
-    capability: Number(permissions),
-    spendingLimitUsd,
-  });
-
-  await sendKitTransaction(rpc, owner, [registerIx as Instruction]);
+  // 3. Seat the agent.
+  //
+  // F-Q6 (register_agent.rs:130-146): a single-key vault can NEVER seat an
+  // OPERATOR-class grant (capability >= CAPABILITY_OPERATOR) instantly —
+  // `register_agent` rejects it with `ErrOperatorGrantRequiresTimelock` (6107)
+  // because the time-delay IS the missing 2nd authorization factor. The lawful
+  // path is queue_agent_grant → wait the on-chain SINGLE_KEY_OPERATOR_DELAY_FLOOR
+  // (600s) → apply_agent_grant. Observer (1) / Disabled (0) grants cannot move
+  // funds and register instantly via the fast path.
+  const capabilityTier = Number(permissions);
+  if (capabilityTier >= CAPABILITY_OPERATOR) {
+    await seatOperatorAgent(
+      rpc,
+      owner,
+      vaultAddress,
+      agent.address,
+      capabilityTier,
+      spendingLimitUsd,
+      overlayPDA,
+    );
+  } else {
+    // PEN-CROSS-5 (Phase 4 absorption): policy account required for the
+    // policy_version bump on the instant register path.
+    const registerIx = await getRegisterAgentInstructionAsync({
+      owner,
+      vault: vaultAddress,
+      policy: policyAddress,
+      agentSpendOverlay: overlayPDA,
+      agent: agent.address,
+      capability: capabilityTier,
+      spendingLimitUsd,
+    });
+    await sendKitTransaction(rpc, owner, [registerIx as Instruction]);
+  }
 
   // 4. Deposit funds (optional)
   if (!opts.skipDeposit) {
@@ -457,6 +649,16 @@ const blockhashCache = new BlockhashCache(15_000);
  * Build, sign, and send a Kit-native transaction.
  *
  * Uses pipe() + signTransactionMessageWithSigners() + sendAndConfirmTransaction().
+ *
+ * The public devnet RPC (`api.devnet.solana.com`) aggressively rate-limits
+ * bursts and returns HTTP 429 on `sendTransaction` even under the SDK's 5-RPS
+ * throttle. `sendAndConfirmTransaction` (the shared production send path) does
+ * NOT retry the initial send by design — so this TEST-ONLY helper wraps the
+ * full build+send in a bounded exponential-backoff retry on transient RPC
+ * errors (429 / Too Many Requests / generic HTTP error). Each attempt rebuilds
+ * with a fresh blockhash so a stale lifetime never leaks into a retry. This
+ * keeps the hardening scoped to the devnet test harness and leaves the
+ * production helper untouched.
  */
 export async function sendKitTransaction(
   rpc: Rpc<SolanaRpcApi>,
@@ -464,34 +666,61 @@ export async function sendKitTransaction(
   instructions: Instruction[],
   opts?: { skipPreflight?: boolean },
 ): Promise<string> {
-  const blockhash = await blockhashCache.get(rpc);
+  const MAX_ATTEMPTS = 6;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    // Fresh blockhash per attempt — the cache TTL keeps this cheap while
+    // guaranteeing a retry never sends with an expired lifetime.
+    const blockhash = await blockhashCache.get(rpc);
 
-  const txMessage = pipe(
-    createTransactionMessage({ version: 0 }),
-    (tx) => setTransactionMessageFeePayer(signer.address, tx),
-    (tx) =>
-      setTransactionMessageLifetimeUsingBlockhash(
-        blockhash as Parameters<
-          typeof setTransactionMessageLifetimeUsingBlockhash
-        >[0],
-        tx,
-      ),
-    (tx) => appendTransactionMessageInstructions(instructions, tx),
-  );
+    const txMessage = pipe(
+      createTransactionMessage({ version: 0 }),
+      (tx) => setTransactionMessageFeePayer(signer.address, tx),
+      (tx) =>
+        setTransactionMessageLifetimeUsingBlockhash(
+          blockhash as Parameters<
+            typeof setTransactionMessageLifetimeUsingBlockhash
+          >[0],
+          tx,
+        ),
+      (tx) => appendTransactionMessageInstructions(instructions, tx),
+    );
 
-  // Attach fee payer signer so signTransactionMessageWithSigners can sign it
-  const txWithSigners = addSignersToTransactionMessage(
-    [signer],
-    txMessage as any,
-  );
-  const signedTx = await signTransactionMessageWithSigners(
-    txWithSigners as any,
-  );
-  const wireBase64 = getBase64EncodedWireTransaction(signedTx as any);
+    // Attach fee payer signer so signTransactionMessageWithSigners can sign it
+    const txWithSigners = addSignersToTransactionMessage(
+      [signer],
+      txMessage as any,
+    );
+    const signedTx = await signTransactionMessageWithSigners(
+      txWithSigners as any,
+    );
+    const wireBase64 = getBase64EncodedWireTransaction(signedTx as any);
 
-  return sendAndConfirmTransaction(rpc, wireBase64, {
-    timeoutMs: 60_000,
-    commitment: "confirmed",
-    skipPreflight: opts?.skipPreflight ?? false,
-  });
+    try {
+      return await sendAndConfirmTransaction(rpc, wireBase64, {
+        timeoutMs: 60_000,
+        commitment: "confirmed",
+        skipPreflight: opts?.skipPreflight ?? false,
+      });
+    } catch (e) {
+      // Retry only transient RPC-availability errors. On-chain program errors
+      // (Custom #NNNN) and confirmed tx failures are deterministic — surface
+      // them immediately rather than masking with retries.
+      const transient = errorMentions(e, [
+        "429",
+        "Too Many Requests",
+        "HTTP error",
+        "fetch failed",
+        "ETIMEDOUT",
+        "ECONNRESET",
+      ]);
+      if (!transient || attempt === MAX_ATTEMPTS - 1) throw e;
+      lastErr = e;
+      // Exponential backoff: 1s, 2s, 4s, 8s, 16s — generous because the
+      // public-devnet rate-limit window is measured in seconds, not ms.
+      await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
+    }
+  }
+  // Unreachable (loop either returns or throws), but satisfies the type checker.
+  throw lastErr;
 }
