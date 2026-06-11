@@ -175,12 +175,22 @@ jobs:
               tests/devnet-routing.ts
           fi
 
-      - name: Run Kit SDK devnet tests (dashboard integration)
+      - name: Run Kit SDK devnet tests (dashboard, lifecycle, composed-tx)
         working-directory: sdk/kit
         env:
           ANCHOR_PROVIDER_URL: ${{ secrets.DEVNET_RPC_URL }}
+        # 20-min per-hook timeout: lifecycle + composed-tx each provision a
+        # FULL_CAPABILITY (operator) vault, which V2 (F-Q6) routes through the
+        # queue → on-chain 600s single-key timelock floor → apply path — one
+        # real ~600s cluster-clock wait per file. dashboard-integration uses an
+        # observer-capability vault (instant) so it finishes fast under the same
+        # ceiling.
         run: |
-          npx mocha --require tsx tests/devnet/dashboard-integration.test.ts --timeout 300000
+          npx mocha --require tsx \
+            tests/devnet/dashboard-integration.test.ts \
+            tests/devnet/lifecycle.test.ts \
+            tests/devnet/composed-tx.test.ts \
+            --timeout 1200000
 
       - name: Cleanup wallet
         if: always()
