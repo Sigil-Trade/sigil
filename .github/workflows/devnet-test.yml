@@ -34,14 +34,21 @@ on:
         required: false
         default: "all"
 
-# Serialize against EVERY devnet job that touches the shared funded wallet —
-# the nightly cron here AND the push-triggered deploy in deploy-devnet.yml
-# (which redeploys sigil.so + spends the same DEVNET_WALLET_KEYPAIR). Both
-# workflows MUST use this identical group string, else GitHub won't queue a
-# deploy against an in-flight nightly and they race the wallet nonce / collide
+# Serialize devnet wallet use across runs. The nightly cron + manual dispatch
+# here, and the push-triggered deploy in deploy-devnet.yml (which redeploys
+# sigil.so + spends the same DEVNET_WALLET_KEYPAIR), MUST queue on one shared
+# group ("devnet-shared-wallet") so they never race the wallet nonce / collide
 # on the deterministic per-file vault IDs.
+#
+# EXCEPTION — workflow_call: when deploy-devnet.yml CALLS this workflow, the
+# parent run ALREADY holds "devnet-shared-wallet" for the whole chain, so the
+# called child must NOT also request it or it self-deadlocks waiting on the slot
+# its own parent holds (the prior failure mode). A called run inherits the
+# caller's event (push), so only the direct schedule/dispatch triggers take the
+# shared lock; the called child uses a unique per-run group and relies on the
+# parent's lock to serialize the chain against the nightly.
 concurrency:
-  group: devnet-shared-wallet
+  group: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'devnet-shared-wallet' || format('devnet-test-{0}', github.run_id) }}
   cancel-in-progress: false
 
 # M6: Least-privilege — only read repo contents
