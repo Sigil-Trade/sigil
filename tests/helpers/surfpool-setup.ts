@@ -583,13 +583,137 @@ const SIGIL_ERROR_NAMES: Record<number, string> = Object.fromEntries(
 );
 
 /**
+ * Serialize an arbitrary thrown value to a string that EXPOSES its content for
+ * substring matching, across every shape an error can arrive in.
+ *
+ * Plain `JSON.stringify(err)` is insufficient on its own: an `Error` instance
+ * (and the `SendTransactionError` subclass web3.js throws from
+ * `sendRawTransaction`) stringifies to `"{}"` because `message`/`stack`/`logs`
+ * are NON-enumerable. So we explicitly fold in `.message`, `.stack`,
+ * `String(err)`, anchor/web3 log arrays, and a bigint-safe JSON dump of the
+ * own-enumerable fields. The result is a single haystack we can scan for a
+ * `Custom`/hex error code regardless of whether the error came back as a raw
+ * `{InstructionError:[…]}` object, an `Error` with the code in its message, an
+ * `AnchorError`, or a `SendTransactionError` whose code is buried in `.logs`.
+ */
+function errorToHaystack(err: unknown): string {
+  const parts: string[] = [];
+  // String(err) → "Error: <message>" for Error instances, "[object Object]"
+  // for plain objects (still useful when combined with the JSON dump below).
+  try {
+    parts.push(String(err));
+  } catch {
+    /* non-stringifiable — ignore */
+  }
+  if (err && typeof err === "object") {
+    const anyErr = err as Record<string, unknown>;
+    // Non-enumerable on Error/SendTransactionError — pull explicitly.
+    if (typeof anyErr.message === "string") parts.push(anyErr.message);
+    if (typeof anyErr.stack === "string") parts.push(anyErr.stack);
+    // web3.js SendTransactionError carries the real program error in `.logs`;
+    // anchor AnchorError carries it in `.logs` too. Fold any string array in.
+    for (const key of ["logs", "transactionLogs"]) {
+      const v = anyErr[key];
+      if (Array.isArray(v)) parts.push(v.join(" "));
+    }
+    // Own-enumerable fields (covers raw `{InstructionError:[…,{Custom:N}]}`
+    // objects and anchor `{error:{errorCode:{number:N}}}`). bigint-safe.
+    try {
+      parts.push(
+        JSON.stringify(err, (_k, v) =>
+          typeof v === "bigint" ? v.toString() : v,
+        ),
+      );
+    } catch {
+      /* circular / non-serializable — the other parts still cover it */
+    }
+  }
+  return parts.join(" || ");
+}
+
+/**
+ * Extract the numeric Solana custom error code from a thrown value of ANY
+ * shape, or `null` if none is present. Walks the `.cause` chain (bounded) so a
+ * code wrapped one or two layers deep is still found.
+ *
+ * Recognized encodings (decimal 6071 used as the example):
+ *  - raw object        `{"InstructionError":[0,{"Custom":6071}]}`
+ *  - Error message     `... "Custom":6071 ...`
+ *  - hex (anchor/RPC)  `0x17b7`  (= 6071)
+ *  - AnchorError       `err.error.errorCode.number === 6071`
+ *  - SendTransactionError logs `... custom program error: 0x17b7 ...`
+ */
+export function extractCustomErrorCode(err: unknown): number | null {
+  // 1. Structured AnchorError field — most precise, check first. Walk the
+  //    bounded `.cause` chain so a wrapped AnchorError is still found.
+  let cursor: unknown = err;
+  for (
+    let depth = 0;
+    depth < 5 && cursor && typeof cursor === "object";
+    depth++
+  ) {
+    const c = cursor as Record<string, any>;
+    const anchorNumber = c?.error?.errorCode?.number;
+    if (typeof anchorNumber === "number") return anchorNumber;
+    // anchor sometimes exposes a flat numeric `.code` (program error range).
+    if (typeof c?.code === "number" && c.code >= 6000) return c.code;
+    cursor = c.cause;
+  }
+
+  // 2. Stringified scan across the whole error (incl. message/logs/JSON), then
+  //    the bounded cause chain. Decimal `Custom` form first, then hex.
+  const haystacks: string[] = [];
+  let node: unknown = err;
+  for (let depth = 0; depth < 5 && node; depth++) {
+    haystacks.push(errorToHaystack(node));
+    // `node` is guaranteed truthy by the loop guard above, so no `node &&`.
+    node =
+      typeof node === "object"
+        ? (node as Record<string, unknown>).cause
+        : undefined;
+  }
+  const haystack = haystacks.join(" || ");
+
+  const decimal = haystack.match(/"Custom"\s*:\s*(\d+)/);
+  if (decimal) return parseInt(decimal[1], 10);
+
+  // anchor/RPC "custom program error: 0x17b7" or a bare "0x17b7".
+  const hex = haystack.match(/0x([0-9a-fA-F]+)/);
+  if (hex) {
+    const n = parseInt(hex[1], 16);
+    if (Number.isFinite(n) && n >= 6000) return n;
+  }
+
+  return null;
+}
+
+/**
+ * Bulletproof predicate: did this thrown value represent a 6071
+ * `PolicyPreviewMismatch` (the slot-bound digest race), in ANY error shape?
+ *
+ * Matches on either the numeric code (6071, decimal or 0x17b7 hex, via
+ * {@link extractCustomErrorCode}) OR the error name `PolicyPreviewMismatch`
+ * appearing anywhere in the error (message / logs / JSON). Returns `true` ONLY
+ * for 6071 — every other error must be treated as real and propagate unchanged.
+ */
+export function isPolicyPreviewMismatch(err: unknown): boolean {
+  if (extractCustomErrorCode(err) === SIGIL_ERRORS.PolicyPreviewMismatch) {
+    return true;
+  }
+  // Fallback to the name (covers any path that surfaces the resolved name but
+  // not the raw code, e.g. sendVersionedTx's "Transaction failed: <name> …").
+  return errorToHaystack(err).includes("PolicyPreviewMismatch");
+}
+
+/**
  * Extract custom error code from Solana transaction error and resolve to name.
+ * Robust to every error shape (delegates to {@link extractCustomErrorCode}, so
+ * it also resolves a code carried only in an `Error.message` — `JSON.stringify`
+ * on a bare `Error` would otherwise yield `"{}"` and miss it).
  */
 function resolveErrorName(err: any): string {
-  const errJson = JSON.stringify(err);
-  const match = errJson.match(/"Custom":(\d+)/);
-  if (match) {
-    const code = parseInt(match[1], 10);
+  const code = extractCustomErrorCode(err);
+  if (code !== null) {
     const name = SIGIL_ERROR_NAMES[code];
     if (name) return `${name} (${code})`;
   }
@@ -630,15 +754,36 @@ export async function sendVersionedTx(
   const tx = new VersionedTransaction(messageV0);
   tx.sign([payer, ...signers]);
 
-  const signature = await connection.sendRawTransaction(tx.serialize(), {
-    skipPreflight: true,
-    maxRetries: 3,
-  });
-
-  const confirmation = await connection.confirmTransaction(
-    { signature, blockhash, lastValidBlockHeight },
-    "confirmed",
-  );
+  // `sendRawTransaction` can throw a `SendTransactionError` (the program error
+  // lives in its NON-enumerable `.logs`, not `.message`), and `getLatestBlockhash`/
+  // `confirmTransaction` can throw RPC errors — all BEFORE the
+  // `confirmation.value.err` branch below. Left raw, such a throw reaches
+  // callers as an opaque object (`expectTxError` matches on `err.message`;
+  // `sendInitVault` retries on a code). Normalize the SEND/CONFIRM failure
+  // shape into a readable Error that names the resolved code and folds in any
+  // captured logs — preserving the original as `cause`. This changes the SHAPE
+  // only; it does not swallow the error (always re-thrown) and weakens no
+  // assertion. (A genuine `confirmation.value.err` is still handled below.)
+  let signature: string;
+  let confirmation: Awaited<ReturnType<Connection["confirmTransaction"]>>;
+  try {
+    signature = await connection.sendRawTransaction(tx.serialize(), {
+      skipPreflight: true,
+      maxRetries: 3,
+    });
+    confirmation = await connection.confirmTransaction(
+      { signature, blockhash, lastValidBlockHeight },
+      "confirmed",
+    );
+  } catch (sendErr: unknown) {
+    const errorName = resolveErrorName(sendErr);
+    const logs = (sendErr as any)?.logs;
+    const logStr = Array.isArray(logs) ? ` Logs: ${logs.join(" ")}` : "";
+    throw new Error(
+      `Transaction send failed: ${errorName || errorToHaystack(sendErr)}${logStr}`,
+      { cause: sendErr },
+    );
+  }
 
   if (confirmation.value.err) {
     const txDetails = await connection.getTransaction(signature, {
@@ -690,13 +835,18 @@ export async function sendInitVault(
   env: SurfpoolTestEnv,
   buildIx: (createdAtSlot: number) => Promise<TransactionInstruction>,
   signers: Keypair[] = [],
-  maxAttempts: number = 24,
+  maxAttempts: number = 30,
 ): Promise<VersionedTxResult> {
   // A promptly-submitted tx lands one block after the slot we read (empirically
   // exec == getSlot()+1 in both `clock` and `transaction` block-production
-  // modes). We bind to base+1 first; the offset cycle absorbs 0-/2-/3-slot drift
-  // (e.g. a slower CI runner) while the datasource clock advances under us.
-  const offsets = [1, 2, 0, 3];
+  // modes). We bind to base+1 first; the offset cycle absorbs slot drift while
+  // the datasource clock advances under us. The window is widened to 0..5 (was
+  // 0..3): under CI burst the surfnet clock — which tracks the devnet
+  // datasource — can advance more than 3 slots between `getSlot("confirmed")`
+  // and the tx landing, so a 0..3 cycle could never bind the landing slot. We
+  // re-read the slot every attempt, so a larger fan-out simply probes a wider
+  // slice of the actual drift distribution.
+  const offsets = [1, 2, 3, 0, 4, 5];
   let lastErr: unknown;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const base = await env.connection.getSlot("confirmed");
@@ -704,22 +854,29 @@ export async function sendInitVault(
     const ix = await buildIx(createdAtSlot);
     try {
       return await sendVersionedTx(env.connection, [ix], env.payer, signers);
-    } catch (e: any) {
-      const msg = String(e?.message ?? e);
-      // 6071 = PolicyPreviewMismatch: the live clock advanced between getSlot()
-      // and execution. Re-read the slot and retry. Any other error is real.
-      if (
-        msg.includes('"Custom":6071') ||
-        msg.includes("PolicyPreviewMismatch")
-      ) {
+    } catch (e: unknown) {
+      // 6071 = PolicyPreviewMismatch: the live clock advanced between
+      // getSlot() and execution. Re-read the slot and retry. Detection is
+      // shape-agnostic (isPolicyPreviewMismatch walks message/logs/JSON/cause
+      // and matches both the decimal `Custom:6071` and hex `0x17b7` forms, plus
+      // the name) — the previous `String(e?.message ?? e)` check missed a 6071
+      // that arrived as a raw `{InstructionError:[…]}` object or a
+      // SendTransactionError (code buried in `.logs`), letting the flake
+      // escape unretried. ANY other error is real and propagates unchanged.
+      if (isPolicyPreviewMismatch(e)) {
         lastErr = e;
         continue;
       }
       throw e;
     }
   }
+  // Exhausted: surface a real Error (never a bare thrown object) that names the
+  // resolved code and preserves the last error as `cause` for debugging.
+  const lastName = resolveErrorName(lastErr);
   throw new Error(
-    `initialize_vault: clock kept advancing past the signed slot after ${maxAttempts} attempts. Last error: ${lastErr}`,
+    `initialize_vault: clock kept advancing past the signed slot after ` +
+      `${maxAttempts} attempts${lastName ? ` (last: ${lastName})` : ""}.`,
+    { cause: lastErr },
   );
 }
 
