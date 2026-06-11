@@ -124,6 +124,15 @@ pub fn handler(
         SigilError::ErrInvalidOwnershipTarget,
     );
 
+    // L-8 (audit 2026-06-11): reject self-transfer. new_owner == current owner
+    // is a no-op that consumes a pending slot for the timelock window and bumps
+    // policy_version (invalidating in-flight sessions). SOL-026 hygiene.
+    require_keys_neq!(
+        new_owner,
+        ctx.accounts.vault.owner,
+        SigilError::ErrInvalidOwnershipTarget,
+    );
+
     // 3. Council ISC-129 — interim cosign gate. Mirrors the PEN-CROSS-1 fix
     //    used by `register_agent`, `reactivate_vault`, `unpause_agent`, and
     //    `set_observe_only`: ownership transfer is at least as elevated as
