@@ -936,6 +936,14 @@ describe("findVaultsByOwner", () => {
           },
         ],
       }),
+      // After the fabricated entry is dropped, Strategy A's verified set is
+      // empty → the function runs the Strategy B probing safety-net. This
+      // owner has no real low-id vaults, so probing returns nothing and the
+      // fabricated entry stays rejected. (A malicious RPC must not be able to
+      // SUPPRESS a real vault either, which probing — client-derived — defends.)
+      getMultipleAccounts: () => ({
+        send: async () => ({ value: Array(20).fill(null) }),
+      }),
     } as any;
 
     const vaults = await findVaultsByOwner(rpc, OWNER);
@@ -955,21 +963,68 @@ describe("findVaultsByOwner", () => {
       getProgramAccounts: () => ({
         send: async () => [{ pubkey: pda0, account: { data: truncated } }],
       }),
+      // The truncated entry is skipped → verified set is empty → the Strategy
+      // B probing safety-net runs. This owner has no real vault behind pda0
+      // (the gMA mock reports all slots absent), so the result stays empty —
+      // the malformed body neither crashes the decode path nor fabricates one.
+      getMultipleAccounts: () => ({
+        send: async () => ({ value: Array(20).fill(null) }),
+      }),
     } as any;
 
     const vaults = await findVaultsByOwner(rpc, OWNER);
     expect(vaults).to.have.length(0);
   });
 
-  it("returns empty array for unknown owner", async () => {
+  it("returns empty array for a genuinely vault-less owner (Strategy A empty → Strategy B also empty)", async () => {
+    // Strategy A returns [] (no matching accounts). The fix then runs the
+    // Strategy B probing safety-net (a restricted RPC can silently return
+    // [] for an owner that DOES have vaults), so the mock must answer
+    // getMultipleAccounts too. A truly vault-less owner has all-null
+    // probe slots → the function still returns [].
     const rpc = {
       getProgramAccounts: () => ({
         send: async () => [],
+      }),
+      getMultipleAccounts: () => ({
+        send: async () => ({ value: Array(20).fill(null) }),
       }),
     } as any;
 
     const vaults = await findVaultsByOwner(rpc, OWNER);
     expect(vaults).to.deep.equal([]);
+  });
+
+  // Regression: devnet CI flake 2026-06-11. A restricted / transiently
+  // inconsistent RPC returns [] from getProgramAccounts (NOT an error) for
+  // an owner that actually has vaults. Before the fix, findVaultsByOwner
+  // returned that [] verbatim and discoverVaults reported "no vaults",
+  // failing `expect(vaults.length).to.be.greaterThan(0)`. The fix runs the
+  // Strategy B PDA-probing safety-net when Strategy A yields zero, so
+  // low-id vaults are still found.
+  it("falls back to probing when Strategy A returns [] but vaults exist at low ids (gPA-restricted RPC)", async () => {
+    const rpc = {
+      getProgramAccounts: () => ({
+        // Restricted RPC: program excluded from the secondary index returns
+        // an empty result set rather than erroring.
+        send: async () => [],
+      }),
+      getMultipleAccounts: () => ({
+        send: async () => ({
+          value: [
+            { data: ["", "base64"] }, // vault 0 exists
+            null,
+            { data: ["", "base64"] }, // vault 2 exists
+            ...Array(17).fill(null), // 3..19 absent
+          ],
+        }),
+      }),
+    } as any;
+
+    const vaults = await findVaultsByOwner(rpc, OWNER);
+    expect(vaults).to.have.length(2);
+    expect(vaults[0].vaultId).to.equal(0n);
+    expect(vaults[1].vaultId).to.equal(2n);
   });
 
   it("falls back to probing when RPC reports method not supported", async () => {

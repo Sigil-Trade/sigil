@@ -228,6 +228,16 @@ export interface ProvisionVaultOpts {
    * must be reactivatable or authorize spending.
    */
   protocols?: Address[];
+  /**
+   * Explicit vault id. When omitted, `inscribe()` auto-probes the first
+   * unused id (fast path 0..4, then GPA for the next free slot). Pass an
+   * explicit id when a test needs a DETERMINISTIC vault id — e.g. a LOW id
+   * (< the Strategy-B probe window of 20) so `findVaultsByOwner` discovers
+   * it via PDA probing even when the RPC restricts `getProgramAccounts`.
+   * The caller is responsible for choosing a free slot (init fails 0x0 /
+   * account-already-in-use if the PDA exists).
+   */
+  vaultId?: bigint;
 }
 
 export interface ProvisionVaultResult {
@@ -286,12 +296,13 @@ export async function provisionVault(
   // Phase 2 TA-19: observe_only defaults to false unless caller opts in.
   const observeOnly = opts.observeOnly ?? false;
 
-  // 1. Derive PDAs via inscribe()
+  // 1. Derive PDAs via inscribe() (auto-probes the next id unless one is given)
   const inscribeResult = await inscribe({
     rpc,
     network: "devnet",
     owner,
     agent,
+    vaultId: opts.vaultId,
     unsafeSkipTeeCheck: true,
   });
 
