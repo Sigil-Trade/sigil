@@ -320,13 +320,16 @@ export async function createVault(
   //   - maxTransactionSizeUsd defaults to dailySpendingCapUsd (caller's
   //     explicit cap becomes the per-tx ceiling unless narrower)
   //   - feeDestination defaults to the owner's key (same principal)
-  //   - protocols=[] + protocolMode=0 means "all protocols allowed" —
-  //     this is a policy decision, not a silent reduction
+  //   - protocolMode defaults to ALLOWLIST (1) — the ONLY mode the V2 program
+  //     accepts. Phase 2 Option A deleted the permissive ALL (0) / DENYLIST
+  //     modes; `initialize_vault.rs:125` hard-rejects any mode != 1. The old
+  //     default of 0 ("all protocols allowed") built an init the deployed
+  //     program reverts on, so it is corrected here.
   const maxTransactionSizeUsd =
     options.maxTransactionSizeUsd ?? options.dailySpendingCapUsd;
   const feeDestination = options.feeDestination ?? options.owner.address;
   const protocols = options.protocols ?? [];
-  const protocolMode = options.protocolMode ?? 0;
+  const protocolMode = options.protocolMode ?? 1;
 
   // Step 4: Build initializeVault instruction
   //
@@ -342,6 +345,31 @@ export async function createVault(
 
   const allowedDestinations = options.allowedDestinations ?? [];
   const observeOnly = options.observeOnly ?? false;
+
+  // F-11 (initialize_vault.rs:190): an ACTIVE (non-observe_only) vault MUST
+  // carry at least one protocol OR destination on its allowlist, else the
+  // program rejects with `ActiveVaultRequiresAllowlist` (6073) — a vault that
+  // allows nothing is silently inert. Fail fast in the SDK with an actionable
+  // message rather than letting the owner-signed init revert on-chain.
+  if (
+    !observeOnly &&
+    protocols.length === 0 &&
+    allowedDestinations.length === 0
+  ) {
+    throw new SigilSdkDomainError(
+      SIGIL_ERROR__SDK__INVALID_PARAMS,
+      "createVault: an active (non-observeOnly) vault must allowlist at least " +
+        "one protocol or destination — otherwise the on-chain program rejects " +
+        "it as inert (ActiveVaultRequiresAllowlist, 6073). Pass `protocols` " +
+        "and/or `allowedDestinations`, or set `observeOnly: true`.",
+      {
+        context: {
+          field: "protocols/allowedDestinations",
+          received: { protocolMode, protocols: 0, allowedDestinations: 0 },
+        },
+      },
+    );
+  }
   // PEN-CROSS-2 (Phase 2 close-up): the on-chain `initialize_vault` handler
   // captures `Clock::get()?.slot` at handler entry and binds it into the
   // canonical digest. The SDK must encode that same slot in the digest the
