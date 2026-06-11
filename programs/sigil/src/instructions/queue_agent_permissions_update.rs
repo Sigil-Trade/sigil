@@ -194,9 +194,13 @@ pub fn handler(
     pending.new_capability = new_capability;
     pending.spending_limit_usd = spending_limit_usd;
     pending.queued_at = clock.unix_timestamp;
+    // L-2 (audit 2026-06-11): checked cast — see queue_policy_update. Avoids a
+    // wrap-to-negative timelock on an out-of-range (no-ceiling) duration.
+    let timelock_secs =
+        i64::try_from(policy.timelock_duration).map_err(|_| error!(SigilError::Overflow))?;
     pending.executes_at = clock
         .unix_timestamp
-        .checked_add(policy.timelock_duration as i64)
+        .checked_add(timelock_secs)
         .ok_or(error!(SigilError::Overflow))?;
     // F-10 audit fix: capture queue slot for slot-bounded freshness check.
     pending.queued_at_slot = clock.slot;

@@ -568,9 +568,15 @@ pub fn handler(
     );
 
     let clock = Clock::get()?;
+    // L-2 (audit 2026-06-11): bound the cast. timelock_duration has a floor
+    // (MIN_TIMELOCK_DURATION) but no ceiling; `as i64` on a value > i64::MAX
+    // wraps negative → executes_at in the past → timelock bypass. checked
+    // try_from fails closed (Overflow) on an out-of-range duration.
+    let timelock_secs =
+        i64::try_from(policy.timelock_duration).map_err(|_| error!(SigilError::Overflow))?;
     let executes_at = clock
         .unix_timestamp
-        .checked_add(policy.timelock_duration as i64)
+        .checked_add(timelock_secs)
         .ok_or(SigilError::Overflow)?;
 
     let pending = &mut ctx.accounts.pending_policy;
