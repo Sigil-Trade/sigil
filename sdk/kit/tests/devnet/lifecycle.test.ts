@@ -22,7 +22,11 @@ import { resolveVaultState } from "../../src/state-resolver.js";
 import { fetchMaybeAgentVault } from "../../src/generated/accounts/agentVault.js";
 import { getQueuePolicyUpdateInstructionAsync } from "../../src/generated/instructions/queuePolicyUpdate.js";
 import { getCancelPendingPolicyInstructionAsync } from "../../src/generated/instructions/cancelPendingPolicy.js";
-import { USDC_MINT_DEVNET, FULL_CAPABILITY } from "../../src/types.js";
+import {
+  USDC_MINT_DEVNET,
+  FULL_CAPABILITY,
+  JUPITER_PROGRAM_ADDRESS,
+} from "../../src/types.js";
 import type { Instruction } from "@solana/kit";
 
 // Skip entire file if no devnet env
@@ -31,7 +35,11 @@ const SKIP = !process.env.ANCHOR_PROVIDER_URL;
 describe("Kit SDK Devnet — Vault Lifecycle", function () {
   if (SKIP) return;
 
-  this.timeout(300_000);
+  // 15 min: provisionVault seats a FULL_CAPABILITY (operator) agent, which V2
+  // (F-Q6) forces through the queue → on-chain 600s single-key timelock floor →
+  // apply path — one real ~600s cluster-clock wait on top of init + the policy
+  // queue/cancel roundtrips. 5 min is not enough (mirrors composed-tx).
+  this.timeout(900_000);
 
   let rpc: Rpc<SolanaRpcApi>;
   let owner: KeyPairSigner;
@@ -59,7 +67,20 @@ describe("Kit SDK Devnet — Vault Lifecycle", function () {
       skipDeposit: false,
       dailySpendingCapUsd: 500_000_000n,
       maxTransactionSizeUsd: 100_000_000n,
-      protocolMode: 0, // allow all
+      // V2 (initialize_vault.rs:123-126) deleted the permissive ALL/DENYLIST
+      // modes — only ALLOWLIST (1) initializes, replacing the stale
+      // `protocolMode: 0`. F-11 (initialize_vault.rs:190) additionally requires
+      // an ACTIVE (non-observe_only) vault to carry at least one protocol or
+      // destination on the allowlist (else 6073 ActiveVaultRequiresAllowlist).
+      // This lifecycle test performs no DeFi spend, so a single allowlisted
+      // protocol (Jupiter) just satisfies that invariant.
+      protocolMode: 1,
+      protocols: [JUPITER_PROGRAM_ADDRESS],
+      // Unique high id so inscribe skips its first-unused-id probe: the shared
+      // devnet wallet has many accumulated vaults and the public RPC view can be
+      // stale, so the probe otherwise reuses an allocated id and init fails with
+      // the system program's "account already in use" (custom 0x0).
+      vaultId: BigInt(Date.now()),
     });
 
     // Verify the vault account exists on-chain
@@ -83,12 +104,15 @@ describe("Kit SDK Devnet — Vault Lifecycle", function () {
     const ownerFromVault = state.vault.owner;
     expect(ownerFromVault).to.equal(owner.address);
 
-    // Check agent is registered with FULL_CAPABILITY
+    // Check agent is registered with FULL_CAPABILITY (operator tier 2). The
+    // decoded AgentEntry.capability is a plain u8 `number`, whereas the
+    // FULL_CAPABILITY constant is a branded bigint (2n) — compare numerically
+    // so chai's strict equality doesn't trip on the number-vs-bigint mismatch.
     const agentEntry = state.vault.agents.find(
       (a) => a.pubkey === agent.address,
     );
     expect(agentEntry).to.exist;
-    expect(agentEntry!.capability).to.equal(FULL_CAPABILITY);
+    expect(agentEntry!.capability).to.equal(Number(FULL_CAPABILITY));
 
     // Check daily spending cap
     expect(Number(state.policy.dailySpendingCapUsd)).to.equal(500_000_000);
@@ -129,7 +153,7 @@ describe("Kit SDK Devnet — Vault Lifecycle", function () {
       await import("../../src/generated/accounts/agentVault.js");
     const { fetchPolicyConfig } =
       await import("../../src/generated/accounts/policyConfig.js");
-    const { computePolicyPreviewDigest } =
+    const { computePolicyPreviewDigest, computeAgentSetHash } =
       await import("../../src/policy/compute-policy-preview-digest.js");
     const livePolicy = await fetchPolicyConfig(rpc, vault.policyAddress);
     const liveVault = await fetchAgentVault(rpc, vault.vaultAddress);
@@ -156,6 +180,18 @@ describe("Kit SDK Devnet — Vault Lifecycle", function () {
       // TA-12/14 (Phase 5): pass-through from live policy.
       stableBalanceFloor: livePolicy.data.stableBalanceFloor,
       perRecipientDailyCapUsd: livePolicy.data.perRecipientDailyCapUsd,
+      // The on-chain queue_policy_update handler (queue_policy_update.rs:517-573)
+      // recomputes the digest over ALL canonical TA-19 fields, including these
+      // four the original test omitted. agent_set_hash is the load-bearing one:
+      // this vault now carries the seated OPERATOR agent, so the handler hashes
+      // a NON-empty agent set — omitting it here defaulted to EMPTY_AGENT_SET_HASH
+      // and tripped PolicyPreviewMismatch (6071). cosign_required /
+      // cosign_session_pubkey / operator_grant_delay_seconds pass through from
+      // live policy (queue doesn't change them on this non-elevated path).
+      cosignRequired: livePolicy.data.cosignRequired,
+      cosignSessionPubkey: livePolicy.data.cosignSessionPubkey,
+      operatorGrantDelaySeconds: livePolicy.data.operatorGrantDelaySeconds,
+      agentSetHash: computeAgentSetHash(liveVault.data.agents),
     });
 
     const queueIx = await getQueuePolicyUpdateInstructionAsync({
