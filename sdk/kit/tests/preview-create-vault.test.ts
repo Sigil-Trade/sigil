@@ -47,6 +47,10 @@ import { SigilSdkDomainError } from "../src/errors/sdk.js";
 const TEST_OWNER = "11111111111111111111111111111114" as Address;
 const TEST_AGENT = "11111111111111111111111111111115" as Address;
 const TEST_FEE_DEST = "11111111111111111111111111111116" as Address;
+// Any valid program pubkey — used to satisfy the V2 active-vault allowlist
+// requirement in baseConfig (these are off-chain preview tests, no on-chain
+// validation of the protocol identity itself).
+const TEST_PROTOCOL = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" as Address;
 const SOL_PRICE_USD = 250_000_000n; // $250.00 in 6-decimal base units
 
 /** Default per-PDA rent the mock returns: `(size + 128) × 6960`. */
@@ -75,8 +79,12 @@ function baseConfig(
     developerFeeRate: 200,
     maxSlippageBps: 100,
     timelockDuration: 1_800n,
-    protocolMode: 0,
-    protocols: [],
+    // V2 Phase 2 Option A: ALLOWLIST (1) is the only valid protocol_mode (the
+    // permissive ALL=0 mode was deleted), and F-11 requires an active vault to
+    // carry at least one allowlist entry. Default to a valid 1-protocol config;
+    // tests that probe empty/other allowlists override these explicitly.
+    protocolMode: 1,
+    protocols: [TEST_PROTOCOL],
     protocolCaps: [],
     allowedDestinations: [],
     feeDestination: TEST_FEE_DEST,
@@ -335,20 +343,24 @@ describe("previewCreateVault — warnings", () => {
   });
 
   it("no_protocols_approved fires when allowlist + 0 protocols", async () => {
+    // A vault that allowlists destinations but no protocols is VALID (not
+    // inert), so previewCreateVault returns the advisory rather than throwing —
+    // the empty-protocols allowlist is worth flagging before the user signs.
     const r = await previewCreateVault(
-      baseConfig({ protocolMode: 1, protocols: [] }),
+      baseConfig({
+        protocolMode: 1,
+        protocols: [],
+        allowedDestinations: [TEST_FEE_DEST],
+      }),
     );
     const w = r.warnings?.find((x) => x.code === "no_protocols_approved");
     expect(w, "no_protocols_approved present").to.exist;
     expect(w!.field).to.equal("protocols");
   });
 
-  it("no_protocols_approved does NOT fire when mode=ALL + 0 protocols", async () => {
-    const r = await previewCreateVault(
-      baseConfig({ protocolMode: 0, protocols: [] }),
-    );
-    expect(r.warnings).to.equal(undefined);
-  });
+  // (Removed) "no_protocols_approved does NOT fire when mode=ALL + 0 protocols":
+  // protocol_mode = 0 (ALL) was deleted in V2 Phase 2 Option A — ALLOWLIST (1)
+  // is the only valid mode, so there is no "mode=ALL" path left to assert.
 
   it("max_tx_exceeds_daily_cap fires when maxTx > dailyCap", async () => {
     const r = await previewCreateVault(
@@ -364,7 +376,9 @@ describe("previewCreateVault — warnings", () => {
   });
 
   it("warnings are sorted by code ascending (FE-stable React keys)", async () => {
-    // Trigger 3 warnings simultaneously: cap=0 + allowlist+empty + maxTx>cap
+    // Trigger 3 warnings simultaneously: cap=0 + allowlist+empty + maxTx>cap.
+    // allowedDestinations is non-empty so the vault is valid (not inert) and
+    // previewCreateVault returns warnings instead of throwing the F-11 guard.
     const r = await previewCreateVault(
       baseConfig({
         dailyCapUsd: 0n,
@@ -372,6 +386,7 @@ describe("previewCreateVault — warnings", () => {
         spendingLimitUsd: 0n,
         protocolMode: 1,
         protocols: [],
+        allowedDestinations: [TEST_FEE_DEST],
       }),
     );
     const codes = r.warnings!.map((w) => w.code);
@@ -387,6 +402,7 @@ describe("previewCreateVault — warnings", () => {
         spendingLimitUsd: 0n,
         protocolMode: 1,
         protocols: [],
+        allowedDestinations: [TEST_FEE_DEST],
       }),
     );
     expect(r.warnings).to.have.lengthOf(3);

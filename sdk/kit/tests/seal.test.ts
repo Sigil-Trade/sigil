@@ -24,6 +24,9 @@ import { createMockAgent, createMockVaultState } from "../src/testing/index.js";
 
 const VAULT = "11111111111111111111111111111112" as Address;
 const AGENT_ADDR = "11111111111111111111111111111113" as Address;
+// Any valid program pubkey — satisfies the V2 active-vault allowlist
+// requirement for createVault() in the PDA-derivation smoke tests below.
+const TEST_PROTOCOL = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" as Address;
 const OWNER_ADDR = "11111111111111111111111111111114" as Address;
 const FEE_DEST = "11111111111111111111111111111115" as Address;
 const USDC_DEVNET = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU" as Address;
@@ -317,6 +320,7 @@ describe("createVault()", () => {
       timelockDuration: 1800,
       // PEN-CROSS-2: stub the digest's slot binding for the PDA-derivation
       // smoke test (no live RPC).
+      protocols: [TEST_PROTOCOL],
       createdAtSlot: 0n,
     });
 
@@ -359,6 +363,7 @@ describe("createVault()", () => {
       spendingLimitUsd: 100_000_000n as never,
       dailySpendingCapUsd: 500_000_000n as never,
       timelockDuration: 1800,
+      protocols: [TEST_PROTOCOL],
       createdAtSlot: 0n,
     });
     const r2 = await createVault({
@@ -370,6 +375,7 @@ describe("createVault()", () => {
       spendingLimitUsd: 100_000_000n as never,
       dailySpendingCapUsd: 500_000_000n as never,
       timelockDuration: 1800,
+      protocols: [TEST_PROTOCOL],
       createdAtSlot: 0n,
     });
     expect(r1.vaultAddress).to.equal(r2.vaultAddress);
@@ -557,6 +563,7 @@ describe("SigilClient", () => {
       spendingLimitUsd: 100_000_000n as never,
       dailySpendingCapUsd: 500_000_000n as never,
       timelockDuration: 1800,
+      protocols: [TEST_PROTOCOL],
       createdAtSlot: 0n,
     });
 
