@@ -360,6 +360,14 @@ impl AgentSpendOverlay {
             return Err(error!(SigilError::Overflow));
         }
 
+        // L-6 (audit 2026-06-11): guard non-positive clock before the epoch
+        // division/modulo, matching the three SpendTracker writers. A negative
+        // unix_timestamp makes `current_epoch % OVERLAY_NUM_EPOCHS` negative and
+        // the subsequent `as usize` cast wrap → OOB index. Not attacker-reachable
+        // (sysvar clock is validator-positive) but the guard belongs on the
+        // writer, not only its callers.
+        require!(clock.unix_timestamp > 0, SigilError::InvalidSession);
+
         let current_epoch = clock.unix_timestamp / OVERLAY_EPOCH_DURATION;
 
         // Zero any gap buckets between last write and now
