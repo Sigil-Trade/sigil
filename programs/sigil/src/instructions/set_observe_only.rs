@@ -79,9 +79,13 @@ pub fn handler(ctx: Context<SetObserveOnly>, new_value: bool) -> Result<()> {
     // digest-binding + timelock fix stays in Phase 8.
     if !new_value && policy.cosign_required {
         let owner_key = ctx.accounts.owner.key();
-        let has_cosigner = crate::instructions::register_agent::has_non_owner_signer(
+        let has_cosigner = crate::instructions::register_agent::has_bound_cosigner(
             ctx.remaining_accounts,
             &owner_key,
+            // `policy` is already a `&mut` binding (used below at the F-11
+            // allowlist check), so reborrow the pubkey through it rather than
+            // re-borrowing `ctx.accounts.policy` immutably (which would conflict).
+            &policy.cosign_session_pubkey,
         );
         require!(has_cosigner, SigilError::ErrCosignRequired);
     }
