@@ -20,6 +20,8 @@ import {
 
 import { OwnerClient } from "../../src/dashboard/index.js";
 import { USDC_MINT_DEVNET, capability, usd } from "../../src/types.js";
+import { getVaultPDA } from "../../src/resolve-accounts.js";
+import { fetchMaybeAgentVault } from "../../src/generated/accounts/agentVault.js";
 
 const SKIP = !process.env.ANCHOR_PROVIDER_URL;
 
@@ -74,18 +76,40 @@ describe("OwnerClient Devnet Integration", function () {
   let owner: KeyPairSigner;
   let client: OwnerClient;
   let vaultAddress: Address;
+  /**
+   * A vault GUARANTEED to exist at a LOW id (< the Strategy-B probe window of
+   * 20). `findVaultsByOwner` discovers low-id vaults via PDA probing even when
+   * the RPC silently restricts `getProgramAccounts` and returns []. The
+   * `finds vaults` assertion checks discovery returns THIS known vault, so it
+   * does not depend on the RPC's flaky gPA support — but still fails loudly if
+   * discovery is genuinely broken. (devnet CI flake 2026-06-11: the
+   * devnet-*.ts suites create ~30 vaults at ids ≥ 1,000,000 — all beyond the
+   * probe window — so when gPA returns [] there was no low-id vault to catch.)
+   */
+  let knownLowIdVault: Address;
+  /** The low id behind {@link knownLowIdVault} (always < LOW_ID_WINDOW). */
+  let knownLowVaultId: bigint;
+
+  /** Strategy-B probe window in findVaultsByOwner (maxProbe default = 20). */
+  const LOW_ID_WINDOW = 20n;
 
   before(async function () {
+    // Provisioning a fresh vault under the devnet slot-bind retry can take a
+    // while; give before() headroom beyond the suite-default 300s.
+    this.timeout(420_000);
+
     rpc = createDevnetRpc();
     const { signer } = await loadOwnerSigner();
     owner = signer;
 
-    // Prefer an existing active vault (in CI the devnet-*.ts suites create many
-    // and the paid RPC supports getProgramAccounts). Fall back to provisioning a
-    // fresh vault when discovery returns none — e.g. a public RPC that restricts
-    // getProgramAccounts — so the mutation/validation tests are self-contained
-    // on any RPC. These tests do only owner-ops (freeze/resume) + reads, never
-    // agent spending, so the fallback uses the cheapest reactivatable vault:
+    // Guarantee an ACTIVE vault at a deterministic LOW id (< LOW_ID_WINDOW) for
+    // this owner. Probe ids 0..LOW_ID_WINDOW-1 directly (the same PDA mechanism
+    // findVaultsByOwner's Strategy B uses) — this does NOT depend on gPA:
+    //   - Prefer the first EXISTING active low-id vault (no write needed).
+    //   - Otherwise provision a fresh active vault at the first free low id.
+    // The vault must be ACTIVE because the mutation test freezes then resumes
+    // it. The read/owner-op tests never spend, so the provisioned vault is the
+    // cheapest reactivatable shape:
     //   - Observer capability (1): instant-eligible — sidesteps the F-Q6
     //     OPERATOR grant timelock (6107).
     //   - One allowlisted protocol: an ACTIVE vault must be non-inert, enforced
@@ -93,15 +117,38 @@ describe("OwnerClient Devnet Integration", function () {
     //     ActiveVaultRequiresAllowlist). The tests never spend through it, so
     //     any valid program id satisfies the allowlist.
     //   - skipDeposit: no funds needed for owner-op/read tests.
-    const vaults = await OwnerClient.discoverVaults(
-      rpc,
-      owner.address,
-      "devnet",
-    );
-    const activeVault = vaults.find((v) => v.status === "active");
-    if (activeVault) {
-      vaultAddress = activeVault.address as Address;
-    } else {
+    let firstFreeLowId: bigint | null = null;
+    for (let i = 0n; i < LOW_ID_WINDOW; i++) {
+      const [pda] = await getVaultPDA(owner.address, i);
+      const account = await fetchMaybeAgentVault(rpc, pda);
+      if (account.exists) {
+        // VaultStatus.Active === 0 (generated enum). Adopt the first ACTIVE
+        // existing low-id vault — guarantees both a probe hit AND a vault the
+        // mutation test can freeze/resume.
+        if ((account.data.status as number) === 0) {
+          knownLowIdVault = pda;
+          knownLowVaultId = i;
+          break;
+        }
+        // Existing but frozen/closed — not reusable for mutations; keep probing.
+        continue;
+      }
+      if (firstFreeLowId === null) firstFreeLowId = i;
+    }
+
+    if (knownLowIdVault === undefined) {
+      // No ACTIVE low-id vault found. If there's ALSO no free low slot (all 20
+      // low ids exist but are frozen/closed — vanishingly unlikely on the CI
+      // wallet, but possible on a long-lived one), we cannot provision a fresh
+      // active vault at a low id, so the deterministic-discovery guarantee
+      // cannot be established. Skip with a clear reason rather than crash
+      // provisionVault with a cryptic account-already-in-use error.
+      if (firstFreeLowId === null) {
+        this.skip();
+        return;
+      }
+      // Provision a fresh active vault at the first free low slot.
+      const lowId = firstFreeLowId;
       const agent = await createFundedAgent(rpc, owner);
       const provisioned = await provisionVault(
         rpc,
@@ -109,6 +156,7 @@ describe("OwnerClient Devnet Integration", function () {
         agent,
         USDC_MINT_DEVNET,
         {
+          vaultId: lowId,
           permissions: capability(1n),
           skipDeposit: true,
           // The deployed mock-defi fixture — a real, non-default program id, so
@@ -116,8 +164,12 @@ describe("OwnerClient Devnet Integration", function () {
           protocols: [address("2heRcfqPUcSiWpH1rAp2Zf4c4ZxfKmKaaVbJWGRa7Qm6")],
         },
       );
-      vaultAddress = provisioned.vaultAddress;
+      knownLowIdVault = provisioned.vaultAddress;
+      knownLowVaultId = provisioned.vaultId;
     }
+
+    // The known low-id (active) vault drives the mutation/read tests too.
+    vaultAddress = knownLowIdVault;
 
     client = new OwnerClient({
       rpc,
@@ -141,12 +193,27 @@ describe("OwnerClient Devnet Integration", function () {
       expect(vaults).to.be.an("array");
       expect(vaults.length).to.be.greaterThan(0);
 
-      const first = vaults[0];
-      expect(first.address).to.be.a("string");
-      expect(first.address.length).to.be.greaterThanOrEqual(32);
-      expect(first.status).to.be.oneOf(["active", "frozen", "closed"]);
-      expect(typeof first.vaultId).to.equal("bigint");
-      expect(typeof first.agentCount).to.equal("number");
+      // Discovery MUST surface the known low-id vault that before() guaranteed.
+      // findVaultsByOwner finds it via PDA probing (ids 0..19) even when the
+      // RPC restricts getProgramAccounts and returns [] — so this assertion is
+      // deterministic across RPCs, yet still fails if discovery is genuinely
+      // broken (a vault we KNOW exists must appear).
+      const known = vaults.find(
+        (v) => (v.address as string) === (knownLowIdVault as string),
+      );
+      expect(
+        known,
+        `discoverVaults must return the known low-id vault ${knownLowIdVault} (id ${knownLowVaultId})`,
+      ).to.not.equal(undefined);
+
+      // Shape checks on the known vault (was vaults[0] — now the deterministic
+      // entry rather than whatever the RPC happened to order first).
+      expect(known!.address).to.be.a("string");
+      expect(known!.address.length).to.be.greaterThanOrEqual(32);
+      expect(known!.status).to.be.oneOf(["active", "frozen", "closed"]);
+      expect(typeof known!.vaultId).to.equal("bigint");
+      expect(known!.vaultId).to.equal(knownLowVaultId);
+      expect(typeof known!.agentCount).to.equal("number");
     });
 
     it("toJSON() serializes vaultId bigint to string", async function () {

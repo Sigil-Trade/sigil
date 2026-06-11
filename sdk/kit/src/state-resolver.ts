@@ -822,6 +822,66 @@ function base64ToUint8(base64: string): Uint8Array {
   return bytes;
 }
 
+/**
+ * Strategy B: PDA probing fallback — derive `cappedProbe` candidate vault
+ * PDAs (ids `0..cappedProbe-1`) seeded with `owner` and batch-fetch them.
+ *
+ * H-5 note: probing seeds with the CALLER's `owner` only finds vaults
+ * for which `vault.vault_authority == owner` — i.e. vaults the caller
+ * originally initialized. Vaults the caller received via
+ * `accept_ownership_transfer` are invisible to probing because the
+ * immutable seed-key still belongs to the original initializer; there
+ * is no way to probe with an unknown seed-key. RPCs that support
+ * `getProgramAccounts` (Strategy A) handle the transferred case
+ * correctly via the H-5 `vault_authority` re-derivation.
+ *
+ * ADDRESS-authoritative, not DATA-verified: every returned address is
+ * re-derived client-side from `(owner, vaultId)`, so the RPC cannot point
+ * the caller at an arbitrary fabricated address — a returned `vaultAddress`
+ * is always the genuine vault PDA for `(owner, vaultId)`. Unlike Strategy A,
+ * this path does NOT decode the account body (no discriminator / owner /
+ * `vault_authority` re-check). A malicious or buggy RPC can therefore still
+ * lie about EXISTENCE — report a real PDA absent, or report a non-existent
+ * PDA present with garbage bytes. The address can't be spoofed; the presence
+ * bit can. Callers that need the body validated must re-fetch and decode:
+ * `discoverVaults` does exactly this via `fetchMaybeAgentVault`, dropping any
+ * locator whose on-chain account fails the discriminator/layout decode — so a
+ * presence-lie cannot survive into a `DiscoveredVault`.
+ */
+async function probeVaultsByOwner(
+  rpc: Rpc<SolanaRpcApi>,
+  owner: Address,
+  cappedProbe: number,
+): Promise<VaultLocator[]> {
+  if (cappedProbe === 0) return [];
+
+  const pdas = await Promise.all(
+    Array.from({ length: cappedProbe }, async (_, i) => {
+      const [pda] = await getVaultPDA(owner, BigInt(i));
+      return { address: pda, vaultId: BigInt(i) };
+    }),
+  );
+
+  // Batch fetch via getMultipleAccounts (cappedProbe <= 100-account limit)
+  const addresses = pdas.map((p) => p.address);
+  const result = await rpc
+    .getMultipleAccounts(addresses, { encoding: "base64" })
+    .send();
+
+  const discovered: VaultLocator[] = [];
+  for (let i = 0; i < result.value.length; i++) {
+    if (result.value[i] !== null) {
+      discovered.push({
+        vaultAddress: pdas[i].address,
+        vaultId: pdas[i].vaultId,
+      });
+    }
+  }
+
+  // Already sorted by vaultId (probed sequentially 0..cappedProbe)
+  return discovered;
+}
+
 export async function findVaultsByOwner(
   rpc: Rpc<SolanaRpcApi>,
   owner: Address,
@@ -846,6 +906,21 @@ export async function findVaultsByOwner(
   // drop the `dataSlice` and parse both fields from the full account
   // body. Bandwidth cost is bounded — vaults per owner are O(1) in
   // practice and the full body is ~675 bytes.
+  //
+  // A devnet / public RPC that restricts `getProgramAccounts` for a
+  // high-account-count program does NOT always error — it can silently
+  // return `[]` (the program is excluded from the secondary index, or the
+  // index is transiently inconsistent). That empty result is
+  // indistinguishable, from Strategy A alone, from a genuinely vault-less
+  // owner. So when Strategy A yields zero verified vaults we DON'T return
+  // `[]` outright — we fall through to the PDA-probing fallback (Strategy B
+  // below). Probing is authoritative for low ids (`0..cappedProbe`) and
+  // cannot fabricate an address, so it can only ADD real vaults the
+  // restricted gPA hid; it never masks a genuinely-empty owner (probing
+  // returns `[]` for one). This closes the silent under-reporting bug where
+  // a restricted RPC made `discoverVaults` report "no vaults" for an owner
+  // that has them (devnet CI flake 2026-06-11). Only a NON-empty Strategy A
+  // result short-circuits (returns early) before probing.
   try {
     const accounts = await rpc
       .getProgramAccounts(SIGIL_PROGRAM_ADDRESS, {
@@ -898,10 +973,16 @@ export async function findVaultsByOwner(
       }
     }
 
-    // Sort by vaultId for consistent ordering regardless of RPC response order
-    return verified.sort((a, b) =>
-      a.vaultId < b.vaultId ? -1 : a.vaultId > b.vaultId ? 1 : 0,
-    );
+    // Strategy A succeeded with results — return them sorted. Only when
+    // it yielded ZERO do we fall through to the probing safety net below
+    // (a restricted RPC can silently return [] for an owner with vaults).
+    if (verified.length > 0) {
+      return verified.sort((a, b) =>
+        a.vaultId < b.vaultId ? -1 : a.vaultId > b.vaultId ? 1 : 0,
+      );
+    }
+    // verified.length === 0 — fall through to the Strategy B probing safety
+    // net (a restricted RPC can silently return [] for an owner with vaults).
   } catch (err) {
     // Rate limits must propagate — never fall back to slow probing under rate limit
     const code = (err as { code?: number }).code;
@@ -918,41 +999,18 @@ export async function findVaultsByOwner(
     }
   }
 
-  // Strategy B: PDA probing fallback — derive all candidate PDAs in parallel.
+  // Strategy B: PDA probing fallback. Reached only when Strategy A produced
+  // ZERO usable vaults — either (a) it threw a gpa-unsupported error (handled
+  // in the catch above), or (b) it ran but returned an empty verified set
+  // (possibly a restricted RPC silently returning [] for an owner that
+  // actually has vaults). In BOTH cases Strategy A contributed nothing, so
+  // probing's result is the whole answer — there is nothing to merge.
   //
-  // H-5 note: probing seeds with the CALLER's `owner` only finds vaults
-  // for which `vault.vault_authority == owner` — i.e. vaults the caller
-  // originally initialized. Vaults the caller received via
-  // `accept_ownership_transfer` are invisible to probing because the
-  // immutable seed-key still belongs to the original initializer; there
-  // is no way to probe with an unknown seed-key. RPCs that support
-  // `getProgramAccounts` (Strategy A above) handle the transferred case
-  // correctly via the H-5 `vault_authority` re-derivation.
-  const pdas = await Promise.all(
-    Array.from({ length: cappedProbe }, async (_, i) => {
-      const [pda] = await getVaultPDA(owner, BigInt(i));
-      return { address: pda, vaultId: BigInt(i) };
-    }),
-  );
-
-  // Batch fetch via getMultipleAccounts (maxProbe <= 20, well under 100-account limit)
-  const addresses = pdas.map((p) => p.address);
-  const result = await rpc
-    .getMultipleAccounts(addresses, { encoding: "base64" })
-    .send();
-
-  const discovered: VaultLocator[] = [];
-  for (let i = 0; i < result.value.length; i++) {
-    if (result.value[i] !== null) {
-      discovered.push({
-        vaultAddress: pdas[i].address,
-        vaultId: pdas[i].vaultId,
-      });
-    }
-  }
-
-  // Already sorted by vaultId (probed sequentially 0..maxProbe)
-  return discovered;
+  // Probing only covers low ids (`0..cappedProbe`): a high-id vault hidden by
+  // a restricted gPA stays hidden. That is an honest limitation (probing
+  // cannot enumerate an unbounded id space), not a silent corruption — a
+  // genuinely vault-less owner still gets [].
+  return probeVaultsByOwner(rpc, owner, cappedProbe);
 }
 
 // Escrow discovery (findEscrowsByVault, ESCROW_DEPOSIT_SIZE) REMOVED in v2
