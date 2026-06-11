@@ -6446,6 +6446,11 @@ export type Sigil = {
       "code": 6110,
       "name": "spendAccountingUnderflow",
       "msg": "finalize spend accounting underflow: collected fees exceed realized stablecoin outflow"
+    },
+    {
+      "code": 6111,
+      "name": "errMultisigCustodyUnsupported",
+      "msg": "Squads multisig ownership custody is not supported in V1 (use a standard EOA owner)"
     }
   ],
   "types": [

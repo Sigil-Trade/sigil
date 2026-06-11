@@ -86,6 +86,16 @@ pub fn handler(
         SigilError::VaultNotActive,
     );
 
+    // H-1 close (audit 2026-06-11): Squads multisig ownership custody is
+    // DISABLED in V1 (architecturally incompatible with Sigil's top-level-only
+    // reject_cpi model — see ErrMultisigCustodyUnsupported + the accept handler
+    // doc). Reject arming a multisig-target transfer so no such pending can be
+    // created; the multisig accept handler also rejects as defense-in-depth.
+    require!(
+        !is_multisig_target,
+        SigilError::ErrMultisigCustodyUnsupported,
+    );
+
     // 2. Council ISC-128 — new_owner blocklist. Closes the foot-gun where a
     //    phished owner signs a transfer to a non-signing address that would
     //    permanently brick the vault. The list pins the most-likely confused

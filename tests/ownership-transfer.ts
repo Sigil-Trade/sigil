@@ -1249,52 +1249,41 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
   });
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 11. EOA ACCEPT REJECTS MULTISIG-TARGETED PENDING.
-  //     Pins the Batch 4 boundary: accept_ownership_transfer must NOT be a
-  //     back-door for `is_multisig_target == true` pendings.
+  // 11. MULTISIG-TARGET INITIATE IS REJECTED (H-1, audit 2026-06-11).
+  //     Squads multisig custody is DISABLED in V1 — is_multisig_target=true is
+  //     rejected at initiate, so no multisig-target pending can be created (the
+  //     EOA-handler back-door this once guarded against is now unreachable).
   // ─────────────────────────────────────────────────────────────────────────
-  it("EOA accept rejects is_multisig_target=true pending (Batch 4 boundary)", async () => {
+  it("initiate with is_multisig_target=true → reject 6111 (multisig custody disabled in V1)", async () => {
     const { vault, policy, auditSuccess, pendingOwner } = await initVault(
       new BN(9010),
     );
     const newOwner = Keypair.generate();
     airdropSol(svm, newOwner.publicKey, 1 * LAMPORTS_PER_SOL);
 
-    // Queue a multisig-target initiate.
-    await program.methods
-      .initiateOwnershipTransfer(newOwner.publicKey, true) // is_multisig_target=true
-      .accounts({
-        owner: owner.publicKey,
-        vault,
-        policy,
-        pending: pendingOwner,
-        auditLogSuccess: auditSuccess,
-        systemProgram: SystemProgram.programId,
-      } as any)
-      .rpc();
-
-    advanceTime(svm, DEFAULT_MIN_DELAY);
-
     let caughtCode: number | null = null;
     try {
       await program.methods
-        .acceptOwnershipTransfer()
+        .initiateOwnershipTransfer(newOwner.publicKey, true) // is_multisig_target=true
         .accounts({
-          newOwner: newOwner.publicKey,
+          owner: owner.publicKey,
           vault,
           policy,
           pending: pendingOwner,
           auditLogSuccess: auditSuccess,
           systemProgram: SystemProgram.programId,
         } as any)
-        .signers([newOwner])
         .rpc();
     } catch (err: any) {
       caughtCode = err?.error?.errorCode?.number ?? null;
     }
-    expect(caughtCode, "EOA accept of multisig pending MUST reject").to.not.be
-      .null;
-    expect(caughtCode).to.equal(6095); // ErrPendingOwnershipNotReady
+    expect(
+      caughtCode,
+      "initiate is_multisig_target=true MUST reject (disabled in V1)",
+    ).to.equal(6111); // ErrMultisigCustodyUnsupported
+
+    // No multisig-target pending was created.
+    expect(accountExists(svm, pendingOwner)).to.equal(false);
   });
 
   // ===========================================================================

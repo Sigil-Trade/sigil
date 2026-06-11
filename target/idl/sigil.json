@@ -6440,6 +6440,11 @@
       "code": 6110,
       "name": "SpendAccountingUnderflow",
       "msg": "finalize spend accounting underflow: collected fees exceed realized stablecoin outflow"
+    },
+    {
+      "code": 6111,
+      "name": "ErrMultisigCustodyUnsupported",
+      "msg": "Squads multisig ownership custody is not supported in V1 (use a standard EOA owner)"
     }
   ],
   "types": [
