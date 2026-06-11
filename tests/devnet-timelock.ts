@@ -10,23 +10,20 @@
  *     Test 1 verifies updatePolicy instruction no longer exists.
  */
 // Strict error helpers — see MEMORY/WORK/20260420-201121_test-assertion-precision-council/
-import { expectSigilError } from "@usesigil/kit/testing";
-import * as anchor from "@coral-xyz/anchor";
+import { expectSigilError } from "./helpers/strict-errors";
 import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
-import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { expect } from "chai";
 import BN from "bn.js";
 import {
   getDevnetProvider,
   nextVaultId,
-  deriveSessionPda,
   createFullVault,
-  authorizeAndFinalize,
+  sendVersionedTx,
+  buildQueueDigest,
   fundKeypair,
   ensureStablecoinMint,
   TEST_USDC_KEYPAIR,
-  sleep,
-  FullVaultResult,
+  MOCK_DEFI_PROGRAM_ID,
 } from "./helpers/devnet-setup";
 
 describe("devnet-timelock", () => {
@@ -35,7 +32,6 @@ describe("devnet-timelock", () => {
 
   const agent = Keypair.generate();
   const feeDestination = Keypair.generate();
-  const jupiterProgramId = Keypair.generate().publicKey;
 
   let mint: PublicKey;
 
@@ -62,9 +58,14 @@ describe("devnet-timelock", () => {
       vaultId: nextVaultId(8),
       dailyCap: new BN(500_000_000),
       maxTx: new BN(200_000_000),
-      allowedProtocols: [jupiterProgramId],
+      allowedProtocols: [MOCK_DEFI_PROGRAM_ID],
       timelockDuration: new BN(timelockDuration),
       depositAmount: new BN(500_000_000),
+      // Observer (1) — instant-eligible. Every test in this file is an
+      // owner-signed governance flow (queue/apply/cancel); no test spends as
+      // the agent, so an OPERATOR seat (and its 600s F-Q6 queue floor) is
+      // never needed here.
+      agentCapability: 1,
     });
   }
 
@@ -79,7 +80,14 @@ describe("devnet-timelock", () => {
     const vault = await createTimelockVault(1800);
     const newDailyCap = new BN(999_000_000);
 
-    // Queue policy change (12 args — includes sessionExpirySeconds)
+    // queue_policy_update requires the correctly-merged post-change digest
+    // (live policy with dailyCap→999M applied), else PolicyPreviewMismatch 6071.
+    const queueDigest = await buildQueueDigest(
+      program,
+      vault.policyPda,
+      vault.vaultPda,
+      { dailySpendingCapUsd: newDailyCap },
+    );
     await program.methods
       .queuePolicyUpdate(
         newDailyCap,
@@ -90,9 +98,18 @@ describe("devnet-timelock", () => {
         null,
         null,
         null,
-        null, // sessionExpirySeconds
-        null, // hasProtocolCaps
-        null, // protocolCaps
+        null,
+        null,
+        null,
+        null, // destinationMode,
+        null, // operating_hours (TA-05 Phase 3)
+        null, // stable_balance_floor (TA-12 Phase 5)
+        null, // per_recipient_daily_cap_usd (TA-14 Phase 5)
+        null, // cosign_required (G6 audit 2026-05-18)
+        null,
+        null, // cosign_session_pubkey (D-5 Phase 10a-B7)
+        PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
+        queueDigest,
       )
       .accounts({
         owner: owner.publicKey,
@@ -128,7 +145,13 @@ describe("devnet-timelock", () => {
   it("3. apply before timelock expires fails (TimelockNotExpired)", async () => {
     const vault = await createTimelockVault(1800); // 1800 seconds — won't expire during test
 
-    // Queue
+    // Queue (correctly-merged digest required — see test 2)
+    const queueDigest = await buildQueueDigest(
+      program,
+      vault.policyPda,
+      vault.vaultPda,
+      { dailySpendingCapUsd: new BN(888_000_000) },
+    );
     await program.methods
       .queuePolicyUpdate(
         new BN(888_000_000),
@@ -139,9 +162,18 @@ describe("devnet-timelock", () => {
         null,
         null,
         null,
-        null, // sessionExpirySeconds
-        null, // hasProtocolCaps
-        null, // protocolCaps
+        null,
+        null,
+        null,
+        null, // destinationMode,
+        null, // operating_hours (TA-05 Phase 3)
+        null, // stable_balance_floor (TA-12 Phase 5)
+        null, // per_recipient_daily_cap_usd (TA-14 Phase 5)
+        null, // cosign_required (G6 audit 2026-05-18)
+        null,
+        null, // cosign_session_pubkey (D-5 Phase 10a-B7)
+        PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
+        queueDigest,
       )
       .accounts({
         owner: owner.publicKey,
@@ -152,9 +184,11 @@ describe("devnet-timelock", () => {
       } as any)
       .rpc();
 
-    // Immediately try apply (V2: no tracker in accounts)
+    // Immediately try apply (V2: no tracker in accounts). Versioned send —
+    // the .rpc() path masks the revert as "Unknown action 'undefined'",
+    // which expectSigilError cannot parse.
     try {
-      await program.methods
+      const applyIx = await program.methods
         .applyPendingPolicy()
         .accounts({
           owner: owner.publicKey,
@@ -162,10 +196,11 @@ describe("devnet-timelock", () => {
           policy: vault.policyPda,
           pendingPolicy: vault.pendingPolicyPda,
         } as any)
-        .rpc();
+        .instruction();
+      await sendVersionedTx(connection, [applyIx], payer);
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectSigilError(err, { name: "TimelockNotExpired", code: 6022 });
+      expectSigilError(err, { name: "TimelockNotExpired" });
     }
 
     // Clean up — cancel the pending update
@@ -184,7 +219,13 @@ describe("devnet-timelock", () => {
   it("4. cancel_pending_policy removes queued change", async () => {
     const vault = await createTimelockVault();
 
-    // Queue
+    // Queue (correctly-merged digest required — see test 2)
+    const queueDigest = await buildQueueDigest(
+      program,
+      vault.policyPda,
+      vault.vaultPda,
+      { dailySpendingCapUsd: new BN(777_000_000) },
+    );
     await program.methods
       .queuePolicyUpdate(
         new BN(777_000_000),
@@ -195,9 +236,18 @@ describe("devnet-timelock", () => {
         null,
         null,
         null,
-        null, // sessionExpirySeconds
-        null, // hasProtocolCaps
-        null, // protocolCaps
+        null,
+        null,
+        null,
+        null, // destinationMode,
+        null, // operating_hours (TA-05 Phase 3)
+        null, // stable_balance_floor (TA-12 Phase 5)
+        null, // per_recipient_daily_cap_usd (TA-14 Phase 5)
+        null, // cosign_required (G6 audit 2026-05-18)
+        null,
+        null, // cosign_session_pubkey (D-5 Phase 10a-B7)
+        PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
+        queueDigest,
       )
       .accounts({
         owner: owner.publicKey,

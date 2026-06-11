@@ -435,6 +435,62 @@ See `CHANGELOG.md` and the upgrade checklist for every grep you need to run.
 
 ---
 
+## Two digests, two scopes — AL3 vs TA-19
+
+Sigil V2 binds owner intent through **two complementary digests**, each
+covering a different scope. They share the same canonical encoder
+(`src/canonical-encode.ts`) so the two cannot drift, but they are
+computed over disjoint inputs and protect against different attack
+classes.
+
+### TA-19 — `policy_preview_digest` (policy state)
+
+SHA-256 over the canonical Borsh encoding of the 21-field PolicyConfig
+preview. Computed by the SDK in `computePolicyPreviewDigest()` and
+recomputed on-chain by `apply_pending_policy` against the actual
+PolicyConfig state at apply time. Mismatch ⇒
+`PolicyPreviewMismatch (6080)`.
+
+**Scope:** the owner-approved POLICY STATE — caps, allowlists, modes,
+operating hours, agent set hash, cosign requirement, etc.
+
+**Defends against:** silent policy mutation between queue and apply
+(e.g. a rogue program tampers with the PendingPolicyUpdate PDA, or a
+phished-owner `register_agent` silently changes the live agent set).
+
+### AL3 — `computeSealInputDigest` (per-call intent)
+
+SHA-256 over the canonical Borsh encoding of a SealInput envelope: the
+specific (vault, agent, mint, amount, target_protocol, network,
+instructions[]) bound for a SINGLE seal() call. Reserved
+`intent_version: u8 = 1` at canonical position 1 for future expansion.
+
+**Today, AL3 is a client-integrity digest** — it surfaces on every
+`SealResult.intentDigest` so preview UIs and audit logs can bind to the
+exact bytes the SDK sealed. **An on-chain verifier is planned for a
+later release**; until it lands, AL3 does not by itself prevent a
+forked SDK from submitting different bytes than it hashed. Pair AL3
+with TA-19 + the policy allowlists for on-chain enforcement.
+
+**Scope:** the per-call EXECUTION INTENT — exactly what is being
+authorised for this one transaction.
+
+**Defends against:** prompt-injection recipient-swap and ix-meta
+reorder attacks where a compromised agent submits a different
+(but still policy-allowed) action than what the user saw in the
+preview.
+
+### Why both
+
+TA-19 binds the *policy state* the owner approved over weeks. AL3 binds
+the *individual intent* the owner approved for a single call. An attack
+that gets past TA-19 (e.g. the policy says "any allowlisted recipient")
+can still be caught by AL3 (e.g. "owner approved recipient A; agent
+submitted recipient B; digest mismatch ⇒ reject"). They are
+complementary, never duplicative.
+
+---
+
 ## License
 
 Apache-2.0. Copyright 2024-2026 Kaleb Rupe.

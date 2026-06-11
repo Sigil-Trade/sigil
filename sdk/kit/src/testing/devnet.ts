@@ -32,10 +32,11 @@ import { getSetComputeUnitLimitInstruction } from "@solana-program/compute-budge
 import { readFileSync } from "node:fs";
 
 import { getInitializeVaultInstructionAsync } from "../generated/instructions/initializeVault.js";
-import { getRegisterAgentInstruction } from "../generated/instructions/registerAgent.js";
+import { getRegisterAgentInstructionAsync } from "../generated/instructions/registerAgent.js";
 import { getDepositFundsInstructionAsync } from "../generated/instructions/depositFunds.js";
 import { inscribe } from "../inscribe.js";
 import { getAgentOverlayPDA, getTrackerPDA } from "../resolve-accounts.js";
+import { computePolicyPreviewDigest } from "../policy/compute-policy-preview-digest.js";
 import { sendAndConfirmTransaction, BlockhashCache } from "../rpc-helpers.js";
 import {
   USDC_MINT_DEVNET,
@@ -216,6 +217,17 @@ export interface ProvisionVaultOpts {
   spendingLimitUsd?: bigint;
   skipDeposit?: boolean;
   timelockDuration?: bigint;
+  /** Phase 2 TA-19: provision vault in observe-only mode. */
+  observeOnly?: boolean;
+  /**
+   * Protocol allowlist (ALLOWLIST mode). Default: empty. An ACTIVE
+   * (non-observe-only) vault needs at least one allowlisted protocol or
+   * destination — the on-chain F-11 guard rejects an inert vault at init
+   * (6073) and the M-9 guard rejects it on reactivate
+   * (ActiveVaultRequiresAllowlist). Pass at least one entry for any vault that
+   * must be reactivatable or authorize spending.
+   */
+  protocols?: Address[];
 }
 
 export interface ProvisionVaultResult {
@@ -224,6 +236,27 @@ export interface ProvisionVaultResult {
   trackerPDA: Address;
   vaultId: bigint;
   overlayPDA: Address;
+}
+
+/**
+ * Does an error mention any of the given needles anywhere in its `.cause`
+ * chain? @solana/kit wraps program errors, so the on-chain code (e.g. "6071")
+ * is usually NOT on the top-level `.message` — it lives down the cause chain or
+ * in Kit's `.context.code`. Walk both at each level.
+ */
+function errorMentions(err: unknown, needles: string[]): boolean {
+  let cur: unknown = err;
+  for (let depth = 0; depth < 6 && cur != null; depth++) {
+    const c = cur as {
+      message?: unknown;
+      context?: { code?: unknown };
+      cause?: unknown;
+    };
+    const hay = `${String(c.message ?? "")} ${String(c.context?.code ?? "")} ${String(cur)}`;
+    if (needles.some((n) => hay.includes(n))) return true;
+    cur = c.cause;
+  }
+  return false;
 }
 
 /**
@@ -243,9 +276,15 @@ export async function provisionVault(
 ): Promise<ProvisionVaultResult> {
   const dailyCap = opts.dailySpendingCapUsd ?? 500_000_000n;
   const maxTx = opts.maxTransactionSizeUsd ?? 100_000_000n;
-  const protocolMode = opts.protocolMode ?? 0; // allow all
+  // Phase 2 Option A: on-chain handler rejects protocolMode != 1 (ALLOWLIST).
+  // Devnet test default is now ALLOWLIST with empty protocols (no DeFi permitted
+  // by default — callers add protocols explicitly).
+  const protocolMode = opts.protocolMode ?? 1;
+  const protocols = opts.protocols ?? [];
   const permissions = opts.permissions ?? FULL_CAPABILITY;
   const spendingLimitUsd = opts.spendingLimitUsd ?? 0n;
+  // Phase 2 TA-19: observe_only defaults to false unless caller opts in.
+  const observeOnly = opts.observeOnly ?? false;
 
   // 1. Derive PDAs via inscribe()
   const inscribeResult = await inscribe({
@@ -259,32 +298,114 @@ export async function provisionVault(
   const { vaultAddress, vaultId, policyAddress } = inscribeResult;
   const [overlayPDA] = await getAgentOverlayPDA(vaultAddress, 0);
 
-  // 2. Build and send initializeVault
-  const initIx = await getInitializeVaultInstructionAsync({
-    owner,
-    agentSpendOverlay: overlayPDA,
-    feeDestination: PROTOCOL_TREASURY,
-    vaultId,
-    dailySpendingCapUsd: dailyCap,
-    maxTransactionSizeUsd: maxTx,
-    protocolMode,
-    protocols: [],
-    developerFeeRate: 0,
-    maxSlippageBps: 500,
-    timelockDuration: opts?.timelockDuration ?? 1800n, // MIN_TIMELOCK_DURATION (TOCTOU fix)
-    allowedDestinations: [],
-    protocolCaps: [],
-  });
+  // 2. Build and send initializeVault.
+  //
+  // PEN-CROSS-2: the on-chain handler captures Clock::get()?.slot at execution
+  // and require!s the owner-signed digest encode that EXACT slot
+  // (PolicyPreviewMismatch 6071 otherwise). The live devnet clock advances
+  // between getSlot() and landing — and `confirmed` LAGS the execution slot —
+  // so a single read mismatches every time. Bind to `processed + offset` and
+  // retry on 6071, fanning the offset out across attempts (mirrors the
+  // production SDK create-vault.ts + the agent-middleware sendInitVault).
+  const timelockDuration = opts?.timelockDuration ?? 1800n;
+  const seedOffsets = [2, 3, 4, 5, 6, 7, 8, 10, 12, 1, 9, 11, 14, 16, 18, 20];
+  let initLanded = false;
+  let lastInitErr: unknown;
+  for (let attempt = 0; attempt < 40 && !initLanded; attempt++) {
+    const base = await rpc.getSlot({ commitment: "processed" }).send();
+    const createdAtSlot =
+      base + BigInt(seedOffsets[attempt % seedOffsets.length]);
+    const previewDigest = computePolicyPreviewDigest({
+      dailySpendingCapUsd: dailyCap,
+      maxTransactionSizeUsd: maxTx,
+      maxSlippageBps: 500,
+      // PEN-CROSS-6: developer_fee_rate is bound by the digest.
+      developerFeeRate: 0,
+      protocolMode,
+      protocols,
+      destinationMode: 0,
+      allowedDestinations: [],
+      timelockDuration,
+      sessionExpirySeconds: 0n,
+      observeOnly,
+      hasPostAssertions: 0,
+      createdAtSlot,
+      operatingHours: 0x00ffffff,
+      autoPromoteGrays: false,
+      autoRevokeThreshold: 5,
+      // TA-12/14 (Phase 5): testing helper defaults — no floor, no per-recipient cap.
+      stableBalanceFloor: 0n,
+      perRecipientDailyCapUsd: 0n,
+      // G6 (audit 2026-05-18 cosign opt-in): testing helper default = false
+      // (low-friction). Tests can override via opts when exercising the
+      // cosign-required path explicitly.
+      cosignRequired: false,
+    });
 
-  await sendKitTransaction(rpc, owner, [
-    getSetComputeUnitLimitInstruction({ units: 400_000 }),
-    initIx as Instruction,
-  ]);
+    const initIx = await getInitializeVaultInstructionAsync({
+      owner,
+      agentSpendOverlay: overlayPDA,
+      feeDestination: PROTOCOL_TREASURY,
+      vaultId,
+      dailySpendingCapUsd: dailyCap,
+      maxTransactionSizeUsd: maxTx,
+      protocolMode,
+      protocols,
+      developerFeeRate: 0,
+      maxSlippageBps: 500,
+      timelockDuration, // MIN_TIMELOCK_DURATION (TOCTOU fix)
+      allowedDestinations: [],
+      protocolCaps: [],
+      observeOnly,
+      operatingHours: 0x00ffffff,
+      autoPromoteGrays: false,
+      autoRevokeThreshold: 5,
+      stableBalanceFloor: 0n,
+      perRecipientDailyCapUsd: 0n,
+      // G6 (audit 2026-05-18 cosign opt-in): same default as the digest
+      // computation above — testing helper opts out of cosign by default.
+      cosignRequired: false,
+      previewDigest,
+    });
+
+    try {
+      // skipPreflight: the digest binds a FUTURE slot; a preflight sim at the
+      // current slot would always reject it (6071) before it can land.
+      await sendKitTransaction(
+        rpc,
+        owner,
+        [
+          getSetComputeUnitLimitInstruction({ units: 400_000 }),
+          initIx as Instruction,
+        ],
+        { skipPreflight: true },
+      );
+      initLanded = true;
+    } catch (e) {
+      // @solana/kit wraps the program error: the caught error's own .message is
+      // a generic preflight-failure string and the "Custom #6071" lives down the
+      // .cause chain — so walk the whole chain (message + context.code).
+      if (errorMentions(e, ["6071", "PolicyPreviewMismatch"])) {
+        lastInitErr = e;
+        continue; // slot advanced past the signed digest — re-read + retry
+      }
+      throw e;
+    }
+  }
+  if (!initLanded) {
+    throw new Error(
+      `provisionVault: initialize_vault slot-bind failed after 40 attempts ` +
+        `(PolicyPreviewMismatch 6071). Last error: ${lastInitErr}`,
+    );
+  }
 
   // 3. Build and send registerAgent
-  const registerIx = getRegisterAgentInstruction({
+  //    PEN-CROSS-5 (Phase 4 absorption): policy account now required for
+  //    policy_version bump.
+  const registerIx = await getRegisterAgentInstructionAsync({
     owner,
     vault: vaultAddress,
+    policy: policyAddress,
     agentSpendOverlay: overlayPDA,
     agent: agent.address,
     capability: Number(permissions),
@@ -330,6 +451,7 @@ export async function sendKitTransaction(
   rpc: Rpc<SolanaRpcApi>,
   signer: KeyPairSigner,
   instructions: Instruction[],
+  opts?: { skipPreflight?: boolean },
 ): Promise<string> {
   const blockhash = await blockhashCache.get(rpc);
 
@@ -359,5 +481,6 @@ export async function sendKitTransaction(
   return sendAndConfirmTransaction(rpc, wireBase64, {
     timeoutMs: 60_000,
     commitment: "confirmed",
+    skipPreflight: opts?.skipPreflight ?? false,
   });
 }

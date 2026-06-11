@@ -65,7 +65,19 @@ function makeTracker(
     lastWriteEpoch: overrides.lastWriteEpoch ?? 0n,
     bump: 255,
     padding: zeroBytes(7),
+    // TA-14 (Phase 5): per-recipient counters appended. Mock defaults empty + 0.
+    perRecipient: emptyPerRecipient(10),
+    perRecipientCount: 0,
+    paddingRecipient: zeroBytes(7),
   };
+}
+
+function emptyPerRecipient(count: number) {
+  return Array.from({ length: count }, () => ({
+    recipient: new Uint8Array(32),
+    windowStart: 0n,
+    windowSpendUsd: 0n,
+  }));
 }
 
 function emptyProtocolCounters(count: number): ProtocolSpendCounter[] {
@@ -809,13 +821,39 @@ describe("resolveVaultState", () => {
 
 describe("findVaultsByOwner", () => {
   const OWNER = "11111111111111111111111111111111" as Address;
+  // A distinct, valid base58 32-byte address — used in H-5 ownership-transfer
+  // case to stand in for the IMMUTABLE `vault.vault_authority` seed-key
+  // while the GPA's `memcmp` matches by the MUTABLE `vault.owner` field.
+  const ORIGINAL_AUTHORITY =
+    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address;
 
   const u64Encoder = getU64Encoder();
 
-  /** Build a base64-encoded 8-byte data slice representing a vault_id. */
-  function vaultIdSlice(id: bigint): [string, string] {
-    const bytes = u64Encoder.encode(id);
-    return [Buffer.from(bytes).toString("base64"), "base64"];
+  // AgentVault layout offsets used by findVaultsByOwner — keep in sync
+  // with state-resolver.ts:VAULT_AUTHORITY_OFFSET (644). The full body
+  // is 675 bytes post-LBL-01; tests build a minimally-correct buffer
+  // that places `vault_id` and `vault_authority` at the right offsets
+  // so the H-5 re-derivation logic can run.
+  const VAULT_ID_OFFSET = 40;
+  const VAULT_AUTHORITY_OFFSET = 644;
+  const AGENT_VAULT_FULL_SIZE = 676;
+
+  /**
+   * Build a base64-encoded full AgentVault body that places `vault_id`
+   * at offset 40 and `vault_authority` at offset 644 (F-Q6 2026-06-02
+   * inserted owner_type at 643, before vault_authority; vault_authority
+   * stays the final 32 bytes = SIZE-32). `authority`
+   * defaults to OWNER so legacy tests exercise the
+   * `vault.vault_authority === owner` (never-transferred) shape.
+   */
+  function vaultAccountData(
+    id: bigint,
+    authority: Address = OWNER,
+  ): [string, string] {
+    const buf = new Uint8Array(AGENT_VAULT_FULL_SIZE);
+    buf.set(u64Encoder.encode(id), VAULT_ID_OFFSET);
+    buf.set(encoder.encode(authority), VAULT_AUTHORITY_OFFSET);
+    return [Buffer.from(buf).toString("base64"), "base64"];
   }
 
   it("returns vaults for owner via getProgramAccounts", async () => {
@@ -826,8 +864,8 @@ describe("findVaultsByOwner", () => {
     const rpc = {
       getProgramAccounts: () => ({
         send: async () => [
-          { pubkey: pda0, account: { data: vaultIdSlice(0n) } },
-          { pubkey: pda1, account: { data: vaultIdSlice(1n) } },
+          { pubkey: pda0, account: { data: vaultAccountData(0n) } },
+          { pubkey: pda1, account: { data: vaultAccountData(1n) } },
         ],
       }),
     } as any;
@@ -838,6 +876,89 @@ describe("findVaultsByOwner", () => {
     expect(vaults[0].vaultId).to.equal(0n);
     expect(vaults[1].vaultAddress).to.equal(pda1);
     expect(vaults[1].vaultId).to.equal(1n);
+  });
+
+  // H-5 (pre-redeploy audit 2026-05-21): the GPA filter returns vaults
+  // by current `vault.owner`, but the PDA seed is the IMMUTABLE
+  // `vault.vault_authority`. After `accept_ownership_transfer` the two
+  // diverge — the new owner queries by their own pubkey but the PDA
+  // still derives from the original initializer's pubkey. This test
+  // proves the H-5 fix: an entry whose `vault_authority` !== filter
+  // owner is still verified correctly.
+  it("returns ownership-transferred vaults (H-5: derive PDA from vault_authority, not filter owner)", async () => {
+    const transferredId = 7n;
+    // The PDA was derived from ORIGINAL_AUTHORITY at init time and
+    // does NOT change when ownership transfers — i.e. the on-chain
+    // address stays pinned to the initial seed.
+    const [transferredPda] = await getVaultPDA(
+      ORIGINAL_AUTHORITY,
+      transferredId,
+    );
+
+    const rpc = {
+      getProgramAccounts: () => ({
+        // The GPA `memcmp(offset=8, owner)` filter would normally match
+        // because `vault.owner` was overwritten with the new owner —
+        // the mock simulates that by returning this entry to the OWNER
+        // caller even though `vault_authority` differs.
+        send: async () => [
+          {
+            pubkey: transferredPda,
+            account: {
+              data: vaultAccountData(transferredId, ORIGINAL_AUTHORITY),
+            },
+          },
+        ],
+      }),
+    } as any;
+
+    const vaults = await findVaultsByOwner(rpc, OWNER);
+    expect(vaults).to.have.length(
+      1,
+      "transferred vault must NOT be silently dropped",
+    );
+    expect(vaults[0].vaultAddress).to.equal(transferredPda);
+    expect(vaults[0].vaultId).to.equal(transferredId);
+  });
+
+  // Defense-in-depth: a malicious RPC that returns a fabricated pubkey
+  // alongside a different `vault_authority` must still be rejected
+  // because the PDA re-derivation will not match.
+  it("drops entries whose pubkey does not match the H-5 vault_authority re-derivation (V-1)", async () => {
+    const fabricatedPda =
+      "So11111111111111111111111111111111111111112" as Address;
+    const rpc = {
+      getProgramAccounts: () => ({
+        send: async () => [
+          {
+            pubkey: fabricatedPda,
+            account: { data: vaultAccountData(0n, ORIGINAL_AUTHORITY) },
+          },
+        ],
+      }),
+    } as any;
+
+    const vaults = await findVaultsByOwner(rpc, OWNER);
+    expect(vaults).to.have.length(0);
+  });
+
+  // Defense-in-depth: a malformed / truncated account body that is too
+  // short to contain `vault_authority` at offset 643 must be skipped
+  // rather than crash the decode path.
+  it("drops entries whose data buffer is too short to contain vault_authority", async () => {
+    const [pda0] = await getVaultPDA(OWNER, 0n);
+    const truncated: [string, string] = [
+      Buffer.from(new Uint8Array(64)).toString("base64"),
+      "base64",
+    ];
+    const rpc = {
+      getProgramAccounts: () => ({
+        send: async () => [{ pubkey: pda0, account: { data: truncated } }],
+      }),
+    } as any;
+
+    const vaults = await findVaultsByOwner(rpc, OWNER);
+    expect(vaults).to.have.length(0);
   });
 
   it("returns empty array for unknown owner", async () => {
@@ -923,8 +1044,8 @@ describe("findVaultsByOwner", () => {
     const rpc = {
       getProgramAccounts: () => ({
         send: async () => [
-          { pubkey: pda5, account: { data: vaultIdSlice(5n) } },
-          { pubkey: pda1, account: { data: vaultIdSlice(1n) } },
+          { pubkey: pda5, account: { data: vaultAccountData(5n) } },
+          { pubkey: pda1, account: { data: vaultAccountData(1n) } },
         ],
       }),
     } as any;

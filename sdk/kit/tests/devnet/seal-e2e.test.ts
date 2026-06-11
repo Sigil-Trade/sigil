@@ -145,7 +145,6 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
       });
 
       expect(result.transaction).to.exist;
-      expect(result.isSpending).to.equal(true);
       expect(result.txSizeBytes).to.be.a("number");
       expect(result.txSizeBytes).to.be.greaterThan(0);
       // Cap warning: $1 is well within $500 cap

@@ -2,7 +2,6 @@ import { expect } from "chai";
 import type { Address } from "@solana/kit";
 import {
   analyzeInstructions,
-  inspectConstraints,
   type InspectableInstruction,
 } from "../src/inspector.js";
 
@@ -228,104 +227,5 @@ describe("inspector", () => {
     expect(result.tokenTransfers).to.have.length(1);
     // Authority is not the signer, so estimatedValue should NOT include this
     expect(result.estimatedValue).to.equal(0n);
-  });
-});
-
-// ─── inspectConstraints ──────────────────────────────────────────────────────
-
-describe("inspectConstraints", () => {
-  it("formats data constraint with hex value", () => {
-    const entries = [
-      {
-        programId: "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" as Address,
-        dataConstraints: [
-          {
-            offset: 0,
-            operator: 0 /* == */,
-            value: new Uint8Array([0xe5, 0x17, 0xcb, 0x98]),
-          },
-        ],
-        accountConstraints: [],
-      },
-    ] as any[];
-
-    const result = inspectConstraints(entries);
-    expect(result).to.have.length(1);
-    expect(result[0].programName).to.equal("Jupiter");
-    expect(result[0].rules[0]).to.include("data[0..+4]");
-    expect(result[0].rules[0]).to.include("0xe517cb98");
-  });
-
-  it("formats account constraint with address", () => {
-    const entries = [
-      {
-        programId: "SomeProgram1111111111111111111111111111111" as Address,
-        dataConstraints: [],
-        accountConstraints: [
-          {
-            index: 2,
-            expected: "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" as Address,
-          },
-        ],
-      },
-    ] as any[];
-
-    const result = inspectConstraints(entries);
-    expect(result).to.have.length(1);
-    expect(result[0].rules[0]).to.include("account[2]");
-    expect(result[0].rules[0]).to.include("JUP6Lk");
-  });
-
-  it("filters out entries with no rules", () => {
-    const entries = [
-      {
-        programId: "Prog1" as Address,
-        dataConstraints: [],
-        accountConstraints: [],
-      },
-    ] as any[];
-
-    const result = inspectConstraints(entries);
-    expect(result).to.have.length(0);
-  });
-
-  it("uses correct operator name for != (operator 1)", () => {
-    const entries = [
-      {
-        programId: "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" as Address,
-        dataConstraints: [
-          {
-            offset: 8,
-            operator: 1 /* != */,
-            value: new Uint8Array([0x00, 0x00]),
-          },
-        ],
-        accountConstraints: [],
-      },
-    ] as any[];
-
-    const result = inspectConstraints(entries);
-    expect(result).to.have.length(1);
-    expect(result[0].rules[0]).to.equal("data[8..+2] != 0x0000");
-  });
-
-  it("counts data and account constraints separately", () => {
-    const entries = [
-      {
-        programId: "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" as Address,
-        dataConstraints: [
-          { offset: 0, operator: 0, value: new Uint8Array([0xab]) },
-          { offset: 4, operator: 2 /* < */, value: new Uint8Array([0xff]) },
-        ],
-        accountConstraints: [
-          { index: 0, expected: "11111111111111111111111111111111" as Address },
-        ],
-      },
-    ] as any[];
-
-    const result = inspectConstraints(entries);
-    expect(result[0].dataConstraintCount).to.equal(2);
-    expect(result[0].accountConstraintCount).to.equal(1);
-    expect(result[0].rules).to.have.length(3);
   });
 });

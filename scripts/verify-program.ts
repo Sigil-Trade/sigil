@@ -16,7 +16,7 @@
 
 import { spawnSync } from "node:child_process";
 
-const PROGRAM_ID = "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL";
+const PROGRAM_ID = "7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK";
 const cluster = process.argv.includes("--cluster")
   ? (process.argv[process.argv.indexOf("--cluster") + 1] ?? "devnet")
   : "devnet";

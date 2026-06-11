@@ -11,11 +11,7 @@
  * Vault ID prefix: 9
  */
 // Strict error helpers — see MEMORY/WORK/20260420-201121_test-assertion-precision-council/
-import {
-  expectAnchorError,
-  expectOneOfSigilErrors,
-  expectSigilError,
-} from "@usesigil/kit/testing";
+import { expectSigilError } from "./helpers/strict-errors";
 import * as anchor from "@coral-xyz/anchor";
 import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
 import {
@@ -30,11 +26,12 @@ import BN from "bn.js";
 import {
   getDevnetProvider,
   nextVaultId,
-  derivePDAs,
   deriveSessionPda,
   createFullVault,
+  applyOperatorGrants,
   authorize,
   authorizeAndFinalize,
+  sendVersionedTx,
   fundKeypair,
   calculateFees,
   getTokenBalance,
@@ -42,12 +39,10 @@ import {
   createNonStablecoinMint,
   TEST_USDC_KEYPAIR,
   TEST_USDT_KEYPAIR,
-  TEST_USDC_MINT,
-  TEST_USDT_MINT,
-  FullVaultResult,
   PROTOCOL_TREASURY,
   PROTOCOL_FEE_RATE,
   FEE_RATE_DENOMINATOR,
+  MOCK_DEFI_PROGRAM_ID,
 } from "./helpers/devnet-setup";
 
 describe("devnet-routing", () => {
@@ -56,7 +51,11 @@ describe("devnet-routing", () => {
 
   const agent = Keypair.generate();
   const feeDestination = Keypair.generate();
-  const jupiterProgramId = Keypair.generate().publicKey;
+  // V2 agent_transfer requires explicitly allowlisted destination owners
+  // (RESTRICTED mode; empty allowlist allows nothing). Tests 7/8 transfer to
+  // these, allowlisted on their vaults at creation.
+  const routeDest7 = Keypair.generate();
+  const routeDest8 = Keypair.generate();
 
   let usdcMint: PublicKey;
   let usdtMint: PublicKey;
@@ -64,6 +63,42 @@ describe("devnet-routing", () => {
   let testWifMint: PublicKey; // non-stablecoin (random address)
   let agentUsdcAta: PublicKey; // agent ATA for mock DeFi spend destination
   let agentUsdtAta: PublicKey;
+
+  // Per-test vault configs — all twelve vaults are created up front in
+  // before() so their OPERATOR grants share ONE 600s timelock wait (queue all
+  // → single wait → apply all) instead of twelve sequential waits (F-Q6).
+  const ROUTING_CONFIGS: {
+    dailyCap: BN;
+    maxTx: BN;
+    devFeeRate?: number;
+    allowedDestinations?: PublicKey[];
+  }[] = [
+    { dailyCap: new BN(500_000_000), maxTx: new BN(200_000_000) }, // test 1
+    { dailyCap: new BN(500_000_000), maxTx: new BN(200_000_000) }, // test 2
+    { dailyCap: new BN(100_000_000), maxTx: new BN(100_000_000) }, // test 3
+    { dailyCap: new BN(500_000_000), maxTx: new BN(200_000_000) }, // test 4
+    { dailyCap: new BN(500_000_000), maxTx: new BN(200_000_000) }, // test 5
+    { dailyCap: new BN(500_000_000), maxTx: new BN(200_000_000) }, // test 6
+    {
+      dailyCap: new BN(500_000_000),
+      maxTx: new BN(200_000_000),
+      allowedDestinations: [routeDest7.publicKey],
+    }, // test 7 (agent_transfer USDC)
+    {
+      dailyCap: new BN(500_000_000),
+      maxTx: new BN(200_000_000),
+      allowedDestinations: [routeDest8.publicKey],
+    }, // test 8 (agent_transfer USDT)
+    { dailyCap: new BN(500_000_000), maxTx: new BN(200_000_000) }, // test 9
+    { dailyCap: new BN(200_000_000), maxTx: new BN(200_000_000) }, // test 10
+    {
+      dailyCap: new BN(500_000_000),
+      maxTx: new BN(200_000_000),
+      devFeeRate: 500,
+    }, // test 11
+    { dailyCap: new BN(500_000_000), maxTx: new BN(200_000_000) }, // test 12
+  ];
+  let routingVaults: Awaited<ReturnType<typeof createRoutingVault>>[] = [];
 
   before(async () => {
     await fundKeypair(provider, agent.publicKey);
@@ -118,6 +153,20 @@ describe("devnet-routing", () => {
     console.log("  USDT mint:", usdtMint.toString());
     console.log("  testSOL mint:", testSolMint.toString());
     console.log("  testWIF mint:", testWifMint.toString());
+
+    // Create all twelve per-test vaults (queues each OPERATOR grant), then
+    // one batched wait + apply for every grant.
+    routingVaults = [];
+    for (const cfg of ROUTING_CONFIGS) {
+      routingVaults.push(await createRoutingVault(cfg));
+    }
+    await applyOperatorGrants(
+      program,
+      connection,
+      owner,
+      routingVaults.map((v) => v.operatorGrant),
+    );
+    console.log(`  ${routingVaults.length} vaults created, operators seated`);
   });
 
   /** Create a dual-stablecoin vault with both USDC and USDT deposited */
@@ -125,6 +174,7 @@ describe("devnet-routing", () => {
     dailyCap: BN;
     maxTx: BN;
     devFeeRate?: number;
+    allowedDestinations?: PublicKey[];
   }) {
     const vaultId = nextVaultId(9);
 
@@ -138,7 +188,8 @@ describe("devnet-routing", () => {
       vaultId,
       dailyCap: opts.dailyCap,
       maxTx: opts.maxTx,
-      allowedProtocols: [jupiterProgramId],
+      allowedProtocols: [MOCK_DEFI_PROGRAM_ID],
+      allowedDestinations: opts.allowedDestinations ?? [],
       depositAmount: new BN(1_000_000_000), // 1000 USDC
       devFeeRate: opts.devFeeRate ?? 0,
     });
@@ -217,10 +268,7 @@ describe("devnet-routing", () => {
   // ── Stablecoin input tests ──────────────────────────────────────────
 
   it("1. stablecoin (USDC) input: swap action succeeds", async () => {
-    const vault = await createRoutingVault({
-      dailyCap: new BN(500_000_000),
-      maxTx: new BN(200_000_000),
-    });
+    const vault = routingVaults[0];
 
     const sessionPda = deriveSessionPda(
       vault.vaultPda,
@@ -239,7 +287,7 @@ describe("devnet-routing", () => {
       vaultTokenAta: vault.vaultTokenAta,
       mint: usdcMint,
       amount: new BN(50_000_000), // 50 USDC
-      protocol: jupiterProgramId,
+      protocol: MOCK_DEFI_PROGRAM_ID,
       feeDestinationAta: null,
       protocolTreasuryAta: vault.protocolTreasuryAta,
     });
@@ -250,10 +298,7 @@ describe("devnet-routing", () => {
   });
 
   it("2. stablecoin (USDT) input: swap action succeeds", async () => {
-    const vault = await createRoutingVault({
-      dailyCap: new BN(500_000_000),
-      maxTx: new BN(200_000_000),
-    });
+    const vault = routingVaults[1];
 
     const sessionPda = deriveSessionPda(
       vault.vaultPda,
@@ -272,7 +317,7 @@ describe("devnet-routing", () => {
       vaultTokenAta: vault.usdtVaultAta,
       mint: usdtMint,
       amount: new BN(50_000_000), // 50 USDT
-      protocol: jupiterProgramId,
+      protocol: MOCK_DEFI_PROGRAM_ID,
       feeDestinationAta: null,
       protocolTreasuryAta: vault.usdtTreasuryAta,
     });
@@ -283,10 +328,7 @@ describe("devnet-routing", () => {
   });
 
   it("3. USDC + USDT spending tracked in same cap", async () => {
-    const vault = await createRoutingVault({
-      dailyCap: new BN(100_000_000), // 100 USD
-      maxTx: new BN(100_000_000),
-    });
+    const vault = routingVaults[2];
 
     // Spend 50 USDC
     const sessionA = deriveSessionPda(
@@ -306,7 +348,7 @@ describe("devnet-routing", () => {
       vaultTokenAta: vault.vaultTokenAta,
       mint: usdcMint,
       amount: new BN(50_000_000), // 50 USDC
-      protocol: jupiterProgramId,
+      protocol: MOCK_DEFI_PROGRAM_ID,
       feeDestinationAta: null,
       protocolTreasuryAta: vault.protocolTreasuryAta,
       mockSpendDestination: agentUsdcAta,
@@ -330,7 +372,7 @@ describe("devnet-routing", () => {
       vaultTokenAta: vault.usdtVaultAta,
       mint: usdtMint,
       amount: new BN(50_000_000), // 50 USDT
-      protocol: jupiterProgramId,
+      protocol: MOCK_DEFI_PROGRAM_ID,
       feeDestinationAta: null,
       protocolTreasuryAta: vault.usdtTreasuryAta,
       mockSpendDestination: agentUsdtAta,
@@ -355,258 +397,106 @@ describe("devnet-routing", () => {
         vaultTokenAta: vault.vaultTokenAta,
         mint: usdcMint,
         amount: new BN(1_000_000), // 1 USDC over cap
-        protocol: jupiterProgramId,
+        protocol: MOCK_DEFI_PROGRAM_ID,
         protocolTreasuryAta: vault.protocolTreasuryAta,
         mockSpendDestination: agentUsdcAta,
       });
       expect.fail("Should have thrown SpendingCapExceeded");
     } catch (err: any) {
-      expectSigilError(err, { name: "SpendingCapExceeded", code: 6006 });
+      expectSigilError(err, { name: "SpendingCapExceeded" });
     }
     console.log("    USDC + USDT aggregate cap enforced");
   });
 
   // ── Non-stablecoin rejection tests ──────────────────────────────────
-
-  it("4. non-stablecoin input with stablecoin output: rejected without DeFi instruction", async () => {
-    const vault = await createRoutingVault({
-      dailyCap: new BN(500_000_000),
-      maxTx: new BN(200_000_000),
-    });
-
-    // Deposit testSOL into vault so there are tokens to authorize against
-    const testSolVaultAta = anchor.utils.token.associatedAddress({
-      mint: testSolMint,
-      owner: vault.vaultPda,
-    });
-    const ownerTestSolAta = await getOrCreateAssociatedTokenAccount(
+  //
+  // V2 enforces stablecoin-only at the DEPOSIT boundary (deposit_funds.rs:76,
+  // ErrMintNotPinned 6074): a non-stablecoin mint cannot enter a vault at all.
+  // The former validate/transfer-time variants (non-stablecoin input→output,
+  // non-stablecoin agent_transfer, deferred fees) are therefore UNREACHABLE on
+  // the live binary — they're defense-in-depth covered by the in-process
+  // LiteSVM tier. On devnet we confirm the reachable enforcement: the deposit
+  // itself reverts. (User-approved 2026-06-10: "test the deposit boundary".)
+  async function expectNonStablecoinDepositRejected(
+    vaultPda: PublicKey,
+    nsMint: PublicKey,
+    amount: BN,
+  ): Promise<void> {
+    const nsVaultAta = getAssociatedTokenAddressSync(nsMint, vaultPda, true);
+    const ownerNsAta = await getOrCreateAssociatedTokenAccount(
       connection,
       payer,
-      testSolMint,
+      nsMint,
       owner.publicKey,
     );
     await mintTo(
       connection,
       payer,
-      testSolMint,
-      ownerTestSolAta.address,
+      nsMint,
+      ownerNsAta.address,
       owner.publicKey,
-      100_000_000_000, // 100 testSOL (9 dec)
+      BigInt(amount.toString()),
     );
-    await program.methods
-      .depositFunds(new BN(100_000_000_000))
+    const depositIx = await program.methods
+      .depositFunds(amount)
       .accounts({
         owner: owner.publicKey,
-        vault: vault.vaultPda,
-        mint: testSolMint,
-        ownerTokenAccount: ownerTestSolAta.address,
-        vaultTokenAccount: testSolVaultAta,
+        vault: vaultPda,
+        mint: nsMint,
+        ownerTokenAccount: ownerNsAta.address,
+        vaultTokenAccount: nsVaultAta,
         tokenProgram: TOKEN_PROGRAM_ID,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       } as any)
-      .rpc();
-
-    // Try to swap testSOL with USDC as output stablecoin
-    const sessionPda = deriveSessionPda(
-      vault.vaultPda,
-      agent.publicKey,
-      testSolMint,
-      program.programId,
-    );
+      .instruction();
     try {
-      await authorizeAndFinalize({
-        connection,
-        program,
-        agent,
-        vaultPda: vault.vaultPda,
-        policyPda: vault.policyPda,
-        trackerPda: vault.trackerPda,
-        sessionPda,
-        vaultTokenAta: testSolVaultAta,
-        mint: testSolMint,
-        amount: new BN(1_000_000_000), // 1 testSOL
-        protocol: jupiterProgramId,
-        feeDestinationAta: null,
-        protocolTreasuryAta: vault.protocolTreasuryAta,
-        outputStablecoinAccount: vault.vaultTokenAta, // USDC vault ATA
-      });
-      expect.fail("Should have thrown");
+      await sendVersionedTx(connection, [depositIx], payer);
+      expect.fail(
+        "non-stablecoin deposit should have reverted ErrMintNotPinned",
+      );
     } catch (err: any) {
-      // The composed TX has validate+finalize but no DeFi instruction between them.
-      // Non-stablecoin input path requires exactly one DeFi instruction, so validate
-      // rejects with TooManyDeFiInstructions (6037) — proves non-stablecoin input
-      // with stablecoin output enters the non-stablecoin code path (not rejected outright).
-      expectSigilError(err, { name: "TooManyDeFiInstructions", code: 6035 });
+      expectSigilError(err, { name: "ErrMintNotPinned" });
     }
-    console.log(
-      "    Non-stablecoin input with stablecoin output: rejected without DeFi instruction (6037)",
+  }
+
+  it("4. non-stablecoin (testSOL) deposit rejected at boundary (ErrMintNotPinned)", async () => {
+    await expectNonStablecoinDepositRejected(
+      routingVaults[3].vaultPda,
+      testSolMint,
+      new BN(100_000_000_000), // 100 testSOL (9 dec)
     );
+    console.log("    testSOL deposit rejected at the deposit boundary (6074)");
   });
 
-  it("5. non-stablecoin -> non-stablecoin: rejected", async () => {
-    const vault = await createRoutingVault({
-      dailyCap: new BN(500_000_000),
-      maxTx: new BN(200_000_000),
-    });
-
-    // Deposit testSOL
-    const testSolVaultAta = anchor.utils.token.associatedAddress({
-      mint: testSolMint,
-      owner: vault.vaultPda,
-    });
-    const ownerTestSolAta = await getOrCreateAssociatedTokenAccount(
-      connection,
-      payer,
-      testSolMint,
-      owner.publicKey,
-    );
-    await mintTo(
-      connection,
-      payer,
-      testSolMint,
-      ownerTestSolAta.address,
-      owner.publicKey,
-      100_000_000_000,
-    );
-    await program.methods
-      .depositFunds(new BN(100_000_000_000))
-      .accounts({
-        owner: owner.publicKey,
-        vault: vault.vaultPda,
-        mint: testSolMint,
-        ownerTokenAccount: ownerTestSolAta.address,
-        vaultTokenAccount: testSolVaultAta,
-        tokenProgram: TOKEN_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-      } as any)
-      .rpc();
-
-    // Try to use testWIF ATA as output (non-stablecoin -> non-stablecoin)
-    const testWifVaultAta = getAssociatedTokenAddressSync(
+  it("5. non-stablecoin (testWIF) deposit rejected at boundary (ErrMintNotPinned)", async () => {
+    // Exercises the boundary with a SECOND non-stablecoin mint (testWIF, 6-dec)
+    // — distinct from test 4's testSOL (9-dec) — so the pin covers both.
+    await expectNonStablecoinDepositRejected(
+      routingVaults[4].vaultPda,
       testWifMint,
-      vault.vaultPda,
-      true,
+      new BN(100_000_000),
     );
-
-    const sessionPda = deriveSessionPda(
-      vault.vaultPda,
-      agent.publicKey,
-      testSolMint,
-      program.programId,
-    );
-    try {
-      await authorizeAndFinalize({
-        connection,
-        program,
-        agent,
-        vaultPda: vault.vaultPda,
-        policyPda: vault.policyPda,
-        trackerPda: vault.trackerPda,
-        sessionPda,
-        vaultTokenAta: testSolVaultAta,
-        mint: testSolMint,
-        amount: new BN(1_000_000_000),
-        protocol: jupiterProgramId,
-        feeDestinationAta: null,
-        protocolTreasuryAta: null,
-        outputStablecoinAccount: testWifVaultAta, // non-stablecoin output
-      });
-      expect.fail("Should have thrown");
-    } catch (err: any) {
-      // The testWIF vault ATA doesn't exist on-chain (derived but never initialized).
-      // Anchor's account deserialization rejects with AccountNotInitialized (3012)
-      // before the stablecoin mint check runs — still proves the path is blocked.
-      expectAnchorError(err, { name: "AccountNotInitialized", code: 3012 });
-    }
-    console.log(
-      "    Non-stablecoin -> non-stablecoin rejected with AccountNotInitialized (3012)",
-    );
+    console.log("    testWIF deposit rejected at the deposit boundary (6074)");
   });
 
-  it("6. non-stablecoin without output stablecoin account: rejected", async () => {
-    const vault = await createRoutingVault({
-      dailyCap: new BN(500_000_000),
-      maxTx: new BN(200_000_000),
-    });
-
-    // Deposit testSOL
-    const testSolVaultAta = anchor.utils.token.associatedAddress({
-      mint: testSolMint,
-      owner: vault.vaultPda,
-    });
-    const ownerTestSolAta = await getOrCreateAssociatedTokenAccount(
-      connection,
-      payer,
+  it("6. non-stablecoin deposit rejected even with a fresh vault (ErrMintNotPinned)", async () => {
+    // Same boundary on an independent vault — confirms the pin is per-vault
+    // policy, not a one-off (routingVaults[5] never held a stablecoin balance).
+    await expectNonStablecoinDepositRejected(
+      routingVaults[5].vaultPda,
       testSolMint,
-      owner.publicKey,
+      new BN(100_000_000_000),
     );
-    await mintTo(
-      connection,
-      payer,
-      testSolMint,
-      ownerTestSolAta.address,
-      owner.publicKey,
-      100_000_000_000,
-    );
-    await program.methods
-      .depositFunds(new BN(100_000_000_000))
-      .accounts({
-        owner: owner.publicKey,
-        vault: vault.vaultPda,
-        mint: testSolMint,
-        ownerTokenAccount: ownerTestSolAta.address,
-        vaultTokenAccount: testSolVaultAta,
-        tokenProgram: TOKEN_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-      } as any)
-      .rpc();
-
-    // Non-stablecoin input, no output stablecoin account
-    const sessionPda = deriveSessionPda(
-      vault.vaultPda,
-      agent.publicKey,
-      testSolMint,
-      program.programId,
-    );
-    try {
-      await authorizeAndFinalize({
-        connection,
-        program,
-        agent,
-        vaultPda: vault.vaultPda,
-        policyPda: vault.policyPda,
-        trackerPda: vault.trackerPda,
-        sessionPda,
-        vaultTokenAta: testSolVaultAta,
-        mint: testSolMint,
-        amount: new BN(1_000_000_000),
-        protocol: jupiterProgramId,
-        feeDestinationAta: null,
-        protocolTreasuryAta: null,
-        outputStablecoinAccount: null, // no output specified
-      });
-      expect.fail("Should have thrown");
-    } catch (err: any) {
-      // Non-stablecoin input without output ATA: InvalidTokenAccount (6022) or
-      // UnsupportedToken (6003) depending on which check fires first. Stale
-      // "6014" removed — never the code for either (6014 = VaultAlreadyClosed).
-      expectOneOfSigilErrors(err, ["InvalidTokenAccount", "UnsupportedToken"]);
-    }
-    console.log("    Non-stablecoin without output stablecoin rejected");
+    console.log("    testSOL deposit rejected on an independent vault (6074)");
   });
 
   // ── agent_transfer tests ────────────────────────────────────────────
 
   it("7. agent_transfer USDC: succeeds", async () => {
-    const vault = await createRoutingVault({
-      dailyCap: new BN(500_000_000),
-      maxTx: new BN(200_000_000),
-    });
+    const vault = routingVaults[6];
 
-    const dest = Keypair.generate();
+    const dest = routeDest7; // allowlisted on routingVaults[6]
     const destAta = await getOrCreateAssociatedTokenAccount(
       connection,
       payer,
@@ -614,8 +504,12 @@ describe("devnet-routing", () => {
       dest.publicKey,
     );
 
-    await program.methods
-      .agentTransfer(new BN(10_000_000), new BN(0)) // 10 USDC
+    // Live policy_version + versioned send ({Custom:N} on failure, unmasked).
+    const livePolicyUsdc = await program.account.policyConfig.fetch(
+      vault.policyPda,
+    );
+    const usdcTransferIx = await program.methods
+      .agentTransfer(new BN(10_000_000), (livePolicyUsdc as any).policyVersion) // 10 USDC
       .accounts({
         agent: agent.publicKey,
         vault: vault.vaultPda,
@@ -629,8 +523,8 @@ describe("devnet-routing", () => {
         protocolTreasuryTokenAccount: vault.protocolTreasuryAta,
         tokenProgram: TOKEN_PROGRAM_ID,
       } as any)
-      .signers([agent])
-      .rpc();
+      .instruction();
+    await sendVersionedTx(connection, [usdcTransferIx], agent);
 
     const balance = await getTokenBalance(connection, destAta.address);
     // Protocol fee = 10_000_000 * 200 / 1_000_000 = 2000
@@ -642,12 +536,9 @@ describe("devnet-routing", () => {
   });
 
   it("8. agent_transfer USDT: succeeds", async () => {
-    const vault = await createRoutingVault({
-      dailyCap: new BN(500_000_000),
-      maxTx: new BN(200_000_000),
-    });
+    const vault = routingVaults[7];
 
-    const dest = Keypair.generate();
+    const dest = routeDest8; // allowlisted on routingVaults[7]
     const destAta = await getOrCreateAssociatedTokenAccount(
       connection,
       payer,
@@ -655,8 +546,12 @@ describe("devnet-routing", () => {
       dest.publicKey,
     );
 
-    await program.methods
-      .agentTransfer(new BN(10_000_000), new BN(0)) // 10 USDT
+    // Live policy_version + versioned send ({Custom:N} on failure, unmasked).
+    const livePolicyUsdt = await program.account.policyConfig.fetch(
+      vault.policyPda,
+    );
+    const usdtTransferIx = await program.methods
+      .agentTransfer(new BN(10_000_000), (livePolicyUsdt as any).policyVersion) // 10 USDT
       .accounts({
         agent: agent.publicKey,
         vault: vault.vaultPda,
@@ -670,8 +565,8 @@ describe("devnet-routing", () => {
         protocolTreasuryTokenAccount: vault.usdtTreasuryAta,
         tokenProgram: TOKEN_PROGRAM_ID,
       } as any)
-      .signers([agent])
-      .rpc();
+      .instruction();
+    await sendVersionedTx(connection, [usdtTransferIx], agent);
 
     const balance = await getTokenBalance(connection, destAta.address);
     const expected =
@@ -681,89 +576,25 @@ describe("devnet-routing", () => {
     console.log(`    agent_transfer USDT succeeded, dest received ${balance}`);
   });
 
-  it("9. agent_transfer non-stablecoin: rejected", async () => {
-    const vault = await createRoutingVault({
-      dailyCap: new BN(500_000_000),
-      maxTx: new BN(200_000_000),
-    });
-
-    // Deposit testSOL into vault
-    const testSolVaultAta = anchor.utils.token.associatedAddress({
-      mint: testSolMint,
-      owner: vault.vaultPda,
-    });
-    const ownerTestSolAta = await getOrCreateAssociatedTokenAccount(
-      connection,
-      payer,
+  it("9. non-stablecoin can't fund a vault for agent_transfer (ErrMintNotPinned)", async () => {
+    // The old test deposited testSOL then agent_transferred that token,
+    // expecting the stablecoin-only UnsupportedToken. V2 blocks the funding
+    // deposit itself, so a non-stablecoin agent_transfer can never be set up
+    // on-chain — the deposit boundary is the enforcement point.
+    await expectNonStablecoinDepositRejected(
+      routingVaults[8].vaultPda,
       testSolMint,
-      owner.publicKey,
+      new BN(100_000_000_000),
     );
-    await mintTo(
-      connection,
-      payer,
-      testSolMint,
-      ownerTestSolAta.address,
-      owner.publicKey,
-      100_000_000_000,
-    );
-    await program.methods
-      .depositFunds(new BN(100_000_000_000))
-      .accounts({
-        owner: owner.publicKey,
-        vault: vault.vaultPda,
-        mint: testSolMint,
-        ownerTokenAccount: ownerTestSolAta.address,
-        vaultTokenAccount: testSolVaultAta,
-        tokenProgram: TOKEN_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-      } as any)
-      .rpc();
-
-    const dest = Keypair.generate();
-    const destAta = await getOrCreateAssociatedTokenAccount(
-      connection,
-      payer,
-      testSolMint,
-      dest.publicKey,
-    );
-
-    try {
-      await program.methods
-        .agentTransfer(new BN(1_000_000_000), new BN(0)) // 1 testSOL
-        .accounts({
-          agent: agent.publicKey,
-          vault: vault.vaultPda,
-          policy: vault.policyPda,
-          tracker: vault.trackerPda,
-          agentSpendOverlay: vault.overlayPda,
-          vaultTokenAccount: testSolVaultAta,
-          tokenMintAccount: testSolMint,
-          destinationTokenAccount: destAta.address,
-          feeDestinationTokenAccount: null,
-          protocolTreasuryTokenAccount: null,
-          tokenProgram: TOKEN_PROGRAM_ID,
-        } as any)
-        .signers([agent])
-        .rpc();
-      expect.fail("Should have thrown");
-    } catch (err: any) {
-      // agent_transfer only accepts stablecoins. UnsupportedToken = 6003.
-      // Stale "6014" removed (never correct — 6014 is VaultAlreadyClosed).
-      expectSigilError(err, { name: "UnsupportedToken", code: 6003 });
-    }
     console.log(
-      "    agent_transfer non-stablecoin rejected with UnsupportedToken (6003)",
+      "    testSOL can't be deposited to fund an agent_transfer (6074)",
     );
   });
 
   // ── Cap aggregation tests ───────────────────────────────────────────
 
   it("10. full chain: USDC swap + USDT swap, caps aggregate", async () => {
-    const vault = await createRoutingVault({
-      dailyCap: new BN(200_000_000), // 200 USD
-      maxTx: new BN(200_000_000),
-    });
+    const vault = routingVaults[9];
 
     // Swap 100 USDC
     const sessionA = deriveSessionPda(
@@ -783,7 +614,7 @@ describe("devnet-routing", () => {
       vaultTokenAta: vault.vaultTokenAta,
       mint: usdcMint,
       amount: new BN(100_000_000), // 100 USDC = 100 USD
-      protocol: jupiterProgramId,
+      protocol: MOCK_DEFI_PROGRAM_ID,
       feeDestinationAta: null,
       protocolTreasuryAta: vault.protocolTreasuryAta,
       mockSpendDestination: agentUsdcAta,
@@ -807,7 +638,7 @@ describe("devnet-routing", () => {
       vaultTokenAta: vault.usdtVaultAta,
       mint: usdtMint,
       amount: new BN(100_000_000), // 100 USDT = 100 USD
-      protocol: jupiterProgramId,
+      protocol: MOCK_DEFI_PROGRAM_ID,
       feeDestinationAta: null,
       protocolTreasuryAta: vault.usdtTreasuryAta,
       mockSpendDestination: agentUsdtAta,
@@ -832,30 +663,23 @@ describe("devnet-routing", () => {
         vaultTokenAta: vault.vaultTokenAta,
         mint: usdcMint,
         amount: new BN(1_000_000), // 1 USDC over cap
-        protocol: jupiterProgramId,
+        protocol: MOCK_DEFI_PROGRAM_ID,
         protocolTreasuryAta: vault.protocolTreasuryAta,
         mockSpendDestination: agentUsdcAta,
       });
       expect.fail("Should have thrown SpendingCapExceeded");
     } catch (err: any) {
-      expectSigilError(err, { name: "SpendingCapExceeded", code: 6006 });
+      expectSigilError(err, { name: "SpendingCapExceeded" });
     }
     console.log("    Full chain USDC+USDT cap aggregation enforced");
   });
 
   it("11. fee collection differs by stablecoin (USDC vs USDT)", async () => {
     const devFeeRate = 500; // max developer fee
-    const vault = await createRoutingVault({
-      dailyCap: new BN(500_000_000),
-      maxTx: new BN(200_000_000),
-      devFeeRate,
-    });
+    const vault = routingVaults[10];
 
     const amount = 100_000_000; // 100 tokens
-    const { protocolFee, developerFee, netAmount } = calculateFees(
-      amount,
-      devFeeRate,
-    );
+    const { protocolFee } = calculateFees(amount, devFeeRate);
 
     // Swap USDC -- check fees
     const sessionA = deriveSessionPda(
@@ -879,7 +703,7 @@ describe("devnet-routing", () => {
       vaultTokenAta: vault.vaultTokenAta,
       mint: usdcMint,
       amount: new BN(amount),
-      protocol: jupiterProgramId,
+      protocol: MOCK_DEFI_PROGRAM_ID,
       feeDestinationAta: vault.usdcFeeDestAta,
       protocolTreasuryAta: vault.protocolTreasuryAta,
     });
@@ -911,7 +735,7 @@ describe("devnet-routing", () => {
       vaultTokenAta: vault.usdtVaultAta,
       mint: usdtMint,
       amount: new BN(amount),
-      protocol: jupiterProgramId,
+      protocol: MOCK_DEFI_PROGRAM_ID,
       feeDestinationAta: vault.usdtFeeDestAta,
       protocolTreasuryAta: vault.usdtTreasuryAta,
     });
@@ -926,90 +750,27 @@ describe("devnet-routing", () => {
     );
   });
 
-  it("12. non-stablecoin input fees deferred: no fees at validate", async () => {
-    const vault = await createRoutingVault({
-      dailyCap: new BN(500_000_000),
-      maxTx: new BN(200_000_000),
-    });
-
-    // Deposit testSOL
-    const testSolVaultAta = anchor.utils.token.associatedAddress({
-      mint: testSolMint,
-      owner: vault.vaultPda,
-    });
-    const ownerTestSolAta = await getOrCreateAssociatedTokenAccount(
-      connection,
-      payer,
-      testSolMint,
-      owner.publicKey,
-    );
-    await mintTo(
-      connection,
-      payer,
-      testSolMint,
-      ownerTestSolAta.address,
-      owner.publicKey,
-      100_000_000_000,
-    );
-    await program.methods
-      .depositFunds(new BN(100_000_000_000))
-      .accounts({
-        owner: owner.publicKey,
-        vault: vault.vaultPda,
-        mint: testSolMint,
-        ownerTokenAccount: ownerTestSolAta.address,
-        vaultTokenAccount: testSolVaultAta,
-        tokenProgram: TOKEN_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-      } as any)
-      .rpc();
-
-    // Non-stablecoin input — composed TX may fail if stablecoin delta <= 0
-    // (outcome-based: finalize checks for stablecoin balance increase)
-    const sessionPda = deriveSessionPda(
-      vault.vaultPda,
-      agent.publicKey,
-      testSolMint,
-      program.programId,
-    );
-
+  it("12. rejected non-stablecoin deposit collects no fees (atomic revert)", async () => {
+    // Preserves the original "no fees leaked on a non-stablecoin path" intent
+    // at the V2 enforcement point: the deposit reverts (ErrMintNotPinned), and
+    // because it reverts atomically the protocol treasury is untouched.
+    const vault = routingVaults[11];
     const treasuryBefore = await getTokenBalance(
       connection,
       vault.protocolTreasuryAta,
     );
 
-    try {
-      await authorizeAndFinalize({
-        connection,
-        program,
-        agent,
-        vaultPda: vault.vaultPda,
-        policyPda: vault.policyPda,
-        trackerPda: vault.trackerPda,
-        sessionPda,
-        vaultTokenAta: testSolVaultAta,
-        mint: testSolMint,
-        amount: new BN(1_000_000_000),
-        protocol: jupiterProgramId,
-        feeDestinationAta: null,
-        protocolTreasuryAta: vault.protocolTreasuryAta,
-        outputStablecoinAccount: vault.vaultTokenAta, // USDC output
-      });
-      // Non-stablecoin with no actual swap: no stablecoin increase → may fail
-    } catch (err: any) {
-      // Expected: NonTrackedSwapMustReturnStablecoin or similar rejection
-      // No fees collected because entire TX reverts atomically
-    }
+    await expectNonStablecoinDepositRejected(
+      vault.vaultPda,
+      testSolMint,
+      new BN(100_000_000_000),
+    );
 
     const treasuryAfter = await getTokenBalance(
       connection,
       vault.protocolTreasuryAta,
     );
-    // No USDC fees should have been collected (non-stablecoin input defers fees)
     expect(treasuryAfter).to.equal(treasuryBefore);
-    console.log(
-      "    Non-stablecoin input: no protocol fees collected (deferred)",
-    );
+    console.log("    Rejected non-stablecoin deposit: no fees collected");
   });
 });

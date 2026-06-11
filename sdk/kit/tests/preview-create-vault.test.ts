@@ -179,24 +179,30 @@ describe("previewCreateVault — PDA derivation", () => {
 // ─── G3 — Account size correctness ──────────────────────────────────────────
 
 describe("previewCreateVault — on-chain account sizes", () => {
-  it("AgentVault sizeBytes equals 634", async () => {
+  it("AgentVault sizeBytes equals 676 (Phase-8 fields + F-Q6 owner_type)", async () => {
     const r = await previewCreateVault(baseConfig());
-    expect(r.pdaList[0]!.sizeBytes).to.equal(634);
+    // F-Q6 (2026-06-02): 676 = 675 (Phase-8 LBL-01) + 1 owner_type. The prior
+    // 634 was stale by 41 bytes (never updated for frozen_at_timestamp +
+    // freeze_reason + vault_authority); corrected to the rent-exact size here.
+    expect(r.pdaList[0]!.sizeBytes).to.equal(676);
   });
 
-  it("PolicyConfig sizeBytes equals 822", async () => {
+  it("PolicyConfig sizeBytes equals 1,329 (Phase 2-5 + G6 + D-5 + F-Q6 operator_grant_delay_seconds)", async () => {
     const r = await previewCreateVault(baseConfig());
-    expect(r.pdaList[1]!.sizeBytes).to.equal(822);
+    // F-Q6 (2026-06-02): +8 operator_grant_delay_seconds. (The prior 1,322 was
+    // 1 byte over — it double-counted the M1-04-removed has_constraints byte;
+    // the rent-exact size is 1,321 pre-F-Q6 → 1,329 now.)
+    expect(r.pdaList[1]!.sizeBytes).to.equal(1_329);
   });
 
-  it("SpendTracker sizeBytes equals 2,840", async () => {
+  it("SpendTracker sizeBytes equals 3,328 (TA-14 per_recipient added)", async () => {
     const r = await previewCreateVault(baseConfig());
-    expect(r.pdaList[2]!.sizeBytes).to.equal(2_840);
+    expect(r.pdaList[2]!.sizeBytes).to.equal(3_328);
   });
 
-  it("AgentSpendOverlay sizeBytes equals 2,528", async () => {
+  it("AgentSpendOverlay sizeBytes equals 2,688 (TA-06 cooldown fields added)", async () => {
     const r = await previewCreateVault(baseConfig());
-    expect(r.pdaList[3]!.sizeBytes).to.equal(2_528);
+    expect(r.pdaList[3]!.sizeBytes).to.equal(2_688);
   });
 });
 
@@ -244,21 +250,32 @@ describe("previewCreateVault — cost math", () => {
     expect(r.totalCostUsd).to.equal(expected);
   });
 
-  it("totalCostUsd fixture: rent ~52M + fee 0 + price $250 → known value", async () => {
+  it("totalCostUsd fixture: rent ~59.0M + fee 0 + price $250 → known value", async () => {
     // pin a single concrete value so a future drift triggers a test failure.
-    // Sum of rent for the 4 PDAs at default mock formula = ((634+128) +
-    // (822+128) + (2840+128) + (2528+128)) × 6960 = (762+950+2968+2656) ×
-    // 6960 = 7336 × 6960 = 51_058_560 lamports.
-    // totalCostUsd = 51_058_560 × 250_000_000 / 1_000_000_000 = 12_764_640
-    // (= $12.76464 in 6-decimal USD).
+    // Post-D-5 (audit 2026-05-19, F-RP3-1): PolicyConfig grew 32 bytes for
+    // the new `cosign_session_pubkey` field — SDK SIZE constants now match
+    // on-chain:
+    //   AgentVault 676, PolicyConfig 1329, SpendTracker 3328, AgentSpendOverlay 2688.
+    // F-Q6 (2026-06-02): PolicyConfig 1322 → 1329 (+8 operator_grant_delay_seconds;
+    // the prior 1322 double-counted the M1-04-removed has_constraints byte) AND
+    // AgentVault 634 → 676 (+1 owner_type; the prior 634 was also stale by 41
+    // bytes — it predated the Phase-8 frozen_at_timestamp + freeze_reason +
+    // vault_authority fields).
+    // Sum of rent for the 4 PDAs at default mock formula =
+    //   ((676+128) + (1329+128) + (3328+128) + (2688+128)) × 6960
+    // = (804 + 1457 + 3456 + 2816) × 6960
+    // = 8533 × 6960 = 59_389_680 lamports.
+    // totalCostUsd = 59_389_680 × 250_000_000 / 1_000_000_000 = 14_847_420
+    // (= $14.84742 in 6-decimal USD).
+    // Prior pin (pre-AgentVault correction): rentLamports = 59_097_360, totalCostUsd = 14_774_340.
     const r = await previewCreateVault(
       baseConfig({
         priorityFeeMicroLamports: 0,
         solPriceUsd: 250_000_000n,
       }),
     );
-    expect(r.rentLamports).to.equal(51_058_560n);
-    expect(r.totalCostUsd).to.equal(12_764_640n);
+    expect(r.rentLamports).to.equal(59_389_680n);
+    expect(r.totalCostUsd).to.equal(14_847_420n);
   });
 
   it("totalCostUsd is bigint (never number)", async () => {

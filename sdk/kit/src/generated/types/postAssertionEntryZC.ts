@@ -33,21 +33,47 @@ import {
  * vault owner configures byte offsets from protocol documentation.
  *
  * Phase B1: absolute value assertions (check field ≤ max, field ≥ min).
- * Phase B3 will add CrossFieldLte for leverage ratio enforcement.
+ * Phase B2: delta-mode assertions (MaxDecrease, MaxIncrease, NoChange).
+ *
+ * Phase B3 CrossFieldLte fields (cross_field_offset_b, cross_field_multiplier_bps,
+ * cross_field_flags) DELETED in Phase 1 Option A demolition (L-1). The two-field
+ * ratio check (field_A × 10000 ≤ multiplier_bps × field_B) was Jupiter-Perps-flavored
+ * leverage-cap logic that doesn't generalize to a per-vault generic primitive.
  */
 export type PostAssertionEntryZC = {
   /**
    * The account to read after execution (passed via remaining_accounts).
-   * Typically a Position PDA, User account, or similar protocol state.
+   *
+   * Per-mode interpretation:
+   * - modes 0..3 (Absolute / MaxDecrease / MaxIncrease / NoChange):
+   * protocol state account (Position PDA, User account, etc).
+   * - mode 4 MintDeltaCap with `aux_byte=1` (scope=1): the single token
+   * account whose balance we measure. With `aux_byte=0` (scope=0):
+   * UNUSED — ATAs are derived on-chain from `(vault, expected_value)`.
    */
   targetAccount: ReadonlyUint8Array;
-  /** Byte offset in the target account's data to read. */
+  /**
+   * Byte offset in the target account's data to read (modes 0..3).
+   * Phase 6 modes (4) ignore this field — balances are read at the
+   * canonical SPL/Token-2022 layout offset (64..72).
+   */
   offset: number;
-  /** Length of the value to compare (1-32 bytes). */
+  /**
+   * Length of the value to compare (1-32 bytes) for modes 0..3.
+   * Phase 6 mode 4 ignores this field.
+   */
   valueLen: number;
-  /** Comparison operator (reuses ConstraintOperator: Eq, Ne, Gte, Lte, etc.) */
+  /**
+   * Comparison operator (reuses ConstraintOperator: Eq, Ne, Gte, Lte, etc.)
+   * Modes 1..4 ignore this field.
+   */
   operator: number;
-  /** Expected value for comparison (same max as DataConstraint). */
+  /**
+   * Per-mode payload:
+   * - modes 0..3: expected value for comparison (same max as DataConstraint).
+   * - mode 4 MintDeltaCap: bytes 0..32 = mint pubkey identifying the
+   * target token. Remaining bytes are unused.
+   */
   expectedValue: ReadonlyUint8Array;
   /**
    * Assertion mode:
@@ -58,28 +84,33 @@ export type PostAssertionEntryZC = {
    * 2 = MaxIncrease: check (current - snapshot) ≤ expected_value (Phase B2)
    * NOTE: If value decreases, check ALWAYS PASSES.
    * 3 = NoChange: check current == snapshot — byte-for-byte equality (Phase B2)
+   * 4 = MintDeltaCap (Phase 6 R-1): vault-wide or per-account drain ceiling
    */
   assertionMode: number;
   /**
-   * Phase B3: Second field offset for CrossFieldLte (little-endian u16).
-   * When cross_field_flags & 0x01: read field_B at offset_b (value_len bytes) from same target.
-   * Check: field_A × 10000 ≤ multiplier_bps × field_B (using u128 arithmetic).
-   * Stored as [u8; 2] for zero-copy Pod alignment compatibility.
+   * Phase 6 generic auxiliary value — per-mode interpretation:
+   * - mode 4 MintDeltaCap: u64 LE = max_net_decrease (units of the mint's
+   * smallest denomination).
+   * - modes 0..3: UNUSED, must be zero (validate_entries enforces).
+   * Stored as raw bytes to keep the struct alignment at 2 (avoids a u64
+   * alignment bump that would force the entry to a multiple of 8 and
+   * regress capacity math).
    */
-  crossFieldOffsetB: ReadonlyUint8Array;
+  auxValue: ReadonlyUint8Array;
   /**
-   * Phase B3: Multiplier in basis points for CrossFieldLte (little-endian u32).
-   * 10000 = 1.0x, 100000 = 10x, 5000000 = 500x.
-   * Must be > 0 when cross_field_flags is enabled.
-   * Stored as [u8; 4] for zero-copy Pod alignment compatibility.
+   * Phase 6 generic auxiliary byte — per-mode interpretation:
+   * - mode 4 MintDeltaCap: scope (0 = vault-wide ATA enumeration,
+   * 1 = single account in `target_account`).
+   * - modes 0..3: UNUSED, must be zero (validate_entries enforces).
+   *
+   * The trailing `aux_byte` brings the entry to an even size (78) which
+   * satisfies the struct's u16 alignment without a separate `_padding`
+   * field — the previous `_padding: u8` from Phase 1 demolition was
+   * absorbed here. Off-chain decoders that previously read `_padding`
+   * now read `aux_byte`; the byte position is the same so wire
+   * compatibility holds with the previous version's zero value.
    */
-  crossFieldMultiplierBps: ReadonlyUint8Array;
-  /**
-   * Phase B3: Flags byte. Bit 0 = enable CrossFieldLte.
-   * When enabled, assertion_mode MUST be 0 (Absolute).
-   * Unknown bits (1-7) must be 0.
-   */
-  crossFieldFlags: number;
+  auxByte: number;
 };
 
 export type PostAssertionEntryZCArgs = PostAssertionEntryZC;
@@ -92,9 +123,8 @@ export function getPostAssertionEntryZCEncoder(): FixedSizeEncoder<PostAssertion
     ["operator", getU8Encoder()],
     ["expectedValue", fixEncoderSize(getBytesEncoder(), 32)],
     ["assertionMode", getU8Encoder()],
-    ["crossFieldOffsetB", fixEncoderSize(getBytesEncoder(), 2)],
-    ["crossFieldMultiplierBps", fixEncoderSize(getBytesEncoder(), 4)],
-    ["crossFieldFlags", getU8Encoder()],
+    ["auxValue", fixEncoderSize(getBytesEncoder(), 8)],
+    ["auxByte", getU8Encoder()],
   ]);
 }
 
@@ -106,9 +136,8 @@ export function getPostAssertionEntryZCDecoder(): FixedSizeDecoder<PostAssertion
     ["operator", getU8Decoder()],
     ["expectedValue", fixDecoderSize(getBytesDecoder(), 32)],
     ["assertionMode", getU8Decoder()],
-    ["crossFieldOffsetB", fixDecoderSize(getBytesDecoder(), 2)],
-    ["crossFieldMultiplierBps", fixDecoderSize(getBytesDecoder(), 4)],
-    ["crossFieldFlags", getU8Decoder()],
+    ["auxValue", fixDecoderSize(getBytesDecoder(), 8)],
+    ["auxByte", getU8Decoder()],
   ]);
 }
 

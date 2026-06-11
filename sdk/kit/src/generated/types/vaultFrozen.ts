@@ -35,6 +35,13 @@ export type VaultFrozen = {
    */
   sessionsRevoked: number;
   timestamp: bigint;
+  /**
+   * Phase 8 — discriminant of `FreezeReason` enum recording WHY the vault
+   * was frozen. 0 = Manual (`freeze_vault`), 1 = AutoRevoke (last agent
+   * removed via `revoke_agent`), 2 = EmergencyBoard (reserved v1.1).
+   * APPENDED at end per APPEND-ONLY event-stability rule.
+   */
+  freezeReason: number;
 };
 
 export type VaultFrozenArgs = {
@@ -48,6 +55,13 @@ export type VaultFrozenArgs = {
    */
   sessionsRevoked: number;
   timestamp: number | bigint;
+  /**
+   * Phase 8 — discriminant of `FreezeReason` enum recording WHY the vault
+   * was frozen. 0 = Manual (`freeze_vault`), 1 = AutoRevoke (last agent
+   * removed via `revoke_agent`), 2 = EmergencyBoard (reserved v1.1).
+   * APPENDED at end per APPEND-ONLY event-stability rule.
+   */
+  freezeReason: number;
 };
 
 export function getVaultFrozenEncoder(): FixedSizeEncoder<VaultFrozenArgs> {
@@ -57,6 +71,7 @@ export function getVaultFrozenEncoder(): FixedSizeEncoder<VaultFrozenArgs> {
     ["agentsPreserved", getU8Encoder()],
     ["sessionsRevoked", getU32Encoder()],
     ["timestamp", getI64Encoder()],
+    ["freezeReason", getU8Encoder()],
   ]);
 }
 
@@ -67,6 +82,7 @@ export function getVaultFrozenDecoder(): FixedSizeDecoder<VaultFrozen> {
     ["agentsPreserved", getU8Decoder()],
     ["sessionsRevoked", getU32Decoder()],
     ["timestamp", getI64Decoder()],
+    ["freezeReason", getU8Decoder()],
   ]);
 }
 

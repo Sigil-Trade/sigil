@@ -28,7 +28,7 @@ This design has a deliberate secondary benefit: new DeFi protocol integrations r
 
 | Network | Program ID                                     |
 | ------- | ---------------------------------------------- |
-| Devnet  | `4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL` |
+| Devnet  | `7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK` |
 | Mainnet | Not yet deployed                               |
 
 The program ID is declared at `programs/sigil/src/lib.rs:16` (`declare_id!`) and registered in `Anchor.toml:9` under `[programs.devnet]`.
@@ -155,8 +155,6 @@ All files live in `agent-middleware/docs/`:
 | `ONCHAIN-FEATURE-INVENTORY.md`    | Complete on-chain feature inventory — all 36 instructions, 12 account types, capability model, events; source-cited from actual .rs files |
 | `COMMANDS-REFERENCE.md`           | Developer command reference — build, test, lint, deploy, security tooling                                                                 |
 | `DEPLOYMENT.md`                   | ALT (Address Lookup Table) deployment plan for devnet and mainnet                                                                         |
-| `RFC-ACTIONTYPE-ELIMINATION.md`   | Design record for the ActionType → tri-state capability migration; status: IMPLEMENTED                                                    |
-| `SECURITY-FINDINGS-2026-04-07.md` | Internal security findings log — Phase 1 audit closure pass; tracks finding status and fix commits                                        |
 
 ---
 

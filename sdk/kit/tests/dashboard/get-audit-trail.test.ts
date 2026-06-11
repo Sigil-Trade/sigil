@@ -46,7 +46,6 @@ function fixtureActivity(
     tokenMint: null,
     tokenSymbol: null,
     isSpending: true,
-    actionType: null,
     protocol: null,
     protocolName: null,
     success: true,
@@ -76,14 +75,14 @@ describe("buildAuditTrail (S12)", () => {
     const entries = buildAuditTrail([
       fixtureActivity({
         category: "policy",
-        eventType: "PolicyUpdated",
+        eventType: "PolicyChangeApplied",
         txSignature: "sig-policy",
         description: "Policy was updated",
       }),
     ]);
     expect(entries).to.have.length(1);
     expect(entries[0].eventType).to.equal("policy_change");
-    expect(entries[0].eventName).to.equal("PolicyUpdated");
+    expect(entries[0].eventName).to.equal("PolicyChangeApplied");
     expect(entries[0].txSignature).to.equal("sig-policy");
     expect(entries[0].details).to.equal("Policy was updated");
   });
@@ -115,22 +114,16 @@ describe("buildAuditTrail (S12)", () => {
     expect(entries[0].actor).to.equal("");
   });
 
-  it("maps escrow events to escrow", () => {
-    const entries = buildAuditTrail([
-      fixtureActivity({
-        category: "escrow",
-        eventType: "EscrowCreated",
-      }),
-    ]);
-    expect(entries).to.have.length(1);
-    expect(entries[0].eventType).to.equal("escrow");
-  });
+  // Escrow events were removed in V2 (REVAMP_PLAN §2.1). `buildAuditTrail`
+  // only maps policy/agent/security categories — see `AUDIT_CATEGORY_TO_TYPE`
+  // in `sdk/kit/src/dashboard/reads.ts`. The "maps escrow events" case is
+  // gone with no V2 equivalent.
 
   it("converts timestamp seconds to milliseconds", () => {
     const entries = buildAuditTrail([
       fixtureActivity({
         category: "policy",
-        eventType: "PolicyUpdated",
+        eventType: "PolicyChangeApplied",
         timestamp: 1_700_000_000,
       }),
     ]);
@@ -161,7 +154,7 @@ describe("buildAuditTrail (S12)", () => {
     const entries = buildAuditTrail([
       fixtureActivity({
         category: "policy",
-        eventType: "PolicyUpdated",
+        eventType: "PolicyChangeApplied",
       }),
     ]);
     const json = entries[0].toJSON();

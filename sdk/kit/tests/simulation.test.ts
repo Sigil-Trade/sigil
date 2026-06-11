@@ -10,12 +10,14 @@ import {
   parseTokenBalance,
   DEFAULT_WARNING_PERCENT,
   DEFAULT_BLOCK_PERCENT,
+  ANCHOR_ERROR_MAP,
 } from "../src/simulation.js";
 import type {
   BalanceDelta,
   DrainDetectionInput,
   DrainThresholds,
 } from "../src/simulation.js";
+import { IDL_ERROR_MAP } from "../src/errors/agent-errors.generated.js";
 
 function makeDelta(account: string, pre: bigint, post: bigint): BalanceDelta {
   return { account, preBalance: pre, postBalance: post, delta: post - pre };
@@ -389,5 +391,64 @@ describe("simulation", () => {
       expect(flags).to.include(RISK_FLAG_FULL_DRAIN);
       expect(flags).to.include(RISK_FLAG_LARGE_OUTFLOW);
     });
+  });
+});
+
+// ─── ANCHOR_ERROR_MAP ↔ IDL consistency ───────────────────────────────────
+// ANCHOR_ERROR_MAP is a curated DIAGNOSTIC subset (simulation-relevant codes
+// only). It is number-keyed and hand-maintained, so a positional renumber of
+// the on-chain enum can silently mis-key an entry (right code, wrong name) or
+// leave a stale entry for a removed error. These guards are name-anchored
+// against the generated IDL projection (`IDL_ERROR_MAP`), so they survive any
+// future renumber rather than pinning a hardcoded code list.
+describe("ANCHOR_ERROR_MAP — IDL consistency", () => {
+  it("every entry's name matches the IDL name for its code", () => {
+    const mismatches: string[] = [];
+    for (const [codeStr, entry] of Object.entries(ANCHOR_ERROR_MAP)) {
+      const code = Number(codeStr);
+      const idl = IDL_ERROR_MAP[code];
+      if (!idl) {
+        mismatches.push(`${code}: not an on-chain code (stale entry?)`);
+      } else if (idl.name !== entry.name) {
+        mismatches.push(`${code}: map=${entry.name} vs IDL=${idl.name}`);
+      }
+    }
+    expect(
+      mismatches,
+      `ANCHOR_ERROR_MAP drift (re-key by name to the new code): ${mismatches.join("; ")}`,
+    ).to.have.lengthOf(0);
+  });
+
+  it("every entry carries a non-empty suggestion", () => {
+    for (const [code, entry] of Object.entries(ANCHOR_ERROR_MAP)) {
+      expect(
+        entry.suggestion.length,
+        `${code} suggestion empty`,
+      ).to.be.greaterThan(0);
+    }
+  });
+
+  it("covers the key post-execution + ownership simulation surfaces (by name)", () => {
+    // Derive codes from the IDL BY NAME so this never rots on a renumber.
+    const byName = new Map(
+      Object.values(IDL_ERROR_MAP).map((e) => [e.name, e.code]),
+    );
+    const mustCover = [
+      "ErrMintDeltaCapExceeded",
+      "ErrAtaAuthorityChanged",
+      "ErrOutputBelowFloor",
+      "ErrDeclarationInconsistent",
+      "IxMetaCountExceeded",
+      "ErrPendingOwnershipExists",
+      "ErrIntentDigestMismatch",
+    ];
+    const missing = mustCover.filter((name) => {
+      const code = byName.get(name);
+      return code === undefined || !ANCHOR_ERROR_MAP[code];
+    });
+    expect(
+      missing,
+      `ANCHOR_ERROR_MAP missing simulation surfaces: ${missing.join(", ")}`,
+    ).to.have.lengthOf(0);
   });
 });

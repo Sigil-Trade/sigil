@@ -26,9 +26,41 @@ mod fuzz_accounts;
 
 use anchor_lang::prelude::Pubkey;
 use anchor_lang::{AccountDeserialize, InstructionData, ToAccountMetas};
-use sigil::state::{AgentVault, PolicyConfig, SessionAuthority, SpendTracker, VaultStatus};
+use sigil::state::{
+    AgentVault, PolicyConfig, SessionAuthority, SpendTracker, VaultStatus,
+    DESTINATION_MODE_RESTRICTED, PROTOCOL_MODE_ALLOWLIST,
+};
+// Call the program's OWN canonical digest functions directly (the `sigil` crate
+// is a path dependency of this harness). This guarantees byte-for-byte equality
+// with what `initialize_vault` / `validate_and_authorize` recompute on-chain —
+// re-implementing the encoding here would risk silent drift. See:
+//   - utils/policy_digest.rs::compute_policy_preview_digest (TA-19 init digest)
+//   - utils/intent_digest.rs::compute_scalar_intent_digest (AL3 scalar digest)
+use sigil::utils::intent_digest::{compute_scalar_intent_digest, ScalarIntentInput};
+use sigil::utils::policy_digest::{
+    compute_agent_set_hash, compute_policy_preview_digest, PolicyPreviewFields,
+};
 
 const MAX_DEVELOPER_FEE_RATE: u16 = 500;
+/// Fixed slot the harness warps to *before* InitializeVault so the
+/// runtime `clock.slot` (which the program binds into the TA-19 policy preview
+/// digest as `created_at_slot`) is deterministic and known to the digest we
+/// pre-compute here. Trident's `warp_to_slot` sets `clock.slot` directly and
+/// nothing else advances the slot between the warp and the tx (post-tx
+/// `update_clock` only bumps `unix_timestamp`, never the slot — verified in
+/// trident-svm 0.2.0 sysvar_tracker::refresh_with_clock), so binding this exact
+/// value makes the on-chain recompute match.
+const INIT_SLOT: u64 = 100;
+/// MIN_TIMELOCK_DURATION from the program (state/mod.rs). The init digest binds
+/// `timelock_duration`, so the harness and the on-chain recompute must agree.
+const HARNESS_TIMELOCK_DURATION: u64 = 1800;
+/// `max_slippage_bps` value the harness passes at init; bound by the digest.
+const HARNESS_MAX_SLIPPAGE_BPS: u16 = 2500;
+/// `auto_revoke_threshold` the harness passes at init. MUST be within
+/// [AUTO_REVOKE_THRESHOLD_MIN=3, AUTO_REVOKE_THRESHOLD_MAX=20] or
+/// initialize_vault.rs:143 reverts with InvalidPermissions (6036). Bound by the
+/// TA-19 digest at position 16.
+const HARNESS_AUTO_REVOKE_THRESHOLD: u8 = 3;
 // F5-H1: schema renamed slot-bound to wall-clock seconds.
 const SESSION_DURATION_SECONDS: i64 = 8;
 const TOKEN_DECIMALS_A: u8 = 6;
@@ -44,7 +76,7 @@ const INSTRUCTIONS_SYSVAR: Pubkey = Pubkey::new_from_array([
 ]);
 
 fn program_id() -> Pubkey {
-    "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL"
+    "7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK"
         .parse()
         .unwrap()
 }
@@ -80,6 +112,19 @@ impl FuzzTest {
             .fee_destination
             .insert(&mut self.trident, None);
 
+        // Create the spending `destination` BEFORE InitializeVault: an Active
+        // (non-observe_only) vault MUST have at least one protocol OR one
+        // allowed destination on its allowlist (`ActiveVaultRequiresAllowlist`,
+        // initialize_vault.rs F-11), AND that destination is bound into the
+        // TA-19 policy preview digest. The pre-fix harness created this only at
+        // Step 3 (after init) with an empty allowlist, so init reverted before
+        // any state was created. Created here, airdropped, and reused at Step 3.
+        let destination = self
+            .fuzz_accounts
+            .destination
+            .insert(&mut self.trident, None);
+        self.trident.airdrop(&destination, LAMPORTS_PER_SOL);
+
         let vault_id: u64 = self.trident.random_from_range(1..u64::MAX);
         let vault_id_bytes = vault_id.to_le_bytes();
 
@@ -114,29 +159,94 @@ impl FuzzTest {
             .trident
             .random_from_range(0..MAX_DEVELOPER_FEE_RATE as u64) as u16;
 
-        // ── Step 1: InitializeVault (V3: 11 args, includes maxSlippageBps) ──
+        // Pin the slot BEFORE InitializeVault. The program captures
+        // `created_at_slot = clock.slot` inside the handler and binds it into the
+        // TA-19 digest; pinning the slot here makes the digest we pre-compute
+        // below match the on-chain recompute byte-for-byte.
+        self.current_slot = INIT_SLOT;
+        self.trident.warp_to_slot(self.current_slot);
+
+        // ── Step 1: InitializeVault (M1: 16 args; Phase 3/5/8 + cosign + digest) ──
+        //
+        // The handler recomputes the TA-19 policy preview digest over the
+        // RESULTING policy fields and rejects on mismatch (PolicyPreviewMismatch).
+        // We pre-compute the SAME digest by calling the program's own
+        // `compute_policy_preview_digest` over the EXACT args we pass, so init
+        // SUCCEEDS and the vault / policy / tracker are actually created — which
+        // is what lets every downstream invariant's `if let Some(...)` guard hit
+        // `Some` and actually execute.
+        //
+        // Two non-digest init requirements also enforced here (both previously
+        // made init revert): protocol_mode MUST be ALLOWLIST (1), and an Active
+        // vault MUST have a non-empty allowlist (we supply one destination).
+        let allowed_destinations = vec![destination];
+        let protocols: Vec<Pubkey> = vec![];
+
+        // Recompute the canonical TA-19 digest over the resulting policy fields.
+        // Field values mirror initialize_vault.rs exactly: destination_mode is
+        // forced to RESTRICTED, session_expiry_seconds = 0, has_post_assertions
+        // = 0, the agent set is empty (deterministic empty-Vec hash),
+        // cosign_session_pubkey = default, operator_grant_delay_seconds = 0.
+        let preview_digest = compute_policy_preview_digest(&PolicyPreviewFields {
+            daily_spending_cap_usd: cap,
+            max_transaction_size_usd: cap,
+            max_slippage_bps: HARNESS_MAX_SLIPPAGE_BPS,
+            developer_fee_rate: fee_rate,
+            protocol_mode: PROTOCOL_MODE_ALLOWLIST,
+            protocols: &protocols,
+            destination_mode: DESTINATION_MODE_RESTRICTED,
+            allowed_destinations: &allowed_destinations,
+            timelock_duration: HARNESS_TIMELOCK_DURATION,
+            session_expiry_seconds: 0,
+            observe_only: false,
+            has_post_assertions: 0,
+            created_at_slot: INIT_SLOT,
+            operating_hours: 0,
+            auto_promote_grays: false,
+            auto_revoke_threshold: HARNESS_AUTO_REVOKE_THRESHOLD,
+            stable_balance_floor: 0,
+            per_recipient_daily_cap_usd: 0,
+            cosign_required: false,
+            agent_set_hash: compute_agent_set_hash(&[]),
+            cosign_session_pubkey: Pubkey::default(),
+            operator_grant_delay_seconds: 0,
+        });
 
         let data = sigil::instruction::InitializeVault {
             vault_id,
             daily_spending_cap_usd: cap,
             max_transaction_size_usd: cap,
-            protocol_mode: 0, // all protocols allowed
-            protocols: vec![],
-            protocol_caps: vec![],
+            protocol_mode: PROTOCOL_MODE_ALLOWLIST,
+            protocols: protocols.clone(),
             developer_fee_rate: fee_rate,
-            timelock_duration: 1800, // MIN_TIMELOCK_DURATION
-            allowed_destinations: vec![],
-            max_slippage_bps: 2500, // 25%
+            max_slippage_bps: HARNESS_MAX_SLIPPAGE_BPS,
+            timelock_duration: HARNESS_TIMELOCK_DURATION,
+            allowed_destinations: allowed_destinations.clone(),
+            protocol_caps: vec![],
+            observe_only: false,
+            operating_hours: 0,
+            auto_promote_grays: false,
+            auto_revoke_threshold: HARNESS_AUTO_REVOKE_THRESHOLD,
+            stable_balance_floor: 0,
+            per_recipient_daily_cap_usd: 0,
+            cosign_required: false,
+            preview_digest,
         };
 
         let (agent_spend_overlay, _) =
             Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
+        let (audit_log_success, _) =
+            Pubkey::find_program_address(&[b"audit_success", vault.as_ref()], &program_id());
+        let (audit_log_rejected, _) =
+            Pubkey::find_program_address(&[b"audit_rejected", vault.as_ref()], &program_id());
         let accounts = sigil::accounts::InitializeVault {
             owner,
             vault,
             policy,
             tracker,
             agent_spend_overlay,
+            audit_log_success,
+            audit_log_rejected,
             fee_destination: fee_dest,
             system_program: solana_sdk::system_program::ID,
         };
@@ -147,6 +257,11 @@ impl FuzzTest {
             accounts.to_account_metas(None),
         );
 
+        // InitializeVault now SUCCEEDS: the pre-computed TA-19 preview_digest
+        // matches the on-chain recompute, protocol_mode is ALLOWLIST, the
+        // allowlist is non-empty, and auto_revoke_threshold is in range. The
+        // vault / policy / tracker PDAs are created, so every downstream
+        // invariant's `if let Some(...)` guard now hits `Some` and executes.
         let _ = self
             .trident
             .process_transaction(&[ix], Some("InitializeVault"));
@@ -175,12 +290,8 @@ impl FuzzTest {
         self.create_mint(&owner, &mint_c, TOKEN_DECIMALS_C);
 
         // ── Step 3: Create ATAs for all tokens ──
-
-        let destination = self
-            .fuzz_accounts
-            .destination
-            .insert(&mut self.trident, None);
-        self.trident.airdrop(&destination, LAMPORTS_PER_SOL);
+        // `destination` was created + airdropped at the top of start() (it must
+        // exist before InitializeVault so it can seed the allowlist). Reuse it.
 
         // Token A ATAs
         self.create_token_atas(
@@ -246,10 +357,16 @@ impl FuzzTest {
         };
         let (reg_agent_spend_overlay, _) =
             Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
+        let (reg_audit_log_success, _) =
+            Pubkey::find_program_address(&[b"audit_success", vault.as_ref()], &program_id());
         let reg_accounts = sigil::accounts::RegisterAgent {
             owner,
             vault,
+            // policy local var derived earlier in this bootstrap flow.
+            policy,
             agent_spend_overlay: reg_agent_spend_overlay,
+            audit_log_success: reg_audit_log_success,
+            slot_hashes_sysvar: anchor_lang::solana_program::sysvar::slot_hashes::id(),
         };
         let reg_ix = Instruction::new_with_bytes(
             program_id(),
@@ -431,12 +548,16 @@ impl FuzzTest {
         amount: u64,
     ) {
         let dep_data = sigil::instruction::DepositFunds { amount };
+        let (dep_audit_log_success, _) =
+            Pubkey::find_program_address(&[b"audit_success", vault.as_ref()], &program_id());
         let dep_accounts = sigil::accounts::DepositFunds {
             owner: *owner,
             vault: *vault,
             mint: *mint,
             owner_token_account: *owner_ata,
             vault_token_account: *vault_ata,
+            audit_log_success: dep_audit_log_success,
+            slot_hashes_sysvar: anchor_lang::solana_program::sysvar::slot_hashes::id(),
             token_program: spl_token::ID,
             associated_token_program: spl_associated_token_account::ID,
             system_program: solana_sdk::system_program::ID,
@@ -539,10 +660,16 @@ impl FuzzTest {
         };
         let (agent_spend_overlay, _) =
             Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
+        let (policy, _) = Pubkey::find_program_address(&[b"policy", vault.as_ref()], &program_id());
+        let (audit_log_success, _) =
+            Pubkey::find_program_address(&[b"audit_success", vault.as_ref()], &program_id());
         let accounts = sigil::accounts::RegisterAgent {
             owner,
             vault,
+            policy,
             agent_spend_overlay,
+            audit_log_success,
+            slot_hashes_sysvar: anchor_lang::solana_program::sysvar::slot_hashes::id(),
         };
 
         let ix = Instruction::new_with_bytes(
@@ -578,6 +705,13 @@ impl FuzzTest {
             Pubkey::find_program_address(&[b"pending_policy", vault.as_ref()], &program_id());
 
         // Queue
+        // M1 added 8 trailing args (verified against queue_policy_update.rs handler):
+        // operating_hours, stable_balance_floor, per_recipient_daily_cap_usd,
+        // cosign_required, cosign_session_pubkey, operator_grant_delay_seconds,
+        // cosign_session, new_policy_preview_digest. The harness only fuzzes the
+        // cap fields; the rest are None / no-cosign defaults. A [0u8;32] preview
+        // digest makes the on-chain TA-19 digest re-check reject (graceful
+        // revert), exercising the queue auth + param-validation path.
         let queue_data = sigil::instruction::QueuePolicyUpdate {
             daily_spending_cap_usd: Some(new_cap),
             max_transaction_amount_usd: Some(new_cap),
@@ -591,6 +725,14 @@ impl FuzzTest {
             has_protocol_caps: None,
             protocol_caps: None,
             destination_mode: None,
+            operating_hours: None,
+            stable_balance_floor: None,
+            per_recipient_daily_cap_usd: None,
+            cosign_required: None,
+            cosign_session_pubkey: None,
+            operator_grant_delay_seconds: None,
+            cosign_session: Pubkey::default(),
+            new_policy_preview_digest: [0u8; 32],
         };
 
         let queue_accounts = sigil::accounts::QueuePolicyUpdate {
@@ -658,12 +800,16 @@ impl FuzzTest {
         let pre = self.snapshot_vault(&vault);
 
         let data = sigil::instruction::DepositFunds { amount };
+        let (audit_log_success, _) =
+            Pubkey::find_program_address(&[b"audit_success", vault.as_ref()], &program_id());
         let accounts = sigil::accounts::DepositFunds {
             owner,
             vault,
             mint,
             owner_token_account: owner_ata,
             vault_token_account: vault_ata,
+            audit_log_success,
+            slot_hashes_sysvar: anchor_lang::solana_program::sysvar::slot_hashes::id(),
             token_program: spl_token::ID,
             associated_token_program: spl_associated_token_account::ID,
             system_program: solana_sdk::system_program::ID,
@@ -719,11 +865,35 @@ impl FuzzTest {
         let pre_vault = self.snapshot_vault(&vault);
         let pre_policy = self.snapshot_policy(&policy_addr);
 
+        let target_protocol = Pubkey::default();
+        // Compute the REAL AL3 scalar intent digest by calling the program's own
+        // `compute_scalar_intent_digest` over the exact scalars this ix carries
+        // (vault, agent, token_mint, amount, target_protocol). The network byte
+        // is derived inside the fn from the program's build feature (devnet by
+        // default), matching the on-chain recompute. A [0u8;32] here would
+        // short-circuit at `ErrIntentDigestMismatch` (validate_and_authorize.rs
+        // ~L181) before any policy/tracker logic ran; the real digest clears
+        // that gate so the downstream authorization path is actually exercised.
+        let expected_intent_digest = compute_scalar_intent_digest(&ScalarIntentInput {
+            vault: &vault,
+            agent: &agent,
+            token_mint: &mint,
+            amount,
+            target_protocol: &target_protocol,
+        });
+
         let data = sigil::instruction::ValidateAndAuthorize {
             token_mint: mint,
             amount,
-            target_protocol: Pubkey::default(),
+            target_protocol,
             expected_policy_version: 0, // Fresh vault, no policy changes applied
+            // M1 added (verified against validate_and_authorize.rs handler):
+            //   expected_nonce — AC-10 durable-nonce replay defense; the session
+            //     is `init` so a fresh SessionAuthority has nonce 0; callers pass 0.
+            //   expected_intent_digest — AL3 scalar intent digest (D-1/D-6),
+            //     now the REAL canonical digest so the digest-verify gate passes.
+            expected_nonce: 0,
+            expected_intent_digest,
         };
 
         let (agent_spend_overlay, _) =
@@ -811,6 +981,10 @@ impl FuzzTest {
         let data = sigil::instruction::FinalizeSession {};
         let (agent_spend_overlay, _) =
             Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
+        let (audit_log_success, _) =
+            Pubkey::find_program_address(&[b"audit_success", vault.as_ref()], &program_id());
+        let (audit_log_rejected, _) =
+            Pubkey::find_program_address(&[b"audit_rejected", vault.as_ref()], &program_id());
         let accounts = sigil::accounts::FinalizeSession {
             payer: agent,
             vault,
@@ -824,6 +998,9 @@ impl FuzzTest {
             token_program: spl_token::ID,
             system_program: solana_sdk::system_program::ID,
             instructions_sysvar: solana_sdk::sysvar::instructions::ID,
+            audit_log_success,
+            audit_log_rejected,
+            slot_hashes_sysvar: anchor_lang::solana_program::sysvar::slot_hashes::id(),
         };
 
         let ix = Instruction::new_with_bytes(
@@ -869,12 +1046,18 @@ impl FuzzTest {
         let pre = self.snapshot_vault(&vault);
 
         let data = sigil::instruction::WithdrawFunds { amount };
+        let (policy, _) = Pubkey::find_program_address(&[b"policy", vault.as_ref()], &program_id());
+        let (audit_log_success, _) =
+            Pubkey::find_program_address(&[b"audit_success", vault.as_ref()], &program_id());
         let accounts = sigil::accounts::WithdrawFunds {
             owner,
             vault,
+            policy,
             mint,
             vault_token_account: vault_ata,
             owner_token_account: owner_ata,
+            audit_log_success,
+            slot_hashes_sysvar: anchor_lang::solana_program::sysvar::slot_hashes::id(),
             token_program: spl_token::ID,
         };
 
@@ -979,10 +1162,16 @@ impl FuzzTest {
         };
         let (agent_spend_overlay, _) =
             Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
+        let (policy, _) = Pubkey::find_program_address(&[b"policy", vault.as_ref()], &program_id());
+        let (audit_log_success, _) =
+            Pubkey::find_program_address(&[b"audit_success", vault.as_ref()], &program_id());
         let accounts = sigil::accounts::RevokeAgent {
             owner,
             vault,
+            policy,
             agent_spend_overlay,
+            audit_log_success,
+            slot_hashes_sysvar: anchor_lang::solana_program::sysvar::slot_hashes::id(),
         };
 
         let ix = Instruction::new_with_bytes(
@@ -1013,7 +1202,16 @@ impl FuzzTest {
             new_agent: None,
             new_agent_capability: None,
         };
-        let accounts = sigil::accounts::ReactivateVault { owner, vault };
+        let (policy, _) = Pubkey::find_program_address(&[b"policy", vault.as_ref()], &program_id());
+        let (audit_log_success, _) =
+            Pubkey::find_program_address(&[b"audit_success", vault.as_ref()], &program_id());
+        let accounts = sigil::accounts::ReactivateVault {
+            owner,
+            vault,
+            policy,
+            audit_log_success,
+            slot_hashes_sysvar: anchor_lang::solana_program::sysvar::slot_hashes::id(),
+        };
 
         let ix = Instruction::new_with_bytes(
             program_id(),
@@ -1052,6 +1250,11 @@ impl FuzzTest {
 
         let pre = self.snapshot_vault(&vault);
 
+        // M1 added 8 trailing args (verified against queue_policy_update.rs handler):
+        // operating_hours, stable_balance_floor, per_recipient_daily_cap_usd,
+        // cosign_required, cosign_session_pubkey, operator_grant_delay_seconds,
+        // cosign_session, new_policy_preview_digest. Harness fuzzes only the cap;
+        // the rest are None / no-cosign defaults (see queue_and_apply_policy note).
         let data = sigil::instruction::QueuePolicyUpdate {
             daily_spending_cap_usd: Some(new_cap),
             max_transaction_amount_usd: None,
@@ -1065,6 +1268,14 @@ impl FuzzTest {
             has_protocol_caps: None,
             protocol_caps: None,
             destination_mode: None,
+            operating_hours: None,
+            stable_balance_floor: None,
+            per_recipient_daily_cap_usd: None,
+            cosign_required: None,
+            cosign_session_pubkey: None,
+            operator_grant_delay_seconds: None,
+            cosign_session: Pubkey::default(),
+            new_policy_preview_digest: [0u8; 32],
         };
 
         let accounts = sigil::accounts::QueuePolicyUpdate {
@@ -1103,11 +1314,15 @@ impl FuzzTest {
         let pre = self.snapshot_vault(&vault);
 
         let data = sigil::instruction::ApplyPendingPolicy {};
+        let (audit_log_success, _) =
+            Pubkey::find_program_address(&[b"audit_success", vault.as_ref()], &program_id());
         let accounts = sigil::accounts::ApplyPendingPolicy {
             owner,
             vault,
             policy,
             pending_policy: pending,
+            audit_log_success,
+            slot_hashes_sysvar: anchor_lang::solana_program::sysvar::slot_hashes::id(),
         };
 
         let ix = Instruction::new_with_bytes(
@@ -1176,12 +1391,20 @@ impl FuzzTest {
         let data = sigil::instruction::CloseVault {};
         let (agent_spend_overlay, _) =
             Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
+        let (audit_log_success, _) =
+            Pubkey::find_program_address(&[b"audit_success", vault.as_ref()], &program_id());
+        let (audit_log_rejected, _) =
+            Pubkey::find_program_address(&[b"audit_rejected", vault.as_ref()], &program_id());
+        // CloseVault closes both audit buffers (rent → owner); no slot_hashes
+        // sysvar on this ix (no audit entry appended on close).
         let accounts = sigil::accounts::CloseVault {
             owner,
             vault,
             policy,
             tracker,
             agent_spend_overlay,
+            audit_log_success,
+            audit_log_rejected,
             system_program: solana_sdk::system_program::ID,
         };
 
@@ -1242,6 +1465,10 @@ impl FuzzTest {
         let data = sigil::instruction::FinalizeSession {};
         let (agent_spend_overlay, _) =
             Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
+        let (audit_log_success, _) =
+            Pubkey::find_program_address(&[b"audit_success", vault.as_ref()], &program_id());
+        let (audit_log_rejected, _) =
+            Pubkey::find_program_address(&[b"audit_rejected", vault.as_ref()], &program_id());
         let accounts = sigil::accounts::FinalizeSession {
             payer: agent,
             vault,
@@ -1255,6 +1482,9 @@ impl FuzzTest {
             token_program: spl_token::ID,
             system_program: solana_sdk::system_program::ID,
             instructions_sysvar: solana_sdk::sysvar::instructions::ID,
+            audit_log_success,
+            audit_log_rejected,
+            slot_hashes_sysvar: anchor_lang::solana_program::sysvar::slot_hashes::id(),
         };
 
         let ix = Instruction::new_with_bytes(
@@ -1301,6 +1531,10 @@ impl FuzzTest {
         let data = sigil::instruction::FinalizeSession {};
         let (agent_spend_overlay, _) =
             Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
+        let (audit_log_success, _) =
+            Pubkey::find_program_address(&[b"audit_success", vault.as_ref()], &program_id());
+        let (audit_log_rejected, _) =
+            Pubkey::find_program_address(&[b"audit_rejected", vault.as_ref()], &program_id());
         let accounts = sigil::accounts::FinalizeSession {
             payer: agent,
             vault,
@@ -1314,6 +1548,9 @@ impl FuzzTest {
             token_program: spl_token::ID,
             system_program: solana_sdk::system_program::ID,
             instructions_sysvar: solana_sdk::sysvar::instructions::ID,
+            audit_log_success,
+            audit_log_rejected,
+            slot_hashes_sysvar: anchor_lang::solana_program::sysvar::slot_hashes::id(),
         };
 
         let ix = Instruction::new_with_bytes(

@@ -9,14 +9,24 @@
 # The deploy-devnet.yml workflow handles: build → deploy → test (chained).
 # This prevents tests from running against a stale program binary.
 #
-# 142 tests across 9 files. Costs SOL — never runs on PRs.
+# 140 tests across 9 files. Costs SOL — never runs on PRs.
+#
+# RUNTIME: ~110 min. F-Q6 forbids instant OPERATOR grants on single-key
+# vaults; devnet has no clock cheatcodes, so each file pays one REAL 600s
+# queue→apply wait in its before() (grants are batched per file). 7 of the
+# 8 files carry a wait. This is the cost of testing the genuine on-chain
+# timelock path — do not "optimize" it away by weakening the program.
 
 name: Devnet Tests
 
 on:
   workflow_call: # Called by deploy-devnet.yml after successful deploy
-  # schedule:                          # DISABLED 2026-04-03 — see deploy-devnet.yml Job 3 comment
-  #   - cron: "0 2 * * *"             # Nightly runs hit same UnauthorizedTokenTransfer failure
+  # Re-enabled 2026-06-10: fixture sweep complete — V2 sandwiches route
+  # through the deployed mock-defi fixture program (2heRcf...), OPERATOR
+  # seating uses the real queue→600s→apply path, and initialize_vault binds
+  # the live execution slot. See tests/helpers/devnet-setup.ts.
+  schedule:
+    - cron: "0 2 * * *"
   workflow_dispatch:
     inputs:
       test-filter:
@@ -24,9 +34,14 @@ on:
         required: false
         default: "all"
 
-# Prevent concurrent devnet runs (shared wallet)
+# Serialize against EVERY devnet job that touches the shared funded wallet —
+# the nightly cron here AND the push-triggered deploy in deploy-devnet.yml
+# (which redeploys sigil.so + spends the same DEVNET_WALLET_KEYPAIR). Both
+# workflows MUST use this identical group string, else GitHub won't queue a
+# deploy against an in-flight nightly and they race the wallet nonce / collide
+# on the deterministic per-file vault IDs.
 concurrency:
-  group: devnet-tests
+  group: devnet-shared-wallet
   cancel-in-progress: false
 
 # M6: Least-privilege — only read repo contents
@@ -36,7 +51,9 @@ permissions:
 jobs:
   devnet-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # ~110 min runtime: 7 files × one real 600s OPERATOR-seating wait each
+    # (F-Q6 single-key floor) + setup/exec. Margin for devnet RPC weather.
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -51,11 +68,12 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # C-3 fix (adversarial review 2026-04-20): devnet tests import
-      # @usesigil/kit/testing for strict error-assertion helpers per
-      # the council decision. That subpath resolves to sdk/kit/dist/
-      # which only exists AFTER build. Required before ts-mocha below.
-      - name: Build kit SDK (required for error-helper imports)
+      # The devnet-*.ts suites import strict error helpers from the local
+      # tests/helpers/strict-errors mirror (NOT @usesigil/kit/testing — that
+      # ESM subpath can't be require()'d under CJS ts-mocha). The kit build is
+      # still required for the separate Kit SDK dashboard-integration step
+      # below, whose imports resolve to sdk/kit/dist/ (built here).
+      - name: Build kit SDK (required for the Kit SDK devnet step below)
         run: pnpm --filter @usesigil/kit run build
 
       - name: Install Solana CLI
@@ -106,6 +124,23 @@ jobs:
           echo "ANCHOR_WALLET=$HOME/.config/solana/id.json" >> "$GITHUB_ENV"
           echo "ANCHOR_PROVIDER_URL=${{ secrets.DEVNET_RPC_URL }}" >> "$GITHUB_ENV"
 
+      # Preflight: the spending suites route every V2 sandwich through the
+      # mock-defi fixture program (open_position / drain_via_delegation). It is
+      # deployed MANUALLY to devnet (not built in CI; keypair not in-repo), so
+      # fail fast with an actionable message rather than letting 7 of 8 files
+      # revert deep in a ~110-min run if the fixture is ever closed/reset.
+      - name: Verify mock-defi fixture is deployed
+        run: |
+          MOCK_DEFI=2heRcfqPUcSiWpH1rAp2Zf4c4ZxfKmKaaVbJWGRa7Qm6
+          if ! solana program show "$MOCK_DEFI" --url "${{ secrets.DEVNET_RPC_URL }}" > /dev/null 2>&1; then
+            echo "::error::mock-defi fixture $MOCK_DEFI is not deployed on devnet."
+            echo "The devnet spending suites require it. Redeploy from tests/fixtures/mock-defi.so:"
+            echo "  solana program deploy tests/fixtures/mock-defi.so --program-id <mock-defi keypair> -u devnet"
+            echo "(rebuild the .so first if its declare_id changed: scripts/rebuild-mock-defi.sh)"
+            exit 1
+          fi
+          echo "mock-defi fixture present: $MOCK_DEFI"
+
       - name: Run devnet tests
         env:
           TEST_FILTER: ${{ github.event.inputs.test-filter || 'all' }}
@@ -113,20 +148,22 @@ jobs:
           # conflicts with ts-node's CJS loader for .ts imports. Disable it.
           NODE_OPTIONS: "--no-experimental-strip-types"
         run: |
+          # -t 1800000 (30 min): the mocha timeout also bounds before() hooks,
+          # which carry vault-pool setup + ONE real 600s OPERATOR-seating wait
+          # (routing's 12-vault pool runs ~17 min end to end).
           FILTER="$TEST_FILTER"
           if [ "$FILTER" != "all" ] && [ -f "tests/$FILTER" ]; then
             echo "Running single test file: tests/$FILTER"
-            npx ts-mocha -p ./tsconfig.json -t 600000 "tests/$FILTER"
+            npx ts-mocha -p ./tsconfig.json -t 1800000 "tests/$FILTER"
           else
-            echo "Running all devnet tests (142 tests, 9 files)"
-            npx ts-mocha -p ./tsconfig.json -t 600000 \
+            echo "Running all devnet tests (8 files)"
+            npx ts-mocha -p ./tsconfig.json -t 1800000 \
               tests/devnet-smoke.ts \
               tests/devnet-sessions.ts \
               tests/devnet-fees.ts \
               tests/devnet-security.ts \
               tests/devnet-spending.ts \
               tests/devnet-transfers.ts \
-              tests/devnet-positions.ts \
               tests/devnet-timelock.ts \
               tests/devnet-routing.ts
           fi

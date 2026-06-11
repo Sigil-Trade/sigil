@@ -50,7 +50,6 @@ function fixtureActivity(
     tokenMint: null,
     tokenSymbol: null,
     isSpending: true,
-    actionType: null,
     protocol: JUPITER,
     protocolName: "Jupiter",
     success: true,

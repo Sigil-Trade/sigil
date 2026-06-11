@@ -252,7 +252,13 @@ Drift uses a complex account model that must be accounted for in transaction com
 
 ### Instruction Mapping
 
-| Sigil Action         | Drift Instruction                                 | ActionType                               |
+> **V2 note:** Sigil's `ActionType` enum was demolished in Phase 1 (`REVAMP_PLAN §2.1`).
+> The "ActionType" column below is preserved as protocol-side semantic context only —
+> it does not correspond to any current on-chain Sigil field. Routing is now
+> determined exclusively by `InstructionConstraints` allowlist + post-execution
+> assertions (R-1..R-4 Maestro borrows).
+
+| Sigil Action         | Drift Instruction                                 | Protocol semantic (informational)        |
 | -------------------- | ------------------------------------------------- | ---------------------------------------- |
 | Open perp position   | `place_perp_order`                                | `OpenPosition`                           |
 | Close perp position  | `cancel_order` + `place_perp_order` (reduce-only) | `ClosePosition`                          |
@@ -286,24 +292,34 @@ Pre-flight validation checks policy constraints client-side BEFORE composing and
 
 ### Pattern
 
-```typescript
-// Always validate before composing
-const check = await client.validateAction({
-  vault: vaultPubkey,
-  amount: new BN(1_000_000),
-  tokenMint: USDC_MINT,
-  protocol: JUPITER_PROGRAM_ID,
-  actionType: ActionType.Swap,
-});
+> **V2 note:** The `client.validateAction({ actionType: ... })` API shown below
+> was V1. Phase 1 demolished `ActionType` and `validateAction` was replaced by
+> the dashboard-side `previewSeal()` / `validateConstraints()` pair plus
+> on-chain `InstructionConstraints` enforcement. The example below is preserved
+> for protocol-integration reference but does not type-check against current
+> `@usesigil/kit`.
 
-if (!check.allowed) {
-  // Handle denial: check.reason, check.details
-  // DO NOT compose and send — it will fail on-chain
+```typescript
+// V1 historical example (does NOT compile against current SDK):
+// const check = await client.validateAction({
+//   vault: vaultPubkey,
+//   amount: new BN(1_000_000),
+//   tokenMint: USDC_MINT,
+//   protocol: JUPITER_PROGRAM_ID,
+//   actionType: ActionType.Swap,
+// });
+//
+// V2 equivalent:
+const preview = await previewSeal({
+  vault: vaultPubkey,
+  instructions: [defiIx],  // the actual DeFi instruction
+  agent: agentPubkey,
+});
+if (!preview.allowed) {
+  // Handle denial: preview.violations[]
   return;
 }
-
-// Safe to compose and send
-const tx = await client.composeSwap({ ... });
+// Safe to compose: const tx = await seal({ ... })
 ```
 
 ### Validation Result Type
@@ -481,7 +497,7 @@ const res = await shieldedFetch(wallet, url, { connection, dryRun: true });
 
 ## Emergency Close Pattern (Phase L — REMOVED, REDESIGN PLANNED)
 
-> **Note:** The original EmergencyCloseAuth PDA was deliberately removed because it introduced an unintentional attack vector. A safer redesign is planned for a future phase. For now, risk-reducing actions (ClosePosition, DecreasePosition, RemoveCollateral, CloseAndSwapPosition) are inherently cap-exempt via `is_spending()` returning false — they never count against the spending cap, so agents can always close positions regardless of cap usage.
+> **Note:** The original EmergencyCloseAuth PDA was deliberately removed because it introduced an unintentional attack vector. A safer redesign is planned for a future phase. For now, risk-reducing actions (ClosePosition, DecreasePosition, RemoveCollateral, CloseAndSwapPosition) are inherently cap-exempt because they invoke `validate_and_authorize` with `amount == 0`, which classifies them as non-spending and skips the spending-cap path. Agents can always close positions regardless of cap usage.
 
 ---
 
@@ -489,16 +505,19 @@ const res = await shieldedFetch(wallet, url, { connection, dryRun: true });
 
 ### Order Types
 
-| MCP Tool                      | Flash Trade Operation | ActionType         | Spending?                   |
-| ----------------------------- | --------------------- | ------------------ | --------------------------- |
-| `shield_open_position`        | Market order open     | `OpenPosition`     | Yes (collateral)            |
-| `shield_close_position`       | Market order close    | `ClosePosition`    | No                          |
-| `shield_place_limit_order`    | Limit order           | `OpenPosition`     | Yes (reserve)               |
-| `shield_cancel_limit_order`   | Cancel limit          | `ClosePosition`    | No                          |
-| `shield_place_trigger_order`  | TP/SL order           | —                  | No (uses existing position) |
-| `shield_cancel_trigger_order` | Cancel TP/SL          | —                  | No                          |
-| `shield_add_collateral`       | Add collateral        | `IncreasePosition` | Yes                         |
-| `shield_remove_collateral`    | Remove collateral     | `DecreasePosition` | No                          |
+> **V2 note:** Sigil's `ActionType` enum was demolished in Phase 1. The
+> "ActionType" column is preserved as protocol-side reference only.
+
+| MCP Tool                      | Flash Trade Operation | Protocol semantic (informational) | Spending?                   |
+| ----------------------------- | --------------------- | --------------------------------- | --------------------------- |
+| `shield_open_position`        | Market order open     | `OpenPosition`                    | Yes (collateral)            |
+| `shield_close_position`       | Market order close    | `ClosePosition`                   | No                          |
+| `shield_place_limit_order`    | Limit order           | `OpenPosition`                    | Yes (reserve)               |
+| `shield_cancel_limit_order`   | Cancel limit          | `ClosePosition`                   | No                          |
+| `shield_place_trigger_order`  | TP/SL order           | —                                 | No (uses existing position) |
+| `shield_cancel_trigger_order` | Cancel TP/SL          | —                                 | No                          |
+| `shield_add_collateral`       | Add collateral        | `IncreasePosition`                | Yes                         |
+| `shield_remove_collateral`    | Remove collateral     | `DecreasePosition`                | No                          |
 
 ### Rules
 

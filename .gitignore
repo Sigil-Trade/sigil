@@ -61,7 +61,6 @@ scripts/extend-sigil-alt.ts
 **/Plans
 programs/sigil/archived-oracle
 tests/archived-oracle
-skills-lock.json
 
 # Working documents (not production code)
 AUDIT-READINESS-PLAN.md

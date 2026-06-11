@@ -3,11 +3,11 @@
 # Runs on every push to main and on pull requests.
 # Eight jobs (1 detection + 6 parallel + 1 gate):
 #   0. changes                — Detect which file groups changed (package-level path filtering)
-#   1. build-lint-test        — TypeScript builds, Prettier, 1911 TS tests (conditional: any-ts or push)
+#   1. build-lint-test        — TypeScript builds, Prettier, 1912 TS tests (conditional: any-ts or push)
 #   2. rust-checks            — cargo fmt + cargo clippy (conditional: rust changes or push)
-#   3. on-chain-tests         — Anchor build + LiteSVM 577 tests (conditional: rust changes or push)
+#   3. on-chain-tests         — Anchor build + LiteSVM 523 tests (conditional: rust changes or push)
 #  3b. build-verification     — Feature flag safety net (conditional: rust changes or push)
-#  3c. surfpool-integration   — Surfpool integration tests, 59 tests (conditional: rust changes or push)
+#  3c. surfpool-integration   — Surfpool integration tests, 49 tests (conditional: rust changes or push)
 #   4. security-scan          — Sec3 X-Ray static analysis (always, BLOCKING)
 #   5. formal-verification    — Certora Solana Prover (conditional: certora changes, BLOCKING)
 #   6. fuzz-test              — Trident fuzz 1K iterations (conditional: rust changes or push, BLOCKING)
@@ -23,7 +23,7 @@
 #   sdk/custody → Custody adapter tests (96 tests)
 #   packages/plugins → Plugin tests (14 tests)
 #
-# Total: ~2,689 tests across 20 suites (1911 TS + 577 on-chain + 59 Surfpool + 142 devnet)
+# Total: ~2,624 tests across 20 suites (1912 TS + 523 on-chain + 49 Surfpool + 140 devnet)
 # All security checks are BLOCKING — zero tolerance for known issues.
 
 name: CI
@@ -47,6 +47,10 @@ env:
   SOLANA_VERSION: "v2.1.14"
   ANCHOR_VERSION: "0.32.1"
   NODE_VERSION: "24"
+  # Pin surfpool: v1.3.x changed transaction handling ("Unknown action
+  # 'undefined'") and broke the integration suite; v1.2.1 is main's last-green
+  # version. Unpinned `curl | bash` (latest) is non-deterministic for a gate.
+  SURFPOOL_VERSION: "v1.2.1"
 
 jobs:
   # ──────────────────────────────────────────────────────────────
@@ -93,7 +97,7 @@ jobs:
               - 'tsconfig*.json'
 
   # ──────────────────────────────────────────────────────────────
-  # Job 1: TypeScript build, lint, and tests (4 suites, 1911 tests)
+  # Job 1: TypeScript build, lint, and tests (4 suites, 1912 tests)
   # ──────────────────────────────────────────────────────────────
   build-lint-test:
     name: Build, Lint & TS Tests
@@ -207,7 +211,21 @@ jobs:
       - name: Verify error-code drift (IDL to TypeScript map)
         run: pnpm run verify:error-drift
 
-      - name: Kit SDK tests (1784 tests)
+      # Phase 9 Batch L (ISC-145, 146): assert security-critical kit
+      # dependencies (@noble/hashes, codama renderers) stay pinned to
+      # the expected major versions in pnpm-lock.yaml. A silent drift
+      # here (e.g. @noble/hashes 1.x → 2.x via a transitive bump)
+      # would invalidate the cross-impl byte-equality guarantees for
+      # AL3 intent-digest and TA-19 policy-preview-digest. Runs BEFORE
+      # the test step so a lockfile drift fails the gate even if some
+      # unrelated test would also fail.
+      - name: Verify lockfile pins (security-critical deps)
+        if: >-
+          needs.changes.outputs.sdk-kit == 'true' ||
+          github.event_name == 'push'
+        run: pnpm -C sdk/kit run verify-lockfile-pins
+
+      - name: Kit SDK tests (1785 tests)
         if: >-
           needs.changes.outputs.sdk-kit == 'true' ||
           github.event_name == 'push'
@@ -336,11 +354,24 @@ jobs:
             -A clippy::too_many_arguments \
             -A ambiguous_glob_reexports
 
+      - name: Run Rust unit tests (cargo test --lib)
+        # 166 in-program #[test] unit tests. Previously only exercised by the
+        # now-retired revamp-ci.yml; gated here so they protect main.
+        run: cargo test --manifest-path programs/sigil/Cargo.toml --lib
+
   # ──────────────────────────────────────────────────────────────
   # Job 3: On-chain tests (LiteSVM in-process, no validator)
   # ──────────────────────────────────────────────────────────────
-  on-chain-tests:
-    name: On-Chain Tests (LiteSVM)
+  # ──────────────────────────────────────────────────────────────
+  # Job 3a: Build program (.so) — x86_64
+  #
+  # Agave/Solana publishes no aarch64-unknown-linux-gnu SBF toolchain, so the
+  # program MUST be compiled on x64. The resulting BPF .so is host-arch-
+  # independent and is consumed by the arm64 on-chain-tests job below (which
+  # runs the litesvm suite on the arm64 binding to avoid LiteSVM/litesvm#171).
+  # ──────────────────────────────────────────────────────────────
+  build-program:
+    name: Build Program (.so)
     needs: changes
     if: needs.changes.outputs.rust == 'true' || github.event_name == 'push'
     runs-on: ubuntu-latest
@@ -361,13 +392,33 @@ jobs:
             ~/.cargo/git
             ~/.cargo/bin
             target
-          key: anchor-${{ runner.os }}-${{ hashFiles('programs/sigil/Cargo.lock') }}
-          restore-keys: anchor-${{ runner.os }}-
+          key: anchor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('programs/sigil/Cargo.lock') }}
+          restore-keys: anchor-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Cache Solana toolchain
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.local/share/solana
+          key: solana-${{ runner.os }}-${{ runner.arch }}-${{ env.SOLANA_VERSION }}
 
       - name: Install Solana CLI
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          sh -c "$(curl -sSfL https://release.anza.xyz/${{ env.SOLANA_VERSION }}/install)"
-          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+          # Idempotent (restored from cache when SOLANA_VERSION is unchanged) +
+          # authenticated + retried with backoff, so a transient GitHub rate
+          # limit on the Anza installer's release fetch on a cold cache cannot
+          # red the gate.
+          SOLANA_BIN="$HOME/.local/share/solana/install/active_release/bin"
+          if [ ! -x "$SOLANA_BIN/solana" ]; then
+            for attempt in 1 2 3 4 5; do
+              sh -c "$(curl -sSfL https://release.anza.xyz/${{ env.SOLANA_VERSION }}/install)" && break
+              echo "Solana install attempt $attempt failed; retrying in $((attempt * 15))s..."
+              sleep $((attempt * 15))
+            done
+          fi
+          echo "$SOLANA_BIN" >> "$GITHUB_PATH"
 
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y pkg-config libudev-dev
@@ -379,35 +430,11 @@ jobs:
             cargo install --git https://github.com/coral-xyz/anchor --tag v${{ env.ANCHOR_VERSION }} anchor-cli --locked --force
           fi
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@91ab88e2619ed1f46221f0ba42d1492c02baf788 # v6.0.6
-        with:
-          version: 10.7.1
-
-      - name: Install Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: "pnpm"
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
       - name: Build program
         run: anchor build --no-idl
 
       - name: Restore committed IDL (cache may contain stale version)
         run: git checkout -- target/idl/ target/types/
-
-      - name: Run on-chain tests (LiteSVM, in-process)
-        run: |
-          npx ts-mocha -p ./tsconfig.json -t 300000 \
-            tests/sigil.ts \
-            tests/jupiter-integration.ts \
-            tests/jupiter-lend-integration.ts \
-            tests/flash-trade-integration.ts \
-            tests/security-exploits.ts \
-            tests/cu-budget.ts
 
       - name: Check for IDL drift
         run: |
@@ -453,6 +480,86 @@ jobs:
             echo "IDL generation skipped (nightly toolchain not available or build failed). Not blocking."
           fi
 
+      - name: Upload program artifact (.so)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sigil-program-so
+          path: target/deploy/sigil.so
+          if-no-files-found: error
+          retention-days: 1
+
+  # ──────────────────────────────────────────────────────────────
+  # Job 3: On-chain tests (LiteSVM in-process) — arm64
+  #
+  # litesvm's x86_64-linux-gnu NAPI binding corrupts the V8/JSC heap under our
+  # full suite's cumulative VM operations (LiteSVM/litesvm#171 — reproduced
+  # under BOTH Node and Bun on x64). The arm64 binding is unaffected. The .so
+  # is built on x64 (build-program) and downloaded here; BPF is host-arch-
+  # independent, so program behavior is identical. No Rust/Solana/Anchor here.
+  # ──────────────────────────────────────────────────────────────
+  on-chain-tests:
+    name: On-Chain Tests (LiteSVM)
+    needs: [changes, build-program]
+    if: needs.changes.outputs.rust == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@91ab88e2619ed1f46221f0ba42d1492c02baf788 # v6.0.6
+        with:
+          version: 10.7.1
+
+      - name: Install Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build SDK packages (tests import @usesigil/kit dist)
+        run: pnpm -r run build
+
+      - name: Download program artifact (.so built on x64)
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: sigil-program-so
+          path: target/deploy/
+
+      - name: Run on-chain tests (LiteSVM, in-process)
+        run: |
+          # Runs on arm64 to avoid the litesvm x86_64 NAPI heap corruption
+          # (LiteSVM/litesvm#171), reproduced on x64 under both Node and Bun.
+          # The .so was built on x64 (build-program) and downloaded above.
+          npx ts-mocha -p ./tsconfig.json -t 300000 \
+            tests/sigil.ts \
+            tests/jupiter-integration.ts \
+            tests/jupiter-lend-integration.ts \
+            tests/flash-trade-integration.ts \
+            tests/security-exploits.ts \
+            tests/cu-budget.ts \
+            tests/analytics-counters.ts \
+            tests/missing-coverage.ts \
+            tests/policy-digest-invariant.ts \
+            tests/post-assertions-r-variants.ts \
+            tests/post-assertions-sandwich.ts \
+            tests/sandwich-integration.ts \
+            tests/sysvar-scan-bound.ts \
+            tests/toctou-security.ts \
+            tests/audit-log.ts \
+            tests/audit-log-burst.ts \
+            tests/audit-log-coverage.ts \
+            tests/ownership-transfer.ts \
+            tests/ownership-transfer-multisig.ts \
+            tests/f10-timelocked-admin.ts \
+            tests/fq6-operator-grant-tiers.ts \
+            tests/intent-digest-parity.ts \
+            tests/m1-03-frozen-gate.ts \
+            tests/pen-cross-1-absorption.ts
+
   # ──────────────────────────────────────────────────────────────
   # Job 3b: Build verification (feature flag safety net)
   #
@@ -486,10 +593,31 @@ jobs:
           key: build-verify-${{ runner.os }}-${{ hashFiles('programs/sigil/Cargo.lock') }}
           restore-keys: build-verify-${{ runner.os }}-
 
+      - name: Cache Solana toolchain
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.local/share/solana
+          key: solana-${{ runner.os }}-${{ runner.arch }}-${{ env.SOLANA_VERSION }}
+
       - name: Install Solana CLI
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          sh -c "$(curl -sSfL https://release.anza.xyz/${{ env.SOLANA_VERSION }}/install)"
-          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+          # Idempotent (restored from cache when SOLANA_VERSION is unchanged) +
+          # authenticated + retried with backoff, so a transient GitHub rate
+          # limit on the Anza installer's release fetch on a cold cache cannot
+          # red the gate. This was the cause of the intermittent
+          # "On-Chain Tests (LiteSVM)" failure.
+          SOLANA_BIN="$HOME/.local/share/solana/install/active_release/bin"
+          if [ ! -x "$SOLANA_BIN/solana" ]; then
+            for attempt in 1 2 3 4 5; do
+              sh -c "$(curl -sSfL https://release.anza.xyz/${{ env.SOLANA_VERSION }}/install)" && break
+              echo "Solana install attempt $attempt failed; retrying in $((attempt * 15))s..."
+              sleep $((attempt * 15))
+            done
+          fi
+          echo "$SOLANA_BIN" >> "$GITHUB_PATH"
 
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y pkg-config libudev-dev
@@ -583,13 +711,34 @@ jobs:
             ~/.cargo/bin
             ~/.local/bin
             target
-          key: surfpool-anchor-${{ runner.os }}-${{ hashFiles('programs/sigil/Cargo.lock') }}
-          restore-keys: surfpool-anchor-${{ runner.os }}-
+          key: surfpool-anchor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('programs/sigil/Cargo.lock') }}
+          restore-keys: surfpool-anchor-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Cache Solana toolchain
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.local/share/solana
+          key: solana-${{ runner.os }}-${{ runner.arch }}-${{ env.SOLANA_VERSION }}
 
       - name: Install Solana CLI
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          sh -c "$(curl -sSfL https://release.anza.xyz/${{ env.SOLANA_VERSION }}/install)"
-          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+          # Idempotent (restored from cache when SOLANA_VERSION is unchanged) +
+          # authenticated + retried with backoff, so a transient GitHub rate
+          # limit on the Anza installer's release fetch on a cold cache cannot
+          # red the gate. This was the cause of the intermittent
+          # "On-Chain Tests (LiteSVM)" failure.
+          SOLANA_BIN="$HOME/.local/share/solana/install/active_release/bin"
+          if [ ! -x "$SOLANA_BIN/solana" ]; then
+            for attempt in 1 2 3 4 5; do
+              sh -c "$(curl -sSfL https://release.anza.xyz/${{ env.SOLANA_VERSION }}/install)" && break
+              echo "Solana install attempt $attempt failed; retrying in $((attempt * 15))s..."
+              sleep $((attempt * 15))
+            done
+          fi
+          echo "$SOLANA_BIN" >> "$GITHUB_PATH"
 
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y pkg-config libudev-dev
@@ -600,12 +749,19 @@ jobs:
             cargo install --git https://github.com/coral-xyz/anchor --tag v${{ env.ANCHOR_VERSION }} anchor-cli --locked --force
           fi
 
-      - name: Install Surfpool CLI
+      - name: Install Surfpool CLI (pinned)
         run: |
+          # Pinned to SURFPOOL_VERSION (see env block) instead of the unpinned
+          # `curl https://run.surfpool.run | bash` (latest), which pulled v1.3.1
+          # and broke the suite. Download the exact release tarball.
           if ! command -v surfpool &> /dev/null; then
-            curl -sL https://run.surfpool.run/ | bash
-            echo "$HOME/.local/bin" >> $GITHUB_PATH
+            mkdir -p "$HOME/.local/bin"
+            curl -sSfL "https://github.com/solana-foundation/surfpool/releases/download/${{ env.SURFPOOL_VERSION }}/surfpool-linux-x64.tar.gz" \
+              | tar -xz -C "$HOME/.local/bin"
+            chmod +x "$HOME/.local/bin/surfpool"
           fi
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          surfpool --version || true
 
       - name: Install pnpm
         uses: pnpm/action-setup@91ab88e2619ed1f46221f0ba42d1492c02baf788 # v6.0.6
@@ -620,6 +776,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Build SDK packages (tests import @usesigil/kit dist)
+        run: pnpm -r run build
 
       - name: Build program
         run: anchor build --no-idl
@@ -674,9 +833,25 @@ jobs:
 
       - name: Run Sec3 X-Ray
         run: |
+          # Capture stdout and stderr to SEPARATE files so X-Ray's progress bar
+          # (carriage-return redraws) can never interleave into — and garble —
+          # the VULNERABLE finding lines. The previous `2>&1 | tee` merged both
+          # streams through one pipe buffer, which non-deterministically
+          # concatenated a progress redraw into an `UnvalidatedAccount` banner
+          # and split the keyword off, so the allowlist could not match it and
+          # the gate flaked RED on byte-identical code. Then normalize CRs to
+          # newlines so any in-stream redraw becomes a clean line break. This
+          # preserves EVERY VULNERABLE line (no finding is dropped → the gate
+          # cannot be hollowed); it only de-garbles them. `|| true` keeps the
+          # original behavior of not failing on X-Ray's own exit code (the
+          # findings check below is the pass/fail authority).
           docker run --rm --volume "$(pwd):/workspace" \
             ghcr.io/sec3-product/x-ray:v0.0.6 \
-            /workspace/programs/sigil 2>&1 | tee xray-report.txt
+            /workspace/programs/sigil > xray-stdout.txt 2> xray-stderr.txt || true
+          cat xray-stdout.txt xray-stderr.txt | tr '\r' '\n' > xray-report.txt
+          echo "::group::X-Ray raw output (stdout+stderr, CR-normalized)"
+          cat xray-report.txt
+          echo "::endgroup::"
 
       - name: Check X-Ray findings
         run: |
@@ -727,7 +902,7 @@ jobs:
   # ──────────────────────────────────────────────────────────────
   # Job 5: Formal verification (Certora Solana Prover)
   #
-  # BLOCKING — all 16 rules must pass (16/16 Verified).
+  # BLOCKING — all 21 rules must pass (21/21 Verified).
   #
   # Uses platform-tools v1.51 (Rust 1.84.1+) via the conf file's
   # cargo_tools_version field. This resolves the Cargo.lock v4
@@ -777,10 +952,19 @@ jobs:
       - name: Run Certora Solana Prover
         env:
           CERTORAKEY: ${{ secrets.CERTORAKEY }}
+          GH_ACTOR: ${{ github.actor }}
+          IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
         run: |
+          # A missing key is only legitimate on Dependabot / forked-PR runs (no
+          # secret access). On a trusted run it is a real failure — formal
+          # verification must not be silently skipped (F6 gate-bypass fix).
           if [ -z "$CERTORAKEY" ]; then
-            echo "::warning::CERTORAKEY not available (Dependabot PR). Skipping formal verification."
-            exit 0
+            if [ "$GH_ACTOR" = "dependabot[bot]" ] || [ "$IS_FORK" = "true" ]; then
+              echo "::warning::CERTORAKEY unavailable on Dependabot/fork PR; skipping formal verification."
+              exit 0
+            fi
+            echo "::error::CERTORAKEY is not set on a trusted run; refusing to skip formal verification."
+            exit 1
           fi
           source .certora-venv/bin/activate
           certoraSolanaProver certora/conf/sigil.conf
@@ -816,6 +1000,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
+            ~/.cargo/bin
             trident-tests/target
           key: trident-${{ runner.os }}-${{ hashFiles('trident-tests/Cargo.lock') }}
           restore-keys: trident-${{ runner.os }}-
@@ -823,12 +1008,54 @@ jobs:
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y pkg-config libudev-dev
 
+      # Trident loads the program-under-test as an SBF .so at runtime (see
+      # trident-tests/Trident.toml [[fuzz.programs]]). Without a freshly-built
+      # sigil.so the harness panics on the first tx — so build it here, same
+      # toolchain pattern as on-chain-tests/surfpool.
+      - name: Cache Solana toolchain
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.local/share/solana
+          key: solana-${{ runner.os }}-${{ runner.arch }}-${{ env.SOLANA_VERSION }}
+
+      - name: Install Solana CLI
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SOLANA_BIN="$HOME/.local/share/solana/install/active_release/bin"
+          if [ ! -x "$SOLANA_BIN/solana" ]; then
+            for attempt in 1 2 3 4 5; do
+              sh -c "$(curl -sSfL https://release.anza.xyz/${{ env.SOLANA_VERSION }}/install)" && break
+              echo "Solana install attempt $attempt failed; retrying in $((attempt * 15))s..."
+              sleep $((attempt * 15))
+            done
+          fi
+          echo "$SOLANA_BIN" >> "$GITHUB_PATH"
+
+      - name: Install Anchor CLI
+        run: |
+          if ! command -v anchor &> /dev/null; then
+            cargo install --git https://github.com/coral-xyz/anchor --tag v${{ env.ANCHOR_VERSION }} anchor-cli --locked --force
+          fi
+
+      - name: Build program (.so for the fuzz harness to load)
+        run: anchor build --no-idl
+
+      - name: Restore committed IDL
+        run: git checkout -- target/idl/ target/types/
+
       - name: Compile fuzz harness
         working-directory: trident-tests
         run: cargo build --release --bin fuzz_0
 
       - name: Run fuzz test (1000 iterations, 100 flows each)
         working-directory: trident-tests
+        # TRIDENT_WITH_EXIT_CODE=1 makes the harness return non-zero on a panic
+        # or invariant violation. Without it the binary exits 0 even when every
+        # iteration panics (the false-green this gate previously had).
+        env:
+          TRIDENT_WITH_EXIT_CODE: "1"
         run: |
           timeout 600 ./target/release/fuzz_0 || EXIT=$?
           if [ "${EXIT:-0}" -eq 124 ]; then
@@ -854,6 +1081,27 @@ jobs:
   # ──────────────────────────────────────────────────────────────
   # Gate: All checks must pass before merge
   # ──────────────────────────────────────────────────────────────
+  ci-lint:
+    name: CI Lint (pin Action refs to SHAs)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Reject mutable Action refs in all workflow files
+        # Supply-chain hardening: every `uses:` must pin a 40-char commit SHA.
+        # PCRE negative lookahead flags any @ref that is not exactly 40 hex chars
+        # (catches @v4, @main, @v6.0.6, ...). Salvaged from the retired revamp-ci.yml.
+        run: |
+          set -euo pipefail
+          OUT=$(find .github/workflows/ -name '*.yml' -print0 \
+            | xargs -0 grep -HnP 'uses:\s+\S+@(?![0-9a-f]{40}\b)\S+' || true)
+          if [ -n "$OUT" ]; then
+            echo "::error::Mutable Action refs detected - pin every uses: to a 40-char SHA:"
+            echo "$OUT"
+            exit 1
+          fi
+          echo "::notice::All workflow uses: references are pinned to 40-char SHAs."
+
   security-gate:
     name: Security Gate
     runs-on: ubuntu-latest
@@ -862,12 +1110,14 @@ jobs:
       - changes
       - build-lint-test
       - rust-checks
+      - build-program
       - on-chain-tests
       - build-verification
       - surfpool-integration
       - security-scan
       - formal-verification
       - fuzz-test
+      - ci-lint
     steps:
       - name: Check all jobs passed
         run: |
@@ -881,6 +1131,7 @@ jobs:
           echo "  security-scan:         ${{ needs.security-scan.result }}"
           echo "  formal-verification:   ${{ needs.formal-verification.result }}"
           echo "  fuzz-test:             ${{ needs.fuzz-test.result }}"
+          echo "  ci-lint:               ${{ needs.ci-lint.result }}"
           echo ""
           echo "Path filter outputs:"
           echo "  any-ts:  ${{ needs.changes.outputs.any-ts }}"
@@ -902,6 +1153,12 @@ jobs:
             FAILED=1
           fi
 
+          # ci-lint must always succeed (runs unconditionally)
+          if [ "${{ needs.ci-lint.result }}" != "success" ]; then
+            echo "::error::ci-lint did not succeed"
+            FAILED=1
+          fi
+
           # build-lint-test: required when TS files changed, skipped is OK otherwise
           BLT="${{ needs.build-lint-test.result }}"
           ANY_TS="${{ needs.changes.outputs.any-ts }}"
@@ -917,11 +1174,12 @@ jobs:
             fi
           fi
 
-          # rust-checks, on-chain-tests, build-verification, surfpool-integration, fuzz-test: required when Rust files changed
+          # rust-checks, build-program, on-chain-tests, build-verification, surfpool-integration, fuzz-test: required when Rust files changed
           RUST_CHANGED="${{ needs.changes.outputs.rust }}"
-          for job_name in rust-checks on-chain-tests build-verification surfpool-integration fuzz-test; do
+          for job_name in rust-checks build-program on-chain-tests build-verification surfpool-integration fuzz-test; do
             case "$job_name" in
               rust-checks)           result="${{ needs.rust-checks.result }}" ;;
+              build-program)         result="${{ needs.build-program.result }}" ;;
               on-chain-tests)        result="${{ needs.on-chain-tests.result }}" ;;
               build-verification)    result="${{ needs.build-verification.result }}" ;;
               surfpool-integration)  result="${{ needs.surfpool-integration.result }}" ;;

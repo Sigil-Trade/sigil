@@ -27,7 +27,6 @@ import {
 export type ActionAuthorized = {
   vault: Address;
   agent: Address;
-  isSpending: boolean;
   tokenMint: Address;
   amount: bigint;
   usdAmount: bigint;
@@ -41,7 +40,6 @@ export type ActionAuthorized = {
 export type ActionAuthorizedArgs = {
   vault: Address;
   agent: Address;
-  isSpending: boolean;
   tokenMint: Address;
   amount: number | bigint;
   usdAmount: number | bigint;
@@ -56,7 +54,6 @@ export function getActionAuthorizedEncoder(): FixedSizeEncoder<ActionAuthorizedA
   return getStructEncoder([
     ["vault", getAddressEncoder()],
     ["agent", getAddressEncoder()],
-    ["isSpending", getBooleanEncoder()],
     ["tokenMint", getAddressEncoder()],
     ["amount", getU64Encoder()],
     ["usdAmount", getU64Encoder()],
@@ -72,7 +69,6 @@ export function getActionAuthorizedDecoder(): FixedSizeDecoder<ActionAuthorized>
   return getStructDecoder([
     ["vault", getAddressDecoder()],
     ["agent", getAddressDecoder()],
-    ["isSpending", getBooleanDecoder()],
     ["tokenMint", getAddressDecoder()],
     ["amount", getU64Decoder()],
     ["usdAmount", getU64Decoder()],

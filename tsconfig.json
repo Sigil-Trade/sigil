@@ -16,7 +16,10 @@
       ],
       "@usesigil/kit/post-assertions": [
         "./sdk/kit/dist/post-assertions/index.d.ts"
-      ]
+      ],
+      "@usesigil/kit/dashboard": ["./sdk/kit/dist/dashboard/index.d.ts"]
     }
-  }
+  },
+  "//": "On-chain TEST tsconfig (module: commonjs, for ts-mocha). Scoped to tests/ — the sub-packages sdk/kit and packages/* are ESM with their OWN tsconfigs (e.g. sdk/kit/tsconfig.test.json via `pnpm --filter @usesigil/kit pretest`) and must NOT be type-checked under this commonjs config (it produced false import.meta/ESM errors). Test imports of @usesigil/kit resolve via the paths above to the built .d.ts.",
+  "include": ["tests/**/*.ts"]
 }

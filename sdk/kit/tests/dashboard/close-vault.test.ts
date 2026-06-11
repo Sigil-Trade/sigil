@@ -74,15 +74,8 @@ describe("closeVault remaining_accounts logic", () => {
       }
     }
 
-    // 3. pending_close_constraints (existenceResults[last])
-    const constraintsIdx = 1 + agents.length;
-    if (existenceResults[constraintsIdx]) {
-      remainingAccounts.push({
-        address: existenceResults[constraintsIdx]!,
-        role: AccountRole.WRITABLE,
-      });
-    }
-
+    // (M1-04b: the pending_close_constraints push was removed — the
+    // constraints engine is gone, that PDA can never exist.)
     return remainingAccounts;
   }
 
@@ -92,7 +85,7 @@ describe("closeVault remaining_accounts logic", () => {
     const result = buildRemainingAccounts(
       { hasPendingPolicy: false },
       [],
-      [null, null], // policy + constraints
+      [null, null], // policy slot (no agents)
     );
     expect(result).to.deep.equal([]);
   });
@@ -101,7 +94,7 @@ describe("closeVault remaining_accounts logic", () => {
     const result = buildRemainingAccounts(
       { hasPendingPolicy: false },
       [{ pubkey: AGENT_1 }, { pubkey: AGENT_2 }],
-      [null, null, null, null], // policy + 2 agents + constraints
+      [null, null, null], // policy + 2 agents
     );
     expect(result).to.deep.equal([]);
   });
@@ -113,7 +106,7 @@ describe("closeVault remaining_accounts logic", () => {
     const result = buildRemainingAccounts(
       { hasPendingPolicy: true },
       [],
-      [policyPda, null], // policy exists, no constraints
+      [policyPda], // policy exists
     );
 
     expect(result).to.have.length(1);
@@ -129,7 +122,7 @@ describe("closeVault remaining_accounts logic", () => {
     const result = buildRemainingAccounts(
       { hasPendingPolicy: false },
       [{ pubkey: AGENT_1 }],
-      [null, agentPermsPda, null], // no policy, agent1 has pending, no constraints
+      [null, agentPermsPda], // no policy, agent1 has pending
     );
 
     expect(result).to.have.length(1);
@@ -143,7 +136,7 @@ describe("closeVault remaining_accounts logic", () => {
     const result = buildRemainingAccounts(
       { hasPendingPolicy: false },
       [{ pubkey: AGENT_1 }, { pubkey: AGENT_2 }],
-      [null, perms1, perms2, null], // no policy, both agents have pending, no constraints
+      [null, perms1, perms2], // no policy, both agents have pending
     );
 
     expect(result).to.have.length(2);
@@ -163,44 +156,25 @@ describe("closeVault remaining_accounts logic", () => {
     expect(result[0].address).to.equal(perms2);
   });
 
-  // ─── Pending Close Constraints ─────────────────────────────────────────
+  // ─── All Types Combined ────────────────────────────────────────────────
 
-  it("includes pending close constraints PDA", () => {
-    const constraintsPda =
-      "Constraints11111111111111111111111111111" as Address;
-    const result = buildRemainingAccounts(
-      { hasPendingPolicy: false },
-      [],
-      [null, constraintsPda], // no policy, constraints exist
-    );
-
-    expect(result).to.have.length(1);
-    expect(result[0].address).to.equal(constraintsPda);
-    expect(result[0].role).to.equal(AccountRole.WRITABLE);
-  });
-
-  // ─── All Three Types Combined ──────────────────────────────────────────
-
-  it("includes all three types in correct order: policy → agents → constraints", () => {
+  it("includes all types in correct order: policy → agents", () => {
     const policyPda = "PolicyPDA111111111111111111111111111111111" as Address;
     const perms1 = "AgentPerms1111111111111111111111111111111" as Address;
     const perms2 = "AgentPerms2222222222222222222222222222222" as Address;
-    const constraintsPda =
-      "Constraints11111111111111111111111111111" as Address;
 
     const result = buildRemainingAccounts(
       { hasPendingPolicy: true },
       [{ pubkey: AGENT_1 }, { pubkey: AGENT_2 }],
-      [policyPda, perms1, perms2, constraintsPda],
+      [policyPda, perms1, perms2],
     );
 
-    expect(result).to.have.length(4);
+    expect(result).to.have.length(3);
 
-    // Verify order: policy first, then agents, then constraints
+    // Verify order: policy first, then agents
     expect(result[0].address).to.equal(policyPda);
     expect(result[1].address).to.equal(perms1);
     expect(result[2].address).to.equal(perms2);
-    expect(result[3].address).to.equal(constraintsPda);
 
     // All must be WRITABLE
     for (const acct of result) {
@@ -208,20 +182,17 @@ describe("closeVault remaining_accounts logic", () => {
     }
   });
 
-  it("handles partial: policy + constraints but no agent perms", () => {
+  it("handles partial: policy but no agent perms", () => {
     const policyPda = "PolicyPDA111111111111111111111111111111111" as Address;
-    const constraintsPda =
-      "Constraints11111111111111111111111111111" as Address;
 
     const result = buildRemainingAccounts(
       { hasPendingPolicy: true },
       [{ pubkey: AGENT_1 }, { pubkey: AGENT_2 }],
-      [policyPda, null, null, constraintsPda], // policy + constraints, no agent perms
+      [policyPda, null, null], // policy only, no agent perms
     );
 
-    expect(result).to.have.length(2);
+    expect(result).to.have.length(1);
     expect(result[0].address).to.equal(policyPda);
-    expect(result[1].address).to.equal(constraintsPda);
   });
 
   // ─── 10 Agents (Max) ──────────────────────────────────────────────────
@@ -235,7 +206,6 @@ describe("closeVault remaining_accounts logic", () => {
     const existenceResults: (Address | null)[] = [
       null, // no pending policy
       ...agents.map((_, i) => `Perms${String(i).padStart(40, "0")}` as Address),
-      null, // no constraints
     ];
 
     const result = buildRemainingAccounts(
@@ -263,34 +233,124 @@ describe("closeVault remaining_accounts logic", () => {
   });
 });
 
-// ─── PDA Seed Verification ──────────────────────────────────────────────────
+// ─── close-vault pending-PDA drain helpers ──────────────────────────────────
 
-describe("closeVault PDA seeds", () => {
-  // Must use valid base58 addresses (no 0, O, I, l characters)
+describe("close-vault pending-PDA drain helpers", () => {
+  // Same valid base58 vault used above; helpers are deterministic so
+  // we can compare addresses across two invocations.
   const VALID_VAULT = "11111111111111111111111111111112" as Address;
 
-  it("pending_close_constraints uses correct seed (not pending_constraints)", async () => {
-    const { getPendingCloseConstraintsPDA } =
-      await import("../../src/resolve-accounts.js");
-    const { getPendingConstraintsPDA } =
-      await import("../../src/resolve-accounts.js");
+  it("CLOSE_VAULT_PENDING_PDA_ORDER pins the 4-step drain layout", async () => {
+    const { CLOSE_VAULT_PENDING_PDA_ORDER } =
+      await import("../../src/dashboard/close-vault.js");
 
-    const [closeConstraintsPda] =
-      await getPendingCloseConstraintsPDA(VALID_VAULT);
-    const [updateConstraintsPda] = await getPendingConstraintsPDA(VALID_VAULT);
-
-    // These MUST be different — they use different seeds
-    // "pending_close_constraints" vs "pending_constraints"
-    expect(closeConstraintsPda).to.not.equal(updateConstraintsPda);
+    // Lock the array shape so reviewers catch drift between the SDK
+    // helper and the Rust drain blocks in close_vault.rs. (M1-04b removed
+    // the pending_close_constraints + pending_constraints drains.)
+    expect([...CLOSE_VAULT_PENDING_PDA_ORDER]).to.deep.equal([
+      "pending_policy",
+      "pending_agent_perms",
+      "pending_owner",
+      "pending_agent_grant",
+    ]);
   });
 
-  it("getPendingCloseConstraintsPDA returns deterministic result", async () => {
-    const { getPendingCloseConstraintsPDA } =
-      await import("../../src/resolve-accounts.js");
+  it("findPendingOwnerPda + findPendingAgentGrantPda are deterministic and distinct", async () => {
+    const { findPendingOwnerPda, findPendingAgentGrantPda } =
+      await import("../../src/dashboard/close-vault.js");
 
-    const [pda1] = await getPendingCloseConstraintsPDA(VALID_VAULT);
-    const [pda2] = await getPendingCloseConstraintsPDA(VALID_VAULT);
+    const ownerPda1 = await findPendingOwnerPda(VALID_VAULT);
+    const ownerPda2 = await findPendingOwnerPda(VALID_VAULT);
+    expect(ownerPda1).to.equal(ownerPda2);
 
-    expect(pda1).to.equal(pda2);
+    const grantPda1 = await findPendingAgentGrantPda(VALID_VAULT);
+    const grantPda2 = await findPendingAgentGrantPda(VALID_VAULT);
+    expect(grantPda1).to.equal(grantPda2);
+
+    // Distinct PDAs (different seeds).
+    expect(ownerPda1).to.not.equal(grantPda1);
+  });
+
+  it("enumerateExistingPendingPdasForClose returns only PDAs that exist on-chain", async () => {
+    const { enumerateExistingPendingPdasForClose } =
+      await import("../../src/dashboard/close-vault.js");
+
+    // Mock RPC that says: pending_owner does NOT exist, pending_agent_grant
+    // DOES exist. The helper should return exactly the one that exists.
+    const fakeAccountInfo = (exists: boolean) => ({
+      send: async () =>
+        exists
+          ? {
+              value: {
+                data: ["", "base64"],
+                lamports: 1n,
+                owner: "x",
+                executable: false,
+                rentEpoch: 0n,
+              },
+            }
+          : { value: null },
+    });
+
+    type Probe = { kind: string; address: Address };
+    const probes: Probe[] = [];
+    const rpcMock = {
+      getAccountInfo: (address: Address, _opts: unknown) => {
+        probes.push({ kind: "?", address });
+        // pending_owner = null, others = exist
+        // We don't know the addresses yet — capture and decide below.
+        return fakeAccountInfo(true);
+      },
+    };
+
+    // First invocation captures the 2 candidate addresses.
+    await enumerateExistingPendingPdasForClose(
+      rpcMock as unknown as Rpc<SolanaRpcApi>,
+      VALID_VAULT,
+    );
+    expect(probes).to.have.length(2);
+
+    const [ownerProbe, grantProbe] = probes;
+    expect(ownerProbe).to.not.be.undefined;
+    expect(grantProbe).to.not.be.undefined;
+
+    // Second invocation with selective existence: owner absent, grant present.
+    const selectiveRpc = {
+      getAccountInfo: (address: Address, _opts: unknown) =>
+        fakeAccountInfo(address !== ownerProbe.address),
+    };
+    const result = await enumerateExistingPendingPdasForClose(
+      selectiveRpc as unknown as Rpc<SolanaRpcApi>,
+      VALID_VAULT,
+    );
+
+    expect(result).to.have.length(1);
+    const kinds = result.map((r) => r.kind).sort();
+    expect(kinds).to.deep.equal(["pending_agent_grant"]);
+    for (const entry of result) {
+      expect(entry.role).to.equal(AccountRole.WRITABLE);
+    }
+  });
+
+  it("enumerateExistingPendingPdasForClose treats RPC errors as 'absent'", async () => {
+    const { enumerateExistingPendingPdasForClose } =
+      await import("../../src/dashboard/close-vault.js");
+
+    const erroringRpc = {
+      getAccountInfo: (_address: Address, _opts: unknown) => ({
+        send: async () => {
+          throw new Error("simulated RPC outage");
+        },
+      }),
+    };
+
+    const result = await enumerateExistingPendingPdasForClose(
+      erroringRpc as unknown as Rpc<SolanaRpcApi>,
+      VALID_VAULT,
+    );
+
+    // RPC errors → safe fallback: no entries returned, close TX still
+    // proceeds, drain blocks silently no-op on missing PDAs.
+    expect(result).to.deep.equal([]);
   });
 });

@@ -1,0 +1,52 @@
+{
+  "_meta": {
+    "description": "Pinned canonical scalar intent-digest vectors. Generated 2026-05-23 from compute_scalar_intent_digest. Mirrors both sdk/kit/src/seal/intent-digest.ts (TS) and programs/sigil/src/utils/intent_digest.rs (Rust). If any field of the encoder changes, regenerate this file and commit the new vectors.",
+    "magic": "SIG1",
+    "intent_version": 2,
+    "buffer_bytes": 142,
+    "output_bytes": 32,
+    "regenerate_command": "see scripts/generate-intent-digest-fixtures.ts (TODO Phase 10a-B7.1)"
+  },
+  "vectors": [
+    {
+      "label": "all-zero devnet",
+      "vault": "11111111111111111111111111111111",
+      "agent": "11111111111111111111111111111111",
+      "tokenMint": "11111111111111111111111111111111",
+      "amount": "0",
+      "targetProtocol": "11111111111111111111111111111111",
+      "network": "devnet",
+      "digestHex": "539bdb36c51540ecd00d99a5c918c367af7e16cca2e0d8eed79532df14c3e783"
+    },
+    {
+      "label": "usdc 1m devnet (typical seal)",
+      "vault": "11111111111111111111111111111112",
+      "agent": "11111111111111111111111111111113",
+      "tokenMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "amount": "1000000",
+      "targetProtocol": "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+      "network": "devnet",
+      "digestHex": "c7e95a1908b9bd671925be1d88c38a4e99ee75a1c722e3a255c2c3003c10fb38"
+    },
+    {
+      "label": "mainnet network id flip",
+      "vault": "11111111111111111111111111111112",
+      "agent": "11111111111111111111111111111113",
+      "tokenMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "amount": "1000000",
+      "targetProtocol": "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+      "network": "mainnet",
+      "digestHex": "9fc0849a172a92b8136ee08fe01dee5210e3238bbf4af7676780ed234ec975ed"
+    },
+    {
+      "label": "large amount u64::MAX",
+      "vault": "Sysvar1nstructions1111111111111111111111111",
+      "agent": "SysvarRent111111111111111111111111111111111",
+      "tokenMint": "So11111111111111111111111111111111111111112",
+      "amount": "18446744073709551615",
+      "targetProtocol": "11111111111111111111111111111111",
+      "network": "devnet",
+      "digestHex": "70bb9b9ba50b3ddbcf7e0b88419cc1152cfa774ce2fd0864d72ec96e09bac196"
+    }
+  ]
+}

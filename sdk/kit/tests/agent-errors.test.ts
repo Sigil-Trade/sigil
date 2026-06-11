@@ -17,15 +17,23 @@ describe("agent-errors", () => {
   // ─── On-chain error map completeness ──────────────────────────────────────
 
   describe("ON_CHAIN_ERROR_MAP completeness", () => {
-    it("maps all 88 error codes (6000-6087)", () => {
+    it("maps all 111 error codes (6000-6110) post F-Q9", () => {
       const codes = getAllOnChainErrorCodes();
-      expect(codes).to.have.lengthOf(88);
+      // 6000-6110 inclusive = 111 codes. M1-04 Step 6 removed 10 dead
+      // constraint-only variants and renumbered the enum (positional); F-Q1a
+      // appended 6105 (DestinationAccountUnresolvable), F-Q4 appended 6106
+      // (ErrToken2022OutputMintUnresolvable), F-Q6 appended 6107-6109
+      // (ErrOperatorGrantRequiresTimelock / ErrOperatorGrantDelayTooLong /
+      // InvalidOwnerType), and F-Q9 appended 6110 (SpendAccountingUnderflow).
+      // The IDL↔generated↔hand-map bijection (incl. name-per-code) is enforced
+      // by error-map-drift.test.ts; this test guards the count/extremes only.
+      expect(codes).to.have.lengthOf(111);
       expect(codes[0]).to.equal(6000);
-      expect(codes[codes.length - 1]).to.equal(6087);
+      expect(codes[codes.length - 1]).to.equal(6110);
     });
 
-    it("every code from 6000-6087 is present with no gaps", () => {
-      for (let code = 6000; code <= 6087; code++) {
+    it("every code from 6000-6110 is present with no gaps post F-Q9", () => {
+      for (let code = 6000; code <= 6110; code++) {
         const entry = ON_CHAIN_ERROR_MAP[code];
         expect(entry, `Missing error code ${code}`).to.exist;
         expect(entry.name).to.be.a("string").and.not.be.empty;
@@ -52,6 +60,31 @@ describe("agent-errors", () => {
         generatedCodeCount,
         `ON_CHAIN_ERROR_MAP has ${handMaintainedCount} entries but generated code has ${generatedCodeCount} SIGIL_ERROR__* numeric constants — sync required`,
       );
+    });
+
+    // H-10 (pre-redeploy audit 2026-05-21): 6096 has three trigger
+    // branches inside finalize_session.rs (cap exceeded, multiple-distinct
+    // recipients, tracker array full). The SDK error mapping must surface
+    // a recovery action for the "multiple distinct recipients in one tx"
+    // branch — splitting the bundle — which the pre-H-10 mapping did not.
+    it("ErrRecipientCapExceeded exposes the H-10 split-into-separate-transactions recovery", () => {
+      // Name-anchored to the generated constant (M1-04 shifted this 6096 → 6087).
+      const entry =
+        ON_CHAIN_ERROR_MAP[
+          generatedErrors.SIGIL_ERROR__ERR_RECIPIENT_CAP_EXCEEDED
+        ];
+      expect(entry, "ErrRecipientCapExceeded must be mapped").to.exist;
+      const actions = entry.recovery_actions.map((a) => a.action);
+      expect(actions).to.include(
+        "split_into_separate_transactions",
+        "H-10: bundle-splitting recovery must be in the action list",
+      );
+      // Existing actions remain — the H-10 fix is purely additive.
+      expect(actions).to.include("reduce_amount");
+      expect(actions).to.include("use_different_recipient");
+      expect(actions).to.include("wait");
+      // The message must reflect the triple-cause disambiguation.
+      expect(entry.message).to.match(/single-recipient/i);
     });
 
     // Drift guard — ensures the highest numeric code in ON_CHAIN_ERROR_MAP
@@ -84,10 +117,14 @@ describe("agent-errors", () => {
       expect(err!.context.error_name).to.equal("VaultNotActive");
     });
 
-    it("parses numeric code 6063 (UnauthorizedPostFinalizeInstruction)", () => {
-      const err = parseOnChainErrorCode(6063);
+    it("parses UnauthorizedPostFinalizeInstruction by generated code (name-anchored)", () => {
+      // Anchored to the generated constant so it never rots on a renumber
+      // (M1-04 Step 6 shifted this 6054 → 6049).
+      const code =
+        generatedErrors.SIGIL_ERROR__UNAUTHORIZED_POST_FINALIZE_INSTRUCTION;
+      const err = parseOnChainErrorCode(code);
       expect(err).to.not.be.null;
-      expect(err!.code).to.equal("6063");
+      expect(err!.code).to.equal(String(code));
       expect(err!.category).to.equal("POLICY_VIOLATION");
       expect(err!.context.error_name).to.equal(
         "UnauthorizedPostFinalizeInstruction",
@@ -101,17 +138,21 @@ describe("agent-errors", () => {
       expect(err!.context.error_name).to.equal("VaultNotActive");
     });
 
-    it("parses hex string 0x17A7 (= 6055 ProtocolCapExceeded)", () => {
-      const err = parseOnChainErrorCode("0x17A7");
+    it("parses ProtocolCapExceeded via hex string (name-anchored)", () => {
+      // Anchored to the generated constant so the hex form tracks renumbers
+      // (M1-04 Step 6 shifted this 6047 → 6043).
+      const code = generatedErrors.SIGIL_ERROR__PROTOCOL_CAP_EXCEEDED;
+      const err = parseOnChainErrorCode("0x" + code.toString(16));
       expect(err).to.not.be.null;
-      expect(err!.code).to.equal("6055");
+      expect(err!.code).to.equal(String(code));
       expect(err!.context.error_name).to.equal("ProtocolCapExceeded");
     });
 
-    it("parses decimal string '6044'", () => {
-      const err = parseOnChainErrorCode("6044");
+    it("parses a decimal string code (name-anchored, InvalidSessionExpiry)", () => {
+      const code = generatedErrors.SIGIL_ERROR__INVALID_SESSION_EXPIRY;
+      const err = parseOnChainErrorCode(String(code));
       expect(err).to.not.be.null;
-      expect(err!.code).to.equal("6044");
+      expect(err!.code).to.equal(String(code));
       expect(err!.category).to.equal("INPUT_VALIDATION");
     });
 
@@ -481,14 +522,7 @@ describe("agent-errors", () => {
       expect(result.recovery_actions[0].action).to.equal("add_instructions");
     });
 
-    // Pattern 11: Escrow action
-    it("pattern 11: escrow-action → INPUT_VALIDATION", () => {
-      const result = toSigilAgentError(
-        new Error('Escrow action "createEscrow" uses standalone instructions'),
-      );
-      expect(result.category).to.equal("INPUT_VALIDATION");
-      expect(result.recovery_actions[0].action).to.equal("use_escrow_api");
-    });
+    // Pattern 11 (escrow-action) removed — escrow system deleted in V2 demolition.
 
     // SigilSdkError contract — exercised via the spending-amount pattern
     it("SigilSdkError has all 7 AgentError fields with correct values", () => {

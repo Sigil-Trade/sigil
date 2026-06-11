@@ -19,6 +19,8 @@ import {
   getAddressEncoder,
   getArrayDecoder,
   getArrayEncoder,
+  getBooleanDecoder,
+  getBooleanEncoder,
   getBytesDecoder,
   getBytesEncoder,
   getI64Decoder,
@@ -84,8 +86,6 @@ export type AgentVault = {
   totalTransactions: bigint;
   /** Total volume processed in token base units */
   totalVolume: bigint;
-  /** Number of active (unsettled/unrefunded) escrow deposits from this vault */
-  activeEscrowCount: number;
   /** Cumulative developer fees collected from this vault (token base units) */
   totalFeesCollected: bigint;
   /**
@@ -113,6 +113,90 @@ export type AgentVault = {
    * close_vault requires this to be 0.
    */
   activeSessions: number;
+  /**
+   * Phase 2 Task 8: observe_only mode flag (independent from TA-19;
+   * included in TA-19 digest encoding at position 10).
+   *
+   * When true, ALL `validate_and_authorize` calls reject with
+   * `ObserveOnlyModeBlocksExecute`. Provides a hard, low-blast-radius
+   * kill switch separate from `VaultStatus::Frozen` — owners can stand
+   * up an observe-only vault to baseline agent behaviour before opening
+   * the execute path.
+   *
+   * Set at `initialize_vault` time; flipped post-init via the dedicated
+   * `set_observe_only` instruction (F-12 audit fix, Option (a) direct
+   * owner-only flip mirroring `freeze_vault` simplicity).
+   *
+   * APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  observeOnly: boolean;
+  /**
+   * Phase 8 — unix timestamp at which `vault.status` last transitioned to
+   * Frozen. Written by every freeze code path (manual `freeze_vault`,
+   * auto-freeze inside `revoke_agent`, future `freeze_internal` helper).
+   * Read by `reactivate_vault` to enforce the 5-minute observation
+   * cooldown (Phase 8 F-RP3-1 fix — closes the phished-owner
+   * freeze→reactivate→register-attacker-agent one-tx replay).
+   *
+   * Zero on freshly-initialized vaults that have never been frozen.
+   * APPENDED per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  frozenAtTimestamp: bigint;
+  /**
+   * Phase 8 — discriminant of the `FreezeReason` enum recording WHY the
+   * vault was last frozen. Single byte on-chain; validated via
+   * `FreezeReason::from_u8` at every write site so unknown values
+   * (3..=255) hard-reject with `SigilError::ErrInvalidFreezeReason`.
+   *
+   * Zero (Manual) on freshly-initialized vaults that have never been
+   * frozen — this is harmless because `status != Frozen` means readers
+   * of this byte gate on status first. APPENDED per F-14 APPEND-ONLY
+   * rule for Borsh stability.
+   */
+  freezeReason: number;
+  /**
+   * F-Q6 (2026-06-02) — owner-account-type discriminant: 0 = single-key EOA
+   * (`OWNER_TYPE_EOA`), 1 = N-of-M multisig / Squads V4 (`OWNER_TYPE_MULTISIG`).
+   * Set ONCE per owner from an on-chain-VERIFIED fact: `initialize_vault` = 0,
+   * `accept_ownership_transfer` (EOA) = 0, `accept_ownership_transfer_multisig`
+   * = 1. NOT bound by any digest — it is program-set (not owner-supplied), and
+   * a stale/wrong value fails SAFE to the single-key delayed-grant path in
+   * `register_agent`. Validated `<= OWNER_TYPE_MULTISIG` at the read site.
+   *
+   * Placed BEFORE `vault_authority` so the LBL-01 seed-key remains the final
+   * 32 bytes (the SDK resolver reads it at `SIZE - 32`). Pre-launch — no
+   * deployed vaults constrain byte placement.
+   */
+  ownerType: number;
+  /**
+   * Phase 8 LBL-01 — immutable PDA seed-key set at `initialize_vault` time;
+   * decouples vault PDA address from owner identity to enable ownership
+   * transfer without bricking the account.
+   *
+   * Before LBL-01: vault PDA derivation used `owner.key()` (or
+   * `vault.owner`). After `accept_ownership_transfer` mutated `vault.owner`,
+   * every subsequent owner-side instruction derived a DIFFERENT PDA →
+   * Anchor `ConstraintSeeds` rejection → vault permanently bricked.
+   *
+   * After LBL-01: all 40 non-init owner-side instructions derive vault
+   * PDA from `vault.vault_authority` instead. At init, the SDK still
+   * derives the PDA from `owner.key() + vault_id` (the canonical pattern),
+   * and the handler writes `vault.vault_authority = owner.key()` so the
+   * stored seed-key equals the initial owner — the on-chain PDA address
+   * is identical to the pre-LBL-01 layout. After ownership transfer the
+   * `vault.owner` byte field changes but `vault.vault_authority` does NOT,
+   * so the PDA address stays put and downstream ix continue to resolve.
+   *
+   * **Invariant:** `vault.vault_authority` is written exactly ONCE inside
+   * `initialize_vault`. No other instruction writes this field. The SDK
+   * helper `vaultPda(owner, vaultId)` continues to use `owner` as the
+   * seed-key at init time; thereafter the SDK reads `vault.vault_authority`
+   * from the resolved state to rebuild the same PDA.
+   *
+   * APPENDED per F-14 APPEND-ONLY rule for Borsh stability — +32 bytes
+   * at the tail keeps every prior byte at its original offset.
+   */
+  vaultAuthority: Address;
 };
 
 export type AgentVaultArgs = {
@@ -137,8 +221,6 @@ export type AgentVaultArgs = {
   totalTransactions: number | bigint;
   /** Total volume processed in token base units */
   totalVolume: number | bigint;
-  /** Number of active (unsettled/unrefunded) escrow deposits from this vault */
-  activeEscrowCount: number;
   /** Cumulative developer fees collected from this vault (token base units) */
   totalFeesCollected: number | bigint;
   /**
@@ -166,6 +248,90 @@ export type AgentVaultArgs = {
    * close_vault requires this to be 0.
    */
   activeSessions: number;
+  /**
+   * Phase 2 Task 8: observe_only mode flag (independent from TA-19;
+   * included in TA-19 digest encoding at position 10).
+   *
+   * When true, ALL `validate_and_authorize` calls reject with
+   * `ObserveOnlyModeBlocksExecute`. Provides a hard, low-blast-radius
+   * kill switch separate from `VaultStatus::Frozen` — owners can stand
+   * up an observe-only vault to baseline agent behaviour before opening
+   * the execute path.
+   *
+   * Set at `initialize_vault` time; flipped post-init via the dedicated
+   * `set_observe_only` instruction (F-12 audit fix, Option (a) direct
+   * owner-only flip mirroring `freeze_vault` simplicity).
+   *
+   * APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  observeOnly: boolean;
+  /**
+   * Phase 8 — unix timestamp at which `vault.status` last transitioned to
+   * Frozen. Written by every freeze code path (manual `freeze_vault`,
+   * auto-freeze inside `revoke_agent`, future `freeze_internal` helper).
+   * Read by `reactivate_vault` to enforce the 5-minute observation
+   * cooldown (Phase 8 F-RP3-1 fix — closes the phished-owner
+   * freeze→reactivate→register-attacker-agent one-tx replay).
+   *
+   * Zero on freshly-initialized vaults that have never been frozen.
+   * APPENDED per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  frozenAtTimestamp: number | bigint;
+  /**
+   * Phase 8 — discriminant of the `FreezeReason` enum recording WHY the
+   * vault was last frozen. Single byte on-chain; validated via
+   * `FreezeReason::from_u8` at every write site so unknown values
+   * (3..=255) hard-reject with `SigilError::ErrInvalidFreezeReason`.
+   *
+   * Zero (Manual) on freshly-initialized vaults that have never been
+   * frozen — this is harmless because `status != Frozen` means readers
+   * of this byte gate on status first. APPENDED per F-14 APPEND-ONLY
+   * rule for Borsh stability.
+   */
+  freezeReason: number;
+  /**
+   * F-Q6 (2026-06-02) — owner-account-type discriminant: 0 = single-key EOA
+   * (`OWNER_TYPE_EOA`), 1 = N-of-M multisig / Squads V4 (`OWNER_TYPE_MULTISIG`).
+   * Set ONCE per owner from an on-chain-VERIFIED fact: `initialize_vault` = 0,
+   * `accept_ownership_transfer` (EOA) = 0, `accept_ownership_transfer_multisig`
+   * = 1. NOT bound by any digest — it is program-set (not owner-supplied), and
+   * a stale/wrong value fails SAFE to the single-key delayed-grant path in
+   * `register_agent`. Validated `<= OWNER_TYPE_MULTISIG` at the read site.
+   *
+   * Placed BEFORE `vault_authority` so the LBL-01 seed-key remains the final
+   * 32 bytes (the SDK resolver reads it at `SIZE - 32`). Pre-launch — no
+   * deployed vaults constrain byte placement.
+   */
+  ownerType: number;
+  /**
+   * Phase 8 LBL-01 — immutable PDA seed-key set at `initialize_vault` time;
+   * decouples vault PDA address from owner identity to enable ownership
+   * transfer without bricking the account.
+   *
+   * Before LBL-01: vault PDA derivation used `owner.key()` (or
+   * `vault.owner`). After `accept_ownership_transfer` mutated `vault.owner`,
+   * every subsequent owner-side instruction derived a DIFFERENT PDA →
+   * Anchor `ConstraintSeeds` rejection → vault permanently bricked.
+   *
+   * After LBL-01: all 40 non-init owner-side instructions derive vault
+   * PDA from `vault.vault_authority` instead. At init, the SDK still
+   * derives the PDA from `owner.key() + vault_id` (the canonical pattern),
+   * and the handler writes `vault.vault_authority = owner.key()` so the
+   * stored seed-key equals the initial owner — the on-chain PDA address
+   * is identical to the pre-LBL-01 layout. After ownership transfer the
+   * `vault.owner` byte field changes but `vault.vault_authority` does NOT,
+   * so the PDA address stays put and downstream ix continue to resolve.
+   *
+   * **Invariant:** `vault.vault_authority` is written exactly ONCE inside
+   * `initialize_vault`. No other instruction writes this field. The SDK
+   * helper `vaultPda(owner, vaultId)` continues to use `owner` as the
+   * seed-key at init time; thereafter the SDK reads `vault.vault_authority`
+   * from the resolved state to rebuild the same PDA.
+   *
+   * APPENDED per F-14 APPEND-ONLY rule for Borsh stability — +32 bytes
+   * at the tail keeps every prior byte at its original offset.
+   */
+  vaultAuthority: Address;
 };
 
 /** Gets the encoder for {@link AgentVaultArgs} account data. */
@@ -182,12 +348,16 @@ export function getAgentVaultEncoder(): Encoder<AgentVaultArgs> {
       ["createdAt", getI64Encoder()],
       ["totalTransactions", getU64Encoder()],
       ["totalVolume", getU64Encoder()],
-      ["activeEscrowCount", getU8Encoder()],
       ["totalFeesCollected", getU64Encoder()],
       ["totalDepositedUsd", getU64Encoder()],
       ["totalWithdrawnUsd", getU64Encoder()],
       ["totalFailedTransactions", getU64Encoder()],
       ["activeSessions", getU8Encoder()],
+      ["observeOnly", getBooleanEncoder()],
+      ["frozenAtTimestamp", getI64Encoder()],
+      ["freezeReason", getU8Encoder()],
+      ["ownerType", getU8Encoder()],
+      ["vaultAuthority", getAddressEncoder()],
     ]),
     (value) => ({ ...value, discriminator: AGENT_VAULT_DISCRIMINATOR }),
   );
@@ -206,12 +376,16 @@ export function getAgentVaultDecoder(): Decoder<AgentVault> {
     ["createdAt", getI64Decoder()],
     ["totalTransactions", getU64Decoder()],
     ["totalVolume", getU64Decoder()],
-    ["activeEscrowCount", getU8Decoder()],
     ["totalFeesCollected", getU64Decoder()],
     ["totalDepositedUsd", getU64Decoder()],
     ["totalWithdrawnUsd", getU64Decoder()],
     ["totalFailedTransactions", getU64Decoder()],
     ["activeSessions", getU8Decoder()],
+    ["observeOnly", getBooleanDecoder()],
+    ["frozenAtTimestamp", getI64Decoder()],
+    ["freezeReason", getU8Decoder()],
+    ["ownerType", getU8Decoder()],
+    ["vaultAuthority", getAddressDecoder()],
   ]);
 }
 

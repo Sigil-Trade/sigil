@@ -60,6 +60,9 @@ export type DepositFundsInstruction<
   TAccountMint extends string | AccountMeta<string> = string,
   TAccountOwnerTokenAccount extends string | AccountMeta<string> = string,
   TAccountVaultTokenAccount extends string | AccountMeta<string> = string,
+  TAccountAuditLogSuccess extends string | AccountMeta<string> = string,
+  TAccountSlotHashesSysvar extends string | AccountMeta<string> =
+    "SysvarS1otHashes111111111111111111111111111",
   TAccountTokenProgram extends string | AccountMeta<string> =
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
   TAccountAssociatedTokenProgram extends string | AccountMeta<string> =
@@ -87,6 +90,12 @@ export type DepositFundsInstruction<
       TAccountVaultTokenAccount extends string
         ? WritableAccount<TAccountVaultTokenAccount>
         : TAccountVaultTokenAccount,
+      TAccountAuditLogSuccess extends string
+        ? WritableAccount<TAccountAuditLogSuccess>
+        : TAccountAuditLogSuccess,
+      TAccountSlotHashesSysvar extends string
+        ? ReadonlyAccount<TAccountSlotHashesSysvar>
+        : TAccountSlotHashesSysvar,
       TAccountTokenProgram extends string
         ? ReadonlyAccount<TAccountTokenProgram>
         : TAccountTokenProgram,
@@ -140,6 +149,8 @@ export type DepositFundsAsyncInput<
   TAccountMint extends string = string,
   TAccountOwnerTokenAccount extends string = string,
   TAccountVaultTokenAccount extends string = string,
+  TAccountAuditLogSuccess extends string = string,
+  TAccountSlotHashesSysvar extends string = string,
   TAccountTokenProgram extends string = string,
   TAccountAssociatedTokenProgram extends string = string,
   TAccountSystemProgram extends string = string,
@@ -151,6 +162,9 @@ export type DepositFundsAsyncInput<
   ownerTokenAccount?: Address<TAccountOwnerTokenAccount>;
   /** Vault's PDA-controlled token account */
   vaultTokenAccount?: Address<TAccountVaultTokenAccount>;
+  /** Phase 7 — success audit log; entry appended after token transfer. */
+  auditLogSuccess?: Address<TAccountAuditLogSuccess>;
+  slotHashesSysvar?: Address<TAccountSlotHashesSysvar>;
   tokenProgram?: Address<TAccountTokenProgram>;
   associatedTokenProgram?: Address<TAccountAssociatedTokenProgram>;
   systemProgram?: Address<TAccountSystemProgram>;
@@ -163,6 +177,8 @@ export async function getDepositFundsInstructionAsync<
   TAccountMint extends string,
   TAccountOwnerTokenAccount extends string,
   TAccountVaultTokenAccount extends string,
+  TAccountAuditLogSuccess extends string,
+  TAccountSlotHashesSysvar extends string,
   TAccountTokenProgram extends string,
   TAccountAssociatedTokenProgram extends string,
   TAccountSystemProgram extends string,
@@ -174,6 +190,8 @@ export async function getDepositFundsInstructionAsync<
     TAccountMint,
     TAccountOwnerTokenAccount,
     TAccountVaultTokenAccount,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar,
     TAccountTokenProgram,
     TAccountAssociatedTokenProgram,
     TAccountSystemProgram
@@ -187,6 +205,8 @@ export async function getDepositFundsInstructionAsync<
     TAccountMint,
     TAccountOwnerTokenAccount,
     TAccountVaultTokenAccount,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar,
     TAccountTokenProgram,
     TAccountAssociatedTokenProgram,
     TAccountSystemProgram
@@ -207,6 +227,11 @@ export async function getDepositFundsInstructionAsync<
     vaultTokenAccount: {
       value: input.vaultTokenAccount ?? null,
       isWritable: true,
+    },
+    auditLogSuccess: { value: input.auditLogSuccess ?? null, isWritable: true },
+    slotHashesSysvar: {
+      value: input.slotHashesSysvar ?? null,
+      isWritable: false,
     },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
     associatedTokenProgram: {
@@ -272,6 +297,28 @@ export async function getDepositFundsInstructionAsync<
       ],
     });
   }
+  if (!accounts.auditLogSuccess.value) {
+    accounts.auditLogSuccess.value = await getProgramDerivedAddress({
+      programAddress,
+      seeds: [
+        getBytesEncoder().encode(
+          new Uint8Array([
+            97, 117, 100, 105, 116, 95, 115, 117, 99, 99, 101, 115, 115,
+          ]),
+        ),
+        getAddressEncoder().encode(
+          getAddressFromResolvedInstructionAccount(
+            "vault",
+            accounts.vault.value,
+          ),
+        ),
+      ],
+    });
+  }
+  if (!accounts.slotHashesSysvar.value) {
+    accounts.slotHashesSysvar.value =
+      "SysvarS1otHashes111111111111111111111111111" as Address<"SysvarS1otHashes111111111111111111111111111">;
+  }
   if (!accounts.tokenProgram.value) {
     accounts.tokenProgram.value =
       "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address<"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA">;
@@ -293,6 +340,8 @@ export async function getDepositFundsInstructionAsync<
       getAccountMeta("mint", accounts.mint),
       getAccountMeta("ownerTokenAccount", accounts.ownerTokenAccount),
       getAccountMeta("vaultTokenAccount", accounts.vaultTokenAccount),
+      getAccountMeta("auditLogSuccess", accounts.auditLogSuccess),
+      getAccountMeta("slotHashesSysvar", accounts.slotHashesSysvar),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
       getAccountMeta("associatedTokenProgram", accounts.associatedTokenProgram),
       getAccountMeta("systemProgram", accounts.systemProgram),
@@ -308,6 +357,8 @@ export async function getDepositFundsInstructionAsync<
     TAccountMint,
     TAccountOwnerTokenAccount,
     TAccountVaultTokenAccount,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar,
     TAccountTokenProgram,
     TAccountAssociatedTokenProgram,
     TAccountSystemProgram
@@ -320,6 +371,8 @@ export type DepositFundsInput<
   TAccountMint extends string = string,
   TAccountOwnerTokenAccount extends string = string,
   TAccountVaultTokenAccount extends string = string,
+  TAccountAuditLogSuccess extends string = string,
+  TAccountSlotHashesSysvar extends string = string,
   TAccountTokenProgram extends string = string,
   TAccountAssociatedTokenProgram extends string = string,
   TAccountSystemProgram extends string = string,
@@ -331,6 +384,9 @@ export type DepositFundsInput<
   ownerTokenAccount: Address<TAccountOwnerTokenAccount>;
   /** Vault's PDA-controlled token account */
   vaultTokenAccount: Address<TAccountVaultTokenAccount>;
+  /** Phase 7 — success audit log; entry appended after token transfer. */
+  auditLogSuccess: Address<TAccountAuditLogSuccess>;
+  slotHashesSysvar?: Address<TAccountSlotHashesSysvar>;
   tokenProgram?: Address<TAccountTokenProgram>;
   associatedTokenProgram?: Address<TAccountAssociatedTokenProgram>;
   systemProgram?: Address<TAccountSystemProgram>;
@@ -343,6 +399,8 @@ export function getDepositFundsInstruction<
   TAccountMint extends string,
   TAccountOwnerTokenAccount extends string,
   TAccountVaultTokenAccount extends string,
+  TAccountAuditLogSuccess extends string,
+  TAccountSlotHashesSysvar extends string,
   TAccountTokenProgram extends string,
   TAccountAssociatedTokenProgram extends string,
   TAccountSystemProgram extends string,
@@ -354,6 +412,8 @@ export function getDepositFundsInstruction<
     TAccountMint,
     TAccountOwnerTokenAccount,
     TAccountVaultTokenAccount,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar,
     TAccountTokenProgram,
     TAccountAssociatedTokenProgram,
     TAccountSystemProgram
@@ -366,6 +426,8 @@ export function getDepositFundsInstruction<
   TAccountMint,
   TAccountOwnerTokenAccount,
   TAccountVaultTokenAccount,
+  TAccountAuditLogSuccess,
+  TAccountSlotHashesSysvar,
   TAccountTokenProgram,
   TAccountAssociatedTokenProgram,
   TAccountSystemProgram
@@ -386,6 +448,11 @@ export function getDepositFundsInstruction<
       value: input.vaultTokenAccount ?? null,
       isWritable: true,
     },
+    auditLogSuccess: { value: input.auditLogSuccess ?? null, isWritable: true },
+    slotHashesSysvar: {
+      value: input.slotHashesSysvar ?? null,
+      isWritable: false,
+    },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
     associatedTokenProgram: {
       value: input.associatedTokenProgram ?? null,
@@ -402,6 +469,10 @@ export function getDepositFundsInstruction<
   const args = { ...input };
 
   // Resolve default values.
+  if (!accounts.slotHashesSysvar.value) {
+    accounts.slotHashesSysvar.value =
+      "SysvarS1otHashes111111111111111111111111111" as Address<"SysvarS1otHashes111111111111111111111111111">;
+  }
   if (!accounts.tokenProgram.value) {
     accounts.tokenProgram.value =
       "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address<"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA">;
@@ -423,6 +494,8 @@ export function getDepositFundsInstruction<
       getAccountMeta("mint", accounts.mint),
       getAccountMeta("ownerTokenAccount", accounts.ownerTokenAccount),
       getAccountMeta("vaultTokenAccount", accounts.vaultTokenAccount),
+      getAccountMeta("auditLogSuccess", accounts.auditLogSuccess),
+      getAccountMeta("slotHashesSysvar", accounts.slotHashesSysvar),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
       getAccountMeta("associatedTokenProgram", accounts.associatedTokenProgram),
       getAccountMeta("systemProgram", accounts.systemProgram),
@@ -438,6 +511,8 @@ export function getDepositFundsInstruction<
     TAccountMint,
     TAccountOwnerTokenAccount,
     TAccountVaultTokenAccount,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar,
     TAccountTokenProgram,
     TAccountAssociatedTokenProgram,
     TAccountSystemProgram
@@ -457,9 +532,12 @@ export type ParsedDepositFundsInstruction<
     ownerTokenAccount: TAccountMetas[3];
     /** Vault's PDA-controlled token account */
     vaultTokenAccount: TAccountMetas[4];
-    tokenProgram: TAccountMetas[5];
-    associatedTokenProgram: TAccountMetas[6];
-    systemProgram: TAccountMetas[7];
+    /** Phase 7 — success audit log; entry appended after token transfer. */
+    auditLogSuccess: TAccountMetas[5];
+    slotHashesSysvar: TAccountMetas[6];
+    tokenProgram: TAccountMetas[7];
+    associatedTokenProgram: TAccountMetas[8];
+    systemProgram: TAccountMetas[9];
   };
   data: DepositFundsInstructionData;
 };
@@ -472,12 +550,12 @@ export function parseDepositFundsInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedDepositFundsInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 8) {
+  if (instruction.accounts.length < 10) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 8,
+        expectedAccountMetas: 10,
       },
     );
   }
@@ -495,6 +573,8 @@ export function parseDepositFundsInstruction<
       mint: getNextAccount(),
       ownerTokenAccount: getNextAccount(),
       vaultTokenAccount: getNextAccount(),
+      auditLogSuccess: getNextAccount(),
+      slotHashesSysvar: getNextAccount(),
       tokenProgram: getNextAccount(),
       associatedTokenProgram: getNextAccount(),
       systemProgram: getNextAccount(),

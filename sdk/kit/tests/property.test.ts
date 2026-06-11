@@ -3,17 +3,18 @@
  *
  * Uses fast-check (v3) for property-based testing to exhaustively explore edge cases
  * that hand-written tests miss. Three categories:
- *   A — Exported function properties (isSpendingAction, getRolling24hUsd)
+ *   A — Exported function properties (getRolling24hUsd)
  *   B — Cross-validation (ceilFee formula)
  *   C — Fuzz testing (detectDrainAttempt, replaceAgentAtas)
  *
  * Note: `hasPermission`, `stringsToPermissions`, `PermissionBuilder` property
  * tests were deleted in the A11 cleanup — the underlying 21-bit bitmask is gone.
+ * `isSpendingAction` property tests were deleted in V2 Option A — the helper
+ * was zombie code; V2 derives spending from `amount > 0n`.
  */
 
 import * as fc from "fast-check";
 import { expect } from "chai";
-import { isSpendingAction } from "../src/types.js";
 import {
   detectDrainAttempt,
   RISK_FLAG_LARGE_OUTFLOW,
@@ -57,40 +58,14 @@ function replaceAgentAtas(
 const NUM_RUNS = parseInt(process.env.PROPERTY_RUNS ?? "5000", 10);
 
 // ─── Constants ──────────────────────────────────────────────────────────────
-
-const SPENDING_ACTIONS = [
-  "swap",
-  "openPosition",
-  "increasePosition",
-  "deposit",
-  "transfer",
-  "addCollateral",
-  "placeLimitOrder",
-  "swapAndOpenPosition",
-  "createEscrow",
-] as const;
-
-const NON_SPENDING_ACTIONS = [
-  "closePosition",
-  "decreasePosition",
-  "withdraw",
-  "removeCollateral",
-  "placeTriggerOrder",
-  "editTriggerOrder",
-  "cancelTriggerOrder",
-  "editLimitOrder",
-  "cancelLimitOrder",
-  "closeAndSwapPosition",
-  "settleEscrow",
-  "refundEscrow",
-] as const;
-
-const ALL_ACTIONS = [...SPENDING_ACTIONS, ...NON_SPENDING_ACTIONS];
-
+//
+// SPENDING_ACTIONS / NON_SPENDING_ACTIONS / ALL_ACTIONS arrays deleted in
+// V2 Option A alongside `isSpendingAction`. The helper they fed was zombie
+// code; V2 derives spending from `amount > 0n`.
+//
 // `ACTION_KEYS` array was used by the deleted `hasPermission` / bitmask
-// property tests (A11). Kept removed — every surviving test either
-// references `SPENDING_ACTIONS` / `NON_SPENDING_ACTIONS` or builds its
-// own inline list.
+// property tests (A11). The v6 program uses a 2-bit capability enum that
+// is not bitmask-compositional.
 
 const EPOCH_DURATION = 600;
 const NUM_EPOCHS = 144;
@@ -154,63 +129,15 @@ const arbAccountRole: fc.Arbitrary<AccountRole> = fc.constantFrom(
 // ─── CATEGORY A: Exported Function Properties ──────────────────────────────
 
 describe("Property Tests — Category A: Exported Function Properties", () => {
-  // ── isSpendingAction ────────────────────────────────────────────────────
-
-  describe("isSpendingAction", () => {
-    it("exactly 9 actions are spending", () => {
-      const spendingCount = ALL_ACTIONS.filter(isSpendingAction).length;
-      expect(spendingCount).to.equal(9);
-    });
-
-    it("exactly 12 actions are non-spending", () => {
-      const nonSpendingCount = ALL_ACTIONS.filter(
-        (a) => !isSpendingAction(a),
-      ).length;
-      expect(nonSpendingCount).to.equal(12);
-    });
-
-    it("every known spending action returns true", () => {
-      for (const action of SPENDING_ACTIONS) {
-        expect(isSpendingAction(action)).to.equal(
-          true,
-          `Expected ${action} to be spending`,
-        );
-      }
-    });
-
-    it("every known non-spending action returns false", () => {
-      for (const action of NON_SPENDING_ACTIONS) {
-        expect(isSpendingAction(action)).to.equal(
-          false,
-          `Expected ${action} to be non-spending`,
-        );
-      }
-    });
-
-    it("random unknown strings always return false", () => {
-      fc.assert(
-        fc.property(
-          fc
-            .string({ minLength: 1, maxLength: 50 })
-            .filter((s) => !(ALL_ACTIONS as readonly string[]).includes(s)),
-          (unknownAction) => {
-            expect(isSpendingAction(unknownAction)).to.equal(false);
-          },
-        ),
-        { numRuns: NUM_RUNS },
-      );
-    });
-
-    it("total known actions = 21", () => {
-      expect(ALL_ACTIONS.length).to.equal(21);
-    });
-  });
-
+  // `isSpendingAction` property-test block deleted in V2 Option A — the
+  // helper was zombie code mapping legacy ActionType names to spending
+  // booleans. V2 uses `amount > 0n` directly as the spending predicate;
+  // no string label mapping exists to property-test.
+  //
   // `hasPermission` property-test block deleted in A11 — the helper encoded
   // the pre-v6 21-bit bitmask. The v6 program uses a 2-bit capability enum
   // that is not bitmask-compositional, so there's no property-based
-  // analogue. Spending classification is property-tested through
-  // `isSpendingAction` above.
+  // analogue.
 
   // ── getRolling24hUsd ──────────────────────────────────────────────────
 
@@ -1102,9 +1029,10 @@ describe("Adversarial SDK Attack Tests", () => {
   // tests (unique-bits-per-action, stringsToPermissions↔PermissionBuilder
   // round-trip, contiguous-0-to-20, all-bits-OR-equals-2^21-1) were all
   // property-testing the deleted bitmask helpers. The v6 program's 2-bit
-  // capability enum has no bitmask structure to test; spending
-  // classification is covered by `isSpendingAction` property tests in
-  // Category A.
+  // capability enum has no bitmask structure to test. Spending
+  // classification was previously covered by `isSpendingAction` property
+  // tests in Category A, which were themselves deleted in V2 Option A
+  // (spending now derives from `amount > 0n`, not a string-label map).
 
   describe("Threshold Property Tests (fuzz)", () => {
     it("drain thresholds are always integers after clamping", () => {

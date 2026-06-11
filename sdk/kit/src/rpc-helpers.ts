@@ -44,6 +44,14 @@ export interface SendAndConfirmOptions {
   pollIntervalMs?: number;
   /** Confirmation commitment. Default: "confirmed" */
   commitment?: Commitment;
+  /**
+   * Skip preflight simulation. Default: false. Required for slot-bound
+   * transactions (e.g. initialize_vault's PEN-CROSS-2 digest): preflight
+   * simulates at the CURRENT slot, which mismatches a digest bound to a FUTURE
+   * execution slot and rejects with PolicyPreviewMismatch before the tx ever
+   * lands. Sending unsimulated lets it execute at the bound slot.
+   */
+  skipPreflight?: boolean;
 }
 
 // ─── BlockhashCache ─────────────────────────────────────────────────────────
@@ -203,7 +211,7 @@ export async function sendAndConfirmTransaction(
   const signature = await rpc
     .sendTransaction(encodedTransaction, {
       encoding: "base64" as const,
-      skipPreflight: false,
+      skipPreflight: options?.skipPreflight ?? false,
       preflightCommitment: commitment,
     })
     .send();
@@ -225,9 +233,15 @@ export async function sendAndConfirmTransaction(
 
       // Check for error
       if (status.err) {
+        // status.err carries Kit's BigInt-typed fields (e.g. u64 indices), so a
+        // plain JSON.stringify throws "Do not know how to serialize a BigInt"
+        // and MASKS the real on-chain error. Serialize BigInts as strings.
+        const errJson = JSON.stringify(status.err, (_k, v) =>
+          typeof v === "bigint" ? v.toString() : v,
+        );
         throw new SigilRpcError(
           SIGIL_ERROR__RPC__TX_FAILED,
-          `Transaction ${signature} failed: ${JSON.stringify(status.err)}`,
+          `Transaction ${signature} failed: ${errJson}`,
           { context: { signature: signature as string } },
         );
       }

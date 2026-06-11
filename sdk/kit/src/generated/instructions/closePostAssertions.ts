@@ -86,13 +86,19 @@ export type ClosePostAssertionsInstruction<
 
 export type ClosePostAssertionsInstructionData = {
   discriminator: ReadonlyUint8Array;
+  expectedDigest: ReadonlyUint8Array;
 };
 
-export type ClosePostAssertionsInstructionDataArgs = {};
+export type ClosePostAssertionsInstructionDataArgs = {
+  expectedDigest: ReadonlyUint8Array;
+};
 
 export function getClosePostAssertionsInstructionDataEncoder(): FixedSizeEncoder<ClosePostAssertionsInstructionDataArgs> {
   return transformEncoder(
-    getStructEncoder([["discriminator", fixEncoderSize(getBytesEncoder(), 8)]]),
+    getStructEncoder([
+      ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
+      ["expectedDigest", fixEncoderSize(getBytesEncoder(), 32)],
+    ]),
     (value) => ({
       ...value,
       discriminator: CLOSE_POST_ASSERTIONS_DISCRIMINATOR,
@@ -103,6 +109,7 @@ export function getClosePostAssertionsInstructionDataEncoder(): FixedSizeEncoder
 export function getClosePostAssertionsInstructionDataDecoder(): FixedSizeDecoder<ClosePostAssertionsInstructionData> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
+    ["expectedDigest", fixDecoderSize(getBytesDecoder(), 32)],
   ]);
 }
 
@@ -128,6 +135,7 @@ export type ClosePostAssertionsAsyncInput<
   policy?: Address<TAccountPolicy>;
   postAssertions?: Address<TAccountPostAssertions>;
   systemProgram?: Address<TAccountSystemProgram>;
+  expectedDigest: ClosePostAssertionsInstructionDataArgs["expectedDigest"];
 };
 
 export async function getClosePostAssertionsInstructionAsync<
@@ -171,6 +179,9 @@ export async function getClosePostAssertionsInstructionAsync<
     keyof typeof originalAccounts,
     ResolvedInstructionAccount
   >;
+
+  // Original args.
+  const args = { ...input };
 
   // Resolve default values.
   if (!accounts.policy.value) {
@@ -220,7 +231,9 @@ export async function getClosePostAssertionsInstructionAsync<
       getAccountMeta("postAssertions", accounts.postAssertions),
       getAccountMeta("systemProgram", accounts.systemProgram),
     ],
-    data: getClosePostAssertionsInstructionDataEncoder().encode({}),
+    data: getClosePostAssertionsInstructionDataEncoder().encode(
+      args as ClosePostAssertionsInstructionDataArgs,
+    ),
     programAddress,
   } as ClosePostAssertionsInstruction<
     TProgramAddress,
@@ -244,6 +257,7 @@ export type ClosePostAssertionsInput<
   policy: Address<TAccountPolicy>;
   postAssertions: Address<TAccountPostAssertions>;
   systemProgram?: Address<TAccountSystemProgram>;
+  expectedDigest: ClosePostAssertionsInstructionDataArgs["expectedDigest"];
 };
 
 export function getClosePostAssertionsInstruction<
@@ -286,6 +300,9 @@ export function getClosePostAssertionsInstruction<
     ResolvedInstructionAccount
   >;
 
+  // Original args.
+  const args = { ...input };
+
   // Resolve default values.
   if (!accounts.systemProgram.value) {
     accounts.systemProgram.value =
@@ -301,7 +318,9 @@ export function getClosePostAssertionsInstruction<
       getAccountMeta("postAssertions", accounts.postAssertions),
       getAccountMeta("systemProgram", accounts.systemProgram),
     ],
-    data: getClosePostAssertionsInstructionDataEncoder().encode({}),
+    data: getClosePostAssertionsInstructionDataEncoder().encode(
+      args as ClosePostAssertionsInstructionDataArgs,
+    ),
     programAddress,
   } as ClosePostAssertionsInstruction<
     TProgramAddress,

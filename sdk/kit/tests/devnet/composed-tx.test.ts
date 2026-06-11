@@ -56,6 +56,15 @@ async function buildSwapInstructions(
     amount,
     targetProtocol: JUPITER_PROGRAM_ADDRESS,
     expectedPolicyVersion: 0n,
+    // AC-10 (Phase 4): fresh session always starts at nonce=0.
+    expectedNonce: 0n,
+    // D-1 (Bucket 2): devnet integration test — zero-filled digest matches
+    // the scalar verifier only if the on-chain program is also configured
+    // to accept zero (it isn't), so this test will reject with 6111. The
+    // test relies on a successful seal, so it MUST compute the correct
+    // scalar digest. Skipped in CI until the test computes via
+    // computeScalarIntentDigest (devnet tests run separately from CI).
+    expectedIntentDigest: new Uint8Array(32),
   });
 
   const finalizeIx = await getFinalizeSessionInstructionAsync({

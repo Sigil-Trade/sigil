@@ -45,6 +45,14 @@ export interface MockRpcOverrides {
   getMinimumBalanceForRentExemptionResult?:
     | bigint
     | ((size: bigint) => bigint | Promise<bigint>);
+  /**
+   * Override `getMultipleAccounts` (what `fetchEncodedAccounts` calls under the
+   * hood). Keyed by base58 address → the JSON-RPC account-info value, or `null`
+   * for "does not exist". Addresses absent from the map resolve to `null`.
+   * Used by the F-Q4 seal() satisfier tests, which fetch the writable DeFi
+   * accounts to resolve vault-owned Token-2022 output mints.
+   */
+  getMultipleAccountsByAddress?: Record<string, unknown>;
 }
 
 export function createMockRpc(overrides?: MockRpcOverrides): Rpc<SolanaRpcApi> {
@@ -74,6 +82,16 @@ export function createMockRpc(overrides?: MockRpcOverrides): Rpc<SolanaRpcApi> {
     getAccountInfo: () => ({
       send: async () => overrides?.getAccountInfoResult ?? { value: null },
     }),
+    // `fetchEncodedAccounts` (used by the F-Q4 seal() satisfier) calls this.
+    // Returns one entry per requested address, in order; unknown addresses → null.
+    getMultipleAccounts: (addresses: readonly Address[]) => ({
+      send: async () => ({
+        context: { slot: 100n },
+        value: addresses.map(
+          (a) => overrides?.getMultipleAccountsByAddress?.[a as string] ?? null,
+        ),
+      }),
+    }),
     getMinimumBalanceForRentExemption: (size: bigint) => ({
       send: async () => {
         const o = overrides?.getMinimumBalanceForRentExemptionResult;
@@ -81,6 +99,11 @@ export function createMockRpc(overrides?: MockRpcOverrides): Rpc<SolanaRpcApi> {
         if (typeof o === "function") return o(size);
         return defaultRent(size);
       },
+    }),
+    // PEN-CROSS-2: `createVault` reads the current slot to bind into the
+    // TA-19 digest. Deterministic mock value so test fixtures don't drift.
+    getSlot: () => ({
+      send: async () => 100n,
     }),
   } as unknown as Rpc<SolanaRpcApi>;
 }

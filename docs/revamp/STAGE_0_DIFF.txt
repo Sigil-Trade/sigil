@@ -1,0 +1,74 @@
+STAGE_0_DIFF.txt — Diff scope verification for Stage 0 baseline
+================================================================
+
+Branch: revamp/v2-2026-05
+Date:   2026-05-17
+Stage:  stage-0-baseline
+
+PRE-EXISTING WORKING-TREE STATE (NOT FROM STAGE 0)
+==================================================
+The following files predate Stage 0 work and are out of scope.
+Documented per NEW-6 of the plan-review feedback. They are NOT included
+in the Stage 0 commit (explicit-path `git add` only stages Stage 0 paths).
+
+Pre-existing untracked deletions outside agent-middleware/ (session-start):
+ D docs/RFC-ACTIONTYPE-ELIMINATION.md
+ D docs/SDK-REDESIGN-PLAN.md
+ D docs/SECURITY-FINDINGS-2026-04-07.md
+ D docs/V1-LAUNCH-NOTES.md
+ D docs/V1-LAUNCH-RUNBOOK.md
+ M pnpm-lock.yaml
+
+Pre-existing prior-session commits on this branch (cumulative from main):
+- d494408 feat(sigil): Stage 1 demolition — escrow + strict-mode removed
+  (85 files changed, +2,970 / −11,212 — see STAGE_1_REMOVED.md)
+- Prior Stage 0 docs at agent-middleware/docs/{REVAMP_PLAN,THREAT_MODEL_V2,ACCEPTANCE_V2}.md
+  (NOT removed; superseded by docs/revamp/ versions)
+
+STAGE 0 NEW ADDITIONS (THIS SESSION)
+====================================
+The following are the ONLY paths included in this Stage 0 commit:
+
+agent-middleware/docs/revamp/REVAMP_PLAN.md         (≥800 lines, NEW)
+agent-middleware/docs/revamp/THREAT_MODEL_V2.md     (≥800 lines, NEW)
+agent-middleware/docs/revamp/ACCEPTANCE_V2.md       (≥800 lines, NEW)
+agent-middleware/docs/revamp/INTERFACES_V2.md       (NEW)
+agent-middleware/docs/revamp/REVAMP_CI_README.md    (NEW)
+agent-middleware/docs/revamp/tier-model.mmd         (NEW)
+agent-middleware/docs/revamp/STAGE_0_REVIEW/reviewer.md         (NEW)
+agent-middleware/docs/revamp/STAGE_0_REVIEW/hunter.md           (NEW)
+agent-middleware/docs/revamp/STAGE_0_REVIEW/comments.md         (NEW)
+agent-middleware/docs/revamp/STAGE_0_REVIEW/reverify.md         (NEW)
+agent-middleware/docs/revamp/STAGE_0_INVOCATIONS.json           (NEW)
+agent-middleware/docs/revamp/STAGE_0_DIFF.txt                   (NEW — this file)
+agent-middleware/.github/workflows/revamp-ci.yml                (NEW)
+
+SCOPE COMPLIANCE
+================
+Per Stage 0 acceptance criteria + §RP §12.6:
+- Stage 0 commit includes ONLY files matching: `^(docs/revamp/|\.github/workflows/revamp-ci\.yml)` (relative to Sigil repo root at agent-middleware/).
+- Pre-existing Stage 1 demolition commit (d494408) and unrelated working-tree state are NOT in the Stage 0 commit.
+- The `revamp-ci.yml` scope-guard job uses `github.event.before...HEAD` (latest push only), NOT cumulative `main...HEAD`, to avoid false-positives on prior-stage commits already on the branch.
+
+VERIFICATION COMMAND (post-commit)
+==================================
+Run from agent-middleware/:
+
+  git diff HEAD~1..HEAD --name-only | grep -vE '^(docs/revamp/|\.github/workflows/revamp-ci\.yml)' || echo "SCOPE CLEAN"
+
+Expected: "SCOPE CLEAN" (no out-of-scope paths in the latest commit).
+
+§RP COMPLIANCE
+==============
+- Reviewer fan (§RP §12.2): 21 CRIT+HIGH (code-reviewer) + 14 CRIT+HIGH (silent-failure-hunter) + bonus 4 CRIT (comment-analyzer). Both mandatory reviewers exceed §RP minimum of 10.
+- Fix loop (§RP §12.3): iter-1 fixes applied to all 21+14+4 CRIT+HIGH findings.
+- Reverify swap (§RP §12.4): silent-failure-hunter reverified reviewer; code-reviewer reverified silent-failure-hunter. 4+3 NEW CRIT + 4+3 NEW HIGH surfaced; iter-2 fixes applied.
+- Iteration bound (§RP §12.4 closure): iter-2 closes Stage 0 §RP. Residual MED+LOW + Stage 2+ deferred items tracked in REVAMP_PLAN §9 Stage 0 Fix Log.
+- Manifest (§RP §12.5): docs/revamp/STAGE_0_INVOCATIONS.json present.
+- Diff verification (§RP §12.6): this file.
+
+STAGE_0_BASELINE TAG
+====================
+After commit and CI green (consultation-gated push per memory pattern),
+the tag `stage-0-baseline` will be applied to the Stage 0 commit. Tag push
+is separately gated on user consultation.

@@ -102,20 +102,22 @@ by its 8-byte Anchor discriminator:
 All sizes are read from `pub const SIZE` in the respective source files. Zero-copy accounts
 use `#[account(zero_copy)]` and require `AccountLoader` (not `Account`) at call sites.
 
-| PDA                             | Seeds                                                        | Size (bytes) | Notes                                                                                                             | Source                                                     |
-| ------------------------------- | ------------------------------------------------------------ | :----------: | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `AgentVault`                    | `["vault", owner, vault_id_le8]`                             |     635      | Root vault state; `agents: Vec<AgentEntry>` capped at 10 entries × 49 bytes                                       | `programs/sigil/src/state/vault.rs:109-127`                |
-| `PolicyConfig`                  | `["policy", vault]`                                          |     826      | Spending caps, protocol allow/deny list, slippage, timelock, `policy_version` OCC counter                         | `programs/sigil/src/state/policy.rs:104-124`               |
-| `SpendTracker`                  | `["tracker", vault]`                                         |    2,840     | **Zero-copy**; 144 × 10-min epoch buckets for rolling 24 h USD spend; per-protocol counters (10 slots × 48 bytes) | `programs/sigil/src/state/tracker.rs:70`                   |
-| `SessionAuthority`              | `["session", vault, agent, token_mint]`                      |     377      | Per-session auth token; delegation state, fees, stablecoin snapshot, Phase B2 assertion snapshots (4 × 32 bytes)  | `programs/sigil/src/state/session.rs:75-76`                |
-| `AgentSpendOverlay`             | `["agent_spend", vault, &[0u8]]`                             |    2,528     | **Zero-copy**; 10 agent slots × 232 bytes (24-bucket hourly epoch); lifetime spend + tx count arrays              | `programs/sigil/src/state/agent_spend_overlay.rs:82-88`    |
-| `EscrowDeposit`                 | `["escrow", source_vault, destination_vault, escrow_id_le8]` |     170      | Escrow state: net amount, expiry, 32-byte condition hash, status enum                                             | `programs/sigil/src/state/escrow.rs:26`                    |
-| `InstructionConstraints`        | `["constraints", vault]`                                     |    35,888    | **Zero-copy**; 64 entries × 560 bytes (8 data + 5 account constraints); strict-mode flag; schema version          | `programs/sigil/src/state/constraints.rs:177`              |
-| `PendingPolicyUpdate`           | `["pending_policy", vault]`                                  |     826      | Queued policy diff; all 14 policy fields as `Option<T>`; holds `executes_at` timestamp                            | `programs/sigil/src/state/pending_policy.rs:42-60`         |
-| `PendingConstraintsUpdate`      | `["pending_constraints", vault]`                             |    35,904    | **Zero-copy**; same 64-entry layout as `InstructionConstraints` plus `queued_at` / `executes_at` timestamps       | `programs/sigil/src/state/pending_constraints.rs:42`       |
-| `PendingAgentPermissionsUpdate` | `["pending_agent_perms", vault, agent]`                      |     105      | Queued capability + spend-limit change for one agent; per-agent PDA allows concurrent updates                     | `programs/sigil/src/state/pending_agent_perms.rs:21`       |
-| `PendingCloseConstraints`       | `["pending_close_constraints", vault]`                       |      57      | Minimal timelock gate for constraint PDA closure; holds `queued_at` / `executes_at`                               | `programs/sigil/src/state/pending_close_constraints.rs:15` |
-| `PostExecutionAssertions`       | `["post_assertions", vault]`                                 |     352      | **Zero-copy**; up to 4 assertion entries × 76 bytes; Phase B1 (absolute), B2 (delta), B3 (cross-field) modes      | `programs/sigil/src/state/post_assertions.rs:115`          |
+| PDA                             | Seeds                                                        | Size (bytes) | Notes                                                                                                                                        | Source                                                     |
+| ------------------------------- | ------------------------------------------------------------ | :----------: | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `AgentVault`                    | `["vault", owner, vault_id_le8]`                             |     634      | Root vault state; `agents: Vec<AgentEntry>` capped at 10 entries × 49 bytes; `observe_only: bool` [Phase 2 TA-19]                            | `programs/sigil/src/state/vault.rs:135-151`                |
+| `PolicyConfig`                  | `["policy", vault]`                                          |    1,290     | Spending caps + cap windows, allowlist protocols + destinations, slippage, timelock, `policy_version` OCC counter, TA-19 digest, TA-12 floor | `programs/sigil/src/state/policy.rs:323-350`               |
+| `SpendTracker`                  | `["tracker", vault]`                                         |    3,328     | **Zero-copy**; 144 × 10-min epoch buckets for rolling 24h USD spend; per-protocol counters (10 × 48); per-recipient counters [TA-14 Phase 5] | `programs/sigil/src/state/tracker.rs:205-214`              |
+| `SessionAuthority`              | `["session", vault, agent, token_mint]`                      |     515      | Per-session auth; delegation, fees, stablecoin snapshot, Phase 5 doubled-snapshot arrays (TA-12/TA-14)                                       | `programs/sigil/src/state/session.rs:144-145`              |
+| `AgentSpendOverlay`             | `["agent_spend", vault, &[0u8]]`                             |    2,688     | **Zero-copy**; 10 agent slots × 232 bytes (24-bucket hourly epoch); lifetime spend + tx count + TA-06 cooldown/last_action arrays            | `programs/sigil/src/state/agent_spend_overlay.rs:114-123`  |
+| `InstructionConstraints`        | `["constraints", vault]`                                     |    35,888    | **Zero-copy**; 64 entries × 560 bytes (8 data + 5 account constraints)                                                                       | `programs/sigil/src/state/constraints.rs:193`              |
+| `PendingPolicyUpdate`           | `["pending_policy", vault]`                                  |     969      | Queued policy diff (all 22 fields as `Option<T>`); `queued_at` / `executes_at` / `queued_at_slot` [F-10]; cosign digest [TA-09]              | `programs/sigil/src/state/pending_policy.rs:111-135`       |
+| `PendingConstraintsUpdate`      | `["pending_constraints", vault]`                             |    35,912    | **Zero-copy**; same 64-entry layout as `InstructionConstraints` plus `queued_at` / `executes_at` / `queued_at_slot` [F-10]                   | `programs/sigil/src/state/pending_constraints.rs:47`       |
+| `PendingAgentPermissionsUpdate` | `["pending_agent_perms", vault, agent]`                      |     121      | Queued capability + spend-limit change for one agent; per-agent PDA allows concurrent updates                                                | `programs/sigil/src/state/pending_agent_perms.rs:31`       |
+| `PendingCloseConstraints`       | `["pending_close_constraints", vault]`                       |      65      | Minimal timelock gate for constraint PDA closure; holds `queued_at` / `executes_at`                                                          | `programs/sigil/src/state/pending_close_constraints.rs:20` |
+| `PostExecutionAssertions`       | `["post_assertions", vault]`                                 |     672      | **Zero-copy**; up to 8 assertion entries × 78 bytes [Phase 6]; modes 0-3 (absolute/delta/cross-field) + modes 4-7 (R-1..R-4 Maestro borrows) | `programs/sigil/src/state/post_assertions.rs:199`          |
+
+> **Removed in v2:** `EscrowDeposit` PDA was demolished in Phase 1 (REVAMP_PLAN §2.1).
+> Escrow flows replaced by direct atomic transfer with policy assertion.
 
 Notes on zero-copy accounts:
 
@@ -255,7 +257,9 @@ allow testing on devnet where Circle-controlled USDC cannot be minted
 ### Agent Capability Model
 
 The old 21-bit `permissions: u64` ActionType bitmask has been eliminated. Spending
-classification now derives from the matched `ConstraintEntryZC.is_spending` field.
+classification derives from `amount > 0` at the entry to `validate_and_authorize`
+(no stored field; both `ConstraintEntryZC.is_spending` and `SessionAuthority.is_spending`
+were deleted in M2 Option A and Option A V2 respectively).
 Agent authorization uses a 2-bit capability field
 (`programs/sigil/src/state/vault.rs:6-8`, `programs/sigil/src/state/mod.rs:32`):
 
@@ -298,7 +302,7 @@ instance-level vault and agent state caching.
 - **Anchor**: `0.32.1` — `programs/sigil/Cargo.toml:25`, `Anchor.toml:2`
 - **Rust toolchain**: `1.89.0` (stable) — `rust-toolchain.toml:2`
 - **Solana program SDK**: `>=2` — `programs/sigil/Cargo.toml:27`
-- **Devnet program ID**: `4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL` — `Anchor.toml:9`, `programs/sigil/src/lib.rs:16`
+- **Devnet program ID**: `7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK` — `Anchor.toml:9`, `programs/sigil/src/lib.rs:16`
 - **Bytemuck**: `1.14` with `derive` + `min_const_generics` — required by zero-copy account types — `programs/sigil/Cargo.toml:28`
 - **Blake3**: `=1.5.5` (pinned) — discriminator computation; pinned to avoid edition 2024 incompatibility with BPF platform-tools — `programs/sigil/Cargo.toml:31-33`
 - **TypeScript SDK**: `sdk/kit/` — ESM-only, peer dep `@solana/kit ^6.2.0` — `sdk/kit/package.json:63`
@@ -315,7 +319,5 @@ instance-level vault and agent state caching.
 | `docs/ERROR-CODES.md`                  | Complete table of all error codes with messages and triggering conditions                                    |
 | `docs/SECURITY.md`                     | Threat model, access control matrix, trust boundaries, upgrade authority governance                          |
 | `docs/ONCHAIN-FEATURE-INVENTORY.md`    | Per-instruction operational detail, complete account type list, event catalog, capability model              |
-| `docs/RFC-ACTIONTYPE-ELIMINATION.md`   | Design rationale for replacing the 21-bit ActionType bitmask with the constraint-derived `is_spending` field |
 | `docs/COMMANDS-REFERENCE.md`           | All build, test, deploy, and tooling commands                                                                |
 | `docs/DEPLOYMENT.md`                   | Devnet and mainnet deployment procedures, verification steps                                                 |
-| `docs/SECURITY-FINDINGS-2026-04-07.md` | Detailed write-up of security findings and mitigations (A3, A5, H-1, M-1, M-2)                               |

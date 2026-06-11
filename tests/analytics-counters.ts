@@ -14,6 +14,11 @@ import {
 } from "@solana/spl-token";
 import { expect } from "chai";
 import BN from "bn.js";
+import { initVaultPreviewDigest } from "./helpers/policy-digest";
+import {
+  buildExpectedIntentDigest,
+  digestAsArgs,
+} from "./helpers/intent-digest-fixture";
 import {
   createTestEnv,
   airdropSol,
@@ -28,7 +33,10 @@ import {
   printCUSummary,
   TestEnv,
   LiteSVM,
+  MOCK_DEFI_PROGRAM_ID,
+  buildMockDefiNoopIx,
 } from "./helpers/litesvm-setup";
+import { registerOperatorAgent } from "./helpers/register-operator-agent";
 
 const FULL_CAPABILITY = 2; // CAPABILITY_OPERATOR
 
@@ -52,9 +60,14 @@ describe("analytics-counters", () => {
   let vaultUsdcAta: PublicKey;
   let feeDestUsdcAta: PublicKey;
 
-  const jupiterProgramId = Keypair.generate().publicKey;
+  // F-Q2: spending sandwiches require EXACTLY ONE counted DeFi instruction, and
+  // the executed DeFi ix's program must equal target_protocol. This "protocol"
+  // is used only as the allowlist entry + authorized target here (no identity
+  // assertion), so point it at the real, loaded, counted mock-defi program; the
+  // sandwich's middle ix is mock-defi's no-op open_position (zero spend).
+  const jupiterProgramId = MOCK_DEFI_PROGRAM_ID;
   const protocolTreasury = new PublicKey(
-    "ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT",
+    "6wrkKTM2pjkcCAbMfRz2j3AXspavu6pq3ePcuJUE3Azp",
   );
   let protocolTreasuryUsdcAta: PublicKey;
 
@@ -132,15 +145,34 @@ describe("analytics-counters", () => {
     await program.methods
       .initializeVault(
         vaultId,
-        new BN(1_000_000_000), // 1000 USDC daily cap
-        new BN(500_000_000), // 500 USDC max tx
-        0, // protocol mode: all
+        new BN(1_000_000_000),
+        new BN(500_000_000),
+        1,
+        [jupiterProgramId],
+        0,
+        5000,
+        new BN(1800),
         [],
-        0, // developer_fee_rate
-        5000, // maxSlippageBps (50%)
-        new BN(1800), // timelockDuration (mandatory minimum: 30 min)
-        [], // allowedDestinations
-        [], // protocolCaps
+        [],
+        false, // observeOnly (Phase 2 TA-19)
+        0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+        false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+        5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+        new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+        new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+        false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+        initVaultPreviewDigest({
+          dailySpendingCapUsd: new BN(1_000_000_000),
+          maxTransactionSizeUsd: new BN(500_000_000),
+          maxSlippageBps: 5000,
+          protocolMode: 1,
+          protocols: [jupiterProgramId],
+          allowedDestinations: [],
+          timelockDuration: new BN(1800),
+          operatingHours: 0x00ffffff,
+          autoPromoteGrays: false,
+          autoRevokeThreshold: 5,
+        }),
       )
       .accounts({
         owner: owner.publicKey,
@@ -153,15 +185,14 @@ describe("analytics-counters", () => {
       } as any)
       .rpc();
 
-    // Register agent
-    await program.methods
-      .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-      .accountsPartial({
-        owner: owner.publicKey,
-        vault: vaultPda,
-        agentSpendOverlay: overlayPda,
-      })
-      .rpc();
+    // Register agent (F-Q6: single-key OPERATOR grant via queue→advance→apply)
+    await registerOperatorAgent({
+      program,
+      svm,
+      owner: owner.publicKey,
+      vault: vaultPda,
+      agent: agent.publicKey,
+    });
 
     // Deposit USDC to vault
     await program.methods
@@ -194,25 +225,51 @@ describe("analytics-counters", () => {
   }
 
   async function buildValidateIx(amount: BN) {
-    return program.methods
-      .validateAndAuthorize(usdcMint, amount, jupiterProgramId, new BN(0))
-      .accountsPartial({
-        agent: agent.publicKey,
-        vault: vaultPda,
-        policy: policyPda,
-        tracker: trackerPda,
-        session: getSessionPda(),
-        vaultTokenAccount: vaultUsdcAta,
-        tokenMintAccount: usdcMint,
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: null,
-        outputStablecoinAccount: null,
-        agentSpendOverlay: overlayPda,
-        tokenProgram: TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-        instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
-      })
-      .instruction();
+    // Read live policy_version for TOCTOU guard (default 0 if not yet bumped).
+    const livePolicy = await program.account.policyConfig.fetch(policyPda);
+    return (
+      program.methods
+        .validateAndAuthorize(
+          usdcMint,
+          amount,
+          jupiterProgramId,
+          livePolicy.policyVersion,
+          new BN(0),
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: vaultPda,
+              agent: agent.publicKey,
+              tokenMint: usdcMint,
+              amount,
+              targetProtocol: jupiterProgramId,
+            }),
+          ),
+        )
+        .accountsPartial({
+          agent: agent.publicKey,
+          vault: vaultPda,
+          policy: policyPda,
+          tracker: trackerPda,
+          session: getSessionPda(),
+          vaultTokenAccount: vaultUsdcAta,
+          tokenMintAccount: usdcMint,
+          protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+          feeDestinationTokenAccount: null,
+          outputStablecoinAccount: null,
+          agentSpendOverlay: overlayPda,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        // F-Q1a completeness: the mock-defi no-op ix lists the agent signer (the
+        // writable fee-payer in the compiled v0 message). validate's
+        // destination-completeness guard requires every writable DeFi meta
+        // resolvable in remaining_accounts, so append the agent (mirrors seal()).
+        .remainingAccounts([
+          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+        ])
+        .instruction()
+    );
   }
 
   async function buildFinalizeIx() {
@@ -237,8 +294,12 @@ describe("analytics-counters", () => {
 
   async function executeSession(amount?: BN): Promise<void> {
     const validateIx = await buildValidateIx(amount ?? new BN(50_000_000));
+    // F-Q2: a spending sandwich needs EXACTLY ONE counted DeFi instruction
+    // between validate and finalize. mock-defi's no-op open_position is that ix
+    // (zero token movement → actual_spend = 0, counters still increment).
+    const defiIx = buildMockDefiNoopIx(agent.publicKey);
     const finalizeIx = await buildFinalizeIx();
-    sendVersionedTx(svm, [validateIx, finalizeIx], agent);
+    sendVersionedTx(svm, [validateIx, defiIx, finalizeIx], agent);
   }
 
   // ─── Tests ───────────────────────────────────────────────────────────────
@@ -333,14 +394,13 @@ describe("analytics-counters", () => {
     const agent2 = Keypair.generate();
     airdropSol(svm, agent2.publicKey, 5 * LAMPORTS_PER_SOL);
 
-    await program.methods
-      .registerAgent(agent2.publicKey, FULL_CAPABILITY, new BN(0))
-      .accountsPartial({
-        owner: owner.publicKey,
-        vault: vaultPda,
-        agentSpendOverlay: overlayPda,
-      })
-      .rpc();
+    await registerOperatorAgent({
+      program,
+      svm,
+      owner: owner.publicKey,
+      vault: vaultPda,
+      agent: agent2.publicKey,
+    });
 
     // Find agent2's slot
     let overlay = await program.account.agentSpendOverlay.fetch(overlayPda);

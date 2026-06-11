@@ -184,13 +184,11 @@ describe("getPermissionEscalationLatency", () => {
   it("detects suspicious rapid permission use", () => {
     const events: DecodedSigilEvent[] = [
       {
-        name: "AgentPermissionsUpdated",
+        name: "AgentPermissionsChangeApplied",
         data: new Uint8Array(0),
         fields: {
           agent: "a1",
-          timestamp: 1700000000n,
-          newPermissions: 1n,
-          oldPermissions: 0n,
+          appliedAt: 1700000000n,
         },
       },
       {
@@ -208,13 +206,11 @@ describe("getPermissionEscalationLatency", () => {
   it("normal latency is not suspicious", () => {
     const events: DecodedSigilEvent[] = [
       {
-        name: "AgentPermissionsUpdated",
+        name: "AgentPermissionsChangeApplied",
         data: new Uint8Array(0),
         fields: {
           agent: "a1",
-          timestamp: 1700000000n,
-          newPermissions: 1n,
-          oldPermissions: 0n,
+          appliedAt: 1700000000n,
         },
       },
       {
@@ -230,13 +226,11 @@ describe("getPermissionEscalationLatency", () => {
   it("handles no subsequent use", () => {
     const events: DecodedSigilEvent[] = [
       {
-        name: "AgentPermissionsUpdated",
+        name: "AgentPermissionsChangeApplied",
         data: new Uint8Array(0),
         fields: {
           agent: "a1",
-          timestamp: 1700000000n,
-          newPermissions: 1n,
-          oldPermissions: 0n,
+          appliedAt: 1700000000n,
         },
       },
     ];

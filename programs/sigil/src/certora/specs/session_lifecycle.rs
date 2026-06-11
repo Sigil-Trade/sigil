@@ -125,3 +125,49 @@ pub fn rule_owner_duration_capped() {
     // Result must equal the capped value, not the requested value.
     cvlr_assert!(expires == now_ts + MAX_OWNER_SESSION_DURATION_SECONDS as i64);
 }
+
+// ─────────────────────────────────────────────────────────────────
+// Rule 7 (STATEFUL, UNIVERSAL): expiry is bounded by the owner cap for
+// EVERY possible (now_ts, duration) input — not just the default 30s.
+//
+// Rules 1–6 above pin calculate_expiry for SPECIFIC durations (the default
+// SESSION_DURATION_SECONDS) or specific saturation points. This rule
+// strengthens them into a single universal safety bound: for ANY non-
+// negative creation timestamp and ANY owner-supplied duration (including
+// a maliciously huge one and timestamps near i64::MAX), a session can
+// NEVER be issued that outlives `now_ts + MAX_OWNER_SESSION_DURATION_SECONDS`
+// (computed with the same saturating semantics calculate_expiry uses).
+//
+// Security meaning: the maximum live-delegation window an agent can ever
+// hold is hard-capped at MAX_OWNER_SESSION_DURATION_SECONDS regardless of
+// what duration value reaches calculate_expiry — the defense-in-depth that
+// closes audit F5-H1 (over-long delegation under slot-time variance) for
+// the entire input space, not merely the configured default. This is the
+// "no session outlives the owner cap" liveness/authority bound.
+//
+// Proof obligation rests on monotonicity of saturating_add in its second
+// argument: calculate_expiry computes
+//   saturating_add(now_ts, min(duration, MAX))   ≤   saturating_add(now_ts, MAX)
+// because min(duration, MAX) ≤ MAX. Holds in the saturating region too
+// (both sides saturate to i64::MAX).
+// ─────────────────────────────────────────────────────────────────
+
+#[rule]
+pub fn rule_session_expiry_bounded_by_owner_cap() {
+    let now_ts: i64 = nondet();
+    cvlr_assume!(now_ts >= 0); // Solana unix_timestamp is non-negative.
+
+    // Fully symbolic duration — covers the default, in-range, and any
+    // out-of-range / overflow-attempting value a caller might pass.
+    let duration: u64 = nondet();
+
+    let expires = SessionAuthority::calculate_expiry(now_ts, duration);
+
+    // The hard ceiling: never beyond now + the owner cap (saturating).
+    let ceiling = now_ts.saturating_add(MAX_OWNER_SESSION_DURATION_SECONDS as i64);
+    cvlr_assert!(expires <= ceiling);
+
+    // And never before creation (consistency with rule_expiry_at_least_now_ts,
+    // re-proven here over the fully-symbolic duration).
+    cvlr_assert!(expires >= now_ts);
+}

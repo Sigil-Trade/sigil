@@ -5,8 +5,12 @@
  * Every error includes a category, retryability flag, and
  * recovery actions that tell the agent exactly what to do next.
  *
- * Maps all 88 on-chain error codes (6000-6087) plus 34 SDK
- * error codes (7000-7033) to AgentError with machine-readable metadata.
+ * Maps all 105 on-chain error codes (6000-6104) — post M1-04 constraints-engine
+ * teardown, which removed 10 dead constraint-only variants and renumbered the
+ * enum (positional). The IDL (`target/idl/sigil.json`) is the authoritative
+ * code↔name source; `error-map-drift.test.ts` enforces this map agrees with it.
+ * Plus 34 SDK error codes (7000-7033), all to AgentError with machine-readable
+ * metadata.
  *
  * Zero dependency on @solana/web3.js or @coral-xyz/anchor.
  * Uses bigint instead of BN for context values.
@@ -57,8 +61,33 @@ export interface AgentError {
 }
 
 // ---------------------------------------------------------------------------
-// On-chain error code mapping (6000-6087)
+// On-chain error code range constants — single source of truth.
+//
+// `dashboard/errors.ts` re-imports these for the FE→BE category mapping.
+// `tests/dashboard/errors-categorize.test.ts` iterates every generated
+// `SIGIL_ERROR__*` constant and asserts it falls within this range, so
+// drift between MAX and the highest variant breaks CI immediately.
+//
+// MAINTENANCE — when `programs/sigil/src/errors.rs` adds a new variant:
+//   1. Bump SIGIL_ON_CHAIN_ERROR_MAX below to the new highest code.
+//   2. Add an entry to ON_CHAIN_ERRORS for that code (or a TODO with
+//      explicit deferral rationale).
+//   3. Regenerate the IDL + SDK with `pnpm codama` so generated/errors
+//      stays in lockstep.
 // ---------------------------------------------------------------------------
+
+/** Lowest Anchor-error code Sigil emits. */
+export const SIGIL_ON_CHAIN_ERROR_MIN = 6000;
+/**
+ * Highest Anchor-error code currently in use. Bump when errors.rs grows.
+ *
+ * The enum tops out at 6106 (107 codes). The drift gate at
+ * `tests/error-map-drift.test.ts` derives the expected count from
+ * `target/idl/sigil.json` (the authoritative code↔name source) and asserts
+ * this map agrees with it by code AND name — so adding or renumbering an
+ * on-chain error without updating this map fails at test time.
+ */
+export const SIGIL_ON_CHAIN_ERROR_MAX = 6110;
 
 interface ErrorMapping {
   name: string;
@@ -503,38 +532,6 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     ],
   },
   6030: {
-    name: "SwapSlippageExceeded",
-    message:
-      "Swap slippage exceeds policy max_slippage_bps or quoted output is zero",
-    category: "POLICY_VIOLATION",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "reduce_slippage",
-        description:
-          "Use a lower slippageBps value within the vault's maxSlippageBps",
-      },
-      {
-        action: "check_policy",
-        description: "Check the vault's maxSlippageBps setting",
-        tool: "sigil_check_vault",
-      },
-    ],
-  },
-  6031: {
-    name: "InvalidJupiterInstruction",
-    message: "Cannot parse Jupiter swap instruction data",
-    category: "INPUT_VALIDATION",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "use_sdk",
-        description:
-          "Use the SDK's composeJupiterSwap — manual instruction building is error-prone",
-      },
-    ],
-  },
-  6032: {
     name: "UnauthorizedTokenTransfer",
     message:
       "Top-level SPL Token transfer not allowed between validate and finalize",
@@ -548,7 +545,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6033: {
+  6031: {
     name: "SlippageBpsTooHigh",
     message: "Slippage BPS exceeds maximum allowed (5000 = 50%)",
     category: "INPUT_VALIDATION",
@@ -560,7 +557,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6034: {
+  6032: {
     name: "ProtocolMismatch",
     message:
       "DeFi instruction program does not match the declared target_protocol",
@@ -574,7 +571,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6035: {
+  6033: {
     name: "TooManyDeFiInstructions",
     message: "Non-stablecoin swap allows exactly one DeFi instruction",
     category: "INPUT_VALIDATION",
@@ -588,7 +585,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   },
 
   // --- Multi-Agent errors ---
-  6036: {
+  6034: {
     name: "MaxAgentsReached",
     message: "Maximum agents per vault reached (limit: 10)",
     category: "INPUT_VALIDATION",
@@ -601,7 +598,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6037: {
+  6035: {
     name: "InsufficientPermissions",
     message: "Agent lacks permission for this action type",
     category: "PERMISSION",
@@ -618,7 +615,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6038: {
+  6036: {
     name: "InvalidPermissions",
     message:
       "Capability exceeds the on-chain maximum (valid values: 0 = Disabled, 1 = Observer, 2 = Operator)",
@@ -633,91 +630,8 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     ],
   },
 
-  // --- Escrow errors ---
-  6039: {
-    name: "EscrowNotActive",
-    message: "Escrow is not in Active status",
-    category: "RESOURCE_NOT_FOUND",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "check_escrow",
-        description: "Verify the escrow exists and is in Active status",
-      },
-    ],
-  },
-  6040: {
-    name: "EscrowExpired",
-    message: "Escrow has expired — can only be refunded now",
-    category: "RESOURCE_NOT_FOUND",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "refund_escrow",
-        description: "Refund the expired escrow back to the source vault",
-        tool: "sigil_refund_escrow",
-      },
-    ],
-  },
-  6041: {
-    name: "EscrowNotExpired",
-    message: "Escrow has not expired yet — cannot refund before expiry",
-    category: "INPUT_VALIDATION",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "wait",
-        description: "Wait for the escrow to expire before requesting a refund",
-      },
-      {
-        action: "settle",
-        description: "Settle the escrow if you are the destination agent",
-        tool: "sigil_settle_escrow",
-      },
-    ],
-  },
-  6042: {
-    name: "InvalidEscrowVault",
-    message: "Invalid escrow vault — source or destination vault mismatch",
-    category: "INPUT_VALIDATION",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "verify_vaults",
-        description:
-          "Ensure source and destination vault addresses match the escrow",
-      },
-    ],
-  },
-  6043: {
-    name: "EscrowConditionsNotMet",
-    message: "Escrow settlement conditions not met (SHA-256 proof invalid)",
-    category: "INPUT_VALIDATION",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "provide_proof",
-        description:
-          "Provide the correct pre-image for the escrow's condition_hash",
-      },
-    ],
-  },
-  6044: {
-    name: "EscrowDurationExceeded",
-    message: "Escrow duration exceeds maximum (30 days)",
-    category: "INPUT_VALIDATION",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "reduce_duration",
-        description:
-          "Set escrow duration to 2,592,000 seconds (30 days) or less",
-      },
-    ],
-  },
-
-  // --- Instruction constraints errors ---
-  6045: {
+  // --- Post-execution assertion config error ---
+  6037: {
     name: "InvalidConstraintConfig",
     message: "Invalid constraint configuration: bounds exceeded",
     category: "INPUT_VALIDATION",
@@ -730,53 +644,9 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6046: {
-    name: "ConstraintViolated",
-    message: "Instruction violated a configured constraint",
-    category: "POLICY_VIOLATION",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "check_constraints",
-        description:
-          "Review the vault's instruction constraints to understand what is allowed",
-        tool: "sigil_check_vault",
-      },
-      {
-        action: "modify_instruction",
-        description:
-          "Modify the instruction parameters to satisfy the constraints",
-      },
-    ],
-  },
-  6047: {
-    name: "InvalidConstraintsPda",
-    message: "Invalid constraints PDA: wrong owner or vault",
-    category: "INPUT_VALIDATION",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "verify_pda",
-        description: "Use the correct constraints PDA derived from the vault",
-      },
-    ],
-  },
-  6048: {
-    name: "InvalidPendingConstraintsPda",
-    message: "Invalid pending constraints PDA: wrong owner or vault",
-    category: "INPUT_VALIDATION",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "verify_pda",
-        description:
-          "Use the correct pending constraints PDA derived from the vault",
-      },
-    ],
-  },
 
   // --- Per-agent spend limit errors ---
-  6049: {
+  6038: {
     name: "AgentSpendLimitExceeded",
     message:
       "Agent's rolling 24h spend exceeds their individual spending limit",
@@ -801,7 +671,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6050: {
+  6039: {
     name: "OverlaySlotExhausted",
     message:
       "Per-agent overlay is full — cannot register agent with spending limit",
@@ -815,7 +685,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6051: {
+  6040: {
     name: "AgentSlotNotFound",
     message: "Agent has per-agent spending limit but no overlay tracking slot",
     category: "RESOURCE_NOT_FOUND",
@@ -828,7 +698,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6052: {
+  6041: {
     name: "UnauthorizedTokenApproval",
     message:
       "Unauthorized SPL Token Approve detected between validate and finalize",
@@ -842,7 +712,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6053: {
+  6042: {
     name: "InvalidSessionExpiry",
     message: "Session expiry slots out of range (10-450)",
     category: "INPUT_VALIDATION",
@@ -854,50 +724,34 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6054: {
-    name: "UnconstrainedProgramBlocked",
-    message: "Program has no constraint entry and strict mode is enabled",
-    category: "POLICY_VIOLATION",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "add_constraint",
-        description:
-          "Add a constraint entry for this program, or disable strict mode",
-      },
-      {
-        action: "check_constraints",
-        description: "Review the vault's instruction constraints",
-        tool: "sigil_check_vault",
-      },
-    ],
-  },
 
   // --- Per-protocol spend cap errors ---
-  6055: {
+  // Phase 5 §RP-1 V5: 6047 semantics flipped. The "rolling 24h per-protocol
+  // cap exceeded" semantic moved to 6095 (ErrDailyCapExceeded). 6047 now
+  // only emits from `state/tracker.rs:313` when the fixed-size per-protocol
+  // counter slot allocation (max 10 protocols tracked) is exhausted —
+  // i.e. an 11th distinct protocol attempted within the rolling window.
+  6043: {
     name: "ProtocolCapExceeded",
-    message: "Per-protocol rolling 24h spending cap would be exceeded",
+    message:
+      "Per-protocol counter slot allocation exhausted (max 10 protocols tracked)",
     category: "SPENDING_CAP",
     retryable: true,
     retry_after_ms: 3_600_000,
     recovery_actions: [
       {
-        action: "reduce_amount",
-        description:
-          "Reduce the amount to fit within the protocol's remaining cap",
-      },
-      {
-        action: "use_different_protocol",
-        description: "Use a different protocol that has remaining capacity",
-      },
-      {
         action: "wait",
         description:
-          "Wait for the 24h rolling window to release spent capacity",
+          "Wait for an existing protocol slot's 24h rolling window to elapse before invoking a new protocol",
+      },
+      {
+        action: "use_existing_protocol",
+        description:
+          "Reuse one of the protocols already tracked in the rolling window rather than invoking an 11th distinct protocol",
       },
     ],
   },
-  6056: {
+  6044: {
     name: "ProtocolCapsMismatch",
     message:
       "protocol_caps length must match protocols length when has_protocol_caps is true",
@@ -913,34 +767,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   },
 
   // --- Vault closure guard errors ---
-  6057: {
-    name: "ActiveEscrowsExist",
-    message: "Active escrow deposits exist — close them before closing vault",
-    category: "RESOURCE_NOT_FOUND",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "close_escrows",
-        description:
-          "Settle or refund all active escrows before closing the vault",
-      },
-    ],
-  },
-  6058: {
-    name: "ConstraintsNotClosed",
-    message:
-      "Instruction constraints PDA still exists — close it before closing vault",
-    category: "RESOURCE_NOT_FOUND",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "close_constraints",
-        description:
-          "Close the instruction constraints account before closing the vault",
-      },
-    ],
-  },
-  6059: {
+  6045: {
     name: "PendingPolicyExists",
     message:
       "A pending policy update exists — apply or cancel it before closing vault",
@@ -956,7 +783,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   },
 
   // --- Agent pause errors ---
-  6060: {
+  6046: {
     name: "AgentPaused",
     message: "Agent is paused — unpause before executing actions",
     category: "PERMISSION",
@@ -968,7 +795,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6061: {
+  6047: {
     name: "AgentAlreadyPaused",
     message: "Agent is already paused",
     category: "INPUT_VALIDATION",
@@ -980,7 +807,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6062: {
+  6048: {
     name: "AgentNotPaused",
     message: "Agent is not paused — cannot unpause",
     category: "INPUT_VALIDATION",
@@ -992,7 +819,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6063: {
+  6049: {
     name: "UnauthorizedPostFinalizeInstruction",
     message:
       "Instructions after finalize_session must be ComputeBudget or SystemProgram only",
@@ -1006,7 +833,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6064: {
+  6050: {
     name: "UnexpectedBalanceDecrease",
     message:
       "Vault stablecoin balance decreased more than the session authorized amount. " +
@@ -1030,7 +857,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   },
 
   // --- TOCTOU + timelock hardening errors ---
-  6065: {
+  6051: {
     name: "TimelockTooShort",
     message:
       "Timelock duration is below the minimum (1800 seconds / 30 minutes).",
@@ -1044,7 +871,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6066: {
+  6052: {
     name: "PolicyVersionMismatch",
     message:
       "Policy version changed since agent's last RPC read. Re-resolve vault state and retry.",
@@ -1059,7 +886,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6067: {
+  6053: {
     name: "ActiveSessionsExist",
     message:
       "Cannot close vault with active sessions. Finalize all pending sessions first.",
@@ -1076,7 +903,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   },
 
   // --- Post-execution assertions (Phase B scaffolding) ---
-  6068: {
+  6054: {
     name: "PostAssertionFailed",
     message:
       "Post-execution assertion failed: account state did not satisfy constraint.",
@@ -1090,7 +917,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6069: {
+  6055: {
     name: "InvalidPostAssertionIndex",
     message: "Post-assertion references an invalid instruction index.",
     category: "INPUT_VALIDATION",
@@ -1103,7 +930,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6070: {
+  6056: {
     name: "UnauthorizedPreValidateInstruction",
     message:
       "Non-infrastructure instruction detected before validate_and_authorize.",
@@ -1117,7 +944,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6071: {
+  6057: {
     name: "SnapshotNotCaptured",
     message:
       "Delta assertion snapshot was not captured in validate_and_authorize.",
@@ -1131,7 +958,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6072: {
+  6058: {
     name: "InvalidConstraintOperator",
     message:
       "Constraint operator value is not a valid ConstraintOperator discriminant.",
@@ -1144,8 +971,8 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6073: {
-    name: "ConstraintsVaultMismatch",
+  6059: {
+    name: "ZeroCopyVaultMismatch",
     message: "Zero-copy constraints account has wrong vault.",
     category: "INPUT_VALIDATION",
     retryable: false,
@@ -1156,37 +983,25 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6074: {
-    name: "BlockedSplOpcode",
-    message:
-      "SPL opcode is blocked at runtime and cannot be used in constraints.",
-    category: "INPUT_VALIDATION",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "fix_constraints",
-        description:
-          "Remove blocked SPL opcode from the constraint entry — use allowlisted opcodes only.",
-      },
-    ],
-  },
 
-  // F-10 audit fix: durable-nonce pre-signing defense
-  6075: {
+  // F-10 audit fix: durable-nonce pre-signing defense (extended Bucket-3
+  // 2026-05-23 to cover the 2 timelocked-admin PDAs via the wider
+  // MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN ceiling)
+  6060: {
     name: "QueuedUpdateExpired",
     message:
-      "Queued update is too old (>MAX_APPLY_AGE_SLOTS) — re-queue to apply. Defends against durable-nonce pre-signing.",
+      "Queued update is too old (>MAX_APPLY_AGE_SLOTS / >MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN) — re-queue to apply. Defends against durable-nonce pre-signing.",
     category: "POLICY_VIOLATION",
     retryable: false,
     recovery_actions: [
       {
         action: "requeue",
         description:
-          "Re-queue the update via queue_policy_update / queue_constraints_update / queue_close_constraints / queue_agent_permissions_update — the original queued update is past the freshness window.",
+          "Re-queue the update via the matching ix for your flow: queue_policy_update / queue_constraints_update / queue_close_constraints / queue_agent_permissions_update / queue_agent_grant / initiate_ownership_transfer — the original queued update is past the freshness window.",
       },
     ],
   },
-  6076: {
+  6061: {
     name: "AccountWritabilityMismatch",
     message:
       "Account writability flag does not match the constraint requirement (read-only vs writable).",
@@ -1202,7 +1017,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   },
 
   // M11 SIMD-0296 pad-attack DoS guard
-  6077: {
+  6062: {
     name: "SysvarScanBoundExceeded",
     message:
       "Sysvar instruction scan exceeded the per-tx safety bound (MAX_SYSVAR_SCAN_ITERATIONS=64).",
@@ -1218,7 +1033,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   },
 
   // C4 audit fix: async-fulfillment program deny
-  6078: {
+  6063: {
     name: "AsyncFulfillmentNotPermitted",
     message:
       "Async-fulfillment programs (Jupiter Perps, Drift v2, Drift JIT) are not permitted in V1 — keeper-driven settlement happens after finalize_session returns and cannot be measured against the spending cap.",
@@ -1233,51 +1048,8 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     ],
   },
 
-  // Orphan constraints PDA cleanup (F3-H1 audit fix)
-  6079: {
-    name: "ConstraintsAlreadyPopulated",
-    message:
-      "Cannot clean an active constraints PDA via cleanup_orphan_constraints_pda — use queue_close_constraints + apply_close_constraints instead.",
-    category: "INPUT_VALIDATION",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "use_close_path",
-        description:
-          "Route through the timelocked close-constraints path; the orphan-cleanup instruction only operates on never-populated PDAs (partial allocate+extend chain).",
-      },
-    ],
-  },
-  6080: {
-    name: "OrphanPdaWrongOwner",
-    message: "PDA at the constraints seeds is not owned by the Sigil program.",
-    category: "INPUT_VALIDATION",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "verify_pda",
-        description:
-          "Verify the PDA derivation: it must be owned by the Sigil program and match seeds (vault, constraints).",
-      },
-    ],
-  },
-  6081: {
-    name: "OrphanPdaPopulated",
-    message:
-      "PDA is fully populated (carries the Anchor discriminator) — not an orphan; cannot be cleaned.",
-    category: "INPUT_VALIDATION",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "use_close_path",
-        description:
-          "Route fully-populated constraints PDAs through queue_close_constraints + apply_close_constraints.",
-      },
-    ],
-  },
-
   // PR 7: Token-2022 opcode blocks (M3 + Pentester HIGH/MED + third-pass audit)
-  6082: {
+  6064: {
     name: "ConfidentialTransferBlocked",
     message:
       "Token-2022 ConfidentialTransfer is not permitted between validate_and_authorize and finalize_session.",
@@ -1291,7 +1063,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6083: {
+  6065: {
     name: "PermanentDelegateBlocked",
     message:
       "Token-2022 PermanentDelegate is not permitted between validate_and_authorize and finalize_session.",
@@ -1305,7 +1077,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6084: {
+  6066: {
     name: "TransferHookBlocked",
     message:
       "Token-2022 TransferHook is not permitted between validate_and_authorize and finalize_session.",
@@ -1319,7 +1091,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6085: {
+  6067: {
     name: "LamportDrainBlocked",
     message:
       "Token-2022 destructive-balance instruction (opcode 38/45/46) is not permitted between validate_and_authorize and finalize_session.",
@@ -1333,7 +1105,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  6086: {
+  6068: {
     name: "BatchInstructionBlocked",
     message:
       "Token-2022 Batch instruction (opcode 255) is blocked outright — wraps inner instructions and bypasses the byte-0 blocklist.",
@@ -1347,18 +1119,789 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       },
     ],
   },
-  // F-4 audit fix: explicit destination_mode (default Restricted closes default-allow drain)
-  6087: {
+  // F-4 audit fix: explicit destination_mode. Phase 2 Option A tightens to
+  // 0 = RESTRICTED only — OPEN_WITH_CAP path deleted.
+  6069: {
     name: "InvalidDestinationMode",
-    message:
-      "Invalid destination mode (must be 0 = Restricted or 1 = OpenWithCap).",
+    message: "Invalid destination mode (must be 0 = RESTRICTED).",
     category: "INPUT_VALIDATION",
     retryable: false,
     recovery_actions: [
       {
         action: "fix_policy",
         description:
-          "Pass destination_mode = 0 (Restricted, default) or 1 (OpenWithCap, explicit opt-in to drain blast radius).",
+          "Pass destination_mode = 0 (RESTRICTED). Phase 2 deleted the permissive OPEN_WITH_CAP path.",
+      },
+    ],
+  },
+  // Phase 2 TA-04: reserved AgentEntry.capability values 3..=255 reject.
+  6070: {
+    name: "InvalidCapability",
+    message:
+      "Invalid agent capability value (must be 0 = Disabled, 1 = Observer, or 2 = Operator).",
+    category: "INPUT_VALIDATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "fix_policy",
+        description:
+          "Pass capability = 0, 1, or 2. Reserved values 3..=255 are explicitly rejected by register_agent / queue_agent_permissions_update / apply_agent_permissions_update.",
+      },
+    ],
+  },
+  // Phase 2 TA-19: policy_preview_digest mismatch — owner blind-sign defense.
+  6071: {
+    name: "PolicyPreviewMismatch",
+    message:
+      "Policy preview digest mismatch — caller's signed digest differs from recomputed canonical digest.",
+    category: "INPUT_VALIDATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "recompute_digest",
+        description:
+          "Recompute the policy preview digest via computePolicyPreviewDigest() against the actual policy fields and resubmit. Likely cause: owner signed a digest produced from stale fields, or a pending PDA was tampered with between queue and apply.",
+      },
+    ],
+  },
+  // Phase 2 TA-19: observe_only mode rejects all validate_and_authorize calls.
+  6072: {
+    name: "ObserveOnlyModeBlocksExecute",
+    message:
+      "Vault is in observe_only mode — validate_and_authorize is blocked.",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "switch_vault_mode",
+        description:
+          "Owner must queue + apply a policy update to flip observe_only off (or create a separate vault without observe_only set).",
+      },
+    ],
+  },
+  // Phase 2 F-11: active vault (observe_only=false) requires at least one
+  // entry on the protocol allowlist OR destination allowlist. An empty
+  // allowlist would leave the vault silently inert.
+  6073: {
+    name: "ActiveVaultRequiresAllowlist",
+    message:
+      "Active vault (observe_only=false) requires at least one protocol or destination on its allowlist.",
+    category: "INPUT_VALIDATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "add_allowlist_entry",
+        description:
+          "Either add at least one program to `protocols`, at least one wallet to `allowed_destinations`, or pass `observe_only=true` (intentional inert vault).",
+      },
+    ],
+  },
+  // ─── Phase 3 pre-execution guards (TA-03/05/06/07/08/09/17) ───────────────
+  // 6083-6090 codes added by Phase 3 — each is an on-chain policy-violation
+  // surface that the SDK surfaces to dashboard / agent consumers.
+  6074: {
+    name: "ErrMintNotPinned",
+    message:
+      "Deposit mint is not on the build-time stablecoin allowlist (USDC + USDT). Reject prevents exotic / typosquatted mints from being parked in the vault.",
+    category: "INPUT_VALIDATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "use_pinned_stablecoin",
+        description:
+          "Re-issue the deposit using the USDC or USDT mint. Other tokens are not accepted by the vault.",
+      },
+    ],
+  },
+  6075: {
+    name: "ErrOutsideOperatingHours",
+    message:
+      "Current UTC hour is outside the policy's operating_hours bitmask. The vault is configured to spend only during specific UTC hours.",
+    category: "POLICY_VIOLATION",
+    retryable: true,
+    recovery_actions: [
+      {
+        action: "retry_in_window",
+        description:
+          "Wait until a UTC hour permitted by the policy's operating_hours bitmask, or have the owner widen the mask via queue_policy_update.",
+      },
+    ],
+  },
+  6076: {
+    name: "ErrCooldownActive",
+    message:
+      "Agent cooldown has not elapsed since the last successful action. Per-agent cooldown is configured by the owner.",
+    category: "POLICY_VIOLATION",
+    retryable: true,
+    recovery_actions: [
+      {
+        action: "wait_cooldown",
+        description:
+          "Wait until the per-agent cooldown (in seconds) has elapsed since the agent's last successful action.",
+      },
+    ],
+  },
+  6077: {
+    name: "ErrGraylistFriction",
+    message:
+      "Destination is on the graylist — a 24h friction window applied to newly-added allowlist destinations. Promote via promote_graylist_destination or wait for unlock.",
+    category: "POLICY_VIOLATION",
+    retryable: true,
+    recovery_actions: [
+      {
+        action: "wait_or_promote",
+        description:
+          "Owner can promote the destination to active via promote_graylist_destination, or wait the remaining time until automatic unlock.",
+      },
+    ],
+  },
+  6078: {
+    name: "ErrGraylistFull",
+    message:
+      "Graylist bound exceeded (max 10 entries). Wait for an existing entry to unlock or promote.",
+    category: "INPUT_VALIDATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "promote_or_wait",
+        description:
+          "Promote at least one graylist entry to active or wait for unlock. Then re-issue the destination-allowlist add.",
+      },
+    ],
+  },
+  6079: {
+    name: "ErrToken2022ExtensionForbidden",
+    message:
+      "Token-2022 mint has a forbidden extension. Only MemoTransfer and MetadataPointer extensions are permitted at deposit.",
+    category: "INPUT_VALIDATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "use_supported_mint",
+        description:
+          "Use a Token-2022 mint with no extensions, or one limited to MemoTransfer/MetadataPointer.",
+      },
+    ],
+  },
+  6080: {
+    name: "ErrCosignRequired",
+    // §RP-2 M-NEW-3 (audit 2026-05-19): after P0.1 + H-NEW-1, 6089
+    // fires from four sites — queue_policy_update (original elevated
+    // mutation path), register_agent, set_observe_only(false→true),
+    // and unpause_agent. The message + recovery now reflect that the
+    // common axis is "cosign-opted-in vault + owner action lacking a
+    // non-owner co-signer", not just queue_policy_update specifically.
+    message:
+      "Cosign-opted-in vault requires a non-owner signer for this owner-action. Original sites: queue_policy_update (elevated), register_agent, set_observe_only(false→true), unpause_agent.",
+    category: "PERMISSION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "supply_cosigner",
+        description:
+          "Supply the cosign session pubkey as a signer in remaining_accounts. For queue_policy_update, also pass cosign_session as an arg. The cosign session must not be the owner's own key.",
+      },
+    ],
+  },
+  6081: {
+    name: "ErrAutoRevoked",
+    message:
+      "Agent capability was auto-revoked after consecutive policy-violation failures. Owner must re-enable via queue_agent_permissions_update.",
+    category: "PERMISSION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "owner_reenable",
+        description:
+          "Owner queues a fresh queue_agent_permissions_update setting the agent's capability back to Observer or Operator.",
+      },
+    ],
+  },
+  // Phase 4 — Bundle integrity (TA-10 + TA-11 + AC-10)
+  6082: {
+    name: "ErrSandwichIntegrity",
+    message:
+      "Bundle integrity violation: multiple validate_and_authorize instructions for the same (vault, agent, mint) tuple in one transaction. At most one is permitted (TA-10 hardening).",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "rebuild_bundle",
+        description:
+          "Rebuild the transaction with exactly one validate_and_authorize per (vault, agent, mint) tuple. ComputeBudget and SystemProgram instructions may be interleaved.",
+      },
+    ],
+  },
+  6083: {
+    name: "ErrProtectedWritable",
+    message:
+      "A Sigil-owned PDA was passed as writable to a foreign instruction between validate and finalize (TA-11). Protected PDAs include vault, policy, tracker, session, post_assertions, audit, constraints, and overlay accounts.",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "remove_protected_pda_writable",
+        description:
+          "Remove the writable flag on any Sigil PDA passed to the DeFi instruction, or remove the PDA from that instruction's account metas entirely. Sigil PDAs may still be read by foreign instructions (writable=false is allowed).",
+      },
+    ],
+  },
+  6084: {
+    name: "ErrSessionNonceMismatch",
+    message:
+      "Session nonce mismatch (AC-10 durable-nonce replay defense). The caller's expected_nonce does not match the session's stored nonce. For a fresh session, pass expected_nonce = 0.",
+    category: "INPUT_VALIDATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "fresh_session_nonce",
+        description:
+          "Pass expected_nonce = 0 for a fresh validate_and_authorize. A non-zero value is only valid in Phase 8 ownership-transfer flow (M-5).",
+      },
+    ],
+  },
+
+  // ─── Phase 5: post-execution invariants (TA-12 + TA-13 + TA-14) ───
+  // §RP-1 V5: added Phase 5 mappings missing from the SDK error table.
+  // Source of truth: programs/sigil/src/errors.rs:407-451 + IDL.
+
+  /** 6085 — TA-12: combined USDC+USDT vault balance dropped below the
+   * owner-configured `policy.stable_balance_floor`. The HARD reserve —
+   * no combination of attacks (CPI drain, per-protocol cap bypass, fee
+   * inflation) may drain the vault below this line. Asserted in both
+   * `finalize_session` and `agent_transfer` after the CPI completes.
+   */
+  6085: {
+    name: "ErrStableFloorViolation",
+    message:
+      "Stable balance floor violated — combined USDC+USDT balance dropped below policy.stable_balance_floor",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "reduce_amount",
+        description:
+          "Reduce the transfer amount so the post-execution combined USDC+USDT vault balance stays at or above policy.stable_balance_floor",
+      },
+      {
+        action: "deposit_more",
+        description:
+          "Owner can deposit additional USDC or USDT to raise the combined balance above the floor before the agent retries",
+      },
+      {
+        action: "lower_floor",
+        description:
+          "Owner can queue a policy update to lower stable_balance_floor (timelock-gated, owner-only)",
+      },
+    ],
+  },
+
+  /** 6095 — TA-13: per-protocol daily cap exceeded. The owner-configured
+   * `policy.protocol_caps[i]` rolling-24h cap for the protocol the agent
+   * is invoking would be exceeded by this transaction. Distinct from
+   * 6047 (ProtocolCapExceeded), which now signals slot-allocation
+   * exhaustion only — see §RP-1 V5 disposition.
+   */
+  6086: {
+    name: "ErrDailyCapExceeded",
+    message: "Per-protocol daily spending cap would be exceeded (rolling 24h)",
+    category: "SPENDING_CAP",
+    retryable: true,
+    retry_after_ms: 3_600_000,
+    recovery_actions: [
+      {
+        action: "reduce_amount",
+        description:
+          "Reduce the amount to fit within this protocol's remaining 24h rolling-window cap",
+      },
+      {
+        action: "use_different_protocol",
+        description:
+          "Route through a different allowlisted protocol that has remaining 24h capacity",
+      },
+      {
+        action: "wait",
+        description:
+          "Wait for the 24h rolling window to release spent capacity for this protocol",
+      },
+    ],
+  },
+
+  /** 6096 — TA-14: per-recipient daily cap exceeded. The recipient's
+   * rolling-24h outflow would breach `policy.per_recipient_daily_cap_usd`.
+   * Resolved via SPL TokenAccount.owner (the WALLET that holds the
+   * destination ATA), NOT the meta pubkey. Eviction is age-based, never
+   * LRU — array-full with no expired slot returns this code too,
+   * preventing churn-eviction bypass.
+   *
+   * **H-10 (pre-redeploy audit 2026-05-21) — TRIPLE-CAUSE DISAMBIGUATION:**
+   * The same code (6096) fires from THREE distinct branches inside
+   * `programs/sigil/src/instructions/finalize_session.rs`:
+   *
+   *   1. **Cap exceeded** (`finalize_session.rs:654`): cumulative 24h
+   *      recipient outflow + this transfer > policy cap. Recovery: shrink
+   *      the amount, route via a different allowed recipient with cap
+   *      headroom, or wait for the rolling window to release capacity.
+   *   2. **Multiple distinct recipients in one tx** (`finalize_session.rs:638`):
+   *      V1 enforces single-recipient-per-tx for per-recipient cap
+   *      attribution sanity. Recovery: SPLIT the bundle so each finalize
+   *      touches at most one allowlisted recipient
+   *      (`split_into_separate_transactions`).
+   *   3. **`per_recipient` array full with no expired slot**
+   *      (`finalize_session.rs:658` via `tracker.record_recipient_spend`):
+   *      the fixed-size 10-slot tracker has no entry eligible for
+   *      age-based eviction. Recovery: wait for an entry to age out
+   *      (same `wait` action as cause 1).
+   *
+   * UX-side: callers cannot distinguish the three branches from the
+   * error code alone — the recovery list below covers all three.
+   */
+  6087: {
+    name: "ErrRecipientCapExceeded",
+    message:
+      "Per-recipient cap blocked — three possible causes: (a) recipient outflow would breach policy.per_recipient_daily_cap_usd within rolling 24h window; (b) bundle touches multiple distinct allowlisted recipients in one finalize (V1 single-recipient-per-tx rule); (c) per_recipient tracker array full with no expired slot to evict",
+    category: "SPENDING_CAP",
+    retryable: true,
+    retry_after_ms: 3_600_000,
+    recovery_actions: [
+      {
+        action: "reduce_amount",
+        description:
+          "Reduce the transfer amount so the recipient's 24h rolling outflow stays under policy.per_recipient_daily_cap_usd",
+      },
+      {
+        action: "split_into_separate_transactions",
+        description:
+          "If the bundle touches multiple distinct allowlisted recipients in one finalize, split it so each transaction touches at most one recipient. V1 enforces single-recipient-per-tx for per-recipient cap attribution.",
+      },
+      {
+        action: "use_different_recipient",
+        description:
+          "Route the transfer to a different allowed destination that has remaining 24h cap headroom",
+      },
+      {
+        action: "wait",
+        description:
+          "Wait for the recipient's rolling 24h window to release spent capacity (also remediates the array-full / no-evictable-slot case)",
+      },
+    ],
+  },
+
+  // ─── Phase 6: Maestro borrows R-1/R-2/R-3/R-4 (TA-13 absorption) ───
+  // §RP-2 H-NEW-2: added Phase 6 mappings (R-1..R-4) — the predicate already
+  // routes them as "Sigil error" via the >= 6000 && <= SIGIL_ON_CHAIN_ERROR_MAX
+  // bound, but ON_CHAIN_ERROR_MAP had no entries, so users got "Unknown
+  // on-chain error code N" with category FATAL + empty recovery.
+  // Source of truth: programs/sigil/src/errors.rs + IDL.
+
+  /** 6097 — R-1 MintDeltaCap (attack signal): combined balance of
+   * vault-owned ATAs for the configured mint dropped by more than
+   * `max_net_decrease` between `validate_and_authorize` (pre-snap sum)
+   * and `finalize_session` (post sum). Two enforcement shapes:
+   * scope=0 (vault-wide multi-ATA sum) and scope=1 (single target_account).
+   * Pairs with R-2 (6099) per F-18 to close close-and-recreate evasion.
+   */
+  6088: {
+    name: "ErrMintDeltaCapExceeded",
+    message:
+      "Mint delta cap exceeded — net outflow of [mint] from vault exceeded policy.mint_delta_cap[mint] within the post-execution check window.",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "verify_post_assertions",
+        description:
+          "Verify the policy.post_assertions configuration for the affected mint. Reduce transaction outflow or raise the per-mint cap via queue_policy_update (timelock-gated).",
+      },
+    ],
+  },
+
+  /** 6098 — R-1 MintDeltaCap (caller-bug signal): entry's accounts
+   * couldn't be resolved at validate time. Common shapes:
+   *   - scope=1 and target_account not present in remaining_accounts
+   *   - target_account's mint field doesn't match the configured mint
+   *   - target_account isn't owned by the vault
+   *   - scope=0 with no derived ATAs supplied in remaining_accounts
+   * Distinct from ErrMintDeltaCapExceeded because this is a
+   * configuration or caller-side bug (recoverable by fixing the caller),
+   * not an attack signal (which fires 6097 at finalize).
+   */
+  6089: {
+    name: "MintDeltaCapMisconfigured",
+    message:
+      "Mint delta cap entry misconfigured — invalid scope value, zero max_net_decrease, or required derived ATA missing from remaining_accounts.",
+    category: "FATAL",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "inspect_entry_config",
+        description:
+          "Inspect the failed entry's scope value (0 or 1 only), max_net_decrease (must be non-zero for scope=0), and remaining_accounts (must include every derived ATA for scope=0).",
+      },
+    ],
+  },
+
+  /** 6099 — R-2 AtaAuthorityPin (attack signal): a vault-owned token
+   * account had its authority changed during the sandwich, or was
+   * closed and not reinstated as a vault-owned account before finalize.
+   * Detected by reading bytes 32..64 of the post-CPI token account data
+   * and comparing to `vault.key().to_bytes()`. Also fires when the
+   * account is closed (data length < 64) or its owner program is no
+   * longer SPL Token or Token-2022. Pairs with 6097 to close F-18
+   * close+drain+recreate.
+   */
+  6090: {
+    name: "ErrAtaAuthorityChanged",
+    message:
+      "Vault ATA authority changed mid-transaction — a CPI altered the SPL TokenAccount owner field, defeating the vault's custody.",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "audit_ix_for_set_authority",
+        description:
+          "Verify the DeFi instruction in the bundle does not call setAuthority on any vault-owned ATA. Refuse the bundle and audit the agent's request.",
+      },
+    ],
+  },
+
+  /** 6100 — R-3 OutputBalanceFloor (attack signal): a token account
+   * that was supposed to receive at least `min_increase` units of its
+   * mint during the sandwich did not. Snapshot at
+   * `validate_and_authorize` against `target_account.amount` (u64 LE at
+   * bytes 64..72), finalize requires (post - pre) >= aux_value.
+   * Counter to "dust-fill" attacks where the agent obtains delegation
+   * authority then runs a swap that returns 1 lamport.
+   */
+  6091: {
+    name: "ErrOutputBelowFloor",
+    message:
+      "Output balance floor violated — the vault's target ATA gained less than policy.min_increase_usd after the post-execution check.",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "audit_output_value",
+        description:
+          "Verify the DeFi instruction's output. Common causes: dust-fill swap, partial fill, wrong destination meta. Audit the agent's slippage settings.",
+      },
+    ],
+  },
+
+  /** 6101 — R-4 DeclarationConsistency (attack signal): the
+   * (recipient, mint) pair declared on a post-assertion entry doesn't
+   * match the SPL token account at the configured CPI account-meta
+   * index. Closes the "declaration dishonesty" attack: agent declares
+   * "recipient: alice" to satisfy a destination-allowlist check, then
+   * inserts attacker_ata into the CPI metas. The recipient who would
+   * receive funds (attacker_ata.owner) ≠ alice, so R-4 rejects.
+   */
+  6092: {
+    name: "ErrDeclarationInconsistent",
+    message:
+      "Declaration consistency check failed — the CPI account meta at the declared index is not a token account matching the agent's declared recipient + mint.",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "verify_declaration_matches_ix",
+        description:
+          "Verify the agent's authorized_token + output_mint declaration matches the actual SPL TokenAccount at the declared meta index in the DeFi instruction. Reject the bundle if the agent supplied inconsistent declaration.",
+      },
+    ],
+  },
+
+  // ─── Audit 2026-05-19 (P1 HIGH fixes) ───
+  // §RP-2 H-NEW-2: H-1 hard-reject mapping for the destination-check
+  // meta budget. Previously the helper silently take()-truncated at 16;
+  // 1f569eb made it a hard-reject (POLICY_VIOLATION).
+
+  /** 6102 — H-1 hard-reject (audit 2026-05-19): the foreign DeFi
+   * instruction passed more account metas than
+   * `MAX_DESTINATION_CHECK_METAS_PER_IX` (16). Previously the helper
+   * silently `take()`-truncated at the bound, leaving slots 17+
+   * uninspected; an attacker hiding a hostile destination at slot 17+
+   * would bypass the allowlist check. Hard-reject closes the
+   * silent-drop. Expansion to 32 metas is v1.1 backlog (~+4K CU).
+   */
+  6093: {
+    name: "IxMetaCountExceeded",
+    message:
+      "Foreign instruction exceeded the account-meta processing budget (destination check: max 24 writable metas / 64 total; agent_transfer floor-walk: 16). The bundle is rejected rather than partially inspected.",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "use_a_shorter_route",
+        description:
+          "The route references more writable accounts than the guard can inspect in one pass. Use a shorter Jupiter route; Sigil never reshapes the route itself — an unguardable route atomically reverts.",
+      },
+    ],
+  },
+  // --- Phase 8 (ownership transfer + freeze hardening) ---
+  // Phase 8 ownership-transfer + freeze-hardening codes (now 6094-6099 post M1-04).
+  6094: {
+    name: "ErrPendingOwnershipExists",
+    message:
+      "An ownership transfer is already pending for this vault. Cancel the existing transfer before queueing a new target.",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "cancel_ownership_transfer",
+        description:
+          "Call cancel_ownership_transfer to release the pending PDA before queueing a new transfer.",
+      },
+    ],
+  },
+  6095: {
+    name: "ErrPendingOwnershipNotReady",
+    message:
+      "Ownership transfer timelock has not elapsed yet (default 48h). The new owner cannot accept until the window passes.",
+    category: "TRANSIENT",
+    retryable: true,
+    recovery_actions: [
+      {
+        action: "wait_timelock",
+        description:
+          "Wait for the timelock window to elapse. The owner can cancel during this window to abort the transfer.",
+      },
+    ],
+  },
+  6096: {
+    name: "ErrInvalidFreezeReason",
+    message:
+      "Invalid freeze_reason byte (must be 0=Manual, 1=AutoRevoke, or 2=EmergencyBoard).",
+    category: "INPUT_VALIDATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "fix_freeze_reason",
+        description:
+          "Re-call freeze_vault with a valid FreezeReason discriminant.",
+      },
+    ],
+  },
+  6097: {
+    name: "ErrReactivateCooldownActive",
+    message:
+      "Reactivate requires a 5-minute observation cooldown after the vault was frozen. Try again after the cooldown elapses.",
+    category: "TRANSIENT",
+    retryable: true,
+    retry_after_ms: 300_000,
+    recovery_actions: [
+      {
+        action: "wait_cooldown",
+        description:
+          "Wait for the 5-minute observation window to elapse before reactivating.",
+      },
+    ],
+  },
+  6098: {
+    name: "ErrInvalidOwnershipTarget",
+    message:
+      "new_owner cannot be a system/program/sysvar address (would permanently brick the vault).",
+    category: "INPUT_VALIDATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "use_signer_pubkey",
+        description:
+          "Pass an EOA pubkey or Squads V4 vault PDA as new_owner — not SystemProgram, the program ID, or a sysvar.",
+      },
+    ],
+  },
+  6099: {
+    name: "ErrTooManyRevokePairs",
+    message:
+      "freeze_internal received more than MAX_REVOKE_PAIRS (10) session/token pairs in remaining_accounts.",
+    category: "INPUT_VALIDATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "split_revoke_batch",
+        description:
+          "Split the (session_pda, token_account) pairs across multiple freeze_internal calls.",
+      },
+    ],
+  },
+  // H-3 close (pre-redeploy audit 2026-05-21): close_vault rejects if
+  // policy.has_post_assertions != 0 because the 672-byte PostExecutionAssertions
+  // zero-copy PDA must be drained via close_post_assertions first; otherwise it
+  // would be orphaned on close.
+  6100: {
+    name: "ErrPostAssertionsNotClosed",
+    message:
+      "PostExecutionAssertions PDA still active — call close_post_assertions before close_vault.",
+    category: "RESOURCE_NOT_FOUND",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "close_post_assertions",
+        description:
+          "Invoke the close_post_assertions instruction to drain the 672-byte PostExecutionAssertions PDA, then retry close_vault.",
+      },
+    ],
+  },
+  // H-4 close (pre-redeploy audit 2026-05-21, Bucket 1): queue_policy_update
+  // rejects if any allowed_destinations entry is the address of a Sigil-owned
+  // protected PDA for this vault. Closes the owner-self-foot-gun where a
+  // phished owner allowlists a Sigil PDA, enabling an agent to lock funds
+  // at the PDA via a token transfer.
+  6101: {
+    name: "ErrDestinationIsProtectedPda",
+    message:
+      "allowed_destinations entry is a Sigil-protected PDA — owner attempted to allowlist a vault/policy/pending_* PDA.",
+    category: "INPUT_VALIDATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "remove_protected_pda_from_destinations",
+        description:
+          "Remove any pubkey from allowed_destinations that matches a Sigil-protected PDA for this vault. Use a plain EOA or external program owner instead.",
+      },
+    ],
+  },
+  // D-1 + D-6 close (Bucket 2 audit 2026-05-21): AL3 on-chain scalar intent-
+  // digest mismatch. The wallet's preview-time digest doesn't match the
+  // digest the on-chain verifier recomputed from validate_and_authorize's
+  // args. Most likely: man-in-the-middle (compromised agent / browser ext)
+  // swapped one of the scalar fields (mint, amount, target_protocol)
+  // between preview and submit. Less likely: cross-network replay
+  // (mainnet digest sent through a devnet program).
+  6102: {
+    name: "ErrIntentDigestMismatch",
+    message:
+      "AL3 intent-digest mismatch — wallet preview digest does not match the executed bundle's scalars.",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "rebuild_seal_from_fresh_preview",
+        description:
+          "Re-run the wallet preview to refresh the intent digest, then resubmit. If the mismatch persists after a fresh preview, suspect a compromised middleware/agent — pause the agent and investigate.",
+      },
+    ],
+  },
+  // M-5 close (Bucket 2 audit 2026-05-21, PEN-CROSS-3): apply_agent_grant
+  // rejected because the recomputed digest of PendingAgentGrant content
+  // doesn't match the queue-time digest. Same digest-binding defense class
+  // as the policy/ownership pending-update digest checks.
+  6103: {
+    name: "ErrPendingAgentGrantDigestMismatch",
+    message:
+      "PendingAgentGrant content tampered between queue and apply — digest mismatch.",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "cancel_and_requeue_agent_grant",
+        description:
+          "Cancel the pending grant via cancel_agent_grant, then queue a fresh grant with the intended agent + capability.",
+      },
+    ],
+  },
+  // D-5 close (Bucket 2 audit 2026-05-21, F-RP3-1): reactivate_vault
+  // rejected a FULL_CAPABILITY agent graft because no non-owner signer was
+  // present. Defaults-on safety (NH-1): any FULL_CAPABILITY grant on
+  // reactivate requires a second signer, regardless of whether
+  // policy.cosign_session_pubkey was pre-configured. Closes the phished-
+  // owner freeze→reactivate(attacker, FULL) single-signature foot-gun.
+  6104: {
+    name: "ErrReactivateCosignRequiredForFullCapability",
+    message:
+      "Reactivate with a FULL_CAPABILITY new agent requires a non-owner cosigner.",
+    category: "ESCALATION_REQUIRED",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "include_second_signer_in_remaining_accounts",
+        description:
+          "Re-sign the reactivate transaction with a second non-owner signer in remaining_accounts. If policy.cosign_session_pubkey is set, the signer must match it.",
+      },
+    ],
+  },
+  6105: {
+    name: "DestinationAccountUnresolvable",
+    message:
+      "A writable account of the DeFi instruction could not be resolved in validate's remaining_accounts, so the guard cannot classify it (F-Q1a destination completeness — rejected fail-closed rather than silently skipped).",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "use_seal_to_populate_remaining_accounts",
+        description:
+          "Build the bundle with seal(), which auto-populates validate's (and finalize's) remaining_accounts with every writable account of the DeFi instruction (the fee-payer agent included). Hand-built bundles must mirror this.",
+      },
+    ],
+  },
+  6106: {
+    name: "ErrToken2022OutputMintUnresolvable",
+    message:
+      "A vault-owned Token-2022 token account's mint could not be resolved in validate's remaining_accounts (or the supplied account is not Token-2022-owned), so the guard cannot vet its extensions (F-Q4 — rejected fail-closed). A PermanentDelegate / TransferHook / ConfidentialTransfer mint must be vetted before the vault may acquire the token.",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "use_seal_to_populate_remaining_accounts",
+        description:
+          "Build the bundle with seal(), which auto-resolves vault-owned Token-2022 output mints (reading each writable account's mint on-chain) and feeds them into validate's remaining_accounts. Hand-built bundles must include the mint account of every vault-owned Token-2022 token account the swap writes.",
+      },
+    ],
+  },
+  6107: {
+    name: "ErrOperatorGrantRequiresTimelock",
+    message:
+      "An OPERATOR-class agent grant cannot be seated instantly on this vault (single-key, cosign-required-but-unbound, or any vault with a configured operator_grant_delay_seconds > 0). It must route through the timelocked queue_agent_grant → apply_agent_grant path — the time-delay substitutes for the missing 2nd authorization factor (F-Q6).",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "use_queue_agent_grant",
+        description:
+          "Seat the OPERATOR via queue_agent_grant, wait the effective delay (>=10 min for a single-key vault, else the configured operator_grant_delay_seconds), then apply_agent_grant. A cosign-bound vault at zero delay can seat instantly by including the bound cosigner's signature in register_agent.",
+      },
+    ],
+  },
+  6108: {
+    name: "ErrOperatorGrantDelayTooLong",
+    message:
+      "operator_grant_delay_seconds exceeds the maximum (48h / 172800s). A larger delay could exceed the apply-time freshness ceiling and leave a queued OPERATOR grant permanently unapplyable, so it is rejected at configuration time (F-Q6).",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "lower_operator_grant_delay",
+        description:
+          "Set operator_grant_delay_seconds to at most 172800 (48h) in the queue_policy_update call.",
+      },
+    ],
+  },
+  6109: {
+    name: "InvalidOwnerType",
+    message:
+      "vault.owner_type held a value outside the recognized discriminants (0 = EOA, 1 = multisig) at an OPERATOR-grant read site. Only reachable via on-chain state corruption (the field is program-set to {0,1}); the operation is rejected rather than acting on corrupted authority state (F-Q6).",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "report_state_corruption",
+        description:
+          "vault.owner_type is program-set to 0 (EOA) or 1 (multisig); an out-of-range value indicates on-chain state corruption and should be unreachable in normal operation. OPERATOR-grant paths are blocked until the vault state is valid — report this.",
+      },
+    ],
+  },
+  6110: {
+    name: "SpendAccountingUnderflow",
+    message:
+      "finalize_session detected collected fees exceeding the realized stablecoin outflow (fees_collected > total_decrease) — an accounting impossibility, since fees are CPI'd out before the DeFi leg. The transaction is rejected fail-closed rather than under-counting the spend against the caps (F-Q9).",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "review_swap_construction",
+        description:
+          "This fires when a stablecoin-input action net-returned stablecoin so the measured outflow was smaller than the protocol+developer fees. Verify the DeFi instruction actually spends the declared stablecoin input; a net-return on the stablecoin-input path is anomalous and is rejected.",
       },
     ],
   },
@@ -1883,7 +2426,7 @@ const SDK_ERRORS: Record<string, ErrorMapping> = {
  * Convert any error into a structured AgentError.
  *
  * Handles:
- * - On-chain Anchor errors (code 6000-6087)
+ * - On-chain Anchor errors (code 6000-6102)
  * - SDK errors (code 7000-7033)
  * - Network/RPC errors (from message patterns)
  * - Unknown errors (wrapped as FATAL)
@@ -2235,8 +2778,13 @@ function extractErrorCode(error: unknown): number | null {
   if (!error || typeof error !== "object") return null;
   const e = error as Record<string, unknown>;
 
-  // Direct code property
-  if (typeof e.code === "number" && e.code >= 6000 && e.code <= 6087)
+  // Direct code property — uses SIGIL_ON_CHAIN_ERROR_{MIN,MAX} constants
+  // defined at top of file as single source of truth.
+  if (
+    typeof e.code === "number" &&
+    e.code >= SIGIL_ON_CHAIN_ERROR_MIN &&
+    e.code <= SIGIL_ON_CHAIN_ERROR_MAX
+  )
     return e.code;
 
   // Anchor error structure
@@ -2253,7 +2801,8 @@ function extractErrorCode(error: unknown): number | null {
     const match = e.message.match(/custom program error: 0x([0-9a-fA-F]+)/);
     if (match) {
       const code = parseInt(match[1], 16);
-      if (code >= 6000 && code <= 6087) return code;
+      if (code >= SIGIL_ON_CHAIN_ERROR_MIN && code <= SIGIL_ON_CHAIN_ERROR_MAX)
+        return code;
     }
   }
 
@@ -2428,18 +2977,6 @@ const SDK_ERROR_PATTERNS: SdkErrorPattern[] = [
       },
     ],
   },
-  {
-    pattern: /Escrow action/,
-    category: "INPUT_VALIDATION",
-    retryable: false,
-    recovery_actions: [
-      {
-        action: "use_escrow_api",
-        description:
-          "Use createEscrow/settleEscrow/refundEscrow instead of wrap().",
-      },
-    ],
-  },
 ];
 
 // ─── SigilSdkError ──────────────────────────────────────────────────────────
@@ -2494,11 +3031,45 @@ export class SigilSdkError extends Error implements AgentError {
  * Returns a SigilSdkError (extends Error) so instanceof Error checks still work.
  *
  * Processing order:
- * 1. Try on-chain error extraction via toAgentError() (numeric codes 6000-6087)
+ * 1. Try on-chain error extraction via toAgentError() (numeric codes 6000-6102)
  * 2. Pattern-match SDK error messages (11 patterns from seal.ts throw sites)
  * 3. Fallback to UNKNOWN/FATAL
  */
 export function toSigilAgentError(err: unknown): SigilSdkError {
+  // Phase 9 Batch M §RP CRIT-1 fix: preserve SigilSdkDomainError and
+  // SigilRpcError instances unmodified. These are the canonical
+  // SDK-domain-typed errors carrying their own `.code`, structured
+  // `.context`, and rich `.message`. Funneling them through the
+  // pattern-matcher + UNKNOWN/FATAL fallback below silently strips
+  // the context the throw site built (vault address, docs URL,
+  // opt-in/opt-out snippets, network identifier, etc.).
+  //
+  // Wrap the domain error in a SigilSdkError that mirrors its code
+  // + context so downstream consumers narrowing on either
+  // `err instanceof SigilSdkDomainError` (the original throw) OR
+  // `err.code === SIGIL_ERROR__SDK__MAINNET_CONFIRMATION_REQUIRED`
+  // (the SigilSdkError surface) both work.
+  if (
+    err instanceof Error &&
+    typeof (err as unknown as { code?: unknown }).code === "string" &&
+    ((err as unknown as { code: string }).code as string).startsWith(
+      "SIGIL_ERROR__",
+    )
+  ) {
+    const sigilErr = err as unknown as Error & {
+      code: string;
+      context?: Record<string, unknown>;
+    };
+    return new SigilSdkError({
+      code: sigilErr.code,
+      message: sigilErr.message,
+      category: "FATAL",
+      retryable: false,
+      recovery_actions: [],
+      context: sigilErr.context ?? {},
+    });
+  }
+
   // Try on-chain error extraction first
   const onChain = toAgentError(err);
   if (onChain.code !== "UNKNOWN") return new SigilSdkError(onChain);

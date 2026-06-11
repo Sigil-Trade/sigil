@@ -594,9 +594,9 @@ describe("@usesigil/custody/privy", () => {
     });
   });
 
-  // ---- shieldWallet() Compatibility ----------------------------------------
+  // ---- shield() Compatibility ----------------------------------------
 
-  describe("shieldWallet() compatibility", () => {
+  describe("shield() compatibility", () => {
     it("PrivyWallet satisfies WalletLike interface shape", async () => {
       const client = createMockClient();
       const wallet = await PrivyWallet.create(

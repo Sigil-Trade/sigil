@@ -42,7 +42,7 @@ Sigil follows the **trunk-based development** pattern used by every mature Solan
                                        └──► Humans sign in Squads UI
                                              │
                                              └──► Production program
-                                                  (4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL)
+                                                  (7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK)
                                                   upgraded
 ```
 
@@ -133,7 +133,7 @@ Within ~5 minutes of merging to `main`:
 The staging program is a separate on-chain account from production. Wipe-and-redeploy is safe — no real funds depend on its state.
 
 ```
-Production program: 4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL  ← never touched by CI today
+Production program: 7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK  ← never touched by CI today
 Staging program:    STAGSigi…  ← redeployed every main merge after program changes
 ```
 
@@ -360,7 +360,7 @@ The key design principle: **ALTs are an optimization, not a requirement.** Every
 
 ### 8.1 Production Program (today: devnet, future: mainnet)
 
-Program deployed to devnet at `4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL`. Deployed manually via `workflow_dispatch` — never automatically by CI on push.
+Program deployed to devnet at `7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK`. Deployed manually via `workflow_dispatch` — never automatically by CI on push.
 
 ### 8.2 Staging Program (devnet only, ever)
 
@@ -389,7 +389,7 @@ Example Turnkey policy JSON:
   "policyName": "sigil-agent-signing-policy",
   "effect": "EFFECT_ALLOW",
   "consensus": "approvers.any(user, user.id == '<AGENT_USER_ID>')",
-  "condition": "solana.tx.instructions.any(ix, ix.program_id == '4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL')",
+  "condition": "solana.tx.instructions.any(ix, ix.program_id == '7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK')",
   "notes": "Allow signing only when the Sigil program is invoked. Max 100 TX/day, reject if total lamports exceed policy cap."
 }
 ```

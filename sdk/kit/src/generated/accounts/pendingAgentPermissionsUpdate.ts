@@ -67,6 +67,38 @@ export type PendingAgentPermissionsUpdate = {
    */
   queuedAtSlot: bigint;
   bump: number;
+  /**
+   * TA-06 (Phase 3): per-agent cooldown in seconds. 0 disables. Bound
+   * at apply time onto `AgentSpendOverlay.cooldown_seconds[slot]`.
+   * APPENDED at end per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  cooldownSeconds: bigint;
+  /**
+   * Round 2 F-RP3-2 fix (audit 2026-05-19): cosign-binding digest for
+   * elevated mutations. When `queue_agent_permissions_update` detects
+   * that the request RAISES an agent's capability, RAISES the spending
+   * limit, or SHORTENS the cooldown — AND `policy.cosign_required ==
+   * true` — the owner MUST supply a co-signing session in the accounts.
+   * The queue handler computes a sha256 over the canonical pending args
+   * and stores it here; `apply_agent_permissions_update` re-asserts the
+   * digest equality.
+   *
+   * `[0u8; 32]` = no cosign required (non-elevated mutation OR cosign
+   * not opted in on this vault). Any non-zero digest indicates this
+   * pending was bound to a specific cosign and the apply handler MUST
+   * re-compute and equal-check.
+   *
+   * APPENDED at end per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  cosignDigest: ReadonlyUint8Array;
+  /**
+   * Round 2 F-RP3-2 fix (audit 2026-05-19): pubkey of the session that
+   * co-signed this queue. Recorded for audit. `Pubkey::default()` =
+   * no cosign (non-elevated OR not opted in).
+   *
+   * APPENDED at end per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  cosignSession: Address;
 };
 
 export type PendingAgentPermissionsUpdateArgs = {
@@ -84,6 +116,38 @@ export type PendingAgentPermissionsUpdateArgs = {
    */
   queuedAtSlot: number | bigint;
   bump: number;
+  /**
+   * TA-06 (Phase 3): per-agent cooldown in seconds. 0 disables. Bound
+   * at apply time onto `AgentSpendOverlay.cooldown_seconds[slot]`.
+   * APPENDED at end per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  cooldownSeconds: number | bigint;
+  /**
+   * Round 2 F-RP3-2 fix (audit 2026-05-19): cosign-binding digest for
+   * elevated mutations. When `queue_agent_permissions_update` detects
+   * that the request RAISES an agent's capability, RAISES the spending
+   * limit, or SHORTENS the cooldown — AND `policy.cosign_required ==
+   * true` — the owner MUST supply a co-signing session in the accounts.
+   * The queue handler computes a sha256 over the canonical pending args
+   * and stores it here; `apply_agent_permissions_update` re-asserts the
+   * digest equality.
+   *
+   * `[0u8; 32]` = no cosign required (non-elevated mutation OR cosign
+   * not opted in on this vault). Any non-zero digest indicates this
+   * pending was bound to a specific cosign and the apply handler MUST
+   * re-compute and equal-check.
+   *
+   * APPENDED at end per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  cosignDigest: ReadonlyUint8Array;
+  /**
+   * Round 2 F-RP3-2 fix (audit 2026-05-19): pubkey of the session that
+   * co-signed this queue. Recorded for audit. `Pubkey::default()` =
+   * no cosign (non-elevated OR not opted in).
+   *
+   * APPENDED at end per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  cosignSession: Address;
 };
 
 /** Gets the encoder for {@link PendingAgentPermissionsUpdateArgs} account data. */
@@ -100,6 +164,9 @@ export function getPendingAgentPermissionsUpdateEncoder(): FixedSizeEncoder<Pend
       ["executesAt", getI64Encoder()],
       ["queuedAtSlot", getU64Encoder()],
       ["bump", getU8Encoder()],
+      ["cooldownSeconds", getU64Encoder()],
+      ["cosignDigest", fixEncoderSize(getBytesEncoder(), 32)],
+      ["cosignSession", getAddressEncoder()],
     ]),
     (value) => ({
       ...value,
@@ -121,6 +188,9 @@ export function getPendingAgentPermissionsUpdateDecoder(): FixedSizeDecoder<Pend
     ["executesAt", getI64Decoder()],
     ["queuedAtSlot", getU64Decoder()],
     ["bump", getU8Decoder()],
+    ["cooldownSeconds", getU64Decoder()],
+    ["cosignDigest", fixDecoderSize(getBytesDecoder(), 32)],
+    ["cosignSession", getAddressDecoder()],
   ]);
 }
 
@@ -211,5 +281,5 @@ export async function fetchAllMaybePendingAgentPermissionsUpdate(
 }
 
 export function getPendingAgentPermissionsUpdateSize(): number {
-  return 113;
+  return 185;
 }

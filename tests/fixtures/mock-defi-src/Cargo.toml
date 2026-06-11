@@ -1,7 +1,7 @@
 [package]
 name = "mock-defi"
-version = "0.1.0"
-description = "Test-only mock DeFi program. Two no-op instructions (open_position, close_position) with stable 8-byte Anchor discriminators. Loaded by LiteSVM in on-chain tests to exercise Sigil's constraint matching + position counter flow end-to-end. Not deployed to devnet or mainnet."
+version = "0.2.0"
+description = "Test-only mock DeFi program. Two no-op instructions (open_position, close_position) with stable 8-byte Anchor discriminators, plus drain_via_delegation that does a CPI SPL token transfer using the agent's validate-time delegation (used by Phase 6.1 sandwich integration tests to trigger R-1 MintDeltaCap + TA-14 per-recipient cap)."
 edition = "2021"
 license = "Apache-2.0"
 
@@ -28,4 +28,10 @@ default = []
 idl-build = ["anchor-lang/idl-build"]
 
 [dependencies]
-anchor-lang = { version = "0.32.1" }
+anchor-lang = { version = "=0.32.1" }
+anchor-spl = { version = "=0.32.1", features = ["token"] }
+# Pin blake3 to avoid constant_time_eq 0.4.2 which requires edition 2024
+# (BPF platform-tools cargo 1.84 doesn't support edition 2024). Same pin
+# as programs/sigil/Cargo.toml — required for any program that pulls in
+# anchor-spl's transitive solana-program → blake3 dependency.
+blake3 = "=1.5.5"

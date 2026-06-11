@@ -10,8 +10,10 @@ import {
   combineCodec,
   fixDecoderSize,
   fixEncoderSize,
+  getAddressEncoder,
   getBytesDecoder,
   getBytesEncoder,
+  getProgramDerivedAddress,
   getStructDecoder,
   getStructEncoder,
   SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
@@ -34,6 +36,7 @@ import {
 } from "@solana/kit";
 import {
   getAccountMetaFactory,
+  getAddressFromResolvedInstructionAccount,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
 import { SIGIL_PROGRAM_ADDRESS } from "../programs/index.js";
@@ -52,6 +55,9 @@ export type FreezeVaultInstruction<
   TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountOwner extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
+  TAccountAuditLogSuccess extends string | AccountMeta<string> = string,
+  TAccountSlotHashesSysvar extends string | AccountMeta<string> =
+    "SysvarS1otHashes111111111111111111111111111",
   TAccountTokenProgram extends string | AccountMeta<string> =
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
@@ -66,6 +72,12 @@ export type FreezeVaultInstruction<
       TAccountVault extends string
         ? WritableAccount<TAccountVault>
         : TAccountVault,
+      TAccountAuditLogSuccess extends string
+        ? WritableAccount<TAccountAuditLogSuccess>
+        : TAccountAuditLogSuccess,
+      TAccountSlotHashesSysvar extends string
+        ? ReadonlyAccount<TAccountSlotHashesSysvar>
+        : TAccountSlotHashesSysvar,
       TAccountTokenProgram extends string
         ? ReadonlyAccount<TAccountTokenProgram>
         : TAccountTokenProgram,
@@ -100,29 +112,50 @@ export function getFreezeVaultInstructionDataCodec(): FixedSizeCodec<
   );
 }
 
-export type FreezeVaultInput<
+export type FreezeVaultAsyncInput<
   TAccountOwner extends string = string,
   TAccountVault extends string = string,
+  TAccountAuditLogSuccess extends string = string,
+  TAccountSlotHashesSysvar extends string = string,
   TAccountTokenProgram extends string = string,
 > = {
   owner: TransactionSigner<TAccountOwner>;
   vault: Address<TAccountVault>;
+  /** Phase 7 — success audit log; entry appended after status flip. */
+  auditLogSuccess?: Address<TAccountAuditLogSuccess>;
+  /**
+   * Address constrained to the canonical sysvar pubkey so a tampered caller
+   * cannot substitute a stale or attacker-controlled account.
+   */
+  slotHashesSysvar?: Address<TAccountSlotHashesSysvar>;
   tokenProgram?: Address<TAccountTokenProgram>;
 };
 
-export function getFreezeVaultInstruction<
+export async function getFreezeVaultInstructionAsync<
   TAccountOwner extends string,
   TAccountVault extends string,
+  TAccountAuditLogSuccess extends string,
+  TAccountSlotHashesSysvar extends string,
   TAccountTokenProgram extends string,
   TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
-  input: FreezeVaultInput<TAccountOwner, TAccountVault, TAccountTokenProgram>,
+  input: FreezeVaultAsyncInput<
+    TAccountOwner,
+    TAccountVault,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar,
+    TAccountTokenProgram
+  >,
   config?: { programAddress?: TProgramAddress },
-): FreezeVaultInstruction<
-  TProgramAddress,
-  TAccountOwner,
-  TAccountVault,
-  TAccountTokenProgram
+): Promise<
+  FreezeVaultInstruction<
+    TProgramAddress,
+    TAccountOwner,
+    TAccountVault,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar,
+    TAccountTokenProgram
+  >
 > {
   // Program address.
   const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
@@ -131,6 +164,11 @@ export function getFreezeVaultInstruction<
   const originalAccounts = {
     owner: { value: input.owner ?? null, isWritable: false },
     vault: { value: input.vault ?? null, isWritable: true },
+    auditLogSuccess: { value: input.auditLogSuccess ?? null, isWritable: true },
+    slotHashesSysvar: {
+      value: input.slotHashesSysvar ?? null,
+      isWritable: false,
+    },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
@@ -139,6 +177,28 @@ export function getFreezeVaultInstruction<
   >;
 
   // Resolve default values.
+  if (!accounts.auditLogSuccess.value) {
+    accounts.auditLogSuccess.value = await getProgramDerivedAddress({
+      programAddress,
+      seeds: [
+        getBytesEncoder().encode(
+          new Uint8Array([
+            97, 117, 100, 105, 116, 95, 115, 117, 99, 99, 101, 115, 115,
+          ]),
+        ),
+        getAddressEncoder().encode(
+          getAddressFromResolvedInstructionAccount(
+            "vault",
+            accounts.vault.value,
+          ),
+        ),
+      ],
+    });
+  }
+  if (!accounts.slotHashesSysvar.value) {
+    accounts.slotHashesSysvar.value =
+      "SysvarS1otHashes111111111111111111111111111" as Address<"SysvarS1otHashes111111111111111111111111111">;
+  }
   if (!accounts.tokenProgram.value) {
     accounts.tokenProgram.value =
       "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address<"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA">;
@@ -149,6 +209,8 @@ export function getFreezeVaultInstruction<
     accounts: [
       getAccountMeta("owner", accounts.owner),
       getAccountMeta("vault", accounts.vault),
+      getAccountMeta("auditLogSuccess", accounts.auditLogSuccess),
+      getAccountMeta("slotHashesSysvar", accounts.slotHashesSysvar),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
     ],
     data: getFreezeVaultInstructionDataEncoder().encode({}),
@@ -157,6 +219,101 @@ export function getFreezeVaultInstruction<
     TProgramAddress,
     TAccountOwner,
     TAccountVault,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar,
+    TAccountTokenProgram
+  >);
+}
+
+export type FreezeVaultInput<
+  TAccountOwner extends string = string,
+  TAccountVault extends string = string,
+  TAccountAuditLogSuccess extends string = string,
+  TAccountSlotHashesSysvar extends string = string,
+  TAccountTokenProgram extends string = string,
+> = {
+  owner: TransactionSigner<TAccountOwner>;
+  vault: Address<TAccountVault>;
+  /** Phase 7 — success audit log; entry appended after status flip. */
+  auditLogSuccess: Address<TAccountAuditLogSuccess>;
+  /**
+   * Address constrained to the canonical sysvar pubkey so a tampered caller
+   * cannot substitute a stale or attacker-controlled account.
+   */
+  slotHashesSysvar?: Address<TAccountSlotHashesSysvar>;
+  tokenProgram?: Address<TAccountTokenProgram>;
+};
+
+export function getFreezeVaultInstruction<
+  TAccountOwner extends string,
+  TAccountVault extends string,
+  TAccountAuditLogSuccess extends string,
+  TAccountSlotHashesSysvar extends string,
+  TAccountTokenProgram extends string,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
+>(
+  input: FreezeVaultInput<
+    TAccountOwner,
+    TAccountVault,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar,
+    TAccountTokenProgram
+  >,
+  config?: { programAddress?: TProgramAddress },
+): FreezeVaultInstruction<
+  TProgramAddress,
+  TAccountOwner,
+  TAccountVault,
+  TAccountAuditLogSuccess,
+  TAccountSlotHashesSysvar,
+  TAccountTokenProgram
+> {
+  // Program address.
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
+
+  // Original accounts.
+  const originalAccounts = {
+    owner: { value: input.owner ?? null, isWritable: false },
+    vault: { value: input.vault ?? null, isWritable: true },
+    auditLogSuccess: { value: input.auditLogSuccess ?? null, isWritable: true },
+    slotHashesSysvar: {
+      value: input.slotHashesSysvar ?? null,
+      isWritable: false,
+    },
+    tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
+  };
+  const accounts = originalAccounts as Record<
+    keyof typeof originalAccounts,
+    ResolvedInstructionAccount
+  >;
+
+  // Resolve default values.
+  if (!accounts.slotHashesSysvar.value) {
+    accounts.slotHashesSysvar.value =
+      "SysvarS1otHashes111111111111111111111111111" as Address<"SysvarS1otHashes111111111111111111111111111">;
+  }
+  if (!accounts.tokenProgram.value) {
+    accounts.tokenProgram.value =
+      "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address<"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA">;
+  }
+
+  const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
+  return Object.freeze({
+    accounts: [
+      getAccountMeta("owner", accounts.owner),
+      getAccountMeta("vault", accounts.vault),
+      getAccountMeta("auditLogSuccess", accounts.auditLogSuccess),
+      getAccountMeta("slotHashesSysvar", accounts.slotHashesSysvar),
+      getAccountMeta("tokenProgram", accounts.tokenProgram),
+    ],
+    data: getFreezeVaultInstructionDataEncoder().encode({}),
+    programAddress,
+  } as FreezeVaultInstruction<
+    TProgramAddress,
+    TAccountOwner,
+    TAccountVault,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar,
     TAccountTokenProgram
   >);
 }
@@ -169,7 +326,14 @@ export type ParsedFreezeVaultInstruction<
   accounts: {
     owner: TAccountMetas[0];
     vault: TAccountMetas[1];
-    tokenProgram: TAccountMetas[2];
+    /** Phase 7 — success audit log; entry appended after status flip. */
+    auditLogSuccess: TAccountMetas[2];
+    /**
+     * Address constrained to the canonical sysvar pubkey so a tampered caller
+     * cannot substitute a stale or attacker-controlled account.
+     */
+    slotHashesSysvar: TAccountMetas[3];
+    tokenProgram: TAccountMetas[4];
   };
   data: FreezeVaultInstructionData;
 };
@@ -182,12 +346,12 @@ export function parseFreezeVaultInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedFreezeVaultInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 3) {
+  if (instruction.accounts.length < 5) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 3,
+        expectedAccountMetas: 5,
       },
     );
   }
@@ -202,6 +366,8 @@ export function parseFreezeVaultInstruction<
     accounts: {
       owner: getNextAccount(),
       vault: getNextAccount(),
+      auditLogSuccess: getNextAccount(),
+      slotHashesSysvar: getNextAccount(),
       tokenProgram: getNextAccount(),
     },
     data: getFreezeVaultInstructionDataDecoder().decode(instruction.data),

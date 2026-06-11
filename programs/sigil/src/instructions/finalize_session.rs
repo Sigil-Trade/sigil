@@ -3,6 +3,7 @@ use anchor_lang::solana_program::instruction::get_stack_height;
 use anchor_lang::solana_program::sysvar::instructions::{
     load_current_index_checked, load_instruction_at_checked,
 };
+use anchor_spl::associated_token::get_associated_token_address_with_program_id;
 use anchor_spl::token::{self, Revoke, Token, TokenAccount};
 
 use anchor_lang::accounts::account_loader::AccountLoader;
@@ -10,6 +11,7 @@ use anchor_lang::accounts::account_loader::AccountLoader;
 use crate::errors::SigilError;
 use crate::events::{AgentSpendLimitChecked, DelegationRevoked, SessionFinalized};
 use crate::state::*;
+use crate::utils::audit_log::build_audit_entry;
 
 #[derive(Accounts)]
 pub struct FinalizeSession<'info> {
@@ -18,7 +20,7 @@ pub struct FinalizeSession<'info> {
 
     #[account(
         mut,
-        seeds = [b"vault", vault.owner.as_ref(), vault.vault_id.to_le_bytes().as_ref()],
+        seeds = [b"vault", vault.vault_authority.as_ref(), vault.vault_id.to_le_bytes().as_ref()],
         bump = vault.bump,
     )]
     pub vault: Account<'info, AgentVault>,
@@ -84,6 +86,30 @@ pub struct FinalizeSession<'info> {
         address = anchor_lang::solana_program::sysvar::instructions::ID
     )]
     pub instructions_sysvar: UncheckedAccount<'info>,
+
+    /// Phase 7 — SUCCESS-path audit log. Written when the finalize completes
+    /// the non-expired branch.
+    #[account(
+        mut,
+        seeds = [b"audit_success", vault.key().as_ref()],
+        bump = audit_log_success.load()?.bump,
+    )]
+    pub audit_log_success: AccountLoader<'info, AuditLogSuccess>,
+
+    /// Phase 7 — REJECTED-path audit log. Written when the finalize takes
+    /// the expired branch (permissionless-crank cleanup). Audit #2 F-19
+    /// keeps this separate from the success buffer so a crank-attacker
+    /// cannot displace legitimate success history.
+    #[account(
+        mut,
+        seeds = [b"audit_rejected", vault.key().as_ref()],
+        bump = audit_log_rejected.load()?.bump,
+    )]
+    pub audit_log_rejected: AccountLoader<'info, AuditLogRejected>,
+
+    /// CHECK: Phase 7 — slot_hashes sysvar; address-pinned.
+    #[account(address = anchor_lang::solana_program::sysvar::slot_hashes::id())]
+    pub slot_hashes_sysvar: UncheckedAccount<'info>,
 }
 
 pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
@@ -118,11 +144,16 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
 
     // Extract session data before we lose access
     let session_agent = session.agent;
-    let session_is_spending = session.is_spending;
+    // is_spending derived from authorized_amount > 0 (V2 Option A — field removed
+    // from SessionAuthority; canonical source is now amount).
+    let session_is_spending = session.authorized_amount > 0;
     let session_delegated = session.delegated;
     let session_developer_fee = session.developer_fee;
     let session_output_mint = session.output_mint;
     let session_balance_before = session.stablecoin_balance_before;
+    // F-Q8: the validate-pinned output stablecoin ATA (Pubkey::default() on
+    // the stablecoin-input path, which uses vault_token_account instead).
+    let session_output_stablecoin_account = session.output_stablecoin_account;
     let session_delegation_token_account = session.delegation_token_account;
     let session_authorized_amount = session.authorized_amount;
     let session_authorized_protocol = session.authorized_protocol;
@@ -135,15 +166,17 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
     let vault_key = ctx.accounts.vault.key();
     let vault = &mut ctx.accounts.vault;
 
-    // Extract vault PDA seeds data upfront
-    let owner_key = vault.owner;
+    // Extract vault PDA seeds data upfront — LBL-01: must use
+    // vault.vault_authority (immutable PDA seed), NOT vault.owner (mutates on
+    // ownership transfer). See full rationale in freeze_vault.rs:76-86.
+    let vault_authority = vault.vault_authority;
     let vault_id_bytes = vault.vault_id.to_le_bytes();
     let vault_bump = vault.bump;
 
     let bump_slice = [vault_bump];
     let signer_seeds = [
         b"vault" as &[u8],
-        owner_key.as_ref(),
+        vault_authority.as_ref(),
         vault_id_bytes.as_ref(),
         bump_slice.as_ref(),
     ];
@@ -195,34 +228,83 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
     // Measures actual stablecoin balance delta to determine real spending.
     // Caps and spend recording use the measured reality, not declared intent.
     // Expired sessions skip: crank callers don't pass optional token accounts.
+    //
+    // Round 2 F19 fix (2026-05-19): same root cause as H-2 — Anchor 0.32.1
+    // does NOT auto-reload Account<TokenAccount> after CPI, so cached
+    // `.amount` = stale pre-CPI value. The TA-12 floor check at lines
+    // 654-689 already re-reads raw post-CPI bytes; the canonical spending
+    // path (outcome-based caps) MUST do the same or all 6 spending caps
+    // silently bypass on a compromised-CPI drain (cached snapshot makes
+    // `actual_spend` look like 0 even though the real balance dropped).
+    //
+    // SPL TokenAccount layout (identical first 72 bytes for SPL +
+    // Token-2022): 0..32 mint, 32..64 owner, 64..72 amount u64 LE.
+    // Token-2022 ConfidentialTransfer extensions blocked at validate
+    // time (Phase 1) so amount field is always ground-truth.
     let run_outcome_check = !is_expired && session_output_mint != Pubkey::default();
     if run_outcome_check {
         let is_stablecoin_input = is_stablecoin_mint(&session_authorized_token);
 
         let stablecoin_current = if is_stablecoin_input {
             // Stablecoin input (e.g., swap USDC→SOL): read vault_token_account
+            // Raw post-CPI bytes parse (F19 fix — see header note above).
             let acct = ctx
                 .accounts
                 .vault_token_account
                 .as_ref()
                 .ok_or(error!(SigilError::InvalidTokenAccount))?;
-            acct.amount
+            let info = acct.to_account_info();
+            let data = info.try_borrow_data()?;
+            require!(data.len() >= 72, SigilError::InvalidTokenAccount);
+            let mut owner_bytes = [0u8; 32];
+            owner_bytes.copy_from_slice(&data[32..64]);
+            let owner_field = Pubkey::new_from_array(owner_bytes);
+            let mut mint_bytes = [0u8; 32];
+            mint_bytes.copy_from_slice(&data[0..32]);
+            let mint_field = Pubkey::new_from_array(mint_bytes);
+            require!(owner_field == vault_key, SigilError::InvalidTokenAccount);
+            require!(
+                mint_field == session_authorized_token,
+                SigilError::InvalidTokenAccount
+            );
+            let mut amount_bytes = [0u8; 8];
+            amount_bytes.copy_from_slice(&data[64..72]);
+            u64::from_le_bytes(amount_bytes)
         } else {
             // Non-stablecoin input (e.g., swap SOL→USDC): read output_stablecoin_account
+            // Raw post-CPI bytes parse (F19 fix — see header note above).
             let stablecoin_account = ctx
                 .accounts
                 .output_stablecoin_account
                 .as_ref()
                 .ok_or(error!(SigilError::InvalidTokenAccount))?;
-            require!(
-                stablecoin_account.owner == vault_key,
+            // F-Q8: the measured stablecoin ATA MUST be the exact account
+            // pinned at validate. Without this a compromised agent could pass
+            // a DIFFERENT vault-owned stablecoin ATA (whose owner+mint also
+            // pass the checks below) to spoof the `current > before` return
+            // check while the real proceeds went elsewhere.
+            require_keys_eq!(
+                stablecoin_account.key(),
+                session_output_stablecoin_account,
                 SigilError::InvalidTokenAccount
             );
+            let info = stablecoin_account.to_account_info();
+            let data = info.try_borrow_data()?;
+            require!(data.len() >= 72, SigilError::InvalidTokenAccount);
+            let mut owner_bytes = [0u8; 32];
+            owner_bytes.copy_from_slice(&data[32..64]);
+            let owner_field = Pubkey::new_from_array(owner_bytes);
+            let mut mint_bytes = [0u8; 32];
+            mint_bytes.copy_from_slice(&data[0..32]);
+            let mint_field = Pubkey::new_from_array(mint_bytes);
+            require!(owner_field == vault_key, SigilError::InvalidTokenAccount);
             require!(
-                stablecoin_account.mint == session_output_mint,
+                mint_field == session_output_mint,
                 SigilError::InvalidTokenAccount
             );
-            stablecoin_account.amount
+            let mut amount_bytes = [0u8; 8];
+            amount_bytes.copy_from_slice(&data[64..72]);
+            u64::from_le_bytes(amount_bytes)
         };
 
         // P&L: set balance_after once — covers both branches (M-5 fix)
@@ -251,7 +333,22 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
             let fees_collected = session_protocol_fee
                 .checked_add(session_developer_fee)
                 .ok_or(SigilError::Overflow)?;
-            let actual_spend = total_decrease.saturating_sub(fees_collected);
+            // F-Q9 (audit 2026-06-01, G12): checked-revert, NOT saturating.
+            // The fees were CPI'd OUT of THIS SAME ATA before the DeFi leg, so
+            // for any honest spend `current <= before - fees` ⟹
+            // `total_decrease >= fees`. `fees_collected > total_decrease` is
+            // therefore reachable ONLY when the vault's stablecoin ATA ended
+            // HIGHER than (snapshot - fees) — i.e. a net stablecoin INFLOW on
+            // this stablecoin-INPUT session (a net-positive round-trip). That
+            // is an explicitly-unsupported flow (see M2-05); failing closed is
+            // intended. The prior `saturating_sub` silently zeroed
+            // `actual_spend`, masking the anomaly and — with `ceil_fee`'s
+            // round-up — letting small spends round to 0 and skip every cap.
+            // DO NOT revert this to a saturating sub. (Conservation proof:
+            // Certora rule I1 NO-UNDERCOUNT, tracked for M2.)
+            let actual_spend = total_decrease
+                .checked_sub(fees_collected)
+                .ok_or(SigilError::SpendAccountingUnderflow)?;
             actual_spend_tracked = actual_spend;
 
             if actual_spend > 0 {
@@ -309,7 +406,12 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
                 }
                 drop(overlay);
 
-                // Per-protocol cap
+                // TA-13 (Phase 5 ratification): per-protocol rolling 24h cap.
+                // This enforcement existed since Phase 2 (per F-15 audit) —
+                // ratified here with a distinct error code so off-chain
+                // monitors can disambiguate "rolling cap hit" from the legacy
+                // "slot allocation exhausted" path (which still returns
+                // ProtocolCapExceeded from inside `record_protocol_spend`).
                 if let Some(proto_cap) = policy.get_protocol_cap(&session_authorized_protocol) {
                     if proto_cap > 0 {
                         let proto_spend =
@@ -317,7 +419,7 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
                         let new_proto = proto_spend
                             .checked_add(actual_spend)
                             .ok_or(SigilError::Overflow)?;
-                        require!(new_proto <= proto_cap, SigilError::ProtocolCapExceeded);
+                        require!(new_proto <= proto_cap, SigilError::ErrDailyCapExceeded);
                     }
                 }
 
@@ -398,7 +500,9 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
             }
             drop(overlay);
 
-            // Per-protocol cap
+            // TA-13 (Phase 5 ratification): per-protocol rolling 24h cap.
+            // Same enforcement as the stablecoin-input branch above — uses
+            // ErrDailyCapExceeded for the "rolling cap hit" semantic.
             if let Some(proto_cap) = policy.get_protocol_cap(&session_authorized_protocol) {
                 if proto_cap > 0 {
                     let proto_spend =
@@ -406,7 +510,7 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
                     let new_proto = proto_spend
                         .checked_add(stablecoin_delta)
                         .ok_or(SigilError::Overflow)?;
-                    require!(new_proto <= proto_cap, SigilError::ProtocolCapExceeded);
+                    require!(new_proto <= proto_cap, SigilError::ErrDailyCapExceeded);
                 }
             }
 
@@ -446,6 +550,355 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
         );
         tracker.record_spend(&clock, fees_collected_total)?;
         drop(tracker);
+    }
+
+    // ─── TA-14 (Phase 5 post-exec invariant #2): per-recipient cap ───
+    //
+    // When a spending finalize completes with `actual_spend_tracked > 0`,
+    // identify the recipient(s) whose token accounts received outflow and
+    // enforce `policy.per_recipient_daily_cap_usd` against each.
+    //
+    // RECIPIENT RESOLUTION: walk the PREVIOUS (DeFi) instruction's
+    // account metas via the instructions sysvar. For each writable
+    // SPL/Token-2022 token account in the metas where:
+    //   1. The deserialized SPL TokenAccount.owner ∈ allowed_destinations
+    //   2. The mint is a stablecoin (USDC/USDT)
+    // attribute outflow. CRITICAL: recipient = TokenAccount.owner (the
+    // wallet), NOT the meta pubkey (which is the ATA). The §RP brief
+    // explicitly flags ATA-vs-owner confusion as the attack class.
+    //
+    // V1 SCOPING: this loop only RECOGNIZES recipients whose owner is on
+    // the policy's allowed_destinations allowlist. Other writable token
+    // accounts in the DeFi ix's metas (DEX-internal vaults, protocol
+    // treasuries, etc.) are NOT counted as recipients. This matches the
+    // policy model: the owner pre-authorizes the set of legitimate
+    // outflow destinations; any address NOT on that list cannot receive
+    // a deliberate outflow without ALSO breaking the global spending cap.
+    //
+    // When per_recipient_daily_cap_usd == 0, the entire block is skipped
+    // (default — preserves existing vault behavior).
+    let per_recipient_policy = &ctx.accounts.policy;
+    if per_recipient_policy.per_recipient_daily_cap_usd > 0 && actual_spend_tracked > 0 {
+        // Find the DeFi instruction immediately preceding this finalize.
+        // It sits at `validate_ix_index + 1` per the sandwich pattern, OR
+        // we can scan backwards from `current_ix_index - 1`.
+        let ix_sysvar_info_ta14 = ctx.accounts.instructions_sysvar.to_account_info();
+        let current_index = load_current_index_checked(&ix_sysvar_info_ta14)
+            .map_err(|_| error!(SigilError::InvalidSession))? as usize;
+        // The DeFi ix sits at current_index - 1 (the instruction
+        // immediately before finalize_session in the sandwich
+        // [validate, DeFi, finalize]).
+        require!(current_index >= 1, SigilError::InvalidSession);
+        let defi_ix_index = current_index.saturating_sub(1);
+        let Ok(defi_ix) = load_instruction_at_checked(defi_ix_index, &ix_sysvar_info_ta14) else {
+            // No preceding instruction — fail closed.
+            return Err(error!(SigilError::ErrRecipientCapExceeded));
+        };
+
+        // Walk metas to find recipient token accounts. The DeFi ix's metas
+        // contain pubkeys but NOT account data — we must look up each
+        // pubkey in `ctx.remaining_accounts` to get the deserialized
+        // TokenAccount.owner field. The §RP-correct resolution.
+        //
+        // Track distinct recipients seen in THIS tx — V1 rejects if more
+        // than one distinct recipient is touched (the per-recipient
+        // outflow attribution becomes ambiguous and is deferred to V2).
+        let mut recipient_seen: Option<Pubkey> = None;
+        for meta in defi_ix.accounts.iter() {
+            // Only writable token accounts could be recipients. The DeFi
+            // program's read-only accounts (oracles, config PDAs) can't
+            // receive outflow.
+            if !meta.is_writable {
+                continue;
+            }
+            // Look up the meta pubkey in remaining_accounts to get the
+            // account data. If not present, skip (the floor check below
+            // may still pass if this recipient isn't a vault stablecoin
+            // ATA).
+            let Some(info) = ctx
+                .remaining_accounts
+                .iter()
+                .find(|a| a.key() == meta.pubkey)
+            else {
+                continue;
+            };
+            // Must be token-program-owned.
+            if info.owner != &anchor_spl::token::ID && info.owner != &TOKEN_2022_PROGRAM_ID {
+                continue;
+            }
+            let data = info.try_borrow_data()?;
+            if data.len() < 72 {
+                continue;
+            }
+            // Parse mint (0..32), owner (32..64) — see TA-12 block above
+            // for the same shape. Skip non-stablecoin accounts and
+            // accounts whose owner is the vault itself (those are
+            // self-transfers, not recipient outflow).
+            let mut mint_bytes = [0u8; 32];
+            mint_bytes.copy_from_slice(&data[0..32]);
+            let mint = Pubkey::new_from_array(mint_bytes);
+            let mut owner_bytes = [0u8; 32];
+            owner_bytes.copy_from_slice(&data[32..64]);
+            let recipient = Pubkey::new_from_array(owner_bytes);
+            if recipient == vault_key {
+                continue;
+            }
+            if !is_stablecoin_mint(&mint) {
+                continue;
+            }
+            // CRITICAL: only count owners on the policy's allowlist. Any
+            // other destination is either a DEX-internal vault (not a
+            // human recipient) or an unauthorized outflow target — the
+            // latter case is already blocked by destination_check in
+            // validate_and_authorize, so reaching it here would indicate
+            // a deeper validation gap. Defense-in-depth: skip.
+            if !per_recipient_policy.is_destination_allowed(&recipient) {
+                continue;
+            }
+            // Found a legitimate recipient. V1 only supports one
+            // distinct recipient per tx — reject if we see a second.
+            if let Some(prev) = recipient_seen {
+                if prev != recipient {
+                    // Multiple distinct recipients in same finalize.
+                    return Err(error!(SigilError::ErrRecipientCapExceeded));
+                }
+            } else {
+                recipient_seen = Some(recipient);
+            }
+        }
+
+        if let Some(recipient) = recipient_seen {
+            // Read-only prior spend in the active window.
+            let mut tracker = ctx.accounts.tracker.load_mut()?;
+            let prior_spend = tracker.get_recipient_spend(&clock, &recipient);
+            let new_total = prior_spend
+                .checked_add(actual_spend_tracked)
+                .ok_or(SigilError::Overflow)?;
+            require!(
+                new_total <= per_recipient_policy.per_recipient_daily_cap_usd,
+                SigilError::ErrRecipientCapExceeded
+            );
+            // Record (may evict an age-elapsed entry; rejects if all
+            // slots are filled within last 24h per the no-churn rule).
+            tracker.record_recipient_spend(&clock, &recipient, actual_spend_tracked)?;
+            drop(tracker);
+        }
+        // If no recipient was seen but actual_spend_tracked > 0, the
+        // spend went to a non-allowlisted destination (DEX-internal
+        // vault for a swap that lands stablecoin back in the vault, or
+        // protocol treasury). Per the policy model, no per-recipient
+        // attribution applies; the global daily cap already enforced
+        // the spend ceiling. NO-OP for the per-recipient cap.
+    }
+
+    // ─── TA-12 (Phase 5 post-exec invariant #1): stable balance floor ──
+    //
+    // After ALL spending paths complete (DeFi spend bookkeeping, fee
+    // collection, fee-to-cap fallback), assert the combined USDC+USDT
+    // balance held by this vault is ≥ policy.stable_balance_floor.
+    //
+    // The floor is the LAST defensive line — no combination of attacks
+    // (CPI drain, per-protocol cap evasion via async fulfillment, fee
+    // inflation, slippage manipulation) may drain the vault below it.
+    //
+    // Sources of vault stablecoin ATAs (in priority order):
+    //   1. `vault_token_account` (Option<TokenAccount>) — when present,
+    //      validate owner == vault + mint ∈ {USDC, USDT}, contribute amount.
+    //   2. `output_stablecoin_account` (Option<TokenAccount>) — same checks.
+    //   3. `ctx.remaining_accounts` — every account whose deserialized SPL
+    //      TokenAccount has owner == vault + mint ∈ {USDC, USDT}. Caller
+    //      MUST include the OTHER stablecoin ATA when only one stablecoin
+    //      session is in scope (e.g. USDC→SOL session needs vault's USDT
+    //      ATA passed via remaining_accounts for the floor check).
+    //
+    // Default policy.stable_balance_floor = 0 means "no reserve" — the
+    // check passes trivially. Owners explicitly opt in by setting a
+    // non-zero value via initialize_vault or queue_policy_update.
+    //
+    // The §RP brief explicitly calls out attack class "wrong pubkey
+    // (parses ATA pubkey instead of owner field)" — we MUST resolve
+    // via SPL TokenAccount.owner (the WALLET that holds the token
+    // account), NOT the meta pubkey. Same fix applies here.
+    let stable_floor_policy = &ctx.accounts.policy;
+    if stable_floor_policy.stable_balance_floor > 0 {
+        let mut combined_stable_balance: u64 = 0;
+
+        // M3-01 (Option 2): canonical-ATA pin. A vault-owned stablecoin balance
+        // counts toward the floor ONLY if the account is the vault's CANONICAL
+        // associated token account for its own mint + token-program (re-derived
+        // on-chain from the candidate's own bytes). This narrows the floor to
+        // exactly one canonical ATA per stablecoin mint, so a second vault-owned
+        // token account for the same mint cannot inflate the sum (the over-count
+        // surface a non-canonical account would otherwise open).
+        //
+        // INTENDED, FAIL-SAFE narrowing: a stablecoin balance held in a
+        // NON-canonical (non-ATA) account is deliberately NOT counted. This only
+        // makes the sum SMALLER, so `require!(combined >= floor)` fires more
+        // eagerly (stricter) — never a bypass. It cannot brick custody: owner
+        // withdraw/freeze paths do not run this check, so the owner always keeps
+        // control; at worst an unusual vault that parks reserves outside its ATA
+        // sees agent spends over-blocked until it moves them in. Skipped, never
+        // reverted.
+        //
+        // SCOPE: USDC/USDT are legacy SPL Token, and typed Sources 1+2
+        // (`Account<TokenAccount>`) are SPL-only by construction. Adding a
+        // Token-2022 stablecoin to `is_stablecoin_mint` would also require a
+        // Token-2022-aware typed source AND a Token-2022-aware SDK ATA
+        // derivation (deriveAta is legacy-SPL-only) — tracked, not in scope.
+        // Deriving from the candidate's own mint + `info.owner` keeps this
+        // correct under the devnet-testing escape hatch and for whichever token
+        // program owns the account.
+        let is_canonical_vault_ata = |key: Pubkey, mint: &Pubkey, token_program: &Pubkey| -> bool {
+            key == get_associated_token_address_with_program_id(&vault_key, mint, token_program)
+        };
+
+        // CRITICAL H-2 fix (audit 2026-05-19): Anchor 0.32.1 does NOT
+        // auto-reload `Account<TokenAccount>` after CPI. Reading
+        // `acct.amount` returns the PRE-CPI cached value. For the
+        // finalize-time floor check (which runs AFTER the spending CPI
+        // sandwiched between validate and finalize), we MUST re-read raw
+        // post-CPI bytes — same pattern as agent_transfer.rs:316-424
+        // (commit 48c6239). Failing to do so defeats the TA-12 invariant
+        // on the canonical spending path: cached `.amount` = $1000,
+        // actual post-CPI balance = $500, floor = $700 → check passes
+        // ($1000 >= $700) → vault drains below floor unchallenged.
+        //
+        // SPL TokenAccount layout (identical first 72 bytes for SPL +
+        // Token-2022): 0..32 mint, 32..64 owner, 64..72 amount u64 LE.
+        // Token-2022 ConfidentialTransfer extensions blocked at validate
+        // time (Phase 1) so amount field is always ground-truth.
+
+        // Source 1: vault_token_account (raw post-CPI re-read).
+        if let Some(acct) = ctx.accounts.vault_token_account.as_ref() {
+            let info = acct.to_account_info();
+            let data = info.try_borrow_data()?;
+            if data.len() >= 72 {
+                let mut owner_bytes = [0u8; 32];
+                owner_bytes.copy_from_slice(&data[32..64]);
+                let owner = Pubkey::new_from_array(owner_bytes);
+                let mut mint_bytes = [0u8; 32];
+                mint_bytes.copy_from_slice(&data[0..32]);
+                let mint = Pubkey::new_from_array(mint_bytes);
+                if owner == vault_key
+                    && is_stablecoin_mint(&mint)
+                    && is_canonical_vault_ata(info.key(), &mint, info.owner)
+                {
+                    let mut amount_bytes = [0u8; 8];
+                    amount_bytes.copy_from_slice(&data[64..72]);
+                    let amount = u64::from_le_bytes(amount_bytes);
+                    combined_stable_balance = combined_stable_balance
+                        .checked_add(amount)
+                        .ok_or(SigilError::Overflow)?;
+                }
+            }
+        }
+
+        // Source 2: output_stablecoin_account (raw post-CPI re-read).
+        // Skip if same pubkey as vault_token_account (double-count guard).
+        if let Some(acct) = ctx.accounts.output_stablecoin_account.as_ref() {
+            let same_as_input = ctx
+                .accounts
+                .vault_token_account
+                .as_ref()
+                .is_some_and(|t| t.key() == acct.key());
+            if !same_as_input {
+                let info = acct.to_account_info();
+                let data = info.try_borrow_data()?;
+                if data.len() >= 72 {
+                    let mut owner_bytes = [0u8; 32];
+                    owner_bytes.copy_from_slice(&data[32..64]);
+                    let owner = Pubkey::new_from_array(owner_bytes);
+                    let mut mint_bytes = [0u8; 32];
+                    mint_bytes.copy_from_slice(&data[0..32]);
+                    let mint = Pubkey::new_from_array(mint_bytes);
+                    if owner == vault_key
+                        && is_stablecoin_mint(&mint)
+                        && is_canonical_vault_ata(info.key(), &mint, info.owner)
+                    {
+                        let mut amount_bytes = [0u8; 8];
+                        amount_bytes.copy_from_slice(&data[64..72]);
+                        let amount = u64::from_le_bytes(amount_bytes);
+                        combined_stable_balance = combined_stable_balance
+                            .checked_add(amount)
+                            .ok_or(SigilError::Overflow)?;
+                    }
+                }
+            }
+        }
+
+        // Source 3: remaining_accounts — caller passes any additional
+        // vault stablecoin ATAs needed to cover the floor invariant.
+        // We deserialize each as an SPL TokenAccount and check
+        // owner=vault + mint∈{USDC,USDT}. De-duplicate by pubkey to
+        // defend against double-count from a caller passing the same
+        // ATA twice.
+        let already_counted_a = ctx.accounts.vault_token_account.as_ref().map(|t| t.key());
+        let already_counted_b = ctx
+            .accounts
+            .output_stablecoin_account
+            .as_ref()
+            .map(|t| t.key());
+        let mut seen: Vec<Pubkey> = Vec::with_capacity(2);
+        if let Some(k) = already_counted_a {
+            seen.push(k);
+        }
+        if let Some(k) = already_counted_b {
+            if !seen.contains(&k) {
+                seen.push(k);
+            }
+        }
+        for info in ctx.remaining_accounts.iter() {
+            if seen.contains(&info.key()) {
+                continue;
+            }
+            // Defensive: must be a token-program-owned account. Accept
+            // both SPL Token and Token-2022 — the first 72 bytes of the
+            // serialized layout (mint, owner, amount) are identical
+            // between the two, and Token-2022 ConfidentialTransfer
+            // extensions are blocked at validate time so the amount
+            // field is always ground-truth.
+            if info.owner != &anchor_spl::token::ID && info.owner != &TOKEN_2022_PROGRAM_ID {
+                continue;
+            }
+            let data = info.try_borrow_data()?;
+            // SPL TokenAccount packed length = 165 bytes (no extension).
+            // Token-2022 accounts may be larger but the prefix layout
+            // (mint, owner, amount) is identical for the first 72 bytes,
+            // so we only require >=72 here. Token-2022 ConfidentialTransfer
+            // extensions are blocked at validate time (Phase 1) so the
+            // amount field still reflects ground-truth balance.
+            if data.len() < 72 {
+                continue;
+            }
+            // SPL TokenAccount: bytes 0..32 = mint, 32..64 = owner,
+            // 64..72 = amount (u64 LE). Parse only the fields we need
+            // (cheaper than full deserialize).
+            let mut mint_bytes = [0u8; 32];
+            mint_bytes.copy_from_slice(&data[0..32]);
+            let mint = Pubkey::new_from_array(mint_bytes);
+            let mut owner_bytes = [0u8; 32];
+            owner_bytes.copy_from_slice(&data[32..64]);
+            let owner = Pubkey::new_from_array(owner_bytes);
+            if owner != vault_key
+                || !is_stablecoin_mint(&mint)
+                || !is_canonical_vault_ata(info.key(), &mint, info.owner)
+            {
+                continue;
+            }
+            let mut amount_bytes = [0u8; 8];
+            amount_bytes.copy_from_slice(&data[64..72]);
+            let amount = u64::from_le_bytes(amount_bytes);
+            combined_stable_balance = combined_stable_balance
+                .checked_add(amount)
+                .ok_or(SigilError::Overflow)?;
+            seen.push(info.key());
+            drop(data);
+        }
+
+        require!(
+            combined_stable_balance >= stable_floor_policy.stable_balance_floor,
+            SigilError::ErrStableFloorViolation
+        );
     }
 
     // Always track fees that were transferred in validate (regardless of expiry or outcome).
@@ -536,6 +989,81 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
         let count = assertions.entry_count as usize;
         for i in 0..count {
             let entry = &assertions.entries[i];
+
+            // Exhaustive match on assertion_mode — unknown modes hard-fail (security audit H3)
+            let mode = crate::state::post_assertions::AssertionMode::try_from(entry.assertion_mode)
+                .map_err(|_| error!(SigilError::InvalidConstraintConfig))?;
+
+            // Phase 6 R-1..R-4 — dispatch each via #[inline(never)] helpers
+            // to keep the handler's stack frame under the 4096-byte BPF cap.
+            // Each helper allocates its own per-mode locals in a fresh frame
+            // so the snapshot arrays / per-variant 32-byte locals don't
+            // accumulate into the outer handler frame.
+            match mode {
+                crate::state::post_assertions::AssertionMode::MintDeltaCap => {
+                    crate::utils::post_assertion_helpers::verify_mint_delta_cap(
+                        entry,
+                        &session_snapshots[i],
+                        session_snapshot_lens[i],
+                        &vault_key,
+                        remaining,
+                    )?;
+                    emit!(crate::events::PostAssertionChecked {
+                        vault: vault_key,
+                        entry_index: i as u8,
+                        passed: true,
+                        timestamp: clock_ts,
+                    });
+                    continue;
+                }
+                crate::state::post_assertions::AssertionMode::AtaAuthorityPin => {
+                    crate::utils::post_assertion_helpers::verify_ata_authority_pin(
+                        entry, &vault_key, remaining,
+                    )?;
+                    emit!(crate::events::PostAssertionChecked {
+                        vault: vault_key,
+                        entry_index: i as u8,
+                        passed: true,
+                        timestamp: clock_ts,
+                    });
+                    continue;
+                }
+                crate::state::post_assertions::AssertionMode::OutputBalanceFloor => {
+                    crate::utils::post_assertion_helpers::verify_output_balance_floor(
+                        entry,
+                        &session_snapshots[i],
+                        session_snapshot_lens[i],
+                        &vault_key,
+                        remaining,
+                    )?;
+                    emit!(crate::events::PostAssertionChecked {
+                        vault: vault_key,
+                        entry_index: i as u8,
+                        passed: true,
+                        timestamp: clock_ts,
+                    });
+                    continue;
+                }
+                crate::state::post_assertions::AssertionMode::DeclarationConsistency => {
+                    let ix_sysvar_info = ctx.accounts.instructions_sysvar.to_account_info();
+                    crate::utils::post_assertion_helpers::verify_declaration_consistency(
+                        entry,
+                        &ix_sysvar_info,
+                        remaining,
+                    )?;
+                    emit!(crate::events::PostAssertionChecked {
+                        vault: vault_key,
+                        entry_index: i as u8,
+                        passed: true,
+                        timestamp: clock_ts,
+                    });
+                    continue;
+                }
+                // Legacy modes (0..3) fall through to the in-loop logic below.
+                _ => {}
+            }
+
+            // Legacy modes (0..3) require the target_account to be loadable.
             let target_pubkey = Pubkey::new_from_array(entry.target_account);
 
             // Find the target account in remaining_accounts
@@ -552,58 +1080,20 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
             require!(end <= target_data.len(), SigilError::PostAssertionFailed);
             let actual = &target_data[offset..end];
 
-            // Exhaustive match on assertion_mode — unknown modes hard-fail (security audit H3)
-            let mode = crate::state::post_assertions::AssertionMode::try_from(entry.assertion_mode)
-                .map_err(|_| error!(SigilError::InvalidConstraintConfig))?;
-
             match mode {
                 crate::state::post_assertions::AssertionMode::Absolute => {
                     // Phase B1: check current value against expected_value
                     let expected = &entry.expected_value[..len];
-                    let operator = ConstraintOperator::try_from(entry.operator)
-                        .map_err(|_| error!(SigilError::InvalidConstraintOperator))?;
+                    let operator =
+                        crate::state::assertions::ConstraintOperator::try_from(entry.operator)
+                            .map_err(|_| error!(SigilError::InvalidConstraintOperator))?;
 
-                    // Phase B3: CrossFieldLte — ratio check using two offsets
-                    if entry.cross_field_flags & 0x01 != 0 {
-                        let offset_b = u16::from_le_bytes(entry.cross_field_offset_b) as usize;
-                        let end_b = offset_b
-                            .checked_add(len)
-                            .ok_or(error!(SigilError::PostAssertionFailed))?;
-                        require!(end_b <= target_data.len(), SigilError::PostAssertionFailed);
-                        let field_b_bytes = &target_data[offset_b..end_b];
-
-                        // Parse as little-endian unsigned integers
-                        let mut a_buf = [0u8; 8];
-                        let mut b_buf = [0u8; 8];
-                        a_buf[..len].copy_from_slice(actual);
-                        b_buf[..len].copy_from_slice(field_b_bytes);
-                        let field_a = u64::from_le_bytes(a_buf);
-                        let field_b = u64::from_le_bytes(b_buf);
-
-                        let multiplier =
-                            u32::from_le_bytes(entry.cross_field_multiplier_bps) as u128;
-
-                        // Handle field_B = 0 explicitly (security audit H5)
-                        if field_b == 0 {
-                            require!(field_a == 0, SigilError::PostAssertionFailed);
-                        } else {
-                            // Cross-multiply with u128 to avoid overflow (security audit M1)
-                            let lhs = (field_a as u128)
-                                .checked_mul(10000u128)
-                                .ok_or(error!(SigilError::Overflow))?;
-                            let rhs = multiplier
-                                .checked_mul(field_b as u128)
-                                .ok_or(error!(SigilError::Overflow))?;
-                            require!(lhs <= rhs, SigilError::PostAssertionFailed);
-                        }
-                    } else {
-                        // Standard absolute comparison (B1)
-                        let passed =
-                            crate::instructions::integrations::generic_constraints::bytes_match(
-                                actual, &operator, expected,
-                            );
-                        require!(passed, SigilError::PostAssertionFailed);
-                    }
+                    // Phase B3 CrossFieldLte branch DELETED in Phase 1 Option A demolition.
+                    // Standard absolute comparison (B1) is now the sole path.
+                    // M1-04: bytes_match relocated to state::assertions (was
+                    // instructions::integrations::generic_constraints).
+                    let passed = crate::state::assertions::bytes_match(actual, &operator, expected);
+                    require!(passed, SigilError::PostAssertionFailed);
                 }
                 crate::state::post_assertions::AssertionMode::MaxDecrease => {
                     // Phase B2: check (snapshot - current) ≤ expected_value
@@ -660,6 +1150,17 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
                     let snapshot = &session_snapshots[i][..len];
                     require!(actual == snapshot, SigilError::PostAssertionFailed);
                 }
+                crate::state::post_assertions::AssertionMode::MintDeltaCap
+                | crate::state::post_assertions::AssertionMode::AtaAuthorityPin
+                | crate::state::post_assertions::AssertionMode::OutputBalanceFloor
+                | crate::state::post_assertions::AssertionMode::DeclarationConsistency => {
+                    // Handled above before the legacy target_data load.
+                    // These arms are unreachable but the exhaustive match
+                    // requires them. Force an error if execution reaches
+                    // here (would indicate a refactor bug in the
+                    // early-return path).
+                    return Err(error!(SigilError::PostAssertionFailed));
+                }
             }
 
             emit!(crate::events::PostAssertionChecked {
@@ -682,6 +1183,64 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
     // H-1: Decrement active session counter (unconditional — both success and expired)
     vault.active_sessions = vault.active_sessions.saturating_sub(1);
 
+    // AC-10 (Phase 4): nonce bump — dead-on-close under V2 (`close =
+    // session_rent_recipient`); forward-compat for Phase 8 M-5 reuse.
+    // See `docs/revamp/AUDIT_2026_05_18/G2_DEFERRAL_RATIONALE.md`. M-6
+    // audit 2026-05-19 compressed prior 4-line comment to this 3-line cite.
+    {
+        let session = &mut ctx.accounts.session;
+        session.nonce = session.nonce.checked_add(1).ok_or(SigilError::Overflow)?;
+    }
+
+    // Phase 7 — write audit-log entry. SUCCESS path goes to audit_log_success
+    // (discriminator 2); REJECT/expired path goes to audit_log_rejected
+    // (discriminator 16 — `AUDIT_DISC_FINALIZE_REJECT`, distinct from disc=1
+    // which is reserved for future per-validate rows). The two buffers are
+    // physically separate so an expired-finalize burst (permissionless
+    // crank) cannot displace legitimate success history (Audit #2 F-19).
+    // §RP-1 HIGH-1 (2026-05-19): previously reused disc=1
+    // `AUDIT_DISC_VALIDATE` here, but `validate_and_authorize` writes NO
+    // audit entries, so disc=1 on the rejected buffer was a forensic-
+    // correctness lie. Disc=16 fixes the ambiguity.
+    {
+        let delta_out: i64 = actual_spend_tracked.min(i64::MAX as u64) as i64;
+        if is_expired {
+            let entry = build_audit_entry(
+                AUDIT_DISC_FINALIZE_REJECT,
+                session_authorized_protocol,
+                0,
+                delta_out,
+                clock.unix_timestamp,
+                &ctx.accounts.slot_hashes_sysvar.to_account_info(),
+            )?;
+            let mut log = ctx.accounts.audit_log_rejected.load_mut()?;
+            // §RP-1 I-2: defense-in-depth guard against future seeds drift.
+            require_keys_eq!(
+                log.vault,
+                ctx.accounts.vault.key(),
+                SigilError::ZeroCopyVaultMismatch
+            );
+            log.append(entry);
+        } else {
+            let entry = build_audit_entry(
+                AUDIT_DISC_FINALIZE_SUCCESS,
+                session_authorized_protocol,
+                0,
+                delta_out,
+                clock.unix_timestamp,
+                &ctx.accounts.slot_hashes_sysvar.to_account_info(),
+            )?;
+            let mut log = ctx.accounts.audit_log_success.load_mut()?;
+            // §RP-1 I-2: defense-in-depth guard against future seeds drift.
+            require_keys_eq!(
+                log.vault,
+                ctx.accounts.vault.key(),
+                SigilError::ZeroCopyVaultMismatch
+            );
+            log.append(entry);
+        }
+    }
+
     emit!(SessionFinalized {
         vault: vault_key,
         agent: session_agent,
@@ -690,7 +1249,6 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
         timestamp: clock.unix_timestamp,
         actual_spend_usd: actual_spend_tracked,
         balance_after_usd: balance_after_tracked,
-        is_spending: session_is_spending,
     });
 
     // --- Post-finalize instruction scan (defense-in-depth) ---
@@ -702,11 +1260,11 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
         .map_err(|_| error!(SigilError::UnauthorizedPostFinalizeInstruction))?
         as usize;
 
-    // Hardcoded ComputeBudget program ID — matches validate_and_authorize.rs:248-251
-    let compute_budget_id = Pubkey::new_from_array([
-        3, 6, 70, 111, 229, 33, 23, 50, 255, 236, 173, 186, 114, 195, 155, 231, 188, 140, 229, 187,
-        197, 247, 18, 107, 44, 67, 155, 58, 64, 0, 0, 0,
-    ]);
+    // P3.1 + P3.2 audit fix (2026-05-19): single source of truth at
+    // `state/mod.rs::COMPUTE_BUDGET_PROGRAM_ID`. Replaces both the inlined
+    // 32-byte literal AND the stale cross-file line reference (prior comment
+    // pointed at validate_and_authorize.rs:248-251 which had drifted to :385-388).
+    let compute_budget_id = crate::state::COMPUTE_BUDGET_PROGRAM_ID;
     let system_id = anchor_lang::solana_program::system_program::ID;
 
     // Bounded scan: check up to MAX_SYSVAR_SCAN_ITERATIONS instructions after

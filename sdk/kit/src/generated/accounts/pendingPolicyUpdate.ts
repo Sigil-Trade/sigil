@@ -31,6 +31,8 @@ import {
   getStructEncoder,
   getU16Decoder,
   getU16Encoder,
+  getU32Decoder,
+  getU32Encoder,
   getU64Decoder,
   getU64Encoder,
   getU8Decoder,
@@ -87,12 +89,110 @@ export type PendingPolicyUpdate = {
   hasProtocolCaps: Option<boolean>;
   protocolCaps: Option<Array<bigint>>;
   /**
-   * Destination access control mode update (F-4 audit fix).
-   * Some(0) = Restricted, Some(1) = OpenWithCap, None = leave unchanged.
+   * Destination access control mode update.
+   * Phase 2 Option A: only Some(0) (RESTRICTED) is accepted. Some(1) was deleted.
    */
   destinationMode: Option<number>;
   /** Bump seed for PDA */
   bump: number;
+  /**
+   * TA-05 (Phase 3): optional update to `PolicyConfig.operating_hours`.
+   * 24-bit UTC bitmask; upper 8 bits MUST be zero. Bound by TA-19 at
+   * canonical position 15.
+   * APPENDED at end per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  operatingHours: Option<number>;
+  /**
+   * TA-09 (Phase 3 pre-execution guard #6): cosign requirement marker.
+   * When `queue_policy_update` detects an elevated mutation (raising
+   * daily cap, raising max-tx, expanding destinations/protocols, etc),
+   * the owner MUST supply a co-signing session in the accounts. The
+   * queue handler computes a sha256 over the canonical pending args
+   * and stores it here; `apply_pending_policy` re-asserts the digest.
+   *
+   * `[0u8; 32]` = no cosign required (non-elevated mutation). Any
+   * non-zero digest indicates this pending was bound to a specific
+   * cosign. At apply, the handler MUST re-compute and equal-check.
+   *
+   * APPENDED at end per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  cosignDigest: ReadonlyUint8Array;
+  /**
+   * TA-09 (Phase 3): pubkey of the session that co-signed this queue.
+   * Recorded for audit. `Pubkey::default()` = no cosign (non-elevated).
+   */
+  cosignSession: Address;
+  /**
+   * TA-19 (Phase 2): SHA-256 digest of the canonical Borsh encoding of the
+   * policy fields THAT WOULD RESULT FROM APPLYING this pending update over
+   * the live policy. Owner computes off-chain over the merged result and
+   * includes the digest in `queue_policy_update`; `apply_pending_policy`
+   * re-asserts the digest against a re-computed merged digest before any
+   * field is copied to the live policy. Defends against pending-PDA
+   * tampering between queue and apply (e.g., partial overwrite via a
+   * rogue program with the same account discriminator).
+   *
+   * Encoding identical to `PolicyConfig.policy_preview_digest` — see that
+   * field's doc-comment for the canonical encoding ordering.
+   *
+   * APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  newPolicyPreviewDigest: ReadonlyUint8Array;
+  /**
+   * TA-12 (Phase 5): optional update to `PolicyConfig.stable_balance_floor`.
+   * None = preserve live value; Some(n) = set to n. Bound by TA-19 at
+   * canonical digest position 18.
+   *
+   * APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  stableBalanceFloor: Option<bigint>;
+  /**
+   * TA-14 (Phase 5): optional update to
+   * `PolicyConfig.per_recipient_daily_cap_usd`. None = preserve live value;
+   * Some(n) = set to n. Bound by TA-19 at canonical digest position 19.
+   *
+   * APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  perRecipientDailyCapUsd: Option<bigint>;
+  /**
+   * G6 (audit 2026-05-18 cosign opt-in): optional update to
+   * `PolicyConfig.cosign_required`. None = preserve live value;
+   * Some(true) = enable cosign on elevated mutations (safety
+   * improvement — NOT elevated); Some(false) when live is true
+   * IS elevated (one-way ratchet — disabling cosign requires cosign).
+   * Bound by TA-19 at canonical digest position 20.
+   *
+   * APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  cosignRequired: Option<boolean>;
+  /**
+   * D-5 close (audit 2026-05-19, F-RP3-1): optional update to
+   * `PolicyConfig.cosign_session_pubkey`. None = preserve live value;
+   * Some(pubkey) = set the reactivate-cosign pubkey for elevated
+   * capability grants. `Pubkey::default()` is permitted as a value
+   * (disables the gate); any other pubkey enables it.
+   *
+   * Setting this field is NOT classified as elevated by the existing
+   * 7-trigger gate in `queue_policy_update` — owners opt INTO friction
+   * (the gate fires LATER on `reactivate_vault`). Disabling it
+   * (`Some(Pubkey::default())`) on a live policy where the field is
+   * currently non-default IS, however, a one-way-ratchet violation if
+   * the vault is otherwise cosign-opted-in; deferred to Phase 9
+   * alongside the broader ratchet polish — the present batch closes
+   * only the reactivate-time gate.
+   *
+   * Bound by TA-19 at canonical digest position 22.
+   *
+   * APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  cosignSessionPubkey: Option<Address>;
+  /**
+   * F-Q6 (2026-06-02): optional update to
+   * `PolicyConfig.operator_grant_delay_seconds`. None = preserve live value;
+   * Some(n) = update. Bound by TA-19 at canonical digest position 22.
+   * APPENDED per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  operatorGrantDelaySeconds: Option<bigint>;
 };
 
 export type PendingPolicyUpdateArgs = {
@@ -120,12 +220,110 @@ export type PendingPolicyUpdateArgs = {
   hasProtocolCaps: OptionOrNullable<boolean>;
   protocolCaps: OptionOrNullable<Array<number | bigint>>;
   /**
-   * Destination access control mode update (F-4 audit fix).
-   * Some(0) = Restricted, Some(1) = OpenWithCap, None = leave unchanged.
+   * Destination access control mode update.
+   * Phase 2 Option A: only Some(0) (RESTRICTED) is accepted. Some(1) was deleted.
    */
   destinationMode: OptionOrNullable<number>;
   /** Bump seed for PDA */
   bump: number;
+  /**
+   * TA-05 (Phase 3): optional update to `PolicyConfig.operating_hours`.
+   * 24-bit UTC bitmask; upper 8 bits MUST be zero. Bound by TA-19 at
+   * canonical position 15.
+   * APPENDED at end per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  operatingHours: OptionOrNullable<number>;
+  /**
+   * TA-09 (Phase 3 pre-execution guard #6): cosign requirement marker.
+   * When `queue_policy_update` detects an elevated mutation (raising
+   * daily cap, raising max-tx, expanding destinations/protocols, etc),
+   * the owner MUST supply a co-signing session in the accounts. The
+   * queue handler computes a sha256 over the canonical pending args
+   * and stores it here; `apply_pending_policy` re-asserts the digest.
+   *
+   * `[0u8; 32]` = no cosign required (non-elevated mutation). Any
+   * non-zero digest indicates this pending was bound to a specific
+   * cosign. At apply, the handler MUST re-compute and equal-check.
+   *
+   * APPENDED at end per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  cosignDigest: ReadonlyUint8Array;
+  /**
+   * TA-09 (Phase 3): pubkey of the session that co-signed this queue.
+   * Recorded for audit. `Pubkey::default()` = no cosign (non-elevated).
+   */
+  cosignSession: Address;
+  /**
+   * TA-19 (Phase 2): SHA-256 digest of the canonical Borsh encoding of the
+   * policy fields THAT WOULD RESULT FROM APPLYING this pending update over
+   * the live policy. Owner computes off-chain over the merged result and
+   * includes the digest in `queue_policy_update`; `apply_pending_policy`
+   * re-asserts the digest against a re-computed merged digest before any
+   * field is copied to the live policy. Defends against pending-PDA
+   * tampering between queue and apply (e.g., partial overwrite via a
+   * rogue program with the same account discriminator).
+   *
+   * Encoding identical to `PolicyConfig.policy_preview_digest` — see that
+   * field's doc-comment for the canonical encoding ordering.
+   *
+   * APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  newPolicyPreviewDigest: ReadonlyUint8Array;
+  /**
+   * TA-12 (Phase 5): optional update to `PolicyConfig.stable_balance_floor`.
+   * None = preserve live value; Some(n) = set to n. Bound by TA-19 at
+   * canonical digest position 18.
+   *
+   * APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  stableBalanceFloor: OptionOrNullable<number | bigint>;
+  /**
+   * TA-14 (Phase 5): optional update to
+   * `PolicyConfig.per_recipient_daily_cap_usd`. None = preserve live value;
+   * Some(n) = set to n. Bound by TA-19 at canonical digest position 19.
+   *
+   * APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  perRecipientDailyCapUsd: OptionOrNullable<number | bigint>;
+  /**
+   * G6 (audit 2026-05-18 cosign opt-in): optional update to
+   * `PolicyConfig.cosign_required`. None = preserve live value;
+   * Some(true) = enable cosign on elevated mutations (safety
+   * improvement — NOT elevated); Some(false) when live is true
+   * IS elevated (one-way ratchet — disabling cosign requires cosign).
+   * Bound by TA-19 at canonical digest position 20.
+   *
+   * APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  cosignRequired: OptionOrNullable<boolean>;
+  /**
+   * D-5 close (audit 2026-05-19, F-RP3-1): optional update to
+   * `PolicyConfig.cosign_session_pubkey`. None = preserve live value;
+   * Some(pubkey) = set the reactivate-cosign pubkey for elevated
+   * capability grants. `Pubkey::default()` is permitted as a value
+   * (disables the gate); any other pubkey enables it.
+   *
+   * Setting this field is NOT classified as elevated by the existing
+   * 7-trigger gate in `queue_policy_update` — owners opt INTO friction
+   * (the gate fires LATER on `reactivate_vault`). Disabling it
+   * (`Some(Pubkey::default())`) on a live policy where the field is
+   * currently non-default IS, however, a one-way-ratchet violation if
+   * the vault is otherwise cosign-opted-in; deferred to Phase 9
+   * alongside the broader ratchet polish — the present batch closes
+   * only the reactivate-time gate.
+   *
+   * Bound by TA-19 at canonical digest position 22.
+   *
+   * APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  cosignSessionPubkey: OptionOrNullable<Address>;
+  /**
+   * F-Q6 (2026-06-02): optional update to
+   * `PolicyConfig.operator_grant_delay_seconds`. None = preserve live value;
+   * Some(n) = update. Bound by TA-19 at canonical digest position 22.
+   * APPENDED per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  operatorGrantDelaySeconds: OptionOrNullable<number | bigint>;
 };
 
 /** Gets the encoder for {@link PendingPolicyUpdateArgs} account data. */
@@ -153,6 +351,15 @@ export function getPendingPolicyUpdateEncoder(): Encoder<PendingPolicyUpdateArgs
       ["protocolCaps", getOptionEncoder(getArrayEncoder(getU64Encoder()))],
       ["destinationMode", getOptionEncoder(getU8Encoder())],
       ["bump", getU8Encoder()],
+      ["operatingHours", getOptionEncoder(getU32Encoder())],
+      ["cosignDigest", fixEncoderSize(getBytesEncoder(), 32)],
+      ["cosignSession", getAddressEncoder()],
+      ["newPolicyPreviewDigest", fixEncoderSize(getBytesEncoder(), 32)],
+      ["stableBalanceFloor", getOptionEncoder(getU64Encoder())],
+      ["perRecipientDailyCapUsd", getOptionEncoder(getU64Encoder())],
+      ["cosignRequired", getOptionEncoder(getBooleanEncoder())],
+      ["cosignSessionPubkey", getOptionEncoder(getAddressEncoder())],
+      ["operatorGrantDelaySeconds", getOptionEncoder(getU64Encoder())],
     ]),
     (value) => ({
       ...value,
@@ -185,6 +392,15 @@ export function getPendingPolicyUpdateDecoder(): Decoder<PendingPolicyUpdate> {
     ["protocolCaps", getOptionDecoder(getArrayDecoder(getU64Decoder()))],
     ["destinationMode", getOptionDecoder(getU8Decoder())],
     ["bump", getU8Decoder()],
+    ["operatingHours", getOptionDecoder(getU32Decoder())],
+    ["cosignDigest", fixDecoderSize(getBytesDecoder(), 32)],
+    ["cosignSession", getAddressDecoder()],
+    ["newPolicyPreviewDigest", fixDecoderSize(getBytesDecoder(), 32)],
+    ["stableBalanceFloor", getOptionDecoder(getU64Decoder())],
+    ["perRecipientDailyCapUsd", getOptionDecoder(getU64Decoder())],
+    ["cosignRequired", getOptionDecoder(getBooleanDecoder())],
+    ["cosignSessionPubkey", getOptionDecoder(getAddressDecoder())],
+    ["operatorGrantDelaySeconds", getOptionDecoder(getU64Decoder())],
   ]);
 }
 

@@ -4,24 +4,23 @@
  * Privy TEE custody adapter for Sigil.
  * Hardware-enclave signing — the private key never leaves the AWS Nitro Enclave.
  *
- * @example One-liner with shieldWallet():
+ * @example Pair with shield() for client-side policy enforcement:
  * ```typescript
- * import { shieldWallet } from '@usesigil/kit';
+ * import { shield } from '@usesigil/kit';
  * import { privy } from '@usesigil/custody/privy';
  *
- * const wallet = shieldWallet(
- *   await privy({ appId: 'clx...', appSecret: 'sk_...' }),
- *   { maxSpend: '500 USDC/day' }
- * );
+ * const wallet = await privy({ appId: 'clx...', appSecret: 'sk_...' });
+ * const shieldCtx = shield({ maxSpend: '500 USDC/day' });
  * ```
  *
  * @example Zero-config from environment:
  * ```typescript
- * import { shieldWallet } from '@usesigil/kit';
+ * import { shield } from '@usesigil/kit';
  * import { privyFromEnv } from '@usesigil/custody/privy';
  *
  * // Reads PRIVY_APP_ID + PRIVY_APP_SECRET (+ optional PRIVY_WALLET_ID) from env
- * const wallet = shieldWallet(await privyFromEnv(), { maxSpend: '500 USDC/day' });
+ * const wallet = await privyFromEnv();
+ * const shieldCtx = shield({ maxSpend: '500 USDC/day' });
  * ```
  */
 

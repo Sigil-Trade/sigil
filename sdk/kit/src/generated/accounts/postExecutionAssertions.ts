@@ -59,7 +59,7 @@ export type PostExecutionAssertions = {
   vault: ReadonlyUint8Array;
   /** Assertion entries (fixed-size array, up to MAX_POST_ASSERTION_ENTRIES). */
   entries: Array<PostAssertionEntryZC>;
-  /** Number of active entries (0..=4). */
+  /** Number of active entries (0..=MAX_POST_ASSERTION_ENTRIES). */
   entryCount: number;
   /** PDA bump seed. */
   bump: number;
@@ -72,7 +72,7 @@ export type PostExecutionAssertionsArgs = {
   vault: ReadonlyUint8Array;
   /** Assertion entries (fixed-size array, up to MAX_POST_ASSERTION_ENTRIES). */
   entries: Array<PostAssertionEntryZCArgs>;
-  /** Number of active entries (0..=4). */
+  /** Number of active entries (0..=MAX_POST_ASSERTION_ENTRIES). */
   entryCount: number;
   /** PDA bump seed. */
   bump: number;
@@ -88,7 +88,7 @@ export function getPostExecutionAssertionsEncoder(): FixedSizeEncoder<PostExecut
       ["vault", fixEncoderSize(getBytesEncoder(), 32)],
       [
         "entries",
-        getArrayEncoder(getPostAssertionEntryZCEncoder(), { size: 4 }),
+        getArrayEncoder(getPostAssertionEntryZCEncoder(), { size: 8 }),
       ],
       ["entryCount", getU8Encoder()],
       ["bump", getU8Encoder()],
@@ -106,7 +106,7 @@ export function getPostExecutionAssertionsDecoder(): FixedSizeDecoder<PostExecut
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
     ["vault", fixDecoderSize(getBytesDecoder(), 32)],
-    ["entries", getArrayDecoder(getPostAssertionEntryZCDecoder(), { size: 4 })],
+    ["entries", getArrayDecoder(getPostAssertionEntryZCDecoder(), { size: 8 })],
     ["entryCount", getU8Decoder()],
     ["bump", getU8Decoder()],
     ["padding", fixDecoderSize(getBytesDecoder(), 6)],
@@ -194,5 +194,5 @@ export async function fetchAllMaybePostExecutionAssertions(
 }
 
 export function getPostExecutionAssertionsSize(): number {
-  return 352;
+  return 672;
 }

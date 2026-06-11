@@ -546,7 +546,6 @@ describe("shield", () => {
         policy: {} as any,
         tracker: null,
         overlay: null,
-        constraints: null,
         globalBudget: {
           spent24h: 0n,
           cap: 1_000_000_000n,
@@ -930,7 +929,6 @@ describe("shield", () => {
         policy: {} as any,
         tracker: null,
         overlay: null,
-        constraints: null,
         globalBudget: {
           spent24h: 0n,
           cap: 1_000_000_000n,

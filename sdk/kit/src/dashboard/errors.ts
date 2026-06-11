@@ -20,7 +20,12 @@ import {
   type SolanaError,
 } from "@solana/errors";
 
-import { SDK_ERROR_CODES, toAgentError } from "../agent-errors.js";
+import {
+  SDK_ERROR_CODES,
+  SIGIL_ON_CHAIN_ERROR_MAX,
+  SIGIL_ON_CHAIN_ERROR_MIN,
+  toAgentError,
+} from "../agent-errors.js";
 import type { DxError } from "./types.js";
 
 /**
@@ -217,14 +222,18 @@ export function isAccountNotFoundError(
 // ─── DxError range constants (FE↔BE contract §6.3) ──────────────────────────
 
 /**
- * Lower bound of the Anchor on-chain error range. Any code in
+ * Bounds of the Anchor on-chain error range. Any code in
  * [ANCHOR_ERROR_MIN, ANCHOR_ERROR_MAX] means the transaction reached the
  * on-chain program and was rejected by program logic — FE renders a
  * specific "the vault's rules prevented this" message.
+ *
+ * Aliased from `agent-errors.ts` (single source of truth) so both the
+ * dashboard categorize-path and the SDK error-extraction predicate stay
+ * in lockstep without manual sync. Bump only at the constant declaration
+ * in `agent-errors.ts`.
  */
-const ANCHOR_ERROR_MIN = 6000;
-/** Upper bound of the Anchor on-chain error range (Sigil ships 71 codes: 6000-6070; 6074 is the reserved ceiling per the FE↔BE contract). */
-const ANCHOR_ERROR_MAX = 6074;
+const ANCHOR_ERROR_MIN = SIGIL_ON_CHAIN_ERROR_MIN;
+const ANCHOR_ERROR_MAX = SIGIL_ON_CHAIN_ERROR_MAX;
 
 /**
  * Lower bound of the SDK / dashboard logic error range (FE↔BE §6.3).
@@ -269,8 +278,8 @@ export type DxErrorCategory = "user" | "network" | "program" | "unknown";
  * Friendly category for a `DxError` (FE↔BE contract §6.3 helper).
  *
  * Returns one of:
- *   - `"program"` — Anchor on-chain error (6000-6074). Tx reached the
- *     program and was rejected by program logic.
+ *   - `"program"` — Anchor on-chain error (6000-6104 post M1-04). Tx
+ *     reached the program and was rejected by program logic.
  *   - `"user"` — SDK / dashboard logic error (7000-7099). Client-side
  *     validation failure the user can fix.
  *   - `"network"` — RPC / network error (7100-7199). Transport layer;

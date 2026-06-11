@@ -160,7 +160,7 @@ describe("testing utilities", () => {
       });
 
       expect(result).to.have.property("transaction");
-      expect(result).to.have.property("isSpending");
+      expect(result).to.have.property("txSizeBytes");
     });
   });
 });

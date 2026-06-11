@@ -28,6 +28,15 @@ import {
 import { expect } from "chai";
 import BN from "bn.js";
 import {
+  initVaultPreviewDigest,
+  fetchAndComputeQueueDigest,
+} from "./helpers/policy-digest";
+import {
+  buildExpectedIntentDigest,
+  digestAsArgs,
+} from "./helpers/intent-digest-fixture";
+import { registerOperatorAgent } from "./helpers/register-operator-agent";
+import {
   createTestEnv,
   airdropSol,
   createMintAtAddress,
@@ -36,8 +45,6 @@ import {
   mintToHelper,
   advanceTime,
   sendVersionedTx,
-  createConstraintsAccount,
-  queueConstraintsUpdateMultiIx,
   TestEnv,
   LiteSVM,
 } from "./helpers/litesvm-setup";
@@ -57,7 +64,7 @@ describe("TOCTOU Security Fix", () => {
   let usdcMint: PublicKey;
 
   const protocolTreasury = new PublicKey(
-    "ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT",
+    "6wrkKTM2pjkcCAbMfRz2j3AXspavu6pq3ePcuJUE3Azp",
   );
   let protocolTreasuryUsdcAta: PublicKey;
 
@@ -155,15 +162,34 @@ describe("TOCTOU Security Fix", () => {
     await program.methods
       .initializeVault(
         pdas.vaultId,
-        new BN(500_000_000), // daily cap: 500 USDC
-        new BN(100_000_000), // max tx: 100 USDC
-        0, // protocol mode: all
+        new BN(500_000_000),
+        new BN(100_000_000),
+        1,
         [jupiterProgramId],
-        0, // developer_fee_rate
-        500, // maxSlippageBps
+        0,
+        500,
         new BN(timelockDuration),
-        [], // allowedDestinations
-        [], // protocolCaps
+        [],
+        [],
+        false, // observeOnly (Phase 2 TA-19)
+        0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+        false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+        5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+        new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+        new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+        false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+        initVaultPreviewDigest({
+          dailySpendingCapUsd: new BN(500_000_000),
+          maxTransactionSizeUsd: new BN(100_000_000),
+          maxSlippageBps: 500,
+          protocolMode: 1,
+          protocols: [jupiterProgramId],
+          allowedDestinations: [],
+          timelockDuration: new BN(timelockDuration),
+          operatingHours: 0x00ffffff,
+          autoPromoteGrays: false,
+          autoRevokeThreshold: 5,
+        }),
       )
       .accounts({
         owner: owner.publicKey,
@@ -176,14 +202,17 @@ describe("TOCTOU Security Fix", () => {
       } as any)
       .rpc();
 
-    await program.methods
-      .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-      .accountsPartial({
-        owner: owner.publicKey,
-        vault: pdas.vaultPda,
-        agentSpendOverlay: pdas.overlayPda,
-      })
-      .rpc();
+    // F-Q6: instant OPERATOR grant on a single-key vault is rejected
+    // (ErrOperatorGrantRequiresTimelock 6107). Seat the agent via the
+    // timelocked queue→advance→apply path. Net policy_version effect is one
+    // bump (apply_agent_grant), identical to the prior inline registerAgent.
+    await registerOperatorAgent({
+      program,
+      svm,
+      owner: owner.publicKey,
+      vault: pdas.vaultPda,
+      agent: agent.publicKey,
+    });
 
     await program.methods
       .depositFunds(new BN(500_000_000))
@@ -212,6 +241,13 @@ describe("TOCTOU Security Fix", () => {
     timelockSeconds: number,
     dailyCap?: BN,
   ) {
+    // Phase 2 TA-19: compute the digest of the merged-effective policy.
+    const newDigest = await fetchAndComputeQueueDigest(
+      program,
+      v.policyPda,
+      v.vaultPda,
+      { dailySpendingCapUsd: dailyCap ?? null },
+    );
     await program.methods
       .queuePolicyUpdate(
         dailyCap ?? null,
@@ -222,9 +258,18 @@ describe("TOCTOU Security Fix", () => {
         null,
         null,
         null,
-        null, // sessionExpirySeconds
-        null, // hasProtocolCaps
-        null, // protocolCaps
+        null,
+        null,
+        null,
+        null, // destinationMode,
+        null, // operating_hours (TA-05 Phase 3 — null pass-through)
+        null, // stable_balance_floor (TA-12 Phase 5 — null pass-through)
+        null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — null pass-through)
+        null, // cosign_required (G6 audit 2026-05-18 — pass-through, default off)
+        null,
+        null, // cosign_session_pubkey (D-5: pass-through)
+        PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
+        newDigest,
       )
       .accounts({
         owner: owner.publicKey,
@@ -256,9 +301,10 @@ describe("TOCTOU Security Fix", () => {
   it("rejects validate_and_authorize with stale policy version", async () => {
     const v = await setupFullVault(1800);
 
-    // Queue a policy change, advance time, apply it → version becomes 1
+    // PEN-CROSS-5: register_agent in setupFullVault bumped version to 1.
+    // Queue + apply policy change → version becomes 2.
     const newVersion = await queueAndApplyPolicy(v, 1800, new BN(400_000_000));
-    expect(newVersion).to.equal(1);
+    expect(newVersion).to.equal(2);
 
     // Build validate_and_authorize with stale expectedPolicyVersion: 0
     const sessionPda = PublicKey.findProgramAddressSync(
@@ -278,6 +324,16 @@ describe("TOCTOU Security Fix", () => {
           new BN(10_000_000),
           jupiterProgramId,
           new BN(0), // STALE: policy is now at version 1
+          new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: v.vaultPda,
+              agent: agent.publicKey,
+              tokenMint: usdcMint,
+              amount: new BN(10_000_000),
+              targetProtocol: jupiterProgramId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -318,7 +374,7 @@ describe("TOCTOU Security Fix", () => {
       sendVersionedTx(svm, [validateIx, finalizeIx], agent);
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectSigilError(err, { name: "PolicyVersionMismatch", code: 6066 });
+      expectSigilError(err, { name: "PolicyVersionMismatch" });
     }
   });
 
@@ -335,13 +391,32 @@ describe("TOCTOU Security Fix", () => {
           pdas.vaultId,
           new BN(500_000_000),
           new BN(100_000_000),
-          0,
+          1,
           [jupiterProgramId],
           0,
           500,
-          new BN(0), // timelockDuration: 0 — below minimum (NEGATIVE TEST)
+          new BN(0),
           [],
           [],
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(500_000_000),
+            maxTransactionSizeUsd: new BN(100_000_000),
+            maxSlippageBps: 500,
+            protocolMode: 1,
+            protocols: [jupiterProgramId],
+            allowedDestinations: [],
+            timelockDuration: new BN(0),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accounts({
           owner: owner.publicKey,
@@ -355,7 +430,7 @@ describe("TOCTOU Security Fix", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectSigilError(err, { name: "TimelockTooShort", code: 6065 });
+      expectSigilError(err, { name: "TimelockTooShort" });
     }
   });
 
@@ -373,11 +448,20 @@ describe("TOCTOU Security Fix", () => {
           null,
           null,
           null,
-          new BN(900), // timelockDuration: 900 — below 1800 minimum
+          new BN(900),
           null,
-          null, // sessionExpirySeconds
-          null, // hasProtocolCaps
-          null, // protocolCaps
+          null,
+          null,
+          null,
+          null, // destinationMode,
+          null, // operating_hours (TA-05 Phase 3)
+          null, // stable_balance_floor (TA-12 Phase 5 — pass-through)
+          null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
+          null, // cosign_required (G6 audit 2026-05-18 — pass-through, default off)
+          null,
+          null, // cosign_session_pubkey (D-5: pass-through)
+          PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
+          new Array(32).fill(0), // newPolicyPreviewDigest (Phase 2 TA-19 placeholder)
         )
         .accounts({
           owner: owner.publicKey,
@@ -389,7 +473,7 @@ describe("TOCTOU Security Fix", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectSigilError(err, { name: "TimelockTooShort", code: 6065 });
+      expectSigilError(err, { name: "TimelockTooShort" });
     }
   });
 
@@ -407,11 +491,20 @@ describe("TOCTOU Security Fix", () => {
           null,
           null,
           null,
-          new BN(0), // timelockDuration: 0 — removal blocked (NEGATIVE TEST)
+          new BN(0),
           null,
-          null, // sessionExpirySeconds
-          null, // hasProtocolCaps
-          null, // protocolCaps
+          null,
+          null,
+          null,
+          null, // destinationMode,
+          null, // operating_hours (TA-05 Phase 3)
+          null, // stable_balance_floor (TA-12 Phase 5 — pass-through)
+          null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
+          null, // cosign_required (G6 audit 2026-05-18 — pass-through, default off)
+          null,
+          null, // cosign_session_pubkey (D-5: pass-through)
+          PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
+          new Array(32).fill(0), // newPolicyPreviewDigest (Phase 2 TA-19 placeholder)
         )
         .accounts({
           owner: owner.publicKey,
@@ -423,7 +516,7 @@ describe("TOCTOU Security Fix", () => {
         .rpc();
       expect.fail("Should have thrown");
     } catch (err: any) {
-      expectSigilError(err, { name: "TimelockTooShort", code: 6065 });
+      expectSigilError(err, { name: "TimelockTooShort" });
     }
   });
 
@@ -432,115 +525,23 @@ describe("TOCTOU Security Fix", () => {
   it("bumps policy_version when applying pending policy", async () => {
     const v = await setupFullVault(1800);
 
-    // Initial version should be 0
+    // PEN-CROSS-5 (Phase 4 absorption): register_agent now bumps
+    // policy_version (defense-in-depth OCC). setupFullVault calls
+    // register_agent once → baseline is 1, not 0.
     const policy0 = await program.account.policyConfig.fetch(v.policyPda);
-    expect((policy0 as any).policyVersion.toNumber()).to.equal(0);
+    const baseline = (policy0 as any).policyVersion.toNumber();
+    expect(baseline).to.equal(1);
 
-    // Queue + apply → version 1
+    // Queue + apply → bumps by 1
     const v1 = await queueAndApplyPolicy(v, 1800, new BN(400_000_000));
-    expect(v1).to.equal(1);
+    expect(v1).to.equal(baseline + 1);
 
-    // Queue + apply again → version 2
+    // Queue + apply again → bumps by 1
     const v2 = await queueAndApplyPolicy(v, 1800, new BN(300_000_000));
-    expect(v2).to.equal(2);
+    expect(v2).to.equal(baseline + 2);
   });
 
   // ─── Test 6: Version bump on apply_constraints_update ────────────────────
-
-  it("bumps policy_version when applying constraints update", async () => {
-    const v = await setupFullVault(1800);
-
-    // Initial version
-    const policy0 = await program.account.policyConfig.fetch(v.policyPda);
-    expect((policy0 as any).policyVersion.toNumber()).to.equal(0);
-
-    // Create instruction constraints PDA
-    const [constraintsPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("constraints"), v.vaultPda.toBuffer()],
-      program.programId,
-    );
-
-    const entries = [
-      {
-        programId: jupiterProgramId,
-        dataConstraints: [
-          {
-            offset: 0,
-            operator: { eq: {} },
-            value: Buffer.from([
-              0xe5, 0x17, 0xcb, 0x97, 0x7a, 0xe3, 0xad, 0x2a,
-            ]),
-          },
-        ],
-        accountConstraints: [],
-        discriminatorFormat: { anchor8: {} },
-      },
-    ];
-
-    createConstraintsAccount(
-      program,
-      svm,
-      owner.payer,
-      v.vaultPda,
-      v.policyPda,
-      entries,
-      false,
-    );
-
-    // Queue constraints update
-    const [pendingConstraintsPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("pending_constraints"), v.vaultPda.toBuffer()],
-      program.programId,
-    );
-
-    // A5 invariant: first DC must be offset=0, Eq, >=8 bytes, non-zero.
-    const newEntries = [
-      {
-        programId: jupiterProgramId,
-        dataConstraints: [
-          {
-            offset: 0,
-            operator: { eq: {} },
-            value: Buffer.from([
-              0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8,
-            ]),
-          },
-        ],
-        accountConstraints: [],
-        discriminatorFormat: { anchor8: {} },
-      },
-    ];
-
-    queueConstraintsUpdateMultiIx(
-      program,
-      svm,
-      owner.payer,
-      v.vaultPda,
-      v.policyPda,
-      constraintsPda,
-      newEntries,
-      false,
-    );
-
-    // Advance time past the 1800s timelock
-    advanceTime(svm, 1801);
-
-    // Apply constraints update — now requires policy account for version bump
-    await program.methods
-      .applyConstraintsUpdate()
-      .accounts({
-        owner: owner.publicKey,
-        vault: v.vaultPda,
-        policy: v.policyPda,
-        constraints: constraintsPda,
-        pendingConstraints: pendingConstraintsPda,
-      } as any)
-      .rpc();
-
-    // Verify policy version bumped to 1
-    const policy1 = await program.account.policyConfig.fetch(v.policyPda);
-    expect((policy1 as any).policyVersion.toNumber()).to.equal(1);
-  });
 
   // ─── Test 7: Deleted instructions not callable ───────────────────────────
 

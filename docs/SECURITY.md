@@ -1,14 +1,14 @@
 # Sigil Security Specification
 
 > Formal specification for external auditors. Covers the on-chain Anchor program
-> (`4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL`), its invariants, access
+> (`7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK`), its invariants, access
 > control model, PDA derivation paths, error catalog, and trust assumptions.
 >
 > Program: `programs/sigil/` — Anchor 0.32.1, Rust 1.89.0
 > 36 instruction handlers, 12 PDA account types, 81 error codes, 37 events.
 >
 > Cross-reference: See `docs/ARCHITECTURE.md` for account model,
-> `docs/RFC-ACTIONTYPE-ELIMINATION.md` for the capability model migration,
+> git history for `docs/RFC-ACTIONTYPE-ELIMINATION.md` (deleted) covering the capability model migration,
 > and `sdk/kit/src/agent-errors.ts` for error mappings.
 
 ---
@@ -99,9 +99,9 @@ Each agent has a 2-bit capability field:
 - `CAPABILITY_OBSERVER (1)` — Non-spending actions only (amount == 0).
 - `CAPABILITY_OPERATOR (2)` — Full access including spending actions (amount > 0). Also `FULL_CAPABILITY`.
 
-The former 21-bit `permissions: u64` bitmask controlling `ActionType` variants has been replaced. The `ActionType` enum is entirely eliminated. Spending classification at runtime uses `amount > 0` in `validate_and_authorize`. The `ConstraintEntryZC.is_spending` field (1=Spending, 2=NonSpending) in the matched constraint entry is stored in the session and reported in events. Per-agent spending limits are tracked via `AgentSpendOverlay` zero-copy PDAs (10 agent slots, 24 hourly epochs, no shards).
+The former 21-bit `permissions: u64` bitmask controlling `ActionType` variants has been replaced. The `ActionType` enum is entirely eliminated. Spending classification at runtime is **purely** `amount > 0` derived as a function-local in `validate_and_authorize`. There is no `is_spending` field stored anywhere: the byte at offset 554 of `ConstraintEntryZC` was deleted in M2 Option A (renamed to `_reserved_was_is_spending`), and the `SessionAuthority.is_spending` field was deleted in Option A V2 (2026-05-17, commits `a2eee70`..`8d954b2`). Off-chain consumers derive spending vs non-spending from `amount > 0` on the `ActionAuthorized` / `SessionFinalized` events. Per-agent spending limits are tracked via `AgentSpendOverlay` zero-copy PDAs (10 agent slots, 24 hourly epochs, no shards).
 
-Source: `state/vault.rs:4-8` (capability constants), `state/mod.rs:31-32` (FULL_CAPABILITY), `state/mod.rs:255-259` (ActionType elimination note), `instructions/validate_and_authorize.rs:135` (is_spending = amount > 0), `docs/RFC-ACTIONTYPE-ELIMINATION.md`.
+Source: `state/vault.rs:4-8` (capability constants), `state/mod.rs:31-32` (FULL_CAPABILITY), `instructions/validate_and_authorize.rs:152` (`let is_spending = amount > 0;`).
 
 ### INV-8: Timelocked Policy Changes (Mandatory)
 
@@ -112,6 +112,16 @@ Source: `state/mod.rs:62` (MIN_TIMELOCK_DURATION = 1800), `instructions/initiali
 ### INV-9: Outcome-Based Spending Enforcement
 
 Spending caps are enforced in `finalize_session` based on **actual stablecoin balance delta**, not declared intent. `validate_and_authorize` snapshots the vault's stablecoin balance before fees/DeFi execution. `finalize_session` measures the current balance and computes `actual_spend = total_decrease - fees_collected`. Only when `actual_spend > 0` are caps checked (daily rolling cap, per-agent cap, per-protocol cap, per-transaction max). This prevents agents from under-declaring amounts to bypass caps — the program measures reality, not promises. Standalone instructions (`agentTransfer`, `createEscrow`) retain inline cap checks since they move tokens directly.
+
+### INV-10: OPERATOR-Grant Authorization Tiering (F-Q6)
+
+An OPERATOR-class agent grant (`capability == CAPABILITY_OPERATOR`, the only capability that can move funds) may be seated INSTANTLY via `register_agent` only when the vault carries **≥ 2 authorization factors** AND no grant delay is configured; otherwise it MUST route through the timelocked `queue_agent_grant` → `apply_agent_grant` path. The vault's factor count gives three tiers:
+
+- **SingleKey** (`owner_type == 0`, no bound cosigner) — 1 factor. OPERATOR grants are ALWAYS delayed, floored at `SINGLE_KEY_OPERATOR_DELAY_FLOOR` (600 s / 10 min). The forced delay is the missing 2nd factor.
+- **CosignBound** (`cosign_required == true` AND `cosign_session_pubkey != default`) — 2 factors. Instant at delay 0, but the BOUND cosigner must sign inline in `register_agent`'s `remaining_accounts` (C-1). A cosign-required-but-UNBOUND vault degrades to SingleKey.
+- **Multisig** (`owner_type == 1`) — N factors. Instant at delay 0 (the multisig threshold already approved off-chain). See §8.13 for the V1 reachability note.
+
+The owner knob `policy.operator_grant_delay_seconds` (default 0, bounded to 48 h, settable ONLY via the timelocked `queue_policy_update`) raises the delay on any tier; a configured delay routes even cosign/multisig grants through the queue, and lowering it is itself timelocked. Rejection: `ErrOperatorGrantRequiresTimelock` (6107). Source: `instructions/register_agent.rs:130-176`, `utils/operator_grant.rs`, `instructions/queue_agent_grant.rs`, `instructions/queue_policy_update.rs:107`. Honest posture + reachability: §8.13.
 
 ---
 
@@ -160,7 +170,7 @@ Vault seeds include `vault_id` (a `u64`) to allow one owner to create multiple i
 | ---------------------------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `initialize_vault`                 | `owner` (payer)           | PDA seeds enforce owner ownership. `fee_destination ≠ Pubkey::default()`. `developer_fee_rate ≤ 500`. `timelock_duration ≥ 1800`. Bounded vectors.                                                                                                                                                                                                                |
 | `deposit_funds`                    | `owner`                   | `has_one = owner` on vault. Token transfer CPI from owner ATA to vault ATA.                                                                                                                                                                                                                                                                                       |
-| `register_agent`                   | `owner`                   | `has_one = owner`. `agent ≠ Pubkey::default()`. `agent ≠ owner`. Max 10 agents. `capability` must be 0, 1, or 2.                                                                                                                                                                                                                                                  |
+| `register_agent`                   | `owner`                   | `has_one = owner`. `agent ≠ Pubkey::default()`. `agent ≠ owner`. Max 10 agents. `capability` ∈ {0,1,2}. OPERATOR grants follow INV-10 tiering (instant only with ≥2 factors at delay 0, bound cosigner inline; else `ErrOperatorGrantRequiresTimelock` 6107).                                                                                                                                                                                                                                                  |
 | `validate_and_authorize`           | `agent`                   | `vault.is_agent(agent)`. Agent not paused. Capability sufficient (`amount > 0` requires OPERATOR). `expected_policy_version` matches. `vault.is_active()`. CPI guard. Protocol allowed. USD caps. Leverage check. Position count check. Instruction scan. Finalize guard. Session PDA `init` prevents double-auth. Generic constraint check if `has_constraints`. |
 | `finalize_session`                 | `payer` (any for expired) | Non-expired: `payer == session.agent`. Session closed (rent to agent). Post-assertion check if `has_post_assertions`.                                                                                                                                                                                                                                             |
 | `revoke_agent`                     | `owner`                   | `has_one = owner`. `vault.status ≠ Closed`. Removes agent from Vec. Releases overlay slot.                                                                                                                                                                                                                                                                        |
@@ -173,7 +183,7 @@ Vault seeds include `vault_id` (a `u64`) to allow one owner to create multiple i
 | `allocate_constraints_pda`         | `owner`                   | `has_one = owner`. Allocates InstructionConstraints PDA at 10,240 bytes. Must be followed by `extend_pda` + `create_instruction_constraints`.                                                                                                                                                                                                                     |
 | `allocate_pending_constraints_pda` | `owner`                   | `has_one = owner`. Allocates PendingConstraintsUpdate PDA at 10,240 bytes. Must be followed by `extend_pda` + `queue_constraints_update`.                                                                                                                                                                                                                         |
 | `extend_pda`                       | `owner`                   | `has_one = owner`. Grows a program-owned PDA by up to 10,240 bytes per call to reach full SIZE.                                                                                                                                                                                                                                                                   |
-| `create_instruction_constraints`   | `owner`                   | `has_one = owner`. PDA pre-allocated at full SIZE. Max 64 entries. Validates discriminator anchor (A5 invariant), Bitmask non-zero (A3), is_spending 1 or 2. Sets `policy.has_constraints = true`. Bumps `policy_version`.                                                                                                                                        |
+| `create_instruction_constraints`   | `owner`                   | `has_one = owner`. PDA pre-allocated at full SIZE. Max 64 entries. Validates discriminator anchor (A5 invariant) and Bitmask non-zero (A3). Sets `policy.has_constraints = true`. Bumps `policy_version`.                                                                                                                                                          |
 | `queue_constraints_update`         | `owner`                   | `has_one = owner`. PDA pre-allocated. Creates PendingConstraintsUpdate PDA.                                                                                                                                                                                                                                                                                       |
 | `apply_constraints_update`         | `owner`                   | `has_one = owner`. Timelock expired. Merges entries. Closes pending PDA. Bumps `policy_version`.                                                                                                                                                                                                                                                                  |
 | `cancel_constraints_update`        | `owner`                   | `has_one = owner`. Closes PendingConstraintsUpdate PDA.                                                                                                                                                                                                                                                                                                           |
@@ -205,7 +215,7 @@ Vault seeds include `vault_id` (a `u64`) to allow one owner to create multiple i
 - Timelock (new): TimelockTooShort, PolicyVersionMismatch
 - Pending state (new): PendingAgentPermsExists, PendingCloseConstraintsExists, ActiveSessionsExist
 - Post-assertions (new): PostAssertionFailed, InvalidPostAssertionIndex, SnapshotNotCaptured, UnauthorizedPreValidateInstruction
-- Constraints (new): ConstraintIndexOutOfBounds, InvalidConstraintOperator, ConstraintsVaultMismatch, ConstraintEntryCountExceeded, BlockedSplOpcode
+- Constraints (new): ConstraintIndexOutOfBounds, InvalidConstraintOperator, ZeroCopyVaultMismatch (also used by audit-log defense-in-depth), ConstraintEntryCountExceeded, BlockedSplOpcode
 
 ---
 
@@ -370,6 +380,18 @@ The SDK trusts RPC account data for client-side precheck. A malicious RPC can su
 
 Per-protocol spend counters (`SpendTracker.protocol_counters`) use a simple 24-hour window that resets entirely on expiry, rather than the proportional boundary correction used by the global rolling cap. At the window boundary, accumulated per-protocol spend resets to 0, creating a brief window where a determined agent could exceed the per-protocol cap. The global rolling cap (`get_rolling_24h_usd`) provides the primary enforcement and is not subject to this reset behavior. Source: `state/tracker.rs:get_protocol_spend()` documentation.
 
+### 8.13 OPERATOR-Grant Delay Is Opt-In for 2-Factor Vaults; Multisig Tier Is V1-Unreachable
+
+The OPERATOR-grant tiering (INV-10) is deliberately honest about what it does and does not prevent:
+
+- **Single-key vaults get a FORCED detection window, not an opt-in one.** A leaked single owner key CANNOT instantly seat a fund-moving OPERATOR agent — the grant is floored at 600 s (10 min), giving the real owner a window to `cancel_agent_grant`. This floor is not configurable below 600 s.
+- **Cosign-bound and multisig vaults CAN seat an OPERATOR instantly at the default delay of 0.** Their 2nd factor is the inline bound cosigner (CosignBound) or the multisig threshold (Multisig) — not a time delay. `policy.operator_grant_delay_seconds` is an **opt-in** mitigation these owners may enable (up to 48 h) to add a detection window on top of the 2nd factor; it is **not** a default defense. Sigil does NOT claim "an operator can never be seated instantly" — it claims a single key cannot, and a 2-factor vault requires its 2nd factor.
+- **A compromised owner who also controls the 2nd factor is out of scope.** If an attacker holds both the owner key and the bound cosigner key (CosignBound), or controls the multisig threshold (Multisig), they can seat an OPERATOR — that is the 2-factor trust assumption, not a Sigil failure. Likewise an attacker who phishes a single-key owner and waits out the configured delay can apply the queued grant; the delay buys detection time, it does not make theft impossible.
+- **`owner_type` fails safe.** It is program-set (0 = EOA, 1 = multisig) only at the verified ownership-transfer sites; a vault that never transitions to a multisig owner stays `owner_type = 0` and is treated as SingleKey (delayed). A mis/never-detected multisig therefore fails to the MORE-restrictive tier, never the instant one. An out-of-range `owner_type` is rejected with `InvalidOwnerType` (6109).
+- **The Multisig instant tier is UNREACHABLE in V1.** Setting `owner_type = 1` records a keyless Squads vault PDA as the owner, and every owner-op requires `owner: Signer` plus `reject_cpi!()` — which a keyless PDA cannot satisfy (it acts only via Squads CPI, which `reject_cpi!` blocks). There is no signable path to invoke `register_agent`/`queue_agent_grant` as a multisig owner in V1, so the Multisig arm is correct, fail-safe, and forward-compatible but cannot be exercised on-chain until a multisig-callable owner-op path is added. This is a known, tracked gap, not a live risk — an attacker also has no key to act as the PDA owner.
+
+Source: `instructions/register_agent.rs:130-176`, `utils/operator_grant.rs`, `instructions/queue_policy_update.rs`, `instructions/accept_ownership_transfer_multisig.rs`. Behavior proofs: `tests/fq6-operator-grant-tiers.ts`; tier-logic unit tests: `utils/operator_grant.rs::operator_grant_tier_tests`.
+
 ---
 
 ## 9. Audit Scope
@@ -382,7 +404,7 @@ Per-protocol spend counters (`SpendTracker.protocol_counters`) use a simple 24-h
 - Error definitions in `programs/sigil/src/errors.rs` (81 codes, 6000–6080)
 - Event definitions in `programs/sigil/src/events.rs` (38 events)
 - Program entrypoint in `programs/sigil/src/lib.rs`
-- Capability model design rationale: `docs/RFC-ACTIONTYPE-ELIMINATION.md`
+- Capability model design rationale: see git history (RFC-ACTIONTYPE-ELIMINATION.md deleted)
 
 ### Out of Scope
 
@@ -591,7 +613,7 @@ This section documents the 2-bit capability field that replaced the former 21-bi
 
 The `permissions: u64` field on `AgentEntry` (a 21-bit `ActionType` bitmask) has been replaced by `capability: u8`. The `ActionType` enum has been eliminated entirely. The byte layout of `AgentEntry` is preserved at 49 bytes (32 pubkey + 1 capability + 8 spending_limit_usd + 1 paused + 7 reserved) to maintain `AgentVault` account stability on existing deployments.
 
-Source: `state/vault.rs:4-20`, `state/mod.rs:255-259`, `docs/RFC-ACTIONTYPE-ELIMINATION.md`.
+Source: `state/vault.rs:4-20`, `state/mod.rs:255-259`. (Historical RFC at `docs/RFC-ACTIONTYPE-ELIMINATION.md` was deleted — see git history.)
 
 ### 12.2 Capability Levels
 
@@ -606,23 +628,23 @@ Source: `state/vault.rs:6-8`, `state/mod.rs:32`.
 
 ### 12.3 Enforcement in validate_and_authorize
 
-Spending classification at runtime uses `is_spending = amount > 0`. The capability check immediately follows:
+Spending classification at runtime is `let is_spending = amount > 0;` — a function-local derivation in `validate_and_authorize` (line 152). The capability check immediately follows:
 
 ```
 vault.has_capability(&agent, is_spending) → SigilError::InsufficientPermissions (error 6047) if fails
 ```
 
-`has_capability` (`state/vault.rs:148-158`):
+`has_capability` (`state/vault.rs:134-146`) takes the caller-derived `is_spending: bool`:
 
 - `is_spending == true`: requires `agent.capability >= CAPABILITY_OPERATOR (2)`
 - `is_spending == false`: requires `agent.capability >= CAPABILITY_OBSERVER (1)`
 - `CAPABILITY_DISABLED (0)` fails both checks unconditionally.
 
-### 12.4 ConstraintEntryZC.is_spending (Session Classification)
+### 12.4 Session Classification — DELETED Option A V2
 
-`ConstraintEntryZC.is_spending` (1=Spending, 2=NonSpending, 0=Unset rejected at creation) is configured by the vault owner at constraint creation time. When a DeFi instruction matches a constraint entry, the matched entry's `is_spending` value is stored in the `SessionAuthority` PDA and emitted in the `SessionFinalized` event. This replaces the old `ActionType.is_spending()` method.
+Prior versions of this document described two distinct sources of spending classification: a function-local `amount > 0` derivation in `validate_and_authorize` AND a `ConstraintEntryZC.is_spending` byte stored on the matched constraint entry, propagated to `SessionAuthority.is_spending` and emitted in events.
 
-Constraint entries with `is_spending == 0` are rejected at creation time. Source: `state/constraints.rs`.
+**Both stored fields are now deleted.** The `ConstraintEntryZC.is_spending` byte at offset 554 was deleted in M2 Option A (renamed to `_reserved_was_is_spending`; runtime never read it). The `SessionAuthority.is_spending` field was deleted in Option A V2 (2026-05-17). The `ActionAuthorized` and `SessionFinalized` events also dropped their `is_spending: bool` payload field. Spending classification is now exclusively the function-local `amount > 0` derivation; off-chain consumers compute the same expression from the `amount` field on those events.
 
 ### 12.5 Queued Agent Permissions Updates
 
@@ -630,12 +652,10 @@ Agent capability changes are timelock-gated: `queue_agent_permissions_update` �
 
 Source: `state/pending_agent_perms.rs`, `instructions/queue_agent_permissions_update.rs`.
 
-### 12.6 Constraint-Level Spending Classification vs. Capability
+### 12.6 Spending classification — single source of truth
 
-For auditors: spending classification has two distinct purposes in the program.
+For auditors: post Option A V2, spending classification has **one** authoritative source.
 
-1. **Capability gate** (validate_and_authorize): `is_spending = amount > 0`. This determines whether the agent needs OPERATOR capability. It runs before constraint matching.
+**Capability gate** (`validate_and_authorize.rs:152`): `let is_spending = amount > 0;`. This determines whether the agent needs OPERATOR capability. It runs before constraint matching and is the only place spending vs non-spending is decided.
 
-2. **Session/event classification** (ConstraintEntryZC.is_spending, matched entry): Stored in SessionAuthority and emitted in SessionFinalized. Enables off-chain analytics to distinguish spending vs non-spending actions. Does not affect on-chain cap enforcement (caps use the outcome-based balance delta from finalize_session).
-
-These two mechanisms are complementary, not redundant.
+Off-chain analytics that previously read `SessionAuthority.is_spending` or `SessionFinalized.is_spending` must now compute `amount > 0` from the event's `amount` field. The post-execution outcome-based balance delta from `finalize_session` continues to drive on-chain cap enforcement; it does not depend on any stored `is_spending` value.

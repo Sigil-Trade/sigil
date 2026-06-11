@@ -68,11 +68,6 @@ export type SessionAuthority = {
   authorizedToken: Address;
   authorizedProtocol: Address;
   /**
-   * Whether the matched constraint entry classifies this as spending.
-   * Derived from amount > 0 in validate_and_authorize.
-   */
-  isSpending: boolean;
-  /**
    * Wall-clock expiry: session is valid until this `Clock::unix_timestamp`.
    *
    * **Why timestamp, not slot:** Solana slot times vary 400ms-1.5s under
@@ -112,14 +107,83 @@ export type SessionAuthority = {
    * Phase B2: Snapshots of target account bytes captured in validate_and_authorize
    * before DeFi instruction executes. Index i corresponds to PostAssertionEntry i.
    * Used by delta assertion modes (1=MaxDecrease, 2=MaxIncrease, 3=NoChange).
+   *
+   * Phase 6 grow: array length 4 → 8 to match MAX_POST_ASSERTION_ENTRIES.
+   * Adds 128 bytes (4 × 32) to SessionAuthority.
+   *
+   * **Phase 6 R-1 MintDeltaCap reuse:** for mode-4 entries, the snapshot
+   * stores `pre_sum: u64 LE` in bytes [0..8] of the 32-byte slot. Remaining
+   * 24 bytes are zero-padded. `snapshot_lens[i]` is set to 8 (the u64
+   * width) so finalize can distinguish a captured R-1 snapshot from an
+   * uncaptured slot.
    */
   assertionSnapshots: Array<ReadonlyUint8Array>;
   /**
    * Phase B2: Actual value_len captured for each snapshot.
    * 0 = no snapshot captured (mode 0 entries). Non-zero = snapshot was captured.
-   * finalize_session cross-checks snapshot_lens[i] == entry.value_len.
+   * finalize_session cross-checks snapshot_lens[i] == entry.value_len for
+   * modes 1..3. For mode 4 (R-1 MintDeltaCap) the field is set to 8 and
+   * finalize asserts snapshot_lens[i] == 8 before re-summing.
+   *
+   * Phase 6 grow: array length 4 → 8. Adds 4 bytes.
    */
   snapshotLens: ReadonlyUint8Array;
+  /**
+   * AC-10 (Phase 4) — monotonic session nonce closing durable-nonce replay
+   * (per Audit #1 C-1).
+   *
+   * **Semantics**
+   * - New session: `init` zero-initializes the account, so the field starts
+   * at 0. `validate_and_authorize` accepts `expected_nonce` and requires
+   * it to equal `self.nonce` at entry — a fresh session therefore demands
+   * `expected_nonce = 0` from the caller.
+   * - `finalize_session` increments `self.nonce` by 1 on every successful
+   * finalize (including the expired-cleanup path — see finalize_session.rs
+   * for the atomicity argument). The increment is atomic with the
+   * account-close: if finalize errors, the close is rolled back by the
+   * runtime and the persisted nonce stays at the pre-increment value, so
+   * a partial-fail does NOT permanent-increment the nonce.
+   * - Because `validate_and_authorize` uses `init` (not `init_if_needed`),
+   * the (vault, agent, mint) session PDA is closed at finalize and the
+   * next validate creates a fresh account starting at nonce=0. The nonce
+   * field therefore functions as an in-session counter and is checked
+   * against `expected_nonce` ONLY when the SessionAuthority account is
+   * not closed between validates — currently a no-op in the steady-state
+   * flow, present so Phase 8 ownership-transfer replay protection (M-5)
+   * can extend the same field without a state-shape migration.
+   *
+   * **Phase 8 extension contract:** the ownership-transfer flow (M-5) will
+   * reuse this field as a per-vault monotonic counter scoped to the
+   * session PDA, preserving the existing finalize-time increment semantics.
+   * Adding seeds / scope is additive; the on-chain field stays a `u64`.
+   *
+   * **Why NOT in TA-19 canonical digest:** SessionAuthority is per-session
+   * ephemeral state, not policy-owned. Including the nonce in the policy
+   * digest would require digest recomputation on every successful seal,
+   * which collapses the queue/apply timelock semantics. The nonce is
+   * orthogonal to the policy_preview_digest binding.
+   *
+   * **APPEND-ONLY**: new field at the END of SessionAuthority. SIZE grows
+   * by 8 bytes (375 → 383). Pre-existing accounts at the prior layout are
+   * not migrated (the program close+init cycle naturally retires them at
+   * the next finalize), so this is safe under a V2 program ID redeploy.
+   */
+  nonce: bigint;
+  /**
+   * F-Q8 — the vault stablecoin ATA pinned at validate for the
+   * non-stablecoin-input outcome check. finalize_session asserts the
+   * account it measures has THIS exact pubkey, so a compromised agent
+   * cannot substitute a different vault-owned stablecoin ATA (whose
+   * owner+mint also pass) to spoof the `current > before` return check.
+   * Set to output_stablecoin_account.key() on the non-stablecoin-input
+   * spending path; Pubkey::default() otherwise (stablecoin-input uses
+   * vault_token_account, already pinned via delegation_token_account).
+   *
+   * **APPEND-ONLY**: new field at the END of SessionAuthority. SIZE grows
+   * by 32 bytes (515 → 547). Sessions are init/close per cycle, so no
+   * migration is required.
+   */
+  outputStablecoinAccount: Address;
 };
 
 export type SessionAuthorityArgs = {
@@ -133,11 +197,6 @@ export type SessionAuthorityArgs = {
   authorizedAmount: number | bigint;
   authorizedToken: Address;
   authorizedProtocol: Address;
-  /**
-   * Whether the matched constraint entry classifies this as spending.
-   * Derived from amount > 0 in validate_and_authorize.
-   */
-  isSpending: boolean;
   /**
    * Wall-clock expiry: session is valid until this `Clock::unix_timestamp`.
    *
@@ -178,14 +237,83 @@ export type SessionAuthorityArgs = {
    * Phase B2: Snapshots of target account bytes captured in validate_and_authorize
    * before DeFi instruction executes. Index i corresponds to PostAssertionEntry i.
    * Used by delta assertion modes (1=MaxDecrease, 2=MaxIncrease, 3=NoChange).
+   *
+   * Phase 6 grow: array length 4 → 8 to match MAX_POST_ASSERTION_ENTRIES.
+   * Adds 128 bytes (4 × 32) to SessionAuthority.
+   *
+   * **Phase 6 R-1 MintDeltaCap reuse:** for mode-4 entries, the snapshot
+   * stores `pre_sum: u64 LE` in bytes [0..8] of the 32-byte slot. Remaining
+   * 24 bytes are zero-padded. `snapshot_lens[i]` is set to 8 (the u64
+   * width) so finalize can distinguish a captured R-1 snapshot from an
+   * uncaptured slot.
    */
   assertionSnapshots: Array<ReadonlyUint8Array>;
   /**
    * Phase B2: Actual value_len captured for each snapshot.
    * 0 = no snapshot captured (mode 0 entries). Non-zero = snapshot was captured.
-   * finalize_session cross-checks snapshot_lens[i] == entry.value_len.
+   * finalize_session cross-checks snapshot_lens[i] == entry.value_len for
+   * modes 1..3. For mode 4 (R-1 MintDeltaCap) the field is set to 8 and
+   * finalize asserts snapshot_lens[i] == 8 before re-summing.
+   *
+   * Phase 6 grow: array length 4 → 8. Adds 4 bytes.
    */
   snapshotLens: ReadonlyUint8Array;
+  /**
+   * AC-10 (Phase 4) — monotonic session nonce closing durable-nonce replay
+   * (per Audit #1 C-1).
+   *
+   * **Semantics**
+   * - New session: `init` zero-initializes the account, so the field starts
+   * at 0. `validate_and_authorize` accepts `expected_nonce` and requires
+   * it to equal `self.nonce` at entry — a fresh session therefore demands
+   * `expected_nonce = 0` from the caller.
+   * - `finalize_session` increments `self.nonce` by 1 on every successful
+   * finalize (including the expired-cleanup path — see finalize_session.rs
+   * for the atomicity argument). The increment is atomic with the
+   * account-close: if finalize errors, the close is rolled back by the
+   * runtime and the persisted nonce stays at the pre-increment value, so
+   * a partial-fail does NOT permanent-increment the nonce.
+   * - Because `validate_and_authorize` uses `init` (not `init_if_needed`),
+   * the (vault, agent, mint) session PDA is closed at finalize and the
+   * next validate creates a fresh account starting at nonce=0. The nonce
+   * field therefore functions as an in-session counter and is checked
+   * against `expected_nonce` ONLY when the SessionAuthority account is
+   * not closed between validates — currently a no-op in the steady-state
+   * flow, present so Phase 8 ownership-transfer replay protection (M-5)
+   * can extend the same field without a state-shape migration.
+   *
+   * **Phase 8 extension contract:** the ownership-transfer flow (M-5) will
+   * reuse this field as a per-vault monotonic counter scoped to the
+   * session PDA, preserving the existing finalize-time increment semantics.
+   * Adding seeds / scope is additive; the on-chain field stays a `u64`.
+   *
+   * **Why NOT in TA-19 canonical digest:** SessionAuthority is per-session
+   * ephemeral state, not policy-owned. Including the nonce in the policy
+   * digest would require digest recomputation on every successful seal,
+   * which collapses the queue/apply timelock semantics. The nonce is
+   * orthogonal to the policy_preview_digest binding.
+   *
+   * **APPEND-ONLY**: new field at the END of SessionAuthority. SIZE grows
+   * by 8 bytes (375 → 383). Pre-existing accounts at the prior layout are
+   * not migrated (the program close+init cycle naturally retires them at
+   * the next finalize), so this is safe under a V2 program ID redeploy.
+   */
+  nonce: number | bigint;
+  /**
+   * F-Q8 — the vault stablecoin ATA pinned at validate for the
+   * non-stablecoin-input outcome check. finalize_session asserts the
+   * account it measures has THIS exact pubkey, so a compromised agent
+   * cannot substitute a different vault-owned stablecoin ATA (whose
+   * owner+mint also pass) to spoof the `current > before` return check.
+   * Set to output_stablecoin_account.key() on the non-stablecoin-input
+   * spending path; Pubkey::default() otherwise (stablecoin-input uses
+   * vault_token_account, already pinned via delegation_token_account).
+   *
+   * **APPEND-ONLY**: new field at the END of SessionAuthority. SIZE grows
+   * by 32 bytes (515 → 547). Sessions are init/close per cycle, so no
+   * migration is required.
+   */
+  outputStablecoinAccount: Address;
 };
 
 /** Gets the encoder for {@link SessionAuthorityArgs} account data. */
@@ -199,7 +327,6 @@ export function getSessionAuthorityEncoder(): FixedSizeEncoder<SessionAuthorityA
       ["authorizedAmount", getU64Encoder()],
       ["authorizedToken", getAddressEncoder()],
       ["authorizedProtocol", getAddressEncoder()],
-      ["isSpending", getBooleanEncoder()],
       ["expiresAtTimestamp", getI64Encoder()],
       ["delegated", getBooleanEncoder()],
       ["delegationTokenAccount", getAddressEncoder()],
@@ -210,9 +337,11 @@ export function getSessionAuthorityEncoder(): FixedSizeEncoder<SessionAuthorityA
       ["bump", getU8Encoder()],
       [
         "assertionSnapshots",
-        getArrayEncoder(fixEncoderSize(getBytesEncoder(), 32), { size: 4 }),
+        getArrayEncoder(fixEncoderSize(getBytesEncoder(), 32), { size: 8 }),
       ],
-      ["snapshotLens", fixEncoderSize(getBytesEncoder(), 4)],
+      ["snapshotLens", fixEncoderSize(getBytesEncoder(), 8)],
+      ["nonce", getU64Encoder()],
+      ["outputStablecoinAccount", getAddressEncoder()],
     ]),
     (value) => ({ ...value, discriminator: SESSION_AUTHORITY_DISCRIMINATOR }),
   );
@@ -228,7 +357,6 @@ export function getSessionAuthorityDecoder(): FixedSizeDecoder<SessionAuthority>
     ["authorizedAmount", getU64Decoder()],
     ["authorizedToken", getAddressDecoder()],
     ["authorizedProtocol", getAddressDecoder()],
-    ["isSpending", getBooleanDecoder()],
     ["expiresAtTimestamp", getI64Decoder()],
     ["delegated", getBooleanDecoder()],
     ["delegationTokenAccount", getAddressDecoder()],
@@ -239,9 +367,11 @@ export function getSessionAuthorityDecoder(): FixedSizeDecoder<SessionAuthority>
     ["bump", getU8Decoder()],
     [
       "assertionSnapshots",
-      getArrayDecoder(fixDecoderSize(getBytesDecoder(), 32), { size: 4 }),
+      getArrayDecoder(fixDecoderSize(getBytesDecoder(), 32), { size: 8 }),
     ],
-    ["snapshotLens", fixDecoderSize(getBytesDecoder(), 4)],
+    ["snapshotLens", fixDecoderSize(getBytesDecoder(), 8)],
+    ["nonce", getU64Decoder()],
+    ["outputStablecoinAccount", getAddressDecoder()],
   ]);
 }
 
@@ -320,5 +450,5 @@ export async function fetchAllMaybeSessionAuthority(
 }
 
 export function getSessionAuthoritySize(): number {
-  return 376;
+  return 547;
 }

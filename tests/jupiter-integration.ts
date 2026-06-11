@@ -20,6 +20,12 @@ import {
 } from "@solana/spl-token";
 import { expect } from "chai";
 import BN from "bn.js";
+import { initVaultPreviewDigest } from "./helpers/policy-digest";
+import { registerOperatorAgent } from "./helpers/register-operator-agent";
+import {
+  buildExpectedIntentDigest,
+  digestAsArgs,
+} from "./helpers/intent-digest-fixture";
 // Inlined constants — sdk/typescript was deleted in Phase 0 nuclear cleanup
 const JUPITER_PROGRAM_ID = new PublicKey(
   "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
@@ -62,6 +68,8 @@ import {
   TestEnv,
   LiteSVM,
   FailedTransactionMetadata,
+  MOCK_DEFI_PROGRAM_ID,
+  buildMockDefiNoopIx,
 } from "./helpers/litesvm-setup";
 
 const FULL_CAPABILITY = 2; // CAPABILITY_OPERATOR
@@ -92,6 +100,12 @@ describe("jupiter-integration", () => {
 
   // Jupiter protocol ID used as the "allowed protocol" in policy
   const jupiterProtocol = JUPITER_PROGRAM_ID;
+  // F-Q2: spending sandwiches now require EXACTLY ONE counted DeFi instruction.
+  // The mock swap must therefore be a real, allowlisted, counted DeFi ix —
+  // mock-defi's no-op open_position on MOCK_DEFI_PROGRAM_ID. Both the executed
+  // ix AND the authorized target_protocol must be this program (else
+  // ProtocolMismatch); the vault allowlists it alongside jupiterProtocol.
+  const mockDefiProtocol = MOCK_DEFI_PROGRAM_ID;
 
   // Vault for happy-path tests
   const vaultId = new BN(100);
@@ -101,7 +115,7 @@ describe("jupiter-integration", () => {
   let overlayPda: PublicKey;
   // Protocol treasury (must match hardcoded constant in program)
   const protocolTreasury = new PublicKey(
-    "ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT",
+    "6wrkKTM2pjkcCAbMfRz2j3AXspavu6pq3ePcuJUE3Azp",
   );
   let protocolTreasuryUsdcAta: PublicKey;
 
@@ -116,15 +130,15 @@ describe("jupiter-integration", () => {
    * inspect the DeFi instruction — it only validates policy in
    * validate_and_authorize and records the result in finalize_session.
    *
-   * We use a no-op SystemProgram transfer (0 lamports to self) so the
-   * runtime can actually execute it.
+   * F-Q2: the middle ix must be a COUNTED DeFi instruction (one that reaches
+   * the protocol-allowlist match in validate_and_authorize's spending scan),
+   * so we use mock-defi's no-op open_position on MOCK_DEFI_PROGRAM_ID. It moves
+   * zero tokens (preserving the outcome-based premise that actual spend = 0)
+   * while satisfying the exactly-one-DeFi-ix rule. A SystemProgram no-op is
+   * Infrastructure → not counted → would now fail TooManyDeFiInstructions.
    */
   function createMockSwapInstruction(payer: PublicKey): TransactionInstruction {
-    return SystemProgram.transfer({
-      fromPubkey: payer,
-      toPubkey: payer,
-      lamports: 0,
-    });
+    return buildMockDefiNoopIx(payer);
   }
 
   /**
@@ -165,8 +179,25 @@ describe("jupiter-integration", () => {
     );
 
     // 2. Validate and authorize
+    // Fetch live policy version for expected_policy_version arg (TOCTOU guard)
+    const livePolicy = await program.account.policyConfig.fetch(policy);
     const validateIx = await program.methods
-      .validateAndAuthorize(tokenMint, amount, targetProtocol, new BN(0))
+      .validateAndAuthorize(
+        tokenMint,
+        amount,
+        targetProtocol,
+        livePolicy.policyVersion,
+        new BN(0),
+        digestAsArgs(
+          buildExpectedIntentDigest({
+            vault,
+            agent: agentKp.publicKey,
+            tokenMint,
+            amount,
+            targetProtocol,
+          }),
+        ),
+      )
       .accountsPartial({
         agent: agentKp.publicKey,
         vault,
@@ -183,6 +214,14 @@ describe("jupiter-integration", () => {
         systemProgram: SystemProgram.programId,
         instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
+      // F-Q1a completeness: the mock-defi no-op ix lists the agent signer, and
+      // the agent is the writable fee-payer in the compiled v0 message. validate's
+      // destination-completeness guard reads writability from the compiled message
+      // and requires every writable DeFi meta resolvable in remaining_accounts,
+      // so the agent must be appended (mirrors seal()).
+      .remainingAccounts([
+        { pubkey: agentKp.publicKey, isSigner: false, isWritable: false },
+      ])
       .instruction();
 
     // 3. Mock DeFi instruction (would be Jupiter swap in production)
@@ -272,15 +311,34 @@ describe("jupiter-integration", () => {
     await program.methods
       .initializeVault(
         vaultId,
-        new BN(500_000_000), // daily cap
-        new BN(200_000_000), // max tx size
-        1, // protocolMode: 1 = allowlist
-        [jupiterProtocol],
-        0, // developer fee rate (0 = none)
-        100, // maxSlippageBps
-        new BN(1800), // timelockDuration
-        [], // allowedDestinations
-        [], // protocolCaps
+        new BN(500_000_000),
+        new BN(200_000_000),
+        1,
+        [jupiterProtocol, mockDefiProtocol],
+        0,
+        100,
+        new BN(1800),
+        [],
+        [],
+        false, // observeOnly (Phase 2 TA-19)
+        0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+        false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+        5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+        new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+        new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+        false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+        initVaultPreviewDigest({
+          dailySpendingCapUsd: new BN(500_000_000),
+          maxTransactionSizeUsd: new BN(200_000_000),
+          maxSlippageBps: 100,
+          protocolMode: 1,
+          protocols: [jupiterProtocol, mockDefiProtocol],
+          allowedDestinations: [],
+          timelockDuration: new BN(1800),
+          operatingHours: 0x00ffffff,
+          autoPromoteGrays: false,
+          autoRevokeThreshold: 5,
+        }),
       )
       .accountsPartial({
         owner: owner.publicKey,
@@ -293,15 +351,14 @@ describe("jupiter-integration", () => {
       })
       .rpc();
 
-    // Register agent
-    await program.methods
-      .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-      .accountsPartial({
-        owner: owner.publicKey,
-        vault: vaultPda,
-        agentSpendOverlay: overlayPda,
-      })
-      .rpc();
+    // Register agent (OPERATOR on single-key vault → timelocked queue→apply, F-Q6)
+    await registerOperatorAgent({
+      program,
+      svm,
+      owner: owner.publicKey,
+      vault: vaultPda,
+      agent: agent.publicKey,
+    });
 
     // Fund the vault with USDC
     ownerUsdcAta = createAtaHelper(
@@ -351,7 +408,7 @@ describe("jupiter-integration", () => {
         agent,
         usdcMint,
         amount,
-        jupiterProtocol,
+        mockDefiProtocol,
       );
 
       expect(sig.signature).to.be.a("string");
@@ -373,7 +430,7 @@ describe("jupiter-integration", () => {
         agent,
         usdcMint,
         amount,
-        jupiterProtocol,
+        mockDefiProtocol,
       );
 
       const vault = await program.account.agentVault.fetch(vaultPda);
@@ -404,7 +461,7 @@ describe("jupiter-integration", () => {
         agent,
         usdcMint,
         new BN(200_000_000),
-        jupiterProtocol,
+        mockDefiProtocol,
       );
       await sendComposedSwap(
         vaultPda,
@@ -413,7 +470,7 @@ describe("jupiter-integration", () => {
         agent,
         usdcMint,
         new BN(200_000_000),
-        jupiterProtocol,
+        mockDefiProtocol,
       );
 
       // This would exceed the 500 USDC cap if spending were declaration-based,
@@ -425,7 +482,7 @@ describe("jupiter-integration", () => {
         agent,
         usdcMint,
         new BN(50_000_000),
-        jupiterProtocol,
+        mockDefiProtocol,
       );
 
       // Verify vault recorded all transactions (finalize succeeds with actual_spend=0)
@@ -538,13 +595,32 @@ describe("jupiter-integration", () => {
           frozenVaultId,
           new BN(500_000_000),
           new BN(200_000_000),
-          0, // protocolMode
-          [jupiterProtocol],
-          0, // developer fee rate
-          100, // maxSlippageBps
+          1,
+          [jupiterProtocol, mockDefiProtocol],
+          0,
+          100,
           new BN(1800),
           [],
-          [], // protocolCaps
+          [],
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(500_000_000),
+            maxTransactionSizeUsd: new BN(200_000_000),
+            maxSlippageBps: 100,
+            protocolMode: 1,
+            protocols: [jupiterProtocol, mockDefiProtocol],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accountsPartial({
           owner: owner.publicKey,
@@ -557,14 +633,13 @@ describe("jupiter-integration", () => {
         })
         .rpc();
 
-      await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accountsPartial({
-          owner: owner.publicKey,
-          vault: frozenVault,
-          agentSpendOverlay: frozenOverlay,
-        })
-        .rpc();
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: frozenVault,
+        agent: agent.publicKey,
+      });
 
       // Freeze it
       await program.methods
@@ -662,15 +737,34 @@ describe("jupiter-integration", () => {
       await program.methods
         .initializeVault(
           rollingVaultId,
-          new BN(100_000_000), // 100 USDC daily cap
-          new BN(60_000_000), // 60 USDC max tx
-          0, // protocolMode
-          [jupiterProtocol],
-          0, // developer fee rate
-          100, // maxSlippageBps
+          new BN(100_000_000),
+          new BN(60_000_000),
+          1,
+          [jupiterProtocol, mockDefiProtocol],
+          0,
+          100,
           new BN(1800),
           [],
-          [], // protocolCaps
+          [],
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(100_000_000),
+            maxTransactionSizeUsd: new BN(60_000_000),
+            maxSlippageBps: 100,
+            protocolMode: 1,
+            protocols: [jupiterProtocol, mockDefiProtocol],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accountsPartial({
           owner: owner.publicKey,
@@ -683,14 +777,13 @@ describe("jupiter-integration", () => {
         })
         .rpc();
 
-      await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accountsPartial({
-          owner: owner.publicKey,
-          vault: rollingVault,
-          agentSpendOverlay: rollingOverlay,
-        })
-        .rpc();
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: rollingVault,
+        agent: agent.publicKey,
+      });
 
       // Deposit USDC into rolling vault (needed for protocol fee transfers)
       rollingVaultUsdcAta = getAssociatedTokenAddressSync(
@@ -733,7 +826,7 @@ describe("jupiter-integration", () => {
         agent,
         usdcMint,
         new BN(40_000_000),
-        jupiterProtocol,
+        mockDefiProtocol,
         rollingVaultUsdcAta,
       );
 
@@ -748,7 +841,7 @@ describe("jupiter-integration", () => {
         agent,
         usdcMint,
         new BN(40_000_000),
-        jupiterProtocol,
+        mockDefiProtocol,
         rollingVaultUsdcAta,
       );
 
@@ -764,7 +857,7 @@ describe("jupiter-integration", () => {
         agent,
         usdcMint,
         new BN(30_000_000),
-        jupiterProtocol,
+        mockDefiProtocol,
         rollingVaultUsdcAta,
       );
 

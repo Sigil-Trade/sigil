@@ -336,11 +336,13 @@ export function getPermissionEscalationLatency(
   const escalations: EscalationReport["escalations"] = [];
 
   for (let i = 0; i < events.length; i++) {
-    if (events[i].name !== "AgentPermissionsUpdated" || !events[i].fields)
+    if (events[i].name !== "AgentPermissionsChangeApplied" || !events[i].fields)
       continue;
     const permEvent = events[i].fields!;
     const agent = permEvent.agent as string;
-    const grantTimestamp = Number(permEvent.timestamp ?? 0);
+    const grantTimestamp = Number(
+      permEvent.appliedAt ?? permEvent.timestamp ?? 0,
+    );
 
     let firstUseTimestamp: number | null = null;
     for (let j = i + 1; j < events.length; j++) {
@@ -421,35 +423,12 @@ export interface PermissionUtilization {
   leastUsedActionType: string | null;
 }
 
-const ACTION_NAMES = [
-  "Swap",
-  "OpenPosition",
-  "ClosePosition",
-  "IncreasePosition",
-  "DecreasePosition",
-  "Deposit",
-  "Withdraw",
-  "Transfer",
-  "AddCollateral",
-  "RemoveCollateral",
-  "PlaceTriggerOrder",
-  "EditTriggerOrder",
-  "CancelTriggerOrder",
-  "PlaceLimitOrder",
-  "EditLimitOrder",
-  "CancelLimitOrder",
-  "SwapAndOpenPosition",
-  "CloseAndSwapPosition",
-  "CreateEscrow",
-  "SettleEscrow",
-  "RefundEscrow",
-];
-
 /**
  * Ratio of granted permission bits actually exercised by each agent.
- * Shows which ActionTypes agents use vs what they're granted — security surface analysis.
+ * Shows whether agents use spending or non-spending actions — security surface analysis.
  *
- * Handles both legacy (actionType enum) and new v6 (isSpending) event formats.
+ * V2 Option A: derive spending classification from amount > 0 on the
+ * ActionAuthorized event (the on-chain isSpending field was removed).
  * Position-effect tracking removed with the position counter deletion
  * (council 9-1 vote, 2026-04-19).
  */
@@ -464,21 +443,10 @@ export function getPermissionUtilizationRate(
       const agent = e.fields.agent as string;
       if (!agentActionUsage.has(agent)) agentActionUsage.set(agent, new Set());
 
-      // v6 event format: isSpending only (positionEffect deleted with counter)
-      if (e.fields.isSpending != null) {
-        const label = (e.fields.isSpending as boolean)
-          ? "Spending"
-          : "NonSpending";
-        agentActionUsage.get(agent)!.add(label);
-      } else if (e.fields.actionType) {
-        // Legacy event format
-        const actionObj = e.fields.actionType as { __kind: string } | number;
-        const actionName =
-          typeof actionObj === "object" && "__kind" in actionObj
-            ? actionObj.__kind
-            : (ACTION_NAMES[Number(actionObj)] ?? "Unknown");
-        agentActionUsage.get(agent)!.add(actionName);
-      }
+      // V2 Option A: derive spending classification from amount > 0
+      const amount = (e.fields.amount as bigint | undefined) ?? 0n;
+      const label = amount > 0n ? "Spending" : "NonSpending";
+      agentActionUsage.get(agent)!.add(label);
     }
   }
 

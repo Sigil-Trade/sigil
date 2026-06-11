@@ -38,8 +38,6 @@ export {
   MAX_ALLOWED_PROTOCOLS,
   FULL_CAPABILITY,
   FULL_PERMISSIONS,
-  // Escrow
-  MAX_ESCROW_DURATION,
   // Well-known program addresses (PR 3.B — F036 constant dedup)
   TOKEN_PROGRAM_ADDRESS,
   TOKEN_2022_PROGRAM_ADDRESS,
@@ -64,8 +62,6 @@ export {
   RECOGNIZED_DEFI_PROGRAMS,
   // Functions
   isStablecoinMint,
-  parseActionType,
-  isSpendingAction,
   validateNetwork,
   normalizeNetwork,
   // u64 boundary
@@ -83,10 +79,8 @@ export {
   getProtocolSpend,
   getSpendingHistory,
   findVaultsByOwner,
-  findEscrowsByVault,
   findSessionsByVault,
   getPendingPolicyForVault,
-  getPendingConstraintsForVault,
 } from "./state-resolver.js";
 export type {
   EffectiveBudget,
@@ -103,15 +97,48 @@ export type {
 // ─── PDA Resolution ───────────────────────────────────────────────────────────
 export {
   getVaultPDA,
+  // H-5 (audit 2026-05-21): post-ownership-transfer PDA helper.
+  // Use this AFTER an ownership transfer — derives from the IMMUTABLE
+  // `vault.vault_authority` instead of the mutable `vault.owner`.
+  getVaultPdaFromState,
   getPolicyPDA,
   getTrackerPDA,
   getSessionPDA,
   getPendingPolicyPDA,
-  getEscrowPDA,
   getAgentOverlayPDA,
-  getConstraintsPDA,
-  getPendingConstraintsPDA,
+  getAuditLogSuccessPDA,
+  getAuditLogRejectedPDA,
 } from "./resolve-accounts.js";
+export type { VaultPdaSeedSource } from "./resolve-accounts.js";
+
+// ─── Phase 7 — Audit Log ─────────────────────────────────────────────────────
+export {
+  fetchAuditLogSuccess,
+  fetchAuditLogRejected,
+  subjectBytes,
+  // `targetProtocolBytes` alias removed in Phase 10 Bucket 1 (D-item cleanup;
+  // §RP-1 HIGH-2 2026-05-19 deprecation promised removal). Use `subjectBytes`.
+  AUDIT_DISC_RESERVED_ZERO,
+  AUDIT_DISC_VALIDATE,
+  AUDIT_DISC_FINALIZE_SUCCESS,
+  AUDIT_DISC_FINALIZE_REJECT,
+  AUDIT_DISC_DEPOSIT,
+  AUDIT_DISC_WITHDRAW,
+  AUDIT_DISC_FREEZE,
+  AUDIT_DISC_REACTIVATE,
+  AUDIT_DISC_OWNERSHIP_INITIATE,
+  AUDIT_DISC_OWNERSHIP_ACCEPT,
+  AUDIT_DISC_OWNERSHIP_CANCEL,
+  AUDIT_DISC_PAUSE_AGENT,
+  AUDIT_DISC_UNPAUSE_AGENT,
+  AUDIT_DISC_REVOKE_AGENT,
+  AUDIT_DISC_REGISTER_AGENT,
+  AUDIT_DISC_POLICY_APPLY,
+  AUDIT_DISC_CONSTRAINTS_APPLY,
+  AUDIT_LOG_SUCCESS_CAPACITY,
+  AUDIT_LOG_REJECTED_CAPACITY,
+} from "./audit-log.js";
+export type { AuditLogView } from "./audit-log.js";
 
 // ─── Event Parser ─────────────────────────────────────────────────────────────
 export {
@@ -353,6 +380,93 @@ export type {
   SigilErrorCategory,
 } from "./agent-errors.js";
 
+// ─── Phase 9 Batch I — AL3 SealInput intent digest ──────────────────────────
+export {
+  computeSealInputDigest,
+  NETWORK_ID_DEVNET,
+  NETWORK_ID_MAINNET,
+} from "./seal/intent-digest.js";
+export type { SealIntentInput } from "./seal/intent-digest.js";
+
+// ─── Phase 9 Batch H — TA-19 policy preview digest helpers ──────────────────
+// `computeAgentSetHash` is the canonical client-side mirror of the on-chain
+// `compute_agent_set_hash`. It was previously reachable only via deep import
+// (`@usesigil/kit/policy/compute-policy-preview-digest`); promoting it to
+// the root barrel keeps the TA-19 binding contract symmetric with the
+// `buildCosignBundle` surface and matches the D-9 root-export audit (Phase
+// 10 Bucket 1). `computePolicyPreviewDigest` and friends remain reachable
+// via the deep import for advanced consumers building custom preview UIs.
+export { computeAgentSetHash } from "./policy/compute-policy-preview-digest.js";
+
+// ─── Phase 9 Batch K — AL2 mainnet confirmation gate error codes ────────────
+export {
+  SIGIL_ERROR__SDK__MAINNET_CONFIRMATION_REQUIRED,
+  SIGIL_ERROR__SDK__MAINNET_CONFIRMATION_REJECTED,
+} from "./errors/codes.js";
+
+// ─── Phase 9 Batch J — AL4 isMainnet + CAIP-2 network identity ──────────────
+export {
+  CAIP2_NAMESPACE_SOLANA,
+  CAIP2_SOLANA_MAINNET,
+  CAIP2_SOLANA_DEVNET,
+  CAIP2_SOLANA_TESTNET,
+  toCaip2,
+  isMainnetCaip2,
+  deriveNetworkIdentity,
+  // Phase 10 Bucket 1 (D-7): Wallet Standard chain identifier helper.
+  // Identity transform over CAIP-2 today; the explicit helper localizes
+  // any future wallet-standard surface changes.
+  toWalletStandardChain,
+  // M-3 (audit 2026-05-21): opt-in genesis-hash verification helper +
+  // canonical hash constants. Additive; does not change default seal()
+  // behaviour — assertGenesisHash still gates the createSigilClientAsync
+  // factory path. Use verifyNetworkIdentity for preflight checks in
+  // raw-tx-building flows that bypass the client factory.
+  verifyNetworkIdentity,
+  SOLANA_GENESIS_HASHES,
+} from "./caip2-network.js";
+export type {
+  SigilCaip2Chain,
+  SigilNetwork,
+  SigilActualNetwork,
+  NetworkIdentityResult,
+  GenesisRpc,
+} from "./caip2-network.js";
+
+// ─── Phase 9 Batch E — multisig / session / attestation / ownership helpers ─
+// `SQUADS_V4_PROGRAM_ID`, `detectSquadsV4Owner`, and `SquadsDetectionResult`
+// are exported from the existing `./squads-detection.js` block lower in this
+// file; multisig-detection.ts wraps them with the discriminator check
+// (`isSquadsV4Owned`) without re-exporting the underlying primitives.
+export {
+  SQUADS_V4_MULTISIG_DISCRIMINATOR,
+  isSquadsV4Owned,
+} from "./multisig-detection.js";
+export type { MultisigDetectionResult } from "./multisig-detection.js";
+
+export { mintSessionForAgent } from "./session-mint.js";
+export type { MintSessionForAgentInputs } from "./session-mint.js";
+
+export { getLatestPolicyAttestation } from "./policy-attestation.js";
+export type { PolicyAttestation } from "./policy-attestation.js";
+
+export {
+  buildInitiateOwnershipTransferIx,
+  buildAcceptOwnershipTransferIx,
+  buildAcceptOwnershipTransferMultisigIx,
+  buildCancelOwnershipTransferIx,
+} from "./ownership-transfer.js";
+export type {
+  BuildInitiateOwnershipTransferInputs,
+  BuildAcceptOwnershipTransferInputs,
+  BuildAcceptOwnershipTransferMultisigInputs,
+  BuildCancelOwnershipTransferInputs,
+  InitiateOwnershipTransferInstruction,
+  AcceptOwnershipTransferInstruction,
+  AcceptOwnershipTransferMultisigInstruction,
+  CancelOwnershipTransferInstruction,
+} from "./ownership-transfer.js";
+
 // ─── Protocol Resolver ───────────────────────────────────────────────────────
 export {
   ProtocolTier,
@@ -365,13 +479,12 @@ export type {
 } from "./protocol-resolver.js";
 
 // ─── Inspector ───────────────────────────────────────────────────────────────
-export { analyzeInstructions, inspectConstraints } from "./inspector.js";
+export { analyzeInstructions } from "./inspector.js";
 export type {
   InspectableInstruction,
   TokenTransferInfo,
   InstructionAnalysis,
   DangerousTokenOperation,
-  ConstraintSummary,
 } from "./inspector.js";
 
 // ─── Shield ─────────────────────────────────────────────────────────────────
@@ -536,6 +649,34 @@ export type {
   PreviewCreateVaultConfig,
 } from "./preview-create-vault.js";
 
+// ─── TA-09 Cosign Helper (G4 audit close) ───────────────────────────────────
+// Client-side path to produce a valid cosign session + digest for elevated
+// `queue_policy_update` mutations (raising caps, expanding allowlists,
+// lowering floor, raising per-recipient cap). The on-chain handler at
+// queue_policy_update.rs:286-328 rejects elevated mutations without cosign;
+// this helper produces the matching digest mirroring the canonical Rust
+// `compute_cosign_digest` byte-for-byte.
+export { buildCosignBundle } from "./cosign-helper.js";
+export type { CosignArgs, CosignBundle } from "./cosign-helper.js";
+export {
+  computeCosignDigest,
+  cosignDigestsEqual,
+} from "./policy/compute-cosign-digest.js";
+export type { CosignDigestFields } from "./policy/compute-cosign-digest.js";
+
+// ─── TA-18 / G6 — Squads V4 Detection Helper (audit 2026-05-18) ─────────────
+// Read-only off-chain helper that inspects whether a vault owner pubkey is
+// owned by the Squads V4 multisig program. Used by the dashboard to decide
+// whether to suppress the "single-signer protection" warning banner when
+// `policy.cosign_required = false`. NOT an on-chain enforcement primitive —
+// Sigil makes no assumption about the multisig's threshold or configuration.
+// See sdk/kit/src/squads-detection.ts for the full AC-2 mode framing.
+export {
+  SQUADS_V4_PROGRAM_ID,
+  detectSquadsV4Owner,
+} from "./squads-detection.js";
+export type { SquadsDetectionResult } from "./squads-detection.js";
+
 // ─── Error Classification (typed predicates + transport classifier) ─────────
 //
 // Shared helpers used across `seal`, `shielded-fetch`, `facilitator-verify`,
@@ -670,24 +811,6 @@ export type {
   VaultPnL,
   BalancePnL,
 } from "./balance-tracker.js";
-
-// ─── Protocol Registry + Tier Resolver (v2.2 FE↔BE contract C6) ─────────────
-// Hand-curated Verified-tier programId annotations plus the three-tier
-// classifier primitives. See FRONTEND-BACKEND-CONTRACT.md §5c.
-export {
-  PROTOCOL_ANNOTATIONS,
-  VERIFIED_PROGRAMS,
-  lookupProtocolAnnotation,
-} from "./protocol-registry/index.js";
-export type { ProtocolAnnotation } from "./protocol-registry/index.js";
-export { resolveProtocolTier } from "./protocol-tier.js";
-export type {
-  ProtocolTrustTier,
-  NonConstrainableReason,
-  IdlSource,
-  ConstrainabilityResult,
-  CheckConstrainabilityFn,
-} from "./protocol-tier.js";
 
 // ─── Agent handoff bootstrap (v2.2 FE↔BE contract C5) ───────────────────────
 // Canonical handoff-prompt composition for Claude Desktop / ChatGPT / CLI.

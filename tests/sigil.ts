@@ -21,6 +21,18 @@ import {
 import { expect } from "chai";
 import BN from "bn.js";
 import {
+  initVaultPreviewDigest,
+  fetchAndComputeQueueDigest,
+} from "./helpers/policy-digest";
+import {
+  buildExpectedIntentDigest,
+  digestAsArgs,
+} from "./helpers/intent-digest-fixture";
+// F-Q6 (2026-06-02): single-key vaults can no longer instant-register an OPERATOR
+// agent — it must route through queue_agent_grant -> advance -> apply_agent_grant.
+// This helper performs that sequence; see its header for the full rationale.
+import { registerOperatorAgent } from "./helpers/register-operator-agent";
+import {
   createTestEnv,
   airdropSol,
   createMintHelper,
@@ -40,6 +52,11 @@ import {
   printCUSummary,
   TestEnv,
   LiteSVM,
+  MOCK_DEFI_PROGRAM_ID,
+  MOCK_DEFI_2_PROGRAM_ID,
+  buildMockDefiNoopIx,
+  buildMockDefiDrainIx,
+  buildMockDefiDrain2Ix,
 } from "./helpers/litesvm-setup";
 
 const FULL_CAPABILITY = 2; // CAPABILITY_OPERATOR
@@ -82,12 +99,43 @@ describe("sigil", () => {
     return (pol as any).policyVersion ?? new BN(0);
   }
 
+  // F-Q2 drain sizing. validate_and_authorize arms the agent's SPL delegation
+  // for only `amount - protocol_fee - developer_fee` (validate_and_authorize.rs
+  // :995-1000) — the fees are CPI'd out of the vault ATA up front. A drain ix
+  // can therefore move at most that delegated amount; draining the full
+  // declared `amount` would exceed the delegation and the inner SPL Transfer
+  // would fail with "insufficient funds". finalize then measures
+  // actual_spend = total_decrease - fees = the DRAIN amount (finalize_session.rs
+  // :328-350), so draining the full delegation makes actual_spend equal exactly
+  // `amount - fees` and the per-protocol cap charges that. The per-protocol-cap
+  // and TA-13 vaults are created with developer_fee_rate = 0, so the only fee is
+  // the hardcoded protocol fee: ceil(amount * 200 / 1_000_000) (PROTOCOL_FEE_RATE
+  // / FEE_RATE_DENOMINATOR, ceiling division — mirrors state/mod.rs::ceil_fee).
+  const PROTOCOL_FEE_RATE_BN = new BN(200);
+  const FEE_RATE_DENOMINATOR_BN = new BN(1_000_000);
+  const netDrainAmount = (amount: BN): BN => {
+    // ceil(amount * rate / denom) = (amount*rate + denom - 1) / denom
+    const protocolFee = amount
+      .mul(PROTOCOL_FEE_RATE_BN)
+      .add(FEE_RATE_DENOMINATOR_BN.subn(1))
+      .div(FEE_RATE_DENOMINATOR_BN);
+    return amount.sub(protocolFee);
+  };
+
   // Allowed protocol (fake Jupiter program ID for testing)
-  const jupiterProgramId = Keypair.generate().publicKey;
+  // F-Q2: spending sandwiches need EXACTLY ONE counted DeFi instruction whose
+  // program equals target_protocol. This outer "protocol" is used only as the
+  // allowlist entry + authorized target by the simple validate/finalize tests
+  // (the per-protocol-cap and TA-13 blocks declare their own scoped protocol
+  // keypairs). It carries no identity assertion beyond "policy.protocols[0]
+  // equals it", which still holds, so point it at the real, loaded, counted
+  // mock-defi program; the sandwiches' middle ix is mock-defi's no-op
+  // open_position (zero spend, outcome-based premises preserved).
+  const jupiterProgramId = MOCK_DEFI_PROGRAM_ID;
 
   // Protocol treasury (must match hardcoded constant in program)
   const protocolTreasury = new PublicKey(
-    "ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT",
+    "6wrkKTM2pjkcCAbMfRz2j3AXspavu6pq3ePcuJUE3Azp",
   );
   let protocolTreasuryUsdcAta: PublicKey;
 
@@ -177,13 +225,32 @@ describe("sigil", () => {
           vaultId,
           dailyCap,
           maxTxSize,
-          1, // protocolMode: allowlist
+          1,
           [jupiterProgramId],
-          0, // developer_fee_rate
-          100, // maxSlippageBps (1%)
-          new BN(1800), // timelockDuration (MIN_TIMELOCK_DURATION)
-          [], // allowedDestinations
-          [], // protocolCaps
+          0,
+          100,
+          new BN(1800),
+          [],
+          [],
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: dailyCap,
+            maxTransactionSizeUsd: maxTxSize,
+            maxSlippageBps: 100,
+            protocolMode: 1,
+            protocols: [jupiterProgramId],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accounts({
           owner: owner.publicKey,
@@ -229,16 +296,35 @@ describe("sigil", () => {
       try {
         await program.methods
           .initializeVault(
-            vaultId, // same vault_id
+            vaultId,
             new BN(100),
             new BN(100),
-            0, // protocolMode: all
-            [],
+            1,
+            [jupiterProgramId],
             0,
-            100, // maxSlippageBps
+            100,
             new BN(1800),
             [],
-            [], // protocolCaps
+            [],
+            false, // observeOnly (Phase 2 TA-19)
+            0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+            false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+            5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+            new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+            new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+            false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+            initVaultPreviewDigest({
+              dailySpendingCapUsd: new BN(100),
+              maxTransactionSizeUsd: new BN(100),
+              maxSlippageBps: 100,
+              protocolMode: 1,
+              protocols: [jupiterProgramId],
+              allowedDestinations: [],
+              timelockDuration: new BN(1800),
+              operatingHours: 0x00ffffff,
+              autoPromoteGrays: false,
+              autoRevokeThreshold: 5,
+            }),
           )
           .accounts({
             owner: owner.publicKey,
@@ -290,10 +376,29 @@ describe("sigil", () => {
             3,
             [],
             0,
-            100, // maxSlippageBps
+            100,
             new BN(1800),
             [],
-            [], // protocolCaps
+            [],
+            false, // observeOnly (Phase 2 TA-19)
+            0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+            false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+            5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+            new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+            new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+            false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+            initVaultPreviewDigest({
+              dailySpendingCapUsd: new BN(100),
+              maxTransactionSizeUsd: new BN(100),
+              maxSlippageBps: 100,
+              protocolMode: 3,
+              protocols: [],
+              allowedDestinations: [],
+              timelockDuration: new BN(1800),
+              operatingHours: 0x00ffffff,
+              autoPromoteGrays: false,
+              autoRevokeThreshold: 5,
+            }),
           )
           .accounts({
             owner: owner.publicKey,
@@ -307,7 +412,7 @@ describe("sigil", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err, { name: "InvalidProtocolMode", code: 6026 });
+        expectSigilError(err, { name: "InvalidProtocolMode" });
       }
     });
   });
@@ -371,8 +476,12 @@ describe("sigil", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        // Anchor's PDA re-derivation fails before the handler runs
-        expectAnchorError(err, { name: "ConstraintSeeds", code: 2006 });
+        // Phase 8 LBL-01: vault PDA seed-key is now `vault.vault_authority`
+        // (immutable, set at init). PDA derivation succeeds regardless of
+        // signer identity, so the `has_one = owner` constraint fires
+        // instead → UnauthorizedOwner (6002). Pre-LBL-01 this was
+        // ConstraintSeeds (2006) because the seed-key was `signer.key()`.
+        expectSigilError(err, { name: "UnauthorizedOwner", code: 6002 });
       }
     });
   });
@@ -382,14 +491,17 @@ describe("sigil", () => {
   // =========================================================================
   describe("register_agent", () => {
     it("registers an agent pubkey", async () => {
-      await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: owner.publicKey,
-          vault: vaultPda,
-          agentSpendOverlay: overlayPda,
-        } as any)
-        .rpc();
+      // F-Q6: an OPERATOR (FULL_CAPABILITY) grant on this single-key vault must
+      // route through queue_agent_grant -> advance -> apply_agent_grant. The
+      // helper performs that sequence and lands the agent as OPERATOR, so the
+      // capability assertion below still holds.
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: vaultPda,
+        agent: agent.publicKey,
+      });
 
       const vault = await program.account.agentVault.fetch(vaultPda);
       expect(vault.agents[0].pubkey.toString()).to.equal(
@@ -401,18 +513,24 @@ describe("sigil", () => {
 
     it("rejects double registration", async () => {
       try {
-        // Register the SAME agent pubkey that was already registered
+        // Register the SAME agent pubkey that was already registered.
+        // F-Q6: use VIEWER_CAPABILITY so the OPERATOR-grant timelock check
+        // (ErrOperatorGrantRequiresTimelock, 6107) does not fire BEFORE the
+        // AgentAlreadyRegistered check this test targets. The agent is already
+        // registered (as OPERATOR via the helper in the prior test), so the
+        // duplicate-pubkey check fires regardless of the capability arg.
         await program.methods
-          .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
+          .registerAgent(agent.publicKey, VIEWER_CAPABILITY, new BN(0))
           .accounts({
             owner: owner.publicKey,
             vault: vaultPda,
+            policy: policyPda,
             agentSpendOverlay: overlayPda,
           } as any)
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err, { name: "AgentAlreadyRegistered", code: 6010 });
+        expectSigilError(err, { name: "AgentAlreadyRegistered" });
       }
     });
 
@@ -446,13 +564,32 @@ describe("sigil", () => {
           vid,
           new BN(1000),
           new BN(1000),
+          1,
+          [jupiterProgramId],
           0,
+          100,
+          new BN(1800),
           [],
-          0,
-          100, // maxSlippageBps
-          new BN(1800), // MIN_TIMELOCK_DURATION
           [],
-          [], // protocolCaps
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(1000),
+            maxTransactionSizeUsd: new BN(1000),
+            maxSlippageBps: 100,
+            protocolMode: 1,
+            protocols: [jupiterProgramId],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accounts({
           owner: owner.publicKey,
@@ -472,13 +609,20 @@ describe("sigil", () => {
           .accounts({
             owner: unauthorizedUser.publicKey,
             vault: v,
+            policy: PublicKey.findProgramAddressSync(
+              [Buffer.from("policy"), v.toBuffer()],
+              program.programId,
+            )[0],
             agentSpendOverlay: vOverlay,
           } as any)
           .signers([unauthorizedUser])
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectAnchorError(err, { name: "ConstraintSeeds", code: 2006 });
+        // Phase 8 LBL-01: seed-key is `vault.vault_authority` (immutable),
+        // not `signer.key()`. PDA derivation passes regardless of signer
+        // identity → `has_one = owner` fires → UnauthorizedOwner (6002).
+        expectSigilError(err, { name: "UnauthorizedOwner", code: 6002 });
       }
     });
   });
@@ -499,18 +643,28 @@ describe("sigil", () => {
     it("updates individual policy fields via queue+apply", async () => {
       await program.methods
         .queuePolicyUpdate(
-          new BN(200_000_000), // new daily cap: 200 USDC
-          null, // keep max_transaction_size
-          null, // keep protocol_mode
+          new BN(200_000_000),
           null,
-          null, // keep developer_fee_rate
-          null, // keep maxSlippageBps
-          null, // keep timelockDuration
-          null, // keep allowedDestinations
-          null, // keep sessionExpirySeconds
-          null, // hasProtocolCaps
-          null, // protocolCaps
-          null, // destinationMode
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null, // operating_hours (TA-05 Phase 3)
+          null, // stable_balance_floor (TA-12 Phase 5 — pass-through)
+          null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
+          null, // cosign_required (G6 audit 2026-05-18 — pass-through, default off)
+          null,
+          null, // cosign_session_pubkey (D-5: pass-through)
+          PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
+          await fetchAndComputeQueueDigest(program, policyPda, vaultPda, {
+            dailySpendingCapUsd: new BN(200_000_000),
+          }), // newPolicyPreviewDigest (Phase 2 TA-19)
         )
         .accounts({
           owner: owner.publicKey,
@@ -557,9 +711,19 @@ describe("sigil", () => {
             null,
             null,
             null,
-            null, // hasProtocolCaps
-            null, // protocolCaps
-            null, // destinationMode
+            null,
+            null,
+            null,
+            null, // operating_hours (TA-05 Phase 3)
+            null, // stable_balance_floor (TA-12 Phase 5 — pass-through)
+            null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
+            null, // cosign_required (G6 audit 2026-05-18 — pass-through, default off)
+            null,
+            null, // cosign_session_pubkey (D-5: pass-through)
+            PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
+            await fetchAndComputeQueueDigest(program, policyPda, vaultPda, {
+              dailySpendingCapUsd: new BN(999),
+            }), // newPolicyPreviewDigest (Phase 2 TA-19)
           )
           .accounts({
             owner: unauthorizedUser.publicKey,
@@ -572,7 +736,10 @@ describe("sigil", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectAnchorError(err, { name: "ConstraintSeeds", code: 2006 });
+        // Phase 8 LBL-01: seed-key is `vault.vault_authority` (immutable),
+        // not `signer.key()`. PDA derivation passes regardless of signer
+        // identity → `has_one = owner` fires → UnauthorizedOwner (6002).
+        expectSigilError(err, { name: "UnauthorizedOwner", code: 6002 });
       }
     });
 
@@ -593,9 +760,19 @@ describe("sigil", () => {
             null,
             null,
             null,
-            null, // hasProtocolCaps
-            null, // protocolCaps
-            null, // destinationMode
+            null,
+            null,
+            null,
+            null, // operating_hours (TA-05 Phase 3)
+            null, // stable_balance_floor (TA-12 Phase 5 — pass-through)
+            null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
+            null, // cosign_required (G6 audit 2026-05-18 — pass-through, default off)
+            null,
+            null, // cosign_session_pubkey (D-5: pass-through)
+            PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
+            await fetchAndComputeQueueDigest(program, policyPda, vaultPda, {
+              protocols: tooManyProtocols,
+            }), // newPolicyPreviewDigest (Phase 2 TA-19)
           )
           .accounts({
             owner: owner.publicKey,
@@ -607,7 +784,7 @@ describe("sigil", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err, { name: "TooManyAllowedProtocols", code: 6009 });
+        expectSigilError(err, { name: "TooManyAllowedProtocols" });
       }
     });
   });
@@ -652,13 +829,32 @@ describe("sigil", () => {
           revokeVaultId,
           new BN(1000),
           new BN(1000),
+          1,
+          [jupiterProgramId],
           0,
+          100,
+          new BN(1800),
           [],
-          0,
-          100, // maxSlippageBps
-          new BN(1800), // MIN_TIMELOCK_DURATION
           [],
-          [], // protocolCaps
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(1000),
+            maxTransactionSizeUsd: new BN(1000),
+            maxSlippageBps: 100,
+            protocolMode: 1,
+            protocols: [jupiterProgramId],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accounts({
           owner: owner.publicKey,
@@ -670,11 +866,19 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
         } as any)
         .rpc();
+      // F-Q6: this agent is only registered so it can be revoked (to drive the
+      // vault to Frozen) — it never spends. Register as VIEWER to avoid the
+      // OPERATOR-grant timelock requirement; revoke freezes on agent-count == 0
+      // regardless of capability.
       await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
+        .registerAgent(agent.publicKey, VIEWER_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: revokeVaultPda,
+          policy: PublicKey.findProgramAddressSync(
+            [Buffer.from("policy"), revokeVaultPda.toBuffer()],
+            program.programId,
+          )[0],
           agentSpendOverlay: revokeOverlay,
         } as any)
         .rpc();
@@ -686,6 +890,10 @@ describe("sigil", () => {
         .accounts({
           owner: owner.publicKey,
           vault: revokeVaultPda,
+          policy: PublicKey.findProgramAddressSync(
+            [Buffer.from("policy"), revokeVaultPda.toBuffer()],
+            program.programId,
+          )[0],
           agentSpendOverlay: revokeOverlay,
         } as any)
         .rpc();
@@ -703,12 +911,16 @@ describe("sigil", () => {
           .accounts({
             owner: owner.publicKey,
             vault: revokeVaultPda,
+            policy: PublicKey.findProgramAddressSync(
+              [Buffer.from("policy"), revokeVaultPda.toBuffer()],
+              program.programId,
+            )[0],
             agentSpendOverlay: revokeOverlay,
           } as any)
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err, { name: "UnauthorizedAgent", code: 6001 });
+        expectSigilError(err, { name: "UnauthorizedAgent" });
       }
     });
 
@@ -719,13 +931,20 @@ describe("sigil", () => {
           .accounts({
             owner: unauthorizedUser.publicKey,
             vault: revokeVaultPda,
+            policy: PublicKey.findProgramAddressSync(
+              [Buffer.from("policy"), revokeVaultPda.toBuffer()],
+              program.programId,
+            )[0],
             agentSpendOverlay: revokeOverlay,
           } as any)
           .signers([unauthorizedUser])
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectAnchorError(err, { name: "ConstraintSeeds", code: 2006 });
+        // Phase 8 LBL-01: seed-key is `vault.vault_authority` (immutable),
+        // not `signer.key()`. PDA derivation passes regardless of signer
+        // identity → `has_one = owner` fires → UnauthorizedOwner (6002).
+        expectSigilError(err, { name: "UnauthorizedOwner", code: 6002 });
       }
     });
   });
@@ -769,13 +988,32 @@ describe("sigil", () => {
           reactVaultId,
           new BN(1000),
           new BN(1000),
+          1,
+          [jupiterProgramId],
           0,
+          100,
+          new BN(1800),
           [],
-          0,
-          100, // maxSlippageBps
-          new BN(1800), // MIN_TIMELOCK_DURATION
           [],
-          [], // protocolCaps
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(1000),
+            maxTransactionSizeUsd: new BN(1000),
+            maxSlippageBps: 100,
+            protocolMode: 1,
+            protocols: [jupiterProgramId],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accounts({
           owner: owner.publicKey,
@@ -788,12 +1026,19 @@ describe("sigil", () => {
         } as any)
         .rpc();
 
-      // Register agent then freeze by revoking
+      // Register agent then freeze by revoking.
+      // F-Q6: setup-only agent (never spends) — VIEWER avoids the OPERATOR-grant
+      // timelock; the reactivate tests below seat their own OPERATOR via
+      // reactivateVault (unchanged by F-Q6).
       await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
+        .registerAgent(agent.publicKey, VIEWER_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: reactVaultPda,
+          policy: PublicKey.findProgramAddressSync(
+            [Buffer.from("policy"), reactVaultPda.toBuffer()],
+            program.programId,
+          )[0],
           agentSpendOverlay: reactOverlay,
         } as any)
         .rpc();
@@ -803,14 +1048,25 @@ describe("sigil", () => {
         .accounts({
           owner: owner.publicKey,
           vault: reactVaultPda,
+          policy: PublicKey.findProgramAddressSync(
+            [Buffer.from("policy"), reactVaultPda.toBuffer()],
+            program.programId,
+          )[0],
           agentSpendOverlay: reactOverlay,
         } as any)
         .rpc();
     });
 
     it("reactivates a frozen vault", async () => {
+      // Phase 8 C28: advance past 5-min reactivate cooldown
+      advanceTime(svm, 301);
+      // F-Q6: a single-key vault cannot reactivate an OPERATOR agent instantly
+      // (ErrOperatorGrantRequiresTimelock 6107). This test only needs the vault
+      // Active with an agent present, so reactivate with VIEWER_CAPABILITY (1) —
+      // which satisfies the >=1-agent requirement and skips the OPERATOR tier
+      // gate (and therefore the NH-1 FULL-only cosigner requirement).
       await program.methods
-        .reactivateVault(agent.publicKey, FULL_CAPABILITY)
+        .reactivateVault(agent.publicKey, VIEWER_CAPABILITY)
         .accounts({ owner: owner.publicKey, vault: reactVaultPda } as any)
         .rpc();
 
@@ -826,7 +1082,7 @@ describe("sigil", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err, { name: "VaultNotFrozen", code: 6012 });
+        expectSigilError(err, { name: "VaultNotFrozen" });
       }
     });
 
@@ -837,9 +1093,16 @@ describe("sigil", () => {
         .accounts({
           owner: owner.publicKey,
           vault: reactVaultPda,
+          policy: PublicKey.findProgramAddressSync(
+            [Buffer.from("policy"), reactVaultPda.toBuffer()],
+            program.programId,
+          )[0],
           agentSpendOverlay: reactOverlay,
         } as any)
         .rpc();
+
+      // Phase 8 C28: advance past 5-min reactivate cooldown
+      advanceTime(svm, 301);
 
       try {
         await program.methods
@@ -848,12 +1111,14 @@ describe("sigil", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err, { name: "NoAgentRegistered", code: 6011 });
+        expectSigilError(err, { name: "NoAgentRegistered" });
       }
 
-      // Clean up: reactivate with new agent for subsequent tests
+      // Clean up: reactivate with new agent for subsequent tests.
+      // F-Q6: VIEWER_CAPABILITY reactivate (single-key vault cannot grant
+      // OPERATOR instantly); satisfies the >=1-agent requirement.
       await program.methods
-        .reactivateVault(agent.publicKey, FULL_CAPABILITY)
+        .reactivateVault(agent.publicKey, VIEWER_CAPABILITY)
         .accounts({ owner: owner.publicKey, vault: reactVaultPda } as any)
         .rpc();
     });
@@ -865,13 +1130,23 @@ describe("sigil", () => {
         .accounts({
           owner: owner.publicKey,
           vault: reactVaultPda,
+          policy: PublicKey.findProgramAddressSync(
+            [Buffer.from("policy"), reactVaultPda.toBuffer()],
+            program.programId,
+          )[0],
           agentSpendOverlay: reactOverlay,
         } as any)
         .rpc();
 
+      // Phase 8 C28: advance past 5-min reactivate cooldown
+      advanceTime(svm, 301);
+
       const newAgent = Keypair.generate();
+      // F-Q6: VIEWER_CAPABILITY reactivate — this test asserts the agent KEY
+      // was rotated (not its capability), so VIEWER is the minimal correct fix
+      // and skips the OPERATOR tier gate + NH-1 cosigner requirement.
       await program.methods
-        .reactivateVault(newAgent.publicKey, FULL_CAPABILITY)
+        .reactivateVault(newAgent.publicKey, VIEWER_CAPABILITY)
         .accounts({ owner: owner.publicKey, vault: reactVaultPda } as any)
         .rpc();
 
@@ -880,6 +1155,55 @@ describe("sigil", () => {
         newAgent.publicKey.toString(),
       );
       expect(vault.status).to.have.property("active");
+    });
+
+    it("F-Q6: rejects OPERATOR (FULL_CAPABILITY) reactivate on a single-key vault (timelock required)", async () => {
+      // Read the current (rotated) agent from chain — prior test rotated
+      // the agent to a fresh keypair whose handle is block-scoped, so we
+      // re-derive from chain state.
+      const activeVault = await program.account.agentVault.fetch(reactVaultPda);
+      const currentAgentPk = new PublicKey(activeVault.agents[0].pubkey);
+      // Freeze the vault first so the reactivate path is reachable.
+      await program.methods
+        .revokeAgent(currentAgentPk)
+        .accounts({
+          owner: owner.publicKey,
+          vault: reactVaultPda,
+          policy: PublicKey.findProgramAddressSync(
+            [Buffer.from("policy"), reactVaultPda.toBuffer()],
+            program.programId,
+          )[0],
+          agentSpendOverlay: reactOverlay,
+        } as any)
+        .rpc();
+      // Advance past 5-min reactivate cooldown (Phase 8 C28).
+      advanceTime(svm, 301);
+      // F-Q6 (2026-06-02): on a SINGLE-KEY vault (cosign unbound), an instant
+      // OPERATOR (FULL_CAPABILITY) grant via reactivate is rejected with
+      // ErrOperatorGrantRequiresTimelock (6107) REGARDLESS of any signer — the
+      // forced timelock (queue_agent_grant → apply_agent_grant) is the missing
+      // 2nd authorization factor. The old NH-1 "bound-cosigner instant path"
+      // only applies to cosign-BOUND vaults, so even adding a cosigner here
+      // would still revert 6107. This supersedes the old NH-1 6104 assertion.
+      const newAgentPk = Keypair.generate().publicKey;
+      try {
+        await program.methods
+          .reactivateVault(newAgentPk, FULL_CAPABILITY)
+          .accounts({ owner: owner.publicKey, vault: reactVaultPda } as any)
+          .rpc();
+        expect.fail("Should have thrown ErrOperatorGrantRequiresTimelock");
+      } catch (err: any) {
+        expectSigilError(err, {
+          name: "ErrOperatorGrantRequiresTimelock",
+        });
+      }
+      // Clean up: reactivate with VIEWER so subsequent tests have a viable
+      // Active vault. F-Q6: a single-key vault cannot grant OPERATOR instantly,
+      // so VIEWER (1) is the correct reactivation capability here.
+      await program.methods
+        .reactivateVault(newAgentPk, VIEWER_CAPABILITY)
+        .accounts({ owner: owner.publicKey, vault: reactVaultPda } as any)
+        .rpc();
     });
   });
 
@@ -926,7 +1250,7 @@ describe("sigil", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err, { name: "InsufficientBalance", code: 6014 });
+        expectSigilError(err, { name: "InsufficientBalance" });
       }
     });
 
@@ -946,7 +1270,10 @@ describe("sigil", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectAnchorError(err, { name: "ConstraintSeeds", code: 2006 });
+        // Phase 8 LBL-01: seed-key is `vault.vault_authority` (immutable),
+        // not `signer.key()`. PDA derivation passes regardless of signer
+        // identity → `has_one = owner` fires → UnauthorizedOwner (6002).
+        expectSigilError(err, { name: "UnauthorizedOwner", code: 6002 });
       }
     });
   });
@@ -978,6 +1305,16 @@ describe("sigil", () => {
           amount,
           jupiterProgramId,
           await pv(), // expectedPolicyVersion
+          new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: vaultPda,
+              agent: agent.publicKey,
+              tokenMint: usdcMint,
+              amount,
+              targetProtocol: jupiterProgramId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -995,6 +1332,13 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        // F-Q1a completeness: the mock-defi no-op ix lists the agent signer (the
+        // writable fee-payer in the compiled v0 message). validate's
+        // destination-completeness guard requires every writable DeFi meta
+        // resolvable in remaining_accounts, so append the agent (mirrors seal()).
+        .remainingAccounts([
+          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -1015,10 +1359,19 @@ describe("sigil", () => {
         })
         .instruction();
 
+      // F-Q2: a spending sandwich needs EXACTLY ONE counted DeFi instruction
+      // between validate and finalize. mock-defi's no-op open_position is that ix
+      // (zero token movement → balance delta stays the protocol fee only).
+      const defiIx = buildMockDefiNoopIx(agent.publicKey);
+
       // P0 Finding 1: Verify vault balance before/after composed TX
       const vaultBalBefore = getTokenBalance(svm, vaultUsdcAta);
 
-      const txResult = sendVersionedTx(svm, [validateIx, finalizeIx], agent);
+      const txResult = sendVersionedTx(
+        svm,
+        [validateIx, defiIx, finalizeIx],
+        agent,
+      );
       recordCU("validate+finalize:stablecoin", txResult);
 
       // P0 Finding 1: Vault balance delta verification (outcome-based spending)
@@ -1066,6 +1419,16 @@ describe("sigil", () => {
           amount,
           jupiterProgramId,
           await pv(), // restored pv() v2
+          new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: vaultPda,
+              agent: agent.publicKey,
+              tokenMint: usdcMint,
+              amount,
+              targetProtocol: jupiterProgramId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -1083,7 +1446,18 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        // F-Q1a completeness: append the agent fee-payer (writable in the
+        // compiled message, referenced by the mock-defi no-op ix). Mirrors seal().
+        .remainingAccounts([
+          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
+
+      // F-Q2: the counted DeFi ix that sits between validate and finalize so the
+      // spending sandwich satisfies defi_ix_count == 1. The post-finalize scan
+      // tests append THEIR extra ix AFTER finalize, leaving this as the sole
+      // mid-sandwich DeFi instruction.
+      const defiIx = buildMockDefiNoopIx(agent.publicKey);
 
       const finalizeIx = await program.methods
         .finalizeSession()
@@ -1103,28 +1477,35 @@ describe("sigil", () => {
         })
         .instruction();
 
-      return { validateIx, finalizeIx };
+      return { validateIx, defiIx, finalizeIx };
     }
 
     it("succeeds with nothing after finalize", async () => {
-      const { validateIx, finalizeIx } = await buildValidateFinalizePair();
-      const txResult = sendVersionedTx(svm, [validateIx, finalizeIx], agent);
+      const { validateIx, defiIx, finalizeIx } =
+        await buildValidateFinalizePair();
+      const txResult = sendVersionedTx(
+        svm,
+        [validateIx, defiIx, finalizeIx],
+        agent,
+      );
       expect(txResult).to.exist;
     });
 
     it("allows ComputeBudget after finalize", async () => {
-      const { validateIx, finalizeIx } = await buildValidateFinalizePair();
+      const { validateIx, defiIx, finalizeIx } =
+        await buildValidateFinalizePair();
       const cbIx = ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 });
       const txResult = sendVersionedTx(
         svm,
-        [validateIx, finalizeIx, cbIx],
+        [validateIx, defiIx, finalizeIx, cbIx],
         agent,
       );
       expect(txResult).to.exist;
     });
 
     it("allows SystemProgram after finalize", async () => {
-      const { validateIx, finalizeIx } = await buildValidateFinalizePair();
+      const { validateIx, defiIx, finalizeIx } =
+        await buildValidateFinalizePair();
       const sysIx = SystemProgram.transfer({
         fromPubkey: agent.publicKey,
         toPubkey: agent.publicKey,
@@ -1132,14 +1513,15 @@ describe("sigil", () => {
       });
       const txResult = sendVersionedTx(
         svm,
-        [validateIx, finalizeIx, sysIx],
+        [validateIx, defiIx, finalizeIx, sysIx],
         agent,
       );
       expect(txResult).to.exist;
     });
 
     it("rejects SPL Transfer after finalize (rejected at validate or post-finalize scan)", async () => {
-      const { validateIx, finalizeIx } = await buildValidateFinalizePair();
+      const { validateIx, defiIx, finalizeIx } =
+        await buildValidateFinalizePair();
       // Craft a top-level SPL Token transfer instruction (disc = 3)
       const splTransferIx = {
         programId: TOKEN_PROGRAM_ID,
@@ -1151,13 +1533,18 @@ describe("sigil", () => {
         data: Buffer.from([3, 0, 0, 0, 0, 0, 0, 0, 0]), // Transfer disc + 0 amount
       };
       try {
-        sendVersionedTx(svm, [validateIx, finalizeIx, splTransferIx], agent);
+        sendVersionedTx(
+          svm,
+          [validateIx, defiIx, finalizeIx, splTransferIx],
+          agent,
+        );
         expect.fail("Should have thrown");
       } catch (err: any) {
-        // Error 6063 = UnauthorizedPostFinalizeInstruction (code shifted from
-        // 6065 → 6063 after phantom-error cleanup). Checked at finalize
+        // UnauthorizedPostFinalizeInstruction (code: 6049 post-M1-04 — shifted
+        // from 6056 by the Phase 1 Option A demolition which deleted the two
+        // Jupiter-specific variants at 6030/6031). Checked at finalize
         // instruction (index 1).
-        expect(err.toString()).to.include("6063");
+        expect(err.toString()).to.include("6049");
       }
     });
   });
@@ -1206,6 +1593,16 @@ describe("sigil", () => {
             new BN(1_000_000),
             jupiterProgramId,
             await pv(),
+            new BN(0), // AC-10 expectedNonce
+            digestAsArgs(
+              buildExpectedIntentDigest({
+                vault: vaultPda,
+                agent: agent.publicKey,
+                tokenMint: solMint,
+                amount: new BN(1_000_000),
+                targetProtocol: jupiterProgramId,
+              }),
+            ),
           )
           .accounts({
             agent: agent.publicKey,
@@ -1228,7 +1625,7 @@ describe("sigil", () => {
         expect.fail("Should have thrown");
       } catch (err: any) {
         // Non-stablecoin input requires output_stablecoin_account which is null
-        expectSigilError(err, { name: "InvalidTokenAccount", code: 6021 });
+        expectSigilError(err, { name: "InvalidTokenAccount" });
       }
     });
 
@@ -1241,6 +1638,16 @@ describe("sigil", () => {
             new BN(1_000_000),
             fakeProtocol, // not in protocols
             await pv(),
+            new BN(0), // AC-10 expectedNonce
+            digestAsArgs(
+              buildExpectedIntentDigest({
+                vault: vaultPda,
+                agent: agent.publicKey,
+                tokenMint: usdcMint,
+                amount: new BN(1_000_000),
+                targetProtocol: fakeProtocol,
+              }),
+            ),
           )
           .accounts({
             agent: agent.publicKey,
@@ -1262,20 +1669,33 @@ describe("sigil", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err, { name: "ProtocolNotAllowed", code: 6004 });
+        expectSigilError(err, { name: "ProtocolNotAllowed" });
       }
     });
 
     it("standalone validate rejects without finalize (cap check moved to finalize)", async () => {
       // Outcome-based model: per-tx cap checks are in finalize_session, not validate.
-      // A standalone validate (no finalize) fails with MissingFinalizeInstruction.
+      // A spending validate with its DeFi ix but NO finalize fails with
+      // MissingFinalizeInstruction. F-Q2: the sandwich must carry EXACTLY ONE
+      // counted DeFi ix, so the bundle is [validate, mock_defi] (no finalize) —
+      // defi_ix_count == 1 passes, then the missing finalize is the sole defect.
       try {
-        await program.methods
+        const validateIx = await program.methods
           .validateAndAuthorize(
             usdcMint,
             new BN(200_000_000), // would exceed max_transaction_size — but checked in finalize now
             jupiterProgramId,
             await pv(),
+            new BN(0), // AC-10 expectedNonce
+            digestAsArgs(
+              buildExpectedIntentDigest({
+                vault: vaultPda,
+                agent: agent.publicKey,
+                tokenMint: usdcMint,
+                amount: new BN(200_000_000),
+                targetProtocol: jupiterProgramId,
+              }),
+            ),
           )
           .accounts({
             agent: agent.publicKey,
@@ -1293,13 +1713,18 @@ describe("sigil", () => {
             systemProgram: SystemProgram.programId,
             instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           } as any)
-          .signers([agent])
-          .rpc();
+          // F-Q1a completeness: append the agent fee-payer (referenced writable
+          // by the mock-defi no-op ix). Mirrors seal().
+          .remainingAccounts([
+            { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+          ])
+          .instruction();
+        const defiIx = buildMockDefiNoopIx(agent.publicKey);
+        sendVersionedTx(svm, [validateIx, defiIx], agent);
         expect.fail("Should have thrown");
       } catch (err: any) {
         expectSigilError(err, {
           name: "MissingFinalizeInstruction",
-          code: 6028,
         });
       }
     });
@@ -1307,14 +1732,27 @@ describe("sigil", () => {
     it("standalone validate rejects without finalize (daily cap check moved to finalize)", async () => {
       // Outcome-based model: daily cap checks are in finalize_session, not validate.
       // Validate no longer records spend or checks caps — those use actual balance delta.
-      // A standalone validate (no finalize) fails with MissingFinalizeInstruction.
+      // A spending validate with its DeFi ix but NO finalize fails with
+      // MissingFinalizeInstruction. F-Q2: the bundle is [validate, mock_defi]
+      // (no finalize) so defi_ix_count == 1 passes and the missing finalize is
+      // the sole defect.
       try {
-        await program.methods
+        const validateIx = await program.methods
           .validateAndAuthorize(
             usdcMint,
             new BN(100_000_000),
             jupiterProgramId,
             await pv(),
+            new BN(0), // AC-10 expectedNonce
+            digestAsArgs(
+              buildExpectedIntentDigest({
+                vault: vaultPda,
+                agent: agent.publicKey,
+                tokenMint: usdcMint,
+                amount: new BN(100_000_000),
+                targetProtocol: jupiterProgramId,
+              }),
+            ),
           )
           .accounts({
             agent: agent.publicKey,
@@ -1332,13 +1770,18 @@ describe("sigil", () => {
             systemProgram: SystemProgram.programId,
             instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           } as any)
-          .signers([agent])
-          .rpc();
+          // F-Q1a completeness: append the agent fee-payer (referenced writable
+          // by the mock-defi no-op ix). Mirrors seal().
+          .remainingAccounts([
+            { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+          ])
+          .instruction();
+        const defiIx = buildMockDefiNoopIx(agent.publicKey);
+        sendVersionedTx(svm, [validateIx, defiIx], agent);
         expect.fail("Should have thrown");
       } catch (err: any) {
         expectSigilError(err, {
           name: "MissingFinalizeInstruction",
-          code: 6028,
         });
       }
     });
@@ -1364,6 +1807,16 @@ describe("sigil", () => {
             new BN(1_000_000),
             jupiterProgramId,
             await pv(),
+            new BN(0), // AC-10 expectedNonce
+            digestAsArgs(
+              buildExpectedIntentDigest({
+                vault: vaultPda,
+                agent: fakeAgent.publicKey,
+                tokenMint: usdcMint,
+                amount: new BN(1_000_000),
+                targetProtocol: jupiterProgramId,
+              }),
+            ),
           )
           .accounts({
             agent: fakeAgent.publicKey,
@@ -1385,7 +1838,7 @@ describe("sigil", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err, { name: "UnauthorizedAgent", code: 6001 });
+        expectSigilError(err, { name: "UnauthorizedAgent" });
       }
     });
 
@@ -1443,6 +1896,16 @@ describe("sigil", () => {
             new BN(1_000_000),
             jupiterProgramId,
             await pv(),
+            new BN(0), // AC-10 expectedNonce
+            digestAsArgs(
+              buildExpectedIntentDigest({
+                vault: frozenVault,
+                agent: agent.publicKey,
+                tokenMint: usdcMint,
+                amount: new BN(1_000_000),
+                targetProtocol: jupiterProgramId,
+              }),
+            ),
           )
           .accounts({
             agent: agent.publicKey,
@@ -1471,7 +1934,7 @@ describe("sigil", () => {
         // emits the custom-override error code (UnauthorizedAgent 6001),
         // NOT the default `ConstraintRaw 2003` tag — the `@ SigilError::X`
         // syntax replaces the default tag per Anchor codegen.
-        expectSigilError(err, { name: "UnauthorizedAgent", code: 6001 });
+        expectSigilError(err, { name: "UnauthorizedAgent" });
       }
     });
   });
@@ -1517,13 +1980,32 @@ describe("sigil", () => {
           closeVaultId,
           new BN(1000),
           new BN(1000),
+          1,
+          [jupiterProgramId],
           0,
+          100,
+          new BN(1800),
           [],
-          0,
-          100, // maxSlippageBps
-          new BN(1800), // MIN_TIMELOCK_DURATION
           [],
-          [], // protocolCaps
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(1000),
+            maxTransactionSizeUsd: new BN(1000),
+            maxSlippageBps: 100,
+            protocolMode: 1,
+            protocols: [jupiterProgramId],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accounts({
           owner: owner.publicKey,
@@ -1591,13 +2073,32 @@ describe("sigil", () => {
           vid,
           new BN(1000),
           new BN(1000),
+          1,
+          [jupiterProgramId],
           0,
+          100,
+          new BN(1800),
           [],
-          0,
-          100, // maxSlippageBps
-          new BN(1800), // MIN_TIMELOCK_DURATION
           [],
-          [], // protocolCaps
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(1000),
+            maxTransactionSizeUsd: new BN(1000),
+            maxSlippageBps: 100,
+            protocolMode: 1,
+            protocols: [jupiterProgramId],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accounts({
           owner: owner.publicKey,
@@ -1625,7 +2126,10 @@ describe("sigil", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectAnchorError(err, { name: "ConstraintSeeds", code: 2006 });
+        // Phase 8 LBL-01: seed-key is `vault.vault_authority` (immutable),
+        // not `signer.key()`. PDA derivation passes regardless of signer
+        // identity → `has_one = owner` fires → UnauthorizedOwner (6002).
+        expectSigilError(err, { name: "UnauthorizedOwner", code: 6002 });
       }
     });
   });
@@ -1669,13 +2173,33 @@ describe("sigil", () => {
           feeVaultId,
           new BN(500_000_000),
           new BN(100_000_000),
-          1, // protocolMode: allowlist
+          1,
           [jupiterProgramId],
-          30, // developer_fee_rate = 30 (0.3 BPS)
-          100, // maxSlippageBps
-          new BN(1800), // MIN_TIMELOCK_DURATION
+          30,
+          100,
+          new BN(1800),
           [],
-          [], // protocolCaps
+          [],
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(500_000_000),
+            maxTransactionSizeUsd: new BN(100_000_000),
+            maxSlippageBps: 100,
+            developerFeeRate: 30, // PEN-CROSS-6: must match the ix arg.
+            protocolMode: 1,
+            protocols: [jupiterProgramId],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accounts({
           owner: owner.publicKey,
@@ -1721,13 +2245,32 @@ describe("sigil", () => {
             badVaultId,
             new BN(1000),
             new BN(1000),
-            0,
+            1,
             [],
             501,
-            100, // maxSlippageBps
+            100,
             new BN(1800),
             [],
-            [], // protocolCaps
+            [],
+            false, // observeOnly (Phase 2 TA-19)
+            0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+            false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+            5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+            new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+            new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+            false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+            initVaultPreviewDigest({
+              dailySpendingCapUsd: new BN(1000),
+              maxTransactionSizeUsd: new BN(1000),
+              maxSlippageBps: 100,
+              protocolMode: 1,
+              protocols: [jupiterProgramId],
+              allowedDestinations: [],
+              timelockDuration: new BN(1800),
+              operatingHours: 0x00ffffff,
+              autoPromoteGrays: false,
+              autoRevokeThreshold: 5,
+            }),
           )
           .accounts({
             owner: owner.publicKey,
@@ -1741,7 +2284,7 @@ describe("sigil", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err, { name: "DeveloperFeeTooHigh", code: 6015 });
+        expectSigilError(err, { name: "DeveloperFeeTooHigh" });
       }
     });
 
@@ -1763,9 +2306,19 @@ describe("sigil", () => {
           null,
           null,
           null,
-          null, // hasProtocolCaps
-          null, // protocolCaps
-          null, // destinationMode
+          null,
+          null,
+          null,
+          null, // operating_hours (TA-05 Phase 3)
+          null, // stable_balance_floor (TA-12 Phase 5 — pass-through)
+          null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
+          null, // cosign_required (G6 audit 2026-05-18 — pass-through, default off)
+          null,
+          null, // cosign_session_pubkey (D-5: pass-through)
+          PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
+          await fetchAndComputeQueueDigest(program, feePolicyPda, feeVaultPda, {
+            developerFeeRate: 0,
+          }), // newPolicyPreviewDigest (Phase 2 TA-19)
         )
         .accounts({
           owner: owner.publicKey,
@@ -1804,9 +2357,19 @@ describe("sigil", () => {
           null,
           null,
           null,
-          null, // hasProtocolCaps
-          null, // protocolCaps
-          null, // destinationMode
+          null,
+          null,
+          null,
+          null, // operating_hours (TA-05 Phase 3)
+          null, // stable_balance_floor (TA-12 Phase 5 — pass-through)
+          null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
+          null, // cosign_required (G6 audit 2026-05-18 — pass-through, default off)
+          null,
+          null, // cosign_session_pubkey (D-5: pass-through)
+          PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
+          await fetchAndComputeQueueDigest(program, feePolicyPda, feeVaultPda, {
+            developerFeeRate: 30,
+          }), // newPolicyPreviewDigest (Phase 2 TA-19)
         )
         .accounts({
           owner: owner.publicKey,
@@ -1851,9 +2414,22 @@ describe("sigil", () => {
             null,
             null,
             null,
-            null, // hasProtocolCaps
-            null, // protocolCaps
-            null, // destinationMode
+            null,
+            null,
+            null,
+            null, // operating_hours (TA-05 Phase 3)
+            null, // stable_balance_floor (TA-12 Phase 5 — pass-through)
+            null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
+            null, // cosign_required (G6 audit 2026-05-18 — pass-through, default off)
+            null,
+            null, // cosign_session_pubkey (D-5: pass-through)
+            PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
+            await fetchAndComputeQueueDigest(
+              program,
+              feePolicyPda,
+              feeVaultPda,
+              {},
+            ), // newPolicyPreviewDigest (Phase 2 TA-19)
           )
           .accounts({
             owner: owner.publicKey,
@@ -1865,7 +2441,7 @@ describe("sigil", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err, { name: "DeveloperFeeTooHigh", code: 6015 });
+        expectSigilError(err, { name: "DeveloperFeeTooHigh" });
       }
     });
 
@@ -1886,9 +2462,19 @@ describe("sigil", () => {
           null,
           null,
           null,
-          null, // hasProtocolCaps
-          null, // protocolCaps
-          null, // destinationMode
+          null,
+          null,
+          null,
+          null, // operating_hours (TA-05 Phase 3)
+          null, // stable_balance_floor (TA-12 Phase 5 — pass-through)
+          null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
+          null, // cosign_required (G6 audit 2026-05-18 — pass-through, default off)
+          null,
+          null, // cosign_session_pubkey (D-5: pass-through)
+          PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
+          await fetchAndComputeQueueDigest(program, feePolicyPda, feeVaultPda, {
+            developerFeeRate: 0,
+          }), // newPolicyPreviewDigest (Phase 2 TA-19)
         )
         .accounts({
           owner: owner.publicKey,
@@ -1912,19 +2498,20 @@ describe("sigil", () => {
         } as any)
         .rpc();
 
-      // Register agent on fee vault
+      // Register agent on fee vault.
+      // F-Q6: OPERATOR grant on this single-key vault routes through the
+      // timelock queue path (helper); the agent then spends below.
       [feeOverlay] = PublicKey.findProgramAddressSync(
         [Buffer.from("agent_spend"), feeVaultPda.toBuffer(), Buffer.from([0])],
         program.programId,
       );
-      await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: owner.publicKey,
-          vault: feeVaultPda,
-          agentSpendOverlay: feeOverlay,
-        } as any)
-        .rpc();
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: feeVaultPda,
+        agent: agent.publicKey,
+      });
 
       // Deposit to the fee vault
       feeVaultUsdcAta = anchor.utils.token.associatedAddress({
@@ -1964,6 +2551,16 @@ describe("sigil", () => {
           new BN(10_000_000),
           jupiterProgramId,
           await pv(feePolicyPda),
+          new BN(0), // AC-10 expectedNonce
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: feeVaultPda,
+              agent: agent.publicKey,
+              tokenMint: usdcMint,
+              amount: new BN(10_000_000),
+              targetProtocol: jupiterProgramId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -1981,6 +2578,11 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        // F-Q1a completeness: append the agent fee-payer (referenced writable by
+        // the mock-defi no-op ix). Mirrors seal().
+        .remainingAccounts([
+          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -2001,7 +2603,13 @@ describe("sigil", () => {
         })
         .instruction();
 
-      const feeResult = sendVersionedTx(svm, [validateIx, finalizeIx], agent);
+      // F-Q2: counted DeFi ix between validate and finalize (zero spend).
+      const defiIx = buildMockDefiNoopIx(agent.publicKey);
+      const feeResult = sendVersionedTx(
+        svm,
+        [validateIx, defiIx, finalizeIx],
+        agent,
+      );
       recordCU("validate+finalize:with_fees", feeResult);
 
       // Verify vault stats updated
@@ -2028,9 +2636,19 @@ describe("sigil", () => {
           null,
           null,
           null,
-          null, // hasProtocolCaps
-          null, // protocolCaps
-          null, // destinationMode
+          null,
+          null,
+          null,
+          null, // operating_hours (TA-05 Phase 3)
+          null, // stable_balance_floor (TA-12 Phase 5 — pass-through)
+          null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
+          null, // cosign_required (G6 audit 2026-05-18 — pass-through, default off)
+          null,
+          null, // cosign_session_pubkey (D-5: pass-through)
+          PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
+          await fetchAndComputeQueueDigest(program, feePolicyPda, feeVaultPda, {
+            developerFeeRate: 500,
+          }), // newPolicyPreviewDigest (Phase 2 TA-19)
         )
         .accounts({
           owner: owner.publicKey,
@@ -2088,6 +2706,16 @@ describe("sigil", () => {
           new BN(10_000_000),
           jupiterProgramId,
           await pv(feePolicyPda),
+          new BN(0), // AC-10 expectedNonce
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: feeVaultPda,
+              agent: agent.publicKey,
+              tokenMint: usdcMint,
+              amount: new BN(10_000_000),
+              targetProtocol: jupiterProgramId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -2105,6 +2733,11 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        // F-Q1a completeness: append the agent fee-payer (referenced writable by
+        // the mock-defi no-op ix). Mirrors seal().
+        .remainingAccounts([
+          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -2125,16 +2758,22 @@ describe("sigil", () => {
         })
         .instruction();
 
-      sendVersionedTx(svm, [validateIx, finalizeIx], agent);
+      // F-Q2: counted DeFi ix between validate and finalize (zero spend).
+      const defiIx = buildMockDefiNoopIx(agent.publicKey);
+      sendVersionedTx(svm, [validateIx, defiIx, finalizeIx], agent);
 
       // developer fee = 10_000_000 * 500 / 1_000_000 = 5000
       const vault = await program.account.agentVault.fetch(feeVaultPda);
       expect(vault.totalFeesCollected.toNumber()).to.equal(5000);
     });
 
-    it("zero-DeFi finalize always tracks developer fees in total_fees_collected", async () => {
+    it("zero-spend finalize always tracks developer fees in total_fees_collected", async () => {
       // After removing the success param, fees are always tracked in accounting
-      // even when no DeFi instruction ran (fee drain fix).
+      // even when the DeFi leg moved nothing (fee drain fix). F-Q2: a spending
+      // sandwich must carry EXACTLY ONE counted DeFi ix, so the bundle is
+      // [validate, mock_defi(noop), finalize]; the no-op moves zero tokens so
+      // actual_spend = 0 and the fee-only accounting path is exercised — exactly
+      // the case this test pins.
       [feeSessionPda] = PublicKey.findProgramAddressSync(
         [
           Buffer.from("session"),
@@ -2148,13 +2787,23 @@ describe("sigil", () => {
       const vaultBefore = await program.account.agentVault.fetch(feeVaultPda);
       const feesBefore = vaultBefore.totalFeesCollected.toNumber();
 
-      // Compose validate+finalize atomically (no DeFi instruction between them)
+      // Compose validate + mock_defi(noop) + finalize atomically
       const validateIx = await program.methods
         .validateAndAuthorize(
           usdcMint,
           new BN(10_000_000),
           jupiterProgramId,
           await pv(feePolicyPda),
+          new BN(0), // AC-10 expectedNonce
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: feeVaultPda,
+              agent: agent.publicKey,
+              tokenMint: usdcMint,
+              amount: new BN(10_000_000),
+              targetProtocol: jupiterProgramId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -2172,6 +2821,11 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        // F-Q1a completeness: append the agent fee-payer (referenced writable by
+        // the mock-defi no-op ix). Mirrors seal().
+        .remainingAccounts([
+          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -2192,7 +2846,9 @@ describe("sigil", () => {
         })
         .instruction();
 
-      sendVersionedTx(svm, [validateIx, finalizeIx], agent);
+      // F-Q2: counted DeFi ix between validate and finalize (zero spend).
+      const defiIx = buildMockDefiNoopIx(agent.publicKey);
+      sendVersionedTx(svm, [validateIx, defiIx, finalizeIx], agent);
 
       const vault = await program.account.agentVault.fetch(feeVaultPda);
       // Developer fees ALWAYS tracked now (fee drain fix — accounting matches reality)
@@ -2227,13 +2883,33 @@ describe("sigil", () => {
           maxFeeVaultId,
           new BN(1000),
           new BN(1000),
-          0,
-          [],
+          1,
+          [jupiterProgramId],
           500,
-          100, // maxSlippageBps
-          new BN(1800), // MIN_TIMELOCK_DURATION
+          100,
+          new BN(1800),
           [],
-          [], // protocolCaps
+          [],
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(1000),
+            maxTransactionSizeUsd: new BN(1000),
+            maxSlippageBps: 100,
+            developerFeeRate: 500, // PEN-CROSS-6: must match the ix arg.
+            protocolMode: 1,
+            protocols: [jupiterProgramId],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accounts({
           owner: owner.publicKey,
@@ -2308,13 +2984,32 @@ describe("sigil", () => {
           lifecycleVaultId,
           new BN(500_000_000),
           new BN(100_000_000),
-          1, // protocolMode: allowlist
+          1,
           [jupiterProgramId],
           0,
-          100, // maxSlippageBps
-          new BN(1800), // MIN_TIMELOCK_DURATION
+          100,
+          new BN(1800),
           [],
-          [], // protocolCaps
+          [],
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(500_000_000),
+            maxTransactionSizeUsd: new BN(100_000_000),
+            maxSlippageBps: 100,
+            protocolMode: 1,
+            protocols: [jupiterProgramId],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accounts({
           owner: owner.publicKey,
@@ -2327,15 +3022,16 @@ describe("sigil", () => {
         } as any)
         .rpc();
 
-      // Register agent
-      await program.methods
-        .registerAgent(lifecycleAgent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: owner.publicKey,
-          vault: lifecycleVaultPda,
-          agentSpendOverlay: lifecycleOverlay,
-        } as any)
-        .rpc();
+      // Register agent.
+      // F-Q6: OPERATOR grant on this single-key vault routes through the
+      // timelock queue path (helper); lifecycleAgent spends below.
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: lifecycleVaultPda,
+        agent: lifecycleAgent.publicKey,
+      });
 
       // Deposit USDC to vault
       lifecycleVaultUsdcAta = anchor.utils.token.associatedAddress({
@@ -2365,6 +3061,16 @@ describe("sigil", () => {
           new BN(10_000_000),
           jupiterProgramId,
           await pv(lifecyclePolicyPda),
+          new BN(0), // AC-10 expectedNonce
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: lifecycleVaultPda,
+              agent: lifecycleAgent.publicKey,
+              tokenMint: usdcMint,
+              amount: new BN(10_000_000),
+              targetProtocol: jupiterProgramId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: lifecycleAgent.publicKey,
@@ -2382,6 +3088,15 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        // F-Q1a completeness: append the agent fee-payer (referenced writable by
+        // the mock-defi no-op ix). Mirrors seal().
+        .remainingAccounts([
+          {
+            pubkey: lifecycleAgent.publicKey,
+            isSigner: false,
+            isWritable: false,
+          },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -2402,7 +3117,9 @@ describe("sigil", () => {
         })
         .instruction();
 
-      sendVersionedTx(svm, [validateIx, finalizeIx], lifecycleAgent);
+      // F-Q2: counted DeFi ix between validate and finalize (zero spend).
+      const defiIx = buildMockDefiNoopIx(lifecycleAgent.publicKey);
+      sendVersionedTx(svm, [validateIx, defiIx, finalizeIx], lifecycleAgent);
 
       // Session should be closed after atomic validate+finalize. Verify
       // by raw LiteSVM account lookup (see first site for context).
@@ -2421,6 +3138,16 @@ describe("sigil", () => {
           new BN(5_000_000),
           jupiterProgramId,
           await pv(lifecyclePolicyPda),
+          new BN(0), // AC-10 expectedNonce
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: lifecycleVaultPda,
+              agent: lifecycleAgent.publicKey,
+              tokenMint: usdcMint,
+              amount: new BN(5_000_000),
+              targetProtocol: jupiterProgramId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: lifecycleAgent.publicKey,
@@ -2438,6 +3165,15 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        // F-Q1a completeness: append the agent fee-payer (referenced writable by
+        // the mock-defi no-op ix). Mirrors seal().
+        .remainingAccounts([
+          {
+            pubkey: lifecycleAgent.publicKey,
+            isSigner: false,
+            isWritable: false,
+          },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -2459,10 +3195,13 @@ describe("sigil", () => {
         .instruction();
 
       try {
-        sendVersionedTx(svm, [validateIx, finalizeIx], lifecycleAgent);
+        // F-Q2: counted DeFi ix so validate passes and finalize reaches the
+        // InvalidSession check (wrong rent recipient). Zero spend.
+        const defiIx = buildMockDefiNoopIx(lifecycleAgent.publicKey);
+        sendVersionedTx(svm, [validateIx, defiIx, finalizeIx], lifecycleAgent);
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err, { name: "InvalidSession", code: 6008 });
+        expectSigilError(err, { name: "InvalidSession" });
       }
     });
 
@@ -2475,6 +3214,16 @@ describe("sigil", () => {
             new BN(5_000_000),
             jupiterProgramId,
             await pv(lifecyclePolicyPda),
+            new BN(0), // AC-10 expectedNonce
+            digestAsArgs(
+              buildExpectedIntentDigest({
+                vault: lifecycleVaultPda,
+                agent: lifecycleAgent.publicKey,
+                tokenMint: usdcMint,
+                amount: new BN(5_000_000),
+                targetProtocol: jupiterProgramId,
+              }),
+            ),
           )
           .accountsPartial({
             agent: lifecycleAgent.publicKey,
@@ -2492,6 +3241,15 @@ describe("sigil", () => {
             systemProgram: SystemProgram.programId,
             instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           })
+          // F-Q1a completeness: append the agent fee-payer (referenced writable
+          // by the mock-defi no-op ix). Mirrors seal().
+          .remainingAccounts([
+            {
+              pubkey: lifecycleAgent.publicKey,
+              isSigner: false,
+              isWritable: false,
+            },
+          ])
           .instruction();
 
         const finalizeIx = await program.methods
@@ -2512,7 +3270,9 @@ describe("sigil", () => {
           })
           .instruction();
 
-        sendVersionedTx(svm, [validateIx, finalizeIx], lifecycleAgent);
+        // F-Q2: counted DeFi ix between validate and finalize (zero spend).
+        const defiIx = buildMockDefiNoopIx(lifecycleAgent.publicKey);
+        sendVersionedTx(svm, [validateIx, defiIx, finalizeIx], lifecycleAgent);
       }
 
       const vault = await program.account.agentVault.fetch(lifecycleVaultPda);
@@ -2553,13 +3313,32 @@ describe("sigil", () => {
           vid,
           new BN(1000),
           new BN(1000),
+          1,
+          [jupiterProgramId],
           0,
+          100,
+          new BN(1800),
           [],
-          0,
-          100, // maxSlippageBps
-          new BN(1800), // MIN_TIMELOCK_DURATION
           [],
-          [], // protocolCaps
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(1000),
+            maxTransactionSizeUsd: new BN(1000),
+            maxSlippageBps: 100,
+            protocolMode: 1,
+            protocols: [jupiterProgramId],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accounts({
           owner: owner.publicKey,
@@ -2572,17 +3351,24 @@ describe("sigil", () => {
         } as any)
         .rpc();
       try {
+        // F-Q6: use VIEWER_CAPABILITY so the OPERATOR-grant timelock check
+        // (6107) does not pre-empt the AgentIsOwner check this test targets.
+        // owner == agent is rejected regardless of capability.
         await program.methods
-          .registerAgent(owner.publicKey, FULL_CAPABILITY, new BN(0)) // owner = agent → reject
+          .registerAgent(owner.publicKey, VIEWER_CAPABILITY, new BN(0)) // owner = agent → reject
           .accounts({
             owner: owner.publicKey,
             vault: v,
+            policy: PublicKey.findProgramAddressSync(
+              [Buffer.from("policy"), v.toBuffer()],
+              program.programId,
+            )[0],
             agentSpendOverlay: vOverlay2,
           } as any)
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err, { name: "AgentIsOwner", code: 6019 });
+        expectSigilError(err, { name: "AgentIsOwner" });
       }
     });
 
@@ -2622,6 +3408,10 @@ describe("sigil", () => {
           .accounts({
             owner: owner.publicKey,
             vault: rv,
+            policy: PublicKey.findProgramAddressSync(
+              [Buffer.from("policy"), rv.toBuffer()],
+              program.programId,
+            )[0],
             agentSpendOverlay: rvOverlay,
           } as any)
           .rpc();
@@ -2629,8 +3419,15 @@ describe("sigil", () => {
         // ignore if already frozen
       }
 
+      // Phase 8 Batch 5: advance past 5-min reactivate cooldown (ErrReactivateCooldownActive 6097)
+      advanceTime(svm, 301);
+
+      // F-Q6: reactivate with VIEWER (single-key vault cannot grant OPERATOR
+      // instantly). This test asserts the OLD/revoked agent is rejected on
+      // validate; the reactivation agent's capability is irrelevant, so VIEWER
+      // is the minimal correct fix (skips the OPERATOR tier gate + cosigner).
       await program.methods
-        .reactivateVault(newAgent.publicKey, FULL_CAPABILITY)
+        .reactivateVault(newAgent.publicKey, VIEWER_CAPABILITY)
         .accounts({ owner: owner.publicKey, vault: rv } as any)
         .rpc();
 
@@ -2652,6 +3449,16 @@ describe("sigil", () => {
             new BN(1_000_000),
             jupiterProgramId,
             await pv(),
+            new BN(0), // AC-10 expectedNonce
+            digestAsArgs(
+              buildExpectedIntentDigest({
+                vault: rv,
+                agent: agent.publicKey,
+                tokenMint: usdcMint,
+                amount: new BN(1_000_000),
+                targetProtocol: jupiterProgramId,
+              }),
+            ),
           )
           .accounts({
             agent: agent.publicKey,
@@ -2678,7 +3485,7 @@ describe("sigil", () => {
         // the handler body. Anchor emits the `@ X` custom-override code
         // (UnauthorizedAgent 6001), NOT the default `ConstraintRaw 2003`
         // tag — the override syntax replaces the default.
-        expectSigilError(err, { name: "UnauthorizedAgent", code: 6001 });
+        expectSigilError(err, { name: "UnauthorizedAgent" });
       }
     });
   });
@@ -2715,13 +3522,32 @@ describe("sigil", () => {
           frozenVaultId,
           new BN(1000),
           new BN(1000),
+          1,
+          [jupiterProgramId],
           0,
+          100,
+          new BN(1800),
           [],
-          0,
-          100, // maxSlippageBps
-          new BN(1800), // MIN_TIMELOCK_DURATION
           [],
-          [], // protocolCaps
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(1000),
+            maxTransactionSizeUsd: new BN(1000),
+            maxSlippageBps: 100,
+            protocolMode: 1,
+            protocols: [jupiterProgramId],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accounts({
           owner: owner.publicKey,
@@ -2734,12 +3560,19 @@ describe("sigil", () => {
         } as any)
         .rpc();
 
-      // Register agent then freeze by revoking
+      // Register agent then freeze by revoking.
+      // F-Q6: setup-only agent (revoked immediately, never spends) — VIEWER
+      // avoids the OPERATOR-grant timelock. The deposit-to-frozen-vault
+      // assertion is independent of agent capability.
       await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
+        .registerAgent(agent.publicKey, VIEWER_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: fv,
+          policy: PublicKey.findProgramAddressSync(
+            [Buffer.from("policy"), fv.toBuffer()],
+            program.programId,
+          )[0],
           agentSpendOverlay: fvOverlay,
         } as any)
         .rpc();
@@ -2749,6 +3582,10 @@ describe("sigil", () => {
         .accounts({
           owner: owner.publicKey,
           vault: fv,
+          policy: PublicKey.findProgramAddressSync(
+            [Buffer.from("policy"), fv.toBuffer()],
+            program.programId,
+          )[0],
           agentSpendOverlay: fvOverlay,
         } as any)
         .rpc();
@@ -2805,13 +3642,32 @@ describe("sigil", () => {
           closedVaultId,
           new BN(1000),
           new BN(1000),
+          1,
+          [jupiterProgramId],
           0,
+          100,
+          new BN(1800),
           [],
-          0,
-          100, // maxSlippageBps
-          new BN(1800), // MIN_TIMELOCK_DURATION
           [],
-          [], // protocolCaps
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(1000),
+            maxTransactionSizeUsd: new BN(1000),
+            maxSlippageBps: 100,
+            protocolMode: 1,
+            protocols: [jupiterProgramId],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accounts({
           owner: owner.publicKey,
@@ -2907,10 +3763,29 @@ describe("sigil", () => {
           1,
           [jupiterProgramId],
           0,
-          100, // maxSlippageBps
-          new BN(1800), // MIN_TIMELOCK_DURATION
+          100,
+          new BN(1800),
           [],
-          [], // protocolCaps
+          [],
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(1000),
+            maxTransactionSizeUsd: new BN(1000),
+            maxSlippageBps: 100,
+            protocolMode: 1,
+            protocols: [jupiterProgramId],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accounts({
           owner: owner.publicKey,
@@ -2923,12 +3798,20 @@ describe("sigil", () => {
         } as any)
         .rpc();
 
-      // Register agent, then close
+      // Register agent, then close.
+      // F-Q6: setup-only agent — VIEWER avoids the OPERATOR-grant timelock.
+      // The validate-on-closed-vault path fails at account resolution
+      // (AccountNotInitialized) before any capability check, so the agent's
+      // capability is irrelevant to the assertion.
       await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
+        .registerAgent(agent.publicKey, VIEWER_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: cv,
+          policy: PublicKey.findProgramAddressSync(
+            [Buffer.from("policy"), cv.toBuffer()],
+            program.programId,
+          )[0],
           agentSpendOverlay: cvOverlay,
         } as any)
         .rpc();
@@ -2952,6 +3835,16 @@ describe("sigil", () => {
             new BN(1_000_000),
             jupiterProgramId,
             await pv(),
+            new BN(0), // AC-10 expectedNonce
+            digestAsArgs(
+              buildExpectedIntentDigest({
+                vault: cv,
+                agent: agent.publicKey,
+                tokenMint: usdcMint,
+                amount: new BN(1_000_000),
+                targetProtocol: jupiterProgramId,
+              }),
+            ),
           )
           .accounts({
             agent: agent.publicKey,
@@ -3024,15 +3917,34 @@ describe("sigil", () => {
       await program.methods
         .initializeVault(
           ringVaultId,
-          new BN(999_000_000_000), // 999k USDC daily cap
-          new BN(100_000_000), // 100 USDC max tx
-          1, // protocolMode: allowlist
+          new BN(999_000_000_000),
+          new BN(100_000_000),
+          1,
           [jupiterProgramId],
           0,
-          100, // maxSlippageBps
-          new BN(1800), // MIN_TIMELOCK_DURATION
+          100,
+          new BN(1800),
           [],
-          [], // protocolCaps
+          [],
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(999_000_000_000),
+            maxTransactionSizeUsd: new BN(100_000_000),
+            maxSlippageBps: 100,
+            protocolMode: 1,
+            protocols: [jupiterProgramId],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accounts({
           owner: owner.publicKey,
@@ -3044,14 +3956,15 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
         } as any)
         .rpc();
-      await program.methods
-        .registerAgent(ringAgent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: owner.publicKey,
-          vault: ringVaultPda,
-          agentSpendOverlay: ringOverlay,
-        } as any)
-        .rpc();
+      // F-Q6: OPERATOR grant on this single-key vault routes through the
+      // timelock queue path (helper); ringAgent runs 51 spend cycles below.
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: ringVaultPda,
+        agent: ringAgent.publicKey,
+      });
 
       ringVaultUsdcAta = anchor.utils.token.associatedAddress({
         mint: usdcMint,
@@ -3093,6 +4006,16 @@ describe("sigil", () => {
             new BN(1_000_000), // 1 USDC each
             jupiterProgramId,
             await pv(ringPolicyPda),
+            new BN(0), // AC-10 expectedNonce
+            digestAsArgs(
+              buildExpectedIntentDigest({
+                vault: ringVaultPda,
+                agent: ringAgent.publicKey,
+                tokenMint: usdcMint,
+                amount: new BN(1_000_000),
+                targetProtocol: jupiterProgramId,
+              }),
+            ),
           )
           .accountsPartial({
             agent: ringAgent.publicKey,
@@ -3110,6 +4033,11 @@ describe("sigil", () => {
             systemProgram: SystemProgram.programId,
             instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           })
+          // F-Q1a completeness: append the agent fee-payer (referenced writable
+          // by the mock-defi no-op ix). Mirrors seal().
+          .remainingAccounts([
+            { pubkey: ringAgent.publicKey, isSigner: false, isWritable: false },
+          ])
           .instruction();
 
         const finalizeIx = await program.methods
@@ -3130,11 +4058,14 @@ describe("sigil", () => {
           })
           .instruction();
 
-        sendVersionedTx(svm, [validateIx, finalizeIx], ringAgent);
+        // F-Q2: counted DeFi ix between validate and finalize (zero spend).
+        const defiIx = buildMockDefiNoopIx(ringAgent.publicKey);
+        sendVersionedTx(svm, [validateIx, defiIx, finalizeIx], ringAgent);
       }
 
-      // Outcome-based model: no DeFi instruction → actual_spend = 0 per TX.
-      // Tracker buckets remain empty (no recorded spend), but total_transactions increments.
+      // Outcome-based model: the no-op DeFi ix moves nothing → actual_spend = 0
+      // per TX. Tracker buckets remain empty (no recorded spend), but
+      // total_transactions increments.
       const vault = await program.account.agentVault.fetch(ringVaultPda);
       expect(vault.totalTransactions.toNumber()).to.equal(51);
     });
@@ -3186,13 +4117,32 @@ describe("sigil", () => {
           feeEdgeVaultId,
           new BN(999_000_000),
           new BN(100_000_000),
-          1, // protocolMode: allowlist
+          1,
           [jupiterProgramId],
-          0, // developer_fee_rate = 0
-          100, // maxSlippageBps
-          new BN(1800), // MIN_TIMELOCK_DURATION
+          0,
+          100,
+          new BN(1800),
           [],
-          [], // protocolCaps
+          [],
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(999_000_000),
+            maxTransactionSizeUsd: new BN(100_000_000),
+            maxSlippageBps: 100,
+            protocolMode: 1,
+            protocols: [jupiterProgramId],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accounts({
           owner: owner.publicKey,
@@ -3204,14 +4154,15 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
         } as any)
         .rpc();
-      await program.methods
-        .registerAgent(feeEdgeAgent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: owner.publicKey,
-          vault: feeEdgeVaultPda,
-          agentSpendOverlay: feeEdgeOverlay,
-        } as any)
-        .rpc();
+      // F-Q6: OPERATOR grant on this single-key vault routes through the
+      // timelock queue path (helper); feeEdgeAgent spends below.
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: feeEdgeVaultPda,
+        agent: feeEdgeAgent.publicKey,
+      });
 
       feeEdgeVaultUsdcAta = anchor.utils.token.associatedAddress({
         mint: usdcMint,
@@ -3255,6 +4206,16 @@ describe("sigil", () => {
           new BN(1), // 1 lamport
           jupiterProgramId,
           await pv(feeEdgePolicyPda),
+          new BN(0), // AC-10 expectedNonce
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: feeEdgeVaultPda,
+              agent: feeEdgeAgent.publicKey,
+              tokenMint: usdcMint,
+              amount: new BN(1),
+              targetProtocol: jupiterProgramId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: feeEdgeAgent.publicKey,
@@ -3272,6 +4233,15 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        // F-Q1a completeness: append the agent fee-payer (referenced writable by
+        // the mock-defi no-op ix). Mirrors seal().
+        .remainingAccounts([
+          {
+            pubkey: feeEdgeAgent.publicKey,
+            isSigner: false,
+            isWritable: false,
+          },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -3292,7 +4262,10 @@ describe("sigil", () => {
         })
         .instruction();
 
-      sendVersionedTx(svm, [validateIx, finalizeIx], feeEdgeAgent);
+      // F-Q2: counted DeFi ix between validate and finalize (zero spend; the
+      // protocol fee is collected at validate, independent of the DeFi leg).
+      const defiIx = buildMockDefiNoopIx(feeEdgeAgent.publicKey);
+      sendVersionedTx(svm, [validateIx, defiIx, finalizeIx], feeEdgeAgent);
 
       // Vault lost 1 unit (protocol fee), treasury gained 1 unit
       const vaultBalAfter = getTokenBalance(svm, feeEdgeVaultUsdcAta);
@@ -3320,6 +4293,16 @@ describe("sigil", () => {
           new BN(4_999),
           jupiterProgramId,
           await pv(feeEdgePolicyPda),
+          new BN(0), // AC-10 expectedNonce
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: feeEdgeVaultPda,
+              agent: feeEdgeAgent.publicKey,
+              tokenMint: usdcMint,
+              amount: new BN(4_999),
+              targetProtocol: jupiterProgramId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: feeEdgeAgent.publicKey,
@@ -3337,6 +4320,15 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        // F-Q1a completeness: append the agent fee-payer (referenced writable by
+        // the mock-defi no-op ix). Mirrors seal().
+        .remainingAccounts([
+          {
+            pubkey: feeEdgeAgent.publicKey,
+            isSigner: false,
+            isWritable: false,
+          },
+        ])
         .instruction();
 
       const finalizeIx1 = await program.methods
@@ -3357,7 +4349,9 @@ describe("sigil", () => {
         })
         .instruction();
 
-      sendVersionedTx(svm, [validateIx1, finalizeIx1], feeEdgeAgent);
+      // F-Q2: counted DeFi ix between validate and finalize (zero spend).
+      const defiIx1 = buildMockDefiNoopIx(feeEdgeAgent.publicKey);
+      sendVersionedTx(svm, [validateIx1, defiIx1, finalizeIx1], feeEdgeAgent);
 
       // Test amount = 5000: ceil(5000 * 200 / 1_000_000) = 1 (exact division, same result)
       // Capture vault balance BEFORE validate (fee collected during validate)
@@ -3369,6 +4363,16 @@ describe("sigil", () => {
           new BN(5_000),
           jupiterProgramId,
           await pv(feeEdgePolicyPda),
+          new BN(0), // AC-10 expectedNonce
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: feeEdgeVaultPda,
+              agent: feeEdgeAgent.publicKey,
+              tokenMint: usdcMint,
+              amount: new BN(5_000),
+              targetProtocol: jupiterProgramId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: feeEdgeAgent.publicKey,
@@ -3386,6 +4390,15 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        // F-Q1a completeness: append the agent fee-payer (referenced writable by
+        // the mock-defi no-op ix). Mirrors seal().
+        .remainingAccounts([
+          {
+            pubkey: feeEdgeAgent.publicKey,
+            isSigner: false,
+            isWritable: false,
+          },
+        ])
         .instruction();
 
       const finalizeIx2 = await program.methods
@@ -3406,7 +4419,9 @@ describe("sigil", () => {
         })
         .instruction();
 
-      sendVersionedTx(svm, [validateIx2, finalizeIx2], feeEdgeAgent);
+      // F-Q2: counted DeFi ix between validate and finalize (zero spend).
+      const defiIx2 = buildMockDefiNoopIx(feeEdgeAgent.publicKey);
+      sendVersionedTx(svm, [validateIx2, defiIx2, finalizeIx2], feeEdgeAgent);
 
       // Vault balance should decrease by exactly 1 (protocol fee deducted during validate)
       const vaultBalAfter = getTokenBalance(svm, feeEdgeVaultUsdcAta);
@@ -3460,13 +4475,32 @@ describe("sigil", () => {
           tlVaultId,
           new BN(500_000_000),
           new BN(100_000_000),
-          1, // protocolMode: allowlist
+          1,
           [jupiterProgramId],
           0,
-          100, // maxSlippageBps
-          new BN(1800), // MIN_TIMELOCK_DURATION (30 minutes)
+          100,
+          new BN(1800),
           [],
-          [], // protocolCaps
+          [],
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(500_000_000),
+            maxTransactionSizeUsd: new BN(100_000_000),
+            maxSlippageBps: 100,
+            protocolMode: 1,
+            protocols: [jupiterProgramId],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accounts({
           owner: owner.publicKey,
@@ -3478,11 +4512,19 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
         } as any)
         .rpc();
+      // F-Q6: tlAgent exists only to keep the vault non-Frozen during the
+      // policy queue/apply tests below; it never spends and is revoked at the
+      // end of the block. Register as VIEWER to avoid the OPERATOR-grant
+      // timelock requirement.
       await program.methods
-        .registerAgent(tlAgent.publicKey, FULL_CAPABILITY, new BN(0))
+        .registerAgent(tlAgent.publicKey, VIEWER_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: tlVaultPda,
+          policy: PublicKey.findProgramAddressSync(
+            [Buffer.from("policy"), tlVaultPda.toBuffer()],
+            program.programId,
+          )[0],
           agentSpendOverlay: tlOverlay,
         } as any)
         .rpc();
@@ -3491,7 +4533,7 @@ describe("sigil", () => {
     it("queue policy update succeeds when timelock > 0", async () => {
       await program.methods
         .queuePolicyUpdate(
-          new BN(200_000_000), // new daily cap
+          new BN(200_000_000),
           null,
           null,
           null,
@@ -3500,9 +4542,19 @@ describe("sigil", () => {
           null,
           null,
           null,
-          null, // hasProtocolCaps
-          null, // protocolCaps
-          null, // destinationMode
+          null,
+          null,
+          null,
+          null, // operating_hours (TA-05 Phase 3)
+          null, // stable_balance_floor (TA-12 Phase 5 — pass-through)
+          null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
+          null, // cosign_required (G6 audit 2026-05-18 — pass-through, default off)
+          null,
+          null, // cosign_session_pubkey (D-5: pass-through)
+          PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
+          await fetchAndComputeQueueDigest(program, tlPolicyPda, tlVaultPda, {
+            dailySpendingCapUsd: new BN(200_000_000),
+          }), // newPolicyPreviewDigest (Phase 2 TA-19)
         )
         .accounts({
           owner: owner.publicKey,
@@ -3516,7 +4568,7 @@ describe("sigil", () => {
       const pending =
         await program.account.pendingPolicyUpdate.fetch(tlPendingPda);
       expect(pending.vault.toString()).to.equal(tlVaultPda.toString());
-      expect(pending.dailySpendingCapUsd.toNumber()).to.equal(200_000_000);
+      expect(pending.dailySpendingCapUsd!.toNumber()).to.equal(200_000_000);
       expect(pending.executesAt.toNumber()).to.be.greaterThan(
         pending.queuedAt.toNumber(),
       );
@@ -3536,7 +4588,7 @@ describe("sigil", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err, { name: "TimelockNotExpired", code: 6022 });
+        expectSigilError(err, { name: "TimelockNotExpired" });
       }
     });
 
@@ -3567,10 +4619,12 @@ describe("sigil", () => {
     });
 
     it("cancel pending policy succeeds and returns rent", async () => {
-      // Queue another update
+      // Queue another update. Use a LOWER daily cap (100_000_000) so the
+      // TA-09 (Phase 3) elevated-mutation guard does not fire — this test
+      // exercises the cancel-rent-return path, not the cosign workflow.
       await program.methods
         .queuePolicyUpdate(
-          new BN(300_000_000),
+          new BN(100_000_000),
           null,
           null,
           null,
@@ -3579,9 +4633,19 @@ describe("sigil", () => {
           null,
           null,
           null,
-          null, // hasProtocolCaps
-          null, // protocolCaps
-          null, // destinationMode
+          null,
+          null,
+          null,
+          null, // operating_hours (TA-05 Phase 3)
+          null, // stable_balance_floor (TA-12 Phase 5 — pass-through)
+          null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
+          null, // cosign_required (G6 audit 2026-05-18 — pass-through, default off)
+          null,
+          null, // cosign_session_pubkey (D-5: pass-through)
+          PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
+          await fetchAndComputeQueueDigest(program, tlPolicyPda, tlVaultPda, {
+            dailySpendingCapUsd: new BN(100_000_000),
+          }), // newPolicyPreviewDigest (Phase 2 TA-19)
         )
         .accounts({
           owner: owner.publicKey,
@@ -3614,10 +4678,12 @@ describe("sigil", () => {
     });
 
     it("only one pending update at a time (init fails if PDA exists)", async () => {
-      // Queue an update
+      // Queue an update. LOWER the daily cap so TA-09 (Phase 3) elevated-
+      // mutation guard does not fire — this test exercises the
+      // single-pending-PDA invariant, not the cosign workflow.
       await program.methods
         .queuePolicyUpdate(
-          new BN(400_000_000),
+          new BN(150_000_000),
           null,
           null,
           null,
@@ -3626,9 +4692,19 @@ describe("sigil", () => {
           null,
           null,
           null,
-          null, // hasProtocolCaps
-          null, // protocolCaps
-          null, // destinationMode
+          null,
+          null,
+          null,
+          null, // operating_hours (TA-05 Phase 3)
+          null, // stable_balance_floor (TA-12 Phase 5 — pass-through)
+          null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
+          null, // cosign_required (G6 audit 2026-05-18 — pass-through, default off)
+          null,
+          null, // cosign_session_pubkey (D-5: pass-through)
+          PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
+          await fetchAndComputeQueueDigest(program, tlPolicyPda, tlVaultPda, {
+            dailySpendingCapUsd: new BN(150_000_000),
+          }), // newPolicyPreviewDigest (Phase 2 TA-19)
         )
         .accounts({
           owner: owner.publicKey,
@@ -3652,9 +4728,19 @@ describe("sigil", () => {
             null,
             null,
             null,
-            null, // hasProtocolCaps
-            null, // protocolCaps
-            null, // destinationMode
+            null,
+            null,
+            null,
+            null, // operating_hours (TA-05 Phase 3)
+            null, // stable_balance_floor (TA-12 Phase 5 — pass-through)
+            null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
+            null, // cosign_required (G6 audit 2026-05-18 — pass-through, default off)
+            null,
+            null, // cosign_session_pubkey (D-5: pass-through)
+            PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
+            await fetchAndComputeQueueDigest(program, tlPolicyPda, tlVaultPda, {
+              dailySpendingCapUsd: new BN(500_000_000),
+            }), // newPolicyPreviewDigest (Phase 2 TA-19)
           )
           .accounts({
             owner: owner.publicKey,
@@ -3711,13 +4797,32 @@ describe("sigil", () => {
             noTlVaultId,
             new BN(1000),
             new BN(1000),
+            1,
+            [jupiterProgramId],
             0,
+            100,
+            new BN(0),
             [],
-            0,
-            100, // maxSlippageBps
-            new BN(0), // below MIN_TIMELOCK_DURATION — should fail
             [],
-            [], // protocolCaps
+            false, // observeOnly (Phase 2 TA-19)
+            0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+            false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+            5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+            new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+            new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+            false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+            initVaultPreviewDigest({
+              dailySpendingCapUsd: new BN(1000),
+              maxTransactionSizeUsd: new BN(1000),
+              maxSlippageBps: 100,
+              protocolMode: 1,
+              protocols: [jupiterProgramId],
+              allowedDestinations: [],
+              timelockDuration: new BN(0),
+              operatingHours: 0x00ffffff,
+              autoPromoteGrays: false,
+              autoRevokeThreshold: 5,
+            }),
           )
           .accounts({
             owner: owner.publicKey,
@@ -3731,7 +4836,7 @@ describe("sigil", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err, { name: "TimelockTooShort", code: 6065 });
+        expectSigilError(err, { name: "TimelockTooShort" });
       }
     });
 
@@ -3745,12 +4850,22 @@ describe("sigil", () => {
           null,
           null,
           null,
-          new BN(3600), // new timelock_duration
+          new BN(3600),
           null,
           null,
-          null, // hasProtocolCaps
-          null, // protocolCaps
-          null, // destinationMode
+          null,
+          null,
+          null,
+          null, // operating_hours (TA-05 Phase 3)
+          null, // stable_balance_floor (TA-12 Phase 5 — pass-through)
+          null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
+          null, // cosign_required (G6 audit 2026-05-18 — pass-through, default off)
+          null,
+          null, // cosign_session_pubkey (D-5: pass-through)
+          PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
+          await fetchAndComputeQueueDigest(program, tlPolicyPda, tlVaultPda, {
+            timelockDuration: new BN(3600),
+          }), // newPolicyPreviewDigest (Phase 2 TA-19)
         )
         .accounts({
           owner: owner.publicKey,
@@ -3788,12 +4903,22 @@ describe("sigil", () => {
           null,
           null,
           null,
-          new BN(1800), // back to MIN_TIMELOCK_DURATION
+          new BN(1800),
           null,
           null,
-          null, // hasProtocolCaps
-          null, // protocolCaps
-          null, // destinationMode
+          null,
+          null,
+          null,
+          null, // operating_hours (TA-05 Phase 3)
+          null, // stable_balance_floor (TA-12 Phase 5 — pass-through)
+          null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
+          null, // cosign_required (G6 audit 2026-05-18 — pass-through, default off)
+          null,
+          null, // cosign_session_pubkey (D-5: pass-through)
+          PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
+          await fetchAndComputeQueueDigest(program, tlPolicyPda, tlVaultPda, {
+            timelockDuration: new BN(1800),
+          }), // newPolicyPreviewDigest (Phase 2 TA-19)
         )
         .accounts({
           owner: owner.publicKey,
@@ -3820,10 +4945,13 @@ describe("sigil", () => {
       const policy = await program.account.policyConfig.fetch(tlPolicyPda);
       expect(policy.timelockDuration.toNumber()).to.equal(1800);
 
-      // Verify further updates still require queue/apply
+      // Verify further updates still require queue/apply. Use a LOWER
+      // cap (50_000_000) so TA-09 (Phase 3) elevated-mutation guard does
+      // not fire — this assertion exercises queue/apply round-trip on
+      // daily_spending_cap_usd, not the cosign workflow.
       await program.methods
         .queuePolicyUpdate(
-          new BN(999_000_000),
+          new BN(50_000_000),
           null,
           null,
           null,
@@ -3832,9 +4960,19 @@ describe("sigil", () => {
           null,
           null,
           null,
-          null, // hasProtocolCaps
-          null, // protocolCaps
-          null, // destinationMode
+          null,
+          null,
+          null,
+          null, // operating_hours (TA-05 Phase 3)
+          null, // stable_balance_floor (TA-12 Phase 5 — pass-through)
+          null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
+          null, // cosign_required (G6 audit 2026-05-18 — pass-through, default off)
+          null,
+          null, // cosign_session_pubkey (D-5: pass-through)
+          PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
+          await fetchAndComputeQueueDigest(program, tlPolicyPda, tlVaultPda, {
+            dailySpendingCapUsd: new BN(50_000_000),
+          }), // newPolicyPreviewDigest (Phase 2 TA-19)
         )
         .accounts({
           owner: owner.publicKey,
@@ -3859,7 +4997,7 @@ describe("sigil", () => {
         .rpc();
 
       const updated = await program.account.policyConfig.fetch(tlPolicyPda);
-      expect(updated.dailySpendingCapUsd.toNumber()).to.equal(999_000_000);
+      expect(updated.dailySpendingCapUsd.toNumber()).to.equal(50_000_000);
     });
 
     it("revoke_agent bypasses timelock (emergency)", async () => {
@@ -3870,6 +5008,10 @@ describe("sigil", () => {
         .accounts({
           owner: owner.publicKey,
           vault: tlVaultPda,
+          policy: PublicKey.findProgramAddressSync(
+            [Buffer.from("policy"), tlVaultPda.toBuffer()],
+            program.programId,
+          )[0],
           agentSpendOverlay: tlOverlay,
         } as any)
         .rpc();
@@ -3935,15 +5077,34 @@ describe("sigil", () => {
       await program.methods
         .initializeVault(
           destVaultId,
-          new BN(500_000_000), // 500 USDC daily cap
-          new BN(100_000_000), // 100 USDC max tx
-          1, // protocolMode: allowlist
+          new BN(500_000_000),
+          new BN(100_000_000),
+          1,
           [jupiterProgramId],
           0,
-          100, // maxSlippageBps
-          new BN(1800), // MIN_TIMELOCK_DURATION
-          [allowedDest.publicKey], // only allow transfers to this address
-          [], // protocolCaps
+          100,
+          new BN(1800),
+          [allowedDest.publicKey],
+          [],
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(500_000_000),
+            maxTransactionSizeUsd: new BN(100_000_000),
+            maxSlippageBps: 100,
+            protocolMode: 1,
+            protocols: [jupiterProgramId],
+            allowedDestinations: [allowedDest.publicKey],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accounts({
           owner: owner.publicKey,
@@ -3955,14 +5116,15 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
         } as any)
         .rpc();
-      await program.methods
-        .registerAgent(destAgent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: owner.publicKey,
-          vault: destVaultPda,
-          agentSpendOverlay: destOverlay,
-        } as any)
-        .rpc();
+      // F-Q6: OPERATOR grant on this single-key vault routes through the
+      // timelock queue path (helper); destAgent does agent_transfer below.
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: destVaultPda,
+        agent: destAgent.publicKey,
+      });
 
       // Deposit USDC
       destVaultUsdcAta = getAssociatedTokenAddressSync(
@@ -4003,7 +5165,11 @@ describe("sigil", () => {
       const balBefore = getTokenBalance(svm, allowedDestAta);
 
       await program.methods
-        .agentTransfer(new BN(10_000_000), new BN(0)) // 10 USDC
+        .agentTransfer(
+          new BN(10_000_000),
+          ((await program.account.policyConfig.fetch(destPolicyPda))
+            .policyVersion as BN) ?? new BN(0),
+        ) // 10 USDC
         .accounts({
           agent: destAgent.publicKey,
           vault: destVaultPda,
@@ -4029,7 +5195,11 @@ describe("sigil", () => {
     it("agent_transfer to non-allowed destination fails", async () => {
       try {
         await program.methods
-          .agentTransfer(new BN(10_000_000), new BN(0))
+          .agentTransfer(
+            new BN(10_000_000),
+            ((await program.account.policyConfig.fetch(destPolicyPda))
+              .policyVersion as BN) ?? new BN(0),
+          )
           .accounts({
             agent: destAgent.publicKey,
             vault: destVaultPda,
@@ -4047,7 +5217,7 @@ describe("sigil", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err, { name: "DestinationNotAllowed", code: 6024 });
+        expectSigilError(err, { name: "DestinationNotAllowed" });
       }
     });
 
@@ -4086,10 +5256,29 @@ describe("sigil", () => {
           1,
           [jupiterProgramId],
           0,
-          100, // maxSlippageBps
-          new BN(1800), // MIN_TIMELOCK_DURATION
-          [], // empty allowlist — under default Restricted mode this rejects everything
-          [], // protocolCaps
+          100,
+          new BN(1800),
+          [],
+          [],
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(500_000_000),
+            maxTransactionSizeUsd: new BN(100_000_000),
+            maxSlippageBps: 100,
+            protocolMode: 1,
+            protocols: [jupiterProgramId],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accounts({
           owner: owner.publicKey,
@@ -4101,14 +5290,17 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
         } as any)
         .rpc();
-      await program.methods
-        .registerAgent(destAgent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: owner.publicKey,
-          vault: anyVault,
-          agentSpendOverlay: anyOverlay,
-        } as any)
-        .rpc();
+      // F-Q6: OPERATOR grant on this single-key vault routes through the
+      // timelock queue path (helper). The agent must be OPERATOR so the
+      // agent_transfer below reaches the destination check and fails with
+      // DestinationNotAllowed (the F-4 default-deny this test verifies).
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: anyVault,
+        agent: destAgent.publicKey,
+      });
 
       const anyVaultAta = getAssociatedTokenAddressSync(
         usdcMint,
@@ -4138,7 +5330,11 @@ describe("sigil", () => {
       // succeeded and drained up to the daily cap.
       try {
         await program.methods
-          .agentTransfer(new BN(5_000_000), new BN(0))
+          .agentTransfer(
+            new BN(5_000_000),
+            ((await program.account.policyConfig.fetch(anyPolicy))
+              .policyVersion as BN) ?? new BN(0),
+          )
           .accounts({
             agent: destAgent.publicKey,
             vault: anyVault,
@@ -4158,7 +5354,7 @@ describe("sigil", () => {
           "Should have thrown DestinationNotAllowed (F-4 default-deny)",
         );
       } catch (err: any) {
-        expectSigilError(err, { name: "DestinationNotAllowed", code: 6024 });
+        expectSigilError(err, { name: "DestinationNotAllowed" });
       }
 
       // Stash for the OpenWithCap follow-up test below.
@@ -4169,85 +5365,57 @@ describe("sigil", () => {
       (sharedAnyDest as any).vaultAta = anyVaultAta;
     });
 
-    it("OpenWithCap mode allows any destination after queue+apply (F-4 opt-in)", async () => {
+    // Phase 2 Option A: OpenWithCap mode (destination_mode=1) was deleted.
+    // The test now verifies that the queue rejects destination_mode=1 with
+    // InvalidDestinationMode (6069), instead of the previous "opt-in to drain"
+    // behavior. Companion test "queue with destination_mode=2" below covers
+    // the >1 case.
+    it("rejects destination_mode=1 (OpenWithCap deleted in Phase 2 Option A)", async () => {
       const anyVault = (sharedAnyDest as any).vault as PublicKey;
       const anyPolicy = (sharedAnyDest as any).policy as PublicKey;
-      const anyTracker = (sharedAnyDest as any).tracker as PublicKey;
-      const anyOverlay = (sharedAnyDest as any).overlay as PublicKey;
-      const anyVaultAta = (sharedAnyDest as any).vaultAta as PublicKey;
       const [anyPendingPda] = PublicKey.findProgramAddressSync(
         [Buffer.from("pending_policy"), anyVault.toBuffer()],
         program.programId,
       );
 
-      // Owner queues destination_mode = 1 (OpenWithCap)
-      await program.methods
-        .queuePolicyUpdate(
-          null, // dailyCap
-          null, // maxTx
-          null, // protocolMode
-          null, // protocols
-          null, // devFeeRate
-          null, // maxSlippageBps
-          null, // timelock
-          null, // allowedDestinations
-          null, // sessionExpirySlots
-          null, // hasProtocolCaps
-          null, // protocolCaps
-          1, // destinationMode = OpenWithCap
-        )
-        .accounts({
-          owner: owner.publicKey,
-          vault: anyVault,
-          policy: anyPolicy,
-          pendingPolicy: anyPendingPda,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
-
-      advanceTime(svm, 1801);
-
-      await program.methods
-        .applyPendingPolicy()
-        .accounts({
-          owner: owner.publicKey,
-          vault: anyVault,
-          policy: anyPolicy,
-          tracker: anyTracker,
-          pendingPolicy: anyPendingPda,
-        } as any)
-        .rpc();
-
-      // Verify mode flipped.
-      const updatedPolicy = await program.account.policyConfig.fetch(anyPolicy);
-      expect((updatedPolicy as any).destinationMode).to.equal(1);
-
-      // Now agent_transfer to the previously blocked destination must succeed.
-      // Daily cap remains the throttle.
-      const balBefore = getTokenBalance(svm, blockedDestAta);
-      await program.methods
-        .agentTransfer(
-          new BN(5_000_000),
-          (updatedPolicy as any).policyVersion ?? new BN(0),
-        )
-        .accounts({
-          agent: destAgent.publicKey,
-          vault: anyVault,
-          policy: anyPolicy,
-          tracker: anyTracker,
-          agentSpendOverlay: anyOverlay,
-          vaultTokenAccount: anyVaultAta,
-          tokenMintAccount: usdcMint,
-          destinationTokenAccount: blockedDestAta,
-          feeDestinationTokenAccount: null,
-          protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-          tokenProgram: TOKEN_PROGRAM_ID,
-        } as any)
-        .signers([destAgent])
-        .rpc();
-
-      const balAfter = getTokenBalance(svm, blockedDestAta);
-      expect(Number(balAfter)).to.be.greaterThan(Number(balBefore));
+      try {
+        await program.methods
+          .queuePolicyUpdate(
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            1,
+            null, // operating_hours (TA-05 Phase 3)
+            null, // stable_balance_floor (TA-12 Phase 5 — pass-through)
+            null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
+            null, // cosign_required (G6 audit 2026-05-18 — pass-through, default off)
+            null,
+            null, // cosign_session_pubkey (D-5: pass-through)
+            PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
+            await fetchAndComputeQueueDigest(program, anyPolicy, anyVault, {
+              destinationMode: 1,
+            }), // newPolicyPreviewDigest (Phase 2 TA-19)
+          )
+          .accounts({
+            owner: owner.publicKey,
+            vault: anyVault,
+            policy: anyPolicy,
+            pendingPolicy: anyPendingPda,
+            systemProgram: SystemProgram.programId,
+          } as any)
+          .rpc();
+        expect.fail("destination_mode=1 should reject under Phase 2");
+      } catch (err: any) {
+        expectSigilError(err, { name: "InvalidDestinationMode" });
+      }
     });
 
     it("queue with destination_mode=2 (invalid) rejects with InvalidDestinationMode", async () => {
@@ -4272,7 +5440,17 @@ describe("sigil", () => {
             null,
             null,
             null,
-            2, // destinationMode out of range
+            2,
+            null, // operating_hours (TA-05 Phase 3)
+            null, // stable_balance_floor (TA-12 Phase 5 — pass-through)
+            null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
+            null, // cosign_required (G6 audit 2026-05-18 — pass-through, default off)
+            null,
+            null, // cosign_session_pubkey (D-5: pass-through)
+            PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
+            await fetchAndComputeQueueDigest(program, anyPolicy, anyVault, {
+              destinationMode: 2,
+            }), // newPolicyPreviewDigest (Phase 2 TA-19)
           )
           .accounts({
             owner: owner.publicKey,
@@ -4323,13 +5501,32 @@ describe("sigil", () => {
             badVid,
             new BN(1000),
             new BN(1000),
+            1,
+            [jupiterProgramId],
             0,
-            [],
-            0,
-            100, // maxSlippageBps
-            new BN(1800), // MIN_TIMELOCK_DURATION
+            100,
+            new BN(1800),
             tooMany,
-            [], // protocolCaps
+            [],
+            false, // observeOnly (Phase 2 TA-19)
+            0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+            false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+            5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+            new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+            new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+            false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+            initVaultPreviewDigest({
+              dailySpendingCapUsd: new BN(1000),
+              maxTransactionSizeUsd: new BN(1000),
+              maxSlippageBps: 100,
+              protocolMode: 1,
+              protocols: [jupiterProgramId],
+              allowedDestinations: tooMany,
+              timelockDuration: new BN(1800),
+              operatingHours: 0x00ffffff,
+              autoPromoteGrays: false,
+              autoRevokeThreshold: 5,
+            }),
           )
           .accounts({
             owner: owner.publicKey,
@@ -4343,7 +5540,7 @@ describe("sigil", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err, { name: "TooManyDestinations", code: 6025 });
+        expectSigilError(err, { name: "TooManyDestinations" });
       }
     });
 
@@ -4354,7 +5551,11 @@ describe("sigil", () => {
       // push total to 510 USDC (exceeding 500 cap).
       for (let i = 0; i < 4; i++) {
         await program.methods
-          .agentTransfer(new BN(100_000_000), new BN(0)) // 100 USDC each
+          .agentTransfer(
+            new BN(100_000_000),
+            ((await program.account.policyConfig.fetch(destPolicyPda))
+              .policyVersion as BN) ?? new BN(0),
+          ) // 100 USDC each
           .accounts({
             agent: destAgent.publicKey,
             vault: destVaultPda,
@@ -4375,7 +5576,11 @@ describe("sigil", () => {
       // Try 100 USDC → total would be 510 > 500 cap
       try {
         await program.methods
-          .agentTransfer(new BN(100_000_000), new BN(0)) // 100 USDC (would push past cap)
+          .agentTransfer(
+            new BN(100_000_000),
+            ((await program.account.policyConfig.fetch(destPolicyPda))
+              .policyVersion as BN) ?? new BN(0),
+          ) // 100 USDC (would push past cap)
           .accounts({
             agent: destAgent.publicKey,
             vault: destVaultPda,
@@ -4393,7 +5598,7 @@ describe("sigil", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err, { name: "SpendingCapExceeded", code: 6006 });
+        expectSigilError(err, { name: "SpendingCapExceeded" });
       }
     });
 
@@ -4401,7 +5606,11 @@ describe("sigil", () => {
       // Max tx size is 100 USDC
       try {
         await program.methods
-          .agentTransfer(new BN(101_000_000), new BN(0)) // 101 USDC (exceeds max tx)
+          .agentTransfer(
+            new BN(101_000_000),
+            ((await program.account.policyConfig.fetch(destPolicyPda))
+              .policyVersion as BN) ?? new BN(0),
+          ) // 101 USDC (exceeds max tx)
           .accounts({
             agent: destAgent.publicKey,
             vault: destVaultPda,
@@ -4419,7 +5628,7 @@ describe("sigil", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err, { name: "TransactionTooLarge", code: 6005 });
+        expectSigilError(err, { name: "TransactionTooLarge" });
       }
     });
 
@@ -4463,11 +5672,31 @@ describe("sigil", () => {
           new BN(100_000_000),
           1,
           [jupiterProgramId],
-          500, // developer_fee_rate = 500 (5 BPS)
-          100, // maxSlippageBps
-          new BN(1800), // MIN_TIMELOCK_DURATION
-          [allowedDest.publicKey], // F-4 fix: explicit allowlist required under default Restricted
-          [], // protocolCaps
+          500,
+          100,
+          new BN(1800),
+          [allowedDest.publicKey],
+          [],
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(500_000_000),
+            maxTransactionSizeUsd: new BN(100_000_000),
+            maxSlippageBps: 100,
+            developerFeeRate: 500, // PEN-CROSS-6: must match the ix arg.
+            protocolMode: 1,
+            protocols: [jupiterProgramId],
+            allowedDestinations: [allowedDest.publicKey],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accounts({
           owner: owner.publicKey,
@@ -4479,14 +5708,16 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
         } as any)
         .rpc();
-      await program.methods
-        .registerAgent(destAgent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: owner.publicKey,
-          vault: fv,
-          agentSpendOverlay: fvOverlay2,
-        } as any)
-        .rpc();
+      // F-Q6: OPERATOR grant on this single-key vault routes through the
+      // timelock queue path (helper); destAgent does a fee-bearing
+      // agent_transfer below.
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: fv,
+        agent: destAgent.publicKey,
+      });
 
       const fvAta = getAssociatedTokenAddressSync(usdcMint, fv, true);
       await program.methods
@@ -4526,7 +5757,11 @@ describe("sigil", () => {
       // developer_fee = 10_000_000 * 500 / 1_000_000 = 5_000
       // net = 10_000_000 - 2_000 - 5_000 = 9_993_000
       await program.methods
-        .agentTransfer(new BN(10_000_000), new BN(0))
+        .agentTransfer(
+          new BN(10_000_000),
+          ((await program.account.policyConfig.fetch(fp))
+            .policyVersion as BN) ?? new BN(0),
+        )
         .accounts({
           agent: destAgent.publicKey,
           vault: fv,
@@ -4601,9 +5836,28 @@ describe("sigil", () => {
           [jupiterProgramId],
           0,
           100,
-          new BN(1800), // MIN_TIMELOCK_DURATION
+          new BN(1800),
           [],
-          [], // protocolCaps
+          [],
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(1_000_000_000),
+            maxTransactionSizeUsd: new BN(500_000_000),
+            maxSlippageBps: 100,
+            protocolMode: 1,
+            protocols: [jupiterProgramId],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accounts({
           owner: owner.publicKey,
@@ -4645,19 +5899,25 @@ describe("sigil", () => {
         .accounts({
           owner: owner.publicKey,
           vault: maVault,
+          policy: PublicKey.findProgramAddressSync(
+            [Buffer.from("policy"), maVault.toBuffer()],
+            program.programId,
+          )[0],
           agentSpendOverlay: maOverlay,
         } as any)
         .rpc();
 
-      // Agent 2: full capability (operator)
-      await program.methods
-        .registerAgent(agent2.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: owner.publicKey,
-          vault: maVault,
-          agentSpendOverlay: maOverlay,
-        } as any)
-        .rpc();
+      // Agent 2: full capability (operator).
+      // F-Q6: OPERATOR grant on this single-key vault routes through the
+      // timelock queue path (helper). agent2 is registered second, so it lands
+      // at agents[1] as OPERATOR — the capability assertion below still holds.
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: maVault,
+        agent: agent2.publicKey,
+      });
 
       const vault = await program.account.agentVault.fetch(maVault);
       expect(vault.agents.length).to.equal(2);
@@ -4688,6 +5948,16 @@ describe("sigil", () => {
           new BN(0), // non-spending for Observer
           jupiterProgramId,
           await pv(maPolicy),
+          new BN(0), // AC-10 expectedNonce
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: maVault,
+              agent: agent.publicKey,
+              tokenMint: usdcMint,
+              amount: new BN(0),
+              targetProtocol: jupiterProgramId,
+            }),
+          ),
         )
         .accounts({
           agent: agent.publicKey,
@@ -4748,6 +6018,16 @@ describe("sigil", () => {
           new BN(1_000_000),
           jupiterProgramId,
           await pv(maPolicy),
+          new BN(0), // AC-10 expectedNonce
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: maVault,
+              agent: agent.publicKey,
+              tokenMint: usdcMint,
+              amount: new BN(1_000_000),
+              targetProtocol: jupiterProgramId,
+            }),
+          ),
         )
         .accounts({
           agent: agent.publicKey,
@@ -4791,7 +6071,7 @@ describe("sigil", () => {
         sendVersionedTx(svm, [validateIx, finalizeIx], agent);
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err, { name: "InsufficientPermissions", code: 6037 });
+        expectSigilError(err, { name: "InsufficientPermissions" });
       }
     });
 
@@ -4801,6 +6081,10 @@ describe("sigil", () => {
         .accounts({
           owner: owner.publicKey,
           vault: maVault,
+          policy: PublicKey.findProgramAddressSync(
+            [Buffer.from("policy"), maVault.toBuffer()],
+            program.programId,
+          )[0],
           agentSpendOverlay: maOverlay,
         } as any)
         .rpc();
@@ -4819,6 +6103,10 @@ describe("sigil", () => {
         .accounts({
           owner: owner.publicKey,
           vault: maVault,
+          policy: PublicKey.findProgramAddressSync(
+            [Buffer.from("policy"), maVault.toBuffer()],
+            program.programId,
+          )[0],
           agentSpendOverlay: maOverlay,
         } as any)
         .rpc();
@@ -4829,21 +6117,36 @@ describe("sigil", () => {
     });
 
     it("register up to 10 agents — succeeds", async () => {
-      // Reactivate first
+      // Phase 8 Batch 5: prior it() froze vault via last-agent revoke;
+      // advance past 5-min reactivate cooldown (ErrReactivateCooldownActive 6097)
+      advanceTime(svm, 301);
+
+      // Reactivate first.
+      // F-Q6: reactivate with VIEWER (single-key vault cannot grant OPERATOR
+      // instantly). This test asserts only the agent COUNT (10), not their
+      // capabilities, so VIEWER is the minimal correct fix and skips the
+      // OPERATOR tier gate + NH-1 cosigner requirement.
       await program.methods
-        .reactivateVault(agent.publicKey, FULL_CAPABILITY)
+        .reactivateVault(agent.publicKey, VIEWER_CAPABILITY)
         .accounts({ owner: owner.publicKey, vault: maVault } as any)
         .rpc();
 
-      // Register 9 more (total 10 with the agent from reactivate)
+      // Register 9 more (total 10 with the agent from reactivate).
+      // F-Q6: these filler agents only exercise the MAX_AGENTS count path and
+      // never spend — VIEWER avoids the OPERATOR-grant timelock. The test
+      // asserts only the agent count (10), not their capabilities.
       for (let i = 0; i < 9; i++) {
         const a = Keypair.generate();
         airdropSol(svm, a.publicKey, LAMPORTS_PER_SOL);
         await program.methods
-          .registerAgent(a.publicKey, FULL_CAPABILITY, new BN(0))
+          .registerAgent(a.publicKey, VIEWER_CAPABILITY, new BN(0))
           .accounts({
             owner: owner.publicKey,
             vault: maVault,
+            policy: PublicKey.findProgramAddressSync(
+              [Buffer.from("policy"), maVault.toBuffer()],
+              program.programId,
+            )[0],
             agentSpendOverlay: maOverlay,
           } as any)
           .rpc();
@@ -4856,17 +6159,25 @@ describe("sigil", () => {
     it("11th agent → MaxAgentsReached (6038)", async () => {
       const extra = Keypair.generate();
       try {
+        // F-Q6: use VIEWER_CAPABILITY so the OPERATOR-grant timelock check
+        // (6107) does not pre-empt the MaxAgentsReached check this test
+        // targets. The vault is already at MAX_AGENTS, so registration is
+        // rejected for being full regardless of the capability arg.
         await program.methods
-          .registerAgent(extra.publicKey, FULL_CAPABILITY, new BN(0))
+          .registerAgent(extra.publicKey, VIEWER_CAPABILITY, new BN(0))
           .accounts({
             owner: owner.publicKey,
             vault: maVault,
+            policy: PublicKey.findProgramAddressSync(
+              [Buffer.from("policy"), maVault.toBuffer()],
+              program.programId,
+            )[0],
             agentSpendOverlay: maOverlay,
           } as any)
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err, { name: "MaxAgentsReached", code: 6036 });
+        expectSigilError(err, { name: "MaxAgentsReached" });
       }
     });
 
@@ -4879,12 +6190,20 @@ describe("sigil", () => {
           .accounts({
             owner: owner.publicKey,
             vault: maVault,
+            policy: PublicKey.findProgramAddressSync(
+              [Buffer.from("policy"), maVault.toBuffer()],
+              program.programId,
+            )[0],
             agentSpendOverlay: maOverlay,
           } as any)
           .rpc();
       }
 
       const newAgent = Keypair.generate();
+
+      // Phase 8 Batch 5: advance past 5-min reactivate cooldown (ErrReactivateCooldownActive 6097)
+      advanceTime(svm, 301);
+
       await program.methods
         .reactivateVault(newAgent.publicKey, VIEWER_CAPABILITY)
         .accounts({ owner: owner.publicKey, vault: maVault } as any)
@@ -4908,6 +6227,10 @@ describe("sigil", () => {
         .accounts({
           owner: owner.publicKey,
           vault: maVault,
+          policy: PublicKey.findProgramAddressSync(
+            [Buffer.from("policy"), maVault.toBuffer()],
+            program.programId,
+          )[0],
           agentSpendOverlay: maOverlay,
         } as any)
         .rpc();
@@ -4928,6 +6251,8 @@ describe("sigil", () => {
           updAgent.publicKey,
           FULL_CAPABILITY,
           new BN(0),
+          new BN(0), // cooldown_seconds (TA-06 Phase 3 — disabled)
+          PublicKey.default, // cosign_session (F-RP3-2: default = no cosign)
         )
         .accounts({
           owner: owner.publicKey,
@@ -4960,7 +6285,7 @@ describe("sigil", () => {
       expect(entry!.capability).to.equal(FULL_CAPABILITY);
     });
 
-    it("invalid capability value → InvalidPermissions (6040)", async () => {
+    it("invalid capability value → InvalidCapability (6070, Phase 2 TA-04)", async () => {
       const badAgent = Keypair.generate();
       try {
         await program.methods
@@ -4968,12 +6293,19 @@ describe("sigil", () => {
           .accounts({
             owner: owner.publicKey,
             vault: maVault,
+            policy: PublicKey.findProgramAddressSync(
+              [Buffer.from("policy"), maVault.toBuffer()],
+              program.programId,
+            )[0],
             agentSpendOverlay: maOverlay,
           } as any)
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err, { name: "InvalidPermissions", code: 6038 });
+        // Phase 2 TA-04 replaced the generic `InvalidPermissions` with the
+        // specific `InvalidCapability` so callers can distinguish "bad
+        // capability value" from other permission errors.
+        expectSigilError(err, { name: "InvalidCapability" });
       }
     });
   });
@@ -5031,15 +6363,34 @@ describe("sigil", () => {
       await program.methods
         .initializeVault(
           epochVaultId,
-          new BN(2_000_000_000), // 2000 USDC daily cap
-          new BN(1_000_000_000), // 1000 USDC max tx
+          new BN(2_000_000_000),
+          new BN(1_000_000_000),
           1,
           [jupiterProgramId],
           0,
           100,
-          new BN(1800), // MIN_TIMELOCK_DURATION
-          [epochDest.publicKey], // F-4 fix: must explicitly allow this destination under default Restricted mode
-          [], // protocolCaps
+          new BN(1800),
+          [epochDest.publicKey],
+          [],
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(2_000_000_000),
+            maxTransactionSizeUsd: new BN(1_000_000_000),
+            maxSlippageBps: 100,
+            protocolMode: 1,
+            protocols: [jupiterProgramId],
+            allowedDestinations: [epochDest.publicKey],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accounts({
           owner: owner.publicKey,
@@ -5052,19 +6403,19 @@ describe("sigil", () => {
         } as any)
         .rpc();
 
-      // Register agent with $1000 per-agent spend limit
-      await program.methods
-        .registerAgent(
-          epochAgent.publicKey,
-          FULL_CAPABILITY,
-          new BN(1_000_000_000),
-        )
-        .accounts({
-          owner: owner.publicKey,
-          vault: epochVault,
-          agentSpendOverlay: epochOverlay,
-        } as any)
-        .rpc();
+      // Register agent with $1000 per-agent spend limit.
+      // F-Q6: OPERATOR grant on this single-key vault routes through the
+      // timelock queue path (helper). The per-agent spend limit is carried
+      // through queue_agent_grant via spendingLimitUsd so the multi-epoch
+      // tracking assertions below remain valid.
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: epochVault,
+        agent: epochAgent.publicKey,
+        spendingLimitUsd: new BN(1_000_000_000),
+      });
 
       // Deposit USDC
       epochVaultUsdcAta = createAtaIdempotentHelper(
@@ -5100,7 +6451,11 @@ describe("sigil", () => {
     it("accumulates spend across multiple epochs (catches old bug)", async () => {
       // Epoch 0: spend $500
       await program.methods
-        .agentTransfer(new BN(500_000_000), new BN(0))
+        .agentTransfer(
+          new BN(500_000_000),
+          ((await program.account.policyConfig.fetch(epochPolicy))
+            .policyVersion as BN) ?? new BN(0),
+        )
         .accounts({
           agent: epochAgent.publicKey,
           vault: epochVault,
@@ -5123,7 +6478,11 @@ describe("sigil", () => {
 
       // Epoch 1: spend $300
       await program.methods
-        .agentTransfer(new BN(300_000_000), new BN(0))
+        .agentTransfer(
+          new BN(300_000_000),
+          ((await program.account.policyConfig.fetch(epochPolicy))
+            .policyVersion as BN) ?? new BN(0),
+        )
         .accounts({
           agent: epochAgent.publicKey,
           vault: epochVault,
@@ -5148,7 +6507,11 @@ describe("sigil", () => {
       // exceeds the $1000 per-agent limit.
       try {
         await program.methods
-          .agentTransfer(new BN(250_000_000), new BN(0))
+          .agentTransfer(
+            new BN(250_000_000),
+            ((await program.account.policyConfig.fetch(epochPolicy))
+              .policyVersion as BN) ?? new BN(0),
+          )
           .accounts({
             agent: epochAgent.publicKey,
             vault: epochVault,
@@ -5167,12 +6530,16 @@ describe("sigil", () => {
           .rpc();
         expect.fail("Should have exceeded per-agent spend limit");
       } catch (err: any) {
-        expectSigilError(err, { name: "AgentSpendLimitExceeded", code: 6049 });
+        expectSigilError(err, { name: "AgentSpendLimitExceeded" });
       }
 
       // But spending $150 (total = $950 < $1000) should succeed
       await program.methods
-        .agentTransfer(new BN(150_000_000), new BN(0))
+        .agentTransfer(
+          new BN(150_000_000),
+          ((await program.account.policyConfig.fetch(epochPolicy))
+            .policyVersion as BN) ?? new BN(0),
+        )
         .accounts({
           agent: epochAgent.publicKey,
           vault: epochVault,
@@ -5201,7 +6568,11 @@ describe("sigil", () => {
       // Total rolling: $450 (300 + 150 from ~23h ago).
       // Spending $500 more (total ~$950) should succeed since $500 expired.
       await program.methods
-        .agentTransfer(new BN(100_000_000), new BN(0)) // $100 — safe amount to verify window works
+        .agentTransfer(
+          new BN(100_000_000),
+          ((await program.account.policyConfig.fetch(epochPolicy))
+            .policyVersion as BN) ?? new BN(0),
+        ) // $100 — safe amount to verify window works
         .accounts({
           agent: epochAgent.publicKey,
           vault: epochVault,
@@ -5225,7 +6596,11 @@ describe("sigil", () => {
       // Now everything should be expired. Spending $999 (under $1000 limit) should succeed
       // even though we've spent $1050 total historically.
       await program.methods
-        .agentTransfer(new BN(100_000_000), new BN(0)) // $100
+        .agentTransfer(
+          new BN(100_000_000),
+          ((await program.account.policyConfig.fetch(epochPolicy))
+            .policyVersion as BN) ?? new BN(0),
+        ) // $100
         .accounts({
           agent: epochAgent.publicKey,
           vault: epochVault,
@@ -5252,9 +6627,32 @@ describe("sigil", () => {
     const protoCapOwner = Keypair.generate();
     const protoCapAgent = Keypair.generate();
     const protoCapFee = Keypair.generate();
-    const protocolA = Keypair.generate().publicKey;
-    const protocolB = Keypair.generate().publicKey;
+    // F-Q2 migration: per-protocol caps charge `actual_spend` (the measured
+    // vault-ATA balance delta at finalize), so the sandwich's middle ix must
+    // be a REAL fund-moving drain whose program == the authorized
+    // target_protocol (the cap keys off `session.authorized_protocol`). The two
+    // protocols must therefore be the two LOADED mock programs (MOCK_DEFI +
+    // MOCK_DEFI_2), not arbitrary pubkeys — an arbitrary pubkey is not an
+    // executable program, so a drain ix targeting it would fail to invoke.
+    // protocolA = MOCK_DEFI (single-protocol tests), protocolB = MOCK_DEFI_2
+    // (the "other protocol still has room" independence test).
+    const protocolA = MOCK_DEFI_PROGRAM_ID;
+    const protocolB = MOCK_DEFI_2_PROGRAM_ID;
     const protoCapVaultId = new BN(900);
+    // Drain destination — a fresh-keypair USDC ATA. The destination need NOT be
+    // allowlisted: validate's destination check (destination_check.rs) is
+    // resolve-required, not allowlist-required — a resolved, non-allowlisted
+    // token account is treated as a transient route hop and SKIPPED. It must,
+    // however, be passed in validate's remaining_accounts (else
+    // DestinationAccountUnresolvable).
+    const protoCapDrainDest = Keypair.generate();
+    let pcDrainDestUsdc: PublicKey;
+    // G3a audit fix (§RP-2 2026-05-18 HIGH-1): protocol_caps weakening
+    // (any cap → 0, or any cap raised, or has_protocol_caps → false) is
+    // now classified as an elevated mutation by queue_policy_update. The
+    // tests in this describe exercise documented "0 = unlimited" semantics
+    // and master-switch disable — both weakenings that now require cosign.
+    const protoCapCosigner = Keypair.generate();
     let pcVault: PublicKey;
     let pcPolicy: PublicKey;
     let pcTracker: PublicKey;
@@ -5326,21 +6724,61 @@ describe("sigil", () => {
         5_000_000_000n,
       );
 
+      // Drain destination ATA (receives the drained USDC each spend). Owner is
+      // a throwaway keypair — intentionally NOT in allowed_destinations (the
+      // sink-scoped check skips non-allowlisted route hops; see comment at the
+      // protoCapDrainDest declaration).
+      pcDrainDestUsdc = createAtaHelper(
+        svm,
+        protoCapOwner,
+        usdcMint,
+        protoCapDrainDest.publicKey,
+      );
+
       // Initialize vault with 2 protocols + per-protocol caps:
       // protocolA: 100 USDC cap, protocolB: 200 USDC cap
       // Global cap: 1000 USDC, Max tx: 500 USDC
+      //
+      // G6 §RP-2 P2 supplementary (2026-05-18): vault opted IN to cosign so
+      // the `cap of 0 means unlimited` and `caps disabled` tests below
+      // (which weaken protocol_caps) GENUINELY exercise the G6 elevation
+      // gate. Previously those tests passed protoCapCosigner decoratively —
+      // `policy.cosign_required = false` made the handler take the
+      // non-elevated fallback. After the flip, removing protoCapCosigner
+      // from those tests WOULD trip ErrCosignRequired.
       await program.methods
         .initializeVault(
           protoCapVaultId,
-          new BN(1_000_000_000), // 1000 USDC global cap
-          new BN(500_000_000), // 500 USDC max tx
-          1, // ALLOWLIST mode
+          new BN(1_000_000_000),
+          new BN(500_000_000),
+          1,
           [protocolA, protocolB],
-          0, // no dev fee
-          100, // maxSlippageBps
-          new BN(1800), // MIN_TIMELOCK_DURATION
-          [], // no dest restrictions
-          [new BN(100_000_000), new BN(200_000_000)], // protocolCaps: [100 USDC, 200 USDC]
+          0,
+          100,
+          new BN(1800),
+          [],
+          [new BN(100_000_000), new BN(200_000_000)],
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          true, // cosignRequired (G6 §RP-2 P2 supplementary — vault OPTED IN)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(1_000_000_000),
+            maxTransactionSizeUsd: new BN(500_000_000),
+            maxSlippageBps: 100,
+            protocolMode: 1,
+            protocols: [protocolA, protocolB],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+            // G6 §RP-2 P2 supplementary: match on-chain init.
+            cosignRequired: true,
+          }),
         )
         .accounts({
           owner: protoCapOwner.publicKey,
@@ -5354,15 +6792,62 @@ describe("sigil", () => {
         .signers([protoCapOwner])
         .rpc();
 
-      // Register agent
+      // Phase 8 PEN-CROSS-1 migration: register_agent now rejects
+      // CAPABILITY_OPERATOR direct grants on cosign-opted vaults. Migrate
+      // the FULL_CAPABILITY grant through queue_agent_grant + advance
+      // timelock + apply_agent_grant.
+      const [pendingAgentGrantPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("pending_agent_grant"), pcVault.toBuffer()],
+        program.programId,
+      );
+
       await program.methods
-        .registerAgent(protoCapAgent.publicKey, FULL_CAPABILITY, new BN(0))
+        .queueAgentGrant(protoCapAgent.publicKey, FULL_CAPABILITY, new BN(0))
         .accounts({
           owner: protoCapOwner.publicKey,
           vault: pcVault,
+          policy: pcPolicy,
+          pending: pendingAgentGrantPda,
+        } as any)
+        .remainingAccounts([
+          {
+            pubkey: protoCapCosigner.publicKey,
+            isSigner: true,
+            isWritable: false,
+          },
+        ])
+        .signers([protoCapOwner, protoCapCosigner])
+        .rpc();
+
+      // Phase 8 §RP Fix-Up B (PEN-02a CRITICAL): PendingAgentGrant default
+      // timelock raised from MIN_TIMELOCK_DURATION (1800s) to
+      // PendingAgentGrant::DEFAULT_MIN_DELAY (172_800s / 48h) to match
+      // ownership transfer's observation window.
+      advanceTime(svm, 172_801);
+
+      await program.methods
+        .applyAgentGrant()
+        .accounts({
+          owner: protoCapOwner.publicKey,
+          vault: pcVault,
+          policy: pcPolicy,
+          pending: pendingAgentGrantPda,
           agentSpendOverlay: pcOverlay,
         } as any)
-        .signers([protoCapOwner])
+        // H-1 close (audit 2026-05-25): policy.cosign_required=true + a
+        // bound cosign_session_pubkey at queue time requires the apply
+        // tx to include the same cosigner as a signer in
+        // remainingAccounts. Defends against the joint-compromise +
+        // cosign-rotation attack class — see apply_agent_grant.rs
+        // docstring.
+        .remainingAccounts([
+          {
+            pubkey: protoCapCosigner.publicKey,
+            isSigner: true,
+            isWritable: false,
+          },
+        ])
+        .signers([protoCapOwner, protoCapCosigner])
         .rpc();
     });
 
@@ -5379,7 +6864,22 @@ describe("sigil", () => {
       );
 
       const validateIx = await program.methods
-        .validateAndAuthorize(usdcMint, amount, protocol, await pv(pcPolicy))
+        .validateAndAuthorize(
+          usdcMint,
+          amount,
+          protocol,
+          await pv(pcPolicy),
+          new BN(0),
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: pcVault,
+              agent: protoCapAgent.publicKey,
+              tokenMint: usdcMint,
+              amount,
+              targetProtocol: protocol,
+            }),
+          ),
+        )
         .accountsPartial({
           agent: protoCapAgent.publicKey,
           vault: pcVault,
@@ -5396,7 +6896,43 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        // F-Q1a completeness: the drain ix's writable metas (source vault ATA +
+        // drain destination) plus the agent fee-payer (writable in the compiled
+        // v0 message) must be resolvable in validate's remaining_accounts, or
+        // validate rejects with DestinationAccountUnresolvable. Passed
+        // read-only here — they are resolved/classified, not authorized.
+        .remainingAccounts([
+          { pubkey: pcVaultUsdc, isSigner: false, isWritable: false },
+          { pubkey: pcDrainDestUsdc, isSigner: false, isWritable: false },
+          {
+            pubkey: protoCapAgent.publicKey,
+            isSigner: false,
+            isWritable: false,
+          },
+        ])
         .instruction();
+
+      // Real fund-moving DeFi ix: drain `amount` USDC out of the vault to the
+      // throwaway destination, using the agent's validate-time SPL delegation.
+      // The drain's program MUST equal the authorized target_protocol (the cap
+      // keys off session.authorized_protocol), so route through MOCK_DEFI_2's
+      // builder when targeting protocolB, else MOCK_DEFI's. This makes
+      // `actual_spend == amount` at finalize so the per-protocol cap genuinely
+      // charges (a no-op would move 0 and the cap would never fire).
+      const drainAmount = netDrainAmount(amount);
+      const drainIx = protocol.equals(MOCK_DEFI_2_PROGRAM_ID)
+        ? buildMockDefiDrain2Ix(
+            pcVaultUsdc,
+            pcDrainDestUsdc,
+            protoCapAgent.publicKey,
+            drainAmount,
+          )
+        : buildMockDefiDrainIx(
+            pcVaultUsdc,
+            pcDrainDestUsdc,
+            protoCapAgent.publicKey,
+            drainAmount,
+          );
 
       const finalizeIx = await program.methods
         .finalizeSession()
@@ -5416,7 +6952,11 @@ describe("sigil", () => {
         })
         .instruction();
 
-      return sendVersionedTx(svm, [validateIx, finalizeIx], protoCapAgent);
+      return sendVersionedTx(
+        svm,
+        [validateIx, drainIx, finalizeIx],
+        protoCapAgent,
+      );
     };
 
     it("happy path: spend under protocol cap succeeds", async () => {
@@ -5424,6 +6964,21 @@ describe("sigil", () => {
       // composeSpend returns Promise<VersionedTxResult> (uses await on
       // .instruction() internally). Must await to surface tx rejection.
       await composeSpend(protocolA, new BN(50_000_000));
+    });
+
+    it("over-cap spend on a protocol reverts ErrDailyCapExceeded (F-Q2 review F1)", async () => {
+      // Coverage gap closed: this describe otherwise only proves under-cap
+      // success + bypass. protocolA cap = 100 USDC; a 150 USDC spend (net
+      // ~149.97 after the 0.02% fee) exceeds it at finalize → a GENUINE
+      // per-protocol revert (149.97 alone > 100, so it reverts regardless of
+      // the ~50 already in the rolling counter from the happy path).
+      try {
+        await composeSpend(protocolA, new BN(150_000_000));
+        expect.fail("over-cap spend must revert (per-protocol cap exceeded)");
+      } catch (err: any) {
+        if (err?.message?.startsWith("over-cap spend must revert")) throw err;
+        expectSigilError(err, { name: "ErrDailyCapExceeded" });
+      }
     });
 
     it("other protocol still has room", async () => {
@@ -5437,7 +6992,13 @@ describe("sigil", () => {
         program.programId,
       );
 
-      // Update protocolA cap to 0 (unlimited)
+      // Update protocolA cap to 0 (unlimited).
+      // G3a audit fix (§RP-2 2026-05-18 HIGH-1): live cap = 100_000_000;
+      // proposing 0 disables enforcement for protocolA → ELEVATED weakening,
+      // TA-09 cosign required.
+      // G6 §RP-2 P2 supplementary (2026-05-18): pcVault was flipped to
+      // `cosignRequired: true` at init — this `weakens_protocol_caps` queue
+      // now GENUINELY exercises the G6 elevation gate.
       await program.methods
         .queuePolicyUpdate(
           null,
@@ -5449,9 +7010,17 @@ describe("sigil", () => {
           null,
           null,
           null,
-          true, // hasProtocolCaps
-          [new BN(0), new BN(200_000_000)], // protocolA: 0 (unlimited), protocolB: 200
-          null, // destinationMode
+          true,
+          [new BN(0), new BN(200_000_000)],
+          null,
+          null, // operating_hours (TA-05 Phase 3)
+          null, // stable_balance_floor (TA-12 Phase 5 — pass-through)
+          null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
+          null, // cosign_required (G6 — pass-through; live=true after §RP-2 P2 flip at vault init)
+          null,
+          null, // cosign_session_pubkey (D-5: pass-through)
+          protoCapCosigner.publicKey, // cosign_session (TA-09 — ELEVATED, weakens_protocol_caps on cosign-opted-in vault)
+          await fetchAndComputeQueueDigest(program, pcPolicy, pcVault, {}), // newPolicyPreviewDigest (Phase 2 TA-19)
         )
         .accounts({
           owner: protoCapOwner.publicKey,
@@ -5460,7 +7029,14 @@ describe("sigil", () => {
           pendingPolicy: pcPendingPda,
           systemProgram: SystemProgram.programId,
         } as any)
-        .signers([protoCapOwner])
+        .remainingAccounts([
+          {
+            pubkey: protoCapCosigner.publicKey,
+            isSigner: true,
+            isWritable: false,
+          },
+        ])
+        .signers([protoCapOwner, protoCapCosigner])
         .rpc();
 
       advanceTime(svm, 1801);
@@ -5480,7 +7056,14 @@ describe("sigil", () => {
       // Now spend any amount on protocolA — should succeed (cap=0 means unlimited)
       await composeSpend(protocolA, new BN(200_000_000));
 
-      // Restore caps
+      // Restore caps.
+      // G3a (§RP-2): protocolA cap moves from 0 (unlimited live) to 100_000_000
+      // — that's a TIGHTENING (live=0 means already unlimited, no weakening
+      // possible). Non-elevated, no cosign needed.
+      // G6 §RP-2 P2 supplementary (2026-05-18): pcVault now has live=true
+      // for cosign_required but the 7 elevation triggers all evaluate false
+      // here (tightening only) and disables_cosign is false, so is_elevated
+      // remains false. No cosign needed despite live=true.
       await program.methods
         .queuePolicyUpdate(
           null,
@@ -5494,7 +7077,15 @@ describe("sigil", () => {
           null,
           true,
           [new BN(100_000_000), new BN(200_000_000)],
-          null, // destinationMode
+          null,
+          null, // operating_hours (TA-05 Phase 3)
+          null, // stable_balance_floor (TA-12 Phase 5 — pass-through)
+          null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
+          null, // cosign_required (G6 — pass-through; live=true but no elevation trigger fires)
+          null,
+          null, // cosign_session_pubkey (D-5: pass-through)
+          PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated, tightening)
+          await fetchAndComputeQueueDigest(program, pcPolicy, pcVault, {}), // newPolicyPreviewDigest (Phase 2 TA-19)
         )
         .accounts({
           owner: protoCapOwner.publicKey,
@@ -5535,7 +7126,12 @@ describe("sigil", () => {
         program.programId,
       );
 
-      // Disable per-protocol caps
+      // Disable per-protocol caps.
+      // G3a audit fix (§RP-2 2026-05-18 HIGH-1): has_protocol_caps: false
+      // disables the master switch → ELEVATED weakening, TA-09 cosign required.
+      // G6 §RP-2 P2 supplementary (2026-05-18): pcVault was flipped to
+      // `cosignRequired: true` at init — this `weakens_protocol_caps`
+      // (master-switch disable) now GENUINELY exercises the G6 elevation gate.
       await program.methods
         .queuePolicyUpdate(
           null,
@@ -5547,9 +7143,17 @@ describe("sigil", () => {
           null,
           null,
           null,
-          false, // hasProtocolCaps = false
+          false,
           null,
-          null, // destinationMode
+          null,
+          null, // operating_hours (TA-05 Phase 3)
+          null, // stable_balance_floor (TA-12 Phase 5 — pass-through)
+          null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
+          null, // cosign_required (G6 — pass-through; live=true after §RP-2 P2 flip at vault init)
+          null,
+          null, // cosign_session_pubkey (D-5: pass-through)
+          protoCapCosigner.publicKey, // cosign_session (TA-09 — ELEVATED, weakens_protocol_caps via has_protocol_caps=false on cosign-opted-in vault)
+          await fetchAndComputeQueueDigest(program, pcPolicy, pcVault, {}), // newPolicyPreviewDigest (Phase 2 TA-19)
         )
         .accounts({
           owner: protoCapOwner.publicKey,
@@ -5558,7 +7162,14 @@ describe("sigil", () => {
           pendingPolicy: pcPendingPda,
           systemProgram: SystemProgram.programId,
         } as any)
-        .signers([protoCapOwner])
+        .remainingAccounts([
+          {
+            pubkey: protoCapCosigner.publicKey,
+            isSigner: true,
+            isWritable: false,
+          },
+        ])
+        .signers([protoCapOwner, protoCapCosigner])
         .rpc();
 
       advanceTime(svm, 1801);
@@ -5578,7 +7189,13 @@ describe("sigil", () => {
       // Even though we spent near cap on protocolA, with caps disabled it should succeed
       await composeSpend(protocolA, new BN(200_000_000));
 
-      // Re-enable caps for next test
+      // Re-enable caps for next test.
+      // G3a (§RP-2): has_protocol_caps: true (live=false) is NOT a weakening
+      // (the predicate triggers only on `has_protocol_caps: false`). The new
+      // protocol_caps [100M, 200M] vs live [] (cleared) — live_cap=0 at every
+      // index → unlimited → no weakening. Non-elevated, no cosign needed.
+      // G6 §RP-2 P2 supplementary (2026-05-18): pcVault has live=true but no
+      // elevation trigger fires here, so is_elevated remains false.
       await program.methods
         .queuePolicyUpdate(
           null,
@@ -5592,7 +7209,15 @@ describe("sigil", () => {
           null,
           true,
           [new BN(100_000_000), new BN(200_000_000)],
-          null, // destinationMode
+          null,
+          null, // operating_hours (TA-05 Phase 3)
+          null, // stable_balance_floor (TA-12 Phase 5 — pass-through)
+          null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
+          null, // cosign_required (G6 — pass-through; live=true but no elevation trigger fires)
+          null,
+          null, // cosign_session_pubkey (D-5: pass-through)
+          PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated, tightening)
+          await fetchAndComputeQueueDigest(program, pcPolicy, pcVault, {}), // newPolicyPreviewDigest (Phase 2 TA-19)
         )
         .accounts({
           owner: protoCapOwner.publicKey,
@@ -5624,7 +7249,11 @@ describe("sigil", () => {
         [Buffer.from("pending_policy"), pcVault.toBuffer()],
         program.programId,
       );
-      // Try to set protocol_caps with wrong length (1 cap for 2 protocols)
+      // Try to set protocol_caps with wrong length (1 cap for 2 protocols).
+      // G6 §RP-2 P2 supplementary (2026-05-18): pcVault has cosign_required=true
+      // but ProtocolCapsMismatch fires BEFORE the elevation check (handler
+      // queue_policy_update.rs:177-196 runs before line 245 elevation logic),
+      // so cosign session is moot — the basic validation rejects first.
       try {
         await program.methods
           .queuePolicyUpdate(
@@ -5638,8 +7267,16 @@ describe("sigil", () => {
             null,
             null,
             true,
-            [new BN(100_000_000)], // only 1 cap but 2 protocols
-            null, // destinationMode
+            [new BN(100_000_000)],
+            null,
+            null, // operating_hours (TA-05 Phase 3)
+            null, // stable_balance_floor (TA-12 Phase 5 — pass-through)
+            null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
+            null, // cosign_required (G6 — pass-through; mismatch fires before elevation check)
+            null,
+            null, // cosign_session_pubkey (D-5: pass-through)
+            PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated; never reached)
+            await fetchAndComputeQueueDigest(program, pcPolicy, pcVault, {}), // newPolicyPreviewDigest (Phase 2 TA-19)
           )
           .accounts({
             owner: protoCapOwner.publicKey,
@@ -5652,12 +7289,17 @@ describe("sigil", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err, { name: "ProtocolCapsMismatch", code: 6056 });
+        expectSigilError(err, { name: "ProtocolCapsMismatch" });
       }
     });
 
-    it("protocol_caps with non-ALLOWLIST mode rejects", async () => {
-      // Try to initialize vault with ALL mode + protocol_caps → should fail
+    it("protocol_caps length mismatch rejects (ProtocolCapsMismatch)", async () => {
+      // Phase 2 Option A deleted PROTOCOL_MODE_ALL (0). The remaining
+      // ProtocolCapsMismatch failure mode is caps.len() != protocols.len() when
+      // has_protocol_caps is implied. Test passes empty protocols + non-empty
+      // caps; ProtocolCapsMismatch fires at line 113 of initialize_vault.rs,
+      // BEFORE the F-11 ActiveVaultRequiresAllowlist check (line 119), so the
+      // empty allowlist is intentional and load-bearing for the assertion.
       const badVaultId = new BN(901);
       const [bv] = PublicKey.findProgramAddressSync(
         [
@@ -5686,13 +7328,32 @@ describe("sigil", () => {
             badVaultId,
             new BN(1_000_000_000),
             new BN(500_000_000),
-            0, // ALL mode
+            1,
             [],
             0,
             100,
             new BN(1800),
             [],
-            [new BN(100_000_000)], // caps with ALL mode → mismatch
+            [new BN(100_000_000)],
+            false, // observeOnly (Phase 2 TA-19)
+            0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+            false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+            5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+            new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+            new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+            false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+            initVaultPreviewDigest({
+              dailySpendingCapUsd: new BN(1_000_000_000),
+              maxTransactionSizeUsd: new BN(500_000_000),
+              maxSlippageBps: 100,
+              protocolMode: 1,
+              protocols: [],
+              allowedDestinations: [],
+              timelockDuration: new BN(1800),
+              operatingHours: 0x00ffffff,
+              autoPromoteGrays: false,
+              autoRevokeThreshold: 5,
+            }),
           )
           .accounts({
             owner: protoCapOwner.publicKey,
@@ -5707,8 +7368,502 @@ describe("sigil", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err, { name: "ProtocolCapsMismatch", code: 6056 });
+        expectSigilError(err, { name: "ProtocolCapsMismatch" });
       }
+    });
+  });
+
+  // =========================================================================
+  // TA-13 ratification: per-protocol daily cap enforcement (Phase 5, F-15)
+  // =========================================================================
+  //
+  // Adds the 5 regression scenarios required by HARDENED §6 line 985-988.
+  // Pre-Phase-5: the rolling 24h per-protocol cap was already wired in
+  // `finalize_session.rs` (Phase 2), but no LiteSVM test scenario exercised
+  // the actual "exceeds cap → reject" branch. The Phase 2 doc-comment on
+  // `SpendTracker.protocol_counters` claimed "no enforcement yet" — stale.
+  // Phase 5 deletes that comment, ratifies the live enforcement with a
+  // dedicated error variant (`ErrDailyCapExceeded`, 6095), and adds these
+  // 5 scenarios.
+  describe("TA-13 ratification: per-protocol daily cap (F-15)", () => {
+    const ta13Owner = Keypair.generate();
+    const ta13Agent = Keypair.generate();
+    const ta13Fee = Keypair.generate();
+    // F-Q2 migration: the per-protocol cap charges `actual_spend` (measured
+    // balance delta), so the sandwich middle ix must be a REAL drain whose
+    // program == the authorized target_protocol. Both protocols must be LOADED
+    // mock programs. jupiterProtocol = MOCK_DEFI (scenarios 1/3/4/5),
+    // driftProtocol = MOCK_DEFI_2 (scenario 2 — per-protocol independence).
+    const jupiterProtocol = MOCK_DEFI_PROGRAM_ID;
+    const driftProtocol = MOCK_DEFI_2_PROGRAM_ID;
+    const ta13VaultId = new BN(913);
+    // G3a audit fix (§RP-2 2026-05-18 HIGH-1): see protoCapCosigner above.
+    // S3 disables has_protocol_caps; S5 sets a per-protocol cap to 0 —
+    // both weakenings that require cosign under TA-09.
+    const ta13Cosigner = Keypair.generate();
+    // F-Q2 drain destination (throwaway, intentionally NOT allowlisted — the
+    // sink-scoped check skips non-allowlisted route hops; it only needs to be
+    // resolvable in validate's remaining_accounts).
+    const ta13DrainDest = Keypair.generate();
+    let ta13Vault: PublicKey;
+    let ta13Policy: PublicKey;
+    let ta13Tracker: PublicKey;
+    let ta13Overlay: PublicKey;
+    let ta13OwnerUsdc: PublicKey;
+    let ta13VaultUsdc: PublicKey;
+    let ta13FeeUsdc: PublicKey;
+    let ta13DrainDestUsdc: PublicKey;
+    let ta13PendingPda: PublicKey;
+
+    before(async () => {
+      airdropSol(svm, ta13Owner.publicKey, 100 * LAMPORTS_PER_SOL);
+      airdropSol(svm, ta13Agent.publicKey, 10 * LAMPORTS_PER_SOL);
+      airdropSol(svm, ta13Fee.publicKey, 2 * LAMPORTS_PER_SOL);
+
+      ta13OwnerUsdc = createAtaHelper(
+        svm,
+        ta13Owner,
+        usdcMint,
+        ta13Owner.publicKey,
+      );
+      mintToHelper(
+        svm,
+        (owner as any).payer,
+        usdcMint,
+        ta13OwnerUsdc,
+        owner.publicKey,
+        10_000_000_000n,
+      );
+      ta13FeeUsdc = createAtaHelper(svm, ta13Fee, usdcMint, ta13Fee.publicKey);
+
+      [ta13Vault] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("vault"),
+          ta13Owner.publicKey.toBuffer(),
+          ta13VaultId.toArrayLike(Buffer, "le", 8),
+        ],
+        program.programId,
+      );
+      [ta13Policy] = PublicKey.findProgramAddressSync(
+        [Buffer.from("policy"), ta13Vault.toBuffer()],
+        program.programId,
+      );
+      [ta13Tracker] = PublicKey.findProgramAddressSync(
+        [Buffer.from("tracker"), ta13Vault.toBuffer()],
+        program.programId,
+      );
+      [ta13Overlay] = PublicKey.findProgramAddressSync(
+        [Buffer.from("agent_spend"), ta13Vault.toBuffer(), Buffer.from([0])],
+        program.programId,
+      );
+      [ta13PendingPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("pending_policy"), ta13Vault.toBuffer()],
+        program.programId,
+      );
+
+      ta13VaultUsdc = createAtaHelper(
+        svm,
+        ta13Owner,
+        usdcMint,
+        ta13Vault,
+        true,
+      );
+      mintToHelper(
+        svm,
+        (owner as any).payer,
+        usdcMint,
+        ta13VaultUsdc,
+        owner.publicKey,
+        5_000_000_000n,
+      );
+
+      // F-Q2 drain destination ATA — receives the drained USDC each spend.
+      ta13DrainDestUsdc = createAtaHelper(
+        svm,
+        ta13Owner,
+        usdcMint,
+        ta13DrainDest.publicKey,
+      );
+
+      // F-15 fixture: daily_cap=$1000, max_tx=$501, protocols=[Jupiter, Drift],
+      // protocol_caps=[$500, $500]. Bumped max_tx from $500 to $501 so a
+      // single-tx spend of $500 hits the per-protocol cap exactly without
+      // being capped earlier by max_transaction_size_usd. The TA-13
+      // ratification scenarios then push spend AT the per-protocol limit.
+      await program.methods
+        .initializeVault(
+          ta13VaultId,
+          new BN(1_000_000_000), // daily_cap = $1000
+          new BN(501_000_000), // max_tx = $501 (HEADROOM for $500 protocol cap)
+          1,
+          [jupiterProtocol, driftProtocol],
+          0,
+          100,
+          new BN(1800),
+          [],
+          [new BN(500_000_000), new BN(500_000_000)], // Jupiter $500, Drift $500
+          false,
+          0x00ffffff,
+          false,
+          5,
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(1_000_000_000),
+            maxTransactionSizeUsd: new BN(501_000_000),
+            maxSlippageBps: 100,
+            protocolMode: 1,
+            protocols: [jupiterProtocol, driftProtocol],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
+        )
+        .accounts({
+          owner: ta13Owner.publicKey,
+          vault: ta13Vault,
+          policy: ta13Policy,
+          tracker: ta13Tracker,
+          agentSpendOverlay: ta13Overlay,
+          feeDestination: ta13Fee.publicKey,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .signers([ta13Owner])
+        .rpc();
+
+      // F-Q6: OPERATOR grant on this single-key vault routes through the
+      // timelock queue path (helper). ta13Owner is a non-provider keypair, so
+      // it is passed both as `owner` and in `signers` (queue + apply both
+      // require the owner to sign). ta13Agent spends via ta13Spend below.
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: ta13Owner.publicKey,
+        vault: ta13Vault,
+        agent: ta13Agent.publicKey,
+        signers: [ta13Owner],
+      });
+    });
+
+    const ta13Spend = async (protocol: PublicKey, amount: BN) => {
+      const [sessionPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("session"),
+          ta13Vault.toBuffer(),
+          ta13Agent.publicKey.toBuffer(),
+          usdcMint.toBuffer(),
+        ],
+        program.programId,
+      );
+      const validateIx = await program.methods
+        .validateAndAuthorize(
+          usdcMint,
+          amount,
+          protocol,
+          await pv(ta13Policy),
+          new BN(0),
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: ta13Vault,
+              agent: ta13Agent.publicKey,
+              tokenMint: usdcMint,
+              amount,
+              targetProtocol: protocol,
+            }),
+          ),
+        )
+        .accountsPartial({
+          agent: ta13Agent.publicKey,
+          vault: ta13Vault,
+          policy: ta13Policy,
+          tracker: ta13Tracker,
+          session: sessionPda,
+          vaultTokenAccount: ta13VaultUsdc,
+          tokenMintAccount: usdcMint,
+          protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+          feeDestinationTokenAccount: null,
+          outputStablecoinAccount: null,
+          agentSpendOverlay: ta13Overlay,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        // F-Q1a completeness: the drain ix's writable metas (vault ATA + drain
+        // dest) plus the agent fee-payer must be resolvable in validate's
+        // remaining_accounts (else DestinationAccountUnresolvable). Read-only
+        // here — resolved/classified, not authorized.
+        .remainingAccounts([
+          { pubkey: ta13VaultUsdc, isSigner: false, isWritable: false },
+          { pubkey: ta13DrainDestUsdc, isSigner: false, isWritable: false },
+          { pubkey: ta13Agent.publicKey, isSigner: false, isWritable: false },
+        ])
+        .instruction();
+      // Real fund-moving DeFi ix: drain `amount` USDC out of the vault. The
+      // drain's program MUST equal the authorized target_protocol (the cap keys
+      // off session.authorized_protocol), so route through MOCK_DEFI_2's builder
+      // when targeting driftProtocol, else MOCK_DEFI's. actual_spend == amount,
+      // so the per-protocol cap genuinely charges.
+      const drainAmount = netDrainAmount(amount);
+      const drainIx = protocol.equals(MOCK_DEFI_2_PROGRAM_ID)
+        ? buildMockDefiDrain2Ix(
+            ta13VaultUsdc,
+            ta13DrainDestUsdc,
+            ta13Agent.publicKey,
+            drainAmount,
+          )
+        : buildMockDefiDrainIx(
+            ta13VaultUsdc,
+            ta13DrainDestUsdc,
+            ta13Agent.publicKey,
+            drainAmount,
+          );
+      const finalizeIx = await program.methods
+        .finalizeSession()
+        .accountsPartial({
+          payer: ta13Agent.publicKey,
+          vault: ta13Vault,
+          session: sessionPda,
+          sessionRentRecipient: ta13Agent.publicKey,
+          policy: ta13Policy,
+          tracker: ta13Tracker,
+          vaultTokenAccount: ta13VaultUsdc,
+          agentSpendOverlay: ta13Overlay,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+          outputStablecoinAccount: null,
+        })
+        .instruction();
+      return sendVersionedTx(svm, [validateIx, drainIx, finalizeIx], ta13Agent);
+    };
+
+    // SCENARIO 1: spend $500 on Jupiter (at cap), then $1 more Jupiter
+    // → ErrDailyCapExceeded (6095). Global daily_cap=$1000 not yet hit.
+    it("scenario 1: spending exactly cap then $1 more on same protocol → ErrDailyCapExceeded", async () => {
+      // First $500 on Jupiter — fills the per-protocol cap (net of the protocol
+      // fee, actual_spend ≈ $499.90), succeeds.
+      await ta13Spend(jupiterProtocol, new BN(500_000_000));
+      // Next $1 — pushes the Jupiter rolling counter over the $500 cap.
+      // Capture the thrown error OUTSIDE the assertion so a NON-revert is a
+      // real failure: `expect.fail` must NOT live inside the catch (its own
+      // AssertionError message contains "6095" and would vacuously satisfy the
+      // include-check below — a false green). Instead, assert a throw occurred,
+      // then assert it is the per-protocol cap error.
+      // Strict typed assertion (F-Q2 review F2 fix): bind the exact
+      // ErrDailyCapExceeded (6086) via the authoritative error map and reject
+      // ANY other error. The prior loose `includes("6095")` accepted
+      // ErrPendingOwnershipNotReady (6095, unrelated) — a latent false-green.
+      try {
+        await ta13Spend(jupiterProtocol, new BN(1_000_000));
+        expect.fail("second spend must revert (per-protocol cap exceeded)");
+      } catch (err: any) {
+        if (err?.message?.startsWith("second spend must revert")) throw err;
+        expectSigilError(err, { name: "ErrDailyCapExceeded" });
+      }
+    });
+
+    // SCENARIO 2: same state after S1 — Jupiter $500 spent. Spend $499 on
+    // Drift → SUCCEEDS (Drift cap=$500 untouched; global cap has $500
+    // remaining = $1000 - $500).
+    it("scenario 2: other protocol still has room when one is at cap", async () => {
+      await ta13Spend(driftProtocol, new BN(499_000_000));
+    });
+
+    // SCENARIO 3: caps disabled (has_protocol_caps=false). Even after S1+S2,
+    // a third spend on Jupiter would normally exceed the cap — but with
+    // caps disabled, only the global daily_cap applies. Vault has $1 of
+    // global headroom remaining ($1000 - $500 - $499 = $1).
+    it("scenario 3: has_protocol_caps=false (legacy mode) — only global cap enforced", async () => {
+      // Disable per-protocol caps via queue+apply.
+      // G3a audit fix (§RP-2 2026-05-18 HIGH-1) NOTE: weakens_protocol_caps is
+      // one of the 7 elevation triggers, BUT the gate only fires when
+      // `live_cosign_required == true`. ta13Vault is initialized with
+      // `cosignRequired: false` (the G6 default), so the 7-trigger gate
+      // short-circuits and this mutation is NON-elevated. B4 F-3 (audit
+      // 2026-05-19): non-elevated path requires `cosign_session = Pubkey::default`
+      // — silent swallow of a caller-supplied pubkey is REJECTED with
+      // InvalidPermissions. Pass `PublicKey.default` and drop the cosigner
+      // wiring.
+      await program.methods
+        .queuePolicyUpdate(
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          false, // has_protocol_caps = false (master-switch disable)
+          null,
+          null,
+          null,
+          null, // stable_balance_floor (TA-12 — pass-through)
+          null, // per_recipient_daily_cap_usd (TA-14 — pass-through)
+          null, // cosign_required (G6 audit 2026-05-18 — pass-through)
+          null,
+          null, // cosign_session_pubkey (D-5: pass-through)
+          PublicKey.default, // cosign_session (B4 F-3: non-elevated → must be default)
+          await fetchAndComputeQueueDigest(program, ta13Policy, ta13Vault, {}),
+        )
+        .accounts({
+          owner: ta13Owner.publicKey,
+          vault: ta13Vault,
+          policy: ta13Policy,
+          pendingPolicy: ta13PendingPda,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .signers([ta13Owner])
+        .rpc();
+      advanceTime(svm, 1801);
+      await program.methods
+        .applyPendingPolicy()
+        .accounts({
+          owner: ta13Owner.publicKey,
+          vault: ta13Vault,
+          policy: ta13Policy,
+          tracker: ta13Tracker,
+          pendingPolicy: ta13PendingPda,
+        } as any)
+        .signers([ta13Owner])
+        .rpc();
+
+      // Now spend $1 on Jupiter (which would have exceeded the per-protocol
+      // cap). With caps disabled, only global cap applies — and $1 fits
+      // in the $1 of global headroom remaining.
+      await ta13Spend(jupiterProtocol, new BN(1_000_000));
+    });
+
+    // SCENARIO 4: rolling window — after 24h, per-protocol counters expire
+    // and another $500 Jupiter spend succeeds. NOTE: the global daily_cap
+    // tracker uses proportional boundary correction (per
+    // `get_rolling_24h_usd`), so 24h+ ensures BOTH per-protocol AND global
+    // counters are reset. We advance enough to clear both.
+    it("scenario 4: rolling window — 24h+ after first $500 Jupiter spend, another $500 succeeds", async () => {
+      // First re-enable caps (S3 disabled them).
+      await program.methods
+        .queuePolicyUpdate(
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          true, // has_protocol_caps = true
+          [new BN(500_000_000), new BN(500_000_000)],
+          null,
+          null,
+          null,
+          null,
+          null, // cosign_required (G6 audit 2026-05-18 — pass-through)
+          null,
+          null, // cosign_session_pubkey (D-5: pass-through)
+          PublicKey.default,
+          await fetchAndComputeQueueDigest(program, ta13Policy, ta13Vault, {}),
+        )
+        .accounts({
+          owner: ta13Owner.publicKey,
+          vault: ta13Vault,
+          policy: ta13Policy,
+          pendingPolicy: ta13PendingPda,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .signers([ta13Owner])
+        .rpc();
+      advanceTime(svm, 1801);
+      await program.methods
+        .applyPendingPolicy()
+        .accounts({
+          owner: ta13Owner.publicKey,
+          vault: ta13Vault,
+          policy: ta13Policy,
+          tracker: ta13Tracker,
+          pendingPolicy: ta13PendingPda,
+        } as any)
+        .signers([ta13Owner])
+        .rpc();
+
+      // Advance past the 24h rolling window from S1's Jupiter spend.
+      // 144 epochs * 600 = 86_400s. Add buffer.
+      advanceTime(svm, 90_000);
+
+      // Per-protocol Jupiter counter now expired (simple 24h window resets).
+      // Global rolling counter mostly expired (proportional boundary
+      // correction has rolled S1's spend out of the window).
+      await ta13Spend(jupiterProtocol, new BN(500_000_000));
+    });
+
+    // SCENARIO 5: cap=$0 for a specific protocol → all spending on that
+    // protocol blocked. The `get_protocol_cap` Option lookup returns
+    // Some(0); the gate `if proto_cap > 0` SKIPS enforcement (treating
+    // cap=0 as "unlimited"). This is documented behavior — the test
+    // confirms it. To genuinely block, the owner must remove the protocol
+    // from the allowlist (which `is_protocol_allowed` rejects at validate).
+    it("scenario 5: cap=$0 for a specific protocol → unlimited (documented behavior)", async () => {
+      // Update Jupiter cap to $0 (unlimited per documented semantics).
+      // G3a audit fix (§RP-2 2026-05-18 HIGH-1) NOTE: weakens_protocol_caps is
+      // one of the 7 elevation triggers, BUT the gate only fires when
+      // `live_cosign_required == true`. ta13Vault has `cosignRequired: false`
+      // (G6 default), so this mutation is NON-elevated. B4 F-3 (audit
+      // 2026-05-19): non-elevated path requires `cosign_session = Pubkey::default`
+      // — pass `PublicKey.default` and drop cosigner wiring.
+      await program.methods
+        .queuePolicyUpdate(
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          true,
+          [new BN(0), new BN(500_000_000)], // Jupiter cap = $0 (unlimited)
+          null,
+          null,
+          null,
+          null,
+          null, // cosign_required (G6 audit 2026-05-18 — pass-through)
+          null,
+          null, // cosign_session_pubkey (D-5: pass-through)
+          PublicKey.default, // cosign_session (B4 F-3: non-elevated → must be default)
+          await fetchAndComputeQueueDigest(program, ta13Policy, ta13Vault, {}),
+        )
+        .accounts({
+          owner: ta13Owner.publicKey,
+          vault: ta13Vault,
+          policy: ta13Policy,
+          pendingPolicy: ta13PendingPda,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .signers([ta13Owner])
+        .rpc();
+      advanceTime(svm, 1801);
+      await program.methods
+        .applyPendingPolicy()
+        .accounts({
+          owner: ta13Owner.publicKey,
+          vault: ta13Vault,
+          policy: ta13Policy,
+          tracker: ta13Tracker,
+          pendingPolicy: ta13PendingPda,
+        } as any)
+        .signers([ta13Owner])
+        .rpc();
+
+      // After S4 we spent $500 on Jupiter. Global cap is $1000, so we have
+      // $500 of global headroom. With Jupiter cap=$0 (unlimited), the
+      // $500 spend succeeds — bounded only by the global cap, not
+      // per-protocol. Documents the cap=$0 = unlimited semantic.
+      await ta13Spend(jupiterProtocol, new BN(500_000_000));
     });
   });
 
@@ -5758,13 +7913,32 @@ describe("sigil", () => {
           freezeVaultId,
           new BN(1000_000_000),
           new BN(1000_000_000),
-          0,
-          [],
+          1,
+          [jupiterProgramId],
           0,
           100,
-          new BN(1800), // MIN_TIMELOCK_DURATION
+          new BN(1800),
           [],
           [],
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(1000_000_000),
+            maxTransactionSizeUsd: new BN(1000_000_000),
+            maxSlippageBps: 100,
+            protocolMode: 1,
+            protocols: [jupiterProgramId],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accounts({
           owner: owner.publicKey,
@@ -5777,20 +7951,31 @@ describe("sigil", () => {
         } as any)
         .rpc();
 
+      // F-Q6: freezeAgent / freezeAgent2 only verify that freeze/unfreeze
+      // preserves agent entries — neither spends and no capability is asserted.
+      // Register both as VIEWER to avoid the OPERATOR-grant timelock.
       await program.methods
-        .registerAgent(freezeAgent.publicKey, FULL_CAPABILITY, new BN(0))
+        .registerAgent(freezeAgent.publicKey, VIEWER_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: freezeVaultPda,
+          policy: PublicKey.findProgramAddressSync(
+            [Buffer.from("policy"), freezeVaultPda.toBuffer()],
+            program.programId,
+          )[0],
           agentSpendOverlay: freezeOverlay,
         } as any)
         .rpc();
 
       await program.methods
-        .registerAgent(freezeAgent2.publicKey, FULL_CAPABILITY, new BN(0))
+        .registerAgent(freezeAgent2.publicKey, VIEWER_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: freezeVaultPda,
+          policy: PublicKey.findProgramAddressSync(
+            [Buffer.from("policy"), freezeVaultPda.toBuffer()],
+            program.programId,
+          )[0],
           agentSpendOverlay: freezeOverlay,
         } as any)
         .rpc();
@@ -5831,7 +8016,7 @@ describe("sigil", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err, { name: "VaultNotActive", code: 6000 });
+        expectSigilError(err, { name: "VaultNotActive" });
       }
     });
 
@@ -5847,12 +8032,18 @@ describe("sigil", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectAnchorError(err, { name: "ConstraintSeeds", code: 2006 });
+        // Phase 8 LBL-01: seed-key is `vault.vault_authority` (immutable),
+        // not `signer.key()`. PDA derivation passes regardless of signer
+        // identity → `has_one = owner` fires → UnauthorizedOwner (6002).
+        expectSigilError(err, { name: "UnauthorizedOwner", code: 6002 });
       }
     });
 
     it("reactivate unfreezes without needing to add agent (agents preserved)", async () => {
       // Vault is currently frozen from the first test
+      // Phase 8 Batch 5: advance past 5-min reactivate cooldown (ErrReactivateCooldownActive 6097)
+      advanceTime(svm, 301);
+
       await program.methods
         .reactivateVault(null, null)
         .accounts({ owner: owner.publicKey, vault: freezeVaultPda } as any)
@@ -5926,6 +8117,9 @@ describe("sigil", () => {
       const balance = getTokenBalance(svm, vaultUsdcAta);
       expect(balance.toString()).to.equal("0");
 
+      // Phase 8 Batch 5: advance past 5-min reactivate cooldown (ErrReactivateCooldownActive 6097)
+      advanceTime(svm, 301);
+
       // Clean up: reactivate
       await program.methods
         .reactivateVault(null, null)
@@ -5980,13 +8174,32 @@ describe("sigil", () => {
           pauseVaultId,
           new BN(1000_000_000),
           new BN(1000_000_000),
-          0,
+          1,
           [jupiterProgramId],
           0,
           100,
-          new BN(1800), // MIN_TIMELOCK_DURATION
+          new BN(1800),
           [],
           [],
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(1000_000_000),
+            maxTransactionSizeUsd: new BN(1000_000_000),
+            maxSlippageBps: 100,
+            protocolMode: 1,
+            protocols: [jupiterProgramId],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accounts({
           owner: owner.publicKey,
@@ -5999,20 +8212,31 @@ describe("sigil", () => {
         } as any)
         .rpc();
 
-      await program.methods
-        .registerAgent(pauseAgent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: owner.publicKey,
-          vault: pauseVaultPda,
-          agentSpendOverlay: pauseOverlay,
-        } as any)
-        .rpc();
+      // F-Q6: pauseAgent must stay OPERATOR (a later test asserts its
+      // capability == FULL_CAPABILITY and exercises a paused agent_transfer),
+      // so its OPERATOR grant routes through the timelock queue path (helper).
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: pauseVaultPda,
+        agent: pauseAgent.publicKey,
+      });
 
+      // F-Q6: pauseAgent2 is only paused/unpaused (and never spends, no
+      // capability assertion) — register as VIEWER to avoid the OPERATOR-grant
+      // timelock. (pauseAgent above stays OPERATOR via the helper because a
+      // later test asserts its capability == FULL_CAPABILITY and exercises a
+      // paused agentTransfer.)
       await program.methods
-        .registerAgent(pauseAgent2.publicKey, FULL_CAPABILITY, new BN(0))
+        .registerAgent(pauseAgent2.publicKey, VIEWER_CAPABILITY, new BN(0))
         .accounts({
           owner: owner.publicKey,
           vault: pauseVaultPda,
+          policy: PublicKey.findProgramAddressSync(
+            [Buffer.from("policy"), pauseVaultPda.toBuffer()],
+            program.programId,
+          )[0],
           agentSpendOverlay: pauseOverlay,
         } as any)
         .rpc();
@@ -6024,6 +8248,10 @@ describe("sigil", () => {
         .accounts({
           owner: owner.publicKey,
           vault: pauseVaultPda,
+          policy: PublicKey.findProgramAddressSync(
+            [Buffer.from("policy"), pauseVaultPda.toBuffer()],
+            program.programId,
+          )[0],
         } as any)
         .rpc();
 
@@ -6031,7 +8259,7 @@ describe("sigil", () => {
       const entry = vault.agents.find(
         (a: any) => a.pubkey.toString() === pauseAgent.publicKey.toString(),
       );
-      expect(entry.paused).to.equal(true);
+      expect(entry!.paused).to.equal(true);
     });
 
     it("cannot pause an already-paused agent", async () => {
@@ -6041,11 +8269,15 @@ describe("sigil", () => {
           .accounts({
             owner: owner.publicKey,
             vault: pauseVaultPda,
+            policy: PublicKey.findProgramAddressSync(
+              [Buffer.from("policy"), pauseVaultPda.toBuffer()],
+              program.programId,
+            )[0],
           } as any)
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err, { name: "AgentAlreadyPaused", code: 6061 });
+        expectSigilError(err, { name: "AgentAlreadyPaused" });
       }
     });
 
@@ -6057,11 +8289,15 @@ describe("sigil", () => {
           .accounts({
             owner: owner.publicKey,
             vault: pauseVaultPda,
+            policy: PublicKey.findProgramAddressSync(
+              [Buffer.from("policy"), pauseVaultPda.toBuffer()],
+              program.programId,
+            )[0],
           } as any)
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err, { name: "UnauthorizedAgent", code: 6001 });
+        expectSigilError(err, { name: "UnauthorizedAgent" });
       }
     });
 
@@ -6072,12 +8308,19 @@ describe("sigil", () => {
           .accounts({
             owner: unauthorizedUser.publicKey,
             vault: pauseVaultPda,
+            policy: PublicKey.findProgramAddressSync(
+              [Buffer.from("policy"), pauseVaultPda.toBuffer()],
+              program.programId,
+            )[0],
           } as any)
           .signers([unauthorizedUser])
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectAnchorError(err, { name: "ConstraintSeeds", code: 2006 });
+        // Phase 8 LBL-01: seed-key is `vault.vault_authority` (immutable),
+        // not `signer.key()`. PDA derivation passes regardless of signer
+        // identity → `has_one = owner` fires → UnauthorizedOwner (6002).
+        expectSigilError(err, { name: "UnauthorizedOwner", code: 6002 });
       }
     });
 
@@ -6086,7 +8329,7 @@ describe("sigil", () => {
       const entry2 = vault.agents.find(
         (a: any) => a.pubkey.toString() === pauseAgent2.publicKey.toString(),
       );
-      expect(entry2.paused).to.equal(false);
+      expect(entry2!.paused).to.equal(false);
     });
 
     it("paused agent is blocked by agent_transfer (AgentPaused)", async () => {
@@ -6136,7 +8379,11 @@ describe("sigil", () => {
 
       try {
         await program.methods
-          .agentTransfer(new BN(100_000), new BN(0))
+          .agentTransfer(
+            new BN(100_000),
+            ((await program.account.policyConfig.fetch(pausePolicyPda))
+              .policyVersion as BN) ?? new BN(0),
+          )
           .accounts({
             agent: pauseAgent.publicKey,
             vault: pauseVaultPda,
@@ -6154,7 +8401,7 @@ describe("sigil", () => {
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err, { name: "AgentPaused", code: 6060 });
+        expectSigilError(err, { name: "AgentPaused" });
       }
     });
 
@@ -6174,6 +8421,10 @@ describe("sigil", () => {
         .accounts({
           owner: owner.publicKey,
           vault: pauseVaultPda,
+          policy: PublicKey.findProgramAddressSync(
+            [Buffer.from("policy"), pauseVaultPda.toBuffer()],
+            program.programId,
+          )[0],
         } as any)
         .rpc();
 
@@ -6181,7 +8432,10 @@ describe("sigil", () => {
       const entry2 = vault.agents.find(
         (a: any) => a.pubkey.toString() === pauseAgent2.publicKey.toString(),
       );
-      expect(entry2.paused).to.equal(true);
+      expect(entry2!.paused).to.equal(true);
+
+      // Phase 8 Batch 5: advance past 5-min reactivate cooldown (ErrReactivateCooldownActive 6097)
+      advanceTime(svm, 301);
 
       // Clean up: unfreeze and unpause agent2
       await program.methods
@@ -6193,6 +8447,10 @@ describe("sigil", () => {
         .accounts({
           owner: owner.publicKey,
           vault: pauseVaultPda,
+          policy: PublicKey.findProgramAddressSync(
+            [Buffer.from("policy"), pauseVaultPda.toBuffer()],
+            program.programId,
+          )[0],
         } as any)
         .rpc();
     });
@@ -6203,6 +8461,10 @@ describe("sigil", () => {
         .accounts({
           owner: owner.publicKey,
           vault: pauseVaultPda,
+          policy: PublicKey.findProgramAddressSync(
+            [Buffer.from("policy"), pauseVaultPda.toBuffer()],
+            program.programId,
+          )[0],
         } as any)
         .rpc();
 
@@ -6210,7 +8472,7 @@ describe("sigil", () => {
       const entry = vault.agents.find(
         (a: any) => a.pubkey.toString() === pauseAgent.publicKey.toString(),
       );
-      expect(entry.paused).to.equal(false);
+      expect(entry!.paused).to.equal(false);
     });
 
     it("cannot unpause an agent that isn't paused", async () => {
@@ -6220,11 +8482,15 @@ describe("sigil", () => {
           .accounts({
             owner: owner.publicKey,
             vault: pauseVaultPda,
+            policy: PublicKey.findProgramAddressSync(
+              [Buffer.from("policy"), pauseVaultPda.toBuffer()],
+              program.programId,
+            )[0],
           } as any)
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectSigilError(err, { name: "AgentNotPaused", code: 6062 });
+        expectSigilError(err, { name: "AgentNotPaused" });
       }
     });
 
@@ -6235,6 +8501,10 @@ describe("sigil", () => {
         .accounts({
           owner: owner.publicKey,
           vault: pauseVaultPda,
+          policy: PublicKey.findProgramAddressSync(
+            [Buffer.from("policy"), pauseVaultPda.toBuffer()],
+            program.programId,
+          )[0],
         } as any)
         .rpc();
 
@@ -6244,12 +8514,19 @@ describe("sigil", () => {
           .accounts({
             owner: unauthorizedUser.publicKey,
             vault: pauseVaultPda,
+            policy: PublicKey.findProgramAddressSync(
+              [Buffer.from("policy"), pauseVaultPda.toBuffer()],
+              program.programId,
+            )[0],
           } as any)
           .signers([unauthorizedUser])
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expectAnchorError(err, { name: "ConstraintSeeds", code: 2006 });
+        // Phase 8 LBL-01: seed-key is `vault.vault_authority` (immutable),
+        // not `signer.key()`. PDA derivation passes regardless of signer
+        // identity → `has_one = owner` fires → UnauthorizedOwner (6002).
+        expectSigilError(err, { name: "UnauthorizedOwner", code: 6002 });
       }
 
       // Clean up: unpause
@@ -6258,6 +8535,10 @@ describe("sigil", () => {
         .accounts({
           owner: owner.publicKey,
           vault: pauseVaultPda,
+          policy: PublicKey.findProgramAddressSync(
+            [Buffer.from("policy"), pauseVaultPda.toBuffer()],
+            program.programId,
+          )[0],
         } as any)
         .rpc();
     });
@@ -6269,6 +8550,10 @@ describe("sigil", () => {
         .accounts({
           owner: owner.publicKey,
           vault: pauseVaultPda,
+          policy: PublicKey.findProgramAddressSync(
+            [Buffer.from("policy"), pauseVaultPda.toBuffer()],
+            program.programId,
+          )[0],
         } as any)
         .rpc();
 
@@ -6277,6 +8562,10 @@ describe("sigil", () => {
         .accounts({
           owner: owner.publicKey,
           vault: pauseVaultPda,
+          policy: PublicKey.findProgramAddressSync(
+            [Buffer.from("policy"), pauseVaultPda.toBuffer()],
+            program.programId,
+          )[0],
         } as any)
         .rpc();
 
@@ -6284,8 +8573,8 @@ describe("sigil", () => {
       const entry = vault.agents.find(
         (a: any) => a.pubkey.toString() === pauseAgent.publicKey.toString(),
       );
-      expect(entry.paused).to.equal(false);
-      expect(entry.capability).to.equal(FULL_CAPABILITY);
+      expect(entry!.paused).to.equal(false);
+      expect(entry!.capability).to.equal(FULL_CAPABILITY);
     });
   });
 });

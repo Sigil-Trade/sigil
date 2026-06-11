@@ -65,7 +65,6 @@ function fixtureActivity(
     tokenMint: null,
     tokenSymbol: null,
     isSpending: true,
-    actionType: "swap",
     protocol: JUPITER,
     protocolName: "Jupiter",
     success: true,

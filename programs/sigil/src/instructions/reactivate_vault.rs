@@ -3,6 +3,13 @@ use anchor_lang::prelude::*;
 use crate::errors::SigilError;
 use crate::events::VaultReactivated;
 use crate::state::*;
+use crate::utils::audit_log::build_audit_entry;
+use crate::utils::operator_grant::{
+    classify_operator_grant_tier, operator_grant_is_instant_eligible, OperatorGrantTier,
+};
+use crate::utils::policy_digest::{
+    compute_agent_set_hash, compute_policy_preview_digest, PolicyPreviewFields,
+};
 
 #[derive(Accounts)]
 pub struct ReactivateVault<'info> {
@@ -11,10 +18,41 @@ pub struct ReactivateVault<'info> {
     #[account(
         mut,
         has_one = owner @ SigilError::UnauthorizedOwner,
-        seeds = [b"vault", owner.key().as_ref(), vault.vault_id.to_le_bytes().as_ref()],
+        seeds = [b"vault", vault.vault_authority.as_ref(), vault.vault_id.to_le_bytes().as_ref()],
         bump = vault.bump,
     )]
     pub vault: Account<'info, AgentVault>,
+
+    /// Round 2 F-RP3-1 fix (audit 2026-05-19): policy is now mutated by
+    /// `reactivate_vault` to:
+    ///   1. Read `cosign_required` for the interim cosign gate (the previous
+    ///      handler granted FULL_CAPABILITY to a fresh agent with NO cosign
+    ///      gate on a cosign-opted-in vault — phished-owner instant operator
+    ///      grant via freeze→reactivate(attacker, FULL_CAPABILITY)).
+    ///   2. Bump `policy_version` after the agent push so any in-flight
+    ///      validate_and_authorize fails fast with PolicyVersionMismatch
+    ///      rather than relying on the slower vault.is_agent constraint.
+    ///
+    /// Policy-to-vault binding via PDA seeds — same pattern as
+    /// `register_agent.rs:35-40`.
+    #[account(
+        mut,
+        seeds = [b"policy", vault.key().as_ref()],
+        bump = policy.bump,
+    )]
+    pub policy: Account<'info, PolicyConfig>,
+
+    /// Phase 7 — success audit log; entry appended after status flip.
+    #[account(
+        mut,
+        seeds = [b"audit_success", vault.key().as_ref()],
+        bump = audit_log_success.load()?.bump,
+    )]
+    pub audit_log_success: AccountLoader<'info, AuditLogSuccess>,
+
+    /// CHECK: Phase 7 — slot_hashes sysvar; address-pinned.
+    #[account(address = anchor_lang::solana_program::sysvar::slot_hashes::id())]
+    pub slot_hashes_sysvar: UncheckedAccount<'info>,
 }
 
 pub fn handler(
@@ -24,21 +62,86 @@ pub fn handler(
 ) -> Result<()> {
     crate::reject_cpi!();
 
-    let vault = &mut ctx.accounts.vault;
+    // Round 2 §RP-1 F-RP3-1 fix (audit 2026-05-19): status check fires
+    // FIRST so callers operating on a non-frozen vault receive the more
+    // diagnostic `VaultNotFrozen` (6021) rather than the misleading
+    // `ErrCosignRequired` (6080) that the cosign gate would surface. The
+    // cosign gate is still load-bearing for the phished-owner scenario
+    // (freeze→reactivate(attacker, FULL_CAPABILITY)) — it just runs
+    // SECOND so the error-code priority matches operator expectations.
 
-    // 1. Check frozen
+    // 1. Status check FIRST — diagnostic priority. Read-only borrow so
+    // the subsequent cosign-gate check on `ctx.accounts.policy` does not
+    // conflict with a mutable borrow.
     require!(
-        vault.status == VaultStatus::Frozen,
+        ctx.accounts.vault.status == VaultStatus::Frozen,
         SigilError::VaultNotFrozen
     );
 
-    // 2. Validate mutual presence of new_agent and new_agent_capability
+    // 2. Interim cosign gate (Round 2 F-RP3-1). The previous handler
+    // granted FULL_CAPABILITY to a fresh agent on a frozen vault with
+    // NO cosign gate — a phished owner could chain `freeze_vault` →
+    // `reactivate_vault(attacker, FULL_CAPABILITY)` in one tx and
+    // silently install operator capability on a vault that has opted
+    // into cosign. Mirrors `register_agent.rs:91-95` and
+    // `set_observe_only.rs`. Vaults with the default
+    // `cosign_required: false` are unaffected.
+    if ctx.accounts.policy.cosign_required {
+        let owner_key = ctx.accounts.owner.key();
+        let has_cosigner = crate::instructions::register_agent::has_non_owner_signer(
+            ctx.remaining_accounts,
+            &owner_key,
+        );
+        require!(has_cosigner, SigilError::ErrCosignRequired);
+    }
+
+    // 2.5 Phase 8 C28 — 5-minute observation cooldown.
+    //
+    // The cooldown protects against fat-finger unfreeze + brief panic-then-
+    // reactivate workflows. Owner freezes, observes for 5 min, then can
+    // reactivate. UX safety net — see T-19 in THREAT_MODEL_V2.md for the
+    // close+reinit adversarial bypass acknowledgement (V1.1 mitigation
+    // deferred per L-2 no-additional-rent-cost preference).
+    //
+    // Reads the new `frozen_at_timestamp` field added in Phase 8 Batch 1
+    // (AgentVault APPEND-ONLY +9 bytes). Existing post-freeze vaults that
+    // were frozen before this field landed will have 0 → fail the < 300
+    // window check trivially (clock - 0 >> 300), so the cooldown never
+    // fires retroactively.
+    //
+    // Phase 8 §RP Fix-Up B (SFH-04 MED, audit 2026-05-19): defense-in-depth
+    // assert that `frozen_at_timestamp > 0` BEFORE the cooldown check. The
+    // current handler ordering (status check FIRST → cooldown SECOND) makes
+    // this redundant — a vault in Frozen state always has
+    // `frozen_at_timestamp > 0` because `freeze_internal` writes both atomically.
+    // But a future refactor that re-orders the cooldown check above the
+    // status check would let a pre-freeze vault (frozen_at = 0) pass the
+    // cooldown trivially (clock - 0 = clock >> 300 for any non-genesis
+    // clock). The explicit assert pins the invariant at compile-time of
+    // reviewer attention. `VaultNotFrozen` (6021) is the canonical signal
+    // for "this vault was never frozen / frozen_at unset".
+    require!(
+        ctx.accounts.vault.frozen_at_timestamp > 0,
+        SigilError::VaultNotFrozen
+    );
+    const REACTIVATE_COOLDOWN_SECONDS: i64 = 300;
+    let now_pre_mut = Clock::get()?.unix_timestamp;
+    let frozen_at = ctx.accounts.vault.frozen_at_timestamp;
+    let elapsed = now_pre_mut.saturating_sub(frozen_at);
+    require!(
+        elapsed >= REACTIVATE_COOLDOWN_SECONDS,
+        SigilError::ErrReactivateCooldownActive
+    );
+
+    let vault = &mut ctx.accounts.vault;
+
+    // 3. Validate mutual presence of new_agent and new_agent_capability
     require!(
         new_agent.is_some() == new_agent_capability.is_some(),
         SigilError::InvalidPermissions
     );
 
-    // 3. Optionally assign new agent
+    // 4. Optionally assign new agent
     if let Some(agent_key) = new_agent {
         let capability = new_agent_capability.unwrap();
         require!(agent_key != Pubkey::default(), SigilError::InvalidAgentKey);
@@ -55,24 +158,167 @@ pub fn handler(
             !vault.is_agent(&agent_key),
             SigilError::AgentAlreadyRegistered
         );
+
+        // F-Q6 (2026-06-03): an OPERATOR (== FULL_CAPABILITY) graft on the
+        // reactivate path now honors the SAME tier rule as register_agent — an
+        // instant OPERATOR seat requires >= 2 authorization factors at zero
+        // configured delay. This closes the freeze→reactivate instant-OPERATOR
+        // vector UNIFORMLY with register_agent: the prior NH-1 gate accepted ANY
+        // non-owner signer on an unbound (single-key) vault, but Council C-1
+        // established that an unbound throwaway signer is NOT a real 2nd factor.
+        //
+        // Behavior by tier (matches register_agent exactly):
+        //   - SINGLE-KEY (incl. cosign_required but UNBOUND): NOT instant-
+        //     eligible → reject 6107. The owner reactivates with a non-OPERATOR
+        //     agent (an Observer satisfies the >=1-agent requirement at the
+        //     bottom of this handler) and routes the OPERATOR through
+        //     queue_agent_grant → apply_agent_grant (the >=10-min delay is the
+        //     missing 2nd factor). No brick: the Observer-reactivate path stays
+        //     open.
+        //   - COSIGN-BOUND (cosign_session_pubkey != default, delay 0): instant
+        //     IFF a signer matching the BOUND pubkey is present (TA-19-bound at
+        //     canonical position 22, so a tampered SDK cannot flip the gate).
+        //   - MULTISIG (owner_type==1): instant (unreachable in V1 — a keyless
+        //     Squads PDA can't satisfy owner:Signer + reject_cpi!).
+        // A configured operator_grant_delay_seconds > 0 routes even cosign/
+        // multisig through the queue path (instant-eligible only at delay 0).
+        if capability >= CAPABILITY_OPERATOR {
+            require!(
+                vault.owner_type <= OWNER_TYPE_MULTISIG,
+                SigilError::InvalidOwnerType
+            );
+            let tier = classify_operator_grant_tier(
+                vault.owner_type,
+                ctx.accounts.policy.cosign_required,
+                &ctx.accounts.policy.cosign_session_pubkey,
+            );
+            require!(
+                operator_grant_is_instant_eligible(
+                    tier,
+                    ctx.accounts.policy.operator_grant_delay_seconds
+                ),
+                SigilError::ErrOperatorGrantRequiresTimelock
+            );
+            if tier == OperatorGrantTier::CosignBound {
+                let cosign_session_pubkey = ctx.accounts.policy.cosign_session_pubkey;
+                let cosign_ok = ctx
+                    .remaining_accounts
+                    .iter()
+                    .any(|ai| ai.is_signer && ai.key() == cosign_session_pubkey);
+                require!(cosign_ok, SigilError::ErrCosignRequired);
+            }
+        }
+
         vault.agents.push(AgentEntry {
             pubkey: agent_key,
             capability,
-            _reserved: [0u8; 7],
+            consecutive_failures: 0, // TA-17 (Phase 3): fresh counter on reactivation
+            _reserved: [0u8; 6],
             spending_limit_usd: 0, // reactivation agent starts with no per-agent limit
             paused: false,
         });
     }
 
-    // 4. Guard against soft-lock: cannot activate with no agents
+    // 5. Guard against soft-lock: cannot activate with no agents
     require!(!vault.agents.is_empty(), SigilError::NoAgentRegistered);
 
-    // 5. Mutate status only after all checks pass
+    // M-9 close (audit 2026-05-21, defense-in-depth): mirror F-11 from
+    // set_observe_only.rs:80-84 — an Active vault MUST have at least one
+    // populated allowlist (protocols or destinations). Reactivate cannot
+    // mutate these allowlists, so this check is bullet-proofing against
+    // future code changes that might enable allowlist mutation on the
+    // reactivate path (e.g., a follow-up that lets owners trim allowlists
+    // during freeze). Today the invariant is preserved by virtue of the
+    // freeze handler not touching policy.protocols / policy.allowed_destinations,
+    // but enforcement here makes the invariant load-bearing on the path.
+    {
+        let policy = &ctx.accounts.policy;
+        require!(
+            !policy.protocols.is_empty() || !policy.allowed_destinations.is_empty(),
+            SigilError::ActiveVaultRequiresAllowlist
+        );
+    }
+
+    // 6. Mutate status only after all checks pass
     vault.status = VaultStatus::Active;
 
     let clock = Clock::get()?;
+    let vault_key = vault.key();
+
+    // Phase 8 §RP Fix-Up B (LBL-03 HIGH, audit 2026-05-19): recompute
+    // policy_preview_digest with the new agent_set_hash. `vault.agents`
+    // may have been mutated above (when `new_agent.is_some()`); even when
+    // no agent was added, recompute unconditionally so the digest is
+    // re-bound to the post-reactivate live state. Mirrors
+    // `apply_agent_grant.rs:172-196` canonical pattern.
+    //
+    // Round 2 F-RP3-1 fix (audit 2026-05-19): bump policy_version.
+    // Permission posture changes when a new agent is grafted onto the
+    // vault during reactivate — bumping the version ensures any in-flight
+    // validate_and_authorize fails fast with PolicyVersionMismatch
+    // (defense in depth) rather than relying on the slower
+    // vault.is_agent constraint.
+    {
+        let policy = &mut ctx.accounts.policy;
+        let new_agent_set_hash = compute_agent_set_hash(&vault.agents);
+        let new_digest = compute_policy_preview_digest(&PolicyPreviewFields {
+            daily_spending_cap_usd: policy.daily_spending_cap_usd,
+            max_transaction_size_usd: policy.max_transaction_size_usd,
+            max_slippage_bps: policy.max_slippage_bps,
+            developer_fee_rate: policy.developer_fee_rate,
+            protocol_mode: policy.protocol_mode,
+            protocols: &policy.protocols,
+            destination_mode: policy.destination_mode,
+            allowed_destinations: &policy.allowed_destinations,
+            timelock_duration: policy.timelock_duration,
+            session_expiry_seconds: policy.session_expiry_seconds,
+            observe_only: vault.observe_only,
+            has_post_assertions: policy.has_post_assertions,
+            created_at_slot: policy.created_at_slot,
+            operating_hours: policy.operating_hours,
+            auto_promote_grays: policy.auto_promote_grays,
+            auto_revoke_threshold: policy.auto_revoke_threshold,
+            stable_balance_floor: policy.stable_balance_floor,
+            per_recipient_daily_cap_usd: policy.per_recipient_daily_cap_usd,
+            cosign_required: policy.cosign_required,
+            agent_set_hash: new_agent_set_hash,
+            // D-5 (audit 2026-05-19, F-RP3-1): cosign_session_pubkey bound
+            // at canonical position 22 — reactivate_vault never mutates
+            // it, so pass-through from live policy keeps the re-bind
+            // digest matching the queue-time digest.
+            cosign_session_pubkey: policy.cosign_session_pubkey,
+            // F-Q6: operator_grant_delay_seconds bound at canonical digest position 22.
+            operator_grant_delay_seconds: policy.operator_grant_delay_seconds,
+        });
+        policy.policy_preview_digest = new_digest;
+        policy.policy_version = policy
+            .policy_version
+            .checked_add(1)
+            .ok_or(error!(SigilError::Overflow))?;
+    }
+
+    // Phase 7 — write success audit-log entry AFTER state mutation.
+    {
+        let entry = build_audit_entry(
+            AUDIT_DISC_REACTIVATE,
+            vault_key,
+            0,
+            0,
+            clock.unix_timestamp,
+            &ctx.accounts.slot_hashes_sysvar.to_account_info(),
+        )?;
+        let mut log = ctx.accounts.audit_log_success.load_mut()?;
+        // §RP-1 I-2: defense-in-depth guard against future seeds drift.
+        require_keys_eq!(
+            log.vault,
+            ctx.accounts.vault.key(),
+            SigilError::ZeroCopyVaultMismatch
+        );
+        log.append(entry);
+    }
+
     emit!(VaultReactivated {
-        vault: vault.key(),
+        vault: vault_key,
         new_agent,
         new_agent_capability,
         timestamp: clock.unix_timestamp,

@@ -82,39 +82,60 @@ import { SIGIL_ERROR__SDK__INVALID_PARAMS } from "./errors/codes.js";
 // ─── On-chain account sizes (verified against programs/sigil/src/state/*.rs) ─
 
 /**
- * `AgentVault::SIZE` from `programs/sigil/src/state/vault.rs`.
+ * `AgentVault::SIZE` from `programs/sigil/src/state/vault.rs:135-152`.
  * Layout: 8 disc + 32 owner + 8 vault_id + 4 vec_prefix + (49 * 10) agents
  *       + 32 fee_destination + 1 status + 1 bump + 8 created_at
- *       + 8 total_transactions + 8 total_volume + 1 active_escrow_count
+ *       + 8 total_transactions + 8 total_volume
  *       + 8 total_fees_collected + 8 total_deposited_usd + 8 total_withdrawn_usd
- *       + 8 total_failed_transactions + 1 active_sessions = 634.
+ *       + 8 total_failed_transactions + 1 active_sessions
+ *       + 1 observe_only [Phase 2 TA-19] + 8 frozen_at_timestamp + 1 freeze_reason
+ *       + 1 owner_type [F-Q6] + 32 vault_authority [Phase 8 LBL-01] = 676.
+ *   (Was 634 — stale: it predated the Phase-8 fields frozen_at_timestamp +
+ *    freeze_reason + vault_authority (+41) and F-Q6 owner_type (+1); corrected
+ *    to the rent-exact 676 here.)
  */
-const AGENT_VAULT_SIZE = 634;
+const AGENT_VAULT_SIZE = 676;
 
 /**
- * `PolicyConfig::SIZE` from `programs/sigil/src/state/policy.rs`.
+ * `PolicyConfig::SIZE` from `programs/sigil/src/state/policy.rs:323-350`.
  * Layout: 8 disc + 32 vault + 8 daily_cap + 8 max_tx + 1 protocol_mode
- *       + (4 + 32*10) protocols + 2 dev_fee + 2 slippage + 8 timelock
- *       + (4 + 32*10) allowed_destinations + 1 has_constraints
- *       + 1 has_pending_policy + 1 has_protocol_caps
+ *       + (4 + 32*10) protocols + 2 dev_fee + 2 max_slippage_bps
+ *       + 8 session_window + (4 + 32*10) allowed_destinations
+ *       + 1 has_pending_policy + 1 has_protocol_caps [M1-04 removed has_constraints]
  *       + (4 + 8*10) protocol_caps + 8 session_expiry + 1 bump
- *       + 8 policy_version + 1 has_post_assertions = 822.
+ *       + 8 policy_version + 1 has_post_assertions + 1 destination_mode
+ *       + 32 policy_preview_digest [TA-19 Phase 2]
+ *       + 8 created_at_slot [PEN-CROSS-2]
+ *       + 4 operating_hours [TA-05 Phase 3]
+ *       + (4 + 40*10) destination_graylist [TA-07 Phase 3]
+ *       + 1 auto_promote_grays [TA-07] + 1 auto_revoke_threshold [TA-17]
+ *       + 8 stable_balance_floor [TA-12 Phase 5]
+ *       + 8 per_recipient_daily_cap_usd [TA-14 Phase 5]
+ *       + 1 cosign_required [G6 audit 2026-05-18]
+ *       + 32 cosign_session_pubkey [D-5 audit 2026-05-19, F-RP3-1]
+ *       + 8 operator_grant_delay_seconds [F-Q6 2026-06-02] = 1,329.
+ *   (Was 1,322 pre-F-Q6 — that value double-counted the M1-04-removed
+ *    has_constraints byte; corrected to the rent-exact 1,329 here.)
  */
-const POLICY_CONFIG_SIZE = 822;
+const POLICY_CONFIG_SIZE = 1_329;
 
 /**
- * `SpendTracker::SIZE` from `programs/sigil/src/state/tracker.rs`.
+ * `SpendTracker::SIZE` from `programs/sigil/src/state/tracker.rs:200-214`.
  * Layout: 8 disc + 32 vault + (16 * 144) buckets + (48 * 10) protocol_counters
- *       + 8 last_write_epoch + 1 bump + 7 padding = 2840.
+ *       + 8 last_write_epoch + 1 bump + 7 padding
+ *       + (48 * 10) per_recipient [TA-14 Phase 5]
+ *       + 1 per_recipient_count + 7 _padding_recipient = 3,328.
  */
-const SPEND_TRACKER_SIZE = 2_840;
+const SPEND_TRACKER_SIZE = 3_328;
 
 /**
- * `AgentSpendOverlay::SIZE` from `programs/sigil/src/state/agent_spend_overlay.rs`.
+ * `AgentSpendOverlay::SIZE` from `programs/sigil/src/state/agent_spend_overlay.rs:114-123`.
  * Layout: 8 disc + 32 vault + (232 * 10) entries + 1 bump + 7 padding
- *       + (8 * 10) lifetime_spend + (8 * 10) lifetime_tx_count = 2528.
+ *       + (8 * 10) lifetime_spend + (8 * 10) lifetime_tx_count
+ *       + (8 * 10) cooldown_seconds [TA-06 Phase 3]
+ *       + (8 * 10) last_action_unix [TA-06 Phase 3] = 2,688.
  */
-const AGENT_SPEND_OVERLAY_SIZE = 2_528;
+const AGENT_SPEND_OVERLAY_SIZE = 2_688;
 
 /** Default priority fee when caller doesn't supply one. Conservative. */
 const DEFAULT_PRIORITY_FEE_MICRO_LAMPORTS = 10_000;

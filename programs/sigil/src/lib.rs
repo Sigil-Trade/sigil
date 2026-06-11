@@ -6,6 +6,7 @@ pub mod errors;
 pub mod events;
 pub mod instructions;
 pub mod state;
+pub mod utils;
 
 #[cfg(feature = "certora")]
 mod certora;
@@ -13,7 +14,7 @@ mod certora;
 use instructions::*;
 use state::post_assertions::PostAssertionEntry;
 
-declare_id!("4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL");
+declare_id!("7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK");
 
 #[allow(clippy::too_many_arguments)]
 #[program]
@@ -35,6 +36,23 @@ pub mod sigil {
         timelock_duration: u64,
         allowed_destinations: Vec<Pubkey>,
         protocol_caps: Vec<u64>,
+        observe_only: bool,
+        operating_hours: u32,
+        auto_promote_grays: bool,
+        auto_revoke_threshold: u8,
+        // TA-12 (Phase 5): owner's hard floor on combined USDC+USDT vault
+        // balance. Default 0 = no reserve. Bound by TA-19 at digest position 18.
+        stable_balance_floor: u64,
+        // TA-14 (Phase 5): owner's per-recipient rolling 24h outflow cap.
+        // Default 0 = no per-recipient cap. Bound by TA-19 at digest position 19.
+        per_recipient_daily_cap_usd: u64,
+        // G6 (audit 2026-05-18 cosign opt-in): owner's opt-in choice for
+        // TA-09 cosign enforcement on elevated mutations. Default false at
+        // most SDK call sites (low-friction, owner-signature-only). When
+        // true, future `queue_policy_update` calls with elevated mutations
+        // require a cosign session. Bound by TA-19 at digest position 20.
+        cosign_required: bool,
+        preview_digest: [u8; 32],
     ) -> Result<()> {
         instructions::initialize_vault::handler(
             ctx,
@@ -48,6 +66,14 @@ pub mod sigil {
             timelock_duration,
             allowed_destinations,
             protocol_caps,
+            observe_only,
+            operating_hours,
+            auto_promote_grays,
+            auto_revoke_threshold,
+            stable_balance_floor,
+            per_recipient_daily_cap_usd,
+            cosign_required,
+            preview_digest,
         )
     }
 
@@ -81,6 +107,26 @@ pub mod sigil {
         amount: u64,
         target_protocol: Pubkey,
         expected_policy_version: u64,
+        // AC-10 (Phase 4) — session nonce closing durable-nonce replay
+        // (per Audit #1 C-1). Caller passes 0 for a fresh session; the
+        // session PDA is closed at finalize so the steady-state always
+        // resets to 0 between validates. Phase 8 ownership-transfer flow
+        // (M-5) reuses the same field for replay protection.
+        expected_nonce: u64,
+        // D-1 + D-6 (Bucket 2 audit 2026-05-21) — AL3 scalar intent digest.
+        // 32-byte SHA-256 over the canonical SealInput SCALARS the wallet
+        // approved at preview time (`b"SIG1"` magic prefix + intent_version
+        // = 2 + network_id + vault + agent + token_mint + amount +
+        // target_protocol). The on-chain verifier in
+        // `validate_and_authorize::handler` recomputes the same digest from
+        // these args and rejects on byte-equal mismatch (6111
+        // ErrIntentDigestMismatch). Closes the preview→execute scalar
+        // tamper class (recipient/amount/mint/protocol swap between the
+        // user's signed preview and the submitted bundle). The full
+        // ix-bound digest remains client-side only — see
+        // `sdk/kit/src/seal/intent-digest.ts`'s `computeSealInputDigest`
+        // for the full envelope and the v0.17 plan for on-chain ix binding.
+        expected_intent_digest: [u8; 32],
     ) -> Result<()> {
         instructions::validate_and_authorize::handler(
             ctx,
@@ -88,6 +134,8 @@ pub mod sigil {
             amount,
             target_protocol,
             expected_policy_version,
+            expected_nonce,
+            expected_intent_digest,
         )
     }
 
@@ -123,6 +171,10 @@ pub mod sigil {
     }
 
     /// Queue a policy update when timelock is active.
+    /// TA-09 (Phase 3): adds `cosign_session: Pubkey` arg. Pass
+    /// `Pubkey::default()` for non-elevated mutations; for elevated
+    /// mutations pass the cosigner pubkey and include the corresponding
+    /// signer in `remaining_accounts`.
     pub fn queue_policy_update(
         ctx: Context<QueuePolicyUpdate>,
         daily_spending_cap_usd: Option<u64>,
@@ -137,6 +189,28 @@ pub mod sigil {
         has_protocol_caps: Option<bool>,
         protocol_caps: Option<Vec<u64>>,
         destination_mode: Option<u8>,
+        operating_hours: Option<u32>,
+        // TA-12 (Phase 5): optional update to PolicyConfig.stable_balance_floor.
+        // None passes the live value through; Some(n) sets the new floor.
+        stable_balance_floor: Option<u64>,
+        // TA-14 (Phase 5): optional update to
+        // PolicyConfig.per_recipient_daily_cap_usd. None = pass-through.
+        per_recipient_daily_cap_usd: Option<u64>,
+        // G6 (audit 2026-05-18 cosign opt-in): optional update to
+        // PolicyConfig.cosign_required. None = pass-through; Some(true)
+        // = enable (non-elevated); Some(false) when live is true =
+        // disable (ELEVATED — one-way ratchet).
+        cosign_required: Option<bool>,
+        // D-5 (audit 2026-05-19, F-RP3-1): optional update to
+        // PolicyConfig.cosign_session_pubkey. None = pass-through;
+        // Some(pubkey) = set (Pubkey::default() disables the reactivate
+        // cosign gate, any other pubkey enables it). Bound by TA-19 at
+        // canonical digest position 22.
+        cosign_session_pubkey: Option<Pubkey>,
+        // F-Q6 (2026-06-02): owner-configurable OPERATOR-grant delay (seconds).
+        operator_grant_delay_seconds: Option<u64>,
+        cosign_session: Pubkey,
+        new_policy_preview_digest: [u8; 32],
     ) -> Result<()> {
         instructions::queue_policy_update::handler(
             ctx,
@@ -152,6 +226,14 @@ pub mod sigil {
             has_protocol_caps,
             protocol_caps,
             destination_mode,
+            operating_hours,
+            stable_balance_floor,
+            per_recipient_daily_cap_usd,
+            cosign_required,
+            cosign_session_pubkey,
+            operator_grant_delay_seconds,
+            cosign_session,
+            new_policy_preview_digest,
         )
     }
 
@@ -165,82 +247,15 @@ pub mod sigil {
         instructions::cancel_pending_policy::handler(ctx)
     }
 
-    /// Allocate the InstructionConstraints PDA at 10,240 bytes (CPI limit).
-    /// Must be followed by extend_pda calls + create_instruction_constraints
-    /// in the same atomic transaction to reach full SIZE.
-    pub fn allocate_constraints_pda(ctx: Context<AllocateConstraintsPda>) -> Result<()> {
-        instructions::allocate_constraints_pda::handler(ctx)
-    }
-
-    /// Allocate the PendingConstraintsUpdate PDA at 10,240 bytes (CPI limit).
-    /// Must be followed by extend_pda calls + queue_constraints_update
-    /// in the same atomic transaction.
-    pub fn allocate_pending_constraints_pda(
-        ctx: Context<AllocatePendingConstraintsPda>,
-    ) -> Result<()> {
-        instructions::allocate_pending_constraints_pda::handler(ctx)
-    }
-
-    /// Grow a program-owned PDA by up to 10,240 bytes per call.
-    /// Used to extend constraints/pending PDAs to full SIZE before population.
-    pub fn extend_pda(ctx: Context<ExtendPda>, target_size: u32) -> Result<()> {
-        instructions::extend_pda::handler(ctx, target_size)
-    }
-
-    /// Populate a pre-allocated InstructionConstraints PDA with entries.
-    /// Only the owner can call this. PDA must be at full SIZE.
-    pub fn create_instruction_constraints(
-        ctx: Context<CreateInstructionConstraints>,
-        entries: Vec<state::ConstraintEntry>,
-        strict_mode: bool,
-    ) -> Result<()> {
-        instructions::create_instruction_constraints::handler(ctx, entries, strict_mode)
-    }
-
-    // close_instruction_constraints DELETED — use queue_close_constraints → apply_close_constraints.
-    // update_instruction_constraints DELETED — use queue_constraints_update → apply_constraints_update.
-
-    /// Queue a constraints update when timelock is active.
-    pub fn queue_constraints_update(
-        ctx: Context<QueueConstraintsUpdate>,
-        entries: Vec<state::ConstraintEntry>,
-        strict_mode: bool,
-    ) -> Result<()> {
-        instructions::queue_constraints_update::handler(ctx, entries, strict_mode)
-    }
-
-    /// Apply a queued constraints update after the timelock expires.
-    pub fn apply_constraints_update(ctx: Context<ApplyConstraintsUpdate>) -> Result<()> {
-        instructions::apply_constraints_update::handler(ctx)
-    }
-
-    /// Cancel a queued constraints update.
-    pub fn cancel_constraints_update(ctx: Context<CancelConstraintsUpdate>) -> Result<()> {
-        instructions::cancel_constraints_update::handler(ctx)
-    }
-
-    /// Queue a constraint closure. Timelock-gated.
-    pub fn queue_close_constraints(ctx: Context<QueueCloseConstraints>) -> Result<()> {
-        instructions::queue_close_constraints::handler(ctx)
-    }
-
-    /// Apply a queued constraint closure after timelock expires.
-    /// Closes the constraints PDA, clears policy.has_constraints, bumps policy_version.
-    pub fn apply_close_constraints(ctx: Context<ApplyCloseConstraints>) -> Result<()> {
-        instructions::apply_close_constraints::handler(ctx)
-    }
-
-    /// Cancel a queued constraint closure.
-    pub fn cancel_close_constraints(ctx: Context<CancelCloseConstraints>) -> Result<()> {
-        instructions::cancel_close_constraints::handler(ctx)
-    }
-
-    /// Cleanup an orphan InstructionConstraints PDA from a partial
-    /// allocate+extend chain that never reached create_instruction_constraints.
-    /// Owner-only. Drains rent back to owner. F3-H1 audit fix.
-    pub fn cleanup_orphan_constraints_pda(ctx: Context<CleanupOrphanConstraintsPda>) -> Result<()> {
-        instructions::cleanup_orphan_constraints_pda::handler(ctx)
-    }
+    // ─── Constraints engine REMOVED (M1-04, 2026-05-31) ──────────────────────
+    // The instruction-data constraints engine (allocate/extend/create/
+    // queue/apply/cancel/close/cleanup for InstructionConstraints +
+    // PendingConstraintsUpdate + PendingCloseConstraints, 11 instructions) was
+    // deleted. It could not be both protocol-agnostic and caveat-free; the
+    // surviving guardrails — caps, allowlists, sessions, and the balance-delta
+    // / post-execution assertion outcome checks — are independent of it. The
+    // agnostic comparison primitives it shared (ConstraintOperator, bytes_match,
+    // ct_eq_32) were relocated to state::assertions.
 
     // ─── Post-Execution Assertions (Phase B) ─────────────────────────────────
 
@@ -249,13 +264,17 @@ pub mod sigil {
     pub fn create_post_assertions(
         ctx: Context<CreatePostAssertions>,
         entries: Vec<PostAssertionEntry>,
+        expected_digest: [u8; 32],
     ) -> Result<()> {
-        instructions::create_post_assertions::handler(ctx, entries)
+        instructions::create_post_assertions::handler(ctx, entries, expected_digest)
     }
 
     /// Close post-execution assertions for a vault. Returns rent to owner.
-    pub fn close_post_assertions(ctx: Context<ClosePostAssertions>) -> Result<()> {
-        instructions::close_post_assertions::handler(ctx)
+    pub fn close_post_assertions(
+        ctx: Context<ClosePostAssertions>,
+        expected_digest: [u8; 32],
+    ) -> Result<()> {
+        instructions::close_post_assertions::handler(ctx, expected_digest)
     }
 
     /// Transfer tokens from the vault to an allowed destination.
@@ -272,17 +291,29 @@ pub mod sigil {
 
     /// Queue an agent permissions update. Timelock-gated.
     /// Per-agent PDA allows concurrent pending updates for different agents.
+    /// TA-06 (Phase 3): adds `cooldown_seconds` — per-agent cooldown stored
+    /// on `AgentSpendOverlay.cooldown_seconds[slot]`. 0 disables. Bound at
+    /// queue time and applied at apply time onto the agent's overlay slot.
+    ///
+    /// Round 2 F-RP3-2 fix (audit 2026-05-19): adds `cosign_session` —
+    /// on cosign-opted-in vaults, raising capability / spending_limit OR
+    /// setting a non-zero cooldown is an "elevated mutation" and MUST be
+    /// cosigned. Non-elevated callers pass `Pubkey::default()`.
     pub fn queue_agent_permissions_update(
         ctx: Context<QueueAgentPermissionsUpdate>,
         agent: Pubkey,
         new_capability: u8,
         spending_limit_usd: u64,
+        cooldown_seconds: u64,
+        cosign_session: Pubkey,
     ) -> Result<()> {
         instructions::queue_agent_permissions_update::handler(
             ctx,
             agent,
             new_capability,
             spending_limit_usd,
+            cooldown_seconds,
+            cosign_session,
         )
     }
 
@@ -301,34 +332,10 @@ pub mod sigil {
     // sync_positions instruction DELETED — position counter system removed per council decision
     // (9-1 vote, 2026-04-19). See Plans/we-need-to-plan-serialized-summit.md.
 
-    /// Create an escrow deposit between two vaults.
-    /// Agent-initiated, stablecoin-only, fees deducted upfront, cap-checked.
-    pub fn create_escrow(
-        ctx: Context<CreateEscrow>,
-        escrow_id: u64,
-        amount: u64,
-        expires_at: i64,
-        condition_hash: [u8; 32],
-    ) -> Result<()> {
-        instructions::create_escrow::handler(ctx, escrow_id, amount, expires_at, condition_hash)
-    }
-
-    /// Settle an escrow — destination vault's agent claims funds before expiry.
-    /// For conditional escrows, proof must match the SHA-256 condition hash.
-    pub fn settle_escrow(ctx: Context<SettleEscrow>, proof: Vec<u8>) -> Result<()> {
-        instructions::settle_escrow::handler(ctx, proof)
-    }
-
-    /// Refund an escrow — source vault's agent or owner reclaims funds after expiry.
-    /// Cap charge is NOT reversed (prevents cap-washing attacks).
-    pub fn refund_escrow(ctx: Context<RefundEscrow>) -> Result<()> {
-        instructions::refund_escrow::handler(ctx)
-    }
-
-    /// Close a settled/refunded escrow PDA — owner reclaims rent.
-    pub fn close_settled_escrow(ctx: Context<CloseSettledEscrow>, escrow_id: u64) -> Result<()> {
-        instructions::close_settled_escrow::handler(ctx, escrow_id)
-    }
+    // Escrow instructions (create_escrow, settle_escrow, refund_escrow,
+    // close_settled_escrow) REMOVED in Stage 1 of v2 revamp (REVAMP_PLAN.md §2.1).
+    // DEEP-2 audit found freeze-bypass in settle_escrow and there is no
+    // validated customer flow for the feature.
 
     /// Freeze the vault immediately. Preserves all agent entries.
     /// Only the owner can call this. Use reactivate_vault to unfreeze.
@@ -351,5 +358,139 @@ pub mod sigil {
     /// Only the owner can call this.
     pub fn unpause_agent(ctx: Context<UnpauseAgent>, agent_to_unpause: Pubkey) -> Result<()> {
         instructions::unpause_agent::handler(ctx, agent_to_unpause)
+    }
+
+    /// TA-17 (Phase 3): record an on-chain policy-violation failure for
+    /// an agent. Owner-only. `error_code` MUST be in the policy-violation
+    /// range (6074-6091); external codes (CU exhaustion, auth, init)
+    /// reject with InvalidPermissions.
+    ///
+    /// When `agent.consecutive_failures >= policy.auto_revoke_threshold`,
+    /// the agent's capability is set to DISABLED, policy_version bumps,
+    /// and `AgentAutoRevoked` event fires. Subsequent
+    /// validate_and_authorize calls reject with `ErrAutoRevoked` (6090).
+    /// Owner re-enables via existing queue_agent_permissions_update.
+    pub fn record_agent_violation(
+        ctx: Context<RecordAgentViolation>,
+        agent: Pubkey,
+        error_code: u32,
+    ) -> Result<()> {
+        instructions::record_agent_violation::handler(ctx, agent, error_code)
+    }
+
+    /// TA-07 (Phase 3): owner-only fast-track promotion of a destination
+    /// out of the 24h graylist window. The destination must already be on
+    /// the allowlist (otherwise rejected as DestinationNotAllowed). Sets
+    /// the entry's `unlock_unix` to `clock.unix_timestamp` so spending
+    /// paths accept it immediately.
+    ///
+    /// No timelock. Promotion is a strict subset of the already-signed
+    /// allowlist authorisation; the owner pays a friction cost by
+    /// default but can opt out per-destination.
+    pub fn promote_graylist_destination(
+        ctx: Context<PromoteGraylistDestination>,
+        destination: Pubkey,
+    ) -> Result<()> {
+        instructions::promote_graylist_destination::handler(ctx, destination)
+    }
+
+    /// F-12 audit fix: direct owner-only flip of `vault.observe_only`.
+    ///
+    /// Mirrors `freeze_vault` simplicity (no timelock). observe_only is part
+    /// of the canonical policy_preview_digest encoding; the handler recomputes
+    /// the stored digest + bumps `policy_version` (OCC) on every flip and
+    /// emits `ObserveOnlyChanged` for off-chain monitors.
+    ///
+    /// F-11 consistency: cannot flip to active (false) when both protocol
+    /// and destination allowlists are empty.
+    pub fn set_observe_only(ctx: Context<SetObserveOnly>, new_value: bool) -> Result<()> {
+        instructions::set_observe_only::handler(ctx, new_value)
+    }
+
+    // --- Phase 8 PEN-CROSS-1 Batch 6 — queue/apply agent grant ---
+
+    /// Phase 8 PEN-CROSS-1 — queue an OPERATOR-class agent grant with mandatory
+    /// timelock. After `register_agent` was tightened to reject
+    /// `capability == CAPABILITY_OPERATOR`, this is the ONLY path to add a
+    /// new OPERATOR-class agent. Cosign-opted-in vaults require a non-owner
+    /// signer in `remaining_accounts`. The pending PDA at
+    /// `[b"pending_agent_grant", vault]` lives until `apply_agent_grant`
+    /// (after `MIN_TIMELOCK_DURATION = 1800s`).
+    pub fn queue_agent_grant(
+        ctx: Context<QueueAgentGrant>,
+        agent: Pubkey,
+        capability: u8,
+        spending_limit_usd: u64,
+    ) -> Result<()> {
+        instructions::queue_agent_grant::handler(ctx, agent, capability, spending_limit_usd)
+    }
+
+    /// Phase 8 PEN-CROSS-1 — apply a queued OPERATOR-class agent grant past
+    /// the timelock. Inserts the agent into `vault.agents`, claims an
+    /// AgentSpendOverlay slot (fail-closed when `spending_limit_usd > 0`),
+    /// re-derives `policy.policy_preview_digest` with the NEW
+    /// `agent_set_hash`, bumps `policy.policy_version`, closes the pending
+    /// PDA, and emits `AgentGrantApplied`.
+    pub fn apply_agent_grant(ctx: Context<ApplyAgentGrant>) -> Result<()> {
+        instructions::apply_agent_grant::handler(ctx)
+    }
+
+    /// Phase 8 §RP Fix-Up B (PEN-02b CRITICAL, audit 2026-05-19) — cancel a
+    /// queued OPERATOR-class agent grant during the timelock window. The
+    /// `PendingAgentGrant` PDA closes; rent returns to the owner. The vault's
+    /// agent set is NOT mutated (the queued agent never entered).
+    /// Symmetric with `cancel_ownership_transfer` on cosign — when
+    /// `policy.cosign_required == true`, the cancel also requires a non-
+    /// owner signer in `remaining_accounts` (D4 decision: closes the
+    /// phished-key cancel-and-re-queue bypass).
+    pub fn cancel_agent_grant(ctx: Context<CancelAgentGrant>) -> Result<()> {
+        instructions::cancel_agent_grant::handler(ctx)
+    }
+
+    // --- Phase 8 Batch 3 — C26 ownership transfer (owner-side ix) ---
+
+    /// Phase 8 C26 — initiate an ownership transfer with mandatory timelock.
+    /// Owner queues a `PendingOwnershipTransfer` PDA bound to the vault.
+    /// `is_multisig_target` selects between the standard EOA accept (Batch 3
+    /// `accept_ownership_transfer`) and the Squads V4 accept (Batch 4
+    /// `accept_ownership_transfer_multisig`). Cosign-opted-in vaults require
+    /// a non-owner signer in `remaining_accounts` (interim cosign gate).
+    pub fn initiate_ownership_transfer(
+        ctx: Context<InitiateOwnershipTransfer>,
+        new_owner: Pubkey,
+        is_multisig_target: bool,
+    ) -> Result<()> {
+        instructions::initiate_ownership_transfer::handler(ctx, new_owner, is_multisig_target)
+    }
+
+    /// Phase 8 C26 — accept a queued ownership transfer (standard EOA path).
+    /// The `new_owner` signs after the timelock window elapses. Hard-rejects
+    /// when `pending.is_multisig_target == true` (use the Batch 4 multisig
+    /// variant instead). Pending PDA closes; rent returns to `new_owner`.
+    /// Vault.owner is overwritten; policy.policy_version bumps.
+    pub fn accept_ownership_transfer(ctx: Context<AcceptOwnershipTransfer>) -> Result<()> {
+        instructions::accept_ownership_transfer::handler(ctx)
+    }
+
+    /// Phase 8 Batch 4 — accept a queued ownership transfer via Squads V4
+    /// multisig. The `multisig_pda` is an UncheckedAccount (NOT a Signer) —
+    /// Squads V4 vault PDAs have no private key. Authority is enforced by
+    /// (a) `multisig_pda.owner == SQUADS_V4_PROGRAM_ID`, (b) pubkey identity
+    /// match against `pending.new_owner`, and (c) `pending.is_multisig_target
+    /// == true`. Pending PDA closes with rent → multisig_pda. Vault.owner
+    /// is overwritten; policy.policy_version bumps. `OwnershipTransferAccepted`
+    /// is emitted with `via_multisig: true`.
+    pub fn accept_ownership_transfer_multisig(
+        ctx: Context<AcceptOwnershipTransferMultisig>,
+    ) -> Result<()> {
+        instructions::accept_ownership_transfer_multisig::handler(ctx)
+    }
+
+    /// Phase 8 C26 — cancel an in-flight ownership transfer. The current
+    /// owner signs. Symmetric with `initiate_ownership_transfer` on cosign
+    /// (D4 decision — closes the phished-key cancel-and-re-initiate bypass).
+    /// Pending PDA closes; rent returns to `current_owner`.
+    pub fn cancel_ownership_transfer(ctx: Context<CancelOwnershipTransfer>) -> Result<()> {
+        instructions::cancel_ownership_transfer::handler(ctx)
     }
 }

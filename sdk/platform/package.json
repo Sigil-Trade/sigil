@@ -15,6 +15,7 @@
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf dist",
+    "prepublishOnly": "pnpm run clean && pnpm run build",
     "test": "NODE_OPTIONS='--no-experimental-strip-types' mocha --require ts-node/register tests/**/*.test.ts --timeout 30000"
   },
   "files": [

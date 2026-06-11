@@ -37,10 +37,6 @@
       "import": "./dist/dashboard/index.js",
       "types": "./dist/dashboard/index.d.ts"
     },
-    "./constraints": {
-      "import": "./dist/constraints/index.js",
-      "types": "./dist/constraints/index.d.ts"
-    },
     "./errors": {
       "import": "./dist/errors/public.js",
       "types": "./dist/errors/public.d.ts"
@@ -48,10 +44,6 @@
     "./react": {
       "import": "./dist/react/index.js",
       "types": "./dist/react/index.d.ts"
-    },
-    "./post-assertions": {
-      "import": "./dist/post-assertions/index.js",
-      "types": "./dist/post-assertions/index.d.ts"
     }
   },
   "files": [
@@ -66,17 +58,22 @@
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf dist",
+    "prepublishOnly": "pnpm run clean && pnpm run build",
     "codama": "node codama.mjs",
     "codama:flash": "node codama.mjs --protocol=flash-trade",
     "codama:kamino": "node codama.mjs --protocol=kamino",
     "codama:all": "node codama.mjs --all",
-    "pretest": "tsc -p tsconfig.test.json --noEmit",
-    "test": "mocha --require tsx --require tests/global-setup.ts 'tests/*.test.ts' 'tests/core/*.test.ts' 'tests/dashboard/*.test.ts' 'tests/errors/*.test.ts' 'tests/experimental/*.test.ts' 'tests/helpers/*.test.ts' 'tests/post-assertions/*.test.ts' --timeout 30000",
+    "codegen:errors": "node --import tsx scripts/gen-error-map.ts",
+    "check-surface": "node --import tsx scripts/check-surface.ts",
+    "verify-lockfile-pins": "node --import tsx scripts/verify-lockfile-pins.ts",
+    "pretest": "pnpm run codegen:errors && tsc -p tsconfig.test.json --noEmit",
+    "test": "mocha --require tsx --require tests/global-setup.ts 'tests/*.test.ts' 'tests/al-envelope/*.test.ts' 'tests/core/*.test.ts' 'tests/dashboard/*.test.ts' 'tests/errors/*.test.ts' 'tests/experimental/*.test.ts' 'tests/helpers/*.test.ts' 'tests/policy/*.test.ts' --timeout 30000",
     "test:devnet": "mocha --require tsx tests/devnet/**/*.test.ts --timeout 300000",
     "test:experimental": "mocha --require tsx tests/experimental/**/*.test.ts --timeout 30000",
     "check:examples": "tsc -p tsconfig.examples.json"
   },
   "dependencies": {
+    "@noble/hashes": "^1.8.0",
     "@solana-program/compute-budget": "^0.15.0"
   },
   "peerDependencies": {
@@ -106,7 +103,6 @@
     "codama": "1.5.1",
     "fast-check": "^3.23.2",
     "mocha": "^11.7.5",
-    "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
     "typescript": "^5.3.3",
     "@solana/web3.js": "^1.95.0",

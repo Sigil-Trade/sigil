@@ -176,6 +176,7 @@ function findUntrackedTests() {
 
 const actual = {
   "tests/sigil.ts": countOneFile("tests/sigil.ts", TS_RE),
+  "tests/missing-coverage.ts": countOneFile("tests/missing-coverage.ts", TS_RE),
   "tests/jupiter-integration.ts": countOneFile(
     "tests/jupiter-integration.ts",
     TS_RE,
@@ -190,10 +191,6 @@ const actual = {
   ),
   "tests/security-exploits.ts": countOneFile(
     "tests/security-exploits.ts",
-    TS_RE,
-  ),
-  "tests/instruction-constraints.ts": countOneFile(
-    "tests/instruction-constraints.ts",
     TS_RE,
   ),
   "tests/escrow-integration.ts": countOneFile(

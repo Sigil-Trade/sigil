@@ -245,7 +245,6 @@ export function buildAgents(ctx: OverviewContext): AgentData[] {
       ? mapCategory(
           (last.category as string) ?? "unknown",
           (last.eventType as string) ?? "",
-          last.actionType ?? undefined,
         )
       : "";
     const lastActionProtocol = last?.protocolName ?? "";
@@ -541,8 +540,7 @@ export function buildActivityRows(
   return items.map((item) => {
     const cat = (item.category as string) ?? "unknown";
     const evt = (item.eventType as string) ?? "";
-    const act = (item.actionType as string) ?? undefined;
-    const type = mapCategory(cat, evt, act);
+    const type = mapCategory(cat, evt);
     const amt = item.amount ?? 0n;
     const sig = item.txSignature || `evt-${item.timestamp}-${item.eventType}`;
 
@@ -695,27 +693,12 @@ export async function getActivity(
   }
 }
 
-function mapCategory(
-  cat: string,
-  evt: string,
-  actionType?: string,
-): ActivityType {
-  if (cat === "trade") {
-    // Position counter deletion (council 9-1 vote, 2026-04-19) collapsed all
-    // trade events into "swap" by default. Legacy actionType decode is still
-    // honored for historical (pre-v6) events in storage — "lend" is preserved
-    // for deposit/withdraw-style lending actions that aren't stablecoin flows.
-    if (actionType) {
-      const at = actionType.toLowerCase();
-      if (
-        at.includes("lend") ||
-        at.includes("deposit") ||
-        at.includes("withdraw")
-      )
-        return "lend";
-    }
-    return "swap";
-  }
+function mapCategory(cat: string, evt: string): ActivityType {
+  // V2 Option A: the legacy actionType decode path was removed alongside
+  // the on-chain ActionType field. All "trade" category events collapse to
+  // "swap" (council 9-1 vote, 2026-04-19 deleted the position counter and
+  // the per-action permission bits that distinguished lend from swap).
+  if (cat === "trade") return "swap";
   if (cat === "deposit") return "deposit";
   if (cat === "withdrawal") return "withdraw";
   if (evt === "AgentTransferExecuted") return "transfer";
@@ -1092,7 +1075,6 @@ const AUDIT_CATEGORY_TO_TYPE: Partial<Record<EventCategory, AuditEventType>> = {
   policy: "policy_change",
   agent: "agent_change",
   security: "vault_security",
-  escrow: "escrow",
 };
 
 /**
@@ -1137,13 +1119,12 @@ export function buildAuditTrail(
 }
 
 /**
- * Governance + security audit trail — the policy/agent/security/escrow
+ * Governance + security audit trail — the policy/agent/security
  * subset of the vault's activity stream.
  *
  * Use this for an admin-facing "what changed?" feed: policy queue/apply
- * cycles, agent registrations, vault freeze/resume events, and escrow
- * lifecycle. Trades and fund movements are excluded — they live in
- * `getActivity()`.
+ * cycles, agent registrations, and vault freeze/resume events.
+ * Trades and fund movements are excluded — they live in `getActivity()`.
  *
  * Activity fetch shape: one `getSignaturesForAddress` + up to `limit`
  * sequential `getTransaction` calls (see {@link getVaultActivity}).

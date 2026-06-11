@@ -4,8 +4,9 @@
  * The private key lives in Privy's AWS Nitro Enclave.
  * The agent only gets a signing interface — it never sees or touches the key.
  *
- * Works with shieldWallet() out of the box:
- *   const wallet = shieldWallet(await privy({ appId, appSecret }), { maxSpend: '500 USDC/day' });
+ * Works with shield() out of the box:
+ *   const wallet = await privy({ appId, appSecret });
+ *   const shieldCtx = shield({ maxSpend: '500 USDC/day' });
  */
 
 import { PublicKey, Transaction, VersionedTransaction } from "@solana/web3.js";
@@ -223,7 +224,7 @@ export class PrivyRESTClient implements PrivySDKClient {
  *
  * Use the static `create()` method to instantiate:
  *   const wallet = await PrivyWallet.create({ appId: '...', appSecret: '...' });
- *   const shielded = shieldWallet(wallet, { maxSpend: '500 USDC/day' });
+ *   const shieldCtx = shield({ maxSpend: '500 USDC/day' });
  */
 export class PrivyWallet implements WalletLike {
   readonly publicKey: PublicKey;

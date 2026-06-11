@@ -35,11 +35,11 @@ import {
 import {
   getAgentSpendOverlayCodec,
   getAgentVaultCodec,
-  getEscrowDepositCodec,
-  getInstructionConstraintsCodec,
+  getAuditLogRejectedCodec,
+  getAuditLogSuccessCodec,
+  getPendingAgentGrantCodec,
   getPendingAgentPermissionsUpdateCodec,
-  getPendingCloseConstraintsCodec,
-  getPendingConstraintsUpdateCodec,
+  getPendingOwnershipTransferCodec,
   getPendingPolicyUpdateCodec,
   getPolicyConfigCodec,
   getPostExecutionAssertionsCodec,
@@ -49,16 +49,16 @@ import {
   type AgentSpendOverlayArgs,
   type AgentVault,
   type AgentVaultArgs,
-  type EscrowDeposit,
-  type EscrowDepositArgs,
-  type InstructionConstraints,
-  type InstructionConstraintsArgs,
+  type AuditLogRejected,
+  type AuditLogRejectedArgs,
+  type AuditLogSuccess,
+  type AuditLogSuccessArgs,
+  type PendingAgentGrant,
+  type PendingAgentGrantArgs,
   type PendingAgentPermissionsUpdate,
   type PendingAgentPermissionsUpdateArgs,
-  type PendingCloseConstraints,
-  type PendingCloseConstraintsArgs,
-  type PendingConstraintsUpdate,
-  type PendingConstraintsUpdateArgs,
+  type PendingOwnershipTransfer,
+  type PendingOwnershipTransferArgs,
   type PendingPolicyUpdate,
   type PendingPolicyUpdateArgs,
   type PolicyConfig,
@@ -71,163 +71,143 @@ import {
   type SpendTrackerArgs,
 } from "../accounts/index.js";
 import {
+  getAcceptOwnershipTransferInstructionAsync,
+  getAcceptOwnershipTransferMultisigInstructionAsync,
   getAgentTransferInstructionAsync,
-  getAllocateConstraintsPdaInstructionAsync,
-  getAllocatePendingConstraintsPdaInstructionAsync,
+  getApplyAgentGrantInstructionAsync,
   getApplyAgentPermissionsUpdateInstructionAsync,
-  getApplyCloseConstraintsInstructionAsync,
-  getApplyConstraintsUpdateInstructionAsync,
   getApplyPendingPolicyInstructionAsync,
+  getCancelAgentGrantInstructionAsync,
   getCancelAgentPermissionsUpdateInstruction,
-  getCancelCloseConstraintsInstructionAsync,
-  getCancelConstraintsUpdateInstructionAsync,
+  getCancelOwnershipTransferInstructionAsync,
   getCancelPendingPolicyInstructionAsync,
-  getCleanupOrphanConstraintsPdaInstructionAsync,
   getClosePostAssertionsInstructionAsync,
-  getCloseSettledEscrowInstructionAsync,
   getCloseVaultInstructionAsync,
-  getCreateEscrowInstructionAsync,
-  getCreateInstructionConstraintsInstructionAsync,
   getCreatePostAssertionsInstructionAsync,
   getDepositFundsInstructionAsync,
-  getExtendPdaInstruction,
   getFinalizeSessionInstructionAsync,
-  getFreezeVaultInstruction,
+  getFreezeVaultInstructionAsync,
   getInitializeVaultInstructionAsync,
-  getPauseAgentInstruction,
+  getInitiateOwnershipTransferInstructionAsync,
+  getPauseAgentInstructionAsync,
+  getPromoteGraylistDestinationInstructionAsync,
+  getQueueAgentGrantInstructionAsync,
   getQueueAgentPermissionsUpdateInstructionAsync,
-  getQueueCloseConstraintsInstructionAsync,
-  getQueueConstraintsUpdateInstructionAsync,
   getQueuePolicyUpdateInstructionAsync,
-  getReactivateVaultInstruction,
-  getRefundEscrowInstructionAsync,
-  getRegisterAgentInstruction,
-  getRevokeAgentInstruction,
-  getSettleEscrowInstructionAsync,
-  getUnpauseAgentInstruction,
+  getReactivateVaultInstructionAsync,
+  getRecordAgentViolationInstructionAsync,
+  getRegisterAgentInstructionAsync,
+  getRevokeAgentInstructionAsync,
+  getSetObserveOnlyInstructionAsync,
+  getUnpauseAgentInstructionAsync,
   getValidateAndAuthorizeInstructionAsync,
   getWithdrawFundsInstructionAsync,
+  parseAcceptOwnershipTransferInstruction,
+  parseAcceptOwnershipTransferMultisigInstruction,
   parseAgentTransferInstruction,
-  parseAllocateConstraintsPdaInstruction,
-  parseAllocatePendingConstraintsPdaInstruction,
+  parseApplyAgentGrantInstruction,
   parseApplyAgentPermissionsUpdateInstruction,
-  parseApplyCloseConstraintsInstruction,
-  parseApplyConstraintsUpdateInstruction,
   parseApplyPendingPolicyInstruction,
+  parseCancelAgentGrantInstruction,
   parseCancelAgentPermissionsUpdateInstruction,
-  parseCancelCloseConstraintsInstruction,
-  parseCancelConstraintsUpdateInstruction,
+  parseCancelOwnershipTransferInstruction,
   parseCancelPendingPolicyInstruction,
-  parseCleanupOrphanConstraintsPdaInstruction,
   parseClosePostAssertionsInstruction,
-  parseCloseSettledEscrowInstruction,
   parseCloseVaultInstruction,
-  parseCreateEscrowInstruction,
-  parseCreateInstructionConstraintsInstruction,
   parseCreatePostAssertionsInstruction,
   parseDepositFundsInstruction,
-  parseExtendPdaInstruction,
   parseFinalizeSessionInstruction,
   parseFreezeVaultInstruction,
   parseInitializeVaultInstruction,
+  parseInitiateOwnershipTransferInstruction,
   parsePauseAgentInstruction,
+  parsePromoteGraylistDestinationInstruction,
+  parseQueueAgentGrantInstruction,
   parseQueueAgentPermissionsUpdateInstruction,
-  parseQueueCloseConstraintsInstruction,
-  parseQueueConstraintsUpdateInstruction,
   parseQueuePolicyUpdateInstruction,
   parseReactivateVaultInstruction,
-  parseRefundEscrowInstruction,
+  parseRecordAgentViolationInstruction,
   parseRegisterAgentInstruction,
   parseRevokeAgentInstruction,
-  parseSettleEscrowInstruction,
+  parseSetObserveOnlyInstruction,
   parseUnpauseAgentInstruction,
   parseValidateAndAuthorizeInstruction,
   parseWithdrawFundsInstruction,
+  type AcceptOwnershipTransferAsyncInput,
+  type AcceptOwnershipTransferMultisigAsyncInput,
   type AgentTransferAsyncInput,
-  type AllocateConstraintsPdaAsyncInput,
-  type AllocatePendingConstraintsPdaAsyncInput,
+  type ApplyAgentGrantAsyncInput,
   type ApplyAgentPermissionsUpdateAsyncInput,
-  type ApplyCloseConstraintsAsyncInput,
-  type ApplyConstraintsUpdateAsyncInput,
   type ApplyPendingPolicyAsyncInput,
+  type CancelAgentGrantAsyncInput,
   type CancelAgentPermissionsUpdateInput,
-  type CancelCloseConstraintsAsyncInput,
-  type CancelConstraintsUpdateAsyncInput,
+  type CancelOwnershipTransferAsyncInput,
   type CancelPendingPolicyAsyncInput,
-  type CleanupOrphanConstraintsPdaAsyncInput,
   type ClosePostAssertionsAsyncInput,
-  type CloseSettledEscrowAsyncInput,
   type CloseVaultAsyncInput,
-  type CreateEscrowAsyncInput,
-  type CreateInstructionConstraintsAsyncInput,
   type CreatePostAssertionsAsyncInput,
   type DepositFundsAsyncInput,
-  type ExtendPdaInput,
   type FinalizeSessionAsyncInput,
-  type FreezeVaultInput,
+  type FreezeVaultAsyncInput,
   type InitializeVaultAsyncInput,
+  type InitiateOwnershipTransferAsyncInput,
+  type ParsedAcceptOwnershipTransferInstruction,
+  type ParsedAcceptOwnershipTransferMultisigInstruction,
   type ParsedAgentTransferInstruction,
-  type ParsedAllocateConstraintsPdaInstruction,
-  type ParsedAllocatePendingConstraintsPdaInstruction,
+  type ParsedApplyAgentGrantInstruction,
   type ParsedApplyAgentPermissionsUpdateInstruction,
-  type ParsedApplyCloseConstraintsInstruction,
-  type ParsedApplyConstraintsUpdateInstruction,
   type ParsedApplyPendingPolicyInstruction,
+  type ParsedCancelAgentGrantInstruction,
   type ParsedCancelAgentPermissionsUpdateInstruction,
-  type ParsedCancelCloseConstraintsInstruction,
-  type ParsedCancelConstraintsUpdateInstruction,
+  type ParsedCancelOwnershipTransferInstruction,
   type ParsedCancelPendingPolicyInstruction,
-  type ParsedCleanupOrphanConstraintsPdaInstruction,
   type ParsedClosePostAssertionsInstruction,
-  type ParsedCloseSettledEscrowInstruction,
   type ParsedCloseVaultInstruction,
-  type ParsedCreateEscrowInstruction,
-  type ParsedCreateInstructionConstraintsInstruction,
   type ParsedCreatePostAssertionsInstruction,
   type ParsedDepositFundsInstruction,
-  type ParsedExtendPdaInstruction,
   type ParsedFinalizeSessionInstruction,
   type ParsedFreezeVaultInstruction,
   type ParsedInitializeVaultInstruction,
+  type ParsedInitiateOwnershipTransferInstruction,
   type ParsedPauseAgentInstruction,
+  type ParsedPromoteGraylistDestinationInstruction,
+  type ParsedQueueAgentGrantInstruction,
   type ParsedQueueAgentPermissionsUpdateInstruction,
-  type ParsedQueueCloseConstraintsInstruction,
-  type ParsedQueueConstraintsUpdateInstruction,
   type ParsedQueuePolicyUpdateInstruction,
   type ParsedReactivateVaultInstruction,
-  type ParsedRefundEscrowInstruction,
+  type ParsedRecordAgentViolationInstruction,
   type ParsedRegisterAgentInstruction,
   type ParsedRevokeAgentInstruction,
-  type ParsedSettleEscrowInstruction,
+  type ParsedSetObserveOnlyInstruction,
   type ParsedUnpauseAgentInstruction,
   type ParsedValidateAndAuthorizeInstruction,
   type ParsedWithdrawFundsInstruction,
-  type PauseAgentInput,
+  type PauseAgentAsyncInput,
+  type PromoteGraylistDestinationAsyncInput,
+  type QueueAgentGrantAsyncInput,
   type QueueAgentPermissionsUpdateAsyncInput,
-  type QueueCloseConstraintsAsyncInput,
-  type QueueConstraintsUpdateAsyncInput,
   type QueuePolicyUpdateAsyncInput,
-  type ReactivateVaultInput,
-  type RefundEscrowAsyncInput,
-  type RegisterAgentInput,
-  type RevokeAgentInput,
-  type SettleEscrowAsyncInput,
-  type UnpauseAgentInput,
+  type ReactivateVaultAsyncInput,
+  type RecordAgentViolationAsyncInput,
+  type RegisterAgentAsyncInput,
+  type RevokeAgentAsyncInput,
+  type SetObserveOnlyAsyncInput,
+  type UnpauseAgentAsyncInput,
   type ValidateAndAuthorizeAsyncInput,
   type WithdrawFundsAsyncInput,
 } from "../instructions/index.js";
 
 export const SIGIL_PROGRAM_ADDRESS =
-  "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL" as Address<"4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL">;
+  "7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK" as Address<"7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK">;
 
 export enum SigilAccount {
   AgentSpendOverlay,
   AgentVault,
-  EscrowDeposit,
-  InstructionConstraints,
+  AuditLogRejected,
+  AuditLogSuccess,
+  PendingAgentGrant,
   PendingAgentPermissionsUpdate,
-  PendingCloseConstraints,
-  PendingConstraintsUpdate,
+  PendingOwnershipTransfer,
   PendingPolicyUpdate,
   PolicyConfig,
   PostExecutionAssertions,
@@ -265,23 +245,34 @@ export function identifySigilAccount(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([56, 152, 208, 160, 159, 83, 6, 17]),
+        new Uint8Array([211, 117, 26, 31, 160, 74, 242, 204]),
       ),
       0,
     )
   ) {
-    return SigilAccount.EscrowDeposit;
+    return SigilAccount.AuditLogRejected;
   }
   if (
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([183, 235, 149, 166, 174, 58, 98, 218]),
+        new Uint8Array([225, 112, 129, 30, 0, 111, 84, 75]),
       ),
       0,
     )
   ) {
-    return SigilAccount.InstructionConstraints;
+    return SigilAccount.AuditLogSuccess;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([164, 188, 119, 39, 18, 133, 78, 66]),
+      ),
+      0,
+    )
+  ) {
+    return SigilAccount.PendingAgentGrant;
   }
   if (
     containsBytes(
@@ -298,23 +289,12 @@ export function identifySigilAccount(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([128, 154, 58, 181, 85, 163, 243, 233]),
+        new Uint8Array([205, 223, 35, 217, 245, 217, 152, 38]),
       ),
       0,
     )
   ) {
-    return SigilAccount.PendingCloseConstraints;
-  }
-  if (
-    containsBytes(
-      data,
-      fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([22, 206, 77, 208, 147, 121, 53, 174]),
-      ),
-      0,
-    )
-  ) {
-    return SigilAccount.PendingConstraintsUpdate;
+    return SigilAccount.PendingOwnershipTransfer;
   }
   if (
     containsBytes(
@@ -378,39 +358,34 @@ export function identifySigilAccount(
 }
 
 export enum SigilInstruction {
+  AcceptOwnershipTransfer,
+  AcceptOwnershipTransferMultisig,
   AgentTransfer,
-  AllocateConstraintsPda,
-  AllocatePendingConstraintsPda,
+  ApplyAgentGrant,
   ApplyAgentPermissionsUpdate,
-  ApplyCloseConstraints,
-  ApplyConstraintsUpdate,
   ApplyPendingPolicy,
+  CancelAgentGrant,
   CancelAgentPermissionsUpdate,
-  CancelCloseConstraints,
-  CancelConstraintsUpdate,
+  CancelOwnershipTransfer,
   CancelPendingPolicy,
-  CleanupOrphanConstraintsPda,
   ClosePostAssertions,
-  CloseSettledEscrow,
   CloseVault,
-  CreateEscrow,
-  CreateInstructionConstraints,
   CreatePostAssertions,
   DepositFunds,
-  ExtendPda,
   FinalizeSession,
   FreezeVault,
   InitializeVault,
+  InitiateOwnershipTransfer,
   PauseAgent,
+  PromoteGraylistDestination,
+  QueueAgentGrant,
   QueueAgentPermissionsUpdate,
-  QueueCloseConstraints,
-  QueueConstraintsUpdate,
   QueuePolicyUpdate,
   ReactivateVault,
-  RefundEscrow,
+  RecordAgentViolation,
   RegisterAgent,
   RevokeAgent,
-  SettleEscrow,
+  SetObserveOnly,
   UnpauseAgent,
   ValidateAndAuthorize,
   WithdrawFunds,
@@ -420,6 +395,28 @@ export function identifySigilInstruction(
   instruction: { data: ReadonlyUint8Array } | ReadonlyUint8Array,
 ): SigilInstruction {
   const data = "data" in instruction ? instruction.data : instruction;
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([30, 187, 65, 5, 93, 131, 38, 208]),
+      ),
+      0,
+    )
+  ) {
+    return SigilInstruction.AcceptOwnershipTransfer;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([112, 147, 61, 110, 221, 182, 203, 99]),
+      ),
+      0,
+    )
+  ) {
+    return SigilInstruction.AcceptOwnershipTransferMultisig;
+  }
   if (
     containsBytes(
       data,
@@ -435,23 +432,12 @@ export function identifySigilInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([55, 127, 43, 98, 168, 156, 152, 157]),
+        new Uint8Array([236, 230, 108, 143, 155, 71, 185, 87]),
       ),
       0,
     )
   ) {
-    return SigilInstruction.AllocateConstraintsPda;
-  }
-  if (
-    containsBytes(
-      data,
-      fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([211, 244, 224, 20, 224, 183, 236, 165]),
-      ),
-      0,
-    )
-  ) {
-    return SigilInstruction.AllocatePendingConstraintsPda;
+    return SigilInstruction.ApplyAgentGrant;
   }
   if (
     containsBytes(
@@ -468,34 +454,23 @@ export function identifySigilInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([133, 184, 235, 88, 53, 237, 43, 145]),
-      ),
-      0,
-    )
-  ) {
-    return SigilInstruction.ApplyCloseConstraints;
-  }
-  if (
-    containsBytes(
-      data,
-      fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([175, 103, 90, 155, 134, 91, 135, 242]),
-      ),
-      0,
-    )
-  ) {
-    return SigilInstruction.ApplyConstraintsUpdate;
-  }
-  if (
-    containsBytes(
-      data,
-      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([114, 212, 19, 227, 89, 199, 74, 62]),
       ),
       0,
     )
   ) {
     return SigilInstruction.ApplyPendingPolicy;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([193, 182, 191, 195, 80, 150, 140, 196]),
+      ),
+      0,
+    )
+  ) {
+    return SigilInstruction.CancelAgentGrant;
   }
   if (
     containsBytes(
@@ -512,23 +487,12 @@ export function identifySigilInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([150, 125, 186, 114, 40, 105, 237, 184]),
+        new Uint8Array([2, 184, 195, 105, 138, 142, 154, 75]),
       ),
       0,
     )
   ) {
-    return SigilInstruction.CancelCloseConstraints;
-  }
-  if (
-    containsBytes(
-      data,
-      fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([169, 121, 85, 230, 154, 2, 78, 61]),
-      ),
-      0,
-    )
-  ) {
-    return SigilInstruction.CancelConstraintsUpdate;
+    return SigilInstruction.CancelOwnershipTransfer;
   }
   if (
     containsBytes(
@@ -545,17 +509,6 @@ export function identifySigilInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([69, 181, 93, 235, 116, 229, 116, 4]),
-      ),
-      0,
-    )
-  ) {
-    return SigilInstruction.CleanupOrphanConstraintsPda;
-  }
-  if (
-    containsBytes(
-      data,
-      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([226, 172, 252, 173, 29, 236, 59, 248]),
       ),
       0,
@@ -567,45 +520,12 @@ export function identifySigilInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([169, 244, 164, 173, 181, 214, 139, 6]),
-      ),
-      0,
-    )
-  ) {
-    return SigilInstruction.CloseSettledEscrow;
-  }
-  if (
-    containsBytes(
-      data,
-      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([141, 103, 17, 126, 72, 75, 29, 29]),
       ),
       0,
     )
   ) {
     return SigilInstruction.CloseVault;
-  }
-  if (
-    containsBytes(
-      data,
-      fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([253, 215, 165, 116, 36, 108, 68, 80]),
-      ),
-      0,
-    )
-  ) {
-    return SigilInstruction.CreateEscrow;
-  }
-  if (
-    containsBytes(
-      data,
-      fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([13, 182, 97, 5, 57, 136, 26, 152]),
-      ),
-      0,
-    )
-  ) {
-    return SigilInstruction.CreateInstructionConstraints;
   }
   if (
     containsBytes(
@@ -628,17 +548,6 @@ export function identifySigilInstruction(
     )
   ) {
     return SigilInstruction.DepositFunds;
-  }
-  if (
-    containsBytes(
-      data,
-      fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([13, 211, 140, 90, 104, 28, 141, 200]),
-      ),
-      0,
-    )
-  ) {
-    return SigilInstruction.ExtendPda;
   }
   if (
     containsBytes(
@@ -677,6 +586,17 @@ export function identifySigilInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([22, 108, 197, 103, 223, 145, 132, 65]),
+      ),
+      0,
+    )
+  ) {
+    return SigilInstruction.InitiateOwnershipTransfer;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([148, 32, 1, 26, 147, 122, 178, 140]),
       ),
       0,
@@ -688,34 +608,34 @@ export function identifySigilInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([227, 87, 73, 141, 202, 251, 202, 228]),
+      ),
+      0,
+    )
+  ) {
+    return SigilInstruction.PromoteGraylistDestination;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([136, 162, 54, 49, 167, 254, 200, 26]),
+      ),
+      0,
+    )
+  ) {
+    return SigilInstruction.QueueAgentGrant;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([182, 37, 105, 181, 28, 195, 223, 167]),
       ),
       0,
     )
   ) {
     return SigilInstruction.QueueAgentPermissionsUpdate;
-  }
-  if (
-    containsBytes(
-      data,
-      fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([248, 124, 93, 115, 195, 88, 11, 109]),
-      ),
-      0,
-    )
-  ) {
-    return SigilInstruction.QueueCloseConstraints;
-  }
-  if (
-    containsBytes(
-      data,
-      fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([247, 253, 233, 93, 233, 54, 53, 131]),
-      ),
-      0,
-    )
-  ) {
-    return SigilInstruction.QueueConstraintsUpdate;
   }
   if (
     containsBytes(
@@ -743,12 +663,12 @@ export function identifySigilInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([107, 186, 89, 99, 26, 194, 23, 204]),
+        new Uint8Array([131, 113, 120, 227, 219, 36, 160, 109]),
       ),
       0,
     )
   ) {
-    return SigilInstruction.RefundEscrow;
+    return SigilInstruction.RecordAgentViolation;
   }
   if (
     containsBytes(
@@ -776,12 +696,12 @@ export function identifySigilInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([22, 135, 160, 194, 23, 186, 124, 110]),
+        new Uint8Array([36, 88, 141, 35, 179, 134, 54, 12]),
       ),
       0,
     )
   ) {
-    return SigilInstruction.SettleEscrow;
+    return SigilInstruction.SetObserveOnly;
   }
   if (
     containsBytes(
@@ -823,68 +743,50 @@ export function identifySigilInstruction(
 }
 
 export type ParsedSigilInstruction<
-  TProgram extends string = "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL",
+  TProgram extends string = "7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK",
 > =
+  | ({
+      instructionType: SigilInstruction.AcceptOwnershipTransfer;
+    } & ParsedAcceptOwnershipTransferInstruction<TProgram>)
+  | ({
+      instructionType: SigilInstruction.AcceptOwnershipTransferMultisig;
+    } & ParsedAcceptOwnershipTransferMultisigInstruction<TProgram>)
   | ({
       instructionType: SigilInstruction.AgentTransfer;
     } & ParsedAgentTransferInstruction<TProgram>)
   | ({
-      instructionType: SigilInstruction.AllocateConstraintsPda;
-    } & ParsedAllocateConstraintsPdaInstruction<TProgram>)
-  | ({
-      instructionType: SigilInstruction.AllocatePendingConstraintsPda;
-    } & ParsedAllocatePendingConstraintsPdaInstruction<TProgram>)
+      instructionType: SigilInstruction.ApplyAgentGrant;
+    } & ParsedApplyAgentGrantInstruction<TProgram>)
   | ({
       instructionType: SigilInstruction.ApplyAgentPermissionsUpdate;
     } & ParsedApplyAgentPermissionsUpdateInstruction<TProgram>)
   | ({
-      instructionType: SigilInstruction.ApplyCloseConstraints;
-    } & ParsedApplyCloseConstraintsInstruction<TProgram>)
-  | ({
-      instructionType: SigilInstruction.ApplyConstraintsUpdate;
-    } & ParsedApplyConstraintsUpdateInstruction<TProgram>)
-  | ({
       instructionType: SigilInstruction.ApplyPendingPolicy;
     } & ParsedApplyPendingPolicyInstruction<TProgram>)
+  | ({
+      instructionType: SigilInstruction.CancelAgentGrant;
+    } & ParsedCancelAgentGrantInstruction<TProgram>)
   | ({
       instructionType: SigilInstruction.CancelAgentPermissionsUpdate;
     } & ParsedCancelAgentPermissionsUpdateInstruction<TProgram>)
   | ({
-      instructionType: SigilInstruction.CancelCloseConstraints;
-    } & ParsedCancelCloseConstraintsInstruction<TProgram>)
-  | ({
-      instructionType: SigilInstruction.CancelConstraintsUpdate;
-    } & ParsedCancelConstraintsUpdateInstruction<TProgram>)
+      instructionType: SigilInstruction.CancelOwnershipTransfer;
+    } & ParsedCancelOwnershipTransferInstruction<TProgram>)
   | ({
       instructionType: SigilInstruction.CancelPendingPolicy;
     } & ParsedCancelPendingPolicyInstruction<TProgram>)
   | ({
-      instructionType: SigilInstruction.CleanupOrphanConstraintsPda;
-    } & ParsedCleanupOrphanConstraintsPdaInstruction<TProgram>)
-  | ({
       instructionType: SigilInstruction.ClosePostAssertions;
     } & ParsedClosePostAssertionsInstruction<TProgram>)
   | ({
-      instructionType: SigilInstruction.CloseSettledEscrow;
-    } & ParsedCloseSettledEscrowInstruction<TProgram>)
-  | ({
       instructionType: SigilInstruction.CloseVault;
     } & ParsedCloseVaultInstruction<TProgram>)
-  | ({
-      instructionType: SigilInstruction.CreateEscrow;
-    } & ParsedCreateEscrowInstruction<TProgram>)
-  | ({
-      instructionType: SigilInstruction.CreateInstructionConstraints;
-    } & ParsedCreateInstructionConstraintsInstruction<TProgram>)
   | ({
       instructionType: SigilInstruction.CreatePostAssertions;
     } & ParsedCreatePostAssertionsInstruction<TProgram>)
   | ({
       instructionType: SigilInstruction.DepositFunds;
     } & ParsedDepositFundsInstruction<TProgram>)
-  | ({
-      instructionType: SigilInstruction.ExtendPda;
-    } & ParsedExtendPdaInstruction<TProgram>)
   | ({
       instructionType: SigilInstruction.FinalizeSession;
     } & ParsedFinalizeSessionInstruction<TProgram>)
@@ -895,17 +797,20 @@ export type ParsedSigilInstruction<
       instructionType: SigilInstruction.InitializeVault;
     } & ParsedInitializeVaultInstruction<TProgram>)
   | ({
+      instructionType: SigilInstruction.InitiateOwnershipTransfer;
+    } & ParsedInitiateOwnershipTransferInstruction<TProgram>)
+  | ({
       instructionType: SigilInstruction.PauseAgent;
     } & ParsedPauseAgentInstruction<TProgram>)
   | ({
+      instructionType: SigilInstruction.PromoteGraylistDestination;
+    } & ParsedPromoteGraylistDestinationInstruction<TProgram>)
+  | ({
+      instructionType: SigilInstruction.QueueAgentGrant;
+    } & ParsedQueueAgentGrantInstruction<TProgram>)
+  | ({
       instructionType: SigilInstruction.QueueAgentPermissionsUpdate;
     } & ParsedQueueAgentPermissionsUpdateInstruction<TProgram>)
-  | ({
-      instructionType: SigilInstruction.QueueCloseConstraints;
-    } & ParsedQueueCloseConstraintsInstruction<TProgram>)
-  | ({
-      instructionType: SigilInstruction.QueueConstraintsUpdate;
-    } & ParsedQueueConstraintsUpdateInstruction<TProgram>)
   | ({
       instructionType: SigilInstruction.QueuePolicyUpdate;
     } & ParsedQueuePolicyUpdateInstruction<TProgram>)
@@ -913,8 +818,8 @@ export type ParsedSigilInstruction<
       instructionType: SigilInstruction.ReactivateVault;
     } & ParsedReactivateVaultInstruction<TProgram>)
   | ({
-      instructionType: SigilInstruction.RefundEscrow;
-    } & ParsedRefundEscrowInstruction<TProgram>)
+      instructionType: SigilInstruction.RecordAgentViolation;
+    } & ParsedRecordAgentViolationInstruction<TProgram>)
   | ({
       instructionType: SigilInstruction.RegisterAgent;
     } & ParsedRegisterAgentInstruction<TProgram>)
@@ -922,8 +827,8 @@ export type ParsedSigilInstruction<
       instructionType: SigilInstruction.RevokeAgent;
     } & ParsedRevokeAgentInstruction<TProgram>)
   | ({
-      instructionType: SigilInstruction.SettleEscrow;
-    } & ParsedSettleEscrowInstruction<TProgram>)
+      instructionType: SigilInstruction.SetObserveOnly;
+    } & ParsedSetObserveOnlyInstruction<TProgram>)
   | ({
       instructionType: SigilInstruction.UnpauseAgent;
     } & ParsedUnpauseAgentInstruction<TProgram>)
@@ -939,6 +844,20 @@ export function parseSigilInstruction<TProgram extends string>(
 ): ParsedSigilInstruction<TProgram> {
   const instructionType = identifySigilInstruction(instruction);
   switch (instructionType) {
+    case SigilInstruction.AcceptOwnershipTransfer: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: SigilInstruction.AcceptOwnershipTransfer,
+        ...parseAcceptOwnershipTransferInstruction(instruction),
+      };
+    }
+    case SigilInstruction.AcceptOwnershipTransferMultisig: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: SigilInstruction.AcceptOwnershipTransferMultisig,
+        ...parseAcceptOwnershipTransferMultisigInstruction(instruction),
+      };
+    }
     case SigilInstruction.AgentTransfer: {
       assertIsInstructionWithAccounts(instruction);
       return {
@@ -946,18 +865,11 @@ export function parseSigilInstruction<TProgram extends string>(
         ...parseAgentTransferInstruction(instruction),
       };
     }
-    case SigilInstruction.AllocateConstraintsPda: {
+    case SigilInstruction.ApplyAgentGrant: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: SigilInstruction.AllocateConstraintsPda,
-        ...parseAllocateConstraintsPdaInstruction(instruction),
-      };
-    }
-    case SigilInstruction.AllocatePendingConstraintsPda: {
-      assertIsInstructionWithAccounts(instruction);
-      return {
-        instructionType: SigilInstruction.AllocatePendingConstraintsPda,
-        ...parseAllocatePendingConstraintsPdaInstruction(instruction),
+        instructionType: SigilInstruction.ApplyAgentGrant,
+        ...parseApplyAgentGrantInstruction(instruction),
       };
     }
     case SigilInstruction.ApplyAgentPermissionsUpdate: {
@@ -967,25 +879,18 @@ export function parseSigilInstruction<TProgram extends string>(
         ...parseApplyAgentPermissionsUpdateInstruction(instruction),
       };
     }
-    case SigilInstruction.ApplyCloseConstraints: {
-      assertIsInstructionWithAccounts(instruction);
-      return {
-        instructionType: SigilInstruction.ApplyCloseConstraints,
-        ...parseApplyCloseConstraintsInstruction(instruction),
-      };
-    }
-    case SigilInstruction.ApplyConstraintsUpdate: {
-      assertIsInstructionWithAccounts(instruction);
-      return {
-        instructionType: SigilInstruction.ApplyConstraintsUpdate,
-        ...parseApplyConstraintsUpdateInstruction(instruction),
-      };
-    }
     case SigilInstruction.ApplyPendingPolicy: {
       assertIsInstructionWithAccounts(instruction);
       return {
         instructionType: SigilInstruction.ApplyPendingPolicy,
         ...parseApplyPendingPolicyInstruction(instruction),
+      };
+    }
+    case SigilInstruction.CancelAgentGrant: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: SigilInstruction.CancelAgentGrant,
+        ...parseCancelAgentGrantInstruction(instruction),
       };
     }
     case SigilInstruction.CancelAgentPermissionsUpdate: {
@@ -995,18 +900,11 @@ export function parseSigilInstruction<TProgram extends string>(
         ...parseCancelAgentPermissionsUpdateInstruction(instruction),
       };
     }
-    case SigilInstruction.CancelCloseConstraints: {
+    case SigilInstruction.CancelOwnershipTransfer: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: SigilInstruction.CancelCloseConstraints,
-        ...parseCancelCloseConstraintsInstruction(instruction),
-      };
-    }
-    case SigilInstruction.CancelConstraintsUpdate: {
-      assertIsInstructionWithAccounts(instruction);
-      return {
-        instructionType: SigilInstruction.CancelConstraintsUpdate,
-        ...parseCancelConstraintsUpdateInstruction(instruction),
+        instructionType: SigilInstruction.CancelOwnershipTransfer,
+        ...parseCancelOwnershipTransferInstruction(instruction),
       };
     }
     case SigilInstruction.CancelPendingPolicy: {
@@ -1016,13 +914,6 @@ export function parseSigilInstruction<TProgram extends string>(
         ...parseCancelPendingPolicyInstruction(instruction),
       };
     }
-    case SigilInstruction.CleanupOrphanConstraintsPda: {
-      assertIsInstructionWithAccounts(instruction);
-      return {
-        instructionType: SigilInstruction.CleanupOrphanConstraintsPda,
-        ...parseCleanupOrphanConstraintsPdaInstruction(instruction),
-      };
-    }
     case SigilInstruction.ClosePostAssertions: {
       assertIsInstructionWithAccounts(instruction);
       return {
@@ -1030,32 +921,11 @@ export function parseSigilInstruction<TProgram extends string>(
         ...parseClosePostAssertionsInstruction(instruction),
       };
     }
-    case SigilInstruction.CloseSettledEscrow: {
-      assertIsInstructionWithAccounts(instruction);
-      return {
-        instructionType: SigilInstruction.CloseSettledEscrow,
-        ...parseCloseSettledEscrowInstruction(instruction),
-      };
-    }
     case SigilInstruction.CloseVault: {
       assertIsInstructionWithAccounts(instruction);
       return {
         instructionType: SigilInstruction.CloseVault,
         ...parseCloseVaultInstruction(instruction),
-      };
-    }
-    case SigilInstruction.CreateEscrow: {
-      assertIsInstructionWithAccounts(instruction);
-      return {
-        instructionType: SigilInstruction.CreateEscrow,
-        ...parseCreateEscrowInstruction(instruction),
-      };
-    }
-    case SigilInstruction.CreateInstructionConstraints: {
-      assertIsInstructionWithAccounts(instruction);
-      return {
-        instructionType: SigilInstruction.CreateInstructionConstraints,
-        ...parseCreateInstructionConstraintsInstruction(instruction),
       };
     }
     case SigilInstruction.CreatePostAssertions: {
@@ -1070,13 +940,6 @@ export function parseSigilInstruction<TProgram extends string>(
       return {
         instructionType: SigilInstruction.DepositFunds,
         ...parseDepositFundsInstruction(instruction),
-      };
-    }
-    case SigilInstruction.ExtendPda: {
-      assertIsInstructionWithAccounts(instruction);
-      return {
-        instructionType: SigilInstruction.ExtendPda,
-        ...parseExtendPdaInstruction(instruction),
       };
     }
     case SigilInstruction.FinalizeSession: {
@@ -1100,6 +963,13 @@ export function parseSigilInstruction<TProgram extends string>(
         ...parseInitializeVaultInstruction(instruction),
       };
     }
+    case SigilInstruction.InitiateOwnershipTransfer: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: SigilInstruction.InitiateOwnershipTransfer,
+        ...parseInitiateOwnershipTransferInstruction(instruction),
+      };
+    }
     case SigilInstruction.PauseAgent: {
       assertIsInstructionWithAccounts(instruction);
       return {
@@ -1107,25 +977,25 @@ export function parseSigilInstruction<TProgram extends string>(
         ...parsePauseAgentInstruction(instruction),
       };
     }
+    case SigilInstruction.PromoteGraylistDestination: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: SigilInstruction.PromoteGraylistDestination,
+        ...parsePromoteGraylistDestinationInstruction(instruction),
+      };
+    }
+    case SigilInstruction.QueueAgentGrant: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: SigilInstruction.QueueAgentGrant,
+        ...parseQueueAgentGrantInstruction(instruction),
+      };
+    }
     case SigilInstruction.QueueAgentPermissionsUpdate: {
       assertIsInstructionWithAccounts(instruction);
       return {
         instructionType: SigilInstruction.QueueAgentPermissionsUpdate,
         ...parseQueueAgentPermissionsUpdateInstruction(instruction),
-      };
-    }
-    case SigilInstruction.QueueCloseConstraints: {
-      assertIsInstructionWithAccounts(instruction);
-      return {
-        instructionType: SigilInstruction.QueueCloseConstraints,
-        ...parseQueueCloseConstraintsInstruction(instruction),
-      };
-    }
-    case SigilInstruction.QueueConstraintsUpdate: {
-      assertIsInstructionWithAccounts(instruction);
-      return {
-        instructionType: SigilInstruction.QueueConstraintsUpdate,
-        ...parseQueueConstraintsUpdateInstruction(instruction),
       };
     }
     case SigilInstruction.QueuePolicyUpdate: {
@@ -1142,11 +1012,11 @@ export function parseSigilInstruction<TProgram extends string>(
         ...parseReactivateVaultInstruction(instruction),
       };
     }
-    case SigilInstruction.RefundEscrow: {
+    case SigilInstruction.RecordAgentViolation: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: SigilInstruction.RefundEscrow,
-        ...parseRefundEscrowInstruction(instruction),
+        instructionType: SigilInstruction.RecordAgentViolation,
+        ...parseRecordAgentViolationInstruction(instruction),
       };
     }
     case SigilInstruction.RegisterAgent: {
@@ -1163,11 +1033,11 @@ export function parseSigilInstruction<TProgram extends string>(
         ...parseRevokeAgentInstruction(instruction),
       };
     }
-    case SigilInstruction.SettleEscrow: {
+    case SigilInstruction.SetObserveOnly: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: SigilInstruction.SettleEscrow,
-        ...parseSettleEscrowInstruction(instruction),
+        instructionType: SigilInstruction.SetObserveOnly,
+        ...parseSetObserveOnlyInstruction(instruction),
       };
     }
     case SigilInstruction.UnpauseAgent: {
@@ -1209,10 +1079,12 @@ export type SigilPluginAccounts = {
     SelfFetchFunctions<AgentSpendOverlayArgs, AgentSpendOverlay>;
   agentVault: ReturnType<typeof getAgentVaultCodec> &
     SelfFetchFunctions<AgentVaultArgs, AgentVault>;
-  escrowDeposit: ReturnType<typeof getEscrowDepositCodec> &
-    SelfFetchFunctions<EscrowDepositArgs, EscrowDeposit>;
-  instructionConstraints: ReturnType<typeof getInstructionConstraintsCodec> &
-    SelfFetchFunctions<InstructionConstraintsArgs, InstructionConstraints>;
+  auditLogRejected: ReturnType<typeof getAuditLogRejectedCodec> &
+    SelfFetchFunctions<AuditLogRejectedArgs, AuditLogRejected>;
+  auditLogSuccess: ReturnType<typeof getAuditLogSuccessCodec> &
+    SelfFetchFunctions<AuditLogSuccessArgs, AuditLogSuccess>;
+  pendingAgentGrant: ReturnType<typeof getPendingAgentGrantCodec> &
+    SelfFetchFunctions<PendingAgentGrantArgs, PendingAgentGrant>;
   pendingAgentPermissionsUpdate: ReturnType<
     typeof getPendingAgentPermissionsUpdateCodec
   > &
@@ -1220,12 +1092,10 @@ export type SigilPluginAccounts = {
       PendingAgentPermissionsUpdateArgs,
       PendingAgentPermissionsUpdate
     >;
-  pendingCloseConstraints: ReturnType<typeof getPendingCloseConstraintsCodec> &
-    SelfFetchFunctions<PendingCloseConstraintsArgs, PendingCloseConstraints>;
-  pendingConstraintsUpdate: ReturnType<
-    typeof getPendingConstraintsUpdateCodec
+  pendingOwnershipTransfer: ReturnType<
+    typeof getPendingOwnershipTransferCodec
   > &
-    SelfFetchFunctions<PendingConstraintsUpdateArgs, PendingConstraintsUpdate>;
+    SelfFetchFunctions<PendingOwnershipTransferArgs, PendingOwnershipTransfer>;
   pendingPolicyUpdate: ReturnType<typeof getPendingPolicyUpdateCodec> &
     SelfFetchFunctions<PendingPolicyUpdateArgs, PendingPolicyUpdate>;
   policyConfig: ReturnType<typeof getPolicyConfigCodec> &
@@ -1239,73 +1109,53 @@ export type SigilPluginAccounts = {
 };
 
 export type SigilPluginInstructions = {
+  acceptOwnershipTransfer: (
+    input: AcceptOwnershipTransferAsyncInput,
+  ) => ReturnType<typeof getAcceptOwnershipTransferInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  acceptOwnershipTransferMultisig: (
+    input: AcceptOwnershipTransferMultisigAsyncInput,
+  ) => ReturnType<typeof getAcceptOwnershipTransferMultisigInstructionAsync> &
+    SelfPlanAndSendFunctions;
   agentTransfer: (
     input: AgentTransferAsyncInput,
   ) => ReturnType<typeof getAgentTransferInstructionAsync> &
     SelfPlanAndSendFunctions;
-  allocateConstraintsPda: (
-    input: AllocateConstraintsPdaAsyncInput,
-  ) => ReturnType<typeof getAllocateConstraintsPdaInstructionAsync> &
-    SelfPlanAndSendFunctions;
-  allocatePendingConstraintsPda: (
-    input: AllocatePendingConstraintsPdaAsyncInput,
-  ) => ReturnType<typeof getAllocatePendingConstraintsPdaInstructionAsync> &
+  applyAgentGrant: (
+    input: ApplyAgentGrantAsyncInput,
+  ) => ReturnType<typeof getApplyAgentGrantInstructionAsync> &
     SelfPlanAndSendFunctions;
   applyAgentPermissionsUpdate: (
     input: ApplyAgentPermissionsUpdateAsyncInput,
   ) => ReturnType<typeof getApplyAgentPermissionsUpdateInstructionAsync> &
     SelfPlanAndSendFunctions;
-  applyCloseConstraints: (
-    input: ApplyCloseConstraintsAsyncInput,
-  ) => ReturnType<typeof getApplyCloseConstraintsInstructionAsync> &
-    SelfPlanAndSendFunctions;
-  applyConstraintsUpdate: (
-    input: ApplyConstraintsUpdateAsyncInput,
-  ) => ReturnType<typeof getApplyConstraintsUpdateInstructionAsync> &
-    SelfPlanAndSendFunctions;
   applyPendingPolicy: (
     input: ApplyPendingPolicyAsyncInput,
   ) => ReturnType<typeof getApplyPendingPolicyInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  cancelAgentGrant: (
+    input: CancelAgentGrantAsyncInput,
+  ) => ReturnType<typeof getCancelAgentGrantInstructionAsync> &
     SelfPlanAndSendFunctions;
   cancelAgentPermissionsUpdate: (
     input: CancelAgentPermissionsUpdateInput,
   ) => ReturnType<typeof getCancelAgentPermissionsUpdateInstruction> &
     SelfPlanAndSendFunctions;
-  cancelCloseConstraints: (
-    input: CancelCloseConstraintsAsyncInput,
-  ) => ReturnType<typeof getCancelCloseConstraintsInstructionAsync> &
-    SelfPlanAndSendFunctions;
-  cancelConstraintsUpdate: (
-    input: CancelConstraintsUpdateAsyncInput,
-  ) => ReturnType<typeof getCancelConstraintsUpdateInstructionAsync> &
+  cancelOwnershipTransfer: (
+    input: CancelOwnershipTransferAsyncInput,
+  ) => ReturnType<typeof getCancelOwnershipTransferInstructionAsync> &
     SelfPlanAndSendFunctions;
   cancelPendingPolicy: (
     input: CancelPendingPolicyAsyncInput,
   ) => ReturnType<typeof getCancelPendingPolicyInstructionAsync> &
     SelfPlanAndSendFunctions;
-  cleanupOrphanConstraintsPda: (
-    input: CleanupOrphanConstraintsPdaAsyncInput,
-  ) => ReturnType<typeof getCleanupOrphanConstraintsPdaInstructionAsync> &
-    SelfPlanAndSendFunctions;
   closePostAssertions: (
     input: ClosePostAssertionsAsyncInput,
   ) => ReturnType<typeof getClosePostAssertionsInstructionAsync> &
     SelfPlanAndSendFunctions;
-  closeSettledEscrow: (
-    input: CloseSettledEscrowAsyncInput,
-  ) => ReturnType<typeof getCloseSettledEscrowInstructionAsync> &
-    SelfPlanAndSendFunctions;
   closeVault: (
     input: CloseVaultAsyncInput,
   ) => ReturnType<typeof getCloseVaultInstructionAsync> &
-    SelfPlanAndSendFunctions;
-  createEscrow: (
-    input: CreateEscrowAsyncInput,
-  ) => ReturnType<typeof getCreateEscrowInstructionAsync> &
-    SelfPlanAndSendFunctions;
-  createInstructionConstraints: (
-    input: CreateInstructionConstraintsAsyncInput,
-  ) => ReturnType<typeof getCreateInstructionConstraintsInstructionAsync> &
     SelfPlanAndSendFunctions;
   createPostAssertions: (
     input: CreatePostAssertionsAsyncInput,
@@ -1315,61 +1165,66 @@ export type SigilPluginInstructions = {
     input: DepositFundsAsyncInput,
   ) => ReturnType<typeof getDepositFundsInstructionAsync> &
     SelfPlanAndSendFunctions;
-  extendPda: (
-    input: ExtendPdaInput,
-  ) => ReturnType<typeof getExtendPdaInstruction> & SelfPlanAndSendFunctions;
   finalizeSession: (
     input: MakeOptional<FinalizeSessionAsyncInput, "payer">,
   ) => ReturnType<typeof getFinalizeSessionInstructionAsync> &
     SelfPlanAndSendFunctions;
   freezeVault: (
-    input: FreezeVaultInput,
-  ) => ReturnType<typeof getFreezeVaultInstruction> & SelfPlanAndSendFunctions;
+    input: FreezeVaultAsyncInput,
+  ) => ReturnType<typeof getFreezeVaultInstructionAsync> &
+    SelfPlanAndSendFunctions;
   initializeVault: (
     input: InitializeVaultAsyncInput,
   ) => ReturnType<typeof getInitializeVaultInstructionAsync> &
     SelfPlanAndSendFunctions;
+  initiateOwnershipTransfer: (
+    input: InitiateOwnershipTransferAsyncInput,
+  ) => ReturnType<typeof getInitiateOwnershipTransferInstructionAsync> &
+    SelfPlanAndSendFunctions;
   pauseAgent: (
-    input: PauseAgentInput,
-  ) => ReturnType<typeof getPauseAgentInstruction> & SelfPlanAndSendFunctions;
+    input: PauseAgentAsyncInput,
+  ) => ReturnType<typeof getPauseAgentInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  promoteGraylistDestination: (
+    input: PromoteGraylistDestinationAsyncInput,
+  ) => ReturnType<typeof getPromoteGraylistDestinationInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  queueAgentGrant: (
+    input: QueueAgentGrantAsyncInput,
+  ) => ReturnType<typeof getQueueAgentGrantInstructionAsync> &
+    SelfPlanAndSendFunctions;
   queueAgentPermissionsUpdate: (
     input: QueueAgentPermissionsUpdateAsyncInput,
   ) => ReturnType<typeof getQueueAgentPermissionsUpdateInstructionAsync> &
-    SelfPlanAndSendFunctions;
-  queueCloseConstraints: (
-    input: QueueCloseConstraintsAsyncInput,
-  ) => ReturnType<typeof getQueueCloseConstraintsInstructionAsync> &
-    SelfPlanAndSendFunctions;
-  queueConstraintsUpdate: (
-    input: QueueConstraintsUpdateAsyncInput,
-  ) => ReturnType<typeof getQueueConstraintsUpdateInstructionAsync> &
     SelfPlanAndSendFunctions;
   queuePolicyUpdate: (
     input: QueuePolicyUpdateAsyncInput,
   ) => ReturnType<typeof getQueuePolicyUpdateInstructionAsync> &
     SelfPlanAndSendFunctions;
   reactivateVault: (
-    input: ReactivateVaultInput,
-  ) => ReturnType<typeof getReactivateVaultInstruction> &
+    input: ReactivateVaultAsyncInput,
+  ) => ReturnType<typeof getReactivateVaultInstructionAsync> &
     SelfPlanAndSendFunctions;
-  refundEscrow: (
-    input: RefundEscrowAsyncInput,
-  ) => ReturnType<typeof getRefundEscrowInstructionAsync> &
+  recordAgentViolation: (
+    input: RecordAgentViolationAsyncInput,
+  ) => ReturnType<typeof getRecordAgentViolationInstructionAsync> &
     SelfPlanAndSendFunctions;
   registerAgent: (
-    input: RegisterAgentInput,
-  ) => ReturnType<typeof getRegisterAgentInstruction> &
+    input: RegisterAgentAsyncInput,
+  ) => ReturnType<typeof getRegisterAgentInstructionAsync> &
     SelfPlanAndSendFunctions;
   revokeAgent: (
-    input: RevokeAgentInput,
-  ) => ReturnType<typeof getRevokeAgentInstruction> & SelfPlanAndSendFunctions;
-  settleEscrow: (
-    input: SettleEscrowAsyncInput,
-  ) => ReturnType<typeof getSettleEscrowInstructionAsync> &
+    input: RevokeAgentAsyncInput,
+  ) => ReturnType<typeof getRevokeAgentInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  setObserveOnly: (
+    input: SetObserveOnlyAsyncInput,
+  ) => ReturnType<typeof getSetObserveOnlyInstructionAsync> &
     SelfPlanAndSendFunctions;
   unpauseAgent: (
-    input: UnpauseAgentInput,
-  ) => ReturnType<typeof getUnpauseAgentInstruction> & SelfPlanAndSendFunctions;
+    input: UnpauseAgentAsyncInput,
+  ) => ReturnType<typeof getUnpauseAgentInstructionAsync> &
+    SelfPlanAndSendFunctions;
   validateAndAuthorize: (
     input: ValidateAndAuthorizeAsyncInput,
   ) => ReturnType<typeof getValidateAndAuthorizeInstructionAsync> &
@@ -1398,22 +1253,25 @@ export function sigilProgram() {
             getAgentSpendOverlayCodec(),
           ),
           agentVault: addSelfFetchFunctions(client, getAgentVaultCodec()),
-          escrowDeposit: addSelfFetchFunctions(client, getEscrowDepositCodec()),
-          instructionConstraints: addSelfFetchFunctions(
+          auditLogRejected: addSelfFetchFunctions(
             client,
-            getInstructionConstraintsCodec(),
+            getAuditLogRejectedCodec(),
+          ),
+          auditLogSuccess: addSelfFetchFunctions(
+            client,
+            getAuditLogSuccessCodec(),
+          ),
+          pendingAgentGrant: addSelfFetchFunctions(
+            client,
+            getPendingAgentGrantCodec(),
           ),
           pendingAgentPermissionsUpdate: addSelfFetchFunctions(
             client,
             getPendingAgentPermissionsUpdateCodec(),
           ),
-          pendingCloseConstraints: addSelfFetchFunctions(
+          pendingOwnershipTransfer: addSelfFetchFunctions(
             client,
-            getPendingCloseConstraintsCodec(),
-          ),
-          pendingConstraintsUpdate: addSelfFetchFunctions(
-            client,
-            getPendingConstraintsUpdateCodec(),
+            getPendingOwnershipTransferCodec(),
           ),
           pendingPolicyUpdate: addSelfFetchFunctions(
             client,
@@ -1431,90 +1289,65 @@ export function sigilProgram() {
           spendTracker: addSelfFetchFunctions(client, getSpendTrackerCodec()),
         },
         instructions: {
+          acceptOwnershipTransfer: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getAcceptOwnershipTransferInstructionAsync(input),
+            ),
+          acceptOwnershipTransferMultisig: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getAcceptOwnershipTransferMultisigInstructionAsync(input),
+            ),
           agentTransfer: (input) =>
             addSelfPlanAndSendFunctions(
               client,
               getAgentTransferInstructionAsync(input),
             ),
-          allocateConstraintsPda: (input) =>
+          applyAgentGrant: (input) =>
             addSelfPlanAndSendFunctions(
               client,
-              getAllocateConstraintsPdaInstructionAsync(input),
-            ),
-          allocatePendingConstraintsPda: (input) =>
-            addSelfPlanAndSendFunctions(
-              client,
-              getAllocatePendingConstraintsPdaInstructionAsync(input),
+              getApplyAgentGrantInstructionAsync(input),
             ),
           applyAgentPermissionsUpdate: (input) =>
             addSelfPlanAndSendFunctions(
               client,
               getApplyAgentPermissionsUpdateInstructionAsync(input),
             ),
-          applyCloseConstraints: (input) =>
-            addSelfPlanAndSendFunctions(
-              client,
-              getApplyCloseConstraintsInstructionAsync(input),
-            ),
-          applyConstraintsUpdate: (input) =>
-            addSelfPlanAndSendFunctions(
-              client,
-              getApplyConstraintsUpdateInstructionAsync(input),
-            ),
           applyPendingPolicy: (input) =>
             addSelfPlanAndSendFunctions(
               client,
               getApplyPendingPolicyInstructionAsync(input),
+            ),
+          cancelAgentGrant: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getCancelAgentGrantInstructionAsync(input),
             ),
           cancelAgentPermissionsUpdate: (input) =>
             addSelfPlanAndSendFunctions(
               client,
               getCancelAgentPermissionsUpdateInstruction(input),
             ),
-          cancelCloseConstraints: (input) =>
+          cancelOwnershipTransfer: (input) =>
             addSelfPlanAndSendFunctions(
               client,
-              getCancelCloseConstraintsInstructionAsync(input),
-            ),
-          cancelConstraintsUpdate: (input) =>
-            addSelfPlanAndSendFunctions(
-              client,
-              getCancelConstraintsUpdateInstructionAsync(input),
+              getCancelOwnershipTransferInstructionAsync(input),
             ),
           cancelPendingPolicy: (input) =>
             addSelfPlanAndSendFunctions(
               client,
               getCancelPendingPolicyInstructionAsync(input),
             ),
-          cleanupOrphanConstraintsPda: (input) =>
-            addSelfPlanAndSendFunctions(
-              client,
-              getCleanupOrphanConstraintsPdaInstructionAsync(input),
-            ),
           closePostAssertions: (input) =>
             addSelfPlanAndSendFunctions(
               client,
               getClosePostAssertionsInstructionAsync(input),
             ),
-          closeSettledEscrow: (input) =>
-            addSelfPlanAndSendFunctions(
-              client,
-              getCloseSettledEscrowInstructionAsync(input),
-            ),
           closeVault: (input) =>
             addSelfPlanAndSendFunctions(
               client,
               getCloseVaultInstructionAsync(input),
-            ),
-          createEscrow: (input) =>
-            addSelfPlanAndSendFunctions(
-              client,
-              getCreateEscrowInstructionAsync(input),
-            ),
-          createInstructionConstraints: (input) =>
-            addSelfPlanAndSendFunctions(
-              client,
-              getCreateInstructionConstraintsInstructionAsync(input),
             ),
           createPostAssertions: (input) =>
             addSelfPlanAndSendFunctions(
@@ -1526,8 +1359,6 @@ export function sigilProgram() {
               client,
               getDepositFundsInstructionAsync(input),
             ),
-          extendPda: (input) =>
-            addSelfPlanAndSendFunctions(client, getExtendPdaInstruction(input)),
           finalizeSession: (input) =>
             addSelfPlanAndSendFunctions(
               client,
@@ -1539,32 +1370,37 @@ export function sigilProgram() {
           freezeVault: (input) =>
             addSelfPlanAndSendFunctions(
               client,
-              getFreezeVaultInstruction(input),
+              getFreezeVaultInstructionAsync(input),
             ),
           initializeVault: (input) =>
             addSelfPlanAndSendFunctions(
               client,
               getInitializeVaultInstructionAsync(input),
             ),
+          initiateOwnershipTransfer: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getInitiateOwnershipTransferInstructionAsync(input),
+            ),
           pauseAgent: (input) =>
             addSelfPlanAndSendFunctions(
               client,
-              getPauseAgentInstruction(input),
+              getPauseAgentInstructionAsync(input),
+            ),
+          promoteGraylistDestination: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getPromoteGraylistDestinationInstructionAsync(input),
+            ),
+          queueAgentGrant: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getQueueAgentGrantInstructionAsync(input),
             ),
           queueAgentPermissionsUpdate: (input) =>
             addSelfPlanAndSendFunctions(
               client,
               getQueueAgentPermissionsUpdateInstructionAsync(input),
-            ),
-          queueCloseConstraints: (input) =>
-            addSelfPlanAndSendFunctions(
-              client,
-              getQueueCloseConstraintsInstructionAsync(input),
-            ),
-          queueConstraintsUpdate: (input) =>
-            addSelfPlanAndSendFunctions(
-              client,
-              getQueueConstraintsUpdateInstructionAsync(input),
             ),
           queuePolicyUpdate: (input) =>
             addSelfPlanAndSendFunctions(
@@ -1574,32 +1410,32 @@ export function sigilProgram() {
           reactivateVault: (input) =>
             addSelfPlanAndSendFunctions(
               client,
-              getReactivateVaultInstruction(input),
+              getReactivateVaultInstructionAsync(input),
             ),
-          refundEscrow: (input) =>
+          recordAgentViolation: (input) =>
             addSelfPlanAndSendFunctions(
               client,
-              getRefundEscrowInstructionAsync(input),
+              getRecordAgentViolationInstructionAsync(input),
             ),
           registerAgent: (input) =>
             addSelfPlanAndSendFunctions(
               client,
-              getRegisterAgentInstruction(input),
+              getRegisterAgentInstructionAsync(input),
             ),
           revokeAgent: (input) =>
             addSelfPlanAndSendFunctions(
               client,
-              getRevokeAgentInstruction(input),
+              getRevokeAgentInstructionAsync(input),
             ),
-          settleEscrow: (input) =>
+          setObserveOnly: (input) =>
             addSelfPlanAndSendFunctions(
               client,
-              getSettleEscrowInstructionAsync(input),
+              getSetObserveOnlyInstructionAsync(input),
             ),
           unpauseAgent: (input) =>
             addSelfPlanAndSendFunctions(
               client,
-              getUnpauseAgentInstruction(input),
+              getUnpauseAgentInstructionAsync(input),
             ),
           validateAndAuthorize: (input) =>
             addSelfPlanAndSendFunctions(

@@ -318,10 +318,12 @@ describe("expectSigilError", () => {
   });
 
   it("works on raw hex custom program error (no logs)", () => {
-    // MaxAgentsReached — canonical code is 6036 after phantom-error cleanup.
-    // The coupled {name, code} type guarantees tsc catches any drift here.
-    const err = mkRawCustomError(6036);
-    expectSigilError(err, { name: "MaxAgentsReached", code: 6036 });
+    // MaxAgentsReached — canonical code is 6034 after Phase 1 Option A
+    // demolition (shifted from 6036 by the deletion of the two Jupiter-specific
+    // variants at 6030/6031). The coupled {name, code} type guarantees tsc
+    // catches any drift here.
+    const err = mkRawCustomError(6034);
+    expectSigilError(err, { name: "MaxAgentsReached", code: 6034 });
   });
 
   it("preserves original error as cause", () => {

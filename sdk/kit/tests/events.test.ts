@@ -140,8 +140,14 @@ describe("events", () => {
   });
 
   describe("getEventNames", () => {
-    it("returns 38 names", () => {
-      expect(getEventNames()).to.have.length(38);
+    it("returns 45 names", () => {
+      // 39 events post Phase 3 (added GraylistEntered, GraylistPromoted,
+      // AgentAutoRevoked for TA-07/17 pre-execution guards).
+      // Phase 8 added 5 events: OwnershipTransferInitiated /Accepted /
+      // Cancelled (Batches 3/4 C26) + AgentGrantQueued / Applied
+      // (Batch 6 PEN-CROSS-1).
+      // M1-04: 10 constraint-engine events removed → 45 - 10 = 35.
+      expect(getEventNames()).to.have.length(35);
     });
 
     it("includes known names", () => {
@@ -188,7 +194,6 @@ describe("events", () => {
       const encoded = encoder.encode({
         vault: VAULT_ADDR,
         agent: AGENT_ADDR,
-        isSpending: true,
         tokenMint: MINT_ADDR,
         amount: 1_000_000n,
         usdAmount: 1_000_000n,
@@ -227,7 +232,6 @@ describe("events", () => {
         timestamp: 1700000100n,
         actualSpendUsd: 500_000_000n,
         balanceAfterUsd: 1_200_000_000n,
-        isSpending: true,
       });
 
       const event: SigilEvent = {
@@ -244,7 +248,6 @@ describe("events", () => {
       expect(decoded.fields!.timestamp).to.equal(1700000100n);
       expect(decoded.fields!.actualSpendUsd).to.equal(500_000_000n);
       expect(decoded.fields!.balanceAfterUsd).to.equal(1_200_000_000n);
-      expect(decoded.fields!.isSpending).to.equal(true);
     });
 
     it("returns fields=null when decoder fails on corrupt data", () => {
@@ -267,7 +270,6 @@ describe("events", () => {
       const payload = encoder.encode({
         vault: VAULT_ADDR,
         agent: AGENT_ADDR,
-        isSpending: true,
         tokenMint: MINT_ADDR,
         amount: 500_000n,
         usdAmount: 500_000n,
@@ -358,7 +360,6 @@ describe("events", () => {
         timestamp: 1700000500n,
         actualSpendUsd: 0n,
         balanceAfterUsd: 0n,
-        isSpending: true,
       });
       const validBytes = new Uint8Array([
         ...discBytes,
@@ -402,8 +403,12 @@ describe("events", () => {
         );
       }
       // The runtime sync assertion in events.ts would have thrown at import time
-      // if any entry was missing, so reaching this point proves completeness
-      expect(discriminatorNames.size).to.equal(38);
+      // if any entry was missing, so reaching this point proves completeness.
+      // Phase 3: +3 events (GraylistEntered, GraylistPromoted, AgentAutoRevoked).
+      // Phase 8: +5 events (OwnershipTransferInitiated/Accepted/Cancelled +
+      // AgentGrantQueued/Applied) = 39 + 5 = 44.
+      // M1-04: 10 constraint-engine events removed → 35.
+      expect(discriminatorNames.size).to.equal(35);
     });
   });
 });

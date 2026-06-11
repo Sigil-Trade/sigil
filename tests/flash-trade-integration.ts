@@ -20,6 +20,12 @@ import {
 } from "@solana/spl-token";
 import { expect } from "chai";
 import BN from "bn.js";
+import { initVaultPreviewDigest } from "./helpers/policy-digest";
+import {
+  buildExpectedIntentDigest,
+  digestAsArgs,
+} from "./helpers/intent-digest-fixture";
+import { registerOperatorAgent } from "./helpers/register-operator-agent";
 // Inlined constants — sdk/typescript was deleted in Phase 0 nuclear cleanup
 const FLASH_TRADE_PROGRAM_ID = new PublicKey(
   "FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn",
@@ -40,6 +46,8 @@ import {
   advanceTime,
   TestEnv,
   LiteSVM,
+  MOCK_DEFI_PROGRAM_ID,
+  buildMockDefiNoopIx,
 } from "./helpers/litesvm-setup";
 
 const FULL_CAPABILITY = 2; // CAPABILITY_OPERATOR
@@ -71,7 +79,7 @@ describe("flash-trade-integration", () => {
 
   // Protocol treasury (must match hardcoded constant in program)
   const protocolTreasury = new PublicKey(
-    "ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT",
+    "6wrkKTM2pjkcCAbMfRz2j3AXspavu6pq3ePcuJUE3Azp",
   );
   let protocolTreasuryUsdcAta: PublicKey;
   let ownerUsdcAta: PublicKey;
@@ -79,6 +87,12 @@ describe("flash-trade-integration", () => {
 
   // Use Flash Trade program ID as the allowed protocol
   const flashProtocol = FLASH_TRADE_PROGRAM_ID;
+  // F-Q2: spending sandwiches require EXACTLY ONE counted DeFi instruction.
+  // The mock action is mock-defi's no-op open_position on MOCK_DEFI_PROGRAM_ID
+  // (a counted, zero-spend DeFi ix). Spending call sites authorize against this
+  // program (target_protocol must equal the executed ix's program), and every
+  // vault allowlists it alongside the nominal protocol.
+  const mockDefiProtocol = MOCK_DEFI_PROGRAM_ID;
 
   // Vault for perp tests (IDs 300+ to avoid collision with other test files)
   const vaultId = new BN(300);
@@ -87,14 +101,15 @@ describe("flash-trade-integration", () => {
   let trackerPda: PublicKey;
   let overlayPda: PublicKey;
   /**
-   * Create a mock DeFi instruction (no-op transfer to self).
+   * Create a mock DeFi instruction. F-Q2: must be a COUNTED DeFi ix (reaches
+   * the protocol-allowlist match in validate_and_authorize's spending scan), so
+   * we use mock-defi's no-op open_position on MOCK_DEFI_PROGRAM_ID. It moves
+   * zero tokens (outcome-based actual spend = 0) while satisfying the
+   * exactly-one-DeFi-ix rule. A SystemProgram no-op is Infrastructure → not
+   * counted → would now fail TooManyDeFiInstructions on spending sandwiches.
    */
   function createMockDefiInstruction(payer: PublicKey): TransactionInstruction {
-    return SystemProgram.transfer({
-      fromPubkey: payer,
-      toPubkey: payer,
-      lamports: 0,
-    });
+    return buildMockDefiNoopIx(payer);
   }
 
   /**
@@ -138,7 +153,22 @@ describe("flash-trade-integration", () => {
     const currentVersion = (polAcct as any).policyVersion ?? new BN(0);
 
     const validateIx = await program.methods
-      .validateAndAuthorize(tokenMint, amount, targetProtocol, currentVersion)
+      .validateAndAuthorize(
+        tokenMint,
+        amount,
+        targetProtocol,
+        currentVersion,
+        new BN(0),
+        digestAsArgs(
+          buildExpectedIntentDigest({
+            vault,
+            agent: agentKp.publicKey,
+            tokenMint,
+            amount,
+            targetProtocol,
+          }),
+        ),
+      )
       .accountsPartial({
         agent: agentKp.publicKey,
         vault,
@@ -155,6 +185,13 @@ describe("flash-trade-integration", () => {
         systemProgram: SystemProgram.programId,
         instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
+      // F-Q1a completeness: the mock-defi no-op ix lists the agent signer (the
+      // writable fee-payer in the compiled v0 message). validate's
+      // destination-completeness guard requires every writable DeFi meta
+      // resolvable in remaining_accounts, so append the agent (mirrors seal()).
+      .remainingAccounts([
+        { pubkey: agentKp.publicKey, isSigner: false, isWritable: false },
+      ])
       .instruction();
 
     const mockDefiIx = createMockDefiInstruction(agentKp.publicKey);
@@ -241,15 +278,34 @@ describe("flash-trade-integration", () => {
     await program.methods
       .initializeVault(
         vaultId,
-        new BN(1_000_000_000), // daily cap: 1000 USDC
-        new BN(500_000_000), // max tx: 500 USDC
-        0, // protocolMode
-        [flashProtocol],
-        0, // developer fee rate
-        100, // maxSlippageBps
-        new BN(1800), // timelockDuration (mandatory minimum: 30 min)
-        [], // allowedDestinations
-        [], // protocolCaps
+        new BN(1_000_000_000),
+        new BN(500_000_000),
+        1,
+        [flashProtocol, mockDefiProtocol],
+        0,
+        100,
+        new BN(1800),
+        [],
+        [],
+        false, // observeOnly (Phase 2 TA-19)
+        0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+        false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+        5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+        new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+        new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+        false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+        initVaultPreviewDigest({
+          dailySpendingCapUsd: new BN(1_000_000_000),
+          maxTransactionSizeUsd: new BN(500_000_000),
+          maxSlippageBps: 100,
+          protocolMode: 1,
+          protocols: [flashProtocol, mockDefiProtocol],
+          allowedDestinations: [],
+          timelockDuration: new BN(1800),
+          operatingHours: 0x00ffffff,
+          autoPromoteGrays: false,
+          autoRevokeThreshold: 5,
+        }),
       )
       .accountsPartial({
         owner: owner.publicKey,
@@ -262,15 +318,14 @@ describe("flash-trade-integration", () => {
       })
       .rpc();
 
-    // Register agent
-    await program.methods
-      .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-      .accountsPartial({
-        owner: owner.publicKey,
-        vault: vaultPda,
-        agentSpendOverlay: overlayPda,
-      })
-      .rpc();
+    // Register agent (F-Q6: OPERATOR grant on single-key vault → timelocked path)
+    await registerOperatorAgent({
+      program,
+      svm,
+      owner: owner.publicKey,
+      vault: vaultPda,
+      agent: agent.publicKey,
+    });
 
     // Fund the vault with USDC
     ownerUsdcAta = createAtaHelper(
@@ -317,7 +372,7 @@ describe("flash-trade-integration", () => {
         agent,
         usdcMint,
         amount,
-        flashProtocol,
+        mockDefiProtocol,
       );
 
       expect(sig.signature).to.be.a("string");
@@ -345,7 +400,7 @@ describe("flash-trade-integration", () => {
         agent,
         usdcMint,
         new BN(30_000_000),
-        flashProtocol,
+        mockDefiProtocol,
       );
 
       expect(sig.signature).to.be.a("string");
@@ -421,13 +476,32 @@ describe("flash-trade-integration", () => {
           frozenVaultId,
           new BN(1_000_000_000),
           new BN(500_000_000),
-          0, // protocolMode
-          [flashProtocol],
-          0, // developer fee rate
-          100, // maxSlippageBps
+          1,
+          [flashProtocol, mockDefiProtocol],
+          0,
+          100,
           new BN(1800),
           [],
-          [], // protocolCaps
+          [],
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(1_000_000_000),
+            maxTransactionSizeUsd: new BN(500_000_000),
+            maxSlippageBps: 100,
+            protocolMode: 1,
+            protocols: [flashProtocol, mockDefiProtocol],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accountsPartial({
           owner: owner.publicKey,
@@ -440,14 +514,13 @@ describe("flash-trade-integration", () => {
         })
         .rpc();
 
-      await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accountsPartial({
-          owner: owner.publicKey,
-          vault: frozenVault,
-          agentSpendOverlay: frozenOverlay,
-        })
-        .rpc();
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: frozenVault,
+        agent: agent.publicKey,
+      });
 
       // Freeze vault
       await program.methods
@@ -584,19 +657,40 @@ describe("flash-trade-integration", () => {
         program.programId,
       );
 
-      // Daily cap = 200 USDC, max tx = 200 USDC, all protocols allowed
+      // Daily cap = 200 USDC, max tx = 200 USDC, allowlist contains mockProtocol
+      // (Phase 2 Option A: protocol_mode is hard-coded to 1 = ALLOWLIST; "all
+      // protocols allowed" is no longer expressible — owners must enumerate.)
       await program.methods
         .initializeVault(
           capVaultId,
-          new BN(200_000_000), // $200 daily cap
-          new BN(200_000_000), // $200 max tx
-          0, // protocol mode: all allowed
+          new BN(200_000_000),
+          new BN(200_000_000),
+          1,
+          [mockProtocol, mockDefiProtocol],
+          0,
+          100,
+          new BN(1800),
           [],
-          0, // no dev fee
-          100, // maxSlippageBps
-          new BN(1800), // timelockDuration (mandatory minimum: 30 min)
-          [], // no destination allowlist
-          [], // protocolCaps
+          [],
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(200_000_000),
+            maxTransactionSizeUsd: new BN(200_000_000),
+            maxSlippageBps: 100,
+            protocolMode: 1,
+            protocols: [mockProtocol, mockDefiProtocol],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accountsPartial({
           owner: owner.publicKey,
@@ -609,14 +703,13 @@ describe("flash-trade-integration", () => {
         })
         .rpc();
 
-      await program.methods
-        .registerAgent(capAgentKp.publicKey, FULL_CAPABILITY, new BN(0))
-        .accountsPartial({
-          owner: owner.publicKey,
-          vault: capVault,
-          agentSpendOverlay: capOverlay,
-        })
-        .rpc();
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: capVault,
+        agent: capAgentKp.publicKey,
+      });
 
       // Mint fresh USDC for this vault's deposit
       mintToHelper(
@@ -658,7 +751,7 @@ describe("flash-trade-integration", () => {
         capAgentKp,
         usdcMint,
         new BN(100_000_000),
-        mockProtocol,
+        mockDefiProtocol,
         capVaultUsdcAta,
       );
 
@@ -670,7 +763,7 @@ describe("flash-trade-integration", () => {
         capAgentKp,
         usdcMint,
         new BN(100_000_000),
-        mockProtocol,
+        mockDefiProtocol,
         capVaultUsdcAta,
       );
     });
@@ -687,7 +780,7 @@ describe("flash-trade-integration", () => {
         capAgentKp,
         usdcMint,
         new BN(100_000_000),
-        mockProtocol,
+        mockDefiProtocol,
         capVaultUsdcAta,
       );
 
@@ -699,7 +792,7 @@ describe("flash-trade-integration", () => {
         capAgentKp,
         usdcMint,
         new BN(100_000_000),
-        mockProtocol,
+        mockDefiProtocol,
         capVaultUsdcAta,
       );
 
@@ -731,7 +824,7 @@ describe("flash-trade-integration", () => {
         agent,
         usdcMint,
         new BN(50_000_000), // 50 USDC
-        flashProtocol,
+        mockDefiProtocol,
       );
       expect(sig.signature).to.be.a("string");
     });
@@ -802,7 +895,7 @@ describe("flash-trade-integration", () => {
         agent,
         usdcMint,
         new BN(100_000_000), // 100 USDC (spending)
-        flashProtocol,
+        mockDefiProtocol,
       );
       expect(sig.signature).to.be.a("string");
     });
@@ -830,7 +923,7 @@ describe("flash-trade-integration", () => {
         agent,
         usdcMint,
         new BN(100_000_000), // 100 USDC
-        flashProtocol,
+        mockDefiProtocol,
       );
       expect(sig.signature).to.be.a("string");
     });

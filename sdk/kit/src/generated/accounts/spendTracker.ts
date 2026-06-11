@@ -43,10 +43,14 @@ import {
 import {
   getEpochBucketDecoder,
   getEpochBucketEncoder,
+  getPerRecipientCounterDecoder,
+  getPerRecipientCounterEncoder,
   getProtocolSpendCounterDecoder,
   getProtocolSpendCounterEncoder,
   type EpochBucket,
   type EpochBucketArgs,
+  type PerRecipientCounter,
+  type PerRecipientCounterArgs,
   type ProtocolSpendCounter,
   type ProtocolSpendCounterArgs,
 } from "../types/index.js";
@@ -67,7 +71,26 @@ export type SpendTracker = {
   vault: Address;
   /** 144 epoch buckets for rolling 24h spend tracking */
   buckets: Array<EpochBucket>;
-  /** Reserved per-protocol spend counters (zeroed, no enforcement yet) */
+  /**
+   * Per-protocol rolling 24h counters. Enforcement wired in
+   * `finalize_session.rs` — search for "TA-13 (Phase 5 ratification)"
+   * (two sites: the stablecoin-input branch around line 314 and the
+   * non-stablecoin-input branch around line 408). See
+   * `policy.protocol_caps` for the cap values and
+   * `PolicyConfig::get_protocol_cap` for the lookup logic. Per-protocol
+   * entries are populated by `record_protocol_spend()` when
+   * `policy.has_protocol_caps == true`.
+   *
+   * TA-13 ratification (Phase 5): the prior doc-comment claimed
+   * "zeroed, no enforcement yet" — this was stale. The enforcement
+   * has lived in `finalize_session` since Phase 2; this comment was
+   * the only artifact suggesting otherwise. Phase 5 ratifies the
+   * existing require! with the dedicated `ErrDailyCapExceeded` (6086)
+   * error code so off-chain monitors can disambiguate the "rolling
+   * 24h cap hit" semantic from the legacy "slot allocation exhausted"
+   * path (which still returns `ProtocolCapExceeded` from inside
+   * `record_protocol_spend`).
+   */
   protocolCounters: Array<ProtocolSpendCounter>;
   /**
    * Epoch of most recent record_spend() call. Enables early exit in get_rolling_24h_usd().
@@ -78,6 +101,27 @@ export type SpendTracker = {
   bump: number;
   /** Padding for 8-byte alignment */
   padding: ReadonlyUint8Array;
+  /**
+   * TA-14 (Phase 5 post-exec invariant #2): per-recipient rolling 24h
+   * outflow counters. Bounded to `MAX_PER_RECIPIENT_ENTRIES` (10)
+   * entries — Vec NOT permitted in zero-copy account per F-14.
+   * 10 × 48 = 480 bytes. Each entry tracks one recipient pubkey
+   * (resolved from the SPL TokenAccount.owner field — NOT the ATA
+   * pubkey) and their rolling-24h outflow USD total.
+   */
+  perRecipient: Array<PerRecipientCounter>;
+  /**
+   * TA-14 (Phase 5): how many `per_recipient` slots are currently
+   * active. New entries occupy `per_recipient[per_recipient_count]`
+   * then this counter increments. Eviction is AGE-BASED only — slots
+   * whose 24h window has elapsed are eligible; LRU/churn-eviction is
+   * EXPLICITLY REJECTED per §RP requirement (prevents an attacker
+   * recycling slots by paying many distinct recipients to bypass
+   * the cap).
+   */
+  perRecipientCount: number;
+  /** Padding for 8-byte alignment after the new u8 counter. */
+  paddingRecipient: ReadonlyUint8Array;
 };
 
 export type SpendTrackerArgs = {
@@ -85,7 +129,26 @@ export type SpendTrackerArgs = {
   vault: Address;
   /** 144 epoch buckets for rolling 24h spend tracking */
   buckets: Array<EpochBucketArgs>;
-  /** Reserved per-protocol spend counters (zeroed, no enforcement yet) */
+  /**
+   * Per-protocol rolling 24h counters. Enforcement wired in
+   * `finalize_session.rs` — search for "TA-13 (Phase 5 ratification)"
+   * (two sites: the stablecoin-input branch around line 314 and the
+   * non-stablecoin-input branch around line 408). See
+   * `policy.protocol_caps` for the cap values and
+   * `PolicyConfig::get_protocol_cap` for the lookup logic. Per-protocol
+   * entries are populated by `record_protocol_spend()` when
+   * `policy.has_protocol_caps == true`.
+   *
+   * TA-13 ratification (Phase 5): the prior doc-comment claimed
+   * "zeroed, no enforcement yet" — this was stale. The enforcement
+   * has lived in `finalize_session` since Phase 2; this comment was
+   * the only artifact suggesting otherwise. Phase 5 ratifies the
+   * existing require! with the dedicated `ErrDailyCapExceeded` (6086)
+   * error code so off-chain monitors can disambiguate the "rolling
+   * 24h cap hit" semantic from the legacy "slot allocation exhausted"
+   * path (which still returns `ProtocolCapExceeded` from inside
+   * `record_protocol_spend`).
+   */
   protocolCounters: Array<ProtocolSpendCounterArgs>;
   /**
    * Epoch of most recent record_spend() call. Enables early exit in get_rolling_24h_usd().
@@ -96,6 +159,27 @@ export type SpendTrackerArgs = {
   bump: number;
   /** Padding for 8-byte alignment */
   padding: ReadonlyUint8Array;
+  /**
+   * TA-14 (Phase 5 post-exec invariant #2): per-recipient rolling 24h
+   * outflow counters. Bounded to `MAX_PER_RECIPIENT_ENTRIES` (10)
+   * entries — Vec NOT permitted in zero-copy account per F-14.
+   * 10 × 48 = 480 bytes. Each entry tracks one recipient pubkey
+   * (resolved from the SPL TokenAccount.owner field — NOT the ATA
+   * pubkey) and their rolling-24h outflow USD total.
+   */
+  perRecipient: Array<PerRecipientCounterArgs>;
+  /**
+   * TA-14 (Phase 5): how many `per_recipient` slots are currently
+   * active. New entries occupy `per_recipient[per_recipient_count]`
+   * then this counter increments. Eviction is AGE-BASED only — slots
+   * whose 24h window has elapsed are eligible; LRU/churn-eviction is
+   * EXPLICITLY REJECTED per §RP requirement (prevents an attacker
+   * recycling slots by paying many distinct recipients to bypass
+   * the cap).
+   */
+  perRecipientCount: number;
+  /** Padding for 8-byte alignment after the new u8 counter. */
+  paddingRecipient: ReadonlyUint8Array;
 };
 
 /** Gets the encoder for {@link SpendTrackerArgs} account data. */
@@ -112,6 +196,12 @@ export function getSpendTrackerEncoder(): FixedSizeEncoder<SpendTrackerArgs> {
       ["lastWriteEpoch", getI64Encoder()],
       ["bump", getU8Encoder()],
       ["padding", fixEncoderSize(getBytesEncoder(), 7)],
+      [
+        "perRecipient",
+        getArrayEncoder(getPerRecipientCounterEncoder(), { size: 10 }),
+      ],
+      ["perRecipientCount", getU8Encoder()],
+      ["paddingRecipient", fixEncoderSize(getBytesEncoder(), 7)],
     ]),
     (value) => ({ ...value, discriminator: SPEND_TRACKER_DISCRIMINATOR }),
   );
@@ -130,6 +220,12 @@ export function getSpendTrackerDecoder(): FixedSizeDecoder<SpendTracker> {
     ["lastWriteEpoch", getI64Decoder()],
     ["bump", getU8Decoder()],
     ["padding", fixDecoderSize(getBytesDecoder(), 7)],
+    [
+      "perRecipient",
+      getArrayDecoder(getPerRecipientCounterDecoder(), { size: 10 }),
+    ],
+    ["perRecipientCount", getU8Decoder()],
+    ["paddingRecipient", fixDecoderSize(getBytesDecoder(), 7)],
   ]);
 }
 
@@ -195,5 +291,5 @@ export async function fetchAllMaybeSpendTracker(
 }
 
 export function getSpendTrackerSize(): number {
-  return 2840;
+  return 3328;
 }

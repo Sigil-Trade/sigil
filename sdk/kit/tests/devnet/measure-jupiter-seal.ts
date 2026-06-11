@@ -74,7 +74,8 @@ function mockState(): ResolvedVaultState {
           capability: Number(FULL_CAPABILITY),
           spendingLimitUsd: 0n,
           paused: false,
-          reserved: new Uint8Array(7),
+          consecutiveFailures: 0,
+          reserved: new Uint8Array(6),
         },
       ],
       feeDestination: FEE_DEST,
@@ -83,12 +84,18 @@ function mockState(): ResolvedVaultState {
       createdAt: 1000n,
       totalTransactions: 0n,
       totalVolume: 0n,
-      activeEscrowCount: 0,
       totalFeesCollected: 0n,
       totalDepositedUsd: 0n,
       totalWithdrawnUsd: 0n,
       totalFailedTransactions: 0n,
       activeSessions: 0,
+      observeOnly: false,
+      frozenAtTimestamp: 0n,
+      freezeReason: 0,
+      // Phase 8 LBL-01: immutable PDA seed-key (equals initial owner).
+      // F-Q6 (2026-06-02): mock single-key (EOA) owner.
+      ownerType: 0,
+      vaultAuthority: OWNER,
     },
     policy: {
       discriminator: new Uint8Array(8),
@@ -101,7 +108,6 @@ function mockState(): ResolvedVaultState {
       maxSlippageBps: 500,
       timelockDuration: 0n,
       allowedDestinations: [],
-      hasConstraints: false,
       hasPendingPolicy: false,
       hasProtocolCaps: false,
       protocolCaps: [],
@@ -110,10 +116,25 @@ function mockState(): ResolvedVaultState {
       policyVersion: 0n,
       hasPostAssertions: 0,
       destinationMode: 0,
+      policyPreviewDigest: new Uint8Array(32),
+      createdAtSlot: 0n,
+      operatingHours: 0x00ffffff,
+      destinationGraylist: [],
+      autoPromoteGrays: false,
+      autoRevokeThreshold: 5,
+      // TA-12/14 (Phase 5): mock defaults, off.
+      stableBalanceFloor: 0n,
+      perRecipientDailyCapUsd: 0n,
+      // G6 (audit 2026-05-18 cosign opt-in): mock default false (low-friction).
+      cosignRequired: false,
+      // D-5 (Bucket 2 audit 2026-05-21, F-RP3-1): mock default unset.
+      cosignSessionPubkey:
+        "11111111111111111111111111111111" as unknown as Address,
+      // F-Q6 (2026-06-02): mock default 0 (no OPERATOR-grant delay).
+      operatorGrantDelaySeconds: 0n,
     },
     tracker: null,
     overlay: null,
-    constraints: null,
     globalBudget: {
       spent24h: 0n,
       cap: 10_000_000_000n,

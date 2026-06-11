@@ -41,7 +41,7 @@ const JUPITER = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" as Address;
 // Generated from known Solana addresses — NOT program IDs.
 const ADDR_POOL: Address[] = [
   "BtRLCMVamw9c3R8UDwgYBCFur5YVkqACmakVh9xi2aTw" as Address,
-  "ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT" as Address,
+  "6wrkKTM2pjkcCAbMfRz2j3AXspavu6pq3ePcuJUE3Azp" as Address,
   "DMFEQFCRsvGrYzoL2gfwTEd9J8eVBQEjg7HjbJHd6oGH" as Address,
   "6wrkKTM2pjkcCAbMfRz2j3AXspavu6pq3ePcuJUE3Azp" as Address,
   "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" as Address,

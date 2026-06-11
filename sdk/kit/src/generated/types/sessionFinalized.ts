@@ -34,8 +34,6 @@ export type SessionFinalized = {
   actualSpendUsd: bigint;
   /** Vault stablecoin balance after this transaction (0 for non-spending). */
   balanceAfterUsd: bigint;
-  /** Whether this was a spending action. */
-  isSpending: boolean;
 };
 
 export type SessionFinalizedArgs = {
@@ -48,8 +46,6 @@ export type SessionFinalizedArgs = {
   actualSpendUsd: number | bigint;
   /** Vault stablecoin balance after this transaction (0 for non-spending). */
   balanceAfterUsd: number | bigint;
-  /** Whether this was a spending action. */
-  isSpending: boolean;
 };
 
 export function getSessionFinalizedEncoder(): FixedSizeEncoder<SessionFinalizedArgs> {
@@ -61,7 +57,6 @@ export function getSessionFinalizedEncoder(): FixedSizeEncoder<SessionFinalizedA
     ["timestamp", getI64Encoder()],
     ["actualSpendUsd", getU64Encoder()],
     ["balanceAfterUsd", getU64Encoder()],
-    ["isSpending", getBooleanEncoder()],
   ]);
 }
 
@@ -74,7 +69,6 @@ export function getSessionFinalizedDecoder(): FixedSizeDecoder<SessionFinalized>
     ["timestamp", getI64Decoder()],
     ["actualSpendUsd", getU64Decoder()],
     ["balanceAfterUsd", getU64Decoder()],
-    ["isSpending", getBooleanDecoder()],
   ]);
 }
 

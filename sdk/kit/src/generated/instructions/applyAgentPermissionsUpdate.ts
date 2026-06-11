@@ -28,6 +28,7 @@ import {
   type Instruction,
   type InstructionWithAccounts,
   type InstructionWithData,
+  type ReadonlyAccount,
   type ReadonlyUint8Array,
   type TransactionSigner,
   type WritableAccount,
@@ -57,6 +58,9 @@ export type ApplyAgentPermissionsUpdateInstruction<
   TAccountPolicy extends string | AccountMeta<string> = string,
   TAccountPendingAgentPerms extends string | AccountMeta<string> = string,
   TAccountAgentSpendOverlay extends string | AccountMeta<string> = string,
+  TAccountAuditLogSuccess extends string | AccountMeta<string> = string,
+  TAccountSlotHashesSysvar extends string | AccountMeta<string> =
+    "SysvarS1otHashes111111111111111111111111111",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
   InstructionWithData<ReadonlyUint8Array> &
@@ -78,6 +82,12 @@ export type ApplyAgentPermissionsUpdateInstruction<
       TAccountAgentSpendOverlay extends string
         ? WritableAccount<TAccountAgentSpendOverlay>
         : TAccountAgentSpendOverlay,
+      TAccountAuditLogSuccess extends string
+        ? WritableAccount<TAccountAuditLogSuccess>
+        : TAccountAuditLogSuccess,
+      TAccountSlotHashesSysvar extends string
+        ? ReadonlyAccount<TAccountSlotHashesSysvar>
+        : TAccountSlotHashesSysvar,
       ...TRemainingAccounts,
     ]
   >;
@@ -120,6 +130,8 @@ export type ApplyAgentPermissionsUpdateAsyncInput<
   TAccountPolicy extends string = string,
   TAccountPendingAgentPerms extends string = string,
   TAccountAgentSpendOverlay extends string = string,
+  TAccountAuditLogSuccess extends string = string,
+  TAccountSlotHashesSysvar extends string = string,
 > = {
   owner: TransactionSigner<TAccountOwner>;
   vault: Address<TAccountVault>;
@@ -127,6 +139,13 @@ export type ApplyAgentPermissionsUpdateAsyncInput<
   pendingAgentPerms: Address<TAccountPendingAgentPerms>;
   /** Agent spend overlay — per-agent tracking slot. */
   agentSpendOverlay: Address<TAccountAgentSpendOverlay>;
+  /**
+   * M-6 (audit 2026-05-21) — success audit log; entry appended after
+   * the capability / spending_limit / policy_version mutations land.
+   */
+  auditLogSuccess?: Address<TAccountAuditLogSuccess>;
+  /** rejects any mismatched sysvar pubkey before the handler runs. */
+  slotHashesSysvar?: Address<TAccountSlotHashesSysvar>;
 };
 
 export async function getApplyAgentPermissionsUpdateInstructionAsync<
@@ -135,6 +154,8 @@ export async function getApplyAgentPermissionsUpdateInstructionAsync<
   TAccountPolicy extends string,
   TAccountPendingAgentPerms extends string,
   TAccountAgentSpendOverlay extends string,
+  TAccountAuditLogSuccess extends string,
+  TAccountSlotHashesSysvar extends string,
   TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: ApplyAgentPermissionsUpdateAsyncInput<
@@ -142,7 +163,9 @@ export async function getApplyAgentPermissionsUpdateInstructionAsync<
     TAccountVault,
     TAccountPolicy,
     TAccountPendingAgentPerms,
-    TAccountAgentSpendOverlay
+    TAccountAgentSpendOverlay,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar
   >,
   config?: { programAddress?: TProgramAddress },
 ): Promise<
@@ -152,7 +175,9 @@ export async function getApplyAgentPermissionsUpdateInstructionAsync<
     TAccountVault,
     TAccountPolicy,
     TAccountPendingAgentPerms,
-    TAccountAgentSpendOverlay
+    TAccountAgentSpendOverlay,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar
   >
 > {
   // Program address.
@@ -170,6 +195,11 @@ export async function getApplyAgentPermissionsUpdateInstructionAsync<
     agentSpendOverlay: {
       value: input.agentSpendOverlay ?? null,
       isWritable: true,
+    },
+    auditLogSuccess: { value: input.auditLogSuccess ?? null, isWritable: true },
+    slotHashesSysvar: {
+      value: input.slotHashesSysvar ?? null,
+      isWritable: false,
     },
   };
   const accounts = originalAccounts as Record<
@@ -192,6 +222,28 @@ export async function getApplyAgentPermissionsUpdateInstructionAsync<
       ],
     });
   }
+  if (!accounts.auditLogSuccess.value) {
+    accounts.auditLogSuccess.value = await getProgramDerivedAddress({
+      programAddress,
+      seeds: [
+        getBytesEncoder().encode(
+          new Uint8Array([
+            97, 117, 100, 105, 116, 95, 115, 117, 99, 99, 101, 115, 115,
+          ]),
+        ),
+        getAddressEncoder().encode(
+          getAddressFromResolvedInstructionAccount(
+            "vault",
+            accounts.vault.value,
+          ),
+        ),
+      ],
+    });
+  }
+  if (!accounts.slotHashesSysvar.value) {
+    accounts.slotHashesSysvar.value =
+      "SysvarS1otHashes111111111111111111111111111" as Address<"SysvarS1otHashes111111111111111111111111111">;
+  }
 
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
   return Object.freeze({
@@ -201,6 +253,8 @@ export async function getApplyAgentPermissionsUpdateInstructionAsync<
       getAccountMeta("policy", accounts.policy),
       getAccountMeta("pendingAgentPerms", accounts.pendingAgentPerms),
       getAccountMeta("agentSpendOverlay", accounts.agentSpendOverlay),
+      getAccountMeta("auditLogSuccess", accounts.auditLogSuccess),
+      getAccountMeta("slotHashesSysvar", accounts.slotHashesSysvar),
     ],
     data: getApplyAgentPermissionsUpdateInstructionDataEncoder().encode({}),
     programAddress,
@@ -210,7 +264,9 @@ export async function getApplyAgentPermissionsUpdateInstructionAsync<
     TAccountVault,
     TAccountPolicy,
     TAccountPendingAgentPerms,
-    TAccountAgentSpendOverlay
+    TAccountAgentSpendOverlay,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar
   >);
 }
 
@@ -220,6 +276,8 @@ export type ApplyAgentPermissionsUpdateInput<
   TAccountPolicy extends string = string,
   TAccountPendingAgentPerms extends string = string,
   TAccountAgentSpendOverlay extends string = string,
+  TAccountAuditLogSuccess extends string = string,
+  TAccountSlotHashesSysvar extends string = string,
 > = {
   owner: TransactionSigner<TAccountOwner>;
   vault: Address<TAccountVault>;
@@ -227,6 +285,13 @@ export type ApplyAgentPermissionsUpdateInput<
   pendingAgentPerms: Address<TAccountPendingAgentPerms>;
   /** Agent spend overlay — per-agent tracking slot. */
   agentSpendOverlay: Address<TAccountAgentSpendOverlay>;
+  /**
+   * M-6 (audit 2026-05-21) — success audit log; entry appended after
+   * the capability / spending_limit / policy_version mutations land.
+   */
+  auditLogSuccess: Address<TAccountAuditLogSuccess>;
+  /** rejects any mismatched sysvar pubkey before the handler runs. */
+  slotHashesSysvar?: Address<TAccountSlotHashesSysvar>;
 };
 
 export function getApplyAgentPermissionsUpdateInstruction<
@@ -235,6 +300,8 @@ export function getApplyAgentPermissionsUpdateInstruction<
   TAccountPolicy extends string,
   TAccountPendingAgentPerms extends string,
   TAccountAgentSpendOverlay extends string,
+  TAccountAuditLogSuccess extends string,
+  TAccountSlotHashesSysvar extends string,
   TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: ApplyAgentPermissionsUpdateInput<
@@ -242,7 +309,9 @@ export function getApplyAgentPermissionsUpdateInstruction<
     TAccountVault,
     TAccountPolicy,
     TAccountPendingAgentPerms,
-    TAccountAgentSpendOverlay
+    TAccountAgentSpendOverlay,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar
   >,
   config?: { programAddress?: TProgramAddress },
 ): ApplyAgentPermissionsUpdateInstruction<
@@ -251,7 +320,9 @@ export function getApplyAgentPermissionsUpdateInstruction<
   TAccountVault,
   TAccountPolicy,
   TAccountPendingAgentPerms,
-  TAccountAgentSpendOverlay
+  TAccountAgentSpendOverlay,
+  TAccountAuditLogSuccess,
+  TAccountSlotHashesSysvar
 > {
   // Program address.
   const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
@@ -269,11 +340,22 @@ export function getApplyAgentPermissionsUpdateInstruction<
       value: input.agentSpendOverlay ?? null,
       isWritable: true,
     },
+    auditLogSuccess: { value: input.auditLogSuccess ?? null, isWritable: true },
+    slotHashesSysvar: {
+      value: input.slotHashesSysvar ?? null,
+      isWritable: false,
+    },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
     ResolvedInstructionAccount
   >;
+
+  // Resolve default values.
+  if (!accounts.slotHashesSysvar.value) {
+    accounts.slotHashesSysvar.value =
+      "SysvarS1otHashes111111111111111111111111111" as Address<"SysvarS1otHashes111111111111111111111111111">;
+  }
 
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
   return Object.freeze({
@@ -283,6 +365,8 @@ export function getApplyAgentPermissionsUpdateInstruction<
       getAccountMeta("policy", accounts.policy),
       getAccountMeta("pendingAgentPerms", accounts.pendingAgentPerms),
       getAccountMeta("agentSpendOverlay", accounts.agentSpendOverlay),
+      getAccountMeta("auditLogSuccess", accounts.auditLogSuccess),
+      getAccountMeta("slotHashesSysvar", accounts.slotHashesSysvar),
     ],
     data: getApplyAgentPermissionsUpdateInstructionDataEncoder().encode({}),
     programAddress,
@@ -292,7 +376,9 @@ export function getApplyAgentPermissionsUpdateInstruction<
     TAccountVault,
     TAccountPolicy,
     TAccountPendingAgentPerms,
-    TAccountAgentSpendOverlay
+    TAccountAgentSpendOverlay,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar
   >);
 }
 
@@ -308,6 +394,13 @@ export type ParsedApplyAgentPermissionsUpdateInstruction<
     pendingAgentPerms: TAccountMetas[3];
     /** Agent spend overlay — per-agent tracking slot. */
     agentSpendOverlay: TAccountMetas[4];
+    /**
+     * M-6 (audit 2026-05-21) — success audit log; entry appended after
+     * the capability / spending_limit / policy_version mutations land.
+     */
+    auditLogSuccess: TAccountMetas[5];
+    /** rejects any mismatched sysvar pubkey before the handler runs. */
+    slotHashesSysvar: TAccountMetas[6];
   };
   data: ApplyAgentPermissionsUpdateInstructionData;
 };
@@ -320,12 +413,12 @@ export function parseApplyAgentPermissionsUpdateInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedApplyAgentPermissionsUpdateInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 5) {
+  if (instruction.accounts.length < 7) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 5,
+        expectedAccountMetas: 7,
       },
     );
   }
@@ -343,6 +436,8 @@ export function parseApplyAgentPermissionsUpdateInstruction<
       policy: getNextAccount(),
       pendingAgentPerms: getNextAccount(),
       agentSpendOverlay: getNextAccount(),
+      auditLogSuccess: getNextAccount(),
+      slotHashesSysvar: getNextAccount(),
     },
     data: getApplyAgentPermissionsUpdateInstructionDataDecoder().decode(
       instruction.data,

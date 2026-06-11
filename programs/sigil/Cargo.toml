@@ -28,7 +28,10 @@ certora = ["no-entrypoint", "dep:cvlr"]
 # See: MEMORY/WORK/20260420-201121_test-assertion-precision-council/COUNCIL_DECISION.md
 anchor-lang = { version = "=0.32.1", features = ["init-if-needed"] }
 anchor-spl = { version = "=0.32.1", features = ["token", "associated_token"] }
-solana-program = ">=2"
+# Pin to the 2.x major to prevent silent ABI breakage on a future 3.x release.
+# Anchor 0.32.1 currently requires solana-program ^2.3; let cargo pick the
+# patch but reject a major bump until we explicitly re-audit + test.
+solana-program = "~2.3"
 bytemuck = { version = "1.14", features = ["derive", "min_const_generics"] }
 
 # Pin blake3 to avoid constant_time_eq 0.4.2 which requires edition 2024

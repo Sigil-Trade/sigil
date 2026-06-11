@@ -14,16 +14,17 @@ import { SIGIL_ERROR__SDK__INVALID_NETWORK } from "./errors/codes.js";
 export { SIGIL_PROGRAM_ADDRESS } from "./generated/programs/sigil.js";
 
 // Re-export generated types
-/** @deprecated v6: ActionType eliminated. Use isSpending instead. */
+/**
+ * @deprecated v6: ActionType eliminated. V2 Option A also removed the
+ * `isSpending` field from on-chain events and the SDK SealResult — derive
+ * spending from `amount > 0n` directly.
+ */
 export type ActionType = never;
 export type { VaultStatus } from "./generated/types/vaultStatus.js";
-export type { EscrowStatus } from "./generated/types/escrowStatus.js";
 export type { AgentEntry } from "./generated/types/agentEntry.js";
 export type { EpochBucket } from "./generated/types/epochBucket.js";
-export type { ConstraintEntry } from "./generated/types/constraintEntry.js";
-export type { DataConstraint } from "./generated/types/dataConstraint.js";
-export type { AccountConstraint } from "./generated/types/accountConstraint.js";
-export type { ConstraintOperator } from "./generated/types/constraintOperator.js";
+// M1-04: ConstraintEntry/DataConstraint/AccountConstraint/ConstraintOperator
+// re-exports removed with the constraints engine (generated types deleted).
 
 // ─── Fee Constants ────────────────────────────────────────────────────────────
 
@@ -31,7 +32,7 @@ export const FEE_RATE_DENOMINATOR = 1_000_000;
 export const PROTOCOL_FEE_RATE = 200; // 2 BPS
 export const MAX_DEVELOPER_FEE_RATE = 500; // 5 BPS
 export const PROTOCOL_TREASURY =
-  "ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT" as Address;
+  "6wrkKTM2pjkcCAbMfRz2j3AXspavu6pq3ePcuJUE3Azp" as Address;
 
 // ─── Branded Types (PR 2.B — H7-BRAND) ──────────────────────────────────────
 //
@@ -123,9 +124,7 @@ export const FULL_PERMISSIONS: CapabilityTier = FULL_CAPABILITY;
 // FULL_CAPABILITY (2n) for operator agents and put granular per-action
 // restrictions in InstructionConstraints.
 
-// ─── Escrow Constants ─────────────────────────────────────────────────────────
-
-export const MAX_ESCROW_DURATION = 2_592_000; // 30 days in seconds
+// Escrow constants REMOVED in v2 revamp Stage 1 (escrow feature deleted).
 
 // ─── u64 Boundary ────────────────────────────────────────────────────────────
 
@@ -300,77 +299,11 @@ export function isStablecoinMint(mint: Address, network: Network): boolean {
   return mint === USDC_MINT_MAINNET || mint === USDT_MINT_MAINNET;
 }
 
-// ─── ActionType Parsing ──────────────────────────────────────────────────────
-//
-// The v6 on-chain program eliminated per-action permission bits in favor of a
-// 2-bit capability enum. `parseActionType` is preserved because
-// `event-analytics.ts` still reads numeric ActionType values from on-chain
-// events and needs the string label for UI display. It does NOT grant or
-// check any permission — the v6 program enforces capability (0/1/2), not
-// ActionType.
-
-/**
- * Canonical action-type names indexed by the v6 on-chain ActionType enum
- * variant. Index 0 = `Swap`, index 20 = `RefundEscrow`. This is the ONLY
- * permission-related state still in this file post-A11 — it powers
- * `parseActionType` for event decoding and nothing else.
- */
-const ACTION_TYPE_NAMES_BY_INDEX = [
-  "swap", // 0
-  "openPosition", // 1
-  "closePosition", // 2
-  "increasePosition", // 3
-  "decreasePosition", // 4
-  "deposit", // 5
-  "withdraw", // 6
-  "transfer", // 7
-  "addCollateral", // 8
-  "removeCollateral", // 9
-  "placeTriggerOrder", // 10
-  "editTriggerOrder", // 11
-  "cancelTriggerOrder", // 12
-  "placeLimitOrder", // 13
-  "editLimitOrder", // 14
-  "cancelLimitOrder", // 15
-  "swapAndOpenPosition", // 16
-  "closeAndSwapPosition", // 17
-  "createEscrow", // 18
-  "settleEscrow", // 19
-  "refundEscrow", // 20
-] as const;
-
-/**
- * Parse an action type to its string key.
- * Accepts either a numeric ActionType enum value (0-20) or an
- * Anchor-style `{ Swap: {} }` object. Returns `undefined` for
- * out-of-range numeric values or empty objects.
- */
-export function parseActionType(
-  actionType: number | Record<string, unknown>,
-): string | undefined {
-  if (typeof actionType === "number") {
-    return ACTION_TYPE_NAMES_BY_INDEX[actionType];
-  }
-  return Object.keys(actionType)[0];
-}
-
 // ─── Spending Classification ─────────────────────────────────────────────────
-
-// PositionEffect type + getPositionEffect helper REMOVED — position counter
-// system deleted wholesale per council decision (9-1 vote, 2026-04-19).
-// Spending classification is authoritative via session.is_spending (set from
-// amount > 0 in validate_and_authorize) — not derived from position semantics.
-
-export function isSpendingAction(actionType: string): boolean {
-  return [
-    "swap",
-    "openPosition",
-    "increasePosition",
-    "deposit",
-    "transfer",
-    "addCollateral",
-    "placeLimitOrder",
-    "swapAndOpenPosition",
-    "createEscrow",
-  ].includes(actionType);
-}
+//
+// V2 Option A: spending is always derived from `amount > 0`. The on-chain
+// session no longer carries an `is_spending` field, and ActionType + 21-bit
+// permission bits were deleted (council 9-1 vote, 2026-04-19). The
+// `ACTION_TYPE_NAMES_BY_INDEX` / `parseActionType` / `isSpendingAction`
+// helpers that mapped enum indices to labels for UI display were removed
+// along with the on-chain field they decoded.

@@ -26,9 +26,9 @@ import { turnkey } from "@usesigil/custody/turnkey";
 // Create a TEE-backed wallet
 const wallet = await crossmint({ apiKey: "sk_..." });
 
-// Use with Sigil's shieldWallet
-import { shieldWallet } from "@usesigil/kit";
-const shielded = shieldWallet(wallet, { maxSpend: "500 USDC/day" });
+// Pair with Sigil's shield() for client-side policy enforcement
+import { shield } from "@usesigil/kit";
+const shieldCtx = shield({ maxSpend: "500 USDC/day" });
 ```
 
 Each adapter also supports zero-config from environment variables:

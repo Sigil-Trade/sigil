@@ -8,9 +8,15 @@
  */
 
 import { expect } from "chai";
+import { address } from "@solana/kit";
 import type { Address, Rpc, SolanaRpcApi, KeyPairSigner } from "@solana/kit";
 
-import { createDevnetRpc, loadOwnerSigner } from "../../src/testing/devnet.js";
+import {
+  createDevnetRpc,
+  loadOwnerSigner,
+  provisionVault,
+  createFundedAgent,
+} from "../../src/testing/devnet.js";
 
 import { OwnerClient } from "../../src/dashboard/index.js";
 import { USDC_MINT_DEVNET, capability, usd } from "../../src/types.js";
@@ -21,6 +27,42 @@ const SKIP = !process.env.ANCHOR_PROVIDER_URL;
 const RPC_COOLDOWN_MS = 1500;
 function cooldown(): Promise<void> {
   return new Promise((r) => setTimeout(r, RPC_COOLDOWN_MS));
+}
+
+/**
+ * V2 `reactivate_vault` enforces a 300s anti-thrash cooldown from the freeze
+ * (`reactivate_vault.rs` requires `clock.unix_timestamp - frozen_at >= 300`,
+ * `ErrReactivateCooldownActive` 6097 otherwise). Devnet has no clock
+ * cheatcodes, so a resume immediately after a freeze must wait it out. Poll the
+ * CLUSTER clock (getBlockTime — the same clock the on-chain check reads), with
+ * a wall-clock fallback if getBlockTime is unavailable. Anchored to a
+ * post-freeze cluster read, so the 305s wait conservatively clears the 300s
+ * window measured from the (earlier) frozen_at.
+ */
+const REACTIVATE_COOLDOWN_S = 305;
+async function clusterUnix(rpc: Rpc<SolanaRpcApi>): Promise<number | null> {
+  try {
+    const slot = await rpc.getSlot({ commitment: "confirmed" }).send();
+    const t = await rpc.getBlockTime(slot).send();
+    return t == null ? null : Number(t);
+  } catch {
+    return null;
+  }
+}
+async function waitForReactivateCooldown(
+  rpc: Rpc<SolanaRpcApi>,
+): Promise<void> {
+  const startCluster = await clusterUnix(rpc);
+  const startWall = Date.now();
+  for (;;) {
+    const now = await clusterUnix(rpc);
+    if (now != null && startCluster != null) {
+      if (now - startCluster >= REACTIVATE_COOLDOWN_S) return;
+    } else if ((Date.now() - startWall) / 1000 >= REACTIVATE_COOLDOWN_S + 10) {
+      return; // getBlockTime unavailable → conservative wall-clock fallback
+    }
+    await new Promise((r) => setTimeout(r, 15_000));
+  }
 }
 
 describe("OwnerClient Devnet Integration", function () {
@@ -38,19 +80,45 @@ describe("OwnerClient Devnet Integration", function () {
     const { signer } = await loadOwnerSigner();
     owner = signer;
 
-    // Discover an existing active vault instead of provisioning
+    // Prefer an existing active vault (in CI the devnet-*.ts suites create many
+    // and the paid RPC supports getProgramAccounts). Fall back to provisioning a
+    // fresh vault when discovery returns none — e.g. a public RPC that restricts
+    // getProgramAccounts — so the mutation/validation tests are self-contained
+    // on any RPC. These tests do only owner-ops (freeze/resume) + reads, never
+    // agent spending, so the fallback uses the cheapest reactivatable vault:
+    //   - Observer capability (1): instant-eligible — sidesteps the F-Q6
+    //     OPERATOR grant timelock (6107).
+    //   - One allowlisted protocol: an ACTIVE vault must be non-inert, enforced
+    //     at init (F-11 6073) AND on the freeze→resume reactivate path (M-9
+    //     ActiveVaultRequiresAllowlist). The tests never spend through it, so
+    //     any valid program id satisfies the allowlist.
+    //   - skipDeposit: no funds needed for owner-op/read tests.
     const vaults = await OwnerClient.discoverVaults(
       rpc,
       owner.address,
       "devnet",
     );
     const activeVault = vaults.find((v) => v.status === "active");
-    if (!activeVault) {
-      console.log("No active vault found — skipping mutation tests");
-      return;
+    if (activeVault) {
+      vaultAddress = activeVault.address as Address;
+    } else {
+      const agent = await createFundedAgent(rpc, owner);
+      const provisioned = await provisionVault(
+        rpc,
+        owner,
+        agent,
+        USDC_MINT_DEVNET,
+        {
+          permissions: capability(1n),
+          skipDeposit: true,
+          // The deployed mock-defi fixture — a real, non-default program id, so
+          // it can't trip an init default-pubkey guard. Never invoked here.
+          protocols: [address("2heRcfqPUcSiWpH1rAp2Zf4c4ZxfKmKaaVbJWGRa7Qm6")],
+        },
+      );
+      vaultAddress = provisioned.vaultAddress;
     }
 
-    vaultAddress = activeVault.address as Address;
     client = new OwnerClient({
       rpc,
       vault: vaultAddress,
@@ -222,6 +290,10 @@ describe("OwnerClient Devnet Integration", function () {
     });
 
     it("freezeVault() freezes, resumeVault() resumes, toJSON() serializes", async function () {
+      // The resume must wait out the 300s reactivate cooldown (below), so this
+      // test needs more than the suite-default 300s timeout.
+      this.timeout(420_000);
+
       const freezeResult = await client.freezeVault();
       expect(freezeResult.signature).to.be.a("string");
       expect(freezeResult.signature.length).to.be.greaterThan(10);
@@ -235,7 +307,10 @@ describe("OwnerClient Devnet Integration", function () {
       const stateAfterFreeze = await client.getVaultState();
       expect(stateAfterFreeze.vault.status).to.equal("frozen");
 
-      await cooldown();
+      // V2: reactivate_vault has a 300s anti-thrash cooldown from the freeze
+      // (ErrReactivateCooldownActive 6097). No clock cheatcodes on devnet —
+      // wait it out against the cluster clock before resuming.
+      await waitForReactivateCooldown(rpc);
 
       const resumeResult = await client.resumeVault();
       expect(resumeResult.signature).to.be.a("string");

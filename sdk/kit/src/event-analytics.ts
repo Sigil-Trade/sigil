@@ -10,7 +10,7 @@ import type { DecodedSigilEvent, SigilEventName } from "./events.js";
 import { parseAndDecodeSigilEvents } from "./events.js";
 import { formatUsd, formatAddress, formatTokenAmount } from "./formatting.js";
 import { resolveToken } from "./tokens.js";
-import { parseActionType, type Network } from "./types.js";
+import { type Network } from "./types.js";
 import { resolveProtocolName } from "./protocol-names.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -21,7 +21,6 @@ export type EventCategory =
   | "withdrawal"
   | "policy"
   | "agent"
-  | "escrow"
   | "security"
   | "fee";
 
@@ -37,8 +36,6 @@ export interface VaultActivityItem {
   tokenSymbol: string | null;
   /** Whether this was a spending action (amount > 0). */
   isSpending: boolean;
-  /** @deprecated Use isSpending instead. Legacy field for backward decode of pre-v6 events. */
-  actionType: string | null;
   protocol: Address | null;
   protocolName: string | null;
   success: boolean;
@@ -55,19 +52,26 @@ const EVENT_CATEGORY_MAP: Record<string, EventCategory> = {
   AgentSpendLimitChecked: "trade",
   FundsDeposited: "deposit",
   FundsWithdrawn: "withdrawal",
-  PolicyUpdated: "policy",
+  // V2: PolicyUpdated removed — replaced by ChangeQueued/Applied/Cancelled
   PolicyChangeQueued: "policy",
   PolicyChangeApplied: "policy",
   PolicyChangeCancelled: "policy",
   InstructionConstraintsCreated: "policy",
-  InstructionConstraintsUpdated: "policy",
-  InstructionConstraintsClosed: "policy",
+  // V2 (MED-2 cleanup): InstructionConstraintsUpdated / InstructionConstraintsClosed
+  // were replaced by ConstraintsChangeApplied / CloseConstraintsApplied. Dead
+  // entries removed to prevent stale event-name matches.
   ConstraintsChangeQueued: "policy",
   ConstraintsChangeApplied: "policy",
   ConstraintsChangeCancelled: "policy",
+  CloseConstraintsQueued: "policy",
+  CloseConstraintsApplied: "policy",
+  CloseConstraintsCancelled: "policy",
   AgentRegistered: "agent",
   AgentRevoked: "agent",
-  AgentPermissionsUpdated: "agent",
+  // V2: AgentPermissionsUpdated removed — replaced by ChangeQueued/Applied/Cancelled
+  AgentPermissionsChangeQueued: "agent",
+  AgentPermissionsChangeApplied: "agent",
+  AgentPermissionsChangeCancelled: "agent",
   AgentUnpausedEvent: "agent",
   VaultCreated: "security",
   VaultFrozen: "security",
@@ -75,9 +79,6 @@ const EVENT_CATEGORY_MAP: Record<string, EventCategory> = {
   VaultClosed: "security",
   AgentPausedEvent: "security",
   FeesCollected: "fee",
-  EscrowCreated: "escrow",
-  EscrowSettled: "escrow",
-  EscrowRefunded: "escrow",
 };
 
 /** Categorize a decoded event into a high-level group. Defaults to "trade". */
@@ -102,8 +103,7 @@ export function describeEvent(
     case "ActionAuthorized": {
       const agent = formatAddress(f.agent as string);
       const amount = f.usdAmount as bigint;
-      const actionObj = f.actionType as { __kind: string } | undefined;
-      const actionStr = actionObj?.__kind ?? "action";
+      const actionStr = amount > 0n ? "spending" : "action";
       return `Agent ${agent} authorized ${formatUsd(amount, 2)} ${actionStr} on ${resolveProtocolName(f.protocol as string)}`;
     }
 
@@ -141,10 +141,12 @@ export function describeEvent(
     case "AgentRevoked":
       return `Agent ${formatAddress(f.agent as string)} removed from vault (${f.remainingAgents} remaining)`;
 
-    case "AgentPermissionsUpdated": {
-      const permCount = countBits(f.newPermissions as bigint);
-      return `Agent ${formatAddress(f.agent as string)} capability updated (${permCount} bits set)`;
-    }
+    case "AgentPermissionsChangeQueued":
+      return `Agent ${formatAddress(f.agent as string)} permissions change queued (timelock pending)`;
+    case "AgentPermissionsChangeApplied":
+      return `Agent ${formatAddress(f.agent as string)} permissions change applied`;
+    case "AgentPermissionsChangeCancelled":
+      return `Agent ${formatAddress(f.agent as string)} permissions change cancelled`;
 
     case "VaultFrozen":
       return "Vault paused — all agent activity stopped";
@@ -166,21 +168,12 @@ export function describeEvent(
       return `Fees collected: ${formatUsd(protocolFee + devFee, 2)} (${formatUsd(protocolFee, 2)} protocol + ${formatUsd(devFee, 2)} developer)`;
     }
 
-    case "PolicyUpdated":
-      return "Vault policy updated — new spending rules active";
     case "PolicyChangeQueued":
       return "Policy change queued — waiting for timelock to expire";
     case "PolicyChangeApplied":
       return "Queued policy change applied";
     case "PolicyChangeCancelled":
       return "Queued policy change cancelled";
-
-    case "EscrowCreated":
-      return `Escrow created: ${formatUsd(f.amount as bigint, 2)} held for vault ${formatAddress(f.destinationVault as string)}`;
-    case "EscrowSettled":
-      return `Escrow settled — ${formatUsd(f.amount as bigint, 2)} released to destination`;
-    case "EscrowRefunded":
-      return `Escrow refunded — ${formatUsd(f.amount as bigint, 2)} returned to vault`;
 
     case "AgentTransferExecuted":
       return `Agent transferred ${formatUsd(f.amount as bigint, 2)} to ${formatAddress(f.destination as string)}`;
@@ -193,16 +186,18 @@ export function describeEvent(
 
     case "InstructionConstraintsCreated":
       return "Instruction constraints configured for this vault";
-    case "InstructionConstraintsUpdated":
-      return "Instruction constraints updated";
-    case "InstructionConstraintsClosed":
-      return "Instruction constraints removed";
     case "ConstraintsChangeQueued":
       return "Constraint change queued — waiting for timelock";
     case "ConstraintsChangeApplied":
       return "Queued constraint change applied";
     case "ConstraintsChangeCancelled":
       return "Queued constraint change cancelled";
+    case "CloseConstraintsQueued":
+      return "Constraint close queued — waiting for timelock";
+    case "CloseConstraintsApplied":
+      return "Instruction constraints closed";
+    case "CloseConstraintsCancelled":
+      return "Queued constraint close cancelled";
 
     default:
       return `${decoded.name} event`;
@@ -238,50 +233,10 @@ export function buildActivityItem(
         ? formatUsd(amount, 2)
         : null;
 
-  // v6 events carry isSpending directly; legacy events derive it from actionType.
-  // positionEffect extraction removed — position counter system deleted per
-  // council decision (9-1 vote, 2026-04-19).
-  let isSpending = false;
-  let actionType: string | null = null;
-
-  if (f?.isSpending != null) {
-    // New v6 event format
-    isSpending = f.isSpending as boolean;
-  } else if (f?.actionType != null) {
-    // Legacy event format — derive isSpending from actionType for backward decode
-    const at = f.actionType;
-    if (typeof at === "object" && at !== null && "__kind" in at) {
-      actionType = (at as { __kind: string }).__kind;
-    } else if (typeof at === "number" || typeof at === "bigint") {
-      actionType = parseActionType(Number(at))?.toString() ?? null;
-    }
-    if (actionType) {
-      isSpending = [
-        "swap",
-        "Swap",
-        "openPosition",
-        "OpenPosition",
-        "increasePosition",
-        "IncreasePosition",
-        "deposit",
-        "Deposit",
-        "transfer",
-        "Transfer",
-        "addCollateral",
-        "AddCollateral",
-        "placeLimitOrder",
-        "PlaceLimitOrder",
-        "swapAndOpenPosition",
-        "SwapAndOpenPosition",
-        "createEscrow",
-        "CreateEscrow",
-      ].includes(actionType);
-    }
-  }
-  // Also infer isSpending from amount if no event field present
-  if (!isSpending && amount !== null && amount > 0n) {
-    isSpending = true;
-  }
+  // V2 Option A: isSpending derived from amount > 0. The on-chain event no
+  // longer carries an isSpending field, and the legacy ActionType decoding is
+  // dead (position counter + ActionType deleted 2026-04-19).
+  const isSpending = amount !== null && amount > 0n;
 
   return {
     timestamp: blockTime,
@@ -294,7 +249,6 @@ export function buildActivityItem(
     tokenMint,
     tokenSymbol: token?.symbol ?? null,
     isSpending,
-    actionType,
     protocol,
     protocolName: protocol ? resolveProtocolName(protocol) : null,
     success,
@@ -372,16 +326,6 @@ function extractBigInt(
   const val = fields[key];
   if (typeof val === "bigint") return val;
   return null;
-}
-
-function countBits(n: bigint): number {
-  let count = 0;
-  let v = n;
-  while (v > 0n) {
-    count += Number(v & 1n);
-    v >>= 1n;
-  }
-  return count;
 }
 
 function resolveTokenSafe(

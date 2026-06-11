@@ -19,22 +19,41 @@ import {
   TransactionInstruction,
   TransactionMessage,
   VersionedTransaction,
-  SYSVAR_INSTRUCTIONS_PUBKEY,
+  SYSVAR_SLOT_HASHES_PUBKEY,
 } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
-  ASSOCIATED_TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
 import BN from "bn.js";
 import * as fs from "fs";
 import * as path from "path";
-import { execSync } from "child_process";
+import * as crypto from "crypto";
+import { execFileSync } from "child_process";
+import { initVaultPreviewDigest } from "./policy-digest";
+import { SIGIL_ERRORS } from "./strict-errors";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const PROGRAM_ID = new PublicKey(
-  "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL",
+  "7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK",
+);
+
+/**
+ * Mock-DeFi fixture program (counted-zero-spend noop) — mirrors litesvm-setup.ts.
+ * Allowlisted as the default protocol so active (non-observe_only) vaults satisfy
+ * F-11 (initialize_vault.rs:188: an active vault must have >=1 protocol OR
+ * destination on the allowlist). The fixture .so is injected into the Surfnet by
+ * `deployMockDefiPrograms` (called from `createSurfpoolTestEnv`), so spending
+ * sandwiches can target it as their counted DeFi instruction.
+ */
+export const MOCK_DEFI_PROGRAM_ID = new PublicKey(
+  "2heRcfqPUcSiWpH1rAp2Zf4c4ZxfKmKaaVbJWGRa7Qm6",
+);
+
+/** Non-upgradeable BPF loader — bytecode lives directly in the program account. */
+const BPF_LOADER_2_ID = new PublicKey(
+  "BPFLoader2111111111111111111111111111111111",
 );
 
 const SURFPOOL_RPC_URL =
@@ -52,7 +71,7 @@ export const DEVNET_USDT_MINT = new PublicKey(
 
 /** Protocol treasury (must match on-chain constant) */
 export const PROTOCOL_TREASURY = new PublicKey(
-  "ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT",
+  "6wrkKTM2pjkcCAbMfRz2j3AXspavu6pq3ePcuJUE3Azp",
 );
 
 export const PROTOCOL_FEE_RATE = 200;
@@ -147,10 +166,13 @@ async function deployLocalProgram(connection: Connection): Promise<void> {
     JSON.stringify(Array.from(deployer.secretKey)),
   );
 
-  // 2. Fund deployer (need ~5 SOL for deploy buffer)
+  // 2. Fund deployer. Deploying the ~1.27MB sigil.so allocates a buffer
+  //    (~8.9 SOL rent) AND the programdata account (~8.9 SOL) before the
+  //    buffer lamports are reclaimed, so the deployer needs ~18 SOL peak.
+  //    Fund 30 SOL for headroom across the 3 deploy retries.
   await surfnetRpc(connection, "surfnet_setAccount", [
     deployer.publicKey.toString(),
-    { lamports: 10 * LAMPORTS_PER_SOL },
+    { lamports: 30 * LAMPORTS_PER_SOL },
   ]);
 
   // 3. Change program upgrade authority to our deployer
@@ -180,17 +202,29 @@ async function deployLocalProgram(connection: Connection): Promise<void> {
   // 4. Deploy via solana CLI (properly updates SVM program cache)
   //    Retry up to 3 times — Surfnet can be slow after reset or on cold CI cache
   const rpcUrl = (connection as any)._rpcEndpoint || SURFPOOL_RPC_URL;
-  const deployCmd =
-    `solana program deploy "${soPath}" ` +
-    `--program-id ${PROGRAM_ID.toString()} ` +
-    `--keypair "${deployerPath}" ` +
-    `--url ${rpcUrl} ` +
-    `--upgrade-authority "${deployerPath}"`;
+  // execFileSync (argv array, NO shell) so the RPC URL / paths can't be
+  // interpreted as shell metacharacters — closes the CodeQL "indirect
+  // uncontrolled command line" vector. (Inputs here are operator-controlled
+  // test config, but argv-passing removes the injection class entirely.)
+  const deployArgs = [
+    "program",
+    "deploy",
+    soPath,
+    "--program-id",
+    PROGRAM_ID.toString(),
+    "--keypair",
+    deployerPath,
+    "--url",
+    rpcUrl,
+    "--upgrade-authority",
+    deployerPath,
+  ];
 
   let lastErr: unknown;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      execSync(deployCmd, { stdio: "pipe", timeout: 120_000 });
+      // Deploying ~1.27MB takes ~1250 chunk writes; allow up to 5 min/attempt.
+      execFileSync("solana", deployArgs, { stdio: "pipe", timeout: 300_000 });
       return;
     } catch (err) {
       lastErr = err;
@@ -200,6 +234,85 @@ async function deployLocalProgram(connection: Connection): Promise<void> {
     }
   }
   throw lastErr;
+}
+
+// ─── Mock-DeFi fixture programs ──────────────────────────────────────────────
+
+/**
+ * Inject a fixture program .so directly as a NON-UPGRADEABLE executable account
+ * (owner = BPFLoader2) via surfnet_setAccount.
+ *
+ * WHY not `solana program deploy`: mock-defi's `declare_id!` has no committed
+ * keypair and the program is not on devnet (nothing to fork / no authority to
+ * swap), so the deployLocalProgram path is impossible for it. Under BPFLoader2
+ * the bytecode lives directly in the program account, so a plain setAccount is
+ * a complete deployment. SPIKE-VALIDATED (2026-06-10, surfpool 1.2.1, CI flags):
+ * after this injection the program invokes and `open_position` executes
+ * ("Program 2pB26q… success", 432 CU). The "setAccount does not update the
+ * compiled program cache" caveat on deployLocalProgram applies to the
+ * UPGRADEABLE loader path only — it does not bite the v2 loader.
+ */
+async function injectFixtureProgram(
+  connection: Connection,
+  programId: PublicKey,
+  soFile: string,
+): Promise<void> {
+  const soPath = path.resolve(__dirname, "../fixtures", soFile);
+  if (!fs.existsSync(soPath)) {
+    throw new Error(`Fixture program not found at ${soPath}`);
+  }
+  const so = fs.readFileSync(soPath);
+  const lamports = await connection.getMinimumBalanceForRentExemption(
+    so.length,
+  );
+  await surfnetRpc(connection, "surfnet_setAccount", [
+    programId.toString(),
+    {
+      data: so.toString("hex"),
+      owner: BPF_LOADER_2_ID.toString(),
+      executable: true,
+      lamports,
+    },
+  ]);
+}
+
+/**
+ * Deploy the mock-DeFi fixture program to the Surfnet (the counted DeFi target
+ * for spending sandwiches). Idempotent — safe to re-run after
+ * surfnet_resetNetwork.
+ */
+export async function deployMockDefiPrograms(
+  connection: Connection,
+): Promise<void> {
+  await injectFixtureProgram(connection, MOCK_DEFI_PROGRAM_ID, "mock-defi.so");
+}
+
+/** Anchor instruction discriminator: sha256("global:<name>")[0..8]. */
+function anchorDisc(name: string): Buffer {
+  return crypto
+    .createHash("sha256")
+    .update(`global:${name}`)
+    .digest()
+    .subarray(0, 8);
+}
+
+/** Mock-defi `open_position` discriminator (COUNTED-but-zero-spend noop). */
+export const MOCK_DEFI_OPEN_POSITION_DISC = anchorDisc("open_position");
+
+/**
+ * Mock-defi `open_position` ix — true no-op (single signer, handler does
+ * nothing). The canonical COUNTED-but-zero-spend DeFi instruction used as the
+ * middle ix in composed spending sandwiches `[validate, <this>, finalize]`:
+ * targeting the allowlisted MOCK_DEFI_PROGRAM_ID increments `defi_ix_count` to
+ * exactly 1 (F-Q2) while moving zero tokens, so `finalize_session` measures
+ * actual_spend == 0. Mirrors litesvm-setup's builder.
+ */
+export function buildMockDefiNoopIx(signer: PublicKey): TransactionInstruction {
+  return new TransactionInstruction({
+    programId: MOCK_DEFI_PROGRAM_ID,
+    keys: [{ pubkey: signer, isSigner: true, isWritable: false }],
+    data: Buffer.from(MOCK_DEFI_OPEN_POSITION_DISC),
+  });
 }
 
 // ─── Test environment ───────────────────────────────────────────────────────
@@ -221,6 +334,11 @@ export async function createSurfpoolTestEnv(): Promise<SurfpoolTestEnv> {
 
   // Deploy local program (overrides devnet-forked version)
   await deployLocalProgram(connection);
+
+  // Inject the mock-DeFi fixture programs (the counted DeFi targets for
+  // spending sandwiches). Re-runs after surfnet_resetNetwork because suites
+  // re-create the env.
+  await deployMockDefiPrograms(connection);
 
   const payer = Keypair.generate();
 
@@ -452,90 +570,17 @@ export async function getProfilesByTag(
 // ─── Anchor error code → name lookup ─────────────────────────────────────────
 
 /**
- * Sigil custom error codes (6000-6074) mapped to Anchor error names.
- * Source of truth: programs/sigil/src/errors.rs
- * Surfnet does NOT return program logs for failed TXs via getTransaction(),
- * so we must decode the numeric error code to include the name in errors.
+ * Surfnet does NOT return program logs for failed TXs via getTransaction(), so
+ * we decode the numeric Custom code to a name. This map is DERIVED from the
+ * canonical, CI-drift-checked `SIGIL_ERRORS` (tests/helpers/strict-errors.ts, a
+ * mirror of sdk/kit/src/testing/errors/names.generated.ts) — never hand-
+ * maintained here, so it cannot drift from the on-chain error numbering. The
+ * previous hand-written table had drifted (e.g. 6071 mislabeled
+ * OrphanPdaWrongOwner; it is PolicyPreviewMismatch).
  */
-// Canonical error-code table — keep in sync with
-// `sdk/kit/src/generated/errors/sigil.ts` (codama-generated from IDL).
-const SIGIL_ERROR_NAMES: Record<number, string> = {
-  6000: "VaultNotActive",
-  6001: "UnauthorizedAgent",
-  6002: "UnauthorizedOwner",
-  6003: "UnsupportedToken",
-  6004: "ProtocolNotAllowed",
-  6005: "TransactionTooLarge",
-  6006: "SpendingCapExceeded",
-  6007: "SessionNotAuthorized",
-  6008: "InvalidSession",
-  6009: "TooManyAllowedProtocols",
-  6010: "AgentAlreadyRegistered",
-  6011: "NoAgentRegistered",
-  6012: "VaultNotFrozen",
-  6013: "VaultAlreadyClosed",
-  6014: "InsufficientBalance",
-  6015: "DeveloperFeeTooHigh",
-  6016: "InvalidFeeDestination",
-  6017: "InvalidProtocolTreasury",
-  6018: "InvalidAgentKey",
-  6019: "AgentIsOwner",
-  6020: "Overflow",
-  6021: "InvalidTokenAccount",
-  6022: "TimelockNotExpired",
-  6023: "NoTimelockConfigured",
-  6024: "DestinationNotAllowed",
-  6025: "TooManyDestinations",
-  6026: "InvalidProtocolMode",
-  6027: "CpiCallNotAllowed",
-  6028: "MissingFinalizeInstruction",
-  6029: "NonTrackedSwapMustReturnStablecoin",
-  6030: "SwapSlippageExceeded",
-  6031: "InvalidJupiterInstruction",
-  6032: "UnauthorizedTokenTransfer",
-  6033: "SlippageBpsTooHigh",
-  6034: "ProtocolMismatch",
-  6035: "TooManyDeFiInstructions",
-  6036: "MaxAgentsReached",
-  6037: "InsufficientPermissions",
-  6038: "InvalidPermissions",
-  6039: "EscrowNotActive",
-  6040: "EscrowExpired",
-  6041: "EscrowNotExpired",
-  6042: "InvalidEscrowVault",
-  6043: "EscrowConditionsNotMet",
-  6044: "EscrowDurationExceeded",
-  6045: "InvalidConstraintConfig",
-  6046: "ConstraintViolated",
-  6047: "InvalidConstraintsPda",
-  6048: "InvalidPendingConstraintsPda",
-  6049: "AgentSpendLimitExceeded",
-  6050: "OverlaySlotExhausted",
-  6051: "AgentSlotNotFound",
-  6052: "UnauthorizedTokenApproval",
-  6053: "InvalidSessionExpiry",
-  6054: "UnconstrainedProgramBlocked",
-  6055: "ProtocolCapExceeded",
-  6056: "ProtocolCapsMismatch",
-  6057: "ActiveEscrowsExist",
-  6058: "ConstraintsNotClosed",
-  6059: "PendingPolicyExists",
-  6060: "AgentPaused",
-  6061: "AgentAlreadyPaused",
-  6062: "AgentNotPaused",
-  6063: "UnauthorizedPostFinalizeInstruction",
-  6064: "UnexpectedBalanceDecrease",
-  6065: "TimelockTooShort",
-  6066: "PolicyVersionMismatch",
-  6067: "ActiveSessionsExist",
-  6068: "PostAssertionFailed",
-  6069: "InvalidPostAssertionIndex",
-  6070: "UnauthorizedPreValidateInstruction",
-  6071: "SnapshotNotCaptured",
-  6072: "InvalidConstraintOperator",
-  6073: "ConstraintsVaultMismatch",
-  6074: "BlockedSplOpcode",
-};
+const SIGIL_ERROR_NAMES: Record<number, string> = Object.fromEntries(
+  Object.entries(SIGIL_ERRORS).map(([name, code]) => [code, name]),
+);
 
 /**
  * Extract custom error code from Solana transaction error and resolve to name.
@@ -619,6 +664,132 @@ export async function sendVersionedTx(
   };
 }
 
+// ─── initialize_vault slot-bound sender (PEN-CROSS-2 aware) ─────────────────
+
+/**
+ * Send an `initialize_vault` transaction whose owner-signed preview digest is
+ * bound to the slot the tx actually executes in.
+ *
+ * WHY: `initialize_vault` (programs/sigil/src/instructions/initialize_vault.rs:
+ * 202-256) captures `Clock::get()?.slot` at handler entry, recomputes the
+ * policy-preview digest with that slot at canonical position 14 (PEN-CROSS-2
+ * close+reinit replay defense), and `require!`s exact equality with the
+ * owner-signed `preview_digest` (else `PolicyPreviewMismatch`, code 6071).
+ *
+ * LiteSVM freezes the clock at 0 so a digest signed for slot 0 matches. A live
+ * Surfnet clock advances (it tracks the devnet datasource), so the slot read by
+ * the caller can differ from the slot the tx lands in. This mirrors the
+ * production SDK (sdk/kit/src/create-vault.ts:350): read the current slot, sign
+ * the digest for it, submit, and on a 6071 mismatch re-read the slot and retry.
+ * All other errors propagate immediately (no masking).
+ *
+ * @param buildIx receives the slot to bind into the digest and returns the
+ *                fully-built `initialize_vault` instruction.
+ */
+export async function sendInitVault(
+  env: SurfpoolTestEnv,
+  buildIx: (createdAtSlot: number) => Promise<TransactionInstruction>,
+  signers: Keypair[] = [],
+  maxAttempts: number = 24,
+): Promise<VersionedTxResult> {
+  // A promptly-submitted tx lands one block after the slot we read (empirically
+  // exec == getSlot()+1 in both `clock` and `transaction` block-production
+  // modes). We bind to base+1 first; the offset cycle absorbs 0-/2-/3-slot drift
+  // (e.g. a slower CI runner) while the datasource clock advances under us.
+  const offsets = [1, 2, 0, 3];
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const base = await env.connection.getSlot("confirmed");
+    const createdAtSlot = base + offsets[attempt % offsets.length];
+    const ix = await buildIx(createdAtSlot);
+    try {
+      return await sendVersionedTx(env.connection, [ix], env.payer, signers);
+    } catch (e: any) {
+      const msg = String(e?.message ?? e);
+      // 6071 = PolicyPreviewMismatch: the live clock advanced between getSlot()
+      // and execution. Re-read the slot and retry. Any other error is real.
+      if (
+        msg.includes('"Custom":6071') ||
+        msg.includes("PolicyPreviewMismatch")
+      ) {
+        lastErr = e;
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw new Error(
+    `initialize_vault: clock kept advancing past the signed slot after ${maxAttempts} attempts. Last error: ${lastErr}`,
+  );
+}
+
+/**
+ * Standard inline vault init used across the Surfpool suites: the default
+ * policy (500 USDC daily cap, 100 USDC max tx, ALLOWLIST mode, no protocols,
+ * 30-min timelock, all-hours). Routes through `sendInitVault` so the owner-
+ * signed preview digest is bound to the live execution slot (PEN-CROSS-2) with
+ * retry — the only correct way to init on a live Surfnet clock. Returns the
+ * send result so callers (e.g. CU profiling) can read the signature.
+ */
+export async function initVaultInline(
+  env: SurfpoolTestEnv,
+  program: Program<any>,
+  vaultId: BN,
+  vaultPda: PublicKey,
+  policyPda: PublicKey,
+  trackerPda: PublicKey,
+  overlayPda: PublicKey,
+  feeDestination: PublicKey,
+): Promise<VersionedTxResult> {
+  const dailyCap = new BN(500_000_000);
+  const maxTx = new BN(100_000_000);
+  return sendInitVault(env, (createdAtSlot) =>
+    (program.methods as any)
+      .initializeVault(
+        vaultId,
+        dailyCap,
+        maxTx,
+        1,
+        [MOCK_DEFI_PROGRAM_ID],
+        0,
+        100,
+        new BN(1800),
+        [],
+        [],
+        false, // observeOnly
+        0x00ffffff, // operating_hours (all 24h)
+        false, // auto_promote_grays
+        5, // auto_revoke_threshold
+        new BN(0), // stable_balance_floor
+        new BN(0), // per_recipient_daily_cap_usd
+        false, // cosign_required
+        initVaultPreviewDigest({
+          dailySpendingCapUsd: dailyCap,
+          maxTransactionSizeUsd: maxTx,
+          maxSlippageBps: 100,
+          protocolMode: 1,
+          protocols: [MOCK_DEFI_PROGRAM_ID],
+          allowedDestinations: [],
+          timelockDuration: new BN(1800),
+          operatingHours: 0x00ffffff,
+          autoPromoteGrays: false,
+          autoRevokeThreshold: 5,
+          createdAtSlot,
+        }),
+      )
+      .accounts({
+        owner: env.payer.publicKey,
+        vault: vaultPda,
+        policy: policyPda,
+        tracker: trackerPda,
+        agentSpendOverlay: overlayPda,
+        feeDestination,
+        systemProgram: SystemProgram.programId,
+      })
+      .instruction(),
+  );
+}
+
 // ─── PDA derivation (reused from devnet-setup pattern) ──────────────────────
 
 export function derivePDAs(
@@ -683,32 +854,221 @@ export function deriveOverlayPda(
   return overlayPda;
 }
 
-// ─── Escrow PDA derivation ───────────────────────────────────────────────────
+// ─── OPERATOR-grant seating (F-Q6 timelock path) ────────────────────────────
+
+/** CAPABILITY_OPERATOR (state/vault.rs) — the full-access agent capability. */
+export const CAPABILITY_OPERATOR = 2;
 
 /**
- * Derive escrow PDA and its USDC ATA.
+ * SINGLE_KEY_OPERATOR_DELAY_FLOOR (programs/sigil/src/utils/operator_grant.rs).
+ * A single-key vault's OPERATOR grant is floored at this delay (the forced
+ * 2nd authorization factor). Kept in sync with the Rust constant; the helper
+ * advances `floor + 1`s past it.
  */
-export function deriveEscrowPda(
-  srcVault: PublicKey,
-  dstVault: PublicKey,
-  escrowId: BN,
-  programId: PublicKey,
-): { escrowPda: PublicKey; escrowUsdcAta: PublicKey } {
-  const [escrowPda] = PublicKey.findProgramAddressSync(
-    [
-      Buffer.from("escrow"),
-      srcVault.toBuffer(),
-      dstVault.toBuffer(),
-      escrowId.toArrayLike(Buffer, "le", 8),
-    ],
+export const SINGLE_KEY_OPERATOR_DELAY_FLOOR = 600;
+
+/**
+ * Seat an OPERATOR-class agent on a SINGLE-KEY vault via the timelocked
+ * queue → advance → apply path — the Surfpool analogue of the LiteSVM
+ * `tests/helpers/register-operator-agent.ts`.
+ *
+ * After F-Q6 (register_agent.rs:140), `register_agent` REJECTS an instant
+ * OPERATOR grant on a single-key vault (`ErrOperatorGrantRequiresTimelock`,
+ * 6107). Test setups that previously did an instant `registerAgent(OPERATOR)`
+ * swap to this helper, which:
+ *   1. `queue_agent_grant(agent, OPERATOR, limit)` — stores a pending grant
+ *      with `min_delay_seconds = effective_delay` (600s for a single-key vault
+ *      at the default 0 configured delay).
+ *   2. BACKDATE the pending grant via `surfnet_setAccount` instead of
+ *      `timeTravel`. We rewrite `queued_at` (i64 unix seconds) and
+ *      `queued_at_slot` (u64) INTO THE PAST so the apply passes at the
+ *      NATURAL current clock — no clock jump at all. `apply_agent_grant`
+ *      gates (single-key, cosign_required=false) are: (a) the slot-freshness
+ *      `clock.slot.checked_sub(queued_at_slot)` (apply_agent_grant.rs:144-147),
+ *      which UNDERFLOWS to `Overflow` (6020) if `queued_at_slot > clock.slot`,
+ *      and must stay `< MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN = 700_000`; and
+ *      (b) the timelock `unix_timestamp - queued_at >= min_delay_seconds`
+ *      (apply_agent_grant.rs:157-164). Backdating `queued_at` to
+ *      `now - (min_delay_seconds + 5)` and `queued_at_slot` to `slot - 10`
+ *      satisfies BOTH at the live clock (slot_delta ≈ 10, elapsed ≈
+ *      min_delay+5). The pending content digest is sealed over those two
+ *      fields (state/pending_agent_grant.rs:174-194 canonical encoding), so we
+ *      RECOMPUTE it over the backdated values and re-serialize the account with
+ *      the Anchor coder before writing it back.
+ *
+ *      WHY backdate instead of timeTravel: on the CI surfnet (linux binary
+ *      forking LIVE devnet) the slot is NOT monotonic across `timeTravel` — by
+ *      apply time `clock.slot < pending.queued_at_slot`, so the :147
+ *      `checked_sub` underflows (Overflow, 6020). This is platform-specific
+ *      (NOT reproducible on darwin), i.e. a surfnet clock bug, not our code.
+ *      Backdating runs the apply at the natural clock and avoids the jump
+ *      entirely. This SIMULATES elapsed time for setup (same intent as
+ *      litesvm's `advanceTime`); it weakens NO on-chain assertion.
+ *   3. `apply_agent_grant()` — pushes the agent into `vault.agents`.
+ *
+ * Both ix are built via `.instruction()` and sent through `sendVersionedTx`
+ * (NOT `.rpc()`) so a real revert surfaces as `{Custom:N}` instead of the
+ * anchor x web3.js "Unknown action 'undefined'" mask. Every PDA
+ * (policy / pending_agent_grant / agent_spend overlay / audit_success) is
+ * derived locally from `vault`, so callers pass only the high-level context.
+ *
+ * Cosign/multisig vaults seat an OPERATOR INSTANTLY — call `registerAgent`
+ * directly for those. This helper is specifically the single-key substitute.
+ * Callers asserting a REJECT must NOT use this helper (it propagates the revert).
+ *
+ * @param signers Extra signers when `owner` is not the provider wallet
+ *                (the provider/payer auto-signs as fee payer). Pass the owner
+ *                Keypair here in that case (mirrors the inline register block's
+ *                `owner === env.payer ? [] : [owner]`).
+ */
+export async function seatOperatorAgent(
+  env: SurfpoolTestEnv,
+  program: Program<any>,
+  owner: PublicKey,
+  vault: PublicKey,
+  agent: PublicKey,
+  spendingLimitUsd: BN | number = 0,
+  signers: Keypair[] = [],
+): Promise<void> {
+  const spendingLimit = new BN(spendingLimitUsd);
+  const programId = program.programId;
+
+  // Every PDA is derived from the vault PDA directly. policy / pending /
+  // audit_success are all seeded by `vault` (not owner+vault_id), so the
+  // caller need not pass vault_id.
+  const [policy] = PublicKey.findProgramAddressSync(
+    [Buffer.from("policy"), vault.toBuffer()],
     programId,
   );
-  const escrowUsdcAta = getAssociatedTokenAddressSync(
-    DEVNET_USDC_MINT,
-    escrowPda,
-    true,
+  const [pending] = PublicKey.findProgramAddressSync(
+    [Buffer.from("pending_agent_grant"), vault.toBuffer()],
+    programId,
   );
-  return { escrowPda, escrowUsdcAta };
+  const overlay = deriveOverlayPda(vault, programId);
+  const [auditSuccess] = PublicKey.findProgramAddressSync(
+    [Buffer.from("audit_success"), vault.toBuffer()],
+    programId,
+  );
+
+  const methods = program.methods as any;
+
+  // 1. Queue the OPERATOR grant.
+  const queueIx = await methods
+    .queueAgentGrant(agent, CAPABILITY_OPERATOR, spendingLimit)
+    .accounts({
+      owner,
+      vault,
+      policy,
+      pending,
+      auditLogSuccess: auditSuccess,
+      slotHashesSysvar: SYSVAR_SLOT_HASHES_PUBKEY,
+      systemProgram: SystemProgram.programId,
+    })
+    .instruction();
+  await sendVersionedTx(env.connection, [queueIx], env.payer, signers);
+
+  // 2. BACKDATE the pending grant via surfnet_setAccount instead of timeTravel.
+  //    On the CI surfnet (linux binary forking live devnet) the slot is NOT
+  //    monotonic across `timeTravel`, so by apply time
+  //    `clock.slot < pending.queued_at_slot` and apply_agent_grant.rs:147
+  //    `clock.slot.checked_sub(queued_at_slot)` UNDERFLOWS (Overflow, 6020).
+  //    Rewriting `queued_at` / `queued_at_slot` into the PAST lets the apply
+  //    pass at the natural current clock with no jump. This SIMULATES elapsed
+  //    time for setup (same intent as litesvm's advanceTime) — it weakens no
+  //    on-chain assertion.
+  //
+  //    The pending content digest (state/pending_agent_grant.rs:174-194) is a
+  //    SHA-256 over the canonical 97-byte encoding that INCLUDES queued_at and
+  //    queued_at_slot, so we recompute it over the backdated values and
+  //    re-serialize the whole account (with discriminator) via the Anchor
+  //    coder before writing it back. All other fields are preserved verbatim.
+  const pendingAccount = await (program.account as any).pendingAgentGrant.fetch(
+    pending,
+  );
+  const { slot, timestamp } = await getClock(env.connection);
+
+  // queued_at: i64 unix seconds. Backdated so elapsed at apply ≈ minDelay + 5
+  // (≥ min_delay_seconds, clearing the timelock at apply_agent_grant.rs:161).
+  // queued_at_slot: u64. Backdated so slot_delta at apply ≈ 10 (≥ 0, no
+  // underflow at :147, and ≪ MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN = 700_000).
+  const backdatedQueuedAt = new BN(
+    timestamp - (Number(pendingAccount.minDelaySeconds) + 5),
+  );
+  const backdatedQueuedAtSlot = new BN(slot - 10);
+
+  // Recompute pending_content_digest over the canonical encoding (97 bytes):
+  //   vault(32) ++ agent(32) ++ capability(u8) ++ spending_limit_usd(u64 LE) ++
+  //   queued_at(i64 LE) ++ min_delay_seconds(u64 LE) ++ queued_at_slot(u64 LE).
+  // Mirrors canonical_bytes_of_pending_agent_grant EXACTLY. Timestamps and
+  // slots are positive, so BN.toArrayLike(le, 8) yields the correct i64/u64 LE
+  // bytes (8-byte width pinned below).
+  const u64le = (v: BN): Buffer => {
+    const b = v.toArrayLike(Buffer, "le", 8);
+    if (b.length !== 8) {
+      throw new Error(`expected 8-byte LE encoding, got ${b.length}`);
+    }
+    return b;
+  };
+  const canonical = Buffer.concat([
+    pendingAccount.vault.toBuffer(), // 32
+    pendingAccount.agent.toBuffer(), // 32
+    Buffer.from([pendingAccount.capability & 0xff]), // 1 (u8)
+    u64le(new BN(pendingAccount.spendingLimitUsd)), // 8 (u64 LE)
+    u64le(backdatedQueuedAt), // 8 (i64 LE, positive)
+    u64le(new BN(pendingAccount.minDelaySeconds)), // 8 (u64 LE)
+    u64le(backdatedQueuedAtSlot), // 8 (u64 LE)
+  ]);
+  if (canonical.length !== 97) {
+    throw new Error(
+      `pending canonical encoding must be 97 bytes, got ${canonical.length}`,
+    );
+  }
+  const newDigest = crypto.createHash("sha256").update(canonical).digest();
+
+  // Re-serialize the account WITH its 8-byte discriminator. Keep every other
+  // field unchanged; only queued_at / queued_at_slot / pending_content_digest
+  // move. The Program-attached coder uses the camelCase account key and fields.
+  const modified = {
+    ...pendingAccount,
+    queuedAt: backdatedQueuedAt,
+    queuedAtSlot: backdatedQueuedAtSlot,
+    pendingContentDigest: Array.from(newDigest),
+  };
+  const data: Buffer = await program.coder.accounts.encode(
+    "pendingAgentGrant",
+    modified,
+  );
+
+  // Preserve the owning program + lamports (rent-exempt) — only the data moves.
+  const existing = await env.connection.getAccountInfo(pending);
+  if (!existing) {
+    throw new Error(
+      `pending_agent_grant ${pending.toString()} not found after queue`,
+    );
+  }
+  await surfnetRpc(env.connection, "surfnet_setAccount", [
+    pending.toString(),
+    {
+      data: data.toString("hex"),
+      owner: existing.owner.toString(),
+      lamports: existing.lamports,
+    },
+  ]);
+
+  // 3. Apply the grant.
+  const applyIx = await methods
+    .applyAgentGrant()
+    .accounts({
+      owner,
+      vault,
+      policy,
+      pending,
+      agentSpendOverlay: overlay,
+      auditLogSuccess: auditSuccess,
+      slotHashesSysvar: SYSVAR_SLOT_HASHES_PUBKEY,
+    })
+    .instruction();
+  await sendVersionedTx(env.connection, [applyIx], env.payer, signers);
 }
 
 // ─── Vault setup helper ─────────────────────────────────────────────────────
@@ -726,6 +1086,9 @@ export interface SetupVaultOpts {
   owner?: Keypair;
   protocolCaps?: any[];
   skipAgent?: boolean;
+  /** Phase 2 Option A: protocol_mode is hard-coded to 1 (ALLOWLIST). Pass the
+   * actual protocol pubkeys here. Empty array = no DeFi permitted. */
+  protocols?: PublicKey[];
 }
 
 export interface VaultSetupResult {
@@ -774,41 +1137,113 @@ export async function setupVaultWithAgent(
   const pdas = derivePDAs(owner.publicKey, vaultId, program.programId);
   const overlayPda = deriveOverlayPda(pdas.vaultPda, program.programId);
 
-  await program.methods
-    .initializeVault(
-      vaultId,
-      dailyCap,
-      maxTxSize,
-      0, // protocolMode: all
-      [],
-      developerFeeRate,
-      maxSlippageBps,
-      timelockDuration,
-      allowedDestinations,
-      protocolCaps,
-    )
-    .accounts({
-      owner: owner.publicKey,
-      vault: pdas.vaultPda,
-      policy: pdas.policyPda,
-      tracker: pdas.trackerPda,
-      agentSpendOverlay: overlayPda,
-      feeDestination: feeDestination.publicKey,
-      systemProgram: SystemProgram.programId,
-    } as any)
-    .signers(owner === env.payer ? [] : [owner])
-    .rpc();
+  // Phase 2 Option A: protocol_mode must be 1 (ALLOWLIST). Empty protocols
+  // means "no DeFi permitted yet" — callers that need a permissive default
+  // pass `opts.protocols = [...]` explicitly.
+  //
+  // KNOWN: `tsc --noEmit` reports `TS2589: Type instantiation is excessively
+  // deep and possibly infinite` on the `.initializeVault(...)` chain below.
+  // This is a pre-existing Anchor 0.32.1 type-depth limit (the codec hits the
+  // compiler's depth-50 ceiling on the long argument chain). Tracked for v1.1
+  // SDK cleanup (Codama-generated client will sidestep this).
+  //
+  // FIX: alias `program.methods` to an `any`-typed local ONCE and use it for
+  // every `.methods.*` builder call in this function. Casting only the
+  // initialize_vault chain inline merely shifts the cumulative-depth ceiling
+  // onto the next builder call (e.g. register_agent) — the depth budget is
+  // per-file, so a single shared `any` alias is the stable fix. Runtime
+  // behavior is identical (same methods, same args, same `.rpc()`). Do NOT
+  // touch the argument chains themselves.
+  const methods = program.methods as any;
+  await sendInitVault(
+    env,
+    (createdAtSlot) =>
+      methods
+        .initializeVault(
+          vaultId,
+          dailyCap,
+          maxTxSize,
+          1,
+          opts.protocols ?? [MOCK_DEFI_PROGRAM_ID],
+          developerFeeRate,
+          maxSlippageBps,
+          timelockDuration,
+          allowedDestinations,
+          protocolCaps,
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosign_required (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: dailyCap,
+            maxTransactionSizeUsd: maxTxSize,
+            maxSlippageBps: maxSlippageBps,
+            protocolMode: 1,
+            protocols: opts.protocols ?? [MOCK_DEFI_PROGRAM_ID],
+            allowedDestinations: allowedDestinations,
+            timelockDuration: timelockDuration,
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+            // PEN-CROSS-2: bind the owner-signed digest to the slot
+            // initialize_vault will execute in. LiteSVM froze the clock at 0; a
+            // live Surfnet clock advances, so sendInitVault re-reads + retries
+            // on a 6071 mismatch (mirrors create-vault.ts:350).
+            createdAtSlot,
+          }),
+        )
+        .accounts({
+          owner: owner.publicKey,
+          vault: pdas.vaultPda,
+          policy: pdas.policyPda,
+          tracker: pdas.trackerPda,
+          agentSpendOverlay: overlayPda,
+          feeDestination: feeDestination.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .instruction(),
+    owner === env.payer ? [] : [owner],
+  );
 
   if (!skipAgent) {
-    await program.methods
-      .registerAgent(agent.publicKey, agentCapability, agentSpendingLimit)
-      .accounts({
-        owner: owner.publicKey,
-        vault: pdas.vaultPda,
-        agentSpendOverlay: overlayPda,
-      } as any)
-      .signers(owner === env.payer ? [] : [owner])
-      .rpc();
+    const agentSigners = owner === env.payer ? [] : [owner];
+    if (agentCapability >= CAPABILITY_OPERATOR) {
+      // F-Q6: this vault is single-key (cosign_required=false above), so an
+      // OPERATOR (>=2) grant cannot be seated instantly via register_agent
+      // (ErrOperatorGrantRequiresTimelock, 6107). Seat it through the
+      // queue → time-travel → apply timelock path instead.
+      await seatOperatorAgent(
+        env,
+        program,
+        owner.publicKey,
+        pdas.vaultPda,
+        agent.publicKey,
+        agentSpendingLimit,
+        agentSigners,
+      );
+    } else {
+      // Observer (1) / Disabled (0) are instant-eligible — direct register.
+      // Route through sendVersionedTx (not .rpc()) so a real failure surfaces
+      // as {Custom:N} instead of the anchor x web3.js "Unknown action
+      // 'undefined'" mask.
+      const registerIx = await methods
+        .registerAgent(agent.publicKey, agentCapability, agentSpendingLimit)
+        .accounts({
+          owner: owner.publicKey,
+          vault: pdas.vaultPda,
+          agentSpendOverlay: overlayPda,
+        })
+        .instruction();
+      await sendVersionedTx(
+        env.connection,
+        [registerIx],
+        env.payer,
+        agentSigners,
+      );
+    }
   }
 
   const vaultUsdcAta = await fundWithTokens(

@@ -1,9 +1,13 @@
 pub mod agent_spend_overlay;
-pub mod constraints;
-pub mod escrow;
+// M1-04: kept agnostic-assertion primitives (ConstraintOperator, bytes_match,
+// ct_eq_32, …) relocated here from the now-deleted constraints engine.
+// Consumers import `state::assertions::X` explicitly (no glob re-export).
+pub mod assertions;
+pub mod audit_log_rejected;
+pub mod audit_log_success;
+pub mod pending_agent_grant;
 pub mod pending_agent_perms;
-pub mod pending_close_constraints;
-pub mod pending_constraints;
+pub mod pending_ownership_transfer;
 pub mod pending_policy;
 pub mod policy;
 pub mod post_assertions;
@@ -12,11 +16,11 @@ pub mod tracker;
 pub mod vault;
 
 pub use agent_spend_overlay::*;
-pub use constraints::*;
-pub use escrow::*;
+pub use audit_log_rejected::*;
+pub use audit_log_success::*;
+pub use pending_agent_grant::*;
 pub use pending_agent_perms::*;
-pub use pending_close_constraints::*;
-pub use pending_constraints::*;
+pub use pending_ownership_transfer::*;
 pub use pending_policy::*;
 pub use policy::*;
 pub use post_assertions::*;
@@ -73,8 +77,7 @@ pub const MAX_DEVELOPER_FEE_RATE: u16 = 500;
 /// Prevents misconfiguration while allowing wide flexibility.
 pub const MAX_SLIPPAGE_BPS: u16 = 5000;
 
-/// Maximum escrow duration: 30 days in seconds
-pub const MAX_ESCROW_DURATION: i64 = 2_592_000;
+// MAX_ESCROW_DURATION constant REMOVED in v2 revamp Stage 1 (escrow deleted).
 
 /// Minimum timelock duration: 30 minutes in seconds.
 /// Enforced at vault creation and in all queue/apply paths.
@@ -98,9 +101,166 @@ pub const MIN_TIMELOCK_DURATION: u64 = 1800;
 /// update is stale and must be re-queued by the owner.
 pub const MAX_APPLY_AGE_SLOTS: u64 = 216_000;
 
+/// CH-1 close (Bucket-3 audit 2026-05-23): F-10 freshness window for the
+/// two TIMELOCKED-ADMIN pending PDA families (PendingAgentGrant +
+/// PendingOwnershipTransfer). These default to MIN_DELAY = 172_800s (48h),
+/// so the normal 216_000-slot (~24h) freshness window would reject
+/// legitimate apply attempts that come AFTER the timelock matures.
+///
+/// 700_000 slots ≈ 78 hours at 400ms/slot — leaves 48h timelock + 24h
+/// owner-grace + 6h network-clock-skew margin. Wider than the 216_000
+/// non-admin window because the 48h timelock is the PRIMARY defense for
+/// these elevation primitives; F-10 is supplementary (caps the pre-sign
+/// hold window, not the timelock itself).
+pub const MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN: u64 = 700_000;
+
+/// TA-07 (Phase 3): 24-hour graylist friction window in seconds.
+///
+/// New destinations added to `allowed_destinations` via
+/// `queue_policy_update` enter `PolicyConfig.destination_graylist` with
+/// `unlock_unix = now + GRAYLIST_FRICTION_SECONDS`. Until either
+/// (a) the unlock time elapses OR (b) the owner promotes the destination
+/// via `promote_graylist_destination`, spending paths reject the
+/// destination with `ErrGraylistFriction`.
+///
+/// 86,400s = 24h. Owner-side `auto_promote_grays` bypass is available
+/// (digest-bound).
+pub const GRAYLIST_FRICTION_SECONDS: i64 = 86_400;
+
+/// TA-17 (Phase 3): minimum auto_revoke_threshold owners can configure.
+///
+/// Floor of 3 prevents trivial brick-by-3 attacks (one bad seal in a
+/// burst would revoke a working agent). Lower thresholds aren't accepted.
+pub const AUTO_REVOKE_THRESHOLD_MIN: u8 = 3;
+
+/// TA-17 (Phase 3): maximum auto_revoke_threshold owners can configure.
+///
+/// Ceiling of 20 prevents owners from setting the threshold impractically
+/// high to disable the gate (a no-op auto-revoke is worse than no
+/// auto-revoke, because it gives a false sense of security).
+pub const AUTO_REVOKE_THRESHOLD_MAX: u8 = 20;
+
+/// TA-17 (Phase 3): default auto_revoke_threshold for new vaults.
+pub const AUTO_REVOKE_THRESHOLD_DEFAULT: u8 = 5;
+
+/// Squads V4 multisig program ID on Solana mainnet (deployed Q4 2025).
+/// Base58: SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf
+///
+/// Council ISC-A7 + ISC-135: bound as a named constant so a future Squads
+/// migration (V5+) is a one-line change with full grep visibility. Inline
+/// usage (`Pubkey::new_from_array(...)` outside this definition) is forbidden
+/// for Squads — all program-ID equality checks MUST reference this constant.
+///
+/// V1 verification depth: program-ID match only (the
+/// `accept_ownership_transfer_multisig` handler checks
+/// `multisig_pda.owner == &SQUADS_V4_PROGRAM_ID`). Stronger structural
+/// checks (multisig threshold > 0, vault discriminator parse,
+/// anti-1-of-1-self-multisig) are deferred to V1.1.
+pub const SQUADS_V4_PROGRAM_ID: Pubkey = Pubkey::new_from_array([
+    6, 129, 196, 206, 71, 226, 35, 104, 184, 177, 85, 94, 200, 135, 175, 9, 46, 252, 126, 251, 182,
+    108, 163, 245, 47, 191, 104, 212, 172, 156, 183, 168,
+]);
+
+/// TA-17 (Phase 3): numeric range of on-chain "policy-violation" error
+/// codes that count toward the consecutive-failures counter.
+///
+/// ⚠ RENUMBER-SENSITIVE: these are positional error codes. On any change to
+/// the SigilError enum order, re-derive the band from ErrMintNotPinned..=
+/// ErrOutputBelowFloor (see target/idl/sigil.json). Post M1-04 teardown:
+///
+/// 6074..=6091 covers:
+///   - 6074 ErrMintNotPinned (TA-03)
+///   - 6075 ErrOutsideOperatingHours (TA-05)
+///   - 6076 ErrCooldownActive (TA-06)
+///   - 6077 ErrGraylistFriction (TA-07)
+///   - 6078 ErrGraylistFull (TA-07)
+///   - 6079 ErrToken2022ExtensionForbidden (TA-08)
+///   - 6080 ErrCosignRequired (TA-09)
+///   - 6081 ErrAutoRevoked (TA-17)
+///   - 6082-6091 Phase 4 + Phase 5 post-exec assertions (ErrSandwichIntegrity
+///     .. ErrOutputBelowFloor); ErrDeclarationInconsistent (6092) is excluded.
+///
+/// EXCLUDED:
+///   - 6062 SysvarScanBoundExceeded (CU exhaustion / external pad attack)
+///   - 6063 AsyncFulfillmentNotPermitted (external program-id quirk)
+///   - 6000-6073 auth / init / wrapping errors (not policy violations;
+///     auto-revoking on UnauthorizedOwner 6002 would let an attacker
+///     brick a working agent by spamming wrong-key seal attempts)
+///
+/// The filter is by NUMERIC RANGE, not string match — robust against
+/// future error message changes.
+pub fn is_policy_violation_code(code: u32) -> bool {
+    (6074..=6091).contains(&code)
+}
+
 /// sha256("global:finalize_session")[0..8] — used by validate_and_authorize
 /// to identify finalize_session instructions in the transaction.
 pub const FINALIZE_SESSION_DISCRIMINATOR: [u8; 8] = [34, 148, 144, 47, 37, 130, 206, 161];
+
+/// sha256("global:validate_and_authorize")[0..8] — used by validate_and_authorize
+/// to detect SIBLING `validate_and_authorize` ix in the same transaction.
+///
+/// TA-10 (Phase 4) sandwich-integrity uniqueness: at most ONE
+/// `validate_and_authorize` per (vault, agent, mint) tuple per transaction.
+/// A second matching ix would let an attacker stage a nested authorization
+/// inside the first (with the second session's expanded capability) before
+/// the first finalize's revocation runs.
+///
+/// Verified against codama-generated `VALIDATE_AND_AUTHORIZE_DISCRIMINATOR`
+/// in `sdk/kit/src/generated/instructions/validateAndAuthorize.ts`.
+pub const VALIDATE_AND_AUTHORIZE_DISCRIMINATOR: [u8; 8] = [22, 183, 48, 222, 218, 11, 197, 152];
+
+/// TA-11 (Phase 4) — protected seed-prefix family for the dynamic
+/// writable-PDA check.
+///
+/// Every Sigil-owned PDA seed prefix that MUST NOT appear as a writable
+/// account-meta inside a foreign instruction between validate and finalize.
+/// The bundle-entry scan at `validate_and_authorize` derives each family's
+/// pubkeys for the current vault context (owner / vault_id / agent / mint)
+/// and rejects with `ErrProtectedWritable` if any sibling instruction passes
+/// one of those pubkeys with `is_writable=true`.
+///
+/// **Why a prefix list, not an enum.** The list is iterated by the derivation
+/// helper but each entry's "extra seeds" vary (vault has owner+vault_id;
+/// session has vault+agent+mint; constraints has vault). The prefix is the
+/// load-bearing identifier — derivation is per-prefix in the scan code.
+///
+/// **Forward-looking entries.** `audit_success` / `audit_rejected` (Phase 7
+/// audit log), `cosign` (Phase 3 cosign session), `recipient` (post-exec
+/// per-recipient cap), `pending_owner` (Phase 8 ownership transfer) are
+/// listed proactively: when those PDAs ship, no Phase 4 amendment is
+/// required to protect them. The derivation loop will skip families whose
+/// seeds aren't yet known at the current vault (no false positives).
+///
+/// **Defense-in-depth pairing.** The seed-prefix list alone is insufficient
+/// because an attacker could deploy their own program at the derived pubkey
+/// (impossible without an address collision but defensible). Per F-20 + F-30,
+/// the scan ALSO verifies `account.owner == sigil_program_id` for any
+/// candidate match before rejecting (see validate_and_authorize.rs TA-11
+/// scan site).
+pub const PROTECTED_SEED_PREFIXES: [&[u8]; 14] = [
+    b"vault",
+    b"policy",
+    b"tracker",
+    b"session",
+    b"post_assertions",
+    b"audit_success",
+    b"audit_rejected",
+    b"cosign",
+    b"recipient",
+    b"pending_policy",
+    b"pending_agent_perms",
+    b"pending_owner",
+    // Phase 8 PEN-CROSS-1 (audit 2026-05-19): queue/apply timelock-gated
+    // OPERATOR-class agent grant PDA. Listed here so the TA-11 dynamic
+    // writable-PDA check rejects any foreign instruction that tries to
+    // pass this PDA as writable between validate and finalize.
+    b"pending_agent_grant",
+    b"agent_spend",
+    // M1-04c: pending_constraints, pending_close_constraints, and constraints
+    // seeds removed — the constraints engine is gone, those PDAs can never be
+    // allocated, so denylisting them protected nothing.
+];
 
 /// Ceiling fee: ceil(amount * rate / FEE_RATE_DENOMINATOR).
 /// Guarantees non-zero fee for any non-zero amount with non-zero rate.
@@ -127,10 +287,16 @@ compile_error!("devnet-testing is a devnet-only feature and cannot be combined w
 
 #[cfg(feature = "devnet")]
 /// Protocol treasury address (devnet)
-/// Base58: ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT
+/// Base58: 6wrkKTM2pjkcCAbMfRz2j3AXspavu6pq3ePcuJUE3Azp
+///
+/// Phase 10b (audit 2026-05-23): swapped from `ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT`
+/// (the prior devnet treasury keypair, no longer accessible to the team)
+/// to the user's wallet `6wrkKTM2pj...`. Treasury swap is BAKED INTO the
+/// same .so binary as the Phase 10 program-ID redeploy (CH-* findings
+/// closed at the same commit) — there is no runtime `set_treasury` ix.
 pub const PROTOCOL_TREASURY: Pubkey = Pubkey::new_from_array([
-    140, 51, 155, 5, 120, 99, 25, 69, 20, 4, 163, 87, 229, 124, 111, 239, 107, 28, 230, 192, 254,
-    239, 33, 251, 37, 93, 179, 29, 45, 226, 14, 172,
+    88, 88, 12, 26, 164, 64, 182, 168, 149, 18, 132, 97, 242, 247, 243, 69, 120, 91, 235, 116, 3,
+    15, 221, 72, 102, 252, 128, 127, 102, 40, 56, 157,
 ]);
 
 /// Protocol treasury address (mainnet).
@@ -158,7 +324,7 @@ pub const PROTOCOL_TREASURY: Pubkey = Pubkey::new_from_array([
 ///
 /// To recreate the un-pinned state for tests: replace the byte array below with
 /// `[0u8; 32]` and uncomment the previous `compile_error!` block. The runtime
-/// owner check at `instructions/{create_escrow, agent_transfer,
+/// owner check at `instructions/{agent_transfer,
 /// validate_and_authorize}.rs` is preserved as a second layer.
 #[cfg(feature = "mainnet")]
 pub const PROTOCOL_TREASURY: Pubkey = Pubkey::new_from_array([
@@ -206,7 +372,7 @@ pub const USDT_MINT: Pubkey = Pubkey::new_from_array([
 /// is structurally redundant: a `--features mainnet` build cannot reach the
 /// test runner if the constant is unset, because compilation halts first.
 ///
-/// The runtime owner check in `instructions/{create_escrow, agent_transfer,
+/// The runtime owner check in `instructions/{agent_transfer,
 /// validate_and_authorize}.rs` is preserved as defense in depth.
 #[cfg(test)]
 mod treasury_tests {
@@ -230,6 +396,143 @@ mod treasury_tests {
     }
 }
 
+#[cfg(test)]
+mod ta17_policy_violation_filter_tests {
+    use super::*;
+
+    /// TA-17: codes 6074-6091 are policy violations.
+    #[test]
+    fn policy_violation_accepts_phase3_codes() {
+        assert!(is_policy_violation_code(6074), "TA-03 ErrMintNotPinned");
+        assert!(
+            is_policy_violation_code(6075),
+            "TA-05 ErrOutsideOperatingHours"
+        );
+        assert!(is_policy_violation_code(6076), "TA-06 ErrCooldownActive");
+        assert!(is_policy_violation_code(6077), "TA-07 ErrGraylistFriction");
+        assert!(is_policy_violation_code(6078), "TA-07 ErrGraylistFull");
+        assert!(
+            is_policy_violation_code(6079),
+            "TA-08 ErrToken2022ExtensionForbidden"
+        );
+        assert!(is_policy_violation_code(6080), "TA-09 ErrCosignRequired");
+        assert!(is_policy_violation_code(6081), "TA-17 ErrAutoRevoked");
+    }
+
+    /// TA-17: reserved range 6082-6091 also accepted (Phase 4/5 future).
+    #[test]
+    fn policy_violation_accepts_reserved_phase45_range() {
+        for code in 6082..=6091 {
+            assert!(
+                is_policy_violation_code(code),
+                "reserved {} must accept",
+                code
+            );
+        }
+    }
+
+    /// TA-17: SysvarScanBoundExceeded (6068) is NOT a policy violation —
+    /// CU-exhaustion / external pad attack.
+    #[test]
+    fn policy_violation_rejects_cu_exhaustion() {
+        assert!(!is_policy_violation_code(6062));
+    }
+
+    /// TA-17: AsyncFulfillmentNotPermitted (6069) is NOT a policy violation
+    /// — external program-id quirk.
+    #[test]
+    fn policy_violation_rejects_async_fulfillment() {
+        assert!(!is_policy_violation_code(6063));
+    }
+
+    /// TA-17: UnauthorizedOwner (6002) is NOT a policy violation. Auto-
+    /// revoking on auth errors would let an attacker brick a working
+    /// agent by spamming wrong-key seal attempts.
+    #[test]
+    fn policy_violation_rejects_unauthorized_owner() {
+        assert!(!is_policy_violation_code(6002));
+    }
+
+    /// TA-17: Codes outside 6074-6091 reject (lower boundary 6073).
+    #[test]
+    fn policy_violation_rejects_just_below_range() {
+        assert!(
+            !is_policy_violation_code(6073),
+            "ActiveVaultRequiresAllowlist"
+        );
+    }
+
+    /// TA-17: Codes outside 6074-6091 reject (upper boundary 6092).
+    #[test]
+    fn policy_violation_rejects_just_above_range() {
+        assert!(!is_policy_violation_code(6092));
+    }
+
+    /// TA-17: arbitrary error codes (lower range) reject.
+    #[test]
+    fn policy_violation_rejects_arbitrary_low() {
+        assert!(!is_policy_violation_code(0));
+        assert!(!is_policy_violation_code(1000));
+        assert!(!is_policy_violation_code(6000));
+    }
+}
+
+#[cfg(test)]
+mod ta03_pinned_deposit_mint_tests {
+    use super::*;
+
+    /// TA-03: pinned-deposit predicate must accept USDC under the
+    /// non-devnet-testing build. cargo test for the lib runs with the
+    /// default `devnet` feature; `devnet-testing` is enabled only by the
+    /// dedicated `cargo test --features devnet-testing` job. We assert the
+    /// strict path here because the strict variant is the one shipped.
+    #[cfg(not(feature = "devnet-testing"))]
+    #[test]
+    fn pinned_deposit_accepts_usdc() {
+        assert!(
+            is_pinned_deposit_mint(&USDC_MINT),
+            "USDC mint must pass the pinned-deposit gate"
+        );
+    }
+
+    /// TA-03: pinned-deposit must accept USDT.
+    #[cfg(not(feature = "devnet-testing"))]
+    #[test]
+    fn pinned_deposit_accepts_usdt() {
+        assert!(
+            is_pinned_deposit_mint(&USDT_MINT),
+            "USDT mint must pass the pinned-deposit gate"
+        );
+    }
+
+    /// TA-03: pinned-deposit MUST reject an arbitrary unrecognized mint.
+    /// Closes the deposit-time gap where an exotic mint could be parked in
+    /// the vault and trigger `is_stablecoin_mint=true` only via the
+    /// devnet-testing escape — the strict build must reject.
+    #[cfg(not(feature = "devnet-testing"))]
+    #[test]
+    fn pinned_deposit_rejects_arbitrary_mint() {
+        let arbitrary = Pubkey::new_from_array([7u8; 32]);
+        assert!(
+            !is_pinned_deposit_mint(&arbitrary),
+            "arbitrary mint MUST be rejected by the pinned-deposit gate"
+        );
+    }
+
+    /// TA-03: under devnet-testing, the pin is open — same escape hatch as
+    /// `is_stablecoin_mint`. Required so LiteSVM + Surfpool integration
+    /// suites can drive deposits with arbitrary test mints.
+    #[cfg(feature = "devnet-testing")]
+    #[test]
+    fn pinned_deposit_devnet_testing_accepts_arbitrary_mint() {
+        let arbitrary = Pubkey::new_from_array([7u8; 32]);
+        assert!(
+            is_pinned_deposit_mint(&arbitrary),
+            "devnet-testing must keep the deposit gate open for integration suites"
+        );
+    }
+}
+
 /// Check if a mint address is a recognized stablecoin (USDC or USDT).
 /// With `devnet-testing` feature, accepts any mint for integration testing
 /// on devnet where Circle-controlled USDC cannot be minted.
@@ -243,42 +546,59 @@ pub fn is_stablecoin_mint(_mint: &Pubkey) -> bool {
     true
 }
 
+/// TA-03 — pinned-deposit allowlist for `deposit_funds`.
+///
+/// `is_stablecoin_mint` above is used throughout the spending path (balance
+/// delta verification, output-mint checks, fee accounting). It must NOT widen
+/// or it loosens existing security paths. TA-03 introduces a separate,
+/// narrower predicate that gates **deposits only** to the exact set of mints
+/// the program has been built for.
+///
+/// Mainnet: exactly USDC + USDT.
+/// Devnet:  the devnet test-keypair USDC + USDT minted under our control.
+/// `devnet-testing` (LiteSVM integration / Surfpool runs): any mint accepted,
+/// matching the `is_stablecoin_mint` escape hatch — required because we can't
+/// mint Circle-controlled USDC in these environments.
+///
+/// Together with the existing compile-time `mainnet|devnet` feature gate
+/// (`compile_error!` in state/mod.rs), this provides build-time pinning: a
+/// mainnet binary literally cannot be built against an unpinned mint set.
+#[cfg(not(feature = "devnet-testing"))]
+pub fn is_pinned_deposit_mint(mint: &Pubkey) -> bool {
+    *mint == USDC_MINT || *mint == USDT_MINT
+}
+
+#[cfg(feature = "devnet-testing")]
+pub fn is_pinned_deposit_mint(_mint: &Pubkey) -> bool {
+    true
+}
+
 // --- Protocol program IDs (same address on mainnet and devnet) ---
 
-/// Jupiter V6 program
-/// Base58: JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4
-pub const JUPITER_PROGRAM: Pubkey = Pubkey::new_from_array([
-    4, 121, 213, 91, 242, 49, 192, 110, 238, 116, 197, 110, 206, 104, 21, 7, 253, 177, 178, 222,
-    163, 244, 142, 81, 2, 177, 205, 162, 86, 188, 19, 143,
-]);
+// JUPITER_PROGRAM constant removed in Phase 1 (Option A demolition). The Jupiter
+// V6 program ID is no longer referenced by on-chain code. SDK-side allowlist
+// configuration uses the literal pubkey string `JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4`
+// passed through PolicyConfig.protocols at vault creation time — generic primitive,
+// not Jupiter-specific.
 
-/// Flash Trade (Perpetuals) program
-/// Base58: FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn
-pub const FLASH_TRADE_PROGRAM: Pubkey = Pubkey::new_from_array([
-    212, 236, 82, 74, 222, 71, 209, 50, 127, 252, 246, 137, 90, 104, 93, 148, 41, 240, 55, 144,
-    196, 35, 87, 71, 243, 123, 215, 163, 221, 165, 30, 221,
-]);
-
-/// Jupiter Lend program (wraps deposits/withdrawals)
-/// Base58: JLend2fEim9xUFcaHsyGePEoBzFLvkjMi3MnPcSuCdu
-pub const JUPITER_LEND_PROGRAM: Pubkey = Pubkey::new_from_array([
-    4, 113, 24, 1, 43, 4, 76, 56, 240, 98, 104, 189, 87, 231, 52, 36, 154, 118, 168, 157, 132, 58,
-    30, 222, 238, 9, 26, 161, 252, 73, 18, 120,
-]);
-
-/// Jupiter Earn program (on-chain deposit/withdraw target)
-/// Base58: jup3YeL8QhtSx1e253b2FDvsMNC87fDrgQZivbrndc9
-pub const JUPITER_EARN_PROGRAM: Pubkey = Pubkey::new_from_array([
-    10, 254, 27, 145, 46, 72, 94, 149, 253, 21, 235, 41, 55, 223, 252, 75, 55, 163, 22, 208, 166,
-    56, 18, 255, 2, 186, 73, 180, 198, 193, 141, 30,
-]);
-
-/// Jupiter Borrow/Vaults program
-/// Base58: jupr81YtYssSyPt8jbnGuiWon5f6x9TcDEFxYe3Bdzi
-pub const JUPITER_BORROW_PROGRAM: Pubkey = Pubkey::new_from_array([
-    10, 254, 31, 147, 34, 167, 161, 209, 195, 102, 29, 103, 23, 145, 202, 155, 48, 211, 32, 47, 30,
-    31, 214, 135, 58, 119, 204, 220, 113, 143, 17, 51,
-]);
+// ─── ADR-M1 (2026-05-31): is_recognized_defi markers REMOVED ────────────────
+// The four former "recognized DeFi marker" constants (FLASH_TRADE_PROGRAM,
+// JUPITER_LEND_PROGRAM, JUPITER_EARN_PROGRAM, JUPITER_BORROW_PROGRAM) were
+// DELETED. They existed only to gate `ProtocolMismatch` enforcement and
+// `defi_ix_count` accounting for four hardcoded programs in
+// `validate_and_authorize`. Those checks now apply AGNOSTICALLY to every
+// allowlisted protocol (any instruction reaching ScanAction::PassedSharedChecks
+// is treated as a DeFi instruction), so no per-protocol marker set is needed.
+// Removing them eliminates protocol-specific code from the core enforcement
+// path and closes the gap where non-hardcoded allowlisted protocols (Orca,
+// Raydium, Kamino, …) escaped the single-DeFi-ix limit + target match.
+//
+// The async-fulfillment constants below are DIFFERENT in kind: they are
+// program IDs REJECTED outright (KNOWN_ASYNC_FULFILLMENT_PROGRAMS) because
+// their request/keeper-fill model lands the real SPL transfer 5-45s AFTER
+// finalize_session, defeating Sigil's stablecoin balance-delta measurement.
+// They are kept; see the block immediately below.
+// ─────────────────────────────────────────────────────────────────────────────
 
 // --- Async-fulfillment programs (C4 audit fix) ---
 //
@@ -337,6 +657,16 @@ pub const TOKEN_2022_PROGRAM_ID: Pubkey = Pubkey::new_from_array([
     131, 185, 13, 39, 254, 189, 249, 40, 216, 161, 139, 252,
 ]);
 
+/// ComputeBudget program ID — used by `validate_and_authorize` + `finalize_session`
+/// to identify (and skip) ComputeBudget instructions during the sysvar instruction
+/// scan. P3.1 audit fix (2026-05-19): single source of truth, eliminates the
+/// 32-byte literal duplication previously inlined at both call sites.
+/// Base58: ComputeBudget111111111111111111111111111111
+pub const COMPUTE_BUDGET_PROGRAM_ID: Pubkey = Pubkey::new_from_array([
+    3, 6, 70, 111, 229, 33, 23, 50, 255, 236, 173, 186, 114, 195, 155, 231, 188, 140, 229, 187,
+    197, 247, 18, 107, 44, 67, 155, 58, 64, 0, 0, 0,
+]);
+
 /// USD amounts use 6 decimal places (matching USDC/USDT precision).
 /// $1.00 = 1_000_000, $500.00 = 500_000_000
 pub const USD_DECIMALS: u8 = 6;
@@ -368,3 +698,91 @@ pub enum VaultStatus {
 // the runtime never read it. See RFC-ACTIONTYPE-ELIMINATION.md.
 // Agent permissions use the 2-bit capability field (CAPABILITY_OBSERVER / CAPABILITY_OPERATOR)
 // instead of the old 21-bit bitmask.
+
+#[cfg(test)]
+mod seed_uniqueness {
+    //! Council ISC-133 — PDA seed prefix uniqueness invariant.
+    //!
+    //! Every seed prefix declared anywhere in the program must be byte-distinct
+    //! from every other declared prefix. Two prefix families colliding would
+    //! mean two PDAs share a derivation namespace once a vault/key disambiguator
+    //! is added — an audit-class issue: an attacker who could choose the
+    //! disambiguator could trick the program into accepting account A for
+    //! family B's role.
+    //!
+    //! Source of truth: `PROTECTED_SEED_PREFIXES` already enumerates every
+    //! protected family for the TA-11 derivation scan. This test verifies
+    //! the list is internally unique, AND that the live list still matches
+    //! the prefixes actually used by `seeds = [...]` declarations elsewhere
+    //! in the codebase (the cargo test can't grep the codebase, so the
+    //! out-of-band check is documented in the doctest below and enforced
+    //! by code review).
+    //!
+    //! When a new PDA family is added (e.g. a future "audit_v2" prefix),
+    //! it MUST be appended to both `PROTECTED_SEED_PREFIXES` and to the
+    //! `expected` array below. The array length is pinned to the live
+    //! `PROTECTED_SEED_PREFIXES` length so this test fails compilation
+    //! if either list grows without the other being updated.
+
+    use super::PROTECTED_SEED_PREFIXES;
+
+    /// Live enumeration sourced from `PROTECTED_SEED_PREFIXES`. Includes the
+    /// Phase 8 `pending_owner` entry that ships with this batch (already
+    /// pre-listed in `PROTECTED_SEED_PREFIXES` for forward-compat).
+    #[test]
+    fn pda_seed_prefixes_unique() {
+        let prefixes: &[&[u8]] = PROTECTED_SEED_PREFIXES.as_slice();
+        for i in 0..prefixes.len() {
+            for j in (i + 1)..prefixes.len() {
+                assert_ne!(
+                    prefixes[i],
+                    prefixes[j],
+                    "PDA seed prefix collision: {:?} vs {:?}",
+                    std::str::from_utf8(prefixes[i]).unwrap_or("<non-utf8 prefix>"),
+                    std::str::from_utf8(prefixes[j]).unwrap_or("<non-utf8 prefix>"),
+                );
+            }
+        }
+    }
+
+    /// Council ISC-133 — pin the LIVE prefix list so a future addition that
+    /// forgets to update this test fails compilation. If you add a prefix to
+    /// `PROTECTED_SEED_PREFIXES`, mirror it in `expected` below.
+    #[test]
+    fn pda_seed_prefixes_matches_expected_canonical_list() {
+        let expected: [&[u8]; 14] = [
+            b"vault",
+            b"policy",
+            b"tracker",
+            b"session",
+            b"post_assertions",
+            b"audit_success",
+            b"audit_rejected",
+            b"cosign",
+            b"recipient",
+            b"pending_policy",
+            b"pending_agent_perms",
+            b"pending_owner",
+            // Phase 8 PEN-CROSS-1 (audit 2026-05-19): pending_agent_grant
+            // landed in Batch 6.
+            b"pending_agent_grant",
+            b"agent_spend",
+            // M1-04c: pending_constraints, pending_close_constraints, constraints removed.
+        ];
+        assert_eq!(
+            PROTECTED_SEED_PREFIXES.len(),
+            expected.len(),
+            "PROTECTED_SEED_PREFIXES len drift — update both lists",
+        );
+        for (i, want) in expected.iter().enumerate() {
+            assert_eq!(
+                PROTECTED_SEED_PREFIXES[i],
+                *want,
+                "PROTECTED_SEED_PREFIXES[{}] drift — got {:?}, expected {:?}",
+                i,
+                std::str::from_utf8(PROTECTED_SEED_PREFIXES[i]).unwrap_or("<non-utf8>"),
+                std::str::from_utf8(want).unwrap_or("<non-utf8>"),
+            );
+        }
+    }
+}

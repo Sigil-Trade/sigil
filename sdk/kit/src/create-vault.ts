@@ -14,7 +14,7 @@ import type {
 import type { Instruction } from "./kit-adapter.js";
 
 import { getInitializeVaultInstructionAsync } from "./generated/instructions/initializeVault.js";
-import { getRegisterAgentInstruction } from "./generated/instructions/registerAgent.js";
+import { getRegisterAgentInstructionAsync } from "./generated/instructions/registerAgent.js";
 import {
   getVaultPDA,
   getPolicyPDA,
@@ -27,6 +27,7 @@ import {
   type CapabilityTier,
   type UsdBaseUnits,
 } from "./types.js";
+import { computePolicyPreviewDigest } from "./policy/compute-policy-preview-digest.js";
 import { buildOwnerTransaction } from "./owner-transaction.js";
 import { signAndEncode, sendAndConfirmTransaction } from "./rpc-helpers.js";
 import type { SendAndConfirmOptions } from "./rpc-helpers.js";
@@ -86,6 +87,14 @@ export interface CreateVaultOptions {
   protocolCaps?: bigint[];
   maxSlippageBps?: number;
   /**
+   * Phase 2 TA-19: observe-only mode at vault creation. When `true`, all
+   * `validate_and_authorize` calls reject with `ObserveOnlyModeBlocksExecute`.
+   * Used to stand up a vault that baselines agent behaviour before the owner
+   * opens the execute path. Default: `false` (full execute permitted, gated
+   * by policy).
+   */
+  observeOnly?: boolean;
+  /**
    * Timelock duration in seconds for owner-initiated policy changes.
    * Required since v0.9.0 — previously defaulted silently to 0 (no
    * timelock). Closes Pentester F7 / D11: force callers to specify an
@@ -104,6 +113,93 @@ export interface CreateVaultOptions {
   timelockDuration: number;
   allowedDestinations?: Address[];
   vaultId?: bigint;
+  /**
+   * PEN-CROSS-2 (Phase 2 close-up): the slot to bind into the TA-19 digest.
+   * If omitted, `createVault` reads `rpc.getSlot()` — that's what production
+   * callers should do so the digest matches the slot the on-chain handler
+   * captures at execution.
+   *
+   * Tests / fixtures that don't care about replay protection (PDA derivation
+   * smoke tests) can pass a fixed bigint here to avoid mocking `getSlot`.
+   */
+  createdAtSlot?: bigint;
+  /**
+   * TA-05 (Phase 3): 24-bit UTC operating-hours bitmask. Bit `n` (0..=23)
+   * set → spending allowed during UTC hour `n`. Default `0x00FFFFFF` (all
+   * 24h enabled — equivalent to "no operating-hours constraint").
+   *
+   * Upper 8 bits MUST be zero; on-chain handler rejects otherwise with
+   * `ErrOutsideOperatingHours` (6084). Bound by TA-19 at canonical
+   * digest position 15.
+   *
+   * Production callers narrowing for market-hours / business-hours
+   * vaults should pass an explicit mask (e.g. `0x0001E000` for 13-17 UTC).
+   */
+  operatingHours?: number;
+  /**
+   * TA-07 (Phase 3): if true, NEW destinations added via
+   * queue_policy_update skip the 24h graylist friction. Default false —
+   * the owner pays the friction cost by default. Bound by TA-19 at
+   * canonical digest position 16.
+   */
+  autoPromoteGrays?: boolean;
+  /**
+   * TA-17 (Phase 3): consecutive-failure threshold after which an
+   * agent's capability is auto-revoked. Range 3..=20 (on-chain reject
+   * out-of-range with `InvalidPermissions`). Default 5.
+   *
+   * Only on-chain policy-violation codes 6083-6100 count — external
+   * causes (CU exhaustion, nonce desync, auth) do NOT increment.
+   * Bound by TA-19 at canonical digest position 17.
+   */
+  autoRevokeThreshold?: number;
+
+  /**
+   * TA-12 (Phase 5 post-execution invariant): hard stable balance floor in
+   * USD base units (6 decimals). The combined USDC + USDT vault balance is
+   * asserted >= this value at finalize_session AND at agent_transfer's
+   * post-CPI re-read. Default 0 = no floor enforcement.
+   *
+   * Lowering this on a live vault is an elevated mutation per TA-09 and
+   * requires cosign (closed by G3 audit fix).
+   *
+   * Bound by TA-19 at canonical digest position 18.
+   */
+  stableBalanceFloor?: bigint;
+
+  /**
+   * TA-14 (Phase 5 post-execution invariant): per-recipient daily cap in
+   * USD base units (6 decimals). Each unique recipient's rolling 24h
+   * outflow is asserted <= this value at finalize. Per-recipient slots
+   * are bounded at 10 with age-based eviction (no LRU churn).
+   *
+   * Default 0 = no per-recipient cap (global daily cap still applies).
+   * Raising this on a live vault is elevated per TA-09 (closed by G3).
+   *
+   * Bound by TA-19 at canonical digest position 19.
+   */
+  perRecipientDailyCapUsd?: bigint;
+
+  /**
+   * G6 (audit 2026-05-18 cosign opt-in): owner's opt-in to TA-09 cosign
+   * enforcement on elevated mutations. Default `false` (low-friction —
+   * owner signature alone authorizes elevated mutations).
+   *
+   * When `true`, future calls to `queue_policy_update` with elevated
+   * mutations require a non-default `cosignSession` pubkey + a
+   * corresponding signer in `remaining_accounts`. Use this for solo-key
+   * owners who want Sigil-native per-mutation co-signature. Vaults whose
+   * owner is a Squads V4 multisig PDA (`detectSquadsV4Owner` returns
+   * `isSquadsMultisig: true`) typically leave this `false` because
+   * multisig at the Solana layer already enforces multi-signer auth.
+   *
+   * Disabling cosign on a live vault where this is `true` is itself an
+   * elevated mutation (one-way ratchet — `queue_policy_update` requires
+   * cosign to flip true → false).
+   *
+   * Bound by TA-19 at canonical digest position 20.
+   */
+  cosignRequired?: boolean;
 }
 
 export interface CreateVaultResult {
@@ -244,6 +340,63 @@ export async function createVault(
       ? options.protocolCaps
       : protocols.map(() => 0n);
 
+  const allowedDestinations = options.allowedDestinations ?? [];
+  const observeOnly = options.observeOnly ?? false;
+  // PEN-CROSS-2 (Phase 2 close-up): the on-chain `initialize_vault` handler
+  // captures `Clock::get()?.slot` at handler entry and binds it into the
+  // canonical digest. The SDK must encode that same slot in the digest the
+  // owner signs. We use the RPC's current slot — typically off by 0-1 from
+  // the slot the handler executes in. If a slot rollover lands between
+  // `getSlot()` and execution, the user sees a recoverable
+  // `PolicyPreviewMismatch` and the SDK consumer retries with a fresh slot.
+  //
+  // Callers can override `createdAtSlot` for tests / fixtures that don't have
+  // a live RPC. Production submission paths should let this RPC-fetch run.
+  const createdAtSlot =
+    options.createdAtSlot ??
+    (await options.rpc.getSlot({ commitment: "confirmed" }).send());
+  // Phase 2 TA-19: compute the canonical policy-preview digest off-chain.
+  // The on-chain `initialize_vault` handler recomputes this from the resulting
+  // policy state and rejects with `PolicyPreviewMismatch` if they differ.
+  // session_expiry_seconds is always 0 at init (uses default); has_constraints
+  // + has_post_assertions are always 0 at init (constraints are created later).
+  const previewDigest = computePolicyPreviewDigest({
+    dailySpendingCapUsd: options.dailySpendingCapUsd,
+    maxTransactionSizeUsd,
+    maxSlippageBps: options.maxSlippageBps ?? 100,
+    // PEN-CROSS-6: developer_fee_rate is bound by the digest. Mirror the
+    // same default the ix arg uses below to keep digest and storage in sync.
+    developerFeeRate: options.developerFeeRate ?? 0,
+    protocolMode,
+    protocols,
+    destinationMode: 0, // Phase 2 Option A: RESTRICTED is the only valid value
+    allowedDestinations,
+    timelockDuration: BigInt(options.timelockDuration),
+    sessionExpirySeconds: 0n,
+    observeOnly,
+    hasPostAssertions: 0,
+    // PEN-CROSS-2: defends against close+reinit replay.
+    createdAtSlot,
+    // TA-05 (Phase 3): default to all-24h enabled when caller doesn't
+    // narrow. Owner-facing config surface for narrowing lives at the
+    // dashboard-side mutation (not exposed via createVault yet).
+    operatingHours: options.operatingHours ?? 0x00ffffff,
+    // TA-07 (Phase 3): default to enforce 24h friction (auto_promote off).
+    autoPromoteGrays: options.autoPromoteGrays ?? false,
+    // TA-17 (Phase 3): default auto-revoke threshold of 5 — matches the
+    // on-chain default constant. Range 3..=20 enforced by the handler.
+    autoRevokeThreshold: options.autoRevokeThreshold ?? 5,
+    // TA-12 (Phase 5): stable balance floor — hard reserve under which spending
+    // is rejected at finalize. Default 0 = no floor enforcement. Bound by digest.
+    stableBalanceFloor: options.stableBalanceFloor ?? 0n,
+    // TA-14 (Phase 5): per-recipient daily cap. Default 0 = unlimited per recipient
+    // (still bounded by the global daily cap). Bound by digest.
+    perRecipientDailyCapUsd: options.perRecipientDailyCapUsd ?? 0n,
+    // G6 (audit 2026-05-18 cosign opt-in): default false (low-friction).
+    // Owners explicitly opt in by passing true. Bound by TA-19 at position 20.
+    cosignRequired: options.cosignRequired ?? false,
+  });
+
   const initializeVaultIx = await getInitializeVaultInstructionAsync({
     owner: options.owner,
     agentSpendOverlay: agentOverlayAddress,
@@ -256,14 +409,28 @@ export async function createVault(
     developerFeeRate: options.developerFeeRate ?? 0,
     maxSlippageBps: options.maxSlippageBps ?? 100,
     timelockDuration: options.timelockDuration,
-    allowedDestinations: options.allowedDestinations ?? [],
+    allowedDestinations,
     protocolCaps,
+    observeOnly,
+    operatingHours: options.operatingHours ?? 0x00ffffff,
+    autoPromoteGrays: options.autoPromoteGrays ?? false,
+    autoRevokeThreshold: options.autoRevokeThreshold ?? 5,
+    stableBalanceFloor: options.stableBalanceFloor ?? 0n,
+    perRecipientDailyCapUsd: options.perRecipientDailyCapUsd ?? 0n,
+    // G6 (audit 2026-05-18 cosign opt-in): default false at construction.
+    // The arg + the digest above are computed against the same value so
+    // the on-chain `initialize_vault` digest assertion passes.
+    cosignRequired: options.cosignRequired ?? false,
+    previewDigest,
   });
 
-  // Step 5: Build registerAgent instruction
-  const registerAgentIx = getRegisterAgentInstruction({
+  // Step 5: Build registerAgent instruction.
+  //   PEN-CROSS-5 (Phase 4 absorption): policy now required for
+  //   policy_version bump.
+  const registerAgentIx = await getRegisterAgentInstructionAsync({
     owner: options.owner,
     vault: vaultAddress,
+    policy: policyAddress,
     agentSpendOverlay: agentOverlayAddress,
     agent: options.agent.address,
     capability: Number(options.permissions ?? FULL_PERMISSIONS),

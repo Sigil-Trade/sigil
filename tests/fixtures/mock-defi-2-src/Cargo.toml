@@ -1,0 +1,37 @@
+[package]
+name = "mock-defi-2"
+version = "0.2.0"
+description = "Second test-only mock DeFi program — a byte-for-byte clone of mock-defi with a DISTINCT declare_id!. Exists so LiteSVM cap tests can load TWO independent allowlisted programs (MOCK_DEFI + MOCK_DEFI_2) and prove per-protocol cap INDEPENDENCE (a spend on one protocol does not consume the other's cap). Loading mock-defi.so at a second address is impossible — Anchor's runtime declare_id! check rejects it — so a separate crate with its own program ID is required."
+edition = "2021"
+license = "Apache-2.0"
+
+# Intentionally standalone — NOT part of the top-level workspace. Same
+# rationale as mock-defi-src/Cargo.toml (cargo-certora-sbf + feature-flag
+# build compatibility). This empty [workspace] table declares this package
+# as its own workspace root.
+#
+# The compiled binary lives as a committed fixture at
+# tests/fixtures/mock-defi-2.so. To rebuild (rare — only when source in
+# src/lib.rs changes): scripts/rebuild-mock-defi-2.sh
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "mock_defi_2"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+idl-build = ["anchor-lang/idl-build"]
+
+[dependencies]
+anchor-lang = { version = "=0.32.1" }
+anchor-spl = { version = "=0.32.1", features = ["token"] }
+# Pin blake3 to avoid constant_time_eq 0.4.2 which requires edition 2024
+# (BPF platform-tools cargo 1.84 doesn't support edition 2024). Same pin
+# as programs/sigil/Cargo.toml — required for any program that pulls in
+# anchor-spl's transitive solana-program → blake3 dependency.
+blake3 = "=1.5.5"

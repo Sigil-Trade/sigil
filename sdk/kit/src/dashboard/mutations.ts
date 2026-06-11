@@ -38,7 +38,6 @@ import { AccountRole } from "../kit-adapter.js";
 import {
   getAgentOverlayPDA,
   getPendingPolicyPDA,
-  getPendingCloseConstraintsPDA,
   getPolicyPDA,
 } from "../resolve-accounts.js";
 import { resolveVaultStateForOwner } from "../state-resolver.js";
@@ -46,15 +45,23 @@ import { redactCause } from "../network-errors.js";
 import { SIGIL_PROGRAM_ADDRESS, MAX_ALLOWED_PROTOCOLS } from "../types.js";
 import type { Network } from "../types.js";
 import type { AgentVault } from "../generated/accounts/agentVault.js";
+import { fetchAgentVault } from "../generated/accounts/agentVault.js";
+import { fetchPolicyConfig } from "../generated/accounts/policyConfig.js";
+import { computePolicyPreviewDigest } from "../policy/compute-policy-preview-digest.js";
 
 // Phase 3: Simple mutations
-import { getFreezeVaultInstruction } from "../generated/instructions/freezeVault.js";
-import { getReactivateVaultInstruction } from "../generated/instructions/reactivateVault.js";
+import { getFreezeVaultInstructionAsync } from "../generated/instructions/freezeVault.js";
+import { getReactivateVaultInstructionAsync } from "../generated/instructions/reactivateVault.js";
+import { getSetObserveOnlyInstructionAsync } from "../generated/instructions/setObserveOnly.js";
+import { getQueueAgentGrantInstructionAsync } from "../generated/instructions/queueAgentGrant.js";
+import { getApplyAgentGrantInstructionAsync } from "../generated/instructions/applyAgentGrant.js";
+import { getCancelAgentGrantInstructionAsync } from "../generated/instructions/cancelAgentGrant.js";
 import { getCloseVaultInstructionAsync } from "../generated/instructions/closeVault.js";
-import { getPauseAgentInstruction } from "../generated/instructions/pauseAgent.js";
-import { getUnpauseAgentInstruction } from "../generated/instructions/unpauseAgent.js";
-import { getRevokeAgentInstruction } from "../generated/instructions/revokeAgent.js";
-import { getRegisterAgentInstruction } from "../generated/instructions/registerAgent.js";
+import { enumerateExistingPendingPdasForClose } from "./close-vault.js";
+import { getPauseAgentInstructionAsync } from "../generated/instructions/pauseAgent.js";
+import { getUnpauseAgentInstructionAsync } from "../generated/instructions/unpauseAgent.js";
+import { getRevokeAgentInstructionAsync } from "../generated/instructions/revokeAgent.js";
+import { getRegisterAgentInstructionAsync } from "../generated/instructions/registerAgent.js";
 
 // Phase 4: Complex mutations
 import { getDepositFundsInstructionAsync } from "../generated/instructions/depositFunds.js";
@@ -65,31 +72,139 @@ import { getCancelPendingPolicyInstructionAsync } from "../generated/instruction
 import { getQueueAgentPermissionsUpdateInstructionAsync } from "../generated/instructions/queueAgentPermissionsUpdate.js";
 import { getApplyAgentPermissionsUpdateInstructionAsync } from "../generated/instructions/applyAgentPermissionsUpdate.js";
 import { getCancelAgentPermissionsUpdateInstruction } from "../generated/instructions/cancelAgentPermissionsUpdate.js";
-import { getApplyConstraintsUpdateInstructionAsync } from "../generated/instructions/applyConstraintsUpdate.js";
-import { getCancelConstraintsUpdateInstructionAsync } from "../generated/instructions/cancelConstraintsUpdate.js";
-import { getQueueCloseConstraintsInstructionAsync } from "../generated/instructions/queueCloseConstraints.js";
-import { getApplyCloseConstraintsInstructionAsync } from "../generated/instructions/applyCloseConstraints.js";
-import { getCancelCloseConstraintsInstructionAsync } from "../generated/instructions/cancelCloseConstraints.js";
 import { getCreatePostAssertionsInstructionAsync } from "../generated/instructions/createPostAssertions.js";
 import { getClosePostAssertionsInstructionAsync } from "../generated/instructions/closePostAssertions.js";
+
+// M-2 (pre-redeploy audit 2026-05-21): Phase 8 ownership-transfer ix builders.
+// The on-chain handlers live at programs/sigil/src/instructions/
+// {initiate,accept,cancel}_ownership_transfer.rs plus the Squads V4
+// accept-multisig variant.
+import { getInitiateOwnershipTransferInstructionAsync } from "../generated/instructions/initiateOwnershipTransfer.js";
+import { getAcceptOwnershipTransferInstructionAsync } from "../generated/instructions/acceptOwnershipTransfer.js";
+import { getAcceptOwnershipTransferMultisigInstructionAsync } from "../generated/instructions/acceptOwnershipTransferMultisig.js";
+import { getCancelOwnershipTransferInstructionAsync } from "../generated/instructions/cancelOwnershipTransfer.js";
 import type { PostAssertionEntry } from "../generated/types/postAssertionEntry.js";
 import { validatePostAssertionEntries } from "./post-assertion-validation.js";
-import {
-  buildCreateConstraintsIxs,
-  buildQueueConstraintsUpdateIxs,
-} from "./constraint-builders.js";
 
-import type {
-  TxResult,
-  TxOpts,
-  PolicyChanges,
-  ConstraintEntry,
-} from "./types.js";
+import type { TxResult, TxOpts, PolicyChanges } from "./types.js";
 import { toDxError } from "./errors.js";
+import { SigilSdkDomainError } from "../errors/sdk.js";
+import { SIGIL_ERROR__SDK__MAINNET_CONFIRMATION_REQUIRED } from "../errors/codes.js";
 
 // ─── Shared Helper ───────────────────────────────────────────────────────────
 
 const CU_OWNER_ACTION = 200_000;
+
+/**
+ * CH-3 (Security audit 2026-05-23 / Jordan): AL2 mainnet confirmation gate
+ * embedded inside the mutation builder so direct `mutations.*` imports
+ * cannot bypass it. The OwnerClient wrapper layer has its own gate
+ * (`OwnerClient.assertMainnetConfirmed`) which catches consumers using the
+ * class API — this in-mutation gate is the safety net for consumers who
+ * import the mutation function directly.
+ *
+ * Behavior is intentionally STRICTER than the OwnerClient gate. The
+ * OwnerClient gate honours a `requireMainnetConfirmation: false` opt-out
+ * via the class config; this mutation-level gate has no such config (a
+ * standalone function takes no client config), so on mainnet the caller
+ * MUST pass `mainnetConfirmed: true` or the call throws. Devnet ignores
+ * the gate entirely.
+ *
+ * Currently only `createPostAssertions` + `closePostAssertions` invoke
+ * this — they are the only standalone mutations whose OwnerClient
+ * wrapper is missing (the rest of the mutations are gated at the
+ * wrapper). Future standalone mutations should also call this helper.
+ *
+ * Single source of truth: per the audit finding, the mutation-level gate
+ * is the canonical enforcement point. The OwnerClient wrapper gate (when
+ * a wrapper exists) double-asserts the same contract; passing
+ * `mainnetConfirmed: true` satisfies both layers idempotently.
+ */
+function assertMutationMainnetConfirmed(
+  methodName: string,
+  network: "devnet" | "mainnet",
+  vault: Address,
+  opts?: Pick<TxOpts, "mainnetConfirmed">,
+): void {
+  if (network !== "mainnet") return;
+  if (opts?.mainnetConfirmed === true) return;
+  throw new SigilSdkDomainError(
+    SIGIL_ERROR__SDK__MAINNET_CONFIRMATION_REQUIRED,
+    `mutations.${methodName} on mainnet requires \`mainnetConfirmed: true\` ` +
+      `in the per-call options. Direct imports of mutation builders do not ` +
+      `inherit OwnerClient's \`requireMainnetConfirmation\` opt-out — pass ` +
+      `\`mainnetConfirmed: true\` to acknowledge the destructive mainnet action. ` +
+      `Docs: https://github.com/Sigil-Trade/sigil/blob/main/sdk/kit/MIGRATION.md`,
+    {
+      context: {
+        method: methodName,
+        network: "mainnet",
+        vault: vault.toString(),
+      } as never,
+    },
+  );
+}
+
+/**
+ * PEN-CROSS-3 (Phase 2 close-up): compute the post-mutation
+ * policy_preview_digest for one of the 4 sibling handlers
+ * (create_instruction_constraints, apply_close_constraints,
+ * create_post_assertions, close_post_assertions).
+ *
+ * Reads the live PolicyConfig + AgentVault, applies the caller-specified
+ * flag override, then returns the canonical digest the on-chain handler
+ * will recompute and assert against. The owner signs this exact digest
+ * when calling the ix — defends against blind-sign by forcing explicit
+ * attestation of the flag flip.
+ */
+async function siblingHandlerExpectedDigest(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  override: { hasPostAssertions?: number },
+): Promise<Uint8Array> {
+  const [policyAddress] = await getPolicyPDA(vault);
+  const [livePolicy, liveVault] = await Promise.all([
+    fetchPolicyConfig(rpc, policyAddress),
+    fetchAgentVault(rpc, vault),
+  ]);
+  return computePolicyPreviewDigest({
+    dailySpendingCapUsd: livePolicy.data.dailySpendingCapUsd,
+    maxTransactionSizeUsd: livePolicy.data.maxTransactionSizeUsd,
+    maxSlippageBps: livePolicy.data.maxSlippageBps,
+    developerFeeRate: livePolicy.data.developerFeeRate,
+    protocolMode: livePolicy.data.protocolMode,
+    protocols: livePolicy.data.protocols,
+    destinationMode: livePolicy.data.destinationMode,
+    allowedDestinations: livePolicy.data.allowedDestinations,
+    timelockDuration: livePolicy.data.timelockDuration,
+    sessionExpirySeconds: livePolicy.data.sessionExpirySeconds,
+    observeOnly: liveVault.data.observeOnly,
+    hasPostAssertions:
+      override.hasPostAssertions !== undefined
+        ? override.hasPostAssertions
+        : livePolicy.data.hasPostAssertions,
+    createdAtSlot: livePolicy.data.createdAtSlot,
+    // TA-05 (Phase 3): operating_hours is policy-owned. Sibling handlers
+    // (constraints/post-assertions) never mutate it — pass through.
+    operatingHours: livePolicy.data.operatingHours,
+    // TA-07/17 (Phase 3): also pass-through from live policy.
+    autoPromoteGrays: livePolicy.data.autoPromoteGrays,
+    autoRevokeThreshold: livePolicy.data.autoRevokeThreshold,
+    // TA-12/14 (Phase 5): pass-through from live policy — sibling
+    // handlers (constraints / post-assertions flips) never mutate the
+    // post-execution invariant fields.
+    stableBalanceFloor: livePolicy.data.stableBalanceFloor,
+    perRecipientDailyCapUsd: livePolicy.data.perRecipientDailyCapUsd,
+    // G6 (audit 2026-05-18 cosign opt-in): pass-through from live policy.
+    // Sibling handlers never mutate cosign_required — the user changes
+    // this via `queue_policy_update` only.
+    cosignRequired: livePolicy.data.cosignRequired,
+    // D-5 (Bucket 2 audit 2026-05-21, F-RP3-1): pass-through from live
+    // policy. Position 22 of the canonical TA-19 digest. Sibling handlers
+    // never mutate this — owner sets via queue_policy_update only.
+    cosignSessionPubkey: livePolicy.data.cosignSessionPubkey,
+  });
+}
 
 async function run(
   rpc: Rpc<SolanaRpcApi>,
@@ -231,7 +346,7 @@ export async function freezeVault(
   network: "devnet" | "mainnet",
   opts?: TxOpts,
 ): Promise<TxResult> {
-  const ix = getFreezeVaultInstruction({ owner, vault });
+  const ix = await getFreezeVaultInstructionAsync({ owner, vault });
   return run(rpc, owner, network, [ix], opts);
 }
 
@@ -243,11 +358,122 @@ export async function resumeVault(
   newAgent?: { address: Address; permissions: CapabilityTier },
   opts?: TxOpts,
 ): Promise<TxResult> {
-  const ix = getReactivateVaultInstruction({
+  const ix = await getReactivateVaultInstructionAsync({
     owner,
     vault,
     newAgent: newAgent?.address ?? null,
     newAgentCapability: newAgent ? Number(newAgent.permissions) : null,
+  });
+  return run(rpc, owner, network, [ix], opts);
+}
+
+/**
+ * Phase 8 alias for {@link resumeVault} matching the on-chain
+ * `reactivate_vault` instruction name. Prefer `reactivateVault` in new
+ * code; `resumeVault` is retained for backwards compatibility.
+ */
+export async function reactivateVault(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  newAgent?: { address: Address; permissions: CapabilityTier },
+  opts?: TxOpts,
+): Promise<TxResult> {
+  return resumeVault(rpc, vault, owner, network, newAgent, opts);
+}
+
+/**
+ * Phase 8 owner-side observe-only toggle. Setting `newValue: true` puts
+ * the vault into read-only mode (all `validate_and_authorize` calls reject
+ * with `ErrObserveOnlyEnabled`). Setting `newValue: false` resumes
+ * spending. Bumps `policy_version` so concurrent validate_and_authorize
+ * calls fail fast with `PolicyVersionMismatch`.
+ */
+export async function setObserveOnly(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  newValue: boolean,
+  opts?: TxOpts,
+): Promise<TxResult> {
+  const ix = await getSetObserveOnlyInstructionAsync({
+    vault,
+    owner,
+    newValue,
+  });
+  return run(rpc, owner, network, [ix], opts);
+}
+
+/**
+ * Phase 8 owner-side queue of a new agent capability grant. The grant
+ * becomes effective after `apply_agent_grant` is called (subject to the
+ * cosign_required gate if enabled on the policy).
+ *
+ * `capability` is the on-chain `AgentCapability` discriminant:
+ *   - 0 = READ_ONLY
+ *   - 1 = OPERATOR
+ *   - 2 = FULL
+ * `spendingLimitUsd` is in 6-decimal USDC units (e.g. `$500 = 500_000_000n`).
+ */
+export async function queueAgentGrant(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  agent: Address,
+  capability: number,
+  spendingLimitUsd: bigint,
+  opts?: TxOpts,
+): Promise<TxResult> {
+  const ix = await getQueueAgentGrantInstructionAsync({
+    owner,
+    vault,
+    agent,
+    capability,
+    spendingLimitUsd,
+  });
+  return run(rpc, owner, network, [ix], opts);
+}
+
+/**
+ * Phase 8 owner-side apply of a previously-queued agent capability grant.
+ * The grant must have been queued via {@link queueAgentGrant}; the apply
+ * handler verifies the PendingAgentGrant PDA exists and that any cosign
+ * requirement on the policy has been satisfied (or that the grant lowers
+ * — not raises — privilege so cosign is bypassable per F-AT-1).
+ */
+export async function applyAgentGrant(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  opts?: TxOpts,
+): Promise<TxResult> {
+  const [agentSpendOverlay] = await getAgentOverlayPDA(vault);
+  const ix = await getApplyAgentGrantInstructionAsync({
+    owner,
+    vault,
+    agentSpendOverlay,
+  });
+  return run(rpc, owner, network, [ix], opts);
+}
+
+/**
+ * Phase 8 owner-side cancel of a previously-queued agent capability
+ * grant. Closes the PendingAgentGrant PDA and returns rent to the owner.
+ */
+export async function cancelAgentGrant(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  opts?: TxOpts,
+): Promise<TxResult> {
+  const ix = await getCancelAgentGrantInstructionAsync({
+    owner,
+    vault,
   });
   return run(rpc, owner, network, [ix], opts);
 }
@@ -292,15 +518,8 @@ export async function closeVault(
     agents.map((agent) => derivePendingAgentPermsPDA(vault, agent.pubkey)),
   );
 
-  const [pendingCloseConstraintsPda] =
-    await getPendingCloseConstraintsPDA(vault);
-
   // Check all PDAs in parallel (E4 fix — batch instead of sequential)
-  const allPdas = [
-    pendingPolicyPda,
-    ...agentPdaDerivations,
-    pendingCloseConstraintsPda,
-  ];
+  const allPdas = [pendingPolicyPda, ...agentPdaDerivations];
 
   const existenceChecks = await Promise.all(
     allPdas.map(async (pda) => {
@@ -340,13 +559,42 @@ export async function closeVault(
       });
     }
   }
-  // 3. pending_close_constraints (if exists) — E1 fix: correct seed "pending_close_constraints"
-  const constraintsIdx = 1 + agents.length;
-  if (existenceChecks[constraintsIdx]) {
-    remainingAccounts.push({
-      address: existenceChecks[constraintsIdx]!,
-      role: AccountRole.WRITABLE,
-    });
+  // 3-4. SFH-01 close: enumerate pending_owner + pending_agent_grant via the
+  // dedicated helper. Without these, the on-chain drain blocks for
+  // pending_owner + pending_agent_grant silently no-op via the
+  // `lamports() > 0` guard, orphaning their rent. Helper performs parallel
+  // getAccountInfo and only includes accounts that exist.
+  // (M1-04b: pending_close_constraints + pending_constraints drains removed.)
+  //
+  // HH-1 close (audit 2026-05-23 §RP): the helper's silent-failure on RPC
+  // errors is now escalated to ERROR-level log with vault context. If a
+  // transient RPC failure during enumeration kept a PDA out of
+  // remainingAccounts, the on-chain drain falls through silently and rent
+  // is permanently orphaned. The ERROR-level log surfaces this to off-chain
+  // monitors / alerting; the close TX still proceeds (best-effort drain
+  // semantic preserved).
+  let ch2EnumerationHadRpcError = false;
+  const ch2PendingAccounts = await enumerateExistingPendingPdasForClose(
+    rpc,
+    vault,
+    undefined,
+    (kind, address, cause) => {
+      ch2EnumerationHadRpcError = true;
+      const c = redactCause(cause);
+      getSigilModuleLogger().error(
+        `[closeVault] HH-1: RPC enumeration failed for ${kind} ${address} on vault ${vault} — close TX will proceed without it; rent for that PDA WILL stay orphaned if the PDA exists on-chain. Cause: ${
+          c.message ?? c.name ?? c.code ?? "unknown"
+        }`,
+      );
+    },
+  );
+  if (ch2EnumerationHadRpcError) {
+    getSigilModuleLogger().error(
+      `[closeVault] HH-1: at least one pending-PDA enumeration RPC failed for vault ${vault} — verify rent reclamation via on-chain audit before considering close complete.`,
+    );
+  }
+  for (const pa of ch2PendingAccounts) {
+    remainingAccounts.push({ address: pa.address, role: pa.role });
   }
 
   // Append remaining accounts to instruction if any exist
@@ -382,7 +630,14 @@ export async function pauseAgent(
   opts?: TxOpts,
 ): Promise<TxResult> {
   requireValidAddress(agent, "Agent address");
-  const ix = getPauseAgentInstruction({ owner, vault, agentToPause: agent });
+  // PEN-CROSS-5 (Phase 4 absorption): policy now required for policy_version bump.
+  const [policyPda] = await getPolicyPDA(vault);
+  const ix = await getPauseAgentInstructionAsync({
+    owner,
+    vault,
+    policy: policyPda,
+    agentToPause: agent,
+  });
   return run(rpc, owner, network, [ix], opts);
 }
 
@@ -395,9 +650,12 @@ export async function unpauseAgent(
   opts?: TxOpts,
 ): Promise<TxResult> {
   requireValidAddress(agent, "Agent address");
-  const ix = getUnpauseAgentInstruction({
+  // PEN-CROSS-5 (Phase 4 absorption): policy now required for policy_version bump.
+  const [policyPda] = await getPolicyPDA(vault);
+  const ix = await getUnpauseAgentInstructionAsync({
     owner,
     vault,
+    policy: policyPda,
     agentToUnpause: agent,
   });
   return run(rpc, owner, network, [ix], opts);
@@ -413,9 +671,12 @@ export async function revokeAgent(
 ): Promise<TxResult> {
   requireValidAddress(agent, "Agent address");
   const [overlayPda] = await getAgentOverlayPDA(vault, 0);
-  const ix = getRevokeAgentInstruction({
+  // PEN-CROSS-5 (Phase 4 absorption): policy now required for policy_version bump.
+  const [policyPda] = await getPolicyPDA(vault);
+  const ix = await getRevokeAgentInstructionAsync({
     owner,
     vault,
+    policy: policyPda,
     agentSpendOverlay: overlayPda,
     agentToRemove: agent,
   });
@@ -435,9 +696,12 @@ export async function addAgent(
   requireValidAddress(agent, "Agent address");
   requireValidPermissions(permissions);
   const [overlayPda] = await getAgentOverlayPDA(vault, 0);
-  const ix = getRegisterAgentInstruction({
+  // PEN-CROSS-5 (Phase 4 absorption): policy now required for policy_version bump.
+  const [policyPda] = await getPolicyPDA(vault);
+  const ix = await getRegisterAgentInstructionAsync({
     owner,
     vault,
+    policy: policyPda,
     agentSpendOverlay: overlayPda,
     agent,
     capability: Number(permissions),
@@ -546,14 +810,83 @@ export async function queuePolicyUpdate(
       ),
     );
   }
+  // Phase 2 TA-19: fetch live policy + vault state to compute the digest of
+  // the merged-effective policy that WILL result if this update is applied.
+  // The on-chain handler re-asserts the same digest at queue time, so any
+  // owner blind-sign that diverges from the SDK-projected update is rejected.
+  const [policyPda] = await getPolicyPDA(vault);
+  const livePolicy = await fetchPolicyConfig(rpc, policyPda);
+  const liveVault = await fetchAgentVault(rpc, vault);
+
+  const newProtocolMode = changes.protocolMode
+    ? mapProtocolMode(changes.protocolMode)
+    : null;
+  const effProtocolMode = newProtocolMode ?? livePolicy.data.protocolMode;
+  const effProtocols = changes.approvedApps ?? livePolicy.data.protocols;
+  const effDestinationMode =
+    changes.destinationMode ?? livePolicy.data.destinationMode;
+  const effDestinations =
+    changes.allowedDestinations ?? livePolicy.data.allowedDestinations;
+  const effDaily = changes.dailyCap ?? livePolicy.data.dailySpendingCapUsd;
+  const effMaxTx = changes.maxPerTrade ?? livePolicy.data.maxTransactionSizeUsd;
+  const effMaxSlip = changes.maxSlippageBps ?? livePolicy.data.maxSlippageBps;
+  // PEN-CROSS-6: developer_fee_rate is now part of the digest. Project the
+  // merged-effective value the same way as other Option<…> fields.
+  const effDeveloperFeeRate =
+    changes.developerFeeRate ?? livePolicy.data.developerFeeRate;
+  const effTimelock =
+    changes.timelock != null
+      ? BigInt(changes.timelock)
+      : livePolicy.data.timelockDuration;
+  const effSessionExpiry =
+    changes.sessionExpirySeconds ?? livePolicy.data.sessionExpirySeconds;
+
+  const newPolicyPreviewDigest = computePolicyPreviewDigest({
+    dailySpendingCapUsd: effDaily,
+    maxTransactionSizeUsd: effMaxTx,
+    maxSlippageBps: effMaxSlip,
+    developerFeeRate: effDeveloperFeeRate,
+    protocolMode: effProtocolMode,
+    protocols: effProtocols,
+    destinationMode: effDestinationMode,
+    allowedDestinations: effDestinations,
+    timelockDuration: effTimelock,
+    sessionExpirySeconds: effSessionExpiry,
+    observeOnly: liveVault.data.observeOnly,
+    hasPostAssertions: livePolicy.data.hasPostAssertions,
+    // PEN-CROSS-2: created_at_slot is immutable post-init — read from live.
+    createdAtSlot: livePolicy.data.createdAtSlot,
+    // TA-05 (Phase 3): operating_hours is policy-owned and bound by TA-19.
+    // queueAgentPermissions does not currently mutate it through the
+    // dashboard mutation surface — read from live policy.
+    operatingHours: livePolicy.data.operatingHours,
+    // TA-07/17 (Phase 3): same — not mutated by this dashboard surface.
+    autoPromoteGrays: livePolicy.data.autoPromoteGrays,
+    autoRevokeThreshold: livePolicy.data.autoRevokeThreshold,
+    // TA-12/14 (Phase 5): post-exec invariants. Not mutated by this surface;
+    // pass-through from live policy. Mutating them is elevated per TA-09.
+    stableBalanceFloor: livePolicy.data.stableBalanceFloor,
+    perRecipientDailyCapUsd: livePolicy.data.perRecipientDailyCapUsd,
+    // G6 (audit 2026-05-18 cosign opt-in): pass-through from live policy.
+    // The non-elevated dashboard surface does NOT mutate cosign_required;
+    // owners change cosign opt-in via a separate elevated workflow that
+    // includes the cosign signer (or, for false→true direction, can also
+    // be done non-elevated by passing the override directly through the
+    // ix arg below — but this dashboard helper keeps the policy stable
+    // for the default path).
+    cosignRequired: livePolicy.data.cosignRequired,
+    // F-Q6 (2026-06-02): operator_grant_delay not mutated by this dashboard
+    // surface — pass-through from live policy so the digest matches the
+    // on-chain merged (eff) value at canonical position 22.
+    operatorGrantDelaySeconds: livePolicy.data.operatorGrantDelaySeconds,
+  });
+
   const ix = await getQueuePolicyUpdateInstructionAsync({
     owner,
     vault,
     dailySpendingCapUsd: changes.dailyCap ?? null,
     maxTransactionAmountUsd: changes.maxPerTrade ?? null,
-    protocolMode: changes.protocolMode
-      ? mapProtocolMode(changes.protocolMode)
-      : null,
+    protocolMode: newProtocolMode,
     protocols: changes.approvedApps ?? null,
     developerFeeRate: changes.developerFeeRate ?? null,
     maxSlippageBps: changes.maxSlippageBps ?? null,
@@ -564,6 +897,53 @@ export async function queuePolicyUpdate(
     hasProtocolCaps: changes.hasProtocolCaps ?? null,
     protocolCaps: changes.protocolCaps ?? null,
     destinationMode: changes.destinationMode ?? null,
+    // TA-05 (Phase 3): operating_hours is not mutated by this mutation
+    // surface — pass null to fall through to live policy at on-chain merge.
+    operatingHours: null,
+    // TA-12/14 (Phase 5): not mutated by this non-elevated surface — pass
+    // null to fall through to live policy. Elevated mutations (lowering
+    // floor, raising per-recipient cap) require cosign and the
+    // `queuePolicyElevated()` helper.
+    stableBalanceFloor: null,
+    perRecipientDailyCapUsd: null,
+    // G6 (audit 2026-05-18 cosign opt-in): not mutated by this non-
+    // elevated surface — pass null to fall through to live policy.
+    // Toggling cosign on/off goes through a dedicated path that is
+    // aware of the one-way-ratchet semantics (true→false requires
+    // cosign; false→true does not).
+    cosignRequired: null,
+    // D-5 (Bucket 2 audit 2026-05-21, F-RP3-1): not mutated by this
+    // non-elevated surface — pass null to keep live policy value. Owner
+    // sets cosign_session_pubkey via a dedicated elevated helper that
+    // verifies the new pubkey isn't a Sigil-protected PDA at queue time.
+    cosignSessionPubkey: null,
+    // F-Q6 (2026-06-02): not mutated by this dashboard surface — pass null
+    // (falls through to live policy at on-chain merge). Configurability is
+    // available via the raw codama builder + owner paths.
+    operatorGrantDelaySeconds: null,
+    // TA-09 (Phase 3): non-elevated path by default — pass the
+    // System Program / zero-pubkey ("11111111111111111111111111111111").
+    // Elevated mutations through this dashboard surface require a
+    // follow-on `queuePolicyElevated()` helper (cosign-helper.ts, G4).
+    //
+    // CANONICAL `cosign_session` ARG CONTRACT (Round 2 §RP-2 B4 F-3,
+    // 2026-05-19) — for non-Codama callers reading this file as a
+    // reference impl:
+    //   - Non-elevated queue (this branch): pass `Pubkey::default()`
+    //     and OMIT any cosigner from `remaining_accounts`.
+    //   - Elevated queue (raising daily_cap, expanding destinations /
+    //     protocols, lowering stable_balance_floor, raising
+    //     per_recipient_daily_cap_usd, disabling protocol_caps, mutating
+    //     protocol_caps entries, or disabling cosign): pass a REAL session
+    //     pubkey + include it in `remaining_accounts` with
+    //     `is_signer == true`. Build the bundle via
+    //     `buildCosignBundle()` in `sdk/kit/src/cosign-helper.ts`.
+    //   - Reject path: a non-default `cosign_session` on a non-elevated
+    //     queue surfaces `InvalidPermissions` (6088). INTENTIONAL — the
+    //     on-chain handler refuses to silently downgrade a caller's
+    //     declared intent (Option A behaviour).
+    cosignSession: "11111111111111111111111111111111" as unknown as Address,
+    newPolicyPreviewDigest,
   });
   return run(rpc, owner, network, [ix], opts);
 }
@@ -599,6 +979,10 @@ export async function queueAgentPermissions(
   permissions: CapabilityTier,
   spendingLimit: UsdBaseUnits,
   opts?: TxOpts,
+  // TA-06 (Phase 3): per-agent cooldown_seconds. 0 = disabled. Optional so
+  // existing dashboard callers continue compiling; pass non-zero when
+  // configuring agents that need pacing.
+  cooldownSeconds: bigint = 0n,
 ): Promise<TxResult> {
   requireValidAddress(agent, "Agent address");
   requireValidPermissions(permissions);
@@ -608,6 +992,29 @@ export async function queueAgentPermissions(
     agent,
     newCapability: Number(permissions),
     spendingLimitUsd: spendingLimit,
+    cooldownSeconds,
+    // Round 2 F-RP3-2 fix (audit 2026-05-19): non-elevated path default —
+    // System Program / zero-pubkey. The on-chain handler's elevated gate
+    // requires a non-default `cosign_session` only when the mutation
+    // raises capability, raises spending_limit, OR sets a non-zero
+    // cooldown AND `policy.cosign_required == true`. Callers who need
+    // the elevated path should use a dedicated wrapper that injects a
+    // real cosign-session pubkey + remaining_accounts signer (analogous
+    // to `queuePolicyElevated()` for queue_policy_update).
+    //
+    // CANONICAL `cosign_session` ARG CONTRACT (Round 2 §RP-2 B4 F-3,
+    // 2026-05-19) — same shape as the `queuePolicyUpdate` path above:
+    //   - Non-elevated (this branch): pass `Pubkey::default()` and
+    //     OMIT the cosigner from `remaining_accounts`.
+    //   - Elevated (raising capability, raising spending_limit, or
+    //     setting non-zero cooldown on a `cosign_required: true` vault):
+    //     pass a REAL session pubkey + include it as a signer in
+    //     `remaining_accounts`.
+    //   - Reject path: passing a non-default `cosign_session` on a
+    //     non-elevated queue surfaces `InvalidPermissions` (6088).
+    //     INTENTIONAL — the on-chain handler refuses to silently
+    //     downgrade a caller's declared intent (Option A behaviour).
+    cosignSession: "11111111111111111111111111111111" as unknown as Address,
   });
   return run(rpc, owner, network, [ix], opts);
 }
@@ -647,128 +1054,6 @@ export async function cancelAgentPermissions(
     vault,
     pendingAgentPerms: pendingPda,
   });
-  return run(rpc, owner, network, [ix], opts);
-}
-
-/**
- * Allocate the constraints PDA and write the entries.
- *
- * Day-0 fix: this used to send only the `create_instruction_constraints`
- * instruction, which always failed because the PDA needs to be pre-allocated
- * to `InstructionConstraints::SIZE` (35,888 bytes) before the populate handler
- * runs. We now send the full 5-instruction chain (allocate + 3 extends +
- * populate) in one atomic transaction. See `constraint-builders.ts` for the
- * tx-size guardrail (~3 fully-populated entries per call).
- */
-export async function createConstraints(
-  rpc: Rpc<SolanaRpcApi>,
-  vault: Address,
-  owner: TransactionSigner,
-  network: "devnet" | "mainnet",
-  entries: ConstraintEntry[],
-  opts?: TxOpts,
-): Promise<TxResult> {
-  if (!entries || entries.length === 0)
-    throw toDxError(new Error("Constraint entries must be a non-empty array"));
-  try {
-    const [policy] = await getPolicyPDA(vault);
-    const ixs = await buildCreateConstraintsIxs({
-      owner,
-      vault,
-      policy,
-      entries,
-      strictMode: opts?.strictMode ?? true,
-    });
-    return run(rpc, owner, network, ixs, opts);
-  } catch (err: unknown) {
-    throw toDxError(err);
-  }
-}
-
-/**
- * Allocate the pending constraints PDA and queue an update.
- *
- * Same Day-0 fix as `createConstraints` but targets the `pending_constraints`
- * PDA at 35,904 bytes (16 more than `InstructionConstraints` for the extra
- * timestamp fields in `PendingConstraintsUpdate`).
- */
-export async function queueConstraintsUpdate(
-  rpc: Rpc<SolanaRpcApi>,
-  vault: Address,
-  owner: TransactionSigner,
-  network: "devnet" | "mainnet",
-  entries: ConstraintEntry[],
-  opts?: TxOpts,
-): Promise<TxResult> {
-  if (!entries || entries.length === 0)
-    throw toDxError(new Error("Constraint entries must be a non-empty array"));
-  try {
-    const [policy] = await getPolicyPDA(vault);
-    const ixs = await buildQueueConstraintsUpdateIxs({
-      owner,
-      vault,
-      policy,
-      entries,
-      strictMode: opts?.strictMode ?? true,
-    });
-    return run(rpc, owner, network, ixs, opts);
-  } catch (err: unknown) {
-    throw toDxError(err);
-  }
-}
-
-export async function applyConstraintsUpdate(
-  rpc: Rpc<SolanaRpcApi>,
-  vault: Address,
-  owner: TransactionSigner,
-  network: "devnet" | "mainnet",
-  opts?: TxOpts,
-): Promise<TxResult> {
-  const ix = await getApplyConstraintsUpdateInstructionAsync({ owner, vault });
-  return run(rpc, owner, network, [ix], opts);
-}
-
-export async function cancelConstraintsUpdate(
-  rpc: Rpc<SolanaRpcApi>,
-  vault: Address,
-  owner: TransactionSigner,
-  network: "devnet" | "mainnet",
-  opts?: TxOpts,
-): Promise<TxResult> {
-  const ix = await getCancelConstraintsUpdateInstructionAsync({ owner, vault });
-  return run(rpc, owner, network, [ix], opts);
-}
-
-export async function queueCloseConstraints(
-  rpc: Rpc<SolanaRpcApi>,
-  vault: Address,
-  owner: TransactionSigner,
-  network: "devnet" | "mainnet",
-  opts?: TxOpts,
-): Promise<TxResult> {
-  const ix = await getQueueCloseConstraintsInstructionAsync({ owner, vault });
-  return run(rpc, owner, network, [ix], opts);
-}
-
-export async function applyCloseConstraints(
-  rpc: Rpc<SolanaRpcApi>,
-  vault: Address,
-  owner: TransactionSigner,
-  network: "devnet" | "mainnet",
-  opts?: TxOpts,
-): Promise<TxResult> {
-  const ix = await getApplyCloseConstraintsInstructionAsync({ owner, vault });
-  return run(rpc, owner, network, [ix], opts);
-}
-
-export async function cancelCloseConstraints(
-  rpc: Rpc<SolanaRpcApi>,
-  vault: Address,
-  owner: TransactionSigner,
-  network: "devnet" | "mainnet",
-  opts?: TxOpts,
-): Promise<TxResult> {
-  const ix = await getCancelCloseConstraintsInstructionAsync({ owner, vault });
   return run(rpc, owner, network, [ix], opts);
 }
 
@@ -827,10 +1112,22 @@ export async function createPostAssertions(
   // entry" promise. See post-assertion-validation.ts docblock.
   validatePostAssertionEntries(entries);
 
+  // CH-3 (audit 2026-05-23): AL2 gate AFTER client-side validation so the
+  // caller learns about entry-shape mistakes (the cheap, fixable error)
+  // before they're forced to think about mainnet acknowledgement (the
+  // ceremonial gate). Order matches the OwnerClient pattern of running
+  // local validation before destructive-action confirmation.
+  assertMutationMainnetConfirmed("createPostAssertions", network, vault, opts);
+
+  // PEN-CROSS-3: bind the post-mutation digest (`has_post_assertions=1`).
+  const expectedDigest = await siblingHandlerExpectedDigest(rpc, vault, {
+    hasPostAssertions: 1,
+  });
   const ix = await getCreatePostAssertionsInstructionAsync({
     owner,
     vault,
     entries,
+    expectedDigest,
   });
   return run(rpc, owner, network, [ix], opts);
 }
@@ -859,6 +1156,168 @@ export async function closePostAssertions(
   network: "devnet" | "mainnet",
   opts?: TxOpts,
 ): Promise<TxResult> {
-  const ix = await getClosePostAssertionsInstructionAsync({ owner, vault });
+  // CH-3 (audit 2026-05-23): AL2 gate. `closePostAssertions` has no
+  // client-side validation step (no entries arg), so the gate runs first.
+  assertMutationMainnetConfirmed("closePostAssertions", network, vault, opts);
+
+  // PEN-CROSS-3: bind the post-mutation digest (`has_post_assertions=0`).
+  const expectedDigest = await siblingHandlerExpectedDigest(rpc, vault, {
+    hasPostAssertions: 0,
+  });
+  const ix = await getClosePostAssertionsInstructionAsync({
+    owner,
+    vault,
+    expectedDigest,
+  });
   return run(rpc, owner, network, [ix], opts);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// M-2 (pre-redeploy audit 2026-05-21): Phase 8 ownership-transfer mutations.
+//
+// On-chain reference: programs/sigil/src/instructions/
+//   - initiate_ownership_transfer.rs (owner queues transfer + 48h timelock)
+//   - accept_ownership_transfer.rs   (new wallet-owner finalises after timelock)
+//   - accept_ownership_transfer_multisig.rs (Squads V4 PDA accepts via CPI)
+//   - cancel_ownership_transfer.rs   (current owner aborts during timelock)
+//
+// Cosign gate: when `policy.cosign_required = true`, `queue_policy_update`
+// AND `initiate_ownership_transfer` BOTH require a non-owner co-signer in
+// `remaining_accounts` (D4 symmetric cosign gate). The mutations below
+// expose the `cosignSession` parameter; pass `undefined` when the policy
+// does not require cosign.
+//
+// LBL-01: all four ix derive vault state by reading
+// `vault.vault_authority` (immutable) — the on-chain accept handler
+// overwrites `vault.owner` but the PDA address stays put.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Queue an ownership transfer for `vault`. The pending PDA carries the
+ * target `newOwner` plus the configured timelock (default 48h). The
+ * transfer is finalised only by a follow-up `acceptOwnershipTransfer`
+ * (wallet) or `acceptOwnershipTransferMultisig` (Squads V4).
+ *
+ * @param newOwner          The pubkey that will become `vault.owner` after
+ *                          accept. MUST NOT be a system program / sysvar
+ *                          (rejected on-chain by `ErrInvalidOwnershipTarget`).
+ * @param isMultisigTarget  Set to `true` when `newOwner` is a Squads V4
+ *                          multisig PDA — the on-chain handler enforces
+ *                          that the matching accept variant is used.
+ *
+ * Cosign behaviour: when `policy.cosign_required = true`, the on-chain
+ * handler enforces a non-owner co-signer; pass the cosign session pubkey
+ * via the SDK's transaction-signing layer when building the tx. Pre-G6
+ * (audit 2026-05-18) policies without cosign opt-in succeed without one.
+ *
+ * Replays the H-3 "no double-initiate" rule: a second initiate without
+ * an intervening `cancelOwnershipTransfer` fails with
+ * `ErrPendingOwnershipExists` (6103).
+ */
+export async function initiateOwnershipTransfer(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  newOwner: Address,
+  isMultisigTarget: boolean,
+  opts?: TxOpts,
+): Promise<TxResult> {
+  const ix = await getInitiateOwnershipTransferInstructionAsync({
+    owner,
+    vault,
+    newOwner,
+    isMultisigTarget,
+  });
+  return run(rpc, owner, network, [ix], opts);
+}
+
+/**
+ * Finalise a previously-initiated ownership transfer when the incoming
+ * owner is a wallet (keypair) signer. The new owner MUST be the signer
+ * of the enclosing transaction; the on-chain handler verifies their key
+ * matches `pending.new_owner`.
+ *
+ * Timelock: the transfer is only accepted after the configured timelock
+ * has elapsed (default 48h). Calls before the window expires fail with
+ * `ErrPendingOwnershipNotReady` (6104).
+ *
+ * Note: the `owner` argument on this function is the NEW owner who
+ * accepts — kept as `owner` for parity with the rest of the mutations
+ * surface, but semantically `newOwner.address` is what lands on-chain
+ * as `vault.owner`. `vault.vault_authority` (the immutable PDA seed)
+ * is unchanged by this ix.
+ */
+export async function acceptOwnershipTransfer(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  newOwner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  opts?: TxOpts,
+): Promise<TxResult> {
+  const ix = await getAcceptOwnershipTransferInstructionAsync({
+    newOwner,
+    vault,
+  });
+  return run(rpc, newOwner, network, [ix], opts);
+}
+
+/**
+ * Finalise a previously-initiated ownership transfer when the incoming
+ * owner is a Squads V4 multisig PDA (NOT a wallet signer). The Squads
+ * program is the CPI caller; the multisig PDA itself has no private key.
+ *
+ * The on-chain handler verifies:
+ *   1. `multisig_pda.owner == SQUADS_V4_PROGRAM_ID`
+ *   2. `multisig_pda.key() == pending.new_owner`
+ *   3. `pending.is_multisig_target == true`
+ *
+ * Caller is responsible for routing this ix through the Squads V4
+ * proposal flow so it reaches the on-chain handler under the Squads
+ * program signer seeds. The `feePayer` MUST be a wallet signer that
+ * funds the tx; this SDK call accepts that signer separately so the
+ * Squads PDA is NOT a signer at the kit transaction-signing layer.
+ *
+ * Timelock + cosign rules identical to {@link acceptOwnershipTransfer}.
+ */
+export async function acceptOwnershipTransferMultisig(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  multisigPda: Address,
+  feePayer: TransactionSigner,
+  network: "devnet" | "mainnet",
+  opts?: TxOpts,
+): Promise<TxResult> {
+  const ix = await getAcceptOwnershipTransferMultisigInstructionAsync({
+    multisigPda,
+    vault,
+  });
+  return run(rpc, feePayer, network, [ix], opts);
+}
+
+/**
+ * Cancel a queued ownership transfer during the timelock window. The
+ * `currentOwner` (signer) MUST match `pending.current_owner` (the
+ * pubkey that called `initiateOwnershipTransfer`); the on-chain handler
+ * rejects with a require-keys-eq violation otherwise.
+ *
+ * Closes the pending PDA and returns rent to the current owner. After
+ * this ix lands, `initiateOwnershipTransfer` is callable again to queue
+ * a different target.
+ *
+ * Cosign behaviour (D4 symmetric gate): if `policy.cosign_required`,
+ * cancellation also requires a non-owner co-signer.
+ */
+export async function cancelOwnershipTransfer(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  currentOwner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  opts?: TxOpts,
+): Promise<TxResult> {
+  const ix = await getCancelOwnershipTransferInstructionAsync({
+    currentOwner,
+    vault,
+  });
+  return run(rpc, currentOwner, network, [ix], opts);
 }

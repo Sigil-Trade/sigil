@@ -626,9 +626,9 @@ describe("@usesigil/custody/turnkey", () => {
     });
   });
 
-  // ---- shieldWallet() Compatibility ----------------------------------------
+  // ---- shield() Compatibility ----------------------------------------
 
-  describe("shieldWallet() compatibility", () => {
+  describe("shield() compatibility", () => {
     it("TurnkeyWallet satisfies WalletLike interface shape", async () => {
       const client = createMockClient();
       const wallet = await TurnkeyWallet.create(

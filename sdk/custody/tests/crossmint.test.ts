@@ -457,9 +457,9 @@ describe("@usesigil/custody/crossmint", () => {
     });
   });
 
-  // ---- shieldWallet() Compatibility ----------------------------------------
+  // ---- shield() Compatibility ----------------------------------------
 
-  describe("shieldWallet() compatibility", () => {
+  describe("shield() compatibility", () => {
     it("CrossmintWallet satisfies WalletLike interface shape", async () => {
       const client = createMockClient();
       const wallet = await CrossmintWallet.create(

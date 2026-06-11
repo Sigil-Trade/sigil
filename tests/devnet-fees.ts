@@ -9,28 +9,27 @@
  *     finalizeSession includes policy and tracker accounts.
  */
 // Strict error helpers — see MEMORY/WORK/20260420-201121_test-assertion-precision-council/
-import { expectSigilError } from "@usesigil/kit/testing";
-import * as anchor from "@coral-xyz/anchor";
-import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
-import { TOKEN_PROGRAM_ID, getAccount } from "@solana/spl-token";
+import { expectSigilError } from "./helpers/strict-errors";
+import { Keypair, PublicKey } from "@solana/web3.js";
+import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { expect } from "chai";
 import BN from "bn.js";
 import {
   getDevnetProvider,
   nextVaultId,
-  derivePDAs,
   deriveSessionPda,
   createFullVault,
+  applyOperatorGrants,
   authorize,
   authorizeAndFinalize,
+  sendVersionedTx,
   fundKeypair,
   ensureStablecoinMint,
   TEST_USDC_KEYPAIR,
   calculateFees,
   getTokenBalance,
-  PROTOCOL_FEE_RATE,
-  FEE_RATE_DENOMINATOR,
   FullVaultResult,
+  MOCK_DEFI_PROGRAM_ID,
 } from "./helpers/devnet-setup";
 
 describe("devnet-fees", () => {
@@ -41,7 +40,11 @@ describe("devnet-fees", () => {
   const agentB = Keypair.generate();
   const feeDestinationA = Keypair.generate();
   const feeDestinationB = Keypair.generate();
-  const jupiterProgramId = Keypair.generate().publicKey;
+  // V2: agent_transfer requires an EXPLICITLY allowlisted destination
+  // (destination_mode is hardcoded RESTRICTED; an empty allowlist allows
+  // NOTHING — policy.rs is_destination_allowed). Test 7's transfer target is
+  // allowlisted on vaultA at creation.
+  const transferDest = Keypair.generate();
 
   let mint: PublicKey;
   let vaultA: FullVaultResult; // devFeeRate=500 (max)
@@ -75,7 +78,8 @@ describe("devnet-fees", () => {
       vaultId: vaultIdA,
       dailyCap: new BN(500_000_000),
       maxTx: new BN(200_000_000),
-      allowedProtocols: [jupiterProgramId],
+      allowedProtocols: [MOCK_DEFI_PROGRAM_ID],
+      allowedDestinations: [transferDest.publicKey], // test 7 agent_transfer target
       devFeeRate: 500,
       depositAmount: new BN(1_000_000_000),
     });
@@ -90,10 +94,17 @@ describe("devnet-fees", () => {
       vaultId: vaultIdB,
       dailyCap: new BN(500_000_000),
       maxTx: new BN(200_000_000),
-      allowedProtocols: [jupiterProgramId],
+      allowedProtocols: [MOCK_DEFI_PROGRAM_ID],
       devFeeRate: 0,
       depositAmount: new BN(1_000_000_000),
     });
+
+    // F-Q6: both OPERATOR grants were QUEUED by createFullVault — one batched
+    // wait for the on-chain 600s single-key floor, then apply both.
+    await applyOperatorGrants(program, connection, owner, [
+      vaultA.operatorGrant,
+      vaultB.operatorGrant,
+    ]);
 
     console.log("  Vault A (devFee=500):", vaultA.vaultPda.toString());
     console.log("  Vault B (devFee=0):", vaultB.vaultPda.toString());
@@ -126,7 +137,7 @@ describe("devnet-fees", () => {
       vaultTokenAta: vaultB.vaultTokenAta,
       mint,
       amount: new BN(amount),
-      protocol: jupiterProgramId,
+      protocol: MOCK_DEFI_PROGRAM_ID,
       protocolTreasuryAta: vaultB.protocolTreasuryAta,
     });
 
@@ -165,7 +176,7 @@ describe("devnet-fees", () => {
       vaultTokenAta: vaultA.vaultTokenAta,
       mint,
       amount: new BN(amount),
-      protocol: jupiterProgramId,
+      protocol: MOCK_DEFI_PROGRAM_ID,
       protocolTreasuryAta: vaultA.protocolTreasuryAta,
       feeDestinationAta: vaultA.feeDestinationAta,
     });
@@ -205,7 +216,7 @@ describe("devnet-fees", () => {
       vaultTokenAta: vaultA.vaultTokenAta,
       mint,
       amount: new BN(amount),
-      protocol: jupiterProgramId,
+      protocol: MOCK_DEFI_PROGRAM_ID,
       protocolTreasuryAta: vaultA.protocolTreasuryAta,
       feeDestinationAta: vaultA.feeDestinationAta,
     });
@@ -250,7 +261,7 @@ describe("devnet-fees", () => {
       vaultTokenAta: vaultA.vaultTokenAta,
       mint,
       amount: new BN(amount),
-      protocol: jupiterProgramId,
+      protocol: MOCK_DEFI_PROGRAM_ID,
       protocolTreasuryAta: vaultA.protocolTreasuryAta,
       feeDestinationAta: vaultA.feeDestinationAta,
     });
@@ -296,13 +307,13 @@ describe("devnet-fees", () => {
         vaultTokenAta: vaultA.vaultTokenAta,
         mint,
         amount: new BN(1),
-        protocol: jupiterProgramId,
+        protocol: MOCK_DEFI_PROGRAM_ID,
         protocolTreasuryAta: vaultA.protocolTreasuryAta,
         feeDestinationAta: vaultA.feeDestinationAta,
       });
       expect.fail("should have rejected dust amount");
     } catch (err) {
-      expectSigilError(err, { name: "Overflow", code: 6020 });
+      expectSigilError(err, { name: "Overflow" });
     }
     console.log("    Dust amount: ceiling fees exceed amount, rejected");
   });
@@ -323,8 +334,9 @@ describe("devnet-fees", () => {
     const amount = 100_000_000;
     const { protocolFee, developerFee } = calculateFees(amount, 500);
 
-    // Create destination keypair + ATA
-    const dest = Keypair.generate();
+    // Destination ATA — `transferDest` is allowlisted on vaultA (V2
+    // agent_transfer requires an explicitly allowlisted destination owner).
+    const dest = transferDest;
     const { getOrCreateAssociatedTokenAccount } =
       await import("@solana/spl-token");
     const destAta = await getOrCreateAssociatedTokenAccount(
@@ -343,8 +355,13 @@ describe("devnet-fees", () => {
       vaultA.feeDestinationAta!,
     );
 
-    await program.methods
-      .agentTransfer(new BN(amount), new BN(0))
+    // Live policy_version (the apply_agent_grant seating bumped it past 0) +
+    // versioned send (a failure surfaces as {Custom:N}, not the .rpc() mask).
+    const livePolicyA = await program.account.policyConfig.fetch(
+      vaultA.policyPda,
+    );
+    const transferIx = await program.methods
+      .agentTransfer(new BN(amount), (livePolicyA as any).policyVersion)
       .accounts({
         agent: agentA.publicKey,
         vault: vaultA.vaultPda,
@@ -358,8 +375,8 @@ describe("devnet-fees", () => {
         protocolTreasuryTokenAccount: vaultA.protocolTreasuryAta,
         tokenProgram: TOKEN_PROGRAM_ID,
       } as any)
-      .signers([agentA])
-      .rpc();
+      .instruction();
+    await sendVersionedTx(connection, [transferIx], agentA);
 
     const treasuryAfter = await getTokenBalance(
       connection,
@@ -397,7 +414,7 @@ describe("devnet-fees", () => {
       vaultTokenAta: vaultB.vaultTokenAta,
       mint,
       amount: new BN(50_000_000),
-      protocol: jupiterProgramId,
+      protocol: MOCK_DEFI_PROGRAM_ID,
       protocolTreasuryAta: vaultB.protocolTreasuryAta,
     });
 

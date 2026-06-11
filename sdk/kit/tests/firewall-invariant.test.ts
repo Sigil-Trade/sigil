@@ -5,9 +5,9 @@
  * package. The kit is a public, browser-compatible, ESM-only SDK and cannot
  * depend on private code or Node-only `node:zlib` consumed by that parser.
  *
- * This test enforces the invariant documented at
- * `src/protocol-tier.ts:32` ("Firewall invariant. kit must never import
- * from `@sigil-trade/constraints`."). It walks `src/` and rejects any
+ * This test is the canonical enforcement of the firewall invariant —
+ * "kit must never import from `@sigil-trade/constraints`." It walks `src/`
+ * and rejects any
  * file that contains a real `import`/`from`/`require`/`export ... from`
  * statement targeting that package — while permitting JSDoc `@example`
  * blocks and prose mentions in comments.
@@ -113,7 +113,7 @@ describe("Firewall invariant — kit MUST NOT import @sigil-trade/constraints", 
         .map((o) => `  ${o.file}:${o.line}  ${o.text}`)
         .join("\n");
       expect.fail(
-        `Firewall invariant violated — kit must NEVER import from @sigil-trade/constraints (see src/protocol-tier.ts:32). Offenders:\n${msg}`,
+        `Firewall invariant violated — kit must NEVER import from @sigil-trade/constraints (see tests/firewall-invariant.test.ts). Offenders:\n${msg}`,
       );
     }
 

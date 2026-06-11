@@ -40,7 +40,7 @@ import {
 // ────────────────────────────────────────────────────────────────
 
 export const SIGIL_PROGRAM_ID_BASE58 =
-  "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL";
+  "7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK";
 
 // ────────────────────────────────────────────────────────────────
 // ParsedAnchorError — structured extraction from raw error / logs.

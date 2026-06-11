@@ -44,6 +44,11 @@ import {
   getTokenBalance,
   calculateFees,
 } from "../helpers/devnet-setup";
+import { initVaultPreviewDigest } from "../helpers/policy-digest";
+import {
+  buildExpectedIntentDigest,
+  digestAsArgs,
+} from "../helpers/intent-digest-fixture";
 
 // ─── Shared State ──────────────────────────────────────────────────────────
 
@@ -100,6 +105,26 @@ async function createVault(opts: {
       new BN(1800),
       opts.destinations ?? [],
       [],
+      false, // observe_only (Phase 2 TA-19)
+      0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+      false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+      5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+      new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+      new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+      false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+      initVaultPreviewDigest({
+        dailySpendingCapUsd: opts.dailyCap,
+        maxTransactionSizeUsd: opts.maxTx,
+        maxSlippageBps: 500,
+        developerFeeRate: opts.devFeeRate ?? 0,
+        protocolMode: 0,
+        protocols: [],
+        allowedDestinations: opts.destinations ?? [],
+        timelockDuration: new BN(1800),
+        operatingHours: 0x00ffffff,
+        autoPromoteGrays: false,
+        autoRevokeThreshold: 5,
+      }),
     )
     .accounts({
       owner: owner.publicKey,
@@ -206,7 +231,22 @@ async function doComposedTx(
   });
 
   const validateIx = await program.methods
-    .validateAndAuthorize(usdcMint, amount, allowedProtocol, new BN(0))
+    .validateAndAuthorize(
+      usdcMint,
+      amount,
+      allowedProtocol,
+      new BN(0), // expectedPolicyVersion
+      new BN(0), // AC-10 expectedNonce
+      digestAsArgs(
+        buildExpectedIntentDigest({
+          vault,
+          agent: agent.publicKey,
+          tokenMint: usdcMint,
+          amount,
+          targetProtocol: allowedProtocol,
+        }),
+      ),
+    )
     .accounts({
       agent: agent.publicKey,
       vault,
@@ -377,7 +417,9 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
       const destBal = await getTokenBalance(connection, destAta);
 
       // Vault decreased (amount + protocol fee)
-      const fees = calculateFees(50_000_000, 200, 0);
+      // calculateFees(amount, devFeeRate) — protocol fee rate is now the
+      // internal PROTOCOL_FEE_RATE (200) constant, not a parameter.
+      const fees = calculateFees(50_000_000, 0);
       expect(after).to.be.lessThan(before);
       expect(destBal).to.be.greaterThan(0);
       console.log(
@@ -659,6 +701,15 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
         console.log("    ✓ Frozen vault blocks agent");
       }
 
+      // Phase 8 Batch 5: devnet uses wall-clock — wait past 5-min reactivate
+      // cooldown (ErrReactivateCooldownActive 6097). Devnet stress test runs
+      // ad-hoc, not in CI; 5-min wall-clock wait is acceptable here. No clock
+      // mocking available on devnet validator.
+      console.log(
+        "    ⏳ Waiting 301s for reactivate cooldown (devnet wall-clock)...",
+      );
+      await new Promise((r) => setTimeout(r, 301_000));
+
       // Reactivate (unfreeze) — pass null for optional new agent params
       await program.methods
         .reactivateVault(null, null)
@@ -763,199 +814,6 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
           "    ✓ $60 rejected: AgentSpendLimitExceeded ($110 > $100 limit)",
         );
       }
-    });
-  });
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // PHASE 6: Cross-Vault Escrow — Real Token Locking
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  describe("Phase 6: Cross-Vault Escrow", () => {
-    let sourceV: Awaited<ReturnType<typeof createVault>>;
-    let destV: Awaited<ReturnType<typeof createVault>>;
-    let escrowPda: PublicKey;
-    let escrowAta: PublicKey;
-    const escrowId = new BN(Date.now());
-    const escrowAgent = Keypair.generate();
-    const destAgent = Keypair.generate();
-
-    // Conditional escrow: preimage/hash for settlement
-    const preimage = Buffer.from("sigil-escrow-secret-2026");
-    const conditionHash = Array.from(
-      require("crypto").createHash("sha256").update(preimage).digest(),
-    );
-
-    before(async () => {
-      await fundKeypair(provider, escrowAgent.publicKey);
-      await fundKeypair(provider, destAgent.publicKey);
-
-      sourceV = await createVault({
-        dailyCap: new BN(500_000_000),
-        maxTx: new BN(200_000_000),
-        deposit: new BN(500_000_000), // $500
-        agent: escrowAgent,
-      });
-
-      // Destination vault (different agent)
-      const destVaultId = nextVaultId(1);
-      const destPdas = derivePDAs(
-        owner.publicKey,
-        destVaultId,
-        program.programId,
-      );
-      const [destOverlay] = PublicKey.findProgramAddressSync(
-        [
-          Buffer.from("agent_spend"),
-          destPdas.vaultPda.toBuffer(),
-          Buffer.from([0]),
-        ],
-        program.programId,
-      );
-
-      await program.methods
-        .initializeVault(
-          destVaultId,
-          new BN(500_000_000),
-          new BN(200_000_000),
-          0,
-          [],
-          0,
-          500,
-          new BN(0),
-          [],
-          [],
-        )
-        .accounts({
-          owner: owner.publicKey,
-          vault: destPdas.vaultPda,
-          policy: destPdas.policyPda,
-          tracker: destPdas.trackerPda,
-          agentSpendOverlay: destOverlay,
-          feeDestination: feeDestination.publicKey,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
-
-      await program.methods
-        .registerAgent(destAgent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: owner.publicKey,
-          vault: destPdas.vaultPda,
-          agentSpendOverlay: destOverlay,
-        } as any)
-        .rpc();
-
-      const destVaultAta = anchor.utils.token.associatedAddress({
-        mint: usdcMint,
-        owner: destPdas.vaultPda,
-      });
-
-      // Create dest vault ATA (needed for escrow settlement)
-      await getOrCreateAssociatedTokenAccount(
-        connection,
-        payer,
-        usdcMint,
-        destPdas.vaultPda,
-        true,
-      );
-
-      destV = {
-        vault: destPdas.vaultPda,
-        policy: destPdas.policyPda,
-        tracker: destPdas.trackerPda,
-        overlay: destOverlay,
-        vaultAta: destVaultAta,
-      };
-
-      // Derive escrow PDA
-      [escrowPda] = PublicKey.findProgramAddressSync(
-        [
-          Buffer.from("escrow"),
-          sourceV.vault.toBuffer(),
-          destV.vault.toBuffer(),
-          escrowId.toArrayLike(Buffer, "le", 8),
-        ],
-        program.programId,
-      );
-
-      escrowAta = anchor.utils.token.associatedAddress({
-        mint: usdcMint,
-        owner: escrowPda,
-      });
-    });
-
-    it("create escrow: $100 locked from source vault", async () => {
-      const beforeBal = await getTokenBalance(connection, sourceV.vaultAta);
-      const expiresAt = Math.floor(Date.now() / 1000) + 86400; // 24h from now
-
-      await program.methods
-        .createEscrow(
-          escrowId,
-          new BN(100_000_000), // $100
-          new BN(expiresAt),
-          conditionHash,
-        )
-        .accounts({
-          agent: escrowAgent.publicKey,
-          sourceVault: sourceV.vault,
-          policy: sourceV.policy,
-          tracker: sourceV.tracker,
-          destinationVault: destV.vault,
-          escrow: escrowPda,
-          sourceVaultAta: sourceV.vaultAta,
-          escrowAta,
-          protocolTreasuryAta: protocolTreasuryUsdcAta,
-          feeDestinationAta: null,
-          tokenMint: usdcMint,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          agentSpendOverlay: sourceV.overlay,
-        } as any)
-        .signers([escrowAgent])
-        .rpc();
-
-      const afterBal = await getTokenBalance(connection, sourceV.vaultAta);
-      const escrowBal = await getTokenBalance(connection, escrowAta);
-
-      expect(afterBal).to.be.lessThan(beforeBal);
-      expect(escrowBal).to.be.greaterThan(0);
-      console.log(
-        `    Source vault: ${(beforeBal / 1e6).toFixed(2)} → ${(afterBal / 1e6).toFixed(2)} USDC`,
-      );
-      console.log(`    Escrow locked: ${(escrowBal / 1e6).toFixed(6)} USDC`);
-    });
-
-    it("settle escrow: destination agent claims with preimage proof", async () => {
-      await program.methods
-        .settleEscrow(Buffer.from(preimage))
-        .accounts({
-          destinationAgent: destAgent.publicKey,
-          destinationVault: destV.vault,
-          sourceVault: sourceV.vault,
-          escrow: escrowPda,
-          escrowAta,
-          destinationVaultAta: destV.vaultAta,
-          rentDestination: owner.publicKey, // must be source_vault.owner
-          tokenMint: usdcMint,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        } as any)
-        .signers([destAgent])
-        .rpc();
-
-      const destBal = await getTokenBalance(connection, destV.vaultAta);
-      expect(destBal).to.be.greaterThan(0);
-      console.log(
-        `    Dest vault received: ${(destBal / 1e6).toFixed(6)} USDC`,
-      );
-
-      // Verify escrow status changed to Settled
-      const escrow = await program.account.escrowDeposit.fetch(escrowPda);
-      // EscrowStatus enum: { active: {}, settled: {}, refunded: {} }
-      expect(JSON.stringify(escrow.status)).to.include("settled");
-      console.log("    ✓ Escrow settled with SHA-256 preimage proof");
     });
   });
 
@@ -1200,7 +1058,17 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
           usdcMint,
           new BN(0), // amount=0 for non-spending
           allowedProtocol,
-          new BN(0),
+          new BN(0), // expectedPolicyVersion
+          new BN(0), // AC-10 expectedNonce
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: nsV.vault,
+              agent: agentA.publicKey,
+              tokenMint: usdcMint,
+              amount: new BN(0),
+              targetProtocol: allowedProtocol,
+            }),
+          ),
         )
         .accounts({
           agent: agentA.publicKey,

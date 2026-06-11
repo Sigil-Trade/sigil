@@ -9,7 +9,7 @@
  * agent and perfect everything else would get "90/100" — dangerously misleading.
  */
 
-import { getAddressEncoder, type Address } from "./kit-adapter.js";
+import { type Address } from "./kit-adapter.js";
 import type {
   ResolvedVaultState,
   ResolvedVaultStateForOwner,
@@ -62,7 +62,6 @@ export interface AuditEntry {
     | "policy_change"
     | "agent_change"
     | "emergency"
-    | "escrow"
     | "constraint_change";
   action: string;
   actor: Address;
@@ -72,17 +71,6 @@ export interface AuditEntry {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Count set bits in a bigint permission bitmask. */
-function countBits(n: bigint): number {
-  let count = 0;
-  let v = n;
-  while (v > 0n) {
-    count += Number(v & 1n);
-    v >>= 1n;
-  }
-  return count;
-}
-
 // ─── getSecurityPosture ──────────────────────────────────────────────────────
 
 /**
@@ -91,7 +79,7 @@ function countBits(n: bigint): number {
  * Checks 18-19: discriminator staleness, allowlist coverage. Check 20: mode-ALL warning.
  */
 export function getSecurityPosture(state: ResolvedVaultState): SecurityPosture {
-  const { vault, policy, constraints } = state;
+  const { vault, policy } = state;
 
   const checks: SecurityCheck[] = [
     {
@@ -200,18 +188,6 @@ export function getSecurityPosture(state: ResolvedVaultState): SecurityPosture {
         "Reduce per-agent limits so their sum is at or below the vault daily cap.",
     },
     {
-      id: "constraints-configured",
-      label: "Instruction constraints are set",
-      passed: constraints !== null,
-      severity: "info",
-      detail:
-        "Instruction constraints add byte-level validation on DeFi instructions.",
-      remediation:
-        constraints === null
-          ? "Consider adding instruction constraints for high-value vaults."
-          : null,
-    },
-    {
       id: "has-agents",
       label: "At least one agent is registered",
       passed: vault.agents.length > 0,
@@ -292,42 +268,6 @@ export function getSecurityPosture(state: ResolvedVaultState): SecurityPosture {
             : null,
     },
     {
-      id: "constraints-protocol-aligned",
-      label: "Constraint programs are in allowlist",
-      passed: (() => {
-        if (
-          !constraints ||
-          !constraints.entries ||
-          policy.protocolMode !== PROTOCOL_MODE_ALLOWLIST
-        )
-          return true;
-        if (!policy.protocols) return true;
-        const encoder = getAddressEncoder();
-        const allowedBytes = policy.protocols.map((p) => encoder.encode(p));
-        const activeEntries = constraints.entries.slice(
-          0,
-          constraints.entryCount,
-        );
-        for (const entry of activeEntries) {
-          const matches = allowedBytes.some((ab) => {
-            if (ab.length !== entry.programId.length) return false;
-            for (let i = 0; i < 32; i++) {
-              if (ab[i] !== entry.programId[i]) return false;
-            }
-            return true;
-          });
-          if (!matches) return false;
-        }
-        return true;
-      })(),
-      severity: "warning",
-      detail:
-        "Instruction constraints reference program addresses not in the protocol allowlist. " +
-        "These constraints will never trigger because the protocol is already blocked.",
-      remediation:
-        "Update the allowlist to include constrained programs, or remove stale constraints.",
-    },
-    {
       id: "no-permission-concentration",
       label: "No agent has full Operator capability",
       passed: !vault.agents.some(
@@ -341,82 +281,6 @@ export function getSecurityPosture(state: ResolvedVaultState): SecurityPosture {
         "Downgrade agent capability to Observer (1) if spending is not required.",
     },
     // ---- Step 18: 2 more checks (18-19) — council security findings ----
-    {
-      id: "constraints-current",
-      label: "Constraint discriminators are current",
-      passed:
-        !constraints ||
-        !constraints.entries ||
-        constraints.entries.length === 0 ||
-        (() => {
-          // Verify constraint entries reference known program discriminators.
-          // Stale constraints silently stop matching after protocol upgrades.
-          for (const entry of constraints.entries) {
-            if (
-              entry.dataConstraints &&
-              entry.dataConstraints.length === 0 &&
-              entry.accountConstraints &&
-              entry.accountConstraints.length === 0
-            ) {
-              return false; // Empty entry = likely stale or misconfigured
-            }
-          }
-          return true;
-        })(),
-      severity: "warning",
-      detail:
-        "Stale or empty constraint entries may not match current protocol instruction formats. " +
-        "Review constraints when protocols upgrade.",
-      remediation:
-        "Review and update InstructionConstraints entries. Remove empty entries.",
-    },
-    {
-      id: "constraints-cover-allowlist",
-      label: "All allowlisted protocols have constraint entries",
-      passed: (() => {
-        if (
-          !constraints ||
-          !constraints.entries ||
-          policy.protocolMode !== PROTOCOL_MODE_ALLOWLIST ||
-          !policy.protocols
-        )
-          return true;
-        const encoder = getAddressEncoder();
-        const activeEntries = constraints.entries.slice(
-          0,
-          constraints.entryCount,
-        );
-        return policy.protocols.every((p: Address) => {
-          const pBytes = encoder.encode(p);
-          return activeEntries.some((e) => {
-            if (pBytes.length !== e.programId.length) return false;
-            for (let i = 0; i < 32; i++) {
-              if (pBytes[i] !== e.programId[i]) return false;
-            }
-            return true;
-          });
-        });
-      })(),
-      severity: "info",
-      detail:
-        "Protocols on the allowlist without constraint entries rely solely on spending caps for protection.",
-      remediation:
-        "Add InstructionConstraints entries for all allowlisted protocols.",
-    },
-    // ---- Step 20: 1 more check (20) — council security finding ----
-    {
-      id: "mode-all-unguarded",
-      label: "Protocol mode ALL has constraint protection",
-      passed:
-        policy.protocolMode !== 0 /* PROTOCOL_MODE_ALL */ ||
-        (constraints !== null && Number(constraints.strictMode) !== 0),
-      severity: "critical",
-      detail:
-        "Protocol mode ALL allows agents to call any program. Without strict-mode constraints, " +
-        "agents have unrestricted program access beyond spending caps and SPL transfer blocking.",
-      remediation:
-        "Switch to Allowlist mode, or enable InstructionConstraints with strict_mode=true.",
-    },
   ];
 
   const passCount = checks.filter((c) => c.passed).length;
@@ -437,7 +301,7 @@ export function getSecurityPosture(state: ResolvedVaultState): SecurityPosture {
 export function evaluateAlertConditions(
   state: ResolvedVaultState | ResolvedVaultStateForOwner,
   vaultAddress: Address,
-  previousState?: ResolvedVaultState | ResolvedVaultStateForOwner,
+  _previousState?: ResolvedVaultState | ResolvedVaultStateForOwner,
 ): Alert[] {
   const alerts: Alert[] = [];
   const { vault, globalBudget } = state;
@@ -613,33 +477,36 @@ export function evaluateAlertConditions(
 // ─── getAuditTrail ───────────────────────────────────────────────────────────
 
 const AUDIT_EVENTS: Record<string, AuditEntry["category"]> = {
-  PolicyUpdated: "policy_change",
+  // V2: PolicyUpdated removed — replaced by queue/apply/cancel triplet
   PolicyChangeQueued: "policy_change",
   PolicyChangeApplied: "policy_change",
   PolicyChangeCancelled: "policy_change",
   AgentRegistered: "agent_change",
   AgentRevoked: "agent_change",
-  AgentPermissionsUpdated: "agent_change",
+  // V2: AgentPermissionsUpdated removed — replaced by queue/apply/cancel triplet
+  AgentPermissionsChangeQueued: "agent_change",
+  AgentPermissionsChangeApplied: "agent_change",
+  AgentPermissionsChangeCancelled: "agent_change",
   AgentPausedEvent: "emergency",
   AgentUnpausedEvent: "agent_change",
   VaultFrozen: "emergency",
   VaultReactivated: "emergency",
   VaultClosed: "emergency",
   VaultCreated: "emergency",
-  EscrowCreated: "escrow",
-  EscrowSettled: "escrow",
-  EscrowRefunded: "escrow",
   InstructionConstraintsCreated: "constraint_change",
-  InstructionConstraintsUpdated: "constraint_change",
-  InstructionConstraintsClosed: "constraint_change",
+  // V2 (MED-2 cleanup): InstructionConstraintsUpdated / InstructionConstraintsClosed
+  // were replaced by ConstraintsChangeApplied / CloseConstraintsApplied.
   ConstraintsChangeQueued: "constraint_change",
   ConstraintsChangeApplied: "constraint_change",
   ConstraintsChangeCancelled: "constraint_change",
+  CloseConstraintsQueued: "constraint_change",
+  CloseConstraintsApplied: "constraint_change",
+  CloseConstraintsCancelled: "constraint_change",
 };
 
 /**
  * Filter decoded events into a compliance-focused audit trail.
- * Shows only security-relevant events (policy, agent, emergency, escrow, constraints).
+ * Shows only security-relevant events (policy, agent, emergency, constraints).
  *
  * Supports optional filtering by category, timestamp, and actor.
  *
@@ -718,7 +585,6 @@ export function getAuditTrailSummary(trail: AuditEntry[]): AuditTrailSummary {
     policy_change: 0,
     agent_change: 0,
     emergency: 0,
-    escrow: 0,
     constraint_change: 0,
   };
   const actors = new Set<string>();

@@ -56,6 +56,8 @@ export type CloseVaultInstruction<
   TAccountPolicy extends string | AccountMeta<string> = string,
   TAccountTracker extends string | AccountMeta<string> = string,
   TAccountAgentSpendOverlay extends string | AccountMeta<string> = string,
+  TAccountAuditLogSuccess extends string | AccountMeta<string> = string,
+  TAccountAuditLogRejected extends string | AccountMeta<string> = string,
   TAccountSystemProgram extends string | AccountMeta<string> =
     "11111111111111111111111111111111",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
@@ -79,6 +81,12 @@ export type CloseVaultInstruction<
       TAccountAgentSpendOverlay extends string
         ? WritableAccount<TAccountAgentSpendOverlay>
         : TAccountAgentSpendOverlay,
+      TAccountAuditLogSuccess extends string
+        ? WritableAccount<TAccountAuditLogSuccess>
+        : TAccountAuditLogSuccess,
+      TAccountAuditLogRejected extends string
+        ? WritableAccount<TAccountAuditLogRejected>
+        : TAccountAuditLogRejected,
       TAccountSystemProgram extends string
         ? ReadonlyAccount<TAccountSystemProgram>
         : TAccountSystemProgram,
@@ -119,6 +127,8 @@ export type CloseVaultAsyncInput<
   TAccountPolicy extends string = string,
   TAccountTracker extends string = string,
   TAccountAgentSpendOverlay extends string = string,
+  TAccountAuditLogSuccess extends string = string,
+  TAccountAuditLogRejected extends string = string,
   TAccountSystemProgram extends string = string,
 > = {
   owner: TransactionSigner<TAccountOwner>;
@@ -128,6 +138,16 @@ export type CloseVaultAsyncInput<
   tracker?: Address<TAccountTracker>;
   /** Zero-copy AgentSpendOverlay — close returns rent to owner */
   agentSpendOverlay: Address<TAccountAgentSpendOverlay>;
+  /**
+   * Phase 7 — close success audit log; rent returns to owner.
+   * Closing here closes the close+reinit replay window: a vault can be
+   * re-initialised at the same (owner, vault_id) only after the audit
+   * logs have been reclaimed, and PEN-CROSS-2 still protects against
+   * stale-digest replay across the close boundary.
+   */
+  auditLogSuccess?: Address<TAccountAuditLogSuccess>;
+  /** Phase 7 — close rejected audit log; rent returns to owner. */
+  auditLogRejected?: Address<TAccountAuditLogRejected>;
   systemProgram?: Address<TAccountSystemProgram>;
 };
 
@@ -137,6 +157,8 @@ export async function getCloseVaultInstructionAsync<
   TAccountPolicy extends string,
   TAccountTracker extends string,
   TAccountAgentSpendOverlay extends string,
+  TAccountAuditLogSuccess extends string,
+  TAccountAuditLogRejected extends string,
   TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
@@ -146,6 +168,8 @@ export async function getCloseVaultInstructionAsync<
     TAccountPolicy,
     TAccountTracker,
     TAccountAgentSpendOverlay,
+    TAccountAuditLogSuccess,
+    TAccountAuditLogRejected,
     TAccountSystemProgram
   >,
   config?: { programAddress?: TProgramAddress },
@@ -157,6 +181,8 @@ export async function getCloseVaultInstructionAsync<
     TAccountPolicy,
     TAccountTracker,
     TAccountAgentSpendOverlay,
+    TAccountAuditLogSuccess,
+    TAccountAuditLogRejected,
     TAccountSystemProgram
   >
 > {
@@ -171,6 +197,11 @@ export async function getCloseVaultInstructionAsync<
     tracker: { value: input.tracker ?? null, isWritable: true },
     agentSpendOverlay: {
       value: input.agentSpendOverlay ?? null,
+      isWritable: true,
+    },
+    auditLogSuccess: { value: input.auditLogSuccess ?? null, isWritable: true },
+    auditLogRejected: {
+      value: input.auditLogRejected ?? null,
       isWritable: true,
     },
     systemProgram: { value: input.systemProgram ?? null, isWritable: false },
@@ -211,6 +242,42 @@ export async function getCloseVaultInstructionAsync<
       ],
     });
   }
+  if (!accounts.auditLogSuccess.value) {
+    accounts.auditLogSuccess.value = await getProgramDerivedAddress({
+      programAddress,
+      seeds: [
+        getBytesEncoder().encode(
+          new Uint8Array([
+            97, 117, 100, 105, 116, 95, 115, 117, 99, 99, 101, 115, 115,
+          ]),
+        ),
+        getAddressEncoder().encode(
+          getAddressFromResolvedInstructionAccount(
+            "vault",
+            accounts.vault.value,
+          ),
+        ),
+      ],
+    });
+  }
+  if (!accounts.auditLogRejected.value) {
+    accounts.auditLogRejected.value = await getProgramDerivedAddress({
+      programAddress,
+      seeds: [
+        getBytesEncoder().encode(
+          new Uint8Array([
+            97, 117, 100, 105, 116, 95, 114, 101, 106, 101, 99, 116, 101, 100,
+          ]),
+        ),
+        getAddressEncoder().encode(
+          getAddressFromResolvedInstructionAccount(
+            "vault",
+            accounts.vault.value,
+          ),
+        ),
+      ],
+    });
+  }
   if (!accounts.systemProgram.value) {
     accounts.systemProgram.value =
       "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
@@ -224,6 +291,8 @@ export async function getCloseVaultInstructionAsync<
       getAccountMeta("policy", accounts.policy),
       getAccountMeta("tracker", accounts.tracker),
       getAccountMeta("agentSpendOverlay", accounts.agentSpendOverlay),
+      getAccountMeta("auditLogSuccess", accounts.auditLogSuccess),
+      getAccountMeta("auditLogRejected", accounts.auditLogRejected),
       getAccountMeta("systemProgram", accounts.systemProgram),
     ],
     data: getCloseVaultInstructionDataEncoder().encode({}),
@@ -235,6 +304,8 @@ export async function getCloseVaultInstructionAsync<
     TAccountPolicy,
     TAccountTracker,
     TAccountAgentSpendOverlay,
+    TAccountAuditLogSuccess,
+    TAccountAuditLogRejected,
     TAccountSystemProgram
   >);
 }
@@ -245,6 +316,8 @@ export type CloseVaultInput<
   TAccountPolicy extends string = string,
   TAccountTracker extends string = string,
   TAccountAgentSpendOverlay extends string = string,
+  TAccountAuditLogSuccess extends string = string,
+  TAccountAuditLogRejected extends string = string,
   TAccountSystemProgram extends string = string,
 > = {
   owner: TransactionSigner<TAccountOwner>;
@@ -254,6 +327,16 @@ export type CloseVaultInput<
   tracker: Address<TAccountTracker>;
   /** Zero-copy AgentSpendOverlay — close returns rent to owner */
   agentSpendOverlay: Address<TAccountAgentSpendOverlay>;
+  /**
+   * Phase 7 — close success audit log; rent returns to owner.
+   * Closing here closes the close+reinit replay window: a vault can be
+   * re-initialised at the same (owner, vault_id) only after the audit
+   * logs have been reclaimed, and PEN-CROSS-2 still protects against
+   * stale-digest replay across the close boundary.
+   */
+  auditLogSuccess: Address<TAccountAuditLogSuccess>;
+  /** Phase 7 — close rejected audit log; rent returns to owner. */
+  auditLogRejected: Address<TAccountAuditLogRejected>;
   systemProgram?: Address<TAccountSystemProgram>;
 };
 
@@ -263,6 +346,8 @@ export function getCloseVaultInstruction<
   TAccountPolicy extends string,
   TAccountTracker extends string,
   TAccountAgentSpendOverlay extends string,
+  TAccountAuditLogSuccess extends string,
+  TAccountAuditLogRejected extends string,
   TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
@@ -272,6 +357,8 @@ export function getCloseVaultInstruction<
     TAccountPolicy,
     TAccountTracker,
     TAccountAgentSpendOverlay,
+    TAccountAuditLogSuccess,
+    TAccountAuditLogRejected,
     TAccountSystemProgram
   >,
   config?: { programAddress?: TProgramAddress },
@@ -282,6 +369,8 @@ export function getCloseVaultInstruction<
   TAccountPolicy,
   TAccountTracker,
   TAccountAgentSpendOverlay,
+  TAccountAuditLogSuccess,
+  TAccountAuditLogRejected,
   TAccountSystemProgram
 > {
   // Program address.
@@ -295,6 +384,11 @@ export function getCloseVaultInstruction<
     tracker: { value: input.tracker ?? null, isWritable: true },
     agentSpendOverlay: {
       value: input.agentSpendOverlay ?? null,
+      isWritable: true,
+    },
+    auditLogSuccess: { value: input.auditLogSuccess ?? null, isWritable: true },
+    auditLogRejected: {
+      value: input.auditLogRejected ?? null,
       isWritable: true,
     },
     systemProgram: { value: input.systemProgram ?? null, isWritable: false },
@@ -318,6 +412,8 @@ export function getCloseVaultInstruction<
       getAccountMeta("policy", accounts.policy),
       getAccountMeta("tracker", accounts.tracker),
       getAccountMeta("agentSpendOverlay", accounts.agentSpendOverlay),
+      getAccountMeta("auditLogSuccess", accounts.auditLogSuccess),
+      getAccountMeta("auditLogRejected", accounts.auditLogRejected),
       getAccountMeta("systemProgram", accounts.systemProgram),
     ],
     data: getCloseVaultInstructionDataEncoder().encode({}),
@@ -329,6 +425,8 @@ export function getCloseVaultInstruction<
     TAccountPolicy,
     TAccountTracker,
     TAccountAgentSpendOverlay,
+    TAccountAuditLogSuccess,
+    TAccountAuditLogRejected,
     TAccountSystemProgram
   >);
 }
@@ -346,7 +444,17 @@ export type ParsedCloseVaultInstruction<
     tracker: TAccountMetas[3];
     /** Zero-copy AgentSpendOverlay — close returns rent to owner */
     agentSpendOverlay: TAccountMetas[4];
-    systemProgram: TAccountMetas[5];
+    /**
+     * Phase 7 — close success audit log; rent returns to owner.
+     * Closing here closes the close+reinit replay window: a vault can be
+     * re-initialised at the same (owner, vault_id) only after the audit
+     * logs have been reclaimed, and PEN-CROSS-2 still protects against
+     * stale-digest replay across the close boundary.
+     */
+    auditLogSuccess: TAccountMetas[5];
+    /** Phase 7 — close rejected audit log; rent returns to owner. */
+    auditLogRejected: TAccountMetas[6];
+    systemProgram: TAccountMetas[7];
   };
   data: CloseVaultInstructionData;
 };
@@ -359,12 +467,12 @@ export function parseCloseVaultInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedCloseVaultInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 6) {
+  if (instruction.accounts.length < 8) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 6,
+        expectedAccountMetas: 8,
       },
     );
   }
@@ -382,6 +490,8 @@ export function parseCloseVaultInstruction<
       policy: getNextAccount(),
       tracker: getNextAccount(),
       agentSpendOverlay: getNextAccount(),
+      auditLogSuccess: getNextAccount(),
+      auditLogRejected: getNextAccount(),
       systemProgram: getNextAccount(),
     },
     data: getCloseVaultInstructionDataDecoder().decode(instruction.data),

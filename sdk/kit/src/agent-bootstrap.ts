@@ -102,8 +102,7 @@ export function capabilityTierToNames(tier: number): readonly string[] {
  *   - `dailyLimitUsd` — 6-decimal USD bigint (e.g., 500_000_000n for $500).
  *     Formatted into "$X" in the prompt.
  *   - `approvedProtocols` — array of friendly protocol names (caller
- *     resolves via `resolveProtocolName()` or the new
- *     `lookupProtocolAnnotation()`).
+ *     resolves via `resolveProtocolName()`).
  *   - `capabilityTier` — the agent's capability number (0/1/2).
  */
 export interface AgentBootstrapConfig {

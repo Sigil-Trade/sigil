@@ -1,0 +1,59 @@
+{
+  "name": "@usesigil/agent",
+  "version": "0.1.0",
+  "description": "Sigil for AI — bounded Solana agent toolkit. MCP server that gives any AI runtime (Claude Desktop, Claude Code, Cursor, Continue, Cline) typed tools to operate on a Sigil-policy-protected vault.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "sigil-agent": "./dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "pnpm run clean && pnpm run build",
+    "dev": "tsup --watch",
+    "type-check": "tsc --noEmit",
+    "start": "node dist/index.js"
+  },
+  "keywords": [
+    "sigil",
+    "solana",
+    "mcp",
+    "model-context-protocol",
+    "ai-agent",
+    "anthropic",
+    "claude",
+    "agent",
+    "defi"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@solana/kit": "^6.7.0",
+    "@usesigil/kit": "workspace:*",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

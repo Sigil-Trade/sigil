@@ -4,24 +4,23 @@
  * Crossmint TEE custody adapter for Sigil.
  * Hardware-enclave signing — the private key never leaves the TEE.
  *
- * @example One-liner with shieldWallet():
+ * @example Pair with shield() for client-side policy enforcement:
  * ```typescript
- * import { shieldWallet } from '@usesigil/kit';
+ * import { shield } from '@usesigil/kit';
  * import { crossmint } from '@usesigil/custody/crossmint';
  *
- * const wallet = shieldWallet(
- *   await crossmint({ apiKey: 'sk_...' }),
- *   { maxSpend: '500 USDC/day' }
- * );
+ * const wallet = await crossmint({ apiKey: 'sk_...' });
+ * const shieldCtx = shield({ maxSpend: '500 USDC/day' });
  * ```
  *
  * @example Zero-config from environment:
  * ```typescript
- * import { shieldWallet } from '@usesigil/kit';
+ * import { shield } from '@usesigil/kit';
  * import { crossmintFromEnv } from '@usesigil/custody/crossmint';
  *
  * // Reads CROSSMINT_API_KEY (+ optional CROSSMINT_WALLET_LOCATOR) from env
- * const wallet = shieldWallet(await crossmintFromEnv(), { maxSpend: '500 USDC/day' });
+ * const wallet = await crossmintFromEnv();
+ * const shieldCtx = shield({ maxSpend: '500 USDC/day' });
  * ```
  */
 

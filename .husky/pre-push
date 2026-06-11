@@ -1,5 +1,8 @@
-# Tier 1 pre-push gate — fast-fail checks before reaching the wire.
-# Target budget: <10s. Anything slower belongs in CI, not here.
+# Pre-push gate — mirror CI's blocking checks so a red CI is caught locally.
+# Fast checks (count/prettier/fmt) run first; clippy compiles (~30-60s) and is
+# included deliberately: it is a required CI gate, and NOT running it locally is
+# exactly how 20 clippy errors once reached CI. Trades a slower push for fewer
+# red-CI round-trips. Bypass intentional WIP pushes with `git push --no-verify`.
 #
 # Bypass for intentional WIP pushes: `git push --no-verify`.
 # Don't bypass just because the check annoys you; fix the underlying issue.
@@ -24,5 +27,11 @@ pnpm lint
 
 echo "→ [pre-push] cargo fmt..."
 cargo fmt --check --manifest-path programs/sigil/Cargo.toml
+
+echo "→ [pre-push] clippy (-D warnings, mirrors the CI rust-checks gate)..."
+cargo clippy --manifest-path programs/sigil/Cargo.toml -- -D warnings \
+  -A unexpected_cfgs \
+  -A clippy::too_many_arguments \
+  -A ambiguous_glob_reexports
 
 echo "✓ [pre-push] all gates passed"

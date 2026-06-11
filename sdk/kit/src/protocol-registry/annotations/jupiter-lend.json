@@ -1,7 +1,0 @@
-{
-  "programId": "JLend2fEim9xUFcaHsyGePEoBzFLvkjMi3MnPcSuCdu",
-  "name": "Jupiter Lend",
-  "verified": true,
-  "category": "lending",
-  "notes": "Jupiter Lend protocol. Instruction-count-limited in the Sigil on-chain program. Default CU: 400,000."
-}

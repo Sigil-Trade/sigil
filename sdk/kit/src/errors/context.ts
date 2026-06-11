@@ -53,6 +53,8 @@ import type {
   SIGIL_ERROR__SDK__HOOK_ABORTED,
   SIGIL_ERROR__SDK__PLUGIN_REJECTED,
   SIGIL_ERROR__SDK__OWNER_REQUIRED,
+  SIGIL_ERROR__SDK__MAINNET_CONFIRMATION_REQUIRED,
+  SIGIL_ERROR__SDK__MAINNET_CONFIRMATION_REJECTED,
   SIGIL_ERROR__SDK__UNKNOWN,
   SIGIL_ERROR__RPC__TX_FAILED,
   SIGIL_ERROR__RPC__CONFIRMATION_TIMEOUT,
@@ -195,6 +197,14 @@ export interface SigilErrorContext {
     metadata?: Readonly<Record<string, unknown>>;
   };
   [SIGIL_ERROR__SDK__OWNER_REQUIRED]: { method: string; vault: Address };
+  [SIGIL_ERROR__SDK__MAINNET_CONFIRMATION_REQUIRED]: {
+    vault: string;
+    network: string;
+  };
+  [SIGIL_ERROR__SDK__MAINNET_CONFIRMATION_REJECTED]: {
+    vault: string;
+    network: string;
+  };
   [SIGIL_ERROR__SDK__UNKNOWN]: { rawCode?: string; rawMessage?: string };
 
   [SIGIL_ERROR__RPC__TX_FAILED]: { signature?: string; logs?: string[] };

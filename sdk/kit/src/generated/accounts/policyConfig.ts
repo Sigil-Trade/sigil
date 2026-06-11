@@ -27,6 +27,8 @@ import {
   getStructEncoder,
   getU16Decoder,
   getU16Encoder,
+  getU32Decoder,
+  getU32Encoder,
   getU64Decoder,
   getU64Encoder,
   getU8Decoder,
@@ -44,6 +46,12 @@ import {
   type MaybeEncodedAccount,
   type ReadonlyUint8Array,
 } from "@solana/kit";
+import {
+  getDestinationGraylistEntryDecoder,
+  getDestinationGraylistEntryEncoder,
+  type DestinationGraylistEntry,
+  type DestinationGraylistEntryArgs,
+} from "../types/index.js";
 
 export const POLICY_CONFIG_DISCRIMINATOR = new Uint8Array([
   219, 7, 79, 84, 175, 51, 148, 146,
@@ -67,10 +75,9 @@ export type PolicyConfig = {
   /** Maximum single transaction size in USD (6 decimals). */
   maxTransactionSizeUsd: bigint;
   /**
-   * Protocol access control mode:
-   * 0 = all allowed (protocols list ignored)
-   * 1 = allowlist (only protocols in list)
-   * 2 = denylist (all except protocols in list)
+   * Protocol allowlist mode. Phase 2 Option A: ONLY value 1 (ALLOWLIST)
+   * permitted. Modes 0 (ALL) and 2 (DENYLIST) deleted under L-1. Handler
+   * rejects any other value with `ErrInvalidProtocolMode`.
    */
   protocolMode: number;
   /**
@@ -84,9 +91,13 @@ export type PolicyConfig = {
    */
   developerFeeRate: number;
   /**
-   * Maximum slippage tolerance for Jupiter swaps in basis points.
-   * 0 = reject all swaps (vault owner must explicitly configure).
-   * Enforced on-chain via instruction introspection of Jupiter data.
+   * Maximum slippage tolerance (basis points) — generic config primitive
+   * preserved per D-5 across Phase 1 Option A demolition. Per L-1 there is
+   * no on-chain Jupiter slippage verifier in V1; this field is consumed by
+   * off-chain SDK simulators and (Phase 6) generic post-execution assertions
+   * (R-1 mint-delta cap). Validated at config time via
+   * `max_slippage_bps <= MAX_SLIPPAGE_BPS` (= 5000 BPS = 50% ceiling).
+   * 0 = no slippage protection configured.
    */
   maxSlippageBps: number;
   /** Timelock duration in seconds for policy changes. 0 = no timelock. */
@@ -96,11 +107,6 @@ export type PolicyConfig = {
    * Empty = any destination allowed. Bounded to MAX_ALLOWED_DESTINATIONS.
    */
   allowedDestinations: Array<Address>;
-  /**
-   * Whether instruction constraints PDA exists for this vault.
-   * Set true by create_instruction_constraints, false by apply_close_constraints.
-   */
-  hasConstraints: boolean;
   /**
    * Whether a pending policy update PDA exists for this vault.
    * Set true by queue_policy_update, false by apply/cancel_pending_policy.
@@ -140,14 +146,237 @@ export type PolicyConfig = {
    */
   hasPostAssertions: number;
   /**
-   * Destination access control mode for `agent_transfer`:
-   * 0 = Restricted (DEFAULT) — destination MUST be in `allowed_destinations`.
-   * 1 = OpenWithCap — destination unrestricted; only `daily_spending_cap_usd` throttles drain.
-   * Closes F-4 (third-pass audit): empty `allowed_destinations` no longer
-   * implies default-allow. Owners must explicitly opt into OpenWithCap via
-   * queue_policy_update / apply_pending_policy.
+   * Destination access control mode for `agent_transfer` and spending paths.
+   *
+   * Phase 2 Option A: only value 0 (RESTRICTED) is accepted. Permissive
+   * OPEN_WITH_CAP (1) was deleted. Closes F-4 (third-pass audit) and the
+   * subsequent owner-opt-in window definitively.
    */
   destinationMode: number;
+  /**
+   * TA-19 (Phase 2): SHA-256 digest of the canonical Borsh encoding of the
+   * policy fields the owner approved at queue/init time. Bound at the same
+   * instruction where the owner signs the change, re-asserted at apply, so
+   * a compromised owner-signer or pending-PDA tampering cannot mutate the
+   * applied policy without producing a digest mismatch.
+   *
+   * CANONICAL ENCODING (FIXED — DO NOT REORDER):
+   * 1. `daily_spending_cap_usd: u64`
+   * 2. `max_transaction_size_usd: u64`
+   * 3. `max_slippage_bps: u16`
+   * 4. `developer_fee_rate: u16` — PEN-CROSS-6 (Phase 2 close-up)
+   * 5. `protocol_mode: u8`
+   * 6. `protocols: Vec<Pubkey>`
+   * 7. `destination_mode: u8`
+   * 8. `allowed_destinations: Vec<Pubkey>`
+   * 9. `timelock_duration: u64`
+   * 10. `session_expiry_seconds: u64`
+   * 11. `observe_only: bool`
+   * 12. `has_constraints: bool`
+   * 13. `has_post_assertions: u8`
+   * 14. `created_at_slot: u64` — PEN-CROSS-2 (Phase 2 close-up)
+   *
+   * All fields encoded as Borsh: u8/u16/u64 little-endian, `bool` as `[u8; 1]`
+   * (0 or 1), `Vec<Pubkey>` as `u32_le_len ++ pubkey_bytes_concatenated`.
+   * The SDK helper `computePolicyPreviewDigest` mirrors this encoding exactly.
+   *
+   * APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  policyPreviewDigest: ReadonlyUint8Array;
+  /**
+   * PEN-CROSS-2 (Phase 2 close-up): the slot at which `initialize_vault`
+   * minted this PolicyConfig. Bound by TA-19 at position 14 of the
+   * canonical digest encoding.
+   *
+   * Closes the close+reinit replay window: an owner who closes a vault
+   * (via `close_vault`) and later re-inits a fresh PDA at the same
+   * (owner, vault_id) gets a new `created_at_slot`. The signed
+   * `initialize_vault` ix from the old vault encodes the OLD slot in its
+   * preview digest, so replaying that signed tx against the fresh PDA
+   * produces a digest mismatch and `PolicyPreviewMismatch` rejects it.
+   *
+   * APPENDED at end of struct per F-14 APPEND-ONLY rule.
+   */
+  createdAtSlot: bigint;
+  /**
+   * TA-05 (Phase 3 pre-execution guard #2): 24-bit UTC operating-hours
+   * bitmask. Bit `n` (0 ≤ n ≤ 23) set → spending allowed when
+   * `clock.unix_timestamp / 3600 % 24 == n`. Upper 8 bits (24..=31)
+   * MUST be zero; rejected at write-time.
+   *
+   * Default for owners who don't narrow: 0xFFFFFF (all 24 hours enabled
+   * — equivalent to "no operating-hours constraint"). New vaults set
+   * this explicitly via the digest the owner signs; back-compat
+   * consideration removed per L-3 (Phase 2 TA-19 bound the field anyway).
+   *
+   * Bound by TA-19 at position 15 of the canonical digest encoding.
+   * APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  operatingHours: number;
+  /**
+   * TA-07 (Phase 3 pre-execution guard #4): first-time-destination
+   * 24-hour graylist friction. When a NEW destination is added to
+   * `allowed_destinations` (via queue_policy_update), it enters this
+   * graylist with `unlock_unix = now + 86400` (24h). Until either
+   * (a) the unlock time elapses OR (b) the owner calls
+   * `promote_graylist_destination` to fast-track, spending paths
+   * reject any tx routing value to that destination with
+   * `ErrGraylistFriction` (6077).
+   *
+   * Tuple is `(destination_pubkey, unlock_unix)`. Bounded ≤10 entries
+   * (max_destinations). When full, additional allowlist adds reject
+   * with `ErrGraylistFull` (6087) until an existing entry unlocks or
+   * is promoted.
+   *
+   * DESIGN: graylist entries are derived/ephemeral state — the owner's
+   * signed digest already binds the allowlist (canonical position 8),
+   * and graylist friction only delays an already-authorised destination.
+   * Therefore the graylist itself is NOT in the canonical digest
+   * encoding. Promoting accelerates the unlock but cannot widen the
+   * allowlist beyond what the owner signed.
+   *
+   * APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  destinationGraylist: Array<DestinationGraylistEntry>;
+  /**
+   * TA-07 (Phase 3): if true, new destinations added to the allowlist
+   * skip the 24h graylist entirely (audit trail still recorded via
+   * emitted events). Bound by TA-19 at canonical digest position 16
+   * so the owner's choice to bypass friction is part of the signed
+   * configuration — not silently flipped.
+   *
+   * Default false. APPENDED at end per F-14 APPEND-ONLY rule.
+   */
+  autoPromoteGrays: boolean;
+  /**
+   * TA-17 (Phase 3 pre-execution guard #7): consecutive-failure
+   * threshold after which an agent's capability is auto-revoked.
+   * Owner-configurable in range 3..=20; out-of-range values rejected
+   * at policy-write time with `InvalidPermissions`. Default 5.
+   *
+   * Only on-chain policy-violation codes (6074-6091) count — see
+   * `POLICY_VIOLATION_RANGE` in finalize_session. External codes
+   * (CU exhaustion, nonce desync, auth) do NOT increment.
+   *
+   * Bound by TA-19 at canonical digest position 17. APPENDED per
+   * F-14 APPEND-ONLY rule.
+   */
+  autoRevokeThreshold: number;
+  /**
+   * TA-12 (Phase 5 post-execution invariant #1): hard floor on the
+   * combined USDC + USDT balance held by the vault. After every
+   * `finalize_session` spending path completes (CPI balance audit +
+   * rolling-cap + per-agent + per-protocol bookkeeping), the handler
+   * re-reads the vault's USDC + USDT token-account balances and
+   * asserts their sum is ≥ this value. If not, it rejects with
+   * `ErrStableFloorViolation` (6085).
+   *
+   * This is the LAST defensive line — no combination of attacks (CPI
+   * drain, per-protocol cap bypass via async fulfillment, fee
+   * inflation, slippage manipulation) may drain the vault below this
+   * line. Default 0 (no reserve — preserves all existing vault
+   * behavior). Owner-configurable via `initialize_vault` and
+   * `queue_policy_update`.
+   *
+   * Bound by TA-19 at canonical digest position 18. APPENDED per
+   * F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  stableBalanceFloor: bigint;
+  /**
+   * TA-14 (Phase 5 post-execution invariant #2): rolling 24h
+   * per-recipient outflow cap, in 6-decimal USDC face value. When
+   * non-zero, every `finalize_session` spending path validates that
+   * the recipient's rolling 24h spend (tracked on
+   * `SpendTracker.per_recipient`) PLUS this transaction's outflow
+   * to that recipient stays ≤ this value. Otherwise rejects with
+   * `ErrRecipientCapExceeded` (6096).
+   *
+   * Default 0 (no per-recipient cap) preserves existing vault
+   * behavior. Owner-configurable via `initialize_vault` and
+   * `queue_policy_update`.
+   *
+   * Bound by TA-19 at canonical digest position 19. APPENDED per
+   * F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  perRecipientDailyCapUsd: bigint;
+  /**
+   * G6 (audit 2026-05-18): owner-controlled opt-in flag for TA-09
+   * cosign enforcement on elevated policy mutations.
+   *
+   * When `false` (default): elevated mutations (raising caps,
+   * expanding allowlists, weakening floors / per-recipient caps /
+   * protocol caps) require only the owner's signature — no cosign
+   * session is required. Low-friction default, suitable for solo
+   * founders, AI-agent automation, dev/test vaults, and any vault
+   * whose owner is a Squads V4 multisig PDA (multisig at the Solana
+   * layer already enforces multi-signer authorization).
+   *
+   * When `true`: TA-09 elevation checks fire. The seven elevation
+   * triggers in `queue_policy_update` (raises_daily_cap,
+   * raises_max_tx, expands_destinations, expands_protocols,
+   * lowers_floor, weakens_per_recipient_cap, weakens_protocol_caps)
+   * require a non-default `cosign_session` pubkey + a corresponding
+   * signer in `remaining_accounts` with `is_signer == true`.
+   *
+   * Toggle semantics:
+   * - **Enabling (false → true)** is NON-ELEVATED. It is a safety
+   * improvement — owner is voluntarily tightening the policy.
+   * Cosign is not required to enable cosign.
+   * - **Disabling (true → false)** IS ELEVATED. One-way-ratchet
+   * semantics: if cosign is currently ON, the owner cannot turn
+   * it OFF without producing a valid cosign signature — exactly
+   * the protection cosign was meant to provide. A phishing-
+   * compromised owner key cannot silently disable cosign and
+   * then drain via subsequent non-elevated mutations.
+   *
+   * Bound by TA-19 at canonical digest position 20. APPENDED at end
+   * of struct per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  cosignRequired: boolean;
+  /**
+   * D-5 close (audit 2026-05-19, F-RP3-1): the cosign-session pubkey
+   * gating elevated capability grants on the `reactivate_vault` path.
+   *
+   * THREAT: a phished/leaked owner key can chain
+   * `freeze_vault → reactivate_vault(new_agent=ATTACKER, FULL_CAPABILITY)`
+   * in a single transaction. The vault's `cosign_required` flag gates
+   * elevated MUTATIONS via `queue_policy_update`, but the reactivate
+   * path grafts a new agent at FULL_CAPABILITY directly — no timelock,
+   * no cosign — yielding an instant operator-class grant.
+   *
+   * DEFENSE: when `cosign_session_pubkey != Pubkey::default()` AND the
+   * reactivate ix passes `capability == FULL_CAPABILITY` for the new
+   * agent, the handler REQUIRES a matching signer in
+   * `ctx.remaining_accounts` whose key equals this pubkey AND
+   * `is_signer == true`. Otherwise rejects with
+   * `ErrReactivateCosignRequiredForFullCapability` (6114).
+   *
+   * Default `Pubkey::default()` at `initialize_vault` time means
+   * existing vaults retain today's behavior (no cosign gate on
+   * reactivate). Owners opt in by setting a non-default value via
+   * `queue_policy_update`. Setting a non-default value here is
+   * orthogonal to `cosign_required` — the two gate different ix paths
+   * (queue/apply vs reactivate) and use different pubkey sources
+   * (`pending.cosign_session` vs this field).
+   *
+   * Bound by TA-19 at canonical digest position 22. APPENDED at end
+   * of struct per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  cosignSessionPubkey: Address;
+  /**
+   * F-Q6 (2026-06-02): owner-configured delay (in seconds) before an
+   * OPERATOR capability grant takes effect. Default 0. An owner-set
+   * security control gating OPERATOR seating — bound by TA-19 at canonical
+   * digest position 22 so a tampered SDK or pending-PDA mutation cannot
+   * silently lower it between owner approval and on-chain landing.
+   * Changeable only via the timelocked `queue_policy_update` path (so
+   * lowering it is itself delayed). The single-key forced floor
+   * (`max(field, 600)`) and per-tier grant logic live in `register_agent`
+   * / `queue_agent_grant`.
+   *
+   * APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  operatorGrantDelaySeconds: bigint;
 };
 
 export type PolicyConfigArgs = {
@@ -161,10 +390,9 @@ export type PolicyConfigArgs = {
   /** Maximum single transaction size in USD (6 decimals). */
   maxTransactionSizeUsd: number | bigint;
   /**
-   * Protocol access control mode:
-   * 0 = all allowed (protocols list ignored)
-   * 1 = allowlist (only protocols in list)
-   * 2 = denylist (all except protocols in list)
+   * Protocol allowlist mode. Phase 2 Option A: ONLY value 1 (ALLOWLIST)
+   * permitted. Modes 0 (ALL) and 2 (DENYLIST) deleted under L-1. Handler
+   * rejects any other value with `ErrInvalidProtocolMode`.
    */
   protocolMode: number;
   /**
@@ -178,9 +406,13 @@ export type PolicyConfigArgs = {
    */
   developerFeeRate: number;
   /**
-   * Maximum slippage tolerance for Jupiter swaps in basis points.
-   * 0 = reject all swaps (vault owner must explicitly configure).
-   * Enforced on-chain via instruction introspection of Jupiter data.
+   * Maximum slippage tolerance (basis points) — generic config primitive
+   * preserved per D-5 across Phase 1 Option A demolition. Per L-1 there is
+   * no on-chain Jupiter slippage verifier in V1; this field is consumed by
+   * off-chain SDK simulators and (Phase 6) generic post-execution assertions
+   * (R-1 mint-delta cap). Validated at config time via
+   * `max_slippage_bps <= MAX_SLIPPAGE_BPS` (= 5000 BPS = 50% ceiling).
+   * 0 = no slippage protection configured.
    */
   maxSlippageBps: number;
   /** Timelock duration in seconds for policy changes. 0 = no timelock. */
@@ -190,11 +422,6 @@ export type PolicyConfigArgs = {
    * Empty = any destination allowed. Bounded to MAX_ALLOWED_DESTINATIONS.
    */
   allowedDestinations: Array<Address>;
-  /**
-   * Whether instruction constraints PDA exists for this vault.
-   * Set true by create_instruction_constraints, false by apply_close_constraints.
-   */
-  hasConstraints: boolean;
   /**
    * Whether a pending policy update PDA exists for this vault.
    * Set true by queue_policy_update, false by apply/cancel_pending_policy.
@@ -234,14 +461,237 @@ export type PolicyConfigArgs = {
    */
   hasPostAssertions: number;
   /**
-   * Destination access control mode for `agent_transfer`:
-   * 0 = Restricted (DEFAULT) — destination MUST be in `allowed_destinations`.
-   * 1 = OpenWithCap — destination unrestricted; only `daily_spending_cap_usd` throttles drain.
-   * Closes F-4 (third-pass audit): empty `allowed_destinations` no longer
-   * implies default-allow. Owners must explicitly opt into OpenWithCap via
-   * queue_policy_update / apply_pending_policy.
+   * Destination access control mode for `agent_transfer` and spending paths.
+   *
+   * Phase 2 Option A: only value 0 (RESTRICTED) is accepted. Permissive
+   * OPEN_WITH_CAP (1) was deleted. Closes F-4 (third-pass audit) and the
+   * subsequent owner-opt-in window definitively.
    */
   destinationMode: number;
+  /**
+   * TA-19 (Phase 2): SHA-256 digest of the canonical Borsh encoding of the
+   * policy fields the owner approved at queue/init time. Bound at the same
+   * instruction where the owner signs the change, re-asserted at apply, so
+   * a compromised owner-signer or pending-PDA tampering cannot mutate the
+   * applied policy without producing a digest mismatch.
+   *
+   * CANONICAL ENCODING (FIXED — DO NOT REORDER):
+   * 1. `daily_spending_cap_usd: u64`
+   * 2. `max_transaction_size_usd: u64`
+   * 3. `max_slippage_bps: u16`
+   * 4. `developer_fee_rate: u16` — PEN-CROSS-6 (Phase 2 close-up)
+   * 5. `protocol_mode: u8`
+   * 6. `protocols: Vec<Pubkey>`
+   * 7. `destination_mode: u8`
+   * 8. `allowed_destinations: Vec<Pubkey>`
+   * 9. `timelock_duration: u64`
+   * 10. `session_expiry_seconds: u64`
+   * 11. `observe_only: bool`
+   * 12. `has_constraints: bool`
+   * 13. `has_post_assertions: u8`
+   * 14. `created_at_slot: u64` — PEN-CROSS-2 (Phase 2 close-up)
+   *
+   * All fields encoded as Borsh: u8/u16/u64 little-endian, `bool` as `[u8; 1]`
+   * (0 or 1), `Vec<Pubkey>` as `u32_le_len ++ pubkey_bytes_concatenated`.
+   * The SDK helper `computePolicyPreviewDigest` mirrors this encoding exactly.
+   *
+   * APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  policyPreviewDigest: ReadonlyUint8Array;
+  /**
+   * PEN-CROSS-2 (Phase 2 close-up): the slot at which `initialize_vault`
+   * minted this PolicyConfig. Bound by TA-19 at position 14 of the
+   * canonical digest encoding.
+   *
+   * Closes the close+reinit replay window: an owner who closes a vault
+   * (via `close_vault`) and later re-inits a fresh PDA at the same
+   * (owner, vault_id) gets a new `created_at_slot`. The signed
+   * `initialize_vault` ix from the old vault encodes the OLD slot in its
+   * preview digest, so replaying that signed tx against the fresh PDA
+   * produces a digest mismatch and `PolicyPreviewMismatch` rejects it.
+   *
+   * APPENDED at end of struct per F-14 APPEND-ONLY rule.
+   */
+  createdAtSlot: number | bigint;
+  /**
+   * TA-05 (Phase 3 pre-execution guard #2): 24-bit UTC operating-hours
+   * bitmask. Bit `n` (0 ≤ n ≤ 23) set → spending allowed when
+   * `clock.unix_timestamp / 3600 % 24 == n`. Upper 8 bits (24..=31)
+   * MUST be zero; rejected at write-time.
+   *
+   * Default for owners who don't narrow: 0xFFFFFF (all 24 hours enabled
+   * — equivalent to "no operating-hours constraint"). New vaults set
+   * this explicitly via the digest the owner signs; back-compat
+   * consideration removed per L-3 (Phase 2 TA-19 bound the field anyway).
+   *
+   * Bound by TA-19 at position 15 of the canonical digest encoding.
+   * APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  operatingHours: number;
+  /**
+   * TA-07 (Phase 3 pre-execution guard #4): first-time-destination
+   * 24-hour graylist friction. When a NEW destination is added to
+   * `allowed_destinations` (via queue_policy_update), it enters this
+   * graylist with `unlock_unix = now + 86400` (24h). Until either
+   * (a) the unlock time elapses OR (b) the owner calls
+   * `promote_graylist_destination` to fast-track, spending paths
+   * reject any tx routing value to that destination with
+   * `ErrGraylistFriction` (6077).
+   *
+   * Tuple is `(destination_pubkey, unlock_unix)`. Bounded ≤10 entries
+   * (max_destinations). When full, additional allowlist adds reject
+   * with `ErrGraylistFull` (6087) until an existing entry unlocks or
+   * is promoted.
+   *
+   * DESIGN: graylist entries are derived/ephemeral state — the owner's
+   * signed digest already binds the allowlist (canonical position 8),
+   * and graylist friction only delays an already-authorised destination.
+   * Therefore the graylist itself is NOT in the canonical digest
+   * encoding. Promoting accelerates the unlock but cannot widen the
+   * allowlist beyond what the owner signed.
+   *
+   * APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  destinationGraylist: Array<DestinationGraylistEntryArgs>;
+  /**
+   * TA-07 (Phase 3): if true, new destinations added to the allowlist
+   * skip the 24h graylist entirely (audit trail still recorded via
+   * emitted events). Bound by TA-19 at canonical digest position 16
+   * so the owner's choice to bypass friction is part of the signed
+   * configuration — not silently flipped.
+   *
+   * Default false. APPENDED at end per F-14 APPEND-ONLY rule.
+   */
+  autoPromoteGrays: boolean;
+  /**
+   * TA-17 (Phase 3 pre-execution guard #7): consecutive-failure
+   * threshold after which an agent's capability is auto-revoked.
+   * Owner-configurable in range 3..=20; out-of-range values rejected
+   * at policy-write time with `InvalidPermissions`. Default 5.
+   *
+   * Only on-chain policy-violation codes (6074-6091) count — see
+   * `POLICY_VIOLATION_RANGE` in finalize_session. External codes
+   * (CU exhaustion, nonce desync, auth) do NOT increment.
+   *
+   * Bound by TA-19 at canonical digest position 17. APPENDED per
+   * F-14 APPEND-ONLY rule.
+   */
+  autoRevokeThreshold: number;
+  /**
+   * TA-12 (Phase 5 post-execution invariant #1): hard floor on the
+   * combined USDC + USDT balance held by the vault. After every
+   * `finalize_session` spending path completes (CPI balance audit +
+   * rolling-cap + per-agent + per-protocol bookkeeping), the handler
+   * re-reads the vault's USDC + USDT token-account balances and
+   * asserts their sum is ≥ this value. If not, it rejects with
+   * `ErrStableFloorViolation` (6085).
+   *
+   * This is the LAST defensive line — no combination of attacks (CPI
+   * drain, per-protocol cap bypass via async fulfillment, fee
+   * inflation, slippage manipulation) may drain the vault below this
+   * line. Default 0 (no reserve — preserves all existing vault
+   * behavior). Owner-configurable via `initialize_vault` and
+   * `queue_policy_update`.
+   *
+   * Bound by TA-19 at canonical digest position 18. APPENDED per
+   * F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  stableBalanceFloor: number | bigint;
+  /**
+   * TA-14 (Phase 5 post-execution invariant #2): rolling 24h
+   * per-recipient outflow cap, in 6-decimal USDC face value. When
+   * non-zero, every `finalize_session` spending path validates that
+   * the recipient's rolling 24h spend (tracked on
+   * `SpendTracker.per_recipient`) PLUS this transaction's outflow
+   * to that recipient stays ≤ this value. Otherwise rejects with
+   * `ErrRecipientCapExceeded` (6096).
+   *
+   * Default 0 (no per-recipient cap) preserves existing vault
+   * behavior. Owner-configurable via `initialize_vault` and
+   * `queue_policy_update`.
+   *
+   * Bound by TA-19 at canonical digest position 19. APPENDED per
+   * F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  perRecipientDailyCapUsd: number | bigint;
+  /**
+   * G6 (audit 2026-05-18): owner-controlled opt-in flag for TA-09
+   * cosign enforcement on elevated policy mutations.
+   *
+   * When `false` (default): elevated mutations (raising caps,
+   * expanding allowlists, weakening floors / per-recipient caps /
+   * protocol caps) require only the owner's signature — no cosign
+   * session is required. Low-friction default, suitable for solo
+   * founders, AI-agent automation, dev/test vaults, and any vault
+   * whose owner is a Squads V4 multisig PDA (multisig at the Solana
+   * layer already enforces multi-signer authorization).
+   *
+   * When `true`: TA-09 elevation checks fire. The seven elevation
+   * triggers in `queue_policy_update` (raises_daily_cap,
+   * raises_max_tx, expands_destinations, expands_protocols,
+   * lowers_floor, weakens_per_recipient_cap, weakens_protocol_caps)
+   * require a non-default `cosign_session` pubkey + a corresponding
+   * signer in `remaining_accounts` with `is_signer == true`.
+   *
+   * Toggle semantics:
+   * - **Enabling (false → true)** is NON-ELEVATED. It is a safety
+   * improvement — owner is voluntarily tightening the policy.
+   * Cosign is not required to enable cosign.
+   * - **Disabling (true → false)** IS ELEVATED. One-way-ratchet
+   * semantics: if cosign is currently ON, the owner cannot turn
+   * it OFF without producing a valid cosign signature — exactly
+   * the protection cosign was meant to provide. A phishing-
+   * compromised owner key cannot silently disable cosign and
+   * then drain via subsequent non-elevated mutations.
+   *
+   * Bound by TA-19 at canonical digest position 20. APPENDED at end
+   * of struct per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  cosignRequired: boolean;
+  /**
+   * D-5 close (audit 2026-05-19, F-RP3-1): the cosign-session pubkey
+   * gating elevated capability grants on the `reactivate_vault` path.
+   *
+   * THREAT: a phished/leaked owner key can chain
+   * `freeze_vault → reactivate_vault(new_agent=ATTACKER, FULL_CAPABILITY)`
+   * in a single transaction. The vault's `cosign_required` flag gates
+   * elevated MUTATIONS via `queue_policy_update`, but the reactivate
+   * path grafts a new agent at FULL_CAPABILITY directly — no timelock,
+   * no cosign — yielding an instant operator-class grant.
+   *
+   * DEFENSE: when `cosign_session_pubkey != Pubkey::default()` AND the
+   * reactivate ix passes `capability == FULL_CAPABILITY` for the new
+   * agent, the handler REQUIRES a matching signer in
+   * `ctx.remaining_accounts` whose key equals this pubkey AND
+   * `is_signer == true`. Otherwise rejects with
+   * `ErrReactivateCosignRequiredForFullCapability` (6114).
+   *
+   * Default `Pubkey::default()` at `initialize_vault` time means
+   * existing vaults retain today's behavior (no cosign gate on
+   * reactivate). Owners opt in by setting a non-default value via
+   * `queue_policy_update`. Setting a non-default value here is
+   * orthogonal to `cosign_required` — the two gate different ix paths
+   * (queue/apply vs reactivate) and use different pubkey sources
+   * (`pending.cosign_session` vs this field).
+   *
+   * Bound by TA-19 at canonical digest position 22. APPENDED at end
+   * of struct per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  cosignSessionPubkey: Address;
+  /**
+   * F-Q6 (2026-06-02): owner-configured delay (in seconds) before an
+   * OPERATOR capability grant takes effect. Default 0. An owner-set
+   * security control gating OPERATOR seating — bound by TA-19 at canonical
+   * digest position 22 so a tampered SDK or pending-PDA mutation cannot
+   * silently lower it between owner approval and on-chain landing.
+   * Changeable only via the timelocked `queue_policy_update` path (so
+   * lowering it is itself delayed). The single-key forced floor
+   * (`max(field, 600)`) and per-tier grant logic live in `register_agent`
+   * / `queue_agent_grant`.
+   *
+   * APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  operatorGrantDelaySeconds: number | bigint;
 };
 
 /** Gets the encoder for {@link PolicyConfigArgs} account data. */
@@ -258,7 +708,6 @@ export function getPolicyConfigEncoder(): Encoder<PolicyConfigArgs> {
       ["maxSlippageBps", getU16Encoder()],
       ["timelockDuration", getU64Encoder()],
       ["allowedDestinations", getArrayEncoder(getAddressEncoder())],
-      ["hasConstraints", getBooleanEncoder()],
       ["hasPendingPolicy", getBooleanEncoder()],
       ["hasProtocolCaps", getBooleanEncoder()],
       ["protocolCaps", getArrayEncoder(getU64Encoder())],
@@ -267,6 +716,20 @@ export function getPolicyConfigEncoder(): Encoder<PolicyConfigArgs> {
       ["policyVersion", getU64Encoder()],
       ["hasPostAssertions", getU8Encoder()],
       ["destinationMode", getU8Encoder()],
+      ["policyPreviewDigest", fixEncoderSize(getBytesEncoder(), 32)],
+      ["createdAtSlot", getU64Encoder()],
+      ["operatingHours", getU32Encoder()],
+      [
+        "destinationGraylist",
+        getArrayEncoder(getDestinationGraylistEntryEncoder()),
+      ],
+      ["autoPromoteGrays", getBooleanEncoder()],
+      ["autoRevokeThreshold", getU8Encoder()],
+      ["stableBalanceFloor", getU64Encoder()],
+      ["perRecipientDailyCapUsd", getU64Encoder()],
+      ["cosignRequired", getBooleanEncoder()],
+      ["cosignSessionPubkey", getAddressEncoder()],
+      ["operatorGrantDelaySeconds", getU64Encoder()],
     ]),
     (value) => ({ ...value, discriminator: POLICY_CONFIG_DISCRIMINATOR }),
   );
@@ -285,7 +748,6 @@ export function getPolicyConfigDecoder(): Decoder<PolicyConfig> {
     ["maxSlippageBps", getU16Decoder()],
     ["timelockDuration", getU64Decoder()],
     ["allowedDestinations", getArrayDecoder(getAddressDecoder())],
-    ["hasConstraints", getBooleanDecoder()],
     ["hasPendingPolicy", getBooleanDecoder()],
     ["hasProtocolCaps", getBooleanDecoder()],
     ["protocolCaps", getArrayDecoder(getU64Decoder())],
@@ -294,6 +756,20 @@ export function getPolicyConfigDecoder(): Decoder<PolicyConfig> {
     ["policyVersion", getU64Decoder()],
     ["hasPostAssertions", getU8Decoder()],
     ["destinationMode", getU8Decoder()],
+    ["policyPreviewDigest", fixDecoderSize(getBytesDecoder(), 32)],
+    ["createdAtSlot", getU64Decoder()],
+    ["operatingHours", getU32Decoder()],
+    [
+      "destinationGraylist",
+      getArrayDecoder(getDestinationGraylistEntryDecoder()),
+    ],
+    ["autoPromoteGrays", getBooleanDecoder()],
+    ["autoRevokeThreshold", getU8Decoder()],
+    ["stableBalanceFloor", getU64Decoder()],
+    ["perRecipientDailyCapUsd", getU64Decoder()],
+    ["cosignRequired", getBooleanDecoder()],
+    ["cosignSessionPubkey", getAddressDecoder()],
+    ["operatorGrantDelaySeconds", getU64Decoder()],
   ]);
 }
 

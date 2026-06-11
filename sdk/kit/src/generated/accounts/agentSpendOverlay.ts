@@ -21,6 +21,8 @@ import {
   getArrayEncoder,
   getBytesDecoder,
   getBytesEncoder,
+  getI64Decoder,
+  getI64Encoder,
   getStructDecoder,
   getStructEncoder,
   getU64Decoder,
@@ -84,6 +86,36 @@ export type AgentSpendOverlay = {
    * Used for: avg TX size (lifetime_spend / lifetime_tx_count), agent activity ranking.
    */
   lifetimeTxCount: Array<bigint>;
+  /**
+   * TA-06 (Phase 3 pre-execution guard #3): per-agent cooldown in seconds.
+   * Index matches entries[i].
+   *
+   * Per-AGENT, not per-vault — a per-vault cooldown was rejected per F-16
+   * because one agent's traffic would DoS all other agents on the same
+   * vault. With per-agent cooldown, each agent has its own pacing limit
+   * configured by the owner.
+   *
+   * 0 = no cooldown (default). Owner configures via
+   * `queue_agent_permissions_update` (P3).
+   *
+   * Appended AFTER lifetime_spend/lifetime_tx_count to preserve existing
+   * zero-copy byte offsets per the established APPEND-ONLY pattern.
+   */
+  cooldownSeconds: Array<bigint>;
+  /**
+   * TA-06 (Phase 3): per-agent last successful validate_and_authorize
+   * Unix timestamp. Index matches entries[i]. Written at the end of
+   * validate_and_authorize on a successful authorization. The cooldown
+   * gate compares `(now - last_action_unix) >= cooldown_seconds[i]`.
+   *
+   * 0 = no prior action recorded (first authorization for this agent
+   * after registration / overlay reset). The cooldown check uses
+   * `i64::checked_sub` and treats a 0 baseline as "no previous action"
+   * → cooldown auto-passes.
+   *
+   * Appended AFTER cooldown_seconds to preserve zero-copy byte offsets.
+   */
+  lastActionUnix: Array<bigint>;
 };
 
 export type AgentSpendOverlayArgs = {
@@ -112,6 +144,36 @@ export type AgentSpendOverlayArgs = {
    * Used for: avg TX size (lifetime_spend / lifetime_tx_count), agent activity ranking.
    */
   lifetimeTxCount: Array<number | bigint>;
+  /**
+   * TA-06 (Phase 3 pre-execution guard #3): per-agent cooldown in seconds.
+   * Index matches entries[i].
+   *
+   * Per-AGENT, not per-vault — a per-vault cooldown was rejected per F-16
+   * because one agent's traffic would DoS all other agents on the same
+   * vault. With per-agent cooldown, each agent has its own pacing limit
+   * configured by the owner.
+   *
+   * 0 = no cooldown (default). Owner configures via
+   * `queue_agent_permissions_update` (P3).
+   *
+   * Appended AFTER lifetime_spend/lifetime_tx_count to preserve existing
+   * zero-copy byte offsets per the established APPEND-ONLY pattern.
+   */
+  cooldownSeconds: Array<number | bigint>;
+  /**
+   * TA-06 (Phase 3): per-agent last successful validate_and_authorize
+   * Unix timestamp. Index matches entries[i]. Written at the end of
+   * validate_and_authorize on a successful authorization. The cooldown
+   * gate compares `(now - last_action_unix) >= cooldown_seconds[i]`.
+   *
+   * 0 = no prior action recorded (first authorization for this agent
+   * after registration / overlay reset). The cooldown check uses
+   * `i64::checked_sub` and treats a 0 baseline as "no previous action"
+   * → cooldown auto-passes.
+   *
+   * Appended AFTER cooldown_seconds to preserve zero-copy byte offsets.
+   */
+  lastActionUnix: Array<number | bigint>;
 };
 
 /** Gets the encoder for {@link AgentSpendOverlayArgs} account data. */
@@ -128,6 +190,8 @@ export function getAgentSpendOverlayEncoder(): FixedSizeEncoder<AgentSpendOverla
       ["padding", fixEncoderSize(getBytesEncoder(), 7)],
       ["lifetimeSpend", getArrayEncoder(getU64Encoder(), { size: 10 })],
       ["lifetimeTxCount", getArrayEncoder(getU64Encoder(), { size: 10 })],
+      ["cooldownSeconds", getArrayEncoder(getU64Encoder(), { size: 10 })],
+      ["lastActionUnix", getArrayEncoder(getI64Encoder(), { size: 10 })],
     ]),
     (value) => ({ ...value, discriminator: AGENT_SPEND_OVERLAY_DISCRIMINATOR }),
   );
@@ -146,6 +210,8 @@ export function getAgentSpendOverlayDecoder(): FixedSizeDecoder<AgentSpendOverla
     ["padding", fixDecoderSize(getBytesDecoder(), 7)],
     ["lifetimeSpend", getArrayDecoder(getU64Decoder(), { size: 10 })],
     ["lifetimeTxCount", getArrayDecoder(getU64Decoder(), { size: 10 })],
+    ["cooldownSeconds", getArrayDecoder(getU64Decoder(), { size: 10 })],
+    ["lastActionUnix", getArrayDecoder(getI64Decoder(), { size: 10 })],
   ]);
 }
 
@@ -224,5 +290,5 @@ export async function fetchAllMaybeAgentSpendOverlay(
 }
 
 export function getAgentSpendOverlaySize(): number {
-  return 2528;
+  return 2688;
 }

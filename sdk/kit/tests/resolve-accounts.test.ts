@@ -2,13 +2,11 @@ import { expect } from "chai";
 import type { Address } from "@solana/kit";
 import {
   getVaultPDA,
+  getVaultPdaFromState,
   getPolicyPDA,
   getTrackerPDA,
   getSessionPDA,
-  getEscrowPDA,
   getAgentOverlayPDA,
-  getConstraintsPDA,
-  getPendingConstraintsPDA,
   resolveAccounts,
 } from "../src/resolve-accounts.js";
 
@@ -35,6 +33,40 @@ describe("resolve-accounts", () => {
 
     it("returns a bump value", async () => {
       const [, bump] = await getVaultPDA(OWNER, 1n);
+      expect(bump).to.be.a("number");
+      expect(bump).to.be.greaterThanOrEqual(0);
+      expect(bump).to.be.lessThanOrEqual(255);
+    });
+  });
+
+  describe("getVaultPdaFromState (H-5: post-ownership-transfer)", () => {
+    it("derives same PDA as getVaultPDA when authority === owner (pre-transfer)", async () => {
+      const [pdaPre] = await getVaultPDA(OWNER, 3n);
+      const [pdaState] = await getVaultPdaFromState({
+        vaultAuthority: OWNER,
+        vaultId: 3n,
+      });
+      expect(pdaState).to.equal(pdaPre);
+    });
+
+    it("derives different PDA than current owner when authority diverges (post-transfer)", async () => {
+      // After accept_ownership_transfer, vault.owner = AGENT (new owner)
+      // but vault.vault_authority stays pinned to OWNER (original initializer).
+      // Passing the NEW owner to getVaultPDA would produce a wrong PDA;
+      // getVaultPdaFromState with the original authority resolves correctly.
+      const [pdaWrongIfDerivedFromNewOwner] = await getVaultPDA(AGENT, 3n);
+      const [pdaCorrect] = await getVaultPdaFromState({
+        vaultAuthority: OWNER,
+        vaultId: 3n,
+      });
+      expect(pdaCorrect).to.not.equal(pdaWrongIfDerivedFromNewOwner);
+    });
+
+    it("returns a bump value", async () => {
+      const [, bump] = await getVaultPdaFromState({
+        vaultAuthority: OWNER,
+        vaultId: 1n,
+      });
       expect(bump).to.be.a("number");
       expect(bump).to.be.greaterThanOrEqual(0);
       expect(bump).to.be.lessThanOrEqual(255);
@@ -80,20 +112,6 @@ describe("resolve-accounts", () => {
     });
   });
 
-  describe("getEscrowPDA", () => {
-    it("derives from source + dest + escrow_id", async () => {
-      const [pda1] = await getEscrowPDA(VAULT, DEST_VAULT, 1n);
-      const [pda2] = await getEscrowPDA(VAULT, DEST_VAULT, 1n);
-      expect(pda1).to.equal(pda2);
-    });
-
-    it("different escrow_id produces different PDA", async () => {
-      const [pda1] = await getEscrowPDA(VAULT, DEST_VAULT, 1n);
-      const [pda2] = await getEscrowPDA(VAULT, DEST_VAULT, 2n);
-      expect(pda1).to.not.equal(pda2);
-    });
-  });
-
   describe("getAgentOverlayPDA", () => {
     it("different shard_index produces different PDA", async () => {
       const [pda1] = await getAgentOverlayPDA(VAULT, 0);
@@ -108,21 +126,6 @@ describe("resolve-accounts", () => {
     });
   });
 
-  describe("getConstraintsPDA / getPendingConstraintsPDA", () => {
-    it("both derive from vault", async () => {
-      const [cpda] = await getConstraintsPDA(VAULT);
-      const [ppda] = await getPendingConstraintsPDA(VAULT);
-      // They use different seeds so they should be different
-      expect(cpda).to.not.equal(ppda);
-    });
-
-    it("deterministic", async () => {
-      const [c1] = await getConstraintsPDA(VAULT);
-      const [c2] = await getConstraintsPDA(VAULT);
-      expect(c1).to.equal(c2);
-    });
-  });
-
   describe("resolveAccounts", () => {
     it("returns all 4 required PDAs", async () => {
       const resolved = await resolveAccounts({
@@ -134,17 +137,6 @@ describe("resolve-accounts", () => {
       expect(resolved.policyPda).to.be.a("string");
       expect(resolved.trackerPda).to.be.a("string");
       expect(resolved.sessionPda).to.be.a("string");
-      expect(resolved.constraintsPda).to.be.undefined;
-    });
-
-    it("hasConstraints=true adds constraintsPda", async () => {
-      const resolved = await resolveAccounts({
-        vault: VAULT,
-        agent: AGENT,
-        tokenMint: TOKEN_MINT,
-        hasConstraints: true,
-      });
-      expect(resolved.constraintsPda).to.be.a("string");
     });
   });
 });

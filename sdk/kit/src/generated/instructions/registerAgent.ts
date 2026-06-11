@@ -14,6 +14,7 @@ import {
   getAddressEncoder,
   getBytesDecoder,
   getBytesEncoder,
+  getProgramDerivedAddress,
   getStructDecoder,
   getStructEncoder,
   getU64Decoder,
@@ -32,6 +33,7 @@ import {
   type Instruction,
   type InstructionWithAccounts,
   type InstructionWithData,
+  type ReadonlyAccount,
   type ReadonlySignerAccount,
   type ReadonlyUint8Array,
   type TransactionSigner,
@@ -39,6 +41,7 @@ import {
 } from "@solana/kit";
 import {
   getAccountMetaFactory,
+  getAddressFromResolvedInstructionAccount,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
 import { SIGIL_PROGRAM_ADDRESS } from "../programs/index.js";
@@ -57,7 +60,11 @@ export type RegisterAgentInstruction<
   TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountOwner extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
+  TAccountPolicy extends string | AccountMeta<string> = string,
   TAccountAgentSpendOverlay extends string | AccountMeta<string> = string,
+  TAccountAuditLogSuccess extends string | AccountMeta<string> = string,
+  TAccountSlotHashesSysvar extends string | AccountMeta<string> =
+    "SysvarS1otHashes111111111111111111111111111",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
   InstructionWithData<ReadonlyUint8Array> &
@@ -70,9 +77,18 @@ export type RegisterAgentInstruction<
       TAccountVault extends string
         ? WritableAccount<TAccountVault>
         : TAccountVault,
+      TAccountPolicy extends string
+        ? WritableAccount<TAccountPolicy>
+        : TAccountPolicy,
       TAccountAgentSpendOverlay extends string
         ? WritableAccount<TAccountAgentSpendOverlay>
         : TAccountAgentSpendOverlay,
+      TAccountAuditLogSuccess extends string
+        ? WritableAccount<TAccountAuditLogSuccess>
+        : TAccountAuditLogSuccess,
+      TAccountSlotHashesSysvar extends string
+        ? ReadonlyAccount<TAccountSlotHashesSysvar>
+        : TAccountSlotHashesSysvar,
       ...TRemainingAccounts,
     ]
   >;
@@ -121,37 +137,72 @@ export function getRegisterAgentInstructionDataCodec(): FixedSizeCodec<
   );
 }
 
-export type RegisterAgentInput<
+export type RegisterAgentAsyncInput<
   TAccountOwner extends string = string,
   TAccountVault extends string = string,
+  TAccountPolicy extends string = string,
   TAccountAgentSpendOverlay extends string = string,
+  TAccountAuditLogSuccess extends string = string,
+  TAccountSlotHashesSysvar extends string = string,
 > = {
   owner: TransactionSigner<TAccountOwner>;
   vault: Address<TAccountVault>;
+  /**
+   * PEN-CROSS-5 (Phase 4 absorption) — policy is now mutated by
+   * register/revoke/pause/unpause to bump `policy_version` as a
+   * defense-in-depth OCC signal. Existing `vault.is_agent` /
+   * `is_agent_paused` constraints already reject the TOCTOU window;
+   * the version bump lets concurrent validate_and_authorize calls fail
+   * fast with PolicyVersionMismatch instead of relying on the slower
+   * constraint check.
+   *
+   * §RP-1 V6 clarification (2026-05-18): the policy-to-vault binding is
+   * enforced by the PDA seeds derivation `[b"policy", vault.key().as_ref()]`
+   * — functionally equivalent to `has_one = vault`. Any sibling-thread
+   * claim of an explicit `has_one = vault` constraint on this account is
+   * cosmetic; the seeds derivation is the load-bearing check. This same
+   * pattern is mirrored on `revoke_agent.rs`, `pause_agent.rs`, and
+   * `unpause_agent.rs`.
+   */
+  policy?: Address<TAccountPolicy>;
   /** Agent spend overlay — per-agent tracking slot. */
   agentSpendOverlay: Address<TAccountAgentSpendOverlay>;
+  /** Phase 7 — success audit log; entry appended after register completes. */
+  auditLogSuccess?: Address<TAccountAuditLogSuccess>;
+  slotHashesSysvar?: Address<TAccountSlotHashesSysvar>;
   agent: RegisterAgentInstructionDataArgs["agent"];
   capability: RegisterAgentInstructionDataArgs["capability"];
   spendingLimitUsd: RegisterAgentInstructionDataArgs["spendingLimitUsd"];
 };
 
-export function getRegisterAgentInstruction<
+export async function getRegisterAgentInstructionAsync<
   TAccountOwner extends string,
   TAccountVault extends string,
+  TAccountPolicy extends string,
   TAccountAgentSpendOverlay extends string,
+  TAccountAuditLogSuccess extends string,
+  TAccountSlotHashesSysvar extends string,
   TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
-  input: RegisterAgentInput<
+  input: RegisterAgentAsyncInput<
     TAccountOwner,
     TAccountVault,
-    TAccountAgentSpendOverlay
+    TAccountPolicy,
+    TAccountAgentSpendOverlay,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar
   >,
   config?: { programAddress?: TProgramAddress },
-): RegisterAgentInstruction<
-  TProgramAddress,
-  TAccountOwner,
-  TAccountVault,
-  TAccountAgentSpendOverlay
+): Promise<
+  RegisterAgentInstruction<
+    TProgramAddress,
+    TAccountOwner,
+    TAccountVault,
+    TAccountPolicy,
+    TAccountAgentSpendOverlay,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar
+  >
 > {
   // Program address.
   const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
@@ -160,9 +211,15 @@ export function getRegisterAgentInstruction<
   const originalAccounts = {
     owner: { value: input.owner ?? null, isWritable: false },
     vault: { value: input.vault ?? null, isWritable: true },
+    policy: { value: input.policy ?? null, isWritable: true },
     agentSpendOverlay: {
       value: input.agentSpendOverlay ?? null,
       isWritable: true,
+    },
+    auditLogSuccess: { value: input.auditLogSuccess ?? null, isWritable: true },
+    slotHashesSysvar: {
+      value: input.slotHashesSysvar ?? null,
+      isWritable: false,
     },
   };
   const accounts = originalAccounts as Record<
@@ -173,12 +230,53 @@ export function getRegisterAgentInstruction<
   // Original args.
   const args = { ...input };
 
+  // Resolve default values.
+  if (!accounts.policy.value) {
+    accounts.policy.value = await getProgramDerivedAddress({
+      programAddress,
+      seeds: [
+        getBytesEncoder().encode(new Uint8Array([112, 111, 108, 105, 99, 121])),
+        getAddressEncoder().encode(
+          getAddressFromResolvedInstructionAccount(
+            "vault",
+            accounts.vault.value,
+          ),
+        ),
+      ],
+    });
+  }
+  if (!accounts.auditLogSuccess.value) {
+    accounts.auditLogSuccess.value = await getProgramDerivedAddress({
+      programAddress,
+      seeds: [
+        getBytesEncoder().encode(
+          new Uint8Array([
+            97, 117, 100, 105, 116, 95, 115, 117, 99, 99, 101, 115, 115,
+          ]),
+        ),
+        getAddressEncoder().encode(
+          getAddressFromResolvedInstructionAccount(
+            "vault",
+            accounts.vault.value,
+          ),
+        ),
+      ],
+    });
+  }
+  if (!accounts.slotHashesSysvar.value) {
+    accounts.slotHashesSysvar.value =
+      "SysvarS1otHashes111111111111111111111111111" as Address<"SysvarS1otHashes111111111111111111111111111">;
+  }
+
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
   return Object.freeze({
     accounts: [
       getAccountMeta("owner", accounts.owner),
       getAccountMeta("vault", accounts.vault),
+      getAccountMeta("policy", accounts.policy),
       getAccountMeta("agentSpendOverlay", accounts.agentSpendOverlay),
+      getAccountMeta("auditLogSuccess", accounts.auditLogSuccess),
+      getAccountMeta("slotHashesSysvar", accounts.slotHashesSysvar),
     ],
     data: getRegisterAgentInstructionDataEncoder().encode(
       args as RegisterAgentInstructionDataArgs,
@@ -188,7 +286,132 @@ export function getRegisterAgentInstruction<
     TProgramAddress,
     TAccountOwner,
     TAccountVault,
-    TAccountAgentSpendOverlay
+    TAccountPolicy,
+    TAccountAgentSpendOverlay,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar
+  >);
+}
+
+export type RegisterAgentInput<
+  TAccountOwner extends string = string,
+  TAccountVault extends string = string,
+  TAccountPolicy extends string = string,
+  TAccountAgentSpendOverlay extends string = string,
+  TAccountAuditLogSuccess extends string = string,
+  TAccountSlotHashesSysvar extends string = string,
+> = {
+  owner: TransactionSigner<TAccountOwner>;
+  vault: Address<TAccountVault>;
+  /**
+   * PEN-CROSS-5 (Phase 4 absorption) — policy is now mutated by
+   * register/revoke/pause/unpause to bump `policy_version` as a
+   * defense-in-depth OCC signal. Existing `vault.is_agent` /
+   * `is_agent_paused` constraints already reject the TOCTOU window;
+   * the version bump lets concurrent validate_and_authorize calls fail
+   * fast with PolicyVersionMismatch instead of relying on the slower
+   * constraint check.
+   *
+   * §RP-1 V6 clarification (2026-05-18): the policy-to-vault binding is
+   * enforced by the PDA seeds derivation `[b"policy", vault.key().as_ref()]`
+   * — functionally equivalent to `has_one = vault`. Any sibling-thread
+   * claim of an explicit `has_one = vault` constraint on this account is
+   * cosmetic; the seeds derivation is the load-bearing check. This same
+   * pattern is mirrored on `revoke_agent.rs`, `pause_agent.rs`, and
+   * `unpause_agent.rs`.
+   */
+  policy: Address<TAccountPolicy>;
+  /** Agent spend overlay — per-agent tracking slot. */
+  agentSpendOverlay: Address<TAccountAgentSpendOverlay>;
+  /** Phase 7 — success audit log; entry appended after register completes. */
+  auditLogSuccess: Address<TAccountAuditLogSuccess>;
+  slotHashesSysvar?: Address<TAccountSlotHashesSysvar>;
+  agent: RegisterAgentInstructionDataArgs["agent"];
+  capability: RegisterAgentInstructionDataArgs["capability"];
+  spendingLimitUsd: RegisterAgentInstructionDataArgs["spendingLimitUsd"];
+};
+
+export function getRegisterAgentInstruction<
+  TAccountOwner extends string,
+  TAccountVault extends string,
+  TAccountPolicy extends string,
+  TAccountAgentSpendOverlay extends string,
+  TAccountAuditLogSuccess extends string,
+  TAccountSlotHashesSysvar extends string,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
+>(
+  input: RegisterAgentInput<
+    TAccountOwner,
+    TAccountVault,
+    TAccountPolicy,
+    TAccountAgentSpendOverlay,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar
+  >,
+  config?: { programAddress?: TProgramAddress },
+): RegisterAgentInstruction<
+  TProgramAddress,
+  TAccountOwner,
+  TAccountVault,
+  TAccountPolicy,
+  TAccountAgentSpendOverlay,
+  TAccountAuditLogSuccess,
+  TAccountSlotHashesSysvar
+> {
+  // Program address.
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
+
+  // Original accounts.
+  const originalAccounts = {
+    owner: { value: input.owner ?? null, isWritable: false },
+    vault: { value: input.vault ?? null, isWritable: true },
+    policy: { value: input.policy ?? null, isWritable: true },
+    agentSpendOverlay: {
+      value: input.agentSpendOverlay ?? null,
+      isWritable: true,
+    },
+    auditLogSuccess: { value: input.auditLogSuccess ?? null, isWritable: true },
+    slotHashesSysvar: {
+      value: input.slotHashesSysvar ?? null,
+      isWritable: false,
+    },
+  };
+  const accounts = originalAccounts as Record<
+    keyof typeof originalAccounts,
+    ResolvedInstructionAccount
+  >;
+
+  // Original args.
+  const args = { ...input };
+
+  // Resolve default values.
+  if (!accounts.slotHashesSysvar.value) {
+    accounts.slotHashesSysvar.value =
+      "SysvarS1otHashes111111111111111111111111111" as Address<"SysvarS1otHashes111111111111111111111111111">;
+  }
+
+  const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
+  return Object.freeze({
+    accounts: [
+      getAccountMeta("owner", accounts.owner),
+      getAccountMeta("vault", accounts.vault),
+      getAccountMeta("policy", accounts.policy),
+      getAccountMeta("agentSpendOverlay", accounts.agentSpendOverlay),
+      getAccountMeta("auditLogSuccess", accounts.auditLogSuccess),
+      getAccountMeta("slotHashesSysvar", accounts.slotHashesSysvar),
+    ],
+    data: getRegisterAgentInstructionDataEncoder().encode(
+      args as RegisterAgentInstructionDataArgs,
+    ),
+    programAddress,
+  } as RegisterAgentInstruction<
+    TProgramAddress,
+    TAccountOwner,
+    TAccountVault,
+    TAccountPolicy,
+    TAccountAgentSpendOverlay,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar
   >);
 }
 
@@ -200,8 +423,29 @@ export type ParsedRegisterAgentInstruction<
   accounts: {
     owner: TAccountMetas[0];
     vault: TAccountMetas[1];
+    /**
+     * PEN-CROSS-5 (Phase 4 absorption) — policy is now mutated by
+     * register/revoke/pause/unpause to bump `policy_version` as a
+     * defense-in-depth OCC signal. Existing `vault.is_agent` /
+     * `is_agent_paused` constraints already reject the TOCTOU window;
+     * the version bump lets concurrent validate_and_authorize calls fail
+     * fast with PolicyVersionMismatch instead of relying on the slower
+     * constraint check.
+     *
+     * §RP-1 V6 clarification (2026-05-18): the policy-to-vault binding is
+     * enforced by the PDA seeds derivation `[b"policy", vault.key().as_ref()]`
+     * — functionally equivalent to `has_one = vault`. Any sibling-thread
+     * claim of an explicit `has_one = vault` constraint on this account is
+     * cosmetic; the seeds derivation is the load-bearing check. This same
+     * pattern is mirrored on `revoke_agent.rs`, `pause_agent.rs`, and
+     * `unpause_agent.rs`.
+     */
+    policy: TAccountMetas[2];
     /** Agent spend overlay — per-agent tracking slot. */
-    agentSpendOverlay: TAccountMetas[2];
+    agentSpendOverlay: TAccountMetas[3];
+    /** Phase 7 — success audit log; entry appended after register completes. */
+    auditLogSuccess: TAccountMetas[4];
+    slotHashesSysvar: TAccountMetas[5];
   };
   data: RegisterAgentInstructionData;
 };
@@ -214,12 +458,12 @@ export function parseRegisterAgentInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedRegisterAgentInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 3) {
+  if (instruction.accounts.length < 6) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 3,
+        expectedAccountMetas: 6,
       },
     );
   }
@@ -234,7 +478,10 @@ export function parseRegisterAgentInstruction<
     accounts: {
       owner: getNextAccount(),
       vault: getNextAccount(),
+      policy: getNextAccount(),
       agentSpendOverlay: getNextAccount(),
+      auditLogSuccess: getNextAccount(),
+      slotHashesSysvar: getNextAccount(),
     },
     data: getRegisterAgentInstructionDataDecoder().decode(instruction.data),
   };

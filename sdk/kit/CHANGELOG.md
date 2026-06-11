@@ -2,6 +2,101 @@
 
 ## 0.16.0
 
+### Phase 9 SDK redesign — engineering notes
+
+Phase 9 of the Sigil V2 program brings the SDK fully in sync with the
+on-chain layer (Phases 1-8) and stages the AL3/AL4/AL2 envelope
+intent-binding pattern. This is a deprecation-staging release for the
+`requireMainnetConfirmation` default flip planned for v1.0; nothing
+breaks for existing mainnet integrations in 0.16.x.
+
+### Breaking changes
+
+- **Tier-classifier deletion** — `protocol-tier.ts`, `protocol-registry/`
+  and their 6 named exports (`resolveProtocolTier`,
+  `PROTOCOL_ANNOTATIONS`, `VERIFIED_PROGRAMS`, `lookupProtocolAnnotation`,
+  `ProtocolAnnotation`, `ProtocolTrustTier`) are removed per the L-1
+  universal-`seal()` constitution. See `MIGRATION.md` for the
+  recipe. The `ProtocolTier` enum on `protocol-resolver.ts` (vault
+  allowlist tier — KNOWN / DEFAULT / NOT_ALLOWED) is a different concept
+  and stays.
+
+### New surface
+
+- `canonical-encode.ts` — shared Borsh-style encoder primitives
+  (`base58Decode32`, `writeU8/16Le/32Le/64Le/Bool`, `sha256`,
+  `digestsEqual`). TA-19 policy preview digest refactored to consume
+  this module; AL3 SealInput intent digest also consumes it.
+- `multisig-detection.ts` — `isSquadsV4Owned(rpc, owner)` strict
+  detection that verifies BOTH the Squads V4 program ID match AND the
+  Anchor account discriminator.
+- `session-mint.ts` — `mintSessionForAgent(...)` thin wrapper around
+  the generated `register_agent` instruction.
+- `policy-attestation.ts` — `getLatestPolicyAttestation(rpc, pda)`
+  reads the current PolicyConfig PDA + hoists the `policyVersion`.
+- `ownership-transfer.ts` — `buildInitiateOwnershipTransferIx`,
+  `buildAcceptOwnershipTransferIx`,
+  `buildAcceptOwnershipTransferMultisigIx`,
+  `buildCancelOwnershipTransferIx` for Phase 8 owner-rotation
+  instructions.
+- `OwnerClient` methods: `reactivateVault` (alias for `resumeVault`),
+  `setObserveOnly`, `queueAgentGrant`, `applyAgentGrant`,
+  `cancelAgentGrant`. Existing `freezeVault` and `resumeVault` retained.
+
+### Errors
+
+- Phase 8 codes 6103-6108 now have full
+  `{ category, retryable, recovery_actions[] }` entries in
+  `ON_CHAIN_ERROR_MAP`.
+- New auto-generated `src/errors/agent-errors.generated.ts` projection
+  of the IDL error surface (109 codes).
+- New drift gate `tests/error-map-drift.test.ts` ensures IDL ↔
+  generated ↔ hand-maintained stay in sync.
+
+### Tooling
+
+- `pnpm codegen:errors` — regenerates `agent-errors.generated.ts` from
+  `target/idl/sigil.json`. Wired into `pretest`.
+- `pnpm check-surface` — emits a `etc/kit.api.txt` snapshot of every
+  named export from every published subpath. `--check` mode for CI
+  drift detection. Lightweight alternative to `@microsoft/api-extractor`.
+- `tests/pending-constraints-size.invariant.test.ts` — SIZE ratchet
+  for PENDING_CONSTRAINTS_SIZE (35_912 bytes) against the on-chain
+  handler assertion.
+
+### AL3 + AL4 + AL2 envelope intent-binding (this release)
+
+- **AL3** `computeSealInputDigest()` — per-call SHA-256 over a canonical
+  Borsh encoding of (vault, agent, mint, amount, target_protocol,
+  network, instructions[]). Surfaced on every `SealResult.intentDigest`.
+  Reserves `intent_version: u8 = 1` at canonical position 1 for future
+  format evolution. **Client-integrity digest only in 0.16.x** — no
+  on-chain verifier yet; the value is for preview-UI binding and
+  client-side telemetry/audit logging.
+- **AL4** `SealResult.network: SigilCaip2Chain` (CAIP-2 mainnet/devnet
+  literal) + `SealResult.isMainnet: boolean` (derived; strict ===
+  match on the canonical mainnet-beta chain id).
+- **AL2** `SigilClientConfig.requireMainnetConfirmation?: boolean` +
+  `ClientSealOpts.mainnetConfirmed?: boolean`. Default `false` in
+  0.16.x (back-compat); SDK emits a structured-logger warning on
+  mainnet `executeAndConfirm` calls without explicit confirmation.
+  **v1.0 will flip the default to `true`** — mainnet calls without
+  `mainnetConfirmed: true` will throw
+  `SIGIL_ERROR__SDK__MAINNET_CONFIRMATION_REQUIRED` (legacy 7020).
+
+### Deferred to 0.16.1 / v0.17 prep
+
+- `dashboard/reads.ts` V2 schema sync (14 new fields).
+- `@deprecated` tagging pass on the 54 root-barrel exports
+  enumerated in `docs/review/PHASE_9_REVIEW/dead-export-audit.md`.
+- On-chain AL3 verifier (post_assertions extension carrying the
+  digest input) — until this lands, AL3 is a client-integrity
+  primitive, not a chain-enforced one.
+- Symmetric AL2 gating on owner-side mutations (`OwnerClient.*`
+  methods currently bypass the mainnet confirmation gate — agent-call
+  paths only). Decide before v1.0 whether owner paths need separate
+  confirmation semantics or should adopt the agent gate.
+
 ### Minor Changes
 
 - [#280](https://github.com/Sigil-Trade/sigil/pull/280) [`f320582`](https://github.com/Sigil-Trade/sigil/commit/f320582eba9331c7d5c61ebae502cf42487753bd) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - feat(kit): C1 — `previewCreateVault(config)` typed SDK primitive

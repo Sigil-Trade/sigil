@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/sigil.json`.
  */
 export type Sigil = {
-  "address": "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL",
+  "address": "7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK",
   "metadata": {
     "name": "sigil",
     "version": "0.1.0",
@@ -13,6 +13,362 @@ export type Sigil = {
     "description": "On-chain guardrails for AI agents on Solana - Permission controls, spending limits, and audit infrastructure for autonomous agents (Sigil)"
   },
   "instructions": [
+    {
+      "name": "acceptOwnershipTransfer",
+      "docs": [
+        "Phase 8 C26 — accept a queued ownership transfer (standard EOA path).",
+        "The `new_owner` signs after the timelock window elapses. Hard-rejects",
+        "when `pending.is_multisig_target == true` (use the Batch 4 multisig",
+        "variant instead). Pending PDA closes; rent returns to `new_owner`.",
+        "Vault.owner is overwritten; policy.policy_version bumps."
+      ],
+      "discriminator": [
+        30,
+        187,
+        65,
+        5,
+        93,
+        131,
+        38,
+        208
+      ],
+      "accounts": [
+        {
+          "name": "newOwner",
+          "docs": [
+            "The `new_owner` queued at initiate. Pubkey identity verified in the",
+            "handler against `pending.new_owner` (defense-in-depth)."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "vault",
+          "docs": [
+            "Vault is mutated (owner field overwritten). PDA derivation uses the",
+            "immutable `vault.vault_authority` field (LBL-01) — the seed binding",
+            "survives the owner mutation that this handler performs, so subsequent",
+            "owner-side ix from `new_owner` continue to resolve the same vault",
+            "account. Handler-level `require_keys_eq!(pending.current_owner,",
+            "vault.owner)` replaces the implicit seed-derivation binding that",
+            "previously enforced the queue→accept owner match."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault.vault_authority",
+                "account": "agentVault"
+              },
+              {
+                "kind": "account",
+                "path": "vault.vault_id",
+                "account": "agentVault"
+              }
+            ]
+          },
+          "relations": [
+            "pending"
+          ]
+        },
+        {
+          "name": "policy",
+          "docs": [
+            "Policy is mutated (policy_version bump + `policy_preview_digest`",
+            "recompute — see handler lines 173-223)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pending",
+          "docs": [
+            "PendingOwnershipTransfer PDA. `close = new_owner` returns rent to the",
+            "signer. `has_one = vault` binds the PDA to this vault explicitly",
+            "(the seed derivation already enforces this via `vault.key()`, but the",
+            "constraint is defense-in-depth against future seeds drift — same",
+            "pattern as the §RP-1 I-2 audit-log guard)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  110,
+                  100,
+                  105,
+                  110,
+                  103,
+                  95,
+                  111,
+                  119,
+                  110,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "auditLogSuccess",
+          "docs": [
+            "Phase 7 — success audit log; entry appended after state mutation."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  100,
+                  105,
+                  116,
+                  95,
+                  115,
+                  117,
+                  99,
+                  99,
+                  101,
+                  115,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "slotHashesSysvar",
+          "address": "SysvarS1otHashes111111111111111111111111111"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "acceptOwnershipTransferMultisig",
+      "docs": [
+        "Phase 8 Batch 4 — accept a queued ownership transfer via Squads V4",
+        "multisig. The `multisig_pda` is an UncheckedAccount (NOT a Signer) —",
+        "Squads V4 vault PDAs have no private key. Authority is enforced by",
+        "(a) `multisig_pda.owner == SQUADS_V4_PROGRAM_ID`, (b) pubkey identity",
+        "match against `pending.new_owner`, and (c) `pending.is_multisig_target",
+        "== true`. Pending PDA closes with rent → multisig_pda. Vault.owner",
+        "is overwritten; policy.policy_version bumps. `OwnershipTransferAccepted`",
+        "is emitted with `via_multisig: true`."
+      ],
+      "discriminator": [
+        112,
+        147,
+        61,
+        110,
+        221,
+        182,
+        203,
+        99
+      ],
+      "accounts": [
+        {
+          "name": "multisigPda",
+          "docs": [
+            "vault PDAs have no private key — authority is enforced by:",
+            "1. `owner == SQUADS_V4_PROGRAM_ID` (verified in handler)",
+            "2. `key() == pending.new_owner` (verified in handler)",
+            "3. `pending.is_multisig_target == true` (verified in handler)",
+            "",
+            "Marked `mut` so the closed `pending` PDA's rent returns here."
+          ],
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "docs": [
+            "Vault is mutated (owner field overwritten). PDA derivation uses the",
+            "immutable `vault.vault_authority` field (LBL-01) so the seed binding",
+            "survives ownership transfer. Handler-level `require_keys_eq!(",
+            "pending.current_owner, vault.owner)` replaces the implicit seed",
+            "binding that previously enforced the queue→accept owner match."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault.vault_authority",
+                "account": "agentVault"
+              },
+              {
+                "kind": "account",
+                "path": "vault.vault_id",
+                "account": "agentVault"
+              }
+            ]
+          },
+          "relations": [
+            "pending"
+          ]
+        },
+        {
+          "name": "policy",
+          "docs": [
+            "Policy is mutated (policy_version bump + `policy_preview_digest`",
+            "recompute — see handler lines 180-230, mirroring the EOA path)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pending",
+          "docs": [
+            "PendingOwnershipTransfer PDA. `close = multisig_pda` returns rent to the",
+            "new authority. `has_one = vault` binds the PDA to this vault explicitly",
+            "(defense-in-depth against future seeds drift; same pattern as §RP-1 I-2)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  110,
+                  100,
+                  105,
+                  110,
+                  103,
+                  95,
+                  111,
+                  119,
+                  110,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "auditLogSuccess",
+          "docs": [
+            "Phase 7 — success audit log; entry appended after state mutation."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  100,
+                  105,
+                  116,
+                  95,
+                  115,
+                  117,
+                  99,
+                  99,
+                  101,
+                  115,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "slotHashesSysvar",
+          "address": "SysvarS1otHashes111111111111111111111111111"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
     {
       "name": "agentTransfer",
       "docs": [
@@ -52,7 +408,7 @@ export type Sigil = {
               },
               {
                 "kind": "account",
-                "path": "vault.owner",
+                "path": "vault.vault_authority",
                 "account": "agentVault"
               },
               {
@@ -175,136 +531,24 @@ export type Sigil = {
       ]
     },
     {
-      "name": "allocateConstraintsPda",
+      "name": "applyAgentGrant",
       "docs": [
-        "Allocate the InstructionConstraints PDA at 10,240 bytes (CPI limit).",
-        "Must be followed by extend_pda calls + create_instruction_constraints",
-        "in the same atomic transaction to reach full SIZE."
+        "Phase 8 PEN-CROSS-1 — apply a queued OPERATOR-class agent grant past",
+        "the timelock. Inserts the agent into `vault.agents`, claims an",
+        "AgentSpendOverlay slot (fail-closed when `spending_limit_usd > 0`),",
+        "re-derives `policy.policy_preview_digest` with the NEW",
+        "`agent_set_hash`, bumps `policy.policy_version`, closes the pending",
+        "PDA, and emits `AgentGrantApplied`."
       ],
       "discriminator": [
-        55,
-        127,
-        43,
-        98,
-        168,
-        156,
-        152,
-        157
-      ],
-      "accounts": [
-        {
-          "name": "owner",
-          "writable": true,
-          "signer": true,
-          "relations": [
-            "vault"
-          ]
-        },
-        {
-          "name": "vault",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  118,
-                  97,
-                  117,
-                  108,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "owner"
-              },
-              {
-                "kind": "account",
-                "path": "vault.vault_id",
-                "account": "agentVault"
-              }
-            ]
-          },
-          "relations": [
-            "policy"
-          ]
-        },
-        {
-          "name": "policy",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  111,
-                  108,
-                  105,
-                  99,
-                  121
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "vault"
-              }
-            ]
-          }
-        },
-        {
-          "name": "constraints",
-          "docs": [
-            "Account must not already exist (lamports == 0)."
-          ],
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  99,
-                  111,
-                  110,
-                  115,
-                  116,
-                  114,
-                  97,
-                  105,
-                  110,
-                  116,
-                  115
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "vault"
-              }
-            ]
-          }
-        },
-        {
-          "name": "systemProgram",
-          "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "allocatePendingConstraintsPda",
-      "docs": [
-        "Allocate the PendingConstraintsUpdate PDA at 10,240 bytes (CPI limit).",
-        "Must be followed by extend_pda calls + queue_constraints_update",
-        "in the same atomic transaction."
-      ],
-      "discriminator": [
-        211,
-        244,
-        224,
-        20,
-        224,
-        183,
         236,
-        165
+        230,
+        108,
+        143,
+        155,
+        71,
+        185,
+        87
       ],
       "accounts": [
         {
@@ -317,6 +561,7 @@ export type Sigil = {
         },
         {
           "name": "vault",
+          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -331,7 +576,8 @@ export type Sigil = {
               },
               {
                 "kind": "account",
-                "path": "owner"
+                "path": "vault.vault_authority",
+                "account": "agentVault"
               },
               {
                 "kind": "account",
@@ -341,11 +587,15 @@ export type Sigil = {
             ]
           },
           "relations": [
-            "policy"
+            "pending"
           ]
         },
         {
           "name": "policy",
+          "docs": [
+            "Policy is mutated (policy_version bump + policy_preview_digest recompute)."
+          ],
+          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -367,37 +617,12 @@ export type Sigil = {
           }
         },
         {
-          "name": "constraints",
+          "name": "pending",
           "docs": [
-            "Existing constraints PDA must exist (proves there's something to update)."
+            "PendingAgentGrant PDA. `close = owner` returns rent to the signer",
+            "(mirrors register_agent rent payer). `has_one = vault` binds the PDA",
+            "to this vault explicitly (defense-in-depth alongside seed derivation)."
           ],
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  99,
-                  111,
-                  110,
-                  115,
-                  116,
-                  114,
-                  97,
-                  105,
-                  110,
-                  116,
-                  115
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "vault"
-              }
-            ]
-          }
-        },
-        {
-          "name": "pendingConstraints",
           "writable": true,
           "pda": {
             "seeds": [
@@ -412,16 +637,57 @@ export type Sigil = {
                   110,
                   103,
                   95,
-                  99,
-                  111,
+                  97,
+                  103,
+                  101,
                   110,
-                  115,
                   116,
+                  95,
+                  103,
                   114,
                   97,
-                  105,
                   110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "agentSpendOverlay",
+          "docs": [
+            "Agent spend overlay — per-agent tracking slot. Same seeds as",
+            "register_agent so the apply path lands in the same overlay."
+          ],
+          "writable": true
+        },
+        {
+          "name": "auditLogSuccess",
+          "docs": [
+            "Phase 7 — success audit log; entry appended after state mutation."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  100,
+                  105,
                   116,
+                  95,
+                  115,
+                  117,
+                  99,
+                  99,
+                  101,
+                  115,
                   115
                 ]
               },
@@ -433,8 +699,8 @@ export type Sigil = {
           }
         },
         {
-          "name": "systemProgram",
-          "address": "11111111111111111111111111111111"
+          "name": "slotHashesSysvar",
+          "address": "SysvarS1otHashes111111111111111111111111111"
         }
       ],
       "args": []
@@ -477,7 +743,7 @@ export type Sigil = {
               },
               {
                 "kind": "account",
-                "path": "vault.owner",
+                "path": "vault.vault_authority",
                 "account": "agentVault"
               },
               {
@@ -561,217 +827,12 @@ export type Sigil = {
             "Agent spend overlay — per-agent tracking slot."
           ],
           "writable": true
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "applyCloseConstraints",
-      "docs": [
-        "Apply a queued constraint closure after timelock expires.",
-        "Closes the constraints PDA, clears policy.has_constraints, bumps policy_version."
-      ],
-      "discriminator": [
-        133,
-        184,
-        235,
-        88,
-        53,
-        237,
-        43,
-        145
-      ],
-      "accounts": [
-        {
-          "name": "owner",
-          "writable": true,
-          "signer": true,
-          "relations": [
-            "vault"
-          ]
         },
         {
-          "name": "vault",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  118,
-                  97,
-                  117,
-                  108,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "owner"
-              },
-              {
-                "kind": "account",
-                "path": "vault.vault_id",
-                "account": "agentVault"
-              }
-            ]
-          },
-          "relations": [
-            "policy"
-          ]
-        },
-        {
-          "name": "policy",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  111,
-                  108,
-                  105,
-                  99,
-                  121
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "vault"
-              }
-            ]
-          }
-        },
-        {
-          "name": "constraints",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  99,
-                  111,
-                  110,
-                  115,
-                  116,
-                  114,
-                  97,
-                  105,
-                  110,
-                  116,
-                  115
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "vault"
-              }
-            ]
-          }
-        },
-        {
-          "name": "pendingCloseConstraints",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  101,
-                  110,
-                  100,
-                  105,
-                  110,
-                  103,
-                  95,
-                  99,
-                  108,
-                  111,
-                  115,
-                  101,
-                  95,
-                  99,
-                  111,
-                  110,
-                  115,
-                  116,
-                  114,
-                  97,
-                  105,
-                  110,
-                  116,
-                  115
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "vault"
-              }
-            ]
-          }
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "applyConstraintsUpdate",
-      "docs": [
-        "Apply a queued constraints update after the timelock expires."
-      ],
-      "discriminator": [
-        175,
-        103,
-        90,
-        155,
-        134,
-        91,
-        135,
-        242
-      ],
-      "accounts": [
-        {
-          "name": "owner",
-          "writable": true,
-          "signer": true,
-          "relations": [
-            "vault"
-          ]
-        },
-        {
-          "name": "vault",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  118,
-                  97,
-                  117,
-                  108,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "owner"
-              },
-              {
-                "kind": "account",
-                "path": "vault.vault_id",
-                "account": "agentVault"
-              }
-            ]
-          },
-          "relations": [
-            "policy"
-          ]
-        },
-        {
-          "name": "policy",
+          "name": "auditLogSuccess",
           "docs": [
-            "PolicyConfig — needed to bump policy_version on constraint changes."
+            "M-6 (audit 2026-05-21) — success audit log; entry appended after",
+            "the capability / spending_limit / policy_version mutations land."
           ],
           "writable": true,
           "pda": {
@@ -779,75 +840,18 @@ export type Sigil = {
               {
                 "kind": "const",
                 "value": [
-                  112,
-                  111,
-                  108,
-                  105,
-                  99,
-                  121
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "vault"
-              }
-            ]
-          }
-        },
-        {
-          "name": "constraints",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  99,
-                  111,
-                  110,
-                  115,
-                  116,
-                  114,
                   97,
-                  105,
-                  110,
-                  116,
-                  115
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "vault"
-              }
-            ]
-          }
-        },
-        {
-          "name": "pendingConstraints",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  101,
-                  110,
+                  117,
                   100,
                   105,
-                  110,
-                  103,
+                  116,
                   95,
-                  99,
-                  111,
-                  110,
                   115,
-                  116,
-                  114,
-                  97,
-                  105,
-                  110,
-                  116,
+                  117,
+                  99,
+                  99,
+                  101,
+                  115,
                   115
                 ]
               },
@@ -857,6 +861,13 @@ export type Sigil = {
               }
             ]
           }
+        },
+        {
+          "name": "slotHashesSysvar",
+          "docs": [
+            "rejects any mismatched sysvar pubkey before the handler runs."
+          ],
+          "address": "SysvarS1otHashes111111111111111111111111111"
         }
       ],
       "args": []
@@ -901,7 +912,8 @@ export type Sigil = {
               },
               {
                 "kind": "account",
-                "path": "owner"
+                "path": "vault.vault_authority",
+                "account": "agentVault"
               },
               {
                 "kind": "account",
@@ -968,6 +980,218 @@ export type Sigil = {
               }
             ]
           }
+        },
+        {
+          "name": "auditLogSuccess",
+          "docs": [
+            "Phase 7 — success audit log; entry appended after policy applied."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  100,
+                  105,
+                  116,
+                  95,
+                  115,
+                  117,
+                  99,
+                  99,
+                  101,
+                  115,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "slotHashesSysvar",
+          "address": "SysvarS1otHashes111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "cancelAgentGrant",
+      "docs": [
+        "Phase 8 §RP Fix-Up B (PEN-02b CRITICAL, audit 2026-05-19) — cancel a",
+        "queued OPERATOR-class agent grant during the timelock window. The",
+        "`PendingAgentGrant` PDA closes; rent returns to the owner. The vault's",
+        "agent set is NOT mutated (the queued agent never entered).",
+        "Symmetric with `cancel_ownership_transfer` on cosign — when",
+        "`policy.cosign_required == true`, the cancel also requires a non-",
+        "owner signer in `remaining_accounts` (D4 decision: closes the",
+        "phished-key cancel-and-re-queue bypass)."
+      ],
+      "discriminator": [
+        193,
+        182,
+        191,
+        195,
+        80,
+        150,
+        140,
+        196
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "vault"
+          ]
+        },
+        {
+          "name": "vault",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault.vault_authority",
+                "account": "agentVault"
+              },
+              {
+                "kind": "account",
+                "path": "vault.vault_id",
+                "account": "agentVault"
+              }
+            ]
+          },
+          "relations": [
+            "pending"
+          ]
+        },
+        {
+          "name": "policy",
+          "docs": [
+            "PolicyConfig is read-only here — only `cosign_required` is consulted",
+            "(D4 symmetric cosign gate). PDA seeds derivation is the load-bearing",
+            "vault binding; cosmetic `has_one = vault` is unnecessary (§RP-1 V6)."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pending",
+          "docs": [
+            "PendingAgentGrant PDA. `close = owner` returns rent to the signer.",
+            "`has_one = vault` binds the PDA to this vault explicitly (the seed",
+            "derivation already enforces this via `vault.key()`, but the constraint",
+            "is defense-in-depth against future seeds drift — same pattern as the",
+            "§RP-1 I-2 audit-log guard)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  110,
+                  100,
+                  105,
+                  110,
+                  103,
+                  95,
+                  97,
+                  103,
+                  101,
+                  110,
+                  116,
+                  95,
+                  103,
+                  114,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "auditLogSuccess",
+          "docs": [
+            "Phase 7 — success audit log; entry appended after state mutation."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  100,
+                  105,
+                  116,
+                  95,
+                  115,
+                  117,
+                  99,
+                  99,
+                  101,
+                  115,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "slotHashesSysvar",
+          "address": "SysvarS1otHashes111111111111111111111111111"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": []
@@ -1012,7 +1236,8 @@ export type Sigil = {
               },
               {
                 "kind": "account",
-                "path": "owner"
+                "path": "vault.vault_authority",
+                "account": "agentVault"
               },
               {
                 "kind": "account",
@@ -1067,126 +1292,39 @@ export type Sigil = {
       "args": []
     },
     {
-      "name": "cancelCloseConstraints",
+      "name": "cancelOwnershipTransfer",
       "docs": [
-        "Cancel a queued constraint closure."
+        "Phase 8 C26 — cancel an in-flight ownership transfer. The current",
+        "owner signs. Symmetric with `initiate_ownership_transfer` on cosign",
+        "(D4 decision — closes the phished-key cancel-and-re-initiate bypass).",
+        "Pending PDA closes; rent returns to `current_owner`."
       ],
       "discriminator": [
-        150,
-        125,
-        186,
-        114,
-        40,
-        105,
-        237,
-        184
-      ],
-      "accounts": [
-        {
-          "name": "owner",
-          "writable": true,
-          "signer": true,
-          "relations": [
-            "vault"
-          ]
-        },
-        {
-          "name": "vault",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  118,
-                  97,
-                  117,
-                  108,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "owner"
-              },
-              {
-                "kind": "account",
-                "path": "vault.vault_id",
-                "account": "agentVault"
-              }
-            ]
-          }
-        },
-        {
-          "name": "pendingCloseConstraints",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  101,
-                  110,
-                  100,
-                  105,
-                  110,
-                  103,
-                  95,
-                  99,
-                  108,
-                  111,
-                  115,
-                  101,
-                  95,
-                  99,
-                  111,
-                  110,
-                  115,
-                  116,
-                  114,
-                  97,
-                  105,
-                  110,
-                  116,
-                  115
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "vault"
-              }
-            ]
-          }
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "cancelConstraintsUpdate",
-      "docs": [
-        "Cancel a queued constraints update."
-      ],
-      "discriminator": [
-        169,
-        121,
-        85,
-        230,
-        154,
         2,
-        78,
-        61
+        184,
+        195,
+        105,
+        138,
+        142,
+        154,
+        75
       ],
       "accounts": [
         {
-          "name": "owner",
+          "name": "currentOwner",
           "writable": true,
-          "signer": true,
-          "relations": [
-            "vault"
-          ]
+          "signer": true
         },
         {
           "name": "vault",
+          "docs": [
+            "Vault binding via PDA seeds (Phase 8 LBL-01): the seeds use",
+            "`vault.vault_authority` (immutable, set at init), NOT the signer key.",
+            "The handler-level `require_keys_eq!(current_owner.key(),",
+            "pending.current_owner)` below is now the LOAD-BEARING signer-binding",
+            "check (pre-LBL-01 the seed derivation incidentally enforced this when",
+            "the seed-key was `current_owner.key()`)."
+          ],
           "pda": {
             "seeds": [
               {
@@ -1201,7 +1339,8 @@ export type Sigil = {
               },
               {
                 "kind": "account",
-                "path": "owner"
+                "path": "vault.vault_authority",
+                "account": "agentVault"
               },
               {
                 "kind": "account",
@@ -1209,10 +1348,44 @@ export type Sigil = {
                 "account": "agentVault"
               }
             ]
+          },
+          "relations": [
+            "pending"
+          ]
+        },
+        {
+          "name": "policy",
+          "docs": [
+            "PolicyConfig is read-only here — `cosign_required` is the only field",
+            "consulted (D4 symmetric cosign gate)."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
           }
         },
         {
-          "name": "pendingConstraints",
+          "name": "pending",
+          "docs": [
+            "PendingOwnershipTransfer PDA. `close = current_owner` returns rent to",
+            "the signer. `has_one = vault` defense-in-depth binds the PDA to this",
+            "vault explicitly."
+          ],
           "writable": true,
           "pda": {
             "seeds": [
@@ -1227,16 +1400,43 @@ export type Sigil = {
                   110,
                   103,
                   95,
-                  99,
                   111,
+                  119,
                   110,
-                  115,
-                  116,
-                  114,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "auditLogSuccess",
+          "docs": [
+            "Phase 7 — success audit log; entry appended after state mutation."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
                   97,
+                  117,
+                  100,
                   105,
-                  110,
                   116,
+                  95,
+                  115,
+                  117,
+                  99,
+                  99,
+                  101,
+                  115,
                   115
                 ]
               },
@@ -1246,6 +1446,14 @@ export type Sigil = {
               }
             ]
           }
+        },
+        {
+          "name": "slotHashesSysvar",
+          "address": "SysvarS1otHashes111111111111111111111111111"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": []
@@ -1290,7 +1498,8 @@ export type Sigil = {
               },
               {
                 "kind": "account",
-                "path": "owner"
+                "path": "vault.vault_authority",
+                "account": "agentVault"
               },
               {
                 "kind": "account",
@@ -1362,118 +1571,6 @@ export type Sigil = {
       "args": []
     },
     {
-      "name": "cleanupOrphanConstraintsPda",
-      "docs": [
-        "Cleanup an orphan InstructionConstraints PDA from a partial",
-        "allocate+extend chain that never reached create_instruction_constraints.",
-        "Owner-only. Drains rent back to owner. F3-H1 audit fix."
-      ],
-      "discriminator": [
-        69,
-        181,
-        93,
-        235,
-        116,
-        229,
-        116,
-        4
-      ],
-      "accounts": [
-        {
-          "name": "owner",
-          "writable": true,
-          "signer": true,
-          "relations": [
-            "vault"
-          ]
-        },
-        {
-          "name": "vault",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  118,
-                  97,
-                  117,
-                  108,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "owner"
-              },
-              {
-                "kind": "account",
-                "path": "vault.vault_id",
-                "account": "agentVault"
-              }
-            ]
-          },
-          "relations": [
-            "policy"
-          ]
-        },
-        {
-          "name": "policy",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  111,
-                  108,
-                  105,
-                  99,
-                  121
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "vault"
-              }
-            ]
-          }
-        },
-        {
-          "name": "orphanPda",
-          "docs": [
-            "by this program, and discriminator zero (orphan from incomplete",
-            "allocate+extend+populate chain)."
-          ],
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  99,
-                  111,
-                  110,
-                  115,
-                  116,
-                  114,
-                  97,
-                  105,
-                  110,
-                  116,
-                  115
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "vault"
-              }
-            ]
-          }
-        }
-      ],
-      "args": []
-    },
-    {
       "name": "closePostAssertions",
       "docs": [
         "Close post-execution assertions for a vault. Returns rent to owner."
@@ -1514,7 +1611,8 @@ export type Sigil = {
               },
               {
                 "kind": "account",
-                "path": "owner"
+                "path": "vault.vault_authority",
+                "account": "agentVault"
               },
               {
                 "kind": "account",
@@ -1584,102 +1682,15 @@ export type Sigil = {
           "address": "11111111111111111111111111111111"
         }
       ],
-      "args": []
-    },
-    {
-      "name": "closeSettledEscrow",
-      "docs": [
-        "Close a settled/refunded escrow PDA — owner reclaims rent."
-      ],
-      "discriminator": [
-        169,
-        244,
-        164,
-        173,
-        181,
-        214,
-        139,
-        6
-      ],
-      "accounts": [
-        {
-          "name": "signer",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "sourceVault",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  118,
-                  97,
-                  117,
-                  108,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "source_vault.owner",
-                "account": "agentVault"
-              },
-              {
-                "kind": "account",
-                "path": "source_vault.vault_id",
-                "account": "agentVault"
-              }
-            ]
-          },
-          "relations": [
-            "escrow"
-          ]
-        },
-        {
-          "name": "destinationVaultKey",
-          "docs": [
-            "Validated indirectly: if the wrong key is passed, the escrow PDA seeds won't",
-            "match and Anchor will reject the account."
-          ]
-        },
-        {
-          "name": "escrow",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  101,
-                  115,
-                  99,
-                  114,
-                  111,
-                  119
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "sourceVault"
-              },
-              {
-                "kind": "account",
-                "path": "destinationVaultKey"
-              },
-              {
-                "kind": "arg",
-                "path": "escrowId"
-              }
-            ]
-          }
-        }
-      ],
       "args": [
         {
-          "name": "escrowId",
-          "type": "u64"
+          "name": "expectedDigest",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
         }
       ]
     },
@@ -1724,7 +1735,8 @@ export type Sigil = {
               },
               {
                 "kind": "account",
-                "path": "owner"
+                "path": "vault.vault_authority",
+                "account": "agentVault"
               },
               {
                 "kind": "account",
@@ -1795,427 +1807,32 @@ export type Sigil = {
           "writable": true
         },
         {
-          "name": "systemProgram",
-          "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "createEscrow",
-      "docs": [
-        "Create an escrow deposit between two vaults.",
-        "Agent-initiated, stablecoin-only, fees deducted upfront, cap-checked."
-      ],
-      "discriminator": [
-        253,
-        215,
-        165,
-        116,
-        36,
-        108,
-        68,
-        80
-      ],
-      "accounts": [
-        {
-          "name": "agent",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "sourceVault",
+          "name": "auditLogSuccess",
+          "docs": [
+            "Phase 7 — close success audit log; rent returns to owner.",
+            "Closing here closes the close+reinit replay window: a vault can be",
+            "re-initialised at the same (owner, vault_id) only after the audit",
+            "logs have been reclaimed, and PEN-CROSS-2 still protects against",
+            "stale-digest replay across the close boundary."
+          ],
           "writable": true,
           "pda": {
             "seeds": [
               {
                 "kind": "const",
                 "value": [
-                  118,
                   97,
                   117,
-                  108,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "source_vault.owner",
-                "account": "agentVault"
-              },
-              {
-                "kind": "account",
-                "path": "source_vault.vault_id",
-                "account": "agentVault"
-              }
-            ]
-          }
-        },
-        {
-          "name": "policy",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  111,
-                  108,
+                  100,
                   105,
-                  99,
-                  121
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "sourceVault"
-              }
-            ]
-          }
-        },
-        {
-          "name": "tracker",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
                   116,
-                  114,
-                  97,
-                  99,
-                  107,
-                  101,
-                  114
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "sourceVault"
-              }
-            ]
-          }
-        },
-        {
-          "name": "agentSpendOverlay",
-          "docs": [
-            "Zero-copy AgentSpendOverlay — per-agent rolling spend"
-          ],
-          "writable": true
-        },
-        {
-          "name": "destinationVault",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  118,
-                  97,
-                  117,
-                  108,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "destination_vault.owner",
-                "account": "agentVault"
-              },
-              {
-                "kind": "account",
-                "path": "destination_vault.vault_id",
-                "account": "agentVault"
-              }
-            ]
-          }
-        },
-        {
-          "name": "escrow",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  101,
-                  115,
-                  99,
-                  114,
-                  111,
-                  119
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "sourceVault"
-              },
-              {
-                "kind": "account",
-                "path": "destinationVault"
-              },
-              {
-                "kind": "arg",
-                "path": "escrowId"
-              }
-            ]
-          }
-        },
-        {
-          "name": "sourceVaultAta",
-          "docs": [
-            "Source vault's token account (vault PDA is authority)"
-          ],
-          "writable": true
-        },
-        {
-          "name": "escrowAta",
-          "docs": [
-            "Escrow-owned ATA — init_if_needed because escrow PDA is created in same ix"
-          ],
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "account",
-                "path": "escrow"
-              },
-              {
-                "kind": "const",
-                "value": [
-                  6,
-                  221,
-                  246,
-                  225,
-                  215,
-                  101,
-                  161,
-                  147,
-                  217,
-                  203,
-                  225,
-                  70,
-                  206,
-                  235,
-                  121,
-                  172,
-                  28,
-                  180,
-                  133,
-                  237,
                   95,
-                  91,
-                  55,
-                  145,
-                  58,
-                  140,
-                  245,
-                  133,
-                  126,
-                  255,
-                  0,
-                  169
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "tokenMint"
-              }
-            ],
-            "program": {
-              "kind": "const",
-              "value": [
-                140,
-                151,
-                37,
-                143,
-                78,
-                36,
-                137,
-                241,
-                187,
-                61,
-                16,
-                41,
-                20,
-                142,
-                13,
-                131,
-                11,
-                90,
-                19,
-                153,
-                218,
-                255,
-                16,
-                132,
-                4,
-                142,
-                123,
-                216,
-                219,
-                233,
-                248,
-                89
-              ]
-            }
-          }
-        },
-        {
-          "name": "protocolTreasuryAta",
-          "docs": [
-            "Protocol treasury token account (needed when protocol_fee > 0)"
-          ],
-          "writable": true,
-          "optional": true
-        },
-        {
-          "name": "feeDestinationAta",
-          "docs": [
-            "Developer fee destination token account (needed when developer_fee > 0)"
-          ],
-          "writable": true,
-          "optional": true
-        },
-        {
-          "name": "tokenMint"
-        },
-        {
-          "name": "tokenProgram",
-          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-        },
-        {
-          "name": "systemProgram",
-          "address": "11111111111111111111111111111111"
-        },
-        {
-          "name": "associatedTokenProgram",
-          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
-        }
-      ],
-      "args": [
-        {
-          "name": "escrowId",
-          "type": "u64"
-        },
-        {
-          "name": "amount",
-          "type": "u64"
-        },
-        {
-          "name": "expiresAt",
-          "type": "i64"
-        },
-        {
-          "name": "conditionHash",
-          "type": {
-            "array": [
-              "u8",
-              32
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "name": "createInstructionConstraints",
-      "docs": [
-        "Populate a pre-allocated InstructionConstraints PDA with entries.",
-        "Only the owner can call this. PDA must be at full SIZE."
-      ],
-      "discriminator": [
-        13,
-        182,
-        97,
-        5,
-        57,
-        136,
-        26,
-        152
-      ],
-      "accounts": [
-        {
-          "name": "owner",
-          "writable": true,
-          "signer": true,
-          "relations": [
-            "vault"
-          ]
-        },
-        {
-          "name": "vault",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  118,
-                  97,
-                  117,
-                  108,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "owner"
-              },
-              {
-                "kind": "account",
-                "path": "vault.vault_id",
-                "account": "agentVault"
-              }
-            ]
-          },
-          "relations": [
-            "policy"
-          ]
-        },
-        {
-          "name": "policy",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  111,
-                  108,
-                  105,
-                  99,
-                  121
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "vault"
-              }
-            ]
-          }
-        },
-        {
-          "name": "constraints",
-          "docs": [
-            "Verified in handler: correct size, program-owned, vault match, no discriminator yet."
-          ],
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  99,
-                  111,
-                  110,
                   115,
-                  116,
-                  114,
-                  97,
-                  105,
-                  110,
-                  116,
+                  117,
+                  99,
+                  99,
+                  101,
+                  115,
                   115
                 ]
               },
@@ -2225,24 +1842,47 @@ export type Sigil = {
               }
             ]
           }
-        }
-      ],
-      "args": [
+        },
         {
-          "name": "entries",
-          "type": {
-            "vec": {
-              "defined": {
-                "name": "constraintEntry"
+          "name": "auditLogRejected",
+          "docs": [
+            "Phase 7 — close rejected audit log; rent returns to owner."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  100,
+                  105,
+                  116,
+                  95,
+                  114,
+                  101,
+                  106,
+                  101,
+                  99,
+                  116,
+                  101,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
               }
-            }
+            ]
           }
         },
         {
-          "name": "strictMode",
-          "type": "bool"
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
         }
-      ]
+      ],
+      "args": []
     },
     {
       "name": "createPostAssertions",
@@ -2286,7 +1926,8 @@ export type Sigil = {
               },
               {
                 "kind": "account",
-                "path": "owner"
+                "path": "vault.vault_authority",
+                "account": "agentVault"
               },
               {
                 "kind": "account",
@@ -2366,6 +2007,15 @@ export type Sigil = {
               }
             }
           }
+        },
+        {
+          "name": "expectedDigest",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
         }
       ]
     },
@@ -2411,7 +2061,8 @@ export type Sigil = {
               },
               {
                 "kind": "account",
-                "path": "owner"
+                "path": "vault.vault_authority",
+                "account": "agentVault"
               },
               {
                 "kind": "account",
@@ -2611,6 +2262,43 @@ export type Sigil = {
           }
         },
         {
+          "name": "auditLogSuccess",
+          "docs": [
+            "Phase 7 — success audit log; entry appended after token transfer."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  100,
+                  105,
+                  116,
+                  95,
+                  115,
+                  117,
+                  99,
+                  99,
+                  101,
+                  115,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "slotHashesSysvar",
+          "address": "SysvarS1otHashes111111111111111111111111111"
+        },
+        {
           "name": "tokenProgram",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         },
@@ -2627,76 +2315,6 @@ export type Sigil = {
         {
           "name": "amount",
           "type": "u64"
-        }
-      ]
-    },
-    {
-      "name": "extendPda",
-      "docs": [
-        "Grow a program-owned PDA by up to 10,240 bytes per call.",
-        "Used to extend constraints/pending PDAs to full SIZE before population."
-      ],
-      "discriminator": [
-        13,
-        211,
-        140,
-        90,
-        104,
-        28,
-        141,
-        200
-      ],
-      "accounts": [
-        {
-          "name": "owner",
-          "writable": true,
-          "signer": true,
-          "relations": [
-            "vault"
-          ]
-        },
-        {
-          "name": "vault",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  118,
-                  97,
-                  117,
-                  108,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "owner"
-              },
-              {
-                "kind": "account",
-                "path": "vault.vault_id",
-                "account": "agentVault"
-              }
-            ]
-          }
-        },
-        {
-          "name": "pda",
-          "docs": [
-            "owner == crate::ID, vault bytes match, size within bounds."
-          ],
-          "writable": true
-        },
-        {
-          "name": "systemProgram",
-          "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": [
-        {
-          "name": "targetSize",
-          "type": "u32"
         }
       ]
     },
@@ -2739,7 +2357,7 @@ export type Sigil = {
               },
               {
                 "kind": "account",
-                "path": "vault.owner",
+                "path": "vault.vault_authority",
                 "account": "agentVault"
               },
               {
@@ -2885,6 +2503,81 @@ export type Sigil = {
             "Instructions sysvar for post-finalize instruction verification."
           ],
           "address": "Sysvar1nstructions1111111111111111111111111"
+        },
+        {
+          "name": "auditLogSuccess",
+          "docs": [
+            "Phase 7 — SUCCESS-path audit log. Written when the finalize completes",
+            "the non-expired branch."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  100,
+                  105,
+                  116,
+                  95,
+                  115,
+                  117,
+                  99,
+                  99,
+                  101,
+                  115,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "auditLogRejected",
+          "docs": [
+            "Phase 7 — REJECTED-path audit log. Written when the finalize takes",
+            "the expired branch (permissionless-crank cleanup). Audit #2 F-19",
+            "keeps this separate from the success buffer so a crank-attacker",
+            "cannot displace legitimate success history."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  100,
+                  105,
+                  116,
+                  95,
+                  114,
+                  101,
+                  106,
+                  101,
+                  99,
+                  116,
+                  101,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "slotHashesSysvar",
+          "address": "SysvarS1otHashes111111111111111111111111111"
         }
       ],
       "args": []
@@ -2933,7 +2626,8 @@ export type Sigil = {
               },
               {
                 "kind": "account",
-                "path": "owner"
+                "path": "vault.vault_authority",
+                "account": "agentVault"
               },
               {
                 "kind": "account",
@@ -2942,6 +2636,47 @@ export type Sigil = {
               }
             ]
           }
+        },
+        {
+          "name": "auditLogSuccess",
+          "docs": [
+            "Phase 7 — success audit log; entry appended after status flip."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  100,
+                  105,
+                  116,
+                  95,
+                  115,
+                  117,
+                  99,
+                  99,
+                  101,
+                  115,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "slotHashesSysvar",
+          "docs": [
+            "Address constrained to the canonical sysvar pubkey so a tampered caller",
+            "cannot substitute a stale or attacker-controlled account."
+          ],
+          "address": "SysvarS1otHashes111111111111111111111111111"
         },
         {
           "name": "tokenProgram",
@@ -3057,6 +2792,77 @@ export type Sigil = {
           "writable": true
         },
         {
+          "name": "auditLogSuccess",
+          "docs": [
+            "Phase 7 — audit log of SUCCESS-path mutating instructions.",
+            "Allocated at vault creation. Owner pays rent. Failure to allocate",
+            "aborts vault creation (init failure → atomic rollback)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  100,
+                  105,
+                  116,
+                  95,
+                  115,
+                  117,
+                  99,
+                  99,
+                  101,
+                  115,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "auditLogRejected",
+          "docs": [
+            "Phase 7 — audit log of REJECTED finalize attempts (permissionless-",
+            "crank window). Separate from success buffer per Audit #2 F-19 so a",
+            "rejected-finalize burst cannot displace legitimate success history."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  100,
+                  105,
+                  116,
+                  95,
+                  114,
+                  101,
+                  106,
+                  101,
+                  99,
+                  116,
+                  101,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
           "name": "feeDestination"
         },
         {
@@ -3110,6 +2916,213 @@ export type Sigil = {
           "type": {
             "vec": "u64"
           }
+        },
+        {
+          "name": "observeOnly",
+          "type": "bool"
+        },
+        {
+          "name": "operatingHours",
+          "type": "u32"
+        },
+        {
+          "name": "autoPromoteGrays",
+          "type": "bool"
+        },
+        {
+          "name": "autoRevokeThreshold",
+          "type": "u8"
+        },
+        {
+          "name": "stableBalanceFloor",
+          "type": "u64"
+        },
+        {
+          "name": "perRecipientDailyCapUsd",
+          "type": "u64"
+        },
+        {
+          "name": "cosignRequired",
+          "type": "bool"
+        },
+        {
+          "name": "previewDigest",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "initiateOwnershipTransfer",
+      "docs": [
+        "Phase 8 C26 — initiate an ownership transfer with mandatory timelock.",
+        "Owner queues a `PendingOwnershipTransfer` PDA bound to the vault.",
+        "`is_multisig_target` selects between the standard EOA accept (Batch 3",
+        "`accept_ownership_transfer`) and the Squads V4 accept (Batch 4",
+        "`accept_ownership_transfer_multisig`). Cosign-opted-in vaults require",
+        "a non-owner signer in `remaining_accounts` (interim cosign gate)."
+      ],
+      "discriminator": [
+        22,
+        108,
+        197,
+        103,
+        223,
+        145,
+        132,
+        65
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "vault"
+          ]
+        },
+        {
+          "name": "vault",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault.vault_authority",
+                "account": "agentVault"
+              },
+              {
+                "kind": "account",
+                "path": "vault.vault_id",
+                "account": "agentVault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "policy",
+          "docs": [
+            "PolicyConfig is read-only here — `cosign_required` is the only field",
+            "consulted (ISC-129 interim cosign gate)."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pending",
+          "docs": [
+            "PendingOwnershipTransfer PDA. `init` ⇒ ISC-30 / 6103 path: a second",
+            "initiate without an intervening `cancel_ownership_transfer` fails",
+            "hard because Anchor sees the account is already initialised."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  110,
+                  100,
+                  105,
+                  110,
+                  103,
+                  95,
+                  111,
+                  119,
+                  110,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "auditLogSuccess",
+          "docs": [
+            "Phase 7 — success audit log; entry appended after state mutation."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  100,
+                  105,
+                  116,
+                  95,
+                  115,
+                  117,
+                  99,
+                  99,
+                  101,
+                  115,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "slotHashesSysvar",
+          "address": "SysvarS1otHashes111111111111111111111111111"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "newOwner",
+          "type": "pubkey"
+        },
+        {
+          "name": "isMultisigTarget",
+          "type": "bool"
         }
       ]
     },
@@ -3154,7 +3167,8 @@ export type Sigil = {
               },
               {
                 "kind": "account",
-                "path": "owner"
+                "path": "vault.vault_authority",
+                "account": "agentVault"
               },
               {
                 "kind": "account",
@@ -3163,6 +3177,73 @@ export type Sigil = {
               }
             ]
           }
+        },
+        {
+          "name": "policy",
+          "docs": [
+            "PEN-CROSS-5 (Phase 4 absorption) — bump policy_version on pause.",
+            "Mirrors revoke semantics: pause is a kill-switch for an agent,",
+            "and concurrent validate_and_authorize calls must reject with",
+            "PolicyVersionMismatch instead of relying on the slower",
+            "is_agent_paused constraint check."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "auditLogSuccess",
+          "docs": [
+            "Phase 7 — success audit log; entry appended after pause flip."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  100,
+                  105,
+                  116,
+                  95,
+                  115,
+                  117,
+                  99,
+                  99,
+                  101,
+                  115,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "slotHashesSysvar",
+          "address": "SysvarS1otHashes111111111111111111111111111"
         }
       ],
       "args": [
@@ -3173,10 +3254,292 @@ export type Sigil = {
       ]
     },
     {
+      "name": "promoteGraylistDestination",
+      "docs": [
+        "TA-07 (Phase 3): owner-only fast-track promotion of a destination",
+        "out of the 24h graylist window. The destination must already be on",
+        "the allowlist (otherwise rejected as DestinationNotAllowed). Sets",
+        "the entry's `unlock_unix` to `clock.unix_timestamp` so spending",
+        "paths accept it immediately.",
+        "",
+        "No timelock. Promotion is a strict subset of the already-signed",
+        "allowlist authorisation; the owner pays a friction cost by",
+        "default but can opt out per-destination."
+      ],
+      "discriminator": [
+        227,
+        87,
+        73,
+        141,
+        202,
+        251,
+        202,
+        228
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true,
+          "relations": [
+            "vault"
+          ]
+        },
+        {
+          "name": "vault",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault.vault_authority",
+                "account": "agentVault"
+              },
+              {
+                "kind": "account",
+                "path": "vault.vault_id",
+                "account": "agentVault"
+              }
+            ]
+          },
+          "relations": [
+            "policy"
+          ]
+        },
+        {
+          "name": "policy",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "destination",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "queueAgentGrant",
+      "docs": [
+        "Phase 8 PEN-CROSS-1 — queue an OPERATOR-class agent grant with mandatory",
+        "timelock. After `register_agent` was tightened to reject",
+        "`capability == CAPABILITY_OPERATOR`, this is the ONLY path to add a",
+        "new OPERATOR-class agent. Cosign-opted-in vaults require a non-owner",
+        "signer in `remaining_accounts`. The pending PDA at",
+        "`[b\"pending_agent_grant\", vault]` lives until `apply_agent_grant`",
+        "(after `MIN_TIMELOCK_DURATION = 1800s`)."
+      ],
+      "discriminator": [
+        136,
+        162,
+        54,
+        49,
+        167,
+        254,
+        200,
+        26
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "vault"
+          ]
+        },
+        {
+          "name": "vault",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault.vault_authority",
+                "account": "agentVault"
+              },
+              {
+                "kind": "account",
+                "path": "vault.vault_id",
+                "account": "agentVault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "policy",
+          "docs": [
+            "PolicyConfig is read-only here — only `cosign_required` is consulted.",
+            "PDA seeds derivation [b\"policy\", vault.key()] is the load-bearing",
+            "vault binding; cosmetic `has_one = vault` is unnecessary (§RP-1 V6)."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pending",
+          "docs": [
+            "PendingAgentGrant PDA. `init` ⇒ duplicate-queue rejects via Anchor's",
+            "\"account already in use\" path (mirrors PendingOwnershipTransfer's",
+            "double-init guard)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  110,
+                  100,
+                  105,
+                  110,
+                  103,
+                  95,
+                  97,
+                  103,
+                  101,
+                  110,
+                  116,
+                  95,
+                  103,
+                  114,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "auditLogSuccess",
+          "docs": [
+            "Phase 7 — success audit log; entry appended after state mutation."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  100,
+                  105,
+                  116,
+                  95,
+                  115,
+                  117,
+                  99,
+                  99,
+                  101,
+                  115,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "slotHashesSysvar",
+          "address": "SysvarS1otHashes111111111111111111111111111"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "agent",
+          "type": "pubkey"
+        },
+        {
+          "name": "capability",
+          "type": "u8"
+        },
+        {
+          "name": "spendingLimitUsd",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "queueAgentPermissionsUpdate",
       "docs": [
         "Queue an agent permissions update. Timelock-gated.",
-        "Per-agent PDA allows concurrent pending updates for different agents."
+        "Per-agent PDA allows concurrent pending updates for different agents.",
+        "TA-06 (Phase 3): adds `cooldown_seconds` — per-agent cooldown stored",
+        "on `AgentSpendOverlay.cooldown_seconds[slot]`. 0 disables. Bound at",
+        "queue time and applied at apply time onto the agent's overlay slot.",
+        "",
+        "Round 2 F-RP3-2 fix (audit 2026-05-19): adds `cosign_session` —",
+        "on cosign-opted-in vaults, raising capability / spending_limit OR",
+        "setting a non-zero cooldown is an \"elevated mutation\" and MUST be",
+        "cosigned. Non-elevated callers pass `Pubkey::default()`."
       ],
       "discriminator": [
         182,
@@ -3213,7 +3576,8 @@ export type Sigil = {
               },
               {
                 "kind": "account",
-                "path": "owner"
+                "path": "vault.vault_authority",
+                "account": "agentVault"
               },
               {
                 "kind": "account",
@@ -3305,329 +3669,25 @@ export type Sigil = {
         {
           "name": "spendingLimitUsd",
           "type": "u64"
-        }
-      ]
-    },
-    {
-      "name": "queueCloseConstraints",
-      "docs": [
-        "Queue a constraint closure. Timelock-gated."
-      ],
-      "discriminator": [
-        248,
-        124,
-        93,
-        115,
-        195,
-        88,
-        11,
-        109
-      ],
-      "accounts": [
-        {
-          "name": "owner",
-          "writable": true,
-          "signer": true,
-          "relations": [
-            "vault"
-          ]
         },
         {
-          "name": "vault",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  118,
-                  97,
-                  117,
-                  108,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "owner"
-              },
-              {
-                "kind": "account",
-                "path": "vault.vault_id",
-                "account": "agentVault"
-              }
-            ]
-          },
-          "relations": [
-            "policy"
-          ]
+          "name": "cooldownSeconds",
+          "type": "u64"
         },
         {
-          "name": "policy",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  111,
-                  108,
-                  105,
-                  99,
-                  121
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "vault"
-              }
-            ]
-          }
-        },
-        {
-          "name": "constraints",
-          "docs": [
-            "Verify constraints PDA exists (proves there's something to close)."
-          ],
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  99,
-                  111,
-                  110,
-                  115,
-                  116,
-                  114,
-                  97,
-                  105,
-                  110,
-                  116,
-                  115
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "vault"
-              }
-            ]
-          }
-        },
-        {
-          "name": "pendingCloseConstraints",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  101,
-                  110,
-                  100,
-                  105,
-                  110,
-                  103,
-                  95,
-                  99,
-                  108,
-                  111,
-                  115,
-                  101,
-                  95,
-                  99,
-                  111,
-                  110,
-                  115,
-                  116,
-                  114,
-                  97,
-                  105,
-                  110,
-                  116,
-                  115
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "vault"
-              }
-            ]
-          }
-        },
-        {
-          "name": "systemProgram",
-          "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "queueConstraintsUpdate",
-      "docs": [
-        "Queue a constraints update when timelock is active."
-      ],
-      "discriminator": [
-        247,
-        253,
-        233,
-        93,
-        233,
-        54,
-        53,
-        131
-      ],
-      "accounts": [
-        {
-          "name": "owner",
-          "writable": true,
-          "signer": true,
-          "relations": [
-            "vault"
-          ]
-        },
-        {
-          "name": "vault",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  118,
-                  97,
-                  117,
-                  108,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "owner"
-              },
-              {
-                "kind": "account",
-                "path": "vault.vault_id",
-                "account": "agentVault"
-              }
-            ]
-          },
-          "relations": [
-            "policy"
-          ]
-        },
-        {
-          "name": "policy",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  111,
-                  108,
-                  105,
-                  99,
-                  121
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "vault"
-              }
-            ]
-          }
-        },
-        {
-          "name": "constraints",
-          "docs": [
-            "Existing constraints — seeds verify PDA, bump verified via load()."
-          ],
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  99,
-                  111,
-                  110,
-                  115,
-                  116,
-                  114,
-                  97,
-                  105,
-                  110,
-                  116,
-                  115
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "vault"
-              }
-            ]
-          }
-        },
-        {
-          "name": "pendingConstraints",
-          "docs": [
-            "Verified in handler: correct size, program-owned, vault match, no discriminator."
-          ],
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  101,
-                  110,
-                  100,
-                  105,
-                  110,
-                  103,
-                  95,
-                  99,
-                  111,
-                  110,
-                  115,
-                  116,
-                  114,
-                  97,
-                  105,
-                  110,
-                  116,
-                  115
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "vault"
-              }
-            ]
-          }
-        }
-      ],
-      "args": [
-        {
-          "name": "entries",
-          "type": {
-            "vec": {
-              "defined": {
-                "name": "constraintEntry"
-              }
-            }
-          }
-        },
-        {
-          "name": "strictMode",
-          "type": "bool"
+          "name": "cosignSession",
+          "type": "pubkey"
         }
       ]
     },
     {
       "name": "queuePolicyUpdate",
       "docs": [
-        "Queue a policy update when timelock is active."
+        "Queue a policy update when timelock is active.",
+        "TA-09 (Phase 3): adds `cosign_session: Pubkey` arg. Pass",
+        "`Pubkey::default()` for non-elevated mutations; for elevated",
+        "mutations pass the cosigner pubkey and include the corresponding",
+        "signer in `remaining_accounts`."
       ],
       "discriminator": [
         149,
@@ -3664,7 +3724,8 @@ export type Sigil = {
               },
               {
                 "kind": "account",
-                "path": "owner"
+                "path": "vault.vault_authority",
+                "account": "agentVault"
               },
               {
                 "kind": "account",
@@ -3814,6 +3875,55 @@ export type Sigil = {
           "type": {
             "option": "u8"
           }
+        },
+        {
+          "name": "operatingHours",
+          "type": {
+            "option": "u32"
+          }
+        },
+        {
+          "name": "stableBalanceFloor",
+          "type": {
+            "option": "u64"
+          }
+        },
+        {
+          "name": "perRecipientDailyCapUsd",
+          "type": {
+            "option": "u64"
+          }
+        },
+        {
+          "name": "cosignRequired",
+          "type": {
+            "option": "bool"
+          }
+        },
+        {
+          "name": "cosignSessionPubkey",
+          "type": {
+            "option": "pubkey"
+          }
+        },
+        {
+          "name": "operatorGrantDelaySeconds",
+          "type": {
+            "option": "u64"
+          }
+        },
+        {
+          "name": "cosignSession",
+          "type": "pubkey"
+        },
+        {
+          "name": "newPolicyPreviewDigest",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
         }
       ]
     },
@@ -3857,7 +3967,8 @@ export type Sigil = {
               },
               {
                 "kind": "account",
-                "path": "owner"
+                "path": "vault.vault_authority",
+                "account": "agentVault"
               },
               {
                 "kind": "account",
@@ -3866,6 +3977,80 @@ export type Sigil = {
               }
             ]
           }
+        },
+        {
+          "name": "policy",
+          "docs": [
+            "Round 2 F-RP3-1 fix (audit 2026-05-19): policy is now mutated by",
+            "`reactivate_vault` to:",
+            "1. Read `cosign_required` for the interim cosign gate (the previous",
+            "handler granted FULL_CAPABILITY to a fresh agent with NO cosign",
+            "gate on a cosign-opted-in vault — phished-owner instant operator",
+            "grant via freeze→reactivate(attacker, FULL_CAPABILITY)).",
+            "2. Bump `policy_version` after the agent push so any in-flight",
+            "validate_and_authorize fails fast with PolicyVersionMismatch",
+            "rather than relying on the slower vault.is_agent constraint.",
+            "",
+            "Policy-to-vault binding via PDA seeds — same pattern as",
+            "`register_agent.rs:35-40`."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "auditLogSuccess",
+          "docs": [
+            "Phase 7 — success audit log; entry appended after status flip."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  100,
+                  105,
+                  116,
+                  95,
+                  115,
+                  117,
+                  99,
+                  99,
+                  101,
+                  115,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "slotHashesSysvar",
+          "address": "SysvarS1otHashes111111111111111111111111111"
         }
       ],
       "args": [
@@ -3884,32 +4069,39 @@ export type Sigil = {
       ]
     },
     {
-      "name": "refundEscrow",
+      "name": "recordAgentViolation",
       "docs": [
-        "Refund an escrow — source vault's agent or owner reclaims funds after expiry.",
-        "Cap charge is NOT reversed (prevents cap-washing attacks)."
+        "TA-17 (Phase 3): record an on-chain policy-violation failure for",
+        "an agent. Owner-only. `error_code` MUST be in the policy-violation",
+        "range (6074-6091); external codes (CU exhaustion, auth, init)",
+        "reject with InvalidPermissions.",
+        "",
+        "When `agent.consecutive_failures >= policy.auto_revoke_threshold`,",
+        "the agent's capability is set to DISABLED, policy_version bumps,",
+        "and `AgentAutoRevoked` event fires. Subsequent",
+        "validate_and_authorize calls reject with `ErrAutoRevoked` (6090).",
+        "Owner re-enables via existing queue_agent_permissions_update."
       ],
       "discriminator": [
-        107,
-        186,
-        89,
-        99,
-        26,
-        194,
-        23,
-        204
+        131,
+        113,
+        120,
+        227,
+        219,
+        36,
+        160,
+        109
       ],
       "accounts": [
         {
-          "name": "sourceSigner",
-          "docs": [
-            "Source vault's agent or owner"
-          ],
-          "writable": true,
-          "signer": true
+          "name": "owner",
+          "signer": true,
+          "relations": [
+            "vault"
+          ]
         },
         {
-          "name": "sourceVault",
+          "name": "vault",
           "writable": true,
           "pda": {
             "seeds": [
@@ -3925,157 +4117,97 @@ export type Sigil = {
               },
               {
                 "kind": "account",
-                "path": "source_vault.owner",
+                "path": "vault.vault_authority",
                 "account": "agentVault"
               },
               {
                 "kind": "account",
-                "path": "source_vault.vault_id",
+                "path": "vault.vault_id",
                 "account": "agentVault"
               }
             ]
-          }
+          },
+          "relations": [
+            "policy"
+          ]
         },
         {
-          "name": "escrow",
+          "name": "policy",
           "writable": true,
           "pda": {
             "seeds": [
               {
                 "kind": "const",
                 "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "auditLogSuccess",
+          "docs": [
+            "M-8 (audit 2026-05-21) — success audit log; entry appended ONLY",
+            "when the failure counter trips `auto_revoke_threshold` and the",
+            "agent is forcibly disabled. Non-trip increments don't write here",
+            "(policy state is unchanged in that branch)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  100,
+                  105,
+                  116,
+                  95,
+                  115,
+                  117,
+                  99,
+                  99,
                   101,
                   115,
-                  99,
-                  114,
-                  111,
-                  119
+                  115
                 ]
               },
               {
                 "kind": "account",
-                "path": "sourceVault"
-              },
-              {
-                "kind": "account",
-                "path": "escrow.destination_vault",
-                "account": "escrowDeposit"
-              },
-              {
-                "kind": "account",
-                "path": "escrow.escrow_id",
-                "account": "escrowDeposit"
+                "path": "vault"
               }
             ]
           }
         },
         {
-          "name": "escrowAta",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "account",
-                "path": "escrow"
-              },
-              {
-                "kind": "const",
-                "value": [
-                  6,
-                  221,
-                  246,
-                  225,
-                  215,
-                  101,
-                  161,
-                  147,
-                  217,
-                  203,
-                  225,
-                  70,
-                  206,
-                  235,
-                  121,
-                  172,
-                  28,
-                  180,
-                  133,
-                  237,
-                  95,
-                  91,
-                  55,
-                  145,
-                  58,
-                  140,
-                  245,
-                  133,
-                  126,
-                  255,
-                  0,
-                  169
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "tokenMint"
-              }
-            ],
-            "program": {
-              "kind": "const",
-              "value": [
-                140,
-                151,
-                37,
-                143,
-                78,
-                36,
-                137,
-                241,
-                187,
-                61,
-                16,
-                41,
-                20,
-                142,
-                13,
-                131,
-                11,
-                90,
-                19,
-                153,
-                218,
-                255,
-                16,
-                132,
-                4,
-                142,
-                123,
-                216,
-                219,
-                233,
-                248,
-                89
-              ]
-            }
-          }
-        },
-        {
-          "name": "sourceVaultAta",
-          "writable": true
-        },
-        {
-          "name": "rentDestination",
-          "writable": true
-        },
-        {
-          "name": "tokenMint"
-        },
-        {
-          "name": "tokenProgram",
-          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+          "name": "slotHashesSysvar",
+          "docs": [
+            "rejects any mismatched sysvar pubkey before the handler runs."
+          ],
+          "address": "SysvarS1otHashes111111111111111111111111111"
         }
       ],
-      "args": []
+      "args": [
+        {
+          "name": "agent",
+          "type": "pubkey"
+        },
+        {
+          "name": "errorCode",
+          "type": "u32"
+        }
+      ]
     },
     {
       "name": "registerAgent",
@@ -4118,7 +4250,8 @@ export type Sigil = {
               },
               {
                 "kind": "account",
-                "path": "owner"
+                "path": "vault.vault_authority",
+                "account": "agentVault"
               },
               {
                 "kind": "account",
@@ -4129,11 +4262,88 @@ export type Sigil = {
           }
         },
         {
+          "name": "policy",
+          "docs": [
+            "PEN-CROSS-5 (Phase 4 absorption) — policy is now mutated by",
+            "register/revoke/pause/unpause to bump `policy_version` as a",
+            "defense-in-depth OCC signal. Existing `vault.is_agent` /",
+            "`is_agent_paused` constraints already reject the TOCTOU window;",
+            "the version bump lets concurrent validate_and_authorize calls fail",
+            "fast with PolicyVersionMismatch instead of relying on the slower",
+            "constraint check.",
+            "",
+            "§RP-1 V6 clarification (2026-05-18): the policy-to-vault binding is",
+            "enforced by the PDA seeds derivation `[b\"policy\", vault.key().as_ref()]`",
+            "— functionally equivalent to `has_one = vault`. Any sibling-thread",
+            "claim of an explicit `has_one = vault` constraint on this account is",
+            "cosmetic; the seeds derivation is the load-bearing check. This same",
+            "pattern is mirrored on `revoke_agent.rs`, `pause_agent.rs`, and",
+            "`unpause_agent.rs`."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
           "name": "agentSpendOverlay",
           "docs": [
             "Agent spend overlay — per-agent tracking slot."
           ],
           "writable": true
+        },
+        {
+          "name": "auditLogSuccess",
+          "docs": [
+            "Phase 7 — success audit log; entry appended after register completes."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  100,
+                  105,
+                  116,
+                  95,
+                  115,
+                  117,
+                  99,
+                  99,
+                  101,
+                  115,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "slotHashesSysvar",
+          "address": "SysvarS1otHashes111111111111111111111111111"
         }
       ],
       "args": [
@@ -4192,7 +4402,8 @@ export type Sigil = {
               },
               {
                 "kind": "account",
-                "path": "owner"
+                "path": "vault.vault_authority",
+                "account": "agentVault"
               },
               {
                 "kind": "account",
@@ -4203,11 +4414,77 @@ export type Sigil = {
           }
         },
         {
+          "name": "policy",
+          "docs": [
+            "PEN-CROSS-5 (Phase 4 absorption) — bump policy_version on agent",
+            "revocation. See register_agent.rs for the OCC rationale; revoke",
+            "is the more important of the four (removing an agent must",
+            "invalidate concurrent validates that race the revoke)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
           "name": "agentSpendOverlay",
           "docs": [
             "Agent spend overlay — release slot on revocation."
           ],
           "writable": true
+        },
+        {
+          "name": "auditLogSuccess",
+          "docs": [
+            "Phase 7 — success audit log; entry appended after revoke completes."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  100,
+                  105,
+                  116,
+                  95,
+                  115,
+                  117,
+                  99,
+                  99,
+                  101,
+                  115,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "slotHashesSysvar",
+          "address": "SysvarS1otHashes111111111111111111111111111"
         }
       ],
       "args": [
@@ -4218,56 +4495,31 @@ export type Sigil = {
       ]
     },
     {
-      "name": "settleEscrow",
+      "name": "setObserveOnly",
       "docs": [
-        "Settle an escrow — destination vault's agent claims funds before expiry.",
-        "For conditional escrows, proof must match the SHA-256 condition hash."
+        "F-12 audit fix: direct owner-only flip of `vault.observe_only`.",
+        "",
+        "Mirrors `freeze_vault` simplicity (no timelock). observe_only is part",
+        "of the canonical policy_preview_digest encoding; the handler recomputes",
+        "the stored digest + bumps `policy_version` (OCC) on every flip and",
+        "emits `ObserveOnlyChanged` for off-chain monitors.",
+        "",
+        "F-11 consistency: cannot flip to active (false) when both protocol",
+        "and destination allowlists are empty."
       ],
       "discriminator": [
-        22,
-        135,
-        160,
-        194,
-        23,
-        186,
-        124,
-        110
+        36,
+        88,
+        141,
+        35,
+        179,
+        134,
+        54,
+        12
       ],
       "accounts": [
         {
-          "name": "destinationAgent",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "destinationVault",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  118,
-                  97,
-                  117,
-                  108,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "destination_vault.owner",
-                "account": "agentVault"
-              },
-              {
-                "kind": "account",
-                "path": "destination_vault.vault_id",
-                "account": "agentVault"
-              }
-            ]
-          }
-        },
-        {
-          "name": "sourceVault",
+          "name": "vault",
           "writable": true,
           "pda": {
             "seeds": [
@@ -4283,159 +4535,55 @@ export type Sigil = {
               },
               {
                 "kind": "account",
-                "path": "source_vault.owner",
+                "path": "vault.vault_authority",
                 "account": "agentVault"
               },
               {
                 "kind": "account",
-                "path": "source_vault.vault_id",
+                "path": "vault.vault_id",
                 "account": "agentVault"
               }
             ]
-          }
+          },
+          "relations": [
+            "policy"
+          ]
         },
         {
-          "name": "escrow",
+          "name": "policy",
           "writable": true,
           "pda": {
             "seeds": [
               {
                 "kind": "const",
                 "value": [
-                  101,
-                  115,
-                  99,
-                  114,
+                  112,
                   111,
-                  119
+                  108,
+                  105,
+                  99,
+                  121
                 ]
               },
               {
                 "kind": "account",
-                "path": "sourceVault"
-              },
-              {
-                "kind": "account",
-                "path": "destinationVault"
-              },
-              {
-                "kind": "account",
-                "path": "escrow.escrow_id",
-                "account": "escrowDeposit"
+                "path": "vault"
               }
             ]
           }
         },
         {
-          "name": "escrowAta",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "account",
-                "path": "escrow"
-              },
-              {
-                "kind": "const",
-                "value": [
-                  6,
-                  221,
-                  246,
-                  225,
-                  215,
-                  101,
-                  161,
-                  147,
-                  217,
-                  203,
-                  225,
-                  70,
-                  206,
-                  235,
-                  121,
-                  172,
-                  28,
-                  180,
-                  133,
-                  237,
-                  95,
-                  91,
-                  55,
-                  145,
-                  58,
-                  140,
-                  245,
-                  133,
-                  126,
-                  255,
-                  0,
-                  169
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "tokenMint"
-              }
-            ],
-            "program": {
-              "kind": "const",
-              "value": [
-                140,
-                151,
-                37,
-                143,
-                78,
-                36,
-                137,
-                241,
-                187,
-                61,
-                16,
-                41,
-                20,
-                142,
-                13,
-                131,
-                11,
-                90,
-                19,
-                153,
-                218,
-                255,
-                16,
-                132,
-                4,
-                142,
-                123,
-                216,
-                219,
-                233,
-                248,
-                89
-              ]
-            }
-          }
-        },
-        {
-          "name": "destinationVaultAta",
-          "writable": true
-        },
-        {
-          "name": "rentDestination",
-          "writable": true
-        },
-        {
-          "name": "tokenMint"
-        },
-        {
-          "name": "tokenProgram",
-          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+          "name": "owner",
+          "signer": true,
+          "relations": [
+            "vault"
+          ]
         }
       ],
       "args": [
         {
-          "name": "proof",
-          "type": "bytes"
+          "name": "newValue",
+          "type": "bool"
         }
       ]
     },
@@ -4480,7 +4628,8 @@ export type Sigil = {
               },
               {
                 "kind": "account",
-                "path": "owner"
+                "path": "vault.vault_authority",
+                "account": "agentVault"
               },
               {
                 "kind": "account",
@@ -4489,6 +4638,72 @@ export type Sigil = {
               }
             ]
           }
+        },
+        {
+          "name": "policy",
+          "docs": [
+            "PEN-CROSS-5 (Phase 4 absorption) — bump policy_version on unpause.",
+            "Symmetric with pause_agent; the four agent-mutation ix",
+            "(register / revoke / pause / unpause) all bump version so OCC",
+            "signals fire uniformly regardless of which mutation lands."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "auditLogSuccess",
+          "docs": [
+            "Phase 7 — success audit log; entry appended after unpause flip."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  100,
+                  105,
+                  116,
+                  95,
+                  115,
+                  117,
+                  99,
+                  99,
+                  101,
+                  115,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "slotHashesSysvar",
+          "address": "SysvarS1otHashes111111111111111111111111111"
         }
       ],
       "args": [
@@ -4539,7 +4754,7 @@ export type Sigil = {
               },
               {
                 "kind": "account",
-                "path": "vault.owner",
+                "path": "vault.vault_authority",
                 "account": "agentVault"
               },
               {
@@ -4555,6 +4770,13 @@ export type Sigil = {
         },
         {
           "name": "policy",
+          "docs": [
+            "Boxed to keep the `ValidateAndAuthorize::try_accounts` stack frame",
+            "below BPF's 4 KB ceiling. Phase 10 D-5 added 32 bytes",
+            "(`cosign_session_pubkey`) to PolicyConfig, pushing the codegen",
+            "frame from 4072 to 4104 bytes (8 over). `Box` moves the deserialized",
+            "wrapper to the heap, restoring headroom."
+          ],
           "pda": {
             "seeds": [
               {
@@ -4716,6 +4938,19 @@ export type Sigil = {
         {
           "name": "expectedPolicyVersion",
           "type": "u64"
+        },
+        {
+          "name": "expectedNonce",
+          "type": "u64"
+        },
+        {
+          "name": "expectedIntentDigest",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
         }
       ]
     },
@@ -4760,12 +4995,44 @@ export type Sigil = {
               },
               {
                 "kind": "account",
-                "path": "owner"
+                "path": "vault.vault_authority",
+                "account": "agentVault"
               },
               {
                 "kind": "account",
                 "path": "vault.vault_id",
                 "account": "agentVault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "policy",
+          "docs": [
+            "Round 2 fix (audit 2026-05-19): policy is now read by",
+            "`withdraw_funds` to enforce the interim cosign gate when",
+            "`policy.cosign_required == true`. `withdraw_funds` is the REAL",
+            "drain primitive on cosign-opted-in vaults — a phished owner can",
+            "withdraw 100% custody in a single tx without the gate. PDA",
+            "seeds binding mirrors the pattern at",
+            "`register_agent.rs:35-40`."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
               }
             ]
           }
@@ -4960,6 +5227,43 @@ export type Sigil = {
           }
         },
         {
+          "name": "auditLogSuccess",
+          "docs": [
+            "Phase 7 — success audit log; entry appended after token transfer."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  100,
+                  105,
+                  116,
+                  95,
+                  115,
+                  117,
+                  99,
+                  99,
+                  101,
+                  115,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "slotHashesSysvar",
+          "address": "SysvarS1otHashes111111111111111111111111111"
+        },
+        {
           "name": "tokenProgram",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         }
@@ -5000,29 +5304,42 @@ export type Sigil = {
       ]
     },
     {
-      "name": "escrowDeposit",
+      "name": "auditLogRejected",
       "discriminator": [
-        56,
-        152,
-        208,
+        211,
+        117,
+        26,
+        31,
         160,
-        159,
-        83,
-        6,
-        17
+        74,
+        242,
+        204
       ]
     },
     {
-      "name": "instructionConstraints",
+      "name": "auditLogSuccess",
       "discriminator": [
-        183,
-        235,
-        149,
-        166,
-        174,
-        58,
-        98,
-        218
+        225,
+        112,
+        129,
+        30,
+        0,
+        111,
+        84,
+        75
+      ]
+    },
+    {
+      "name": "pendingAgentGrant",
+      "discriminator": [
+        164,
+        188,
+        119,
+        39,
+        18,
+        133,
+        78,
+        66
       ]
     },
     {
@@ -5039,29 +5356,16 @@ export type Sigil = {
       ]
     },
     {
-      "name": "pendingCloseConstraints",
+      "name": "pendingOwnershipTransfer",
       "discriminator": [
-        128,
-        154,
-        58,
-        181,
-        85,
-        163,
-        243,
-        233
-      ]
-    },
-    {
-      "name": "pendingConstraintsUpdate",
-      "discriminator": [
-        22,
-        206,
-        77,
-        208,
-        147,
-        121,
-        53,
-        174
+        205,
+        223,
+        35,
+        217,
+        245,
+        217,
+        152,
+        38
       ]
     },
     {
@@ -5142,6 +5446,58 @@ export type Sigil = {
         8,
         179,
         63
+      ]
+    },
+    {
+      "name": "agentAutoRevoked",
+      "discriminator": [
+        13,
+        133,
+        66,
+        153,
+        126,
+        96,
+        191,
+        221
+      ]
+    },
+    {
+      "name": "agentGrantApplied",
+      "discriminator": [
+        153,
+        242,
+        206,
+        79,
+        159,
+        174,
+        239,
+        134
+      ]
+    },
+    {
+      "name": "agentGrantCancelled",
+      "discriminator": [
+        139,
+        15,
+        84,
+        63,
+        70,
+        46,
+        233,
+        130
+      ]
+    },
+    {
+      "name": "agentGrantQueued",
+      "discriminator": [
+        216,
+        52,
+        141,
+        102,
+        184,
+        100,
+        174,
+        121
       ]
     },
     {
@@ -5262,84 +5618,6 @@ export type Sigil = {
       ]
     },
     {
-      "name": "closeConstraintsApplied",
-      "discriminator": [
-        186,
-        62,
-        25,
-        109,
-        144,
-        207,
-        83,
-        13
-      ]
-    },
-    {
-      "name": "closeConstraintsCancelled",
-      "discriminator": [
-        102,
-        226,
-        171,
-        191,
-        99,
-        98,
-        255,
-        134
-      ]
-    },
-    {
-      "name": "closeConstraintsQueued",
-      "discriminator": [
-        77,
-        23,
-        232,
-        153,
-        108,
-        46,
-        243,
-        53
-      ]
-    },
-    {
-      "name": "constraintsChangeApplied",
-      "discriminator": [
-        112,
-        150,
-        111,
-        125,
-        243,
-        133,
-        35,
-        55
-      ]
-    },
-    {
-      "name": "constraintsChangeCancelled",
-      "discriminator": [
-        15,
-        75,
-        104,
-        222,
-        104,
-        193,
-        65,
-        145
-      ]
-    },
-    {
-      "name": "constraintsChangeQueued",
-      "discriminator": [
-        111,
-        221,
-        100,
-        149,
-        52,
-        23,
-        88,
-        212
-      ]
-    },
-    {
       "name": "delegationRevoked",
       "discriminator": [
         59,
@@ -5350,45 +5628,6 @@ export type Sigil = {
         116,
         220,
         8
-      ]
-    },
-    {
-      "name": "escrowCreated",
-      "discriminator": [
-        70,
-        127,
-        105,
-        102,
-        92,
-        97,
-        7,
-        173
-      ]
-    },
-    {
-      "name": "escrowRefunded",
-      "discriminator": [
-        132,
-        209,
-        49,
-        109,
-        135,
-        138,
-        28,
-        81
-      ]
-    },
-    {
-      "name": "escrowSettled",
-      "discriminator": [
-        97,
-        27,
-        150,
-        55,
-        203,
-        179,
-        173,
-        23
       ]
     },
     {
@@ -5431,55 +5670,81 @@ export type Sigil = {
       ]
     },
     {
-      "name": "instructionConstraintsCreated",
+      "name": "graylistEntered",
       "discriminator": [
-        8,
-        170,
-        99,
-        232,
-        31,
-        216,
-        57,
-        26
-      ]
-    },
-    {
-      "name": "orphanConstraintsPdaCleaned",
-      "discriminator": [
-        161,
-        234,
-        147,
-        131,
-        31,
-        163,
-        145,
-        25
-      ]
-    },
-    {
-      "name": "pdaAllocated",
-      "discriminator": [
-        27,
-        99,
-        195,
-        198,
-        238,
-        53,
-        3,
-        181
-      ]
-    },
-    {
-      "name": "pdaExtended",
-      "discriminator": [
-        67,
-        151,
-        95,
-        79,
-        12,
+        71,
+        189,
+        127,
         11,
-        51,
-        242
+        219,
+        84,
+        46,
+        219
+      ]
+    },
+    {
+      "name": "graylistPromoted",
+      "discriminator": [
+        169,
+        36,
+        32,
+        86,
+        203,
+        34,
+        0,
+        36
+      ]
+    },
+    {
+      "name": "observeOnlyChanged",
+      "discriminator": [
+        180,
+        209,
+        162,
+        85,
+        197,
+        205,
+        231,
+        170
+      ]
+    },
+    {
+      "name": "ownershipTransferAccepted",
+      "discriminator": [
+        170,
+        218,
+        124,
+        19,
+        70,
+        121,
+        99,
+        8
+      ]
+    },
+    {
+      "name": "ownershipTransferCancelled",
+      "discriminator": [
+        120,
+        203,
+        162,
+        145,
+        180,
+        57,
+        253,
+        23
+      ]
+    },
+    {
+      "name": "ownershipTransferInitiated",
+      "discriminator": [
+        181,
+        32,
+        40,
+        60,
+        60,
+        64,
+        235,
+        29
       ]
     },
     {
@@ -5760,7 +6025,7 @@ export type Sigil = {
     {
       "code": 6026,
       "name": "invalidProtocolMode",
-      "msg": "Invalid protocol mode (must be 0, 1, or 2)"
+      "msg": "Invalid protocol mode (must be 1 = ALLOWLIST)"
     },
     {
       "code": 6027,
@@ -5779,375 +6044,411 @@ export type Sigil = {
     },
     {
       "code": 6030,
-      "name": "swapSlippageExceeded",
-      "msg": "Swap slippage exceeds policy max_slippage_bps or quoted output is zero"
-    },
-    {
-      "code": 6031,
-      "name": "invalidJupiterInstruction",
-      "msg": "Cannot parse Jupiter swap instruction data"
-    },
-    {
-      "code": 6032,
       "name": "unauthorizedTokenTransfer",
       "msg": "Top-level SPL Token transfer not allowed between validate and finalize"
     },
     {
-      "code": 6033,
+      "code": 6031,
       "name": "slippageBpsTooHigh",
       "msg": "Slippage BPS exceeds maximum (5000 = 50%)"
     },
     {
-      "code": 6034,
+      "code": 6032,
       "name": "protocolMismatch",
       "msg": "DeFi instruction program does not match declared target_protocol"
     },
     {
-      "code": 6035,
+      "code": 6033,
       "name": "tooManyDeFiInstructions",
       "msg": "Spending allows at most one DeFi instruction"
     },
     {
-      "code": 6036,
+      "code": 6034,
       "name": "maxAgentsReached",
       "msg": "Maximum agents per vault reached (limit: 10)"
     },
     {
-      "code": 6037,
+      "code": 6035,
       "name": "insufficientPermissions",
       "msg": "Agent lacks permission for this action type"
     },
     {
-      "code": 6038,
+      "code": 6036,
       "name": "invalidPermissions",
       "msg": "Permission bitmask contains invalid bits"
     },
     {
-      "code": 6039,
-      "name": "escrowNotActive",
-      "msg": "Escrow is not in Active status"
-    },
-    {
-      "code": 6040,
-      "name": "escrowExpired",
-      "msg": "Escrow has expired"
-    },
-    {
-      "code": 6041,
-      "name": "escrowNotExpired",
-      "msg": "Escrow has not expired yet"
-    },
-    {
-      "code": 6042,
-      "name": "invalidEscrowVault",
-      "msg": "Invalid escrow vault"
-    },
-    {
-      "code": 6043,
-      "name": "escrowConditionsNotMet",
-      "msg": "Escrow conditions not met"
-    },
-    {
-      "code": 6044,
-      "name": "escrowDurationExceeded",
-      "msg": "Escrow duration exceeds maximum (30 days)"
-    },
-    {
-      "code": 6045,
+      "code": 6037,
       "name": "invalidConstraintConfig",
       "msg": "Invalid constraint configuration: bounds exceeded"
     },
     {
-      "code": 6046,
-      "name": "constraintViolated",
-      "msg": "Instruction constraint violated"
-    },
-    {
-      "code": 6047,
-      "name": "invalidConstraintsPda",
-      "msg": "Invalid constraints PDA: wrong owner or vault"
-    },
-    {
-      "code": 6048,
-      "name": "invalidPendingConstraintsPda",
-      "msg": "Invalid pending constraints PDA: wrong owner or vault"
-    },
-    {
-      "code": 6049,
+      "code": 6038,
       "name": "agentSpendLimitExceeded",
       "msg": "Agent rolling 24h spend exceeds per-agent spending limit"
     },
     {
-      "code": 6050,
+      "code": 6039,
       "name": "overlaySlotExhausted",
       "msg": "Per-agent overlay is full; cannot register agent with spending limit"
     },
     {
-      "code": 6051,
+      "code": 6040,
       "name": "agentSlotNotFound",
       "msg": "Agent has per-agent spending limit but no overlay tracking slot"
     },
     {
-      "code": 6052,
+      "code": 6041,
       "name": "unauthorizedTokenApproval",
       "msg": "Unauthorized SPL Token Approve between validate and finalize"
     },
     {
-      "code": 6053,
+      "code": 6042,
       "name": "invalidSessionExpiry",
-      "msg": "Session expiry slots out of range (10-450)"
+      "msg": "Session expiry seconds out of range (5-90)"
     },
     {
-      "code": 6054,
-      "name": "unconstrainedProgramBlocked",
-      "msg": "Program has no constraint entry and strict mode is enabled"
-    },
-    {
-      "code": 6055,
+      "code": 6043,
       "name": "protocolCapExceeded",
-      "msg": "Per-protocol rolling 24h spending cap would be exceeded"
+      "msg": "Per-protocol rolling 24h spending cap would be exceeded — LEGACY counter exhaustion path. New rolling-24h amount-based cap rejections use 6086 ErrDailyCapExceeded"
     },
     {
-      "code": 6056,
+      "code": 6044,
       "name": "protocolCapsMismatch",
       "msg": "protocol_caps length must match protocols length when has_protocol_caps is true"
     },
     {
-      "code": 6057,
-      "name": "activeEscrowsExist",
-      "msg": "Cannot close vault with active escrow deposits"
-    },
-    {
-      "code": 6058,
-      "name": "constraintsNotClosed",
-      "msg": "Instruction constraints must be closed before closing vault"
-    },
-    {
-      "code": 6059,
+      "code": 6045,
       "name": "pendingPolicyExists",
       "msg": "Pending policy update must be applied or cancelled before closing vault"
     },
     {
-      "code": 6060,
+      "code": 6046,
       "name": "agentPaused",
       "msg": "Agent is paused and cannot execute actions"
     },
     {
-      "code": 6061,
+      "code": 6047,
       "name": "agentAlreadyPaused",
       "msg": "Agent is already paused"
     },
     {
-      "code": 6062,
+      "code": 6048,
       "name": "agentNotPaused",
       "msg": "Agent is not paused"
     },
     {
-      "code": 6063,
+      "code": 6049,
       "name": "unauthorizedPostFinalizeInstruction",
       "msg": "Instructions after finalize_session must be ComputeBudget or SystemProgram only"
     },
     {
-      "code": 6064,
+      "code": 6050,
       "name": "unexpectedBalanceDecrease",
       "msg": "Vault balance decreased more than delegated amount — potential CPI attack"
     },
     {
-      "code": 6065,
+      "code": 6051,
       "name": "timelockTooShort",
       "msg": "Timelock duration below minimum (1800 seconds / 30 minutes)"
     },
     {
-      "code": 6066,
+      "code": 6052,
       "name": "policyVersionMismatch",
       "msg": "Policy version mismatch — policy changed since agent's last RPC read"
     },
     {
-      "code": 6067,
+      "code": 6053,
       "name": "activeSessionsExist",
       "msg": "Cannot close vault with active sessions (finalize pending sessions first)"
     },
     {
-      "code": 6068,
+      "code": 6054,
       "name": "postAssertionFailed",
       "msg": "Post-execution assertion failed: account state did not satisfy constraint"
     },
     {
-      "code": 6069,
+      "code": 6055,
       "name": "invalidPostAssertionIndex",
       "msg": "Post-assertion constraint references invalid instruction index"
     },
     {
-      "code": 6070,
+      "code": 6056,
       "name": "unauthorizedPreValidateInstruction",
       "msg": "Non-infrastructure instruction detected before validate_and_authorize"
     },
     {
-      "code": 6071,
+      "code": 6057,
       "name": "snapshotNotCaptured",
       "msg": "Delta assertion snapshot was not captured in validate_and_authorize"
     },
     {
-      "code": 6072,
+      "code": 6058,
       "name": "invalidConstraintOperator",
       "msg": "Constraint operator value is not a valid ConstraintOperator discriminant"
     },
     {
-      "code": 6073,
-      "name": "constraintsVaultMismatch",
-      "msg": "Zero-copy constraints account has wrong vault"
+      "code": 6059,
+      "name": "zeroCopyVaultMismatch",
+      "msg": "Zero-copy account vault key mismatch (defense-in-depth)"
     },
     {
-      "code": 6074,
-      "name": "blockedSplOpcode",
-      "msg": "SPL opcode is blocked at runtime and cannot be used in constraints"
-    },
-    {
-      "code": 6075,
+      "code": 6060,
       "name": "queuedUpdateExpired",
-      "msg": "Queued update is too old (>MAX_APPLY_AGE_SLOTS) — re-queue to apply. Defends against durable-nonce pre-signing."
+      "msg": "Queued update is too old (>MAX_APPLY_AGE_SLOTS / >MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN) — re-queue via the matching queue/initiate ix (queue_policy_update, queue_agent_permissions_update, queue_agent_grant, or initiate_ownership_transfer) to apply. Defends against durable-nonce pre-signing (CH-1 audit 2026-05-23 extended scope to timelocked-admin PDAs)."
     },
     {
-      "code": 6076,
+      "code": 6061,
       "name": "accountWritabilityMismatch",
       "msg": "Account writability flag does not match constraint requirement"
     },
     {
-      "code": 6077,
+      "code": 6062,
       "name": "sysvarScanBoundExceeded",
       "msg": "Sysvar instruction scan exceeded the per-tx safety bound"
     },
     {
-      "code": 6078,
+      "code": 6063,
       "name": "asyncFulfillmentNotPermitted",
       "msg": "Async-fulfillment program is not permitted in V1 (Jupiter Perps, Drift, Drift JIT). Spending cannot be measured because keeper submits the actual transfer in a separate transaction after finalize_session returns."
     },
     {
-      "code": 6079,
-      "name": "constraintsAlreadyPopulated",
-      "msg": "Cannot clean an active constraints PDA; use queue+apply_close_constraints"
-    },
-    {
-      "code": 6080,
-      "name": "orphanPdaWrongOwner",
-      "msg": "PDA at constraints seeds is not program-owned"
-    },
-    {
-      "code": 6081,
-      "name": "orphanPdaPopulated",
-      "msg": "PDA is fully populated; not an orphan"
-    },
-    {
-      "code": 6082,
+      "code": 6064,
       "name": "confidentialTransferBlocked",
       "msg": "Token-2022 ConfidentialTransfer not permitted between validate and finalize"
     },
     {
-      "code": 6083,
+      "code": 6065,
       "name": "permanentDelegateBlocked",
       "msg": "Token-2022 PermanentDelegate not permitted between validate and finalize"
     },
     {
-      "code": 6084,
+      "code": 6066,
       "name": "transferHookBlocked",
       "msg": "Token-2022 TransferHook not permitted between validate and finalize"
     },
     {
-      "code": 6085,
+      "code": 6067,
       "name": "lamportDrainBlocked",
       "msg": "Token-2022 destructive-balance ix (opcodes 38/45/46) not permitted between validate and finalize"
     },
     {
-      "code": 6086,
+      "code": 6068,
       "name": "batchInstructionBlocked",
       "msg": "Token-2022 Batch instruction (opcode 255) is blocked outright — wraps inner instructions and bypasses byte-0 blocklist"
     },
     {
-      "code": 6087,
+      "code": 6069,
       "name": "invalidDestinationMode",
-      "msg": "Invalid destination mode (must be 0 = Restricted or 1 = OpenWithCap)"
+      "msg": "Invalid destination mode (must be 0 = RESTRICTED)"
+    },
+    {
+      "code": 6070,
+      "name": "invalidCapability",
+      "msg": "Invalid agent capability value (must be 0 = Disabled, 1 = Observer, or 2 = Operator)"
+    },
+    {
+      "code": 6071,
+      "name": "policyPreviewMismatch",
+      "msg": "Policy preview digest mismatch — caller's signed digest differs from recomputed canonical digest"
+    },
+    {
+      "code": 6072,
+      "name": "observeOnlyModeBlocksExecute",
+      "msg": "Vault is in observe_only mode — validate_and_authorize is blocked"
+    },
+    {
+      "code": 6073,
+      "name": "activeVaultRequiresAllowlist",
+      "msg": "Active (non-observe_only) vault must have at least one protocol or destination on the allowlist"
+    },
+    {
+      "code": 6074,
+      "name": "errMintNotPinned",
+      "msg": "Deposit mint is not a build-time-pinned stablecoin (USDC or USDT)"
+    },
+    {
+      "code": 6075,
+      "name": "errOutsideOperatingHours",
+      "msg": "Current UTC hour is outside the policy's operating_hours bitmask"
+    },
+    {
+      "code": 6076,
+      "name": "errCooldownActive",
+      "msg": "Agent cooldown period has not elapsed since the last action"
+    },
+    {
+      "code": 6077,
+      "name": "errGraylistFriction",
+      "msg": "Destination is graylisted (24h friction window — awaiting promote_graylist_destination or unlock)"
+    },
+    {
+      "code": 6078,
+      "name": "errGraylistFull",
+      "msg": "Destination graylist is full (max 10 entries) — wait for an existing entry to unlock or promote"
+    },
+    {
+      "code": 6079,
+      "name": "errToken2022ExtensionForbidden",
+      "msg": "Token-2022 mint has a forbidden extension (only MemoTransfer + MetadataPointer allowed)"
+    },
+    {
+      "code": 6080,
+      "name": "errCosignRequired",
+      "msg": "Elevated policy mutation requires an owner-signed cosigning session"
+    },
+    {
+      "code": 6081,
+      "name": "errAutoRevoked",
+      "msg": "Agent capability auto-revoked after consecutive policy-violation failures; owner must re-enable"
+    },
+    {
+      "code": 6082,
+      "name": "errSandwichIntegrity",
+      "msg": "Bundle integrity violation: multiple validate_and_authorize instructions for the same (vault, agent, mint) tuple in one transaction"
+    },
+    {
+      "code": 6083,
+      "name": "errProtectedWritable",
+      "msg": "Protected Sigil PDA passed as writable to a foreign instruction between validate and finalize"
+    },
+    {
+      "code": 6084,
+      "name": "errSessionNonceMismatch",
+      "msg": "Session nonce mismatch — caller's expected_nonce does not match the session's stored nonce (durable-nonce replay defense)"
+    },
+    {
+      "code": 6085,
+      "name": "errStableFloorViolation",
+      "msg": "Stable balance floor violated — combined USDC+USDT balance dropped below policy.stable_balance_floor"
+    },
+    {
+      "code": 6086,
+      "name": "errDailyCapExceeded",
+      "msg": "Per-protocol daily spending cap would be exceeded (rolling 24h)"
+    },
+    {
+      "code": 6087,
+      "name": "errRecipientCapExceeded",
+      "msg": "Per-recipient daily cap exceeded — recipient outflow would breach policy.per_recipient_daily_cap_usd within the rolling 24h window, or per_recipient array full with no expired slot to evict"
+    },
+    {
+      "code": 6088,
+      "name": "errMintDeltaCapExceeded",
+      "msg": "R-1 MintDeltaCap: vault-mint balance decreased by more than max_net_decrease"
+    },
+    {
+      "code": 6089,
+      "name": "mintDeltaCapMisconfigured",
+      "msg": "R-1 MintDeltaCap misconfigured — target account missing, mint mismatch, or owner not vault"
+    },
+    {
+      "code": 6090,
+      "name": "errAtaAuthorityChanged",
+      "msg": "R-2 AtaAuthorityPin: vault-owned token account authority changed or account closed/reinitialized mid-sandwich"
+    },
+    {
+      "code": 6091,
+      "name": "errOutputBelowFloor",
+      "msg": "R-3 OutputBalanceFloor: post-execution balance increase fell below the configured min_increase floor"
+    },
+    {
+      "code": 6092,
+      "name": "errDeclarationInconsistent",
+      "msg": "R-4 DeclarationConsistency: declared recipient/mint does not match CPI account-meta"
+    },
+    {
+      "code": 6093,
+      "name": "ixMetaCountExceeded",
+      "msg": "Foreign instruction exceeded the account-meta processing budget; the bundle is rejected rather than partially inspected"
+    },
+    {
+      "code": 6094,
+      "name": "errPendingOwnershipExists",
+      "msg": "An ownership transfer is already pending; cancel it first"
+    },
+    {
+      "code": 6095,
+      "name": "errPendingOwnershipNotReady",
+      "msg": "Ownership transfer timelock has not elapsed"
+    },
+    {
+      "code": 6096,
+      "name": "errInvalidFreezeReason",
+      "msg": "freeze_reason value out of {{0,1,2}}"
+    },
+    {
+      "code": 6097,
+      "name": "errReactivateCooldownActive",
+      "msg": "Reactivate requires 5-minute observation cooldown to elapse"
+    },
+    {
+      "code": 6098,
+      "name": "errInvalidOwnershipTarget",
+      "msg": "new_owner cannot be system/program/sysvar addresses (Council ISC-128)"
+    },
+    {
+      "code": 6099,
+      "name": "errTooManyRevokePairs",
+      "msg": "freeze_internal MAX_REVOKE_PAIRS = 10 exceeded (Council ISC-136)"
+    },
+    {
+      "code": 6100,
+      "name": "errPostAssertionsNotClosed",
+      "msg": "PostExecutionAssertions PDA still active — call close_post_assertions first"
+    },
+    {
+      "code": 6101,
+      "name": "errDestinationIsProtectedPda",
+      "msg": "Destination is a Sigil-protected PDA — rejected at queue time"
+    },
+    {
+      "code": 6102,
+      "name": "errIntentDigestMismatch",
+      "msg": "AL3 intent-digest mismatch — preview digest does not match executed bundle"
+    },
+    {
+      "code": 6103,
+      "name": "errPendingAgentGrantDigestMismatch",
+      "msg": "PendingAgentGrant digest mismatch between queue and apply"
+    },
+    {
+      "code": 6104,
+      "name": "errReactivateCosignRequiredForFullCapability",
+      "msg": "Reactivate with FULL_CAPABILITY new agent requires cosign"
+    },
+    {
+      "code": 6105,
+      "name": "destinationAccountUnresolvable",
+      "msg": "Writable DeFi account could not be resolved in remaining_accounts — destination set incomplete"
+    },
+    {
+      "code": 6106,
+      "name": "errToken2022OutputMintUnresolvable",
+      "msg": "Vault-owned Token-2022 output ATA's mint is absent from remaining_accounts or not Token-2022-owned — cannot vet extensions"
+    },
+    {
+      "code": 6107,
+      "name": "errOperatorGrantRequiresTimelock",
+      "msg": "OPERATOR grant requires the timelock queue path on this vault — use queue_agent_grant"
+    },
+    {
+      "code": 6108,
+      "name": "errOperatorGrantDelayTooLong",
+      "msg": "operator_grant_delay_seconds exceeds the maximum (48h) — would brick grant applicability"
+    },
+    {
+      "code": 6109,
+      "name": "invalidOwnerType",
+      "msg": "vault.owner_type is not a recognized discriminant (expected 0=EOA or 1=multisig)"
+    },
+    {
+      "code": 6110,
+      "name": "spendAccountingUnderflow",
+      "msg": "finalize spend accounting underflow: collected fees exceed realized stablecoin outflow"
     }
   ],
   "types": [
-    {
-      "name": "accountConstraint",
-      "docs": [
-        "Account-index constraint: requires a specific pubkey at a specific account index,",
-        "and optionally enforces the account-meta `is_writable` flag.",
-        "",
-        "`is_writable_required` encoding (M5 — Squads SAP parity):",
-        "0 = \"any\"          — do not check the writable flag (backwards-compatible default;",
-        "existing on-chain PDAs zero-init this byte → 0 → any)",
-        "1 = \"must be read-only\" — require account_meta.is_writable == false",
-        "2 = \"must be writable\"  — require account_meta.is_writable == true",
-        "3+ = invalid (rejected at create/queue time by validate_entries)",
-        "",
-        "Closes the attack class where an owner pins a pubkey expecting read-only access",
-        "but the agent submits the same pubkey with `is_writable: true`, gaining write",
-        "access to the constrained account without breaking the pubkey check."
-      ],
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "index",
-            "type": "u8"
-          },
-          {
-            "name": "isWritableRequired",
-            "type": "u8"
-          },
-          {
-            "name": "expected",
-            "type": "pubkey"
-          }
-        ]
-      }
-    },
-    {
-      "name": "accountConstraintZc",
-      "serialization": "bytemuck",
-      "repr": {
-        "kind": "c"
-      },
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "expected",
-            "type": {
-              "array": [
-                "u8",
-                32
-              ]
-            }
-          },
-          {
-            "name": "index",
-            "type": "u8"
-          },
-          {
-            "name": "isWritableRequired",
-            "docs": [
-              "0=any, 1=must-be-read-only, 2=must-be-writable. See AccountConstraint",
-              "docs for full semantics. Zero-initialized on existing V1 PDAs → 0 →",
-              "\"any\" (backwards-compatible — runtime ignores the writable flag for",
-              "pre-PR-9 entries that never set this byte)."
-            ],
-            "type": "u8"
-          },
-          {
-            "name": "padding",
-            "type": {
-              "array": [
-                "u8",
-                6
-              ]
-            }
-          }
-        ]
-      }
-    },
     {
       "name": "actionAuthorized",
       "type": {
@@ -6160,10 +6461,6 @@ export type Sigil = {
           {
             "name": "agent",
             "type": "pubkey"
-          },
-          {
-            "name": "isSpending",
-            "type": "bool"
           },
           {
             "name": "tokenMint",
@@ -6192,6 +6489,39 @@ export type Sigil = {
           {
             "name": "delegated",
             "type": "bool"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "agentAutoRevoked",
+      "docs": [
+        "TA-17 (Phase 3): an agent's capability was auto-revoked after",
+        "`consecutive_failures >= policy.auto_revoke_threshold` policy-violation",
+        "failures. Owner re-enables via `queue_agent_permissions_update`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "agent",
+            "type": "pubkey"
+          },
+          {
+            "name": "threshold",
+            "type": "u8"
+          },
+          {
+            "name": "consecutiveFailures",
+            "type": "u8"
           },
           {
             "name": "timestamp",
@@ -6279,13 +6609,159 @@ export type Sigil = {
             "type": "bool"
           },
           {
+            "name": "consecutiveFailures",
+            "docs": [
+              "TA-17 (Phase 3 pre-execution guard #7): consecutive policy-",
+              "violation failures by this agent. Solana's atomic-or-none execution",
+              "means a validate-time reject rolls back its own state mutation, so",
+              "the counter cannot self-increment inside the failing tx. Instead,",
+              "it is incremented by the owner-only `record_agent_violation` ix,",
+              "called by an off-chain monitor after observing a failed seal whose",
+              "reject reason is an on-chain policy code (numeric range",
+              "POLICY_VIOLATION_RANGE = 6074..=6091 — see `state/mod.rs::is_policy_violation_code`).",
+              "Reset to 0 inside `validate_and_authorize` on a successful seal.",
+              "When `>= policy.auto_revoke_threshold`, the agent's capability is",
+              "set to CAPABILITY_DISABLED and an `AgentAutoRevoked` event is",
+              "emitted. Owner re-enables via `queue_agent_permissions_update`.",
+              "",
+              "External codes (sysvar-scan 6068 SysvarScanBoundExceeded,",
+              "async-fulfillment 6069 AsyncFulfillmentNotPermitted, auth",
+              "errors 6000-6082) do NOT increment — they're not the agent's",
+              "fault and auto-revoking on them would let an attacker brick",
+              "a working agent.",
+              "",
+              "Uses 1 byte from the prior `_reserved: [u8; 7]`. 6 bytes remain",
+              "reserved for future fields."
+            ],
+            "type": "u8"
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                7
+                6
               ]
             }
+          }
+        ]
+      }
+    },
+    {
+      "name": "agentGrantApplied",
+      "docs": [
+        "Phase 8 PEN-CROSS-1 — owner applied a queued OPERATOR-class agent grant",
+        "past the timelock window. The agent is now in `vault.agents` and the",
+        "policy_preview_digest has been re-derived to bind the new agent_set_hash.",
+        "`new_policy_version` is the post-bump version; in-flight",
+        "`validate_and_authorize` ix snapshotted the prior version will fail fast",
+        "with PolicyVersionMismatch under the new authority surface."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "agent",
+            "type": "pubkey"
+          },
+          {
+            "name": "capability",
+            "type": "u8"
+          },
+          {
+            "name": "spendingLimitUsd",
+            "type": "u64"
+          },
+          {
+            "name": "queuedAt",
+            "type": "i64"
+          },
+          {
+            "name": "appliedAt",
+            "type": "i64"
+          },
+          {
+            "name": "newPolicyVersion",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "agentGrantCancelled",
+      "docs": [
+        "Phase 8 §RP Fix-Up B (PEN-02b CRITICAL, audit 2026-05-19) — owner",
+        "cancelled a queued OPERATOR-class agent grant during the timelock window.",
+        "`cancelled_agent` echoes the agent pubkey from the closed PDA so off-chain",
+        "monitors can correlate the queue ↔ cancel pair without re-fetching the",
+        "now-closed PDA. Off-chain monitors should ALERT on this event for any",
+        "vault they protect — if the owner did not initiate the cancel, this is",
+        "a phished-key attempt to abort a legitimate grant."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "cancelledAgent",
+            "type": "pubkey"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "agentGrantQueued",
+      "docs": [
+        "Phase 8 PEN-CROSS-1 — owner queued an OPERATOR-class agent grant. The",
+        "agent is NOT yet in `vault.agents`; off-chain monitors should ALERT on",
+        "this event for any vault they protect. If the owner didn't initiate the",
+        "queue, this is a phished-key attack signal — the owner has",
+        "`min_delay_seconds` (default 1800s = 30 min) to abort before",
+        "`apply_agent_grant` can land. (A `cancel_agent_grant` instruction is",
+        "planned for a follow-up batch; until then, observers should freeze the",
+        "vault if the queue was unauthorized.)"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "agent",
+            "type": "pubkey"
+          },
+          {
+            "name": "capability",
+            "type": "u8"
+          },
+          {
+            "name": "spendingLimitUsd",
+            "type": "u64"
+          },
+          {
+            "name": "queuedAt",
+            "type": "i64"
+          },
+          {
+            "name": "executesAt",
+            "type": "i64"
           }
         ]
       }
@@ -6459,8 +6935,9 @@ export type Sigil = {
         "",
         "Supports up to 10 agents (matches MAX_AGENTS_PER_VAULT).",
         "",
-        "Size calculation:",
-        "8 (discriminator) + 32 (vault) + 232 × 10 (entries) + 1 (bump) + 7 (padding) + 80 (lifetime_spend) + 80 (lifetime_tx_count) = 2,528 bytes"
+        "Size calculation (PRE-TA-06):",
+        "8 (discriminator) + 32 (vault) + 232 × 10 (entries) + 1 (bump) + 7 (padding) + 80 (lifetime_spend) + 80 (lifetime_tx_count) = 2,528 bytes",
+        "Size calculation (POST-TA-06): +80 cooldown_seconds + 80 last_action_unix = 2,688 bytes"
       ],
       "serialization": "bytemuck",
       "repr": {
@@ -6540,6 +7017,52 @@ export type Sigil = {
             "type": {
               "array": [
                 "u64",
+                10
+              ]
+            }
+          },
+          {
+            "name": "cooldownSeconds",
+            "docs": [
+              "TA-06 (Phase 3 pre-execution guard #3): per-agent cooldown in seconds.",
+              "Index matches entries[i].",
+              "",
+              "Per-AGENT, not per-vault — a per-vault cooldown was rejected per F-16",
+              "because one agent's traffic would DoS all other agents on the same",
+              "vault. With per-agent cooldown, each agent has its own pacing limit",
+              "configured by the owner.",
+              "",
+              "0 = no cooldown (default). Owner configures via",
+              "`queue_agent_permissions_update` (P3).",
+              "",
+              "Appended AFTER lifetime_spend/lifetime_tx_count to preserve existing",
+              "zero-copy byte offsets per the established APPEND-ONLY pattern."
+            ],
+            "type": {
+              "array": [
+                "u64",
+                10
+              ]
+            }
+          },
+          {
+            "name": "lastActionUnix",
+            "docs": [
+              "TA-06 (Phase 3): per-agent last successful validate_and_authorize",
+              "Unix timestamp. Index matches entries[i]. Written at the end of",
+              "validate_and_authorize on a successful authorization. The cooldown",
+              "gate compares `(now - last_action_unix) >= cooldown_seconds[i]`.",
+              "",
+              "0 = no prior action recorded (first authorization for this agent",
+              "after registration / overlay reset). The cooldown check uses",
+              "`i64::checked_sub` and treats a 0 baseline as \"no previous action\"",
+              "→ cooldown auto-passes.",
+              "",
+              "Appended AFTER cooldown_seconds to preserve zero-copy byte offsets."
+            ],
+            "type": {
+              "array": [
+                "i64",
                 10
               ]
             }
@@ -6671,13 +7194,6 @@ export type Sigil = {
             "type": "u64"
           },
           {
-            "name": "activeEscrowCount",
-            "docs": [
-              "Number of active (unsettled/unrefunded) escrow deposits from this vault"
-            ],
-            "type": "u8"
-          },
-          {
             "name": "totalFeesCollected",
             "docs": [
               "Cumulative developer fees collected from this vault (token base units)"
@@ -6720,116 +7236,136 @@ export type Sigil = {
               "close_vault requires this to be 0."
             ],
             "type": "u8"
-          }
-        ]
-      }
-    },
-    {
-      "name": "closeConstraintsApplied",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "vault",
-            "type": "pubkey"
           },
           {
-            "name": "appliedAt",
-            "type": "i64"
-          }
-        ]
-      }
-    },
-    {
-      "name": "closeConstraintsCancelled",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "vault",
-            "type": "pubkey"
-          }
-        ]
-      }
-    },
-    {
-      "name": "closeConstraintsQueued",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "vault",
-            "type": "pubkey"
-          },
-          {
-            "name": "executesAt",
-            "type": "i64"
-          }
-        ]
-      }
-    },
-    {
-      "name": "constraintEntry",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "programId",
-            "type": "pubkey"
-          },
-          {
-            "name": "dataConstraints",
-            "type": {
-              "vec": {
-                "defined": {
-                  "name": "dataConstraint"
-                }
-              }
-            }
-          },
-          {
-            "name": "accountConstraints",
-            "type": {
-              "vec": {
-                "defined": {
-                  "name": "accountConstraint"
-                }
-              }
-            }
-          },
-          {
-            "name": "discriminatorFormat",
+            "name": "observeOnly",
             "docs": [
-              "Discriminator format for this entry's target program. Controls the",
-              "minimum byte length of the first DataConstraint (the A5 anchor).",
-              "Default: Anchor8 (0). Use Spl1 (1) for SPL Token / Token-2022."
+              "Phase 2 Task 8: observe_only mode flag (independent from TA-19;",
+              "included in TA-19 digest encoding at position 10).",
+              "",
+              "When true, ALL `validate_and_authorize` calls reject with",
+              "`ObserveOnlyModeBlocksExecute`. Provides a hard, low-blast-radius",
+              "kill switch separate from `VaultStatus::Frozen` — owners can stand",
+              "up an observe-only vault to baseline agent behaviour before opening",
+              "the execute path.",
+              "",
+              "Set at `initialize_vault` time; flipped post-init via the dedicated",
+              "`set_observe_only` instruction (F-12 audit fix, Option (a) direct",
+              "owner-only flip mirroring `freeze_vault` simplicity).",
+              "",
+              "APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability."
             ],
-            "type": {
-              "defined": {
-                "name": "discriminatorFormat"
-              }
-            }
+            "type": "bool"
+          },
+          {
+            "name": "frozenAtTimestamp",
+            "docs": [
+              "Phase 8 — unix timestamp at which `vault.status` last transitioned to",
+              "Frozen. Written by every freeze code path (manual `freeze_vault`,",
+              "auto-freeze inside `revoke_agent`, future `freeze_internal` helper).",
+              "Read by `reactivate_vault` to enforce the 5-minute observation",
+              "cooldown (Phase 8 F-RP3-1 fix — closes the phished-owner",
+              "freeze→reactivate→register-attacker-agent one-tx replay).",
+              "",
+              "Zero on freshly-initialized vaults that have never been frozen.",
+              "APPENDED per F-14 APPEND-ONLY rule for Borsh stability."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "freezeReason",
+            "docs": [
+              "Phase 8 — discriminant of the `FreezeReason` enum recording WHY the",
+              "vault was last frozen. Single byte on-chain; validated via",
+              "`FreezeReason::from_u8` at every write site so unknown values",
+              "(3..=255) hard-reject with `SigilError::ErrInvalidFreezeReason`.",
+              "",
+              "Zero (Manual) on freshly-initialized vaults that have never been",
+              "frozen — this is harmless because `status != Frozen` means readers",
+              "of this byte gate on status first. APPENDED per F-14 APPEND-ONLY",
+              "rule for Borsh stability."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "ownerType",
+            "docs": [
+              "F-Q6 (2026-06-02) — owner-account-type discriminant: 0 = single-key EOA",
+              "(`OWNER_TYPE_EOA`), 1 = N-of-M multisig / Squads V4 (`OWNER_TYPE_MULTISIG`).",
+              "Set ONCE per owner from an on-chain-VERIFIED fact: `initialize_vault` = 0,",
+              "`accept_ownership_transfer` (EOA) = 0, `accept_ownership_transfer_multisig`",
+              "= 1. NOT bound by any digest — it is program-set (not owner-supplied), and",
+              "a stale/wrong value fails SAFE to the single-key delayed-grant path in",
+              "`register_agent`. Validated `<= OWNER_TYPE_MULTISIG` at the read site.",
+              "",
+              "Placed BEFORE `vault_authority` so the LBL-01 seed-key remains the final",
+              "32 bytes (the SDK resolver reads it at `SIZE - 32`). Pre-launch — no",
+              "deployed vaults constrain byte placement."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "vaultAuthority",
+            "docs": [
+              "Phase 8 LBL-01 — immutable PDA seed-key set at `initialize_vault` time;",
+              "decouples vault PDA address from owner identity to enable ownership",
+              "transfer without bricking the account.",
+              "",
+              "Before LBL-01: vault PDA derivation used `owner.key()` (or",
+              "`vault.owner`). After `accept_ownership_transfer` mutated `vault.owner`,",
+              "every subsequent owner-side instruction derived a DIFFERENT PDA →",
+              "Anchor `ConstraintSeeds` rejection → vault permanently bricked.",
+              "",
+              "After LBL-01: all 40 non-init owner-side instructions derive vault",
+              "PDA from `vault.vault_authority` instead. At init, the SDK still",
+              "derives the PDA from `owner.key() + vault_id` (the canonical pattern),",
+              "and the handler writes `vault.vault_authority = owner.key()` so the",
+              "stored seed-key equals the initial owner — the on-chain PDA address",
+              "is identical to the pre-LBL-01 layout. After ownership transfer the",
+              "`vault.owner` byte field changes but `vault.vault_authority` does NOT,",
+              "so the PDA address stays put and downstream ix continue to resolve.",
+              "",
+              "**Invariant:** `vault.vault_authority` is written exactly ONCE inside",
+              "`initialize_vault`. No other instruction writes this field. The SDK",
+              "helper `vaultPda(owner, vaultId)` continues to use `owner` as the",
+              "seed-key at init time; thereafter the SDK reads `vault.vault_authority`",
+              "from the resolved state to rebuild the same PDA.",
+              "",
+              "APPENDED per F-14 APPEND-ONLY rule for Borsh stability — +32 bytes",
+              "at the tail keeps every prior byte at its original offset."
+            ],
+            "type": "pubkey"
           }
         ]
       }
     },
     {
-      "name": "constraintEntryZc",
+      "name": "auditEntry",
       "docs": [
-        "BYTE LAYOUT REGISTRY — Canonical assignment of padding bytes.",
+        "Single audit-log entry. Zero-copy, fixed-size 64 bytes per entry.",
         "",
-        "Layout (post is_spending removal, M2 Option A — runtime never read it):",
+        "**Layout strategy:** `#[repr(C)]` ordered so natural alignment never",
+        "introduces implicit padding (Pod derive forbids implicit padding).",
+        "All fields with alignment > 1 are placed at offsets that are multiples",
+        "of their alignment.",
         "",
-        "byte 554: _reserved_was_is_spending  (was: is_spending; deleted M2 Option A)",
-        "byte 555: discriminator_format",
-        "bytes 556-559: _padding[4]  (reserved for future use)",
+        "Byte offsets (verified at compile time):",
+        "0..32   subject          [u8;32]  align 1",
+        "32..40  balance_delta_in i64      align 8 (32 % 8 = 0 ✓)",
+        "40..48  balance_delta_out i64     align 8 (40 % 8 = 0 ✓)",
+        "48..56  timestamp        i64      align 8 (48 % 8 = 0 ✓)",
+        "56..60  slot_hash        [u8;4]   align 1",
+        "60..63  blockhash        [u8;3]   align 1",
+        "63..64  discriminator    u8       align 1",
+        "──── total: 64 bytes, struct alignment = 8 ────",
         "",
-        "Total: 32+320+200+1+1+1+1+4 = 560 (unchanged).",
-        "is_spending (formerly byte 554) was deleted because the runtime never reads",
-        "it — `validate_and_authorize.rs:134` derives spending from `amount > 0`.",
-        "The freed byte is held as `_reserved_was_is_spending` to preserve the",
-        "560-byte total — shrinking the struct would corrupt every existing",
-        "on-chain InstructionConstraints PDA (35,888-byte zero-copy account)."
+        "**discriminator placement note:** semantically the discriminator is",
+        "\"type of entry,\" but for Pod-compatible packing we place it at the",
+        "trailing byte. SDK decoders read it by offset 63, not by struct field",
+        "order.",
+        "",
+        "Audit #1 AUD3-F5: uses `slot_hashes_sysvar`, NOT deprecated",
+        "`recent_blockhashes_sysvar` (deprecated in Solana 1.18+)."
       ],
       "serialization": "bytemuck",
       "repr": {
@@ -6839,7 +7375,33 @@ export type Sigil = {
         "kind": "struct",
         "fields": [
           {
-            "name": "programId",
+            "name": "subject",
+            "docs": [
+              "32-byte pubkey of the entry's subject. Stored as raw bytes because",
+              "`zero_copy` cannot hold `Pubkey` directly without `Pod` impl on",
+              "Pubkey itself.",
+              "",
+              "Per-discriminator semantic (§RP-1 HIGH-2 disambiguation, 2026-05-19):",
+              "disc=2  (finalize_success) → protocol pubkey (session.authorized_protocol)",
+              "disc=16 (finalize_reject)  → protocol pubkey (session.authorized_protocol)",
+              "disc=3  (deposit)          → SPL Token mint pubkey",
+              "disc=4  (withdraw)         → SPL Token mint pubkey",
+              "disc=5  (freeze)           → vault pubkey",
+              "disc=6  (reactivate)       → vault pubkey",
+              "disc=10 (pause_agent)      → agent pubkey",
+              "disc=11 (unpause_agent)    → agent pubkey",
+              "disc=12 (revoke_agent)     → agent pubkey",
+              "disc=13 (register_agent)   → agent pubkey",
+              "disc=14 (policy_apply)     → vault pubkey",
+              "disc=15 (constraints_apply)→ vault pubkey",
+              "disc=7..=9 (ownership_*)   → ownership initiate/accept/cancel",
+              "disc=17 (agent_grant_queue)→ agent pubkey (Phase 8 PEN-CROSS-1 Batch 6)",
+              "disc=18 (agent_grant_apply)→ agent pubkey (Phase 8 PEN-CROSS-1 Batch 6)",
+              "disc=19 (agent_grant_cancel)→ agent pubkey (Phase 8 §RP Fix-Up B / PEN-02b)",
+              "disc=20 (agent_perms_apply)→ agent pubkey (M-6 close, audit 2026-05-21)",
+              "disc=21 (constraints_close_apply)→ vault pubkey (M-7 close, audit 2026-05-21)",
+              "disc=22 (agent_auto_revoked) → agent pubkey (M-8 close, audit 2026-05-21)"
+            ],
             "type": {
               "array": [
                 "u8",
@@ -6848,186 +7410,93 @@ export type Sigil = {
             }
           },
           {
-            "name": "dataConstraints",
-            "type": {
-              "array": [
-                {
-                  "defined": {
-                    "name": "dataConstraintZc"
-                  }
-                },
-                8
-              ]
-            }
-          },
-          {
-            "name": "accountConstraints",
-            "type": {
-              "array": [
-                {
-                  "defined": {
-                    "name": "accountConstraintZc"
-                  }
-                },
-                5
-              ]
-            }
-          },
-          {
-            "name": "dataCount",
-            "type": "u8"
-          },
-          {
-            "name": "accountCount",
-            "type": "u8"
-          },
-          {
-            "name": "reservedWasIsSpending",
+            "name": "balanceDeltaIn",
             "docs": [
-              "Reserved byte — formerly `is_spending` (deleted M2 Option A: runtime",
-              "never read it; spending is derived from `amount > 0`). Held as",
-              "padding to preserve the 560-byte ConstraintEntryZC invariant; existing",
-              "on-chain PDAs zero-init this byte. Do not repurpose without a",
-              "migration plan — old PDAs will read 0/1/2 here from prior writes."
+              "Stablecoin delta IN (e.g. swap output, deposit). 0 when not applicable."
             ],
-            "type": "u8"
+            "type": "i64"
           },
           {
-            "name": "discriminatorFormat",
+            "name": "balanceDeltaOut",
             "docs": [
-              "DiscriminatorFormat discriminant (0=Anchor8, 1=Spl1). Write-time only —",
-              "verify_data_constraints_zc() does not read this field at runtime.",
-              "Zero-initialized on existing V1 PDAs → 0 → Anchor8 (backward compatible)."
+              "Stablecoin delta OUT (e.g. swap input, withdraw, transfer). 0 when N/A."
             ],
-            "type": "u8"
+            "type": "i64"
           },
           {
-            "name": "padding",
+            "name": "timestamp",
+            "docs": [
+              "Wall-clock unix timestamp (Clock::unix_timestamp)."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "slotHash",
+            "docs": [
+              "First 4 bytes of slot_hashes_sysvar[0].slot in LE byte order."
+            ],
             "type": {
               "array": [
                 "u8",
                 4
               ]
             }
-          }
-        ]
-      }
-    },
-    {
-      "name": "constraintOperator",
-      "type": {
-        "kind": "enum",
-        "variants": [
-          {
-            "name": "eq"
           },
           {
-            "name": "ne"
-          },
-          {
-            "name": "gte"
-          },
-          {
-            "name": "lte"
-          },
-          {
-            "name": "gteSigned"
-          },
-          {
-            "name": "lteSigned"
-          },
-          {
-            "name": "bitmask"
-          }
-        ]
-      }
-    },
-    {
-      "name": "constraintsChangeApplied",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "vault",
-            "type": "pubkey"
-          },
-          {
-            "name": "discriminatorFormats",
+            "name": "blockhash",
             "docs": [
-              "Per-entry discriminator format (0=Anchor8, 1=Spl1) from the applied entries.",
-              "Emitted at apply time so monitors see the active format when it takes effect."
+              "First 3 bytes of slot_hashes_sysvar[0].hash."
             ],
-            "type": "bytes"
-          },
-          {
-            "name": "appliedAt",
-            "type": "i64"
-          }
-        ]
-      }
-    },
-    {
-      "name": "constraintsChangeCancelled",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "vault",
-            "type": "pubkey"
-          }
-        ]
-      }
-    },
-    {
-      "name": "constraintsChangeQueued",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "vault",
-            "type": "pubkey"
-          },
-          {
-            "name": "discriminatorFormats",
-            "docs": [
-              "Per-entry discriminator format (0=Anchor8, 1=Spl1).",
-              "Enables off-chain monitors to detect format changes/downgrades."
-            ],
-            "type": "bytes"
-          },
-          {
-            "name": "executesAt",
-            "type": "i64"
-          }
-        ]
-      }
-    },
-    {
-      "name": "dataConstraint",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "offset",
-            "type": "u16"
-          },
-          {
-            "name": "operator",
             "type": {
-              "defined": {
-                "name": "constraintOperator"
-              }
+              "array": [
+                "u8",
+                3
+              ]
             }
           },
           {
-            "name": "value",
-            "type": "bytes"
+            "name": "discriminator",
+            "docs": [
+              "See discriminator constants above (AUDIT_DISC_*). At byte offset 63."
+            ],
+            "type": "u8"
           }
         ]
       }
     },
     {
-      "name": "dataConstraintZc",
+      "name": "auditLogRejected",
+      "docs": [
+        "On-chain circular log of REJECTED finalize attempts for a vault.",
+        "",
+        "Phase 7 writes only the `finalize_session` REJECT path (expired-finalize",
+        "permissionless cranks) into this buffer. Other instructions that error",
+        "out roll back atomically and produce no audit entry by design.",
+        "",
+        "Audit #2 F-19 (audit log spam): kept separate from `AuditLogSuccess`",
+        "so the rejected stream cannot displace the success history. The two",
+        "buffers share the same `AuditEntry` shape so SDK decoders can be",
+        "shared.",
+        "",
+        "Seeds: `[b\"audit_rejected\", vault.key().as_ref()]`",
+        "",
+        "**Layout (within 8-byte Anchor discriminator):**",
+        "0..32      vault       Pubkey",
+        "32..4128   entries     [AuditEntry; 64]   (64 * 64 = 4,096)",
+        "4128..4129 head        u8",
+        "4129..4130 count       u8",
+        "4130..4143 _padding    [u8;13]",
+        "4143..4144 bump        u8",
+        "──── total data: 4,144 bytes ────",
+        "",
+        "Including 8-byte Anchor discriminator: **4,152 bytes total.**",
+        "",
+        "**DEVIATION FROM SPEC:** The Phase 7 spec called for `_padding: [u8;6]`",
+        "with claimed SIZE = 4,145. Same Pod-alignment issue as `AuditLogSuccess`",
+        "— `[AuditEntry; 64]` is 8-byte aligned, so the struct must be a multiple",
+        "of 8. We widen padding from 6 → 13 to reach 4,144 data bytes; SIZE",
+        "becomes 4,152."
+      ],
       "serialization": "bytemuck",
       "repr": {
         "kind": "c"
@@ -7036,34 +7505,167 @@ export type Sigil = {
         "kind": "struct",
         "fields": [
           {
-            "name": "offset",
-            "type": "u16"
+            "name": "vault",
+            "docs": [
+              "Associated vault pubkey. Verified by PDA seeds + has_one constraints",
+              "at the instruction layer."
+            ],
+            "type": "pubkey"
           },
           {
-            "name": "operator",
-            "type": "u8"
-          },
-          {
-            "name": "valueLen",
-            "type": "u8"
-          },
-          {
-            "name": "value",
+            "name": "entries",
+            "docs": [
+              "Circular-buffer entries. Same shape as success buffer."
+            ],
             "type": {
               "array": [
-                "u8",
-                32
+                {
+                  "defined": {
+                    "name": "auditEntry"
+                  }
+                },
+                64
               ]
             }
+          },
+          {
+            "name": "head",
+            "docs": [
+              "Next write position (0..=CAPACITY-1). Wraps modulo CAPACITY."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "count",
+            "docs": [
+              "Total entries written, saturated at CAPACITY."
+            ],
+            "type": "u8"
           },
           {
             "name": "padding",
+            "docs": [
+              "13-byte explicit padding (Pod no-implicit-padding rule + future",
+              "forward-compat appends)."
+            ],
             "type": {
               "array": [
                 "u8",
-                4
+                13
               ]
             }
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "PDA bump seed."
+            ],
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "auditLogSuccess",
+      "docs": [
+        "On-chain circular log of SUCCESSFUL mutating instructions for a vault.",
+        "",
+        "Audit #2 F-19 (audit log spam): kept separate from `AuditLogRejected`",
+        "so a permissionless-crank attacker who triggers expired-finalize",
+        "rejects cannot displace legitimate success entries.",
+        "",
+        "Seeds: `[b\"audit_success\", vault.key().as_ref()]`",
+        "",
+        "**Layout (within 8-byte Anchor discriminator):**",
+        "0..32      vault       Pubkey",
+        "32..8224   entries     [AuditEntry; 128]   (128 * 64 = 8,192)",
+        "8224..8225 head        u8",
+        "8225..8226 count       u8",
+        "8226..8239 _padding    [u8;13]             (alignment to make struct multiple of 8)",
+        "8239..8240 bump        u8",
+        "──── total data: 8,240 bytes ────",
+        "",
+        "Including 8-byte Anchor discriminator at front: **8,248 bytes total.**",
+        "",
+        "**DEVIATION FROM SPEC:** The Phase 7 spec called for `_padding: [u8;6]`",
+        "with claimed SIZE = 8,241. That arithmetic is incompatible with the Pod",
+        "derive (which `#[zero_copy]` applies): `[AuditEntry; 128]` has 8-byte",
+        "alignment (from inner `i64` fields), so the containing struct also has",
+        "8-byte alignment and `size_of::<AuditLogSuccess>()` MUST be a multiple",
+        "of 8. 8,233 is not — the compiler would either insert 7 bytes of",
+        "implicit trailing padding (which Pod forbids) or fail.",
+        "",
+        "We resolve this by widening `_padding` from 6 → 13 bytes so the data",
+        "portion totals exactly 8,240 (multiple of 8), and SIZE becomes 8,248.",
+        "Net cost: 7 additional bytes of rent per vault (≈ 50,000 lamports at",
+        "current rent rates — negligible)."
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "docs": [
+              "Associated vault pubkey. Verified by PDA seeds + has_one constraints",
+              "at the instruction layer."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "entries",
+            "docs": [
+              "Circular-buffer entries. Indexed by `(head - 1) mod CAPACITY` for the",
+              "most recent entry; oldest is at `head` when `count == CAPACITY`."
+            ],
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "auditEntry"
+                  }
+                },
+                128
+              ]
+            }
+          },
+          {
+            "name": "head",
+            "docs": [
+              "Next write position (0..=CAPACITY-1). Wraps modulo CAPACITY."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "count",
+            "docs": [
+              "Total entries written, saturated at CAPACITY. Used by readers to",
+              "distinguish a half-filled buffer from a wrapped one."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "padding",
+            "docs": [
+              "13-byte explicit padding to satisfy Pod's no-implicit-padding rule.",
+              "Forward-compat slot for future field appends (see Phase 9+)."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                13
+              ]
+            }
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "PDA bump seed."
+            ],
+            "type": "u8"
           }
         ]
       }
@@ -7089,23 +7691,29 @@ export type Sigil = {
       }
     },
     {
-      "name": "discriminatorFormat",
+      "name": "destinationGraylistEntry",
       "docs": [
-        "Discriminator format for the first DataConstraint in a ConstraintEntry.",
-        "Controls the minimum byte length required for the instruction discriminator",
-        "anchor (A5 invariant). Different Solana programs use different discriminator",
-        "widths — Anchor uses 8-byte SHA-256 prefixes, SPL Token uses 1-byte enum",
-        "indices. The format is checked at constraint creation time only; runtime",
-        "verification in verify_data_constraints_zc() uses value_len directly."
+        "TA-07 (Phase 3): one entry in `PolicyConfig.destination_graylist`.",
+        "",
+        "`destination` is the wallet/PDA pubkey whose ATAs are being graylisted",
+        "(matches the entry in `allowed_destinations`). `unlock_unix` is the",
+        "Unix timestamp at which the destination becomes spendable without",
+        "the owner having to promote it.",
+        "",
+        "Layout: 32 + 8 = 40 bytes per entry. Bounded ≤MAX_ALLOWED_DESTINATIONS",
+        "(10) so the worst-case Vec contribution to PolicyConfig SIZE is",
+        "`4 + 40*10 = 404` bytes."
       ],
       "type": {
-        "kind": "enum",
-        "variants": [
+        "kind": "struct",
+        "fields": [
           {
-            "name": "anchor8"
+            "name": "destination",
+            "type": "pubkey"
           },
           {
-            "name": "spl1"
+            "name": "unlockUnix",
+            "type": "i64"
           }
         ]
       }
@@ -7136,177 +7744,6 @@ export type Sigil = {
               "Aggregate USD spent in this epoch (6 decimals)"
             ],
             "type": "u64"
-          }
-        ]
-      }
-    },
-    {
-      "name": "escrowCreated",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "sourceVault",
-            "type": "pubkey"
-          },
-          {
-            "name": "destinationVault",
-            "type": "pubkey"
-          },
-          {
-            "name": "escrowId",
-            "type": "u64"
-          },
-          {
-            "name": "amount",
-            "type": "u64"
-          },
-          {
-            "name": "tokenMint",
-            "type": "pubkey"
-          },
-          {
-            "name": "expiresAt",
-            "type": "i64"
-          },
-          {
-            "name": "conditionHash",
-            "type": {
-              "array": [
-                "u8",
-                32
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "name": "escrowDeposit",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "sourceVault",
-            "type": "pubkey"
-          },
-          {
-            "name": "destinationVault",
-            "type": "pubkey"
-          },
-          {
-            "name": "escrowId",
-            "type": "u64"
-          },
-          {
-            "name": "amount",
-            "type": "u64"
-          },
-          {
-            "name": "tokenMint",
-            "type": "pubkey"
-          },
-          {
-            "name": "createdAt",
-            "type": "i64"
-          },
-          {
-            "name": "expiresAt",
-            "type": "i64"
-          },
-          {
-            "name": "status",
-            "type": {
-              "defined": {
-                "name": "escrowStatus"
-              }
-            }
-          },
-          {
-            "name": "conditionHash",
-            "type": {
-              "array": [
-                "u8",
-                32
-              ]
-            }
-          },
-          {
-            "name": "bump",
-            "type": "u8"
-          }
-        ]
-      }
-    },
-    {
-      "name": "escrowRefunded",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "sourceVault",
-            "type": "pubkey"
-          },
-          {
-            "name": "destinationVault",
-            "type": "pubkey"
-          },
-          {
-            "name": "escrowId",
-            "type": "u64"
-          },
-          {
-            "name": "amount",
-            "type": "u64"
-          },
-          {
-            "name": "refundedBy",
-            "type": "pubkey"
-          }
-        ]
-      }
-    },
-    {
-      "name": "escrowSettled",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "sourceVault",
-            "type": "pubkey"
-          },
-          {
-            "name": "destinationVault",
-            "type": "pubkey"
-          },
-          {
-            "name": "escrowId",
-            "type": "u64"
-          },
-          {
-            "name": "amount",
-            "type": "u64"
-          },
-          {
-            "name": "settledBy",
-            "type": "pubkey"
-          }
-        ]
-      }
-    },
-    {
-      "name": "escrowStatus",
-      "type": {
-        "kind": "enum",
-        "variants": [
-          {
-            "name": "active"
-          },
-          {
-            "name": "settled"
-          },
-          {
-            "name": "refunded"
           }
         ]
       }
@@ -7416,16 +7853,95 @@ export type Sigil = {
       }
     },
     {
-      "name": "instructionConstraints",
-      "serialization": "bytemuck",
-      "repr": {
-        "kind": "c"
-      },
+      "name": "graylistEntered",
+      "docs": [
+        "TA-07 (Phase 3): a destination entered the graylist with a 24h unlock",
+        "(or `unlock_unix == now` if `auto_promote_grays` was true). Emitted",
+        "from `apply_pending_policy` when allowed_destinations gains a new entry."
+      ],
       "type": {
         "kind": "struct",
         "fields": [
           {
             "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "destination",
+            "type": "pubkey"
+          },
+          {
+            "name": "unlockUnix",
+            "type": "i64"
+          },
+          {
+            "name": "autoPromoted",
+            "type": "bool"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "graylistPromoted",
+      "docs": [
+        "TA-07 (Phase 3): owner promoted a destination out of the graylist via",
+        "`promote_graylist_destination`. `promoted = false` when the destination",
+        "was already past unlock (no-op promotion — still emitted for audit)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "destination",
+            "type": "pubkey"
+          },
+          {
+            "name": "promoted",
+            "type": "bool"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "observeOnlyChanged",
+      "docs": [
+        "Emitted when `set_observe_only` flips `vault.observe_only`. Off-chain",
+        "monitors use `new_policy_preview_digest` + `new_policy_version` for OCC",
+        "reconciliation against their cached policy view."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "oldValue",
+            "type": "bool"
+          },
+          {
+            "name": "newValue",
+            "type": "bool"
+          },
+          {
+            "name": "newPolicyVersion",
+            "type": "u64"
+          },
+          {
+            "name": "newPolicyPreviewDigest",
             "type": {
               "array": [
                 "u8",
@@ -7434,145 +7950,264 @@ export type Sigil = {
             }
           },
           {
-            "name": "entries",
-            "type": {
-              "array": [
-                {
-                  "defined": {
-                    "name": "constraintEntryZc"
-                  }
-                },
-                64
-              ]
-            }
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ownershipTransferAccepted",
+      "docs": [
+        "Phase 8 C26 — `new_owner` (or the multisig PDA, Batch 4) accepted a queued",
+        "transfer past timelock. `previous_owner` is the pubkey that signed the",
+        "initiate (and matches `pending.current_owner`). `via_multisig` flags the",
+        "Batch 4 path so off-chain monitors can distinguish EOA vs Squads accepts."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
           },
           {
-            "name": "entryCount",
+            "name": "previousOwner",
+            "type": "pubkey"
+          },
+          {
+            "name": "newOwner",
+            "type": "pubkey"
+          },
+          {
+            "name": "viaMultisig",
+            "type": "bool"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ownershipTransferCancelled",
+      "docs": [
+        "Phase 8 C26 — `current_owner` cancelled a queued transfer. `cancelled_new_owner`",
+        "echoes the target pubkey from the cancelled PDA so off-chain monitors",
+        "can correlate cancel ↔ initiate without re-fetching the (now-closed) PDA."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "currentOwner",
+            "type": "pubkey"
+          },
+          {
+            "name": "cancelledNewOwner",
+            "type": "pubkey"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ownershipTransferInitiated",
+      "docs": [
+        "Phase 8 C26 — owner queued a `PendingOwnershipTransfer`. Off-chain",
+        "monitors should ALERT on this event for any vault they protect — if the",
+        "owner did not initiate the queue, this is a phished-key attack signal",
+        "and the owner has `min_delay_seconds` (default 48h) to",
+        "`cancel_ownership_transfer` before the timelock elapses."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "currentOwner",
+            "type": "pubkey"
+          },
+          {
+            "name": "newOwner",
+            "type": "pubkey"
+          },
+          {
+            "name": "queuedAt",
+            "type": "i64"
+          },
+          {
+            "name": "isMultisigTarget",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "pendingAgentGrant",
+      "docs": [
+        "Phase 8 PEN-CROSS-1 (Council ISC-58..65) — queued OPERATOR-class agent grant.",
+        "",
+        "`register_agent` (Batch 6) now hard-rejects `capability == CAPABILITY_OPERATOR`",
+        "(closes the phished-owner instant-operator-grant vector). To grant an",
+        "OPERATOR-class agent the owner now MUST route through the two-step queue",
+        "+ apply timelock-gated path:",
+        "",
+        "1. `queue_agent_grant(agent, capability=OPERATOR, spending_limit_usd)` →",
+        "writes this PDA, captures `queued_at`, requires cosign when",
+        "`policy.cosign_required == true`.",
+        "2. `apply_agent_grant()` after `now - queued_at >= min_delay_seconds` →",
+        "pushes the agent into `vault.agents`, re-derives the policy preview",
+        "digest with the new `agent_set_hash`, bumps `policy.policy_version`,",
+        "and closes the pending PDA.",
+        "",
+        "PDA seeds: `[b\"pending_agent_grant\", vault.key().as_ref()]`. There is at",
+        "most ONE pending OPERATOR grant per vault — `init` against a duplicate",
+        "pubkey rejects via the standard Anchor \"account already in use\" path,",
+        "mirroring `PendingOwnershipTransfer` and `PendingPolicyUpdate`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "docs": [
+              "PDA-bound vault. Defense-in-depth duplicate of the seeds vault prefix."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "agent",
+            "docs": [
+              "Agent pubkey being granted. Validated against the existing",
+              "`vault.is_agent` set at apply time (the Anchor `init` of the PDA",
+              "itself prevents double-queue per agent because the seed includes the",
+              "vault only — apply also re-checks for double-registration)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "capability",
+            "docs": [
+              "Target capability. Hard-rejected at queue time unless `>= CAPABILITY_OPERATOR`",
+              "— this is the WHOLE POINT of the queued path. Stored as u8 for wire",
+              "compatibility with `vault.agents[i].capability`."
+            ],
             "type": "u8"
           },
           {
-            "name": "strictMode",
-            "type": "u8"
+            "name": "spendingLimitUsd",
+            "docs": [
+              "Per-agent rolling-24h spend limit (USDC face value, 6 decimals).",
+              "Mirrors `register_agent`'s arg."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "queuedAt",
+            "docs": [
+              "`Clock::unix_timestamp` at queue time. Timelock enforced as",
+              "`clock.unix_timestamp - queued_at >= min_delay_seconds`."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "minDelaySeconds",
+            "docs": [
+              "Owner-configurable timelock window (seconds). Defaults to",
+              "`Self::DEFAULT_MIN_DELAY = 172_800s = 48h` — matches the",
+              "`PendingOwnershipTransfer` 48h window so an OPERATOR-class grant",
+              "(which is at least as elevated as ownership transfer in capability",
+              "terms) gets the full observation window for the owner to detect a",
+              "phished-key queue and cancel via `cancel_agent_grant`.",
+              "",
+              "Phase 8 §RP Fix-Up B (PEN-02a CRITICAL, audit 2026-05-19): raised",
+              "from 30min → 48h. The previous default gave a phished owner only",
+              "30 minutes to react. 48h matches the ownership-transfer floor; a",
+              "future SDK call may permit owner-configurable shortening if",
+              "`policy.timelock_duration` permits, but the V1 default is the",
+              "48h floor for safety."
+            ],
+            "type": "u64"
           },
           {
             "name": "bump",
-            "type": "u8"
-          },
-          {
-            "name": "constraintVersion",
             "docs": [
-              "Constraint schema version. Always 1 for new deployments."
+              "PDA bump."
             ],
             "type": "u8"
           },
           {
             "name": "padding",
+            "docs": [
+              "6-byte alignment cushion + additive headroom for future v1.1",
+              "extensions (e.g. cooldown_seconds binding). Zero-init on `init`."
+            ],
             "type": {
               "array": [
                 "u8",
-                4
+                6
               ]
             }
-          }
-        ]
-      }
-    },
-    {
-      "name": "instructionConstraintsCreated",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "vault",
-            "type": "pubkey"
           },
           {
-            "name": "entriesCount",
-            "type": "u8"
-          },
-          {
-            "name": "strictMode",
-            "type": "bool"
-          },
-          {
-            "name": "discriminatorFormats",
+            "name": "pendingContentDigest",
             "docs": [
-              "Per-entry discriminator format (0=Anchor8, 1=Spl1).",
-              "Enables off-chain monitors to detect format changes/downgrades."
+              "M-5 close (Bucket 2, Phase 10 PEN-CROSS-3): SHA-256 over the",
+              "canonical byte encoding of the pending content (vault + agent +",
+              "capability + spending_limit_usd + queued_at + min_delay_seconds +",
+              "queued_at_slot — CH-1 close Bucket-3 audit 2026-05-23 folded",
+              "queued_at_slot into the canonical encoder at position 7).",
+              "Written once at `queue_agent_grant` and re-asserted at",
+              "`apply_agent_grant` before any mutation of `vault.agents`.",
+              "",
+              "Defense-in-depth against discriminator-collision overwrite of",
+              "this pending PDA's body between queue and apply: even if a future",
+              "bug allowed a same-seed CPI to rewrite the grant fields, the",
+              "digest recorded at queue time pins the owner-attested content,",
+              "and the apply-time recompute would diverge and reject with",
+              "`ErrPendingAgentGrantDigestMismatch`.",
+              "",
+              "Alignment: Anchor's `#[account]` uses Borsh on-the-wire layout, so",
+              "the byte arithmetic is purely additive: 104 + 32 + 8 = 144 bytes",
+              "total (CH-1 Bucket-3 added 8 bytes for queued_at_slot).",
+              "`[u8; 32]` has alignment 1, so no padding is required regardless of",
+              "the preceding `u8` + `[u8; 6]` shape."
             ],
-            "type": "bytes"
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
           },
           {
-            "name": "timestamp",
-            "type": "i64"
-          }
-        ]
-      }
-    },
-    {
-      "name": "orphanConstraintsPdaCleaned",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "vault",
-            "type": "pubkey"
-          },
-          {
-            "name": "rentRecovered",
+            "name": "queuedAtSlot",
+            "docs": [
+              "CH-1 close (Bucket-3 audit 2026-05-23): slot at queue time for",
+              "F-10 freshness check. Paired with `MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN`",
+              "to defend against the Drift-April-2026 durable-nonce pre-signing",
+              "attack class: a compromised owner key can pre-sign queue+apply ix",
+              "in the same slot, queue NOW, then replay the pre-signed apply",
+              "weeks later. Slot-based F-10 catches the \"weeks later\" case.",
+              "",
+              "Note: `queued_at: i64` above is the existing unix-timestamp used",
+              "by the 48h timelock countdown — that semantic is unchanged. This",
+              "slot field is additive and load-bearing only for the F-10 fresh-",
+              "ness check."
+            ],
             "type": "u64"
-          },
-          {
-            "name": "timestamp",
-            "type": "i64"
-          }
-        ]
-      }
-    },
-    {
-      "name": "pdaAllocated",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "vault",
-            "type": "pubkey"
-          },
-          {
-            "name": "pdaType",
-            "type": "u8"
-          },
-          {
-            "name": "initialSize",
-            "type": "u32"
-          },
-          {
-            "name": "timestamp",
-            "type": "i64"
-          }
-        ]
-      }
-    },
-    {
-      "name": "pdaExtended",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "vault",
-            "type": "pubkey"
-          },
-          {
-            "name": "oldSize",
-            "type": "u32"
-          },
-          {
-            "name": "newSize",
-            "type": "u32"
-          },
-          {
-            "name": "timestamp",
-            "type": "i64"
           }
         ]
       }
@@ -7632,69 +8267,34 @@ export type Sigil = {
           {
             "name": "bump",
             "type": "u8"
-          }
-        ]
-      }
-    },
-    {
-      "name": "pendingCloseConstraints",
-      "docs": [
-        "Queued constraint closure. Minimal — just needs the timelock gate.",
-        "PDA seeds: [b\"pending_close_constraints\", vault.key().as_ref()]"
-      ],
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "vault",
-            "type": "pubkey"
           },
           {
-            "name": "queuedAt",
-            "type": "i64"
-          },
-          {
-            "name": "executesAt",
-            "type": "i64"
-          },
-          {
-            "name": "queuedAtSlot",
+            "name": "cooldownSeconds",
             "docs": [
-              "Slot number when this update was queued. Paired with `MAX_APPLY_AGE_SLOTS`",
-              "to enforce a freshness ceiling — defends against durable-nonce pre-signing",
-              "attacks (F-10 audit fix, Drift Protocol April 2026 $285M analog)."
+              "TA-06 (Phase 3): per-agent cooldown in seconds. 0 disables. Bound",
+              "at apply time onto `AgentSpendOverlay.cooldown_seconds[slot]`.",
+              "APPENDED at end per F-14 APPEND-ONLY rule for Borsh stability."
             ],
             "type": "u64"
           },
           {
-            "name": "bump",
-            "type": "u8"
-          }
-        ]
-      }
-    },
-    {
-      "name": "pendingConstraintsUpdate",
-      "docs": [
-        "Queued instruction constraints update that becomes executable after",
-        "a timelock period. Mirrors `PendingPolicyUpdate` pattern.",
-        "",
-        "PDA seeds: `[b\"pending_constraints\", vault.key().as_ref()]`",
-        "",
-        "Zero-copy layout — same entries array as InstructionConstraints",
-        "plus queued_at and executes_at timestamps."
-      ],
-      "serialization": "bytemuck",
-      "repr": {
-        "kind": "c"
-      },
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "vault",
+            "name": "cosignDigest",
             "docs": [
-              "Associated vault pubkey (as raw bytes for Pod compatibility)"
+              "Round 2 F-RP3-2 fix (audit 2026-05-19): cosign-binding digest for",
+              "elevated mutations. When `queue_agent_permissions_update` detects",
+              "that the request RAISES an agent's capability, RAISES the spending",
+              "limit, or SHORTENS the cooldown — AND `policy.cosign_required ==",
+              "true` — the owner MUST supply a co-signing session in the accounts.",
+              "The queue handler computes a sha256 over the canonical pending args",
+              "and stores it here; `apply_agent_permissions_update` re-asserts the",
+              "digest equality.",
+              "",
+              "`[0u8; 32]` = no cosign required (non-elevated mutation OR cosign",
+              "not opted in on this vault). Any non-zero digest indicates this",
+              "pending was bound to a specific cosign and the apply handler MUST",
+              "re-compute and equal-check.",
+              "",
+              "APPENDED at end per F-14 APPEND-ONLY rule for Borsh stability."
             ],
             "type": {
               "array": [
@@ -7704,75 +8304,126 @@ export type Sigil = {
             }
           },
           {
-            "name": "entries",
+            "name": "cosignSession",
             "docs": [
-              "New constraint entries to apply (fixed array, use entry_count for active)"
+              "Round 2 F-RP3-2 fix (audit 2026-05-19): pubkey of the session that",
+              "co-signed this queue. Recorded for audit. `Pubkey::default()` =",
+              "no cosign (non-elevated OR not opted in).",
+              "",
+              "APPENDED at end per F-14 APPEND-ONLY rule for Borsh stability."
             ],
-            "type": {
-              "array": [
-                {
-                  "defined": {
-                    "name": "constraintEntryZc"
-                  }
-                },
-                64
-              ]
-            }
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "pendingOwnershipTransfer",
+      "docs": [
+        "Phase 8 — C26 ownership transfer pending state.",
+        "",
+        "Two-step ownership migration with mandatory timelock. The OWNER initiates",
+        "a transfer to a `new_owner` pubkey (any address — EOA or Squads V4 PDA),",
+        "the timelock elapses (default 172,800s = 48h), then either:",
+        "- `new_owner` (standard) calls `accept_ownership_transfer`, OR",
+        "- the multisig PDA itself (via Squads) calls",
+        "`accept_ownership_transfer_multisig` (Batch 4 — `is_multisig_target == true`).",
+        "",
+        "The PDA closes on accept (rent → `new_owner`) or cancel (rent → `current_owner`).",
+        "`freeze_vault` will be wired to cancel any in-flight transfer atomically in",
+        "a subsequent batch (today's batch only ships the three owner-side",
+        "instructions plus the PDA).",
+        "",
+        "Layout matches `Self::SIZE` exactly — the 6-byte tail padding keeps the",
+        "account's total bytes 8-aligned for downstream zero-copy compat and gives",
+        "us a safe additive cushion (any new field ≤ 6 bytes can land without",
+        "growing the PDA)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "docs": [
+              "PDA-bound vault. Defense-in-depth duplicate of the [b\"pending_owner\",",
+              "vault.key()] seed — also lets handlers reject stale accounts that were",
+              "re-created against a different vault during a close-then-reuse race."
+            ],
+            "type": "pubkey"
           },
           {
-            "name": "entryCount",
+            "name": "currentOwner",
             "docs": [
-              "Number of active entries (0..=64)"
+              "Owner pubkey at queue time. `cancel_ownership_transfer` requires the",
+              "signer match this field exactly (in addition to `has_one = owner` on",
+              "the vault), and the PDA's rent reverts here on cancel."
             ],
-            "type": "u8"
+            "type": "pubkey"
           },
           {
-            "name": "strictMode",
+            "name": "newOwner",
             "docs": [
-              "Whether to reject programs without matching constraint entries (0 = permissive, non-zero = strict)"
+              "Target owner. `accept_ownership_transfer` requires the signer match",
+              "this field exactly (standard EOA path). Multisig variant in Batch 4",
+              "will also bind here when `is_multisig_target == true`."
             ],
-            "type": "u8"
+            "type": "pubkey"
+          },
+          {
+            "name": "queuedAt",
+            "docs": [
+              "`Clock::unix_timestamp` at queue time. Timelock is enforced as",
+              "`clock.unix_timestamp - queued_at >= min_delay_seconds`."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "minDelaySeconds",
+            "docs": [
+              "Owner-configurable timelock (seconds). Defaults to",
+              "`Self::DEFAULT_MIN_DELAY` (172,800 / 48h). Owner can shorten in a",
+              "future SDK call if `policy.timelock_duration` permits, but Batch 3",
+              "pins the default — extension hook lives in Batch 4+."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "isMultisigTarget",
+            "docs": [
+              "`true` means the accept path will be `accept_ownership_transfer_multisig`",
+              "(Batch 4 — Squads V4 vault-PDA-signs flow). `false` means the standard",
+              "EOA accept path. Today's `accept_ownership_transfer` HARD-REJECTS when",
+              "this is `true` so the multisig flow cannot be silently taken by the",
+              "regular handler before Batch 4 ships."
+            ],
+            "type": "bool"
           },
           {
             "name": "bump",
             "docs": [
-              "Bump seed for PDA"
+              "PDA bump."
             ],
             "type": "u8"
           },
           {
             "name": "padding",
             "docs": [
-              "Alignment padding"
+              "8-byte alignment cushion + additive headroom for Batch 4+ extensions",
+              "(e.g. cooldown packing, multisig-attestation digest). Zero-init on",
+              "`init` and unread today."
             ],
             "type": {
               "array": [
                 "u8",
-                5
+                6
               ]
             }
           },
           {
-            "name": "queuedAt",
-            "docs": [
-              "Unix timestamp when this update was queued"
-            ],
-            "type": "i64"
-          },
-          {
-            "name": "executesAt",
-            "docs": [
-              "Unix timestamp when this update becomes executable"
-            ],
-            "type": "i64"
-          },
-          {
             "name": "queuedAtSlot",
             "docs": [
-              "Slot number when this update was queued. Paired with `MAX_APPLY_AGE_SLOTS`",
-              "to enforce a freshness ceiling — defends against durable-nonce pre-signing",
-              "attacks (F-10 audit fix, Drift Protocol April 2026 $285M analog).",
-              "Already 8-byte aligned (follows two i64 fields)."
+              "CH-1 close (Bucket-3 audit 2026-05-23): slot at queue time for",
+              "F-10 freshness. See pending_agent_grant.rs for the threat model."
             ],
             "type": "u64"
           }
@@ -7896,8 +8547,8 @@ export type Sigil = {
           {
             "name": "destinationMode",
             "docs": [
-              "Destination access control mode update (F-4 audit fix).",
-              "Some(0) = Restricted, Some(1) = OpenWithCap, None = leave unchanged."
+              "Destination access control mode update.",
+              "Phase 2 Option A: only Some(0) (RESTRICTED) is accepted. Some(1) was deleted."
             ],
             "type": {
               "option": "u8"
@@ -7909,6 +8560,209 @@ export type Sigil = {
               "Bump seed for PDA"
             ],
             "type": "u8"
+          },
+          {
+            "name": "operatingHours",
+            "docs": [
+              "TA-05 (Phase 3): optional update to `PolicyConfig.operating_hours`.",
+              "24-bit UTC bitmask; upper 8 bits MUST be zero. Bound by TA-19 at",
+              "canonical position 15.",
+              "APPENDED at end per F-14 APPEND-ONLY rule for Borsh stability."
+            ],
+            "type": {
+              "option": "u32"
+            }
+          },
+          {
+            "name": "cosignDigest",
+            "docs": [
+              "TA-09 (Phase 3 pre-execution guard #6): cosign requirement marker.",
+              "When `queue_policy_update` detects an elevated mutation (raising",
+              "daily cap, raising max-tx, expanding destinations/protocols, etc),",
+              "the owner MUST supply a co-signing session in the accounts. The",
+              "queue handler computes a sha256 over the canonical pending args",
+              "and stores it here; `apply_pending_policy` re-asserts the digest.",
+              "",
+              "`[0u8; 32]` = no cosign required (non-elevated mutation). Any",
+              "non-zero digest indicates this pending was bound to a specific",
+              "cosign. At apply, the handler MUST re-compute and equal-check.",
+              "",
+              "APPENDED at end per F-14 APPEND-ONLY rule for Borsh stability."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "cosignSession",
+            "docs": [
+              "TA-09 (Phase 3): pubkey of the session that co-signed this queue.",
+              "Recorded for audit. `Pubkey::default()` = no cosign (non-elevated)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "newPolicyPreviewDigest",
+            "docs": [
+              "TA-19 (Phase 2): SHA-256 digest of the canonical Borsh encoding of the",
+              "policy fields THAT WOULD RESULT FROM APPLYING this pending update over",
+              "the live policy. Owner computes off-chain over the merged result and",
+              "includes the digest in `queue_policy_update`; `apply_pending_policy`",
+              "re-asserts the digest against a re-computed merged digest before any",
+              "field is copied to the live policy. Defends against pending-PDA",
+              "tampering between queue and apply (e.g., partial overwrite via a",
+              "rogue program with the same account discriminator).",
+              "",
+              "Encoding identical to `PolicyConfig.policy_preview_digest` — see that",
+              "field's doc-comment for the canonical encoding ordering.",
+              "",
+              "APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "stableBalanceFloor",
+            "docs": [
+              "TA-12 (Phase 5): optional update to `PolicyConfig.stable_balance_floor`.",
+              "None = preserve live value; Some(n) = set to n. Bound by TA-19 at",
+              "canonical digest position 18.",
+              "",
+              "APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability."
+            ],
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "perRecipientDailyCapUsd",
+            "docs": [
+              "TA-14 (Phase 5): optional update to",
+              "`PolicyConfig.per_recipient_daily_cap_usd`. None = preserve live value;",
+              "Some(n) = set to n. Bound by TA-19 at canonical digest position 19.",
+              "",
+              "APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability."
+            ],
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "cosignRequired",
+            "docs": [
+              "G6 (audit 2026-05-18 cosign opt-in): optional update to",
+              "`PolicyConfig.cosign_required`. None = preserve live value;",
+              "Some(true) = enable cosign on elevated mutations (safety",
+              "improvement — NOT elevated); Some(false) when live is true",
+              "IS elevated (one-way ratchet — disabling cosign requires cosign).",
+              "Bound by TA-19 at canonical digest position 20.",
+              "",
+              "APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability."
+            ],
+            "type": {
+              "option": "bool"
+            }
+          },
+          {
+            "name": "cosignSessionPubkey",
+            "docs": [
+              "D-5 close (audit 2026-05-19, F-RP3-1): optional update to",
+              "`PolicyConfig.cosign_session_pubkey`. None = preserve live value;",
+              "Some(pubkey) = set the reactivate-cosign pubkey for elevated",
+              "capability grants. `Pubkey::default()` is permitted as a value",
+              "(disables the gate); any other pubkey enables it.",
+              "",
+              "Setting this field is NOT classified as elevated by the existing",
+              "7-trigger gate in `queue_policy_update` — owners opt INTO friction",
+              "(the gate fires LATER on `reactivate_vault`). Disabling it",
+              "(`Some(Pubkey::default())`) on a live policy where the field is",
+              "currently non-default IS, however, a one-way-ratchet violation if",
+              "the vault is otherwise cosign-opted-in; deferred to Phase 9",
+              "alongside the broader ratchet polish — the present batch closes",
+              "only the reactivate-time gate.",
+              "",
+              "Bound by TA-19 at canonical digest position 22.",
+              "",
+              "APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability."
+            ],
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "operatorGrantDelaySeconds",
+            "docs": [
+              "F-Q6 (2026-06-02): optional update to",
+              "`PolicyConfig.operator_grant_delay_seconds`. None = preserve live value;",
+              "Some(n) = update. Bound by TA-19 at canonical digest position 22.",
+              "APPENDED per F-14 APPEND-ONLY rule for Borsh stability."
+            ],
+            "type": {
+              "option": "u64"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "perRecipientCounter",
+      "docs": [
+        "TA-14 (Phase 5 post-exec): per-recipient rolling 24h outflow counter.",
+        "48 bytes per entry (32 + 8 + 8).",
+        "",
+        "`recipient` is resolved from the SPL TokenAccount.owner field — NOT",
+        "the ATA pubkey. The §RP brief explicitly flags ATA-vs-owner confusion",
+        "as the attack class to defend against.",
+        "",
+        "`window_start` is the Unix timestamp at which the current 24h window",
+        "began. When `now - window_start >= 86400` the slot is eligible for",
+        "age-based eviction.",
+        "",
+        "`window_spend_usd` is the accumulated 6-decimal USDC face value spent",
+        "to this recipient in the active window."
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "recipient",
+            "docs": [
+              "Recipient wallet pubkey (NOT the ATA pubkey — Pod-compatible",
+              "`[u8; 32]` since zero-copy accounts can't hold Pubkey directly)."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "windowStart",
+            "docs": [
+              "Unix timestamp at which the active rolling 24h window started.",
+              "Zero indicates an empty slot."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "windowSpendUsd",
+            "docs": [
+              "Accumulated 6-decimal USDC face value spent to `recipient` in",
+              "the active 24h window."
+            ],
+            "type": "u64"
           }
         ]
       }
@@ -7987,10 +8841,9 @@ export type Sigil = {
           {
             "name": "protocolMode",
             "docs": [
-              "Protocol access control mode:",
-              "0 = all allowed (protocols list ignored)",
-              "1 = allowlist (only protocols in list)",
-              "2 = denylist (all except protocols in list)"
+              "Protocol allowlist mode. Phase 2 Option A: ONLY value 1 (ALLOWLIST)",
+              "permitted. Modes 0 (ALL) and 2 (DENYLIST) deleted under L-1. Handler",
+              "rejects any other value with `ErrInvalidProtocolMode`."
             ],
             "type": "u8"
           },
@@ -8015,9 +8868,13 @@ export type Sigil = {
           {
             "name": "maxSlippageBps",
             "docs": [
-              "Maximum slippage tolerance for Jupiter swaps in basis points.",
-              "0 = reject all swaps (vault owner must explicitly configure).",
-              "Enforced on-chain via instruction introspection of Jupiter data."
+              "Maximum slippage tolerance (basis points) — generic config primitive",
+              "preserved per D-5 across Phase 1 Option A demolition. Per L-1 there is",
+              "no on-chain Jupiter slippage verifier in V1; this field is consumed by",
+              "off-chain SDK simulators and (Phase 6) generic post-execution assertions",
+              "(R-1 mint-delta cap). Validated at config time via",
+              "`max_slippage_bps <= MAX_SLIPPAGE_BPS` (= 5000 BPS = 50% ceiling).",
+              "0 = no slippage protection configured."
             ],
             "type": "u16"
           },
@@ -8037,14 +8894,6 @@ export type Sigil = {
             "type": {
               "vec": "pubkey"
             }
-          },
-          {
-            "name": "hasConstraints",
-            "docs": [
-              "Whether instruction constraints PDA exists for this vault.",
-              "Set true by create_instruction_constraints, false by apply_close_constraints."
-            ],
-            "type": "bool"
           },
           {
             "name": "hasPendingPolicy",
@@ -8112,14 +8961,281 @@ export type Sigil = {
           {
             "name": "destinationMode",
             "docs": [
-              "Destination access control mode for `agent_transfer`:",
-              "0 = Restricted (DEFAULT) — destination MUST be in `allowed_destinations`.",
-              "1 = OpenWithCap — destination unrestricted; only `daily_spending_cap_usd` throttles drain.",
-              "Closes F-4 (third-pass audit): empty `allowed_destinations` no longer",
-              "implies default-allow. Owners must explicitly opt into OpenWithCap via",
-              "queue_policy_update / apply_pending_policy."
+              "Destination access control mode for `agent_transfer` and spending paths.",
+              "",
+              "Phase 2 Option A: only value 0 (RESTRICTED) is accepted. Permissive",
+              "OPEN_WITH_CAP (1) was deleted. Closes F-4 (third-pass audit) and the",
+              "subsequent owner-opt-in window definitively."
             ],
             "type": "u8"
+          },
+          {
+            "name": "policyPreviewDigest",
+            "docs": [
+              "TA-19 (Phase 2): SHA-256 digest of the canonical Borsh encoding of the",
+              "policy fields the owner approved at queue/init time. Bound at the same",
+              "instruction where the owner signs the change, re-asserted at apply, so",
+              "a compromised owner-signer or pending-PDA tampering cannot mutate the",
+              "applied policy without producing a digest mismatch.",
+              "",
+              "CANONICAL ENCODING (FIXED — DO NOT REORDER):",
+              "1. `daily_spending_cap_usd: u64`",
+              "2. `max_transaction_size_usd: u64`",
+              "3. `max_slippage_bps: u16`",
+              "4. `developer_fee_rate: u16` — PEN-CROSS-6 (Phase 2 close-up)",
+              "5. `protocol_mode: u8`",
+              "6. `protocols: Vec<Pubkey>`",
+              "7. `destination_mode: u8`",
+              "8. `allowed_destinations: Vec<Pubkey>`",
+              "9. `timelock_duration: u64`",
+              "10. `session_expiry_seconds: u64`",
+              "11. `observe_only: bool`",
+              "12. `has_constraints: bool`",
+              "13. `has_post_assertions: u8`",
+              "14. `created_at_slot: u64` — PEN-CROSS-2 (Phase 2 close-up)",
+              "",
+              "All fields encoded as Borsh: u8/u16/u64 little-endian, `bool` as `[u8; 1]`",
+              "(0 or 1), `Vec<Pubkey>` as `u32_le_len ++ pubkey_bytes_concatenated`.",
+              "The SDK helper `computePolicyPreviewDigest` mirrors this encoding exactly.",
+              "",
+              "APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "createdAtSlot",
+            "docs": [
+              "PEN-CROSS-2 (Phase 2 close-up): the slot at which `initialize_vault`",
+              "minted this PolicyConfig. Bound by TA-19 at position 14 of the",
+              "canonical digest encoding.",
+              "",
+              "Closes the close+reinit replay window: an owner who closes a vault",
+              "(via `close_vault`) and later re-inits a fresh PDA at the same",
+              "(owner, vault_id) gets a new `created_at_slot`. The signed",
+              "`initialize_vault` ix from the old vault encodes the OLD slot in its",
+              "preview digest, so replaying that signed tx against the fresh PDA",
+              "produces a digest mismatch and `PolicyPreviewMismatch` rejects it.",
+              "",
+              "APPENDED at end of struct per F-14 APPEND-ONLY rule."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "operatingHours",
+            "docs": [
+              "TA-05 (Phase 3 pre-execution guard #2): 24-bit UTC operating-hours",
+              "bitmask. Bit `n` (0 ≤ n ≤ 23) set → spending allowed when",
+              "`clock.unix_timestamp / 3600 % 24 == n`. Upper 8 bits (24..=31)",
+              "MUST be zero; rejected at write-time.",
+              "",
+              "Default for owners who don't narrow: 0xFFFFFF (all 24 hours enabled",
+              "— equivalent to \"no operating-hours constraint\"). New vaults set",
+              "this explicitly via the digest the owner signs; back-compat",
+              "consideration removed per L-3 (Phase 2 TA-19 bound the field anyway).",
+              "",
+              "Bound by TA-19 at position 15 of the canonical digest encoding.",
+              "APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "destinationGraylist",
+            "docs": [
+              "TA-07 (Phase 3 pre-execution guard #4): first-time-destination",
+              "24-hour graylist friction. When a NEW destination is added to",
+              "`allowed_destinations` (via queue_policy_update), it enters this",
+              "graylist with `unlock_unix = now + 86400` (24h). Until either",
+              "(a) the unlock time elapses OR (b) the owner calls",
+              "`promote_graylist_destination` to fast-track, spending paths",
+              "reject any tx routing value to that destination with",
+              "`ErrGraylistFriction` (6077).",
+              "",
+              "Tuple is `(destination_pubkey, unlock_unix)`. Bounded ≤10 entries",
+              "(max_destinations). When full, additional allowlist adds reject",
+              "with `ErrGraylistFull` (6087) until an existing entry unlocks or",
+              "is promoted.",
+              "",
+              "DESIGN: graylist entries are derived/ephemeral state — the owner's",
+              "signed digest already binds the allowlist (canonical position 8),",
+              "and graylist friction only delays an already-authorised destination.",
+              "Therefore the graylist itself is NOT in the canonical digest",
+              "encoding. Promoting accelerates the unlock but cannot widen the",
+              "allowlist beyond what the owner signed.",
+              "",
+              "APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability."
+            ],
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "destinationGraylistEntry"
+                }
+              }
+            }
+          },
+          {
+            "name": "autoPromoteGrays",
+            "docs": [
+              "TA-07 (Phase 3): if true, new destinations added to the allowlist",
+              "skip the 24h graylist entirely (audit trail still recorded via",
+              "emitted events). Bound by TA-19 at canonical digest position 16",
+              "so the owner's choice to bypass friction is part of the signed",
+              "configuration — not silently flipped.",
+              "",
+              "Default false. APPENDED at end per F-14 APPEND-ONLY rule."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "autoRevokeThreshold",
+            "docs": [
+              "TA-17 (Phase 3 pre-execution guard #7): consecutive-failure",
+              "threshold after which an agent's capability is auto-revoked.",
+              "Owner-configurable in range 3..=20; out-of-range values rejected",
+              "at policy-write time with `InvalidPermissions`. Default 5.",
+              "",
+              "Only on-chain policy-violation codes (6074-6091) count — see",
+              "`POLICY_VIOLATION_RANGE` in finalize_session. External codes",
+              "(CU exhaustion, nonce desync, auth) do NOT increment.",
+              "",
+              "Bound by TA-19 at canonical digest position 17. APPENDED per",
+              "F-14 APPEND-ONLY rule."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "stableBalanceFloor",
+            "docs": [
+              "TA-12 (Phase 5 post-execution invariant #1): hard floor on the",
+              "combined USDC + USDT balance held by the vault. After every",
+              "`finalize_session` spending path completes (CPI balance audit +",
+              "rolling-cap + per-agent + per-protocol bookkeeping), the handler",
+              "re-reads the vault's USDC + USDT token-account balances and",
+              "asserts their sum is ≥ this value. If not, it rejects with",
+              "`ErrStableFloorViolation` (6085).",
+              "",
+              "This is the LAST defensive line — no combination of attacks (CPI",
+              "drain, per-protocol cap bypass via async fulfillment, fee",
+              "inflation, slippage manipulation) may drain the vault below this",
+              "line. Default 0 (no reserve — preserves all existing vault",
+              "behavior). Owner-configurable via `initialize_vault` and",
+              "`queue_policy_update`.",
+              "",
+              "Bound by TA-19 at canonical digest position 18. APPENDED per",
+              "F-14 APPEND-ONLY rule for Borsh stability."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "perRecipientDailyCapUsd",
+            "docs": [
+              "TA-14 (Phase 5 post-execution invariant #2): rolling 24h",
+              "per-recipient outflow cap, in 6-decimal USDC face value. When",
+              "non-zero, every `finalize_session` spending path validates that",
+              "the recipient's rolling 24h spend (tracked on",
+              "`SpendTracker.per_recipient`) PLUS this transaction's outflow",
+              "to that recipient stays ≤ this value. Otherwise rejects with",
+              "`ErrRecipientCapExceeded` (6096).",
+              "",
+              "Default 0 (no per-recipient cap) preserves existing vault",
+              "behavior. Owner-configurable via `initialize_vault` and",
+              "`queue_policy_update`.",
+              "",
+              "Bound by TA-19 at canonical digest position 19. APPENDED per",
+              "F-14 APPEND-ONLY rule for Borsh stability."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "cosignRequired",
+            "docs": [
+              "G6 (audit 2026-05-18): owner-controlled opt-in flag for TA-09",
+              "cosign enforcement on elevated policy mutations.",
+              "",
+              "When `false` (default): elevated mutations (raising caps,",
+              "expanding allowlists, weakening floors / per-recipient caps /",
+              "protocol caps) require only the owner's signature — no cosign",
+              "session is required. Low-friction default, suitable for solo",
+              "founders, AI-agent automation, dev/test vaults, and any vault",
+              "whose owner is a Squads V4 multisig PDA (multisig at the Solana",
+              "layer already enforces multi-signer authorization).",
+              "",
+              "When `true`: TA-09 elevation checks fire. The seven elevation",
+              "triggers in `queue_policy_update` (raises_daily_cap,",
+              "raises_max_tx, expands_destinations, expands_protocols,",
+              "lowers_floor, weakens_per_recipient_cap, weakens_protocol_caps)",
+              "require a non-default `cosign_session` pubkey + a corresponding",
+              "signer in `remaining_accounts` with `is_signer == true`.",
+              "",
+              "Toggle semantics:",
+              "- **Enabling (false → true)** is NON-ELEVATED. It is a safety",
+              "improvement — owner is voluntarily tightening the policy.",
+              "Cosign is not required to enable cosign.",
+              "- **Disabling (true → false)** IS ELEVATED. One-way-ratchet",
+              "semantics: if cosign is currently ON, the owner cannot turn",
+              "it OFF without producing a valid cosign signature — exactly",
+              "the protection cosign was meant to provide. A phishing-",
+              "compromised owner key cannot silently disable cosign and",
+              "then drain via subsequent non-elevated mutations.",
+              "",
+              "Bound by TA-19 at canonical digest position 20. APPENDED at end",
+              "of struct per F-14 APPEND-ONLY rule for Borsh stability."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "cosignSessionPubkey",
+            "docs": [
+              "D-5 close (audit 2026-05-19, F-RP3-1): the cosign-session pubkey",
+              "gating elevated capability grants on the `reactivate_vault` path.",
+              "",
+              "THREAT: a phished/leaked owner key can chain",
+              "`freeze_vault → reactivate_vault(new_agent=ATTACKER, FULL_CAPABILITY)`",
+              "in a single transaction. The vault's `cosign_required` flag gates",
+              "elevated MUTATIONS via `queue_policy_update`, but the reactivate",
+              "path grafts a new agent at FULL_CAPABILITY directly — no timelock,",
+              "no cosign — yielding an instant operator-class grant.",
+              "",
+              "DEFENSE: when `cosign_session_pubkey != Pubkey::default()` AND the",
+              "reactivate ix passes `capability == FULL_CAPABILITY` for the new",
+              "agent, the handler REQUIRES a matching signer in",
+              "`ctx.remaining_accounts` whose key equals this pubkey AND",
+              "`is_signer == true`. Otherwise rejects with",
+              "`ErrReactivateCosignRequiredForFullCapability` (6114).",
+              "",
+              "Default `Pubkey::default()` at `initialize_vault` time means",
+              "existing vaults retain today's behavior (no cosign gate on",
+              "reactivate). Owners opt in by setting a non-default value via",
+              "`queue_policy_update`. Setting a non-default value here is",
+              "orthogonal to `cosign_required` — the two gate different ix paths",
+              "(queue/apply vs reactivate) and use different pubkey sources",
+              "(`pending.cosign_session` vs this field).",
+              "",
+              "Bound by TA-19 at canonical digest position 22. APPENDED at end",
+              "of struct per F-14 APPEND-ONLY rule for Borsh stability."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "operatorGrantDelaySeconds",
+            "docs": [
+              "F-Q6 (2026-06-02): owner-configured delay (in seconds) before an",
+              "OPERATOR capability grant takes effect. Default 0. An owner-set",
+              "security control gating OPERATOR seating — bound by TA-19 at canonical",
+              "digest position 22 so a tampered SDK or pending-PDA mutation cannot",
+              "silently lower it between owner approval and on-chain landing.",
+              "Changeable only via the timelocked `queue_policy_update` path (so",
+              "lowering it is itself delayed). The single-key forced floor",
+              "(`max(field, 600)`) and per-tier grant logic live in `register_agent`",
+              "/ `queue_agent_grant`.",
+              "",
+              "APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability."
+            ],
+            "type": "u64"
           }
         ]
       }
@@ -8151,7 +9267,14 @@ export type Sigil = {
     {
       "name": "postAssertionEntry",
       "docs": [
-        "Borsh-serializable assertion entry (instruction parameter form)."
+        "Borsh-serializable assertion entry (instruction parameter form).",
+        "",
+        "Phase B3 fields (cross_field_offset_b, cross_field_multiplier_bps,",
+        "cross_field_flags) DELETED in Phase 1 Option A demolition.",
+        "",
+        "Phase 6 appended `aux_value: [u8; 8]` + `aux_byte: u8` for the four new",
+        "variants (R-1/R-2/R-3/R-4). Modes 0..3 must set both to zero; the",
+        "validator enforces it."
       ],
       "type": {
         "kind": "struct",
@@ -8181,23 +9304,21 @@ export type Sigil = {
             "type": "u8"
           },
           {
-            "name": "crossFieldOffsetB",
+            "name": "auxValue",
             "docs": [
-              "Phase B3: second field offset for CrossFieldLte (0 if unused)"
+              "Phase 6: u64 LE auxiliary value. Per-mode meaning — see ZC struct."
             ],
-            "type": "u16"
+            "type": {
+              "array": [
+                "u8",
+                8
+              ]
+            }
           },
           {
-            "name": "crossFieldMultiplierBps",
+            "name": "auxByte",
             "docs": [
-              "Phase B3: multiplier in BPS for CrossFieldLte (0 if unused)"
-            ],
-            "type": "u32"
-          },
-          {
-            "name": "crossFieldFlags",
-            "docs": [
-              "Phase B3: flags byte — bit 0 = enable CrossFieldLte (0 if unused)"
+              "Phase 6: u8 auxiliary byte. Per-mode meaning — see ZC struct."
             ],
             "type": "u8"
           }
@@ -8215,7 +9336,12 @@ export type Sigil = {
         "vault owner configures byte offsets from protocol documentation.",
         "",
         "Phase B1: absolute value assertions (check field ≤ max, field ≥ min).",
-        "Phase B3 will add CrossFieldLte for leverage ratio enforcement."
+        "Phase B2: delta-mode assertions (MaxDecrease, MaxIncrease, NoChange).",
+        "",
+        "Phase B3 CrossFieldLte fields (cross_field_offset_b, cross_field_multiplier_bps,",
+        "cross_field_flags) DELETED in Phase 1 Option A demolition (L-1). The two-field",
+        "ratio check (field_A × 10000 ≤ multiplier_bps × field_B) was Jupiter-Perps-flavored",
+        "leverage-cap logic that doesn't generalize to a per-vault generic primitive."
       ],
       "serialization": "bytemuck",
       "repr": {
@@ -8228,7 +9354,13 @@ export type Sigil = {
             "name": "targetAccount",
             "docs": [
               "The account to read after execution (passed via remaining_accounts).",
-              "Typically a Position PDA, User account, or similar protocol state."
+              "",
+              "Per-mode interpretation:",
+              "- modes 0..3 (Absolute / MaxDecrease / MaxIncrease / NoChange):",
+              "protocol state account (Position PDA, User account, etc).",
+              "- mode 4 MintDeltaCap with `aux_byte=1` (scope=1): the single token",
+              "account whose balance we measure. With `aux_byte=0` (scope=0):",
+              "UNUSED — ATAs are derived on-chain from `(vault, expected_value)`."
             ],
             "type": {
               "array": [
@@ -8240,28 +9372,35 @@ export type Sigil = {
           {
             "name": "offset",
             "docs": [
-              "Byte offset in the target account's data to read."
+              "Byte offset in the target account's data to read (modes 0..3).",
+              "Phase 6 modes (4) ignore this field — balances are read at the",
+              "canonical SPL/Token-2022 layout offset (64..72)."
             ],
             "type": "u16"
           },
           {
             "name": "valueLen",
             "docs": [
-              "Length of the value to compare (1-32 bytes)."
+              "Length of the value to compare (1-32 bytes) for modes 0..3.",
+              "Phase 6 mode 4 ignores this field."
             ],
             "type": "u8"
           },
           {
             "name": "operator",
             "docs": [
-              "Comparison operator (reuses ConstraintOperator: Eq, Ne, Gte, Lte, etc.)"
+              "Comparison operator (reuses ConstraintOperator: Eq, Ne, Gte, Lte, etc.)",
+              "Modes 1..4 ignore this field."
             ],
             "type": "u8"
           },
           {
             "name": "expectedValue",
             "docs": [
-              "Expected value for comparison (same max as DataConstraint)."
+              "Per-mode payload:",
+              "- modes 0..3: expected value for comparison (same max as DataConstraint).",
+              "- mode 4 MintDeltaCap: bytes 0..32 = mint pubkey identifying the",
+              "target token. Remaining bytes are unused."
             ],
             "type": {
               "array": [
@@ -8280,46 +9419,43 @@ export type Sigil = {
               "For bidirectional protection, pair with MaxIncrease or use NoChange.",
               "2 = MaxIncrease: check (current - snapshot) ≤ expected_value (Phase B2)",
               "NOTE: If value decreases, check ALWAYS PASSES.",
-              "3 = NoChange: check current == snapshot — byte-for-byte equality (Phase B2)"
+              "3 = NoChange: check current == snapshot — byte-for-byte equality (Phase B2)",
+              "4 = MintDeltaCap (Phase 6 R-1): vault-wide or per-account drain ceiling"
             ],
             "type": "u8"
           },
           {
-            "name": "crossFieldOffsetB",
+            "name": "auxValue",
             "docs": [
-              "Phase B3: Second field offset for CrossFieldLte (little-endian u16).",
-              "When cross_field_flags & 0x01: read field_B at offset_b (value_len bytes) from same target.",
-              "Check: field_A × 10000 ≤ multiplier_bps × field_B (using u128 arithmetic).",
-              "Stored as [u8; 2] for zero-copy Pod alignment compatibility."
+              "Phase 6 generic auxiliary value — per-mode interpretation:",
+              "- mode 4 MintDeltaCap: u64 LE = max_net_decrease (units of the mint's",
+              "smallest denomination).",
+              "- modes 0..3: UNUSED, must be zero (validate_entries enforces).",
+              "Stored as raw bytes to keep the struct alignment at 2 (avoids a u64",
+              "alignment bump that would force the entry to a multiple of 8 and",
+              "regress capacity math)."
             ],
             "type": {
               "array": [
                 "u8",
-                2
+                8
               ]
             }
           },
           {
-            "name": "crossFieldMultiplierBps",
+            "name": "auxByte",
             "docs": [
-              "Phase B3: Multiplier in basis points for CrossFieldLte (little-endian u32).",
-              "10000 = 1.0x, 100000 = 10x, 5000000 = 500x.",
-              "Must be > 0 when cross_field_flags is enabled.",
-              "Stored as [u8; 4] for zero-copy Pod alignment compatibility."
-            ],
-            "type": {
-              "array": [
-                "u8",
-                4
-              ]
-            }
-          },
-          {
-            "name": "crossFieldFlags",
-            "docs": [
-              "Phase B3: Flags byte. Bit 0 = enable CrossFieldLte.",
-              "When enabled, assertion_mode MUST be 0 (Absolute).",
-              "Unknown bits (1-7) must be 0."
+              "Phase 6 generic auxiliary byte — per-mode interpretation:",
+              "- mode 4 MintDeltaCap: scope (0 = vault-wide ATA enumeration,",
+              "1 = single account in `target_account`).",
+              "- modes 0..3: UNUSED, must be zero (validate_entries enforces).",
+              "",
+              "The trailing `aux_byte` brings the entry to an even size (78) which",
+              "satisfies the struct's u16 alignment without a separate `_padding`",
+              "field — the previous `_padding: u8` from Phase 1 demolition was",
+              "absorbed here. Off-chain decoders that previously read `_padding`",
+              "now read `aux_byte`; the byte position is the same so wire",
+              "compatibility holds with the previous version's zero value."
             ],
             "type": "u8"
           }
@@ -8366,7 +9502,9 @@ export type Sigil = {
       "name": "postExecutionAssertions",
       "docs": [
         "On-chain account storing post-execution assertions for a vault.",
-        "Seeds: [b\"post_assertions\", vault.key()]"
+        "Seeds: [b\"post_assertions\", vault.key()]",
+        "",
+        "Phase 6 grow: entries 4 → 8, per-entry size 70 → 78 bytes. New SIZE 672."
       ],
       "serialization": "bytemuck",
       "repr": {
@@ -8399,14 +9537,14 @@ export type Sigil = {
                     "name": "postAssertionEntryZc"
                   }
                 },
-                4
+                8
               ]
             }
           },
           {
             "name": "entryCount",
             "docs": [
-              "Number of active entries (0..=4)."
+              "Number of active entries (0..=MAX_POST_ASSERTION_ENTRIES)."
             ],
             "type": "u8"
           },
@@ -8517,14 +9655,6 @@ export type Sigil = {
             "type": "pubkey"
           },
           {
-            "name": "isSpending",
-            "docs": [
-              "Whether the matched constraint entry classifies this as spending.",
-              "Derived from amount > 0 in validate_and_authorize."
-            ],
-            "type": "bool"
-          },
-          {
             "name": "expiresAtTimestamp",
             "docs": [
               "Wall-clock expiry: session is valid until this `Clock::unix_timestamp`.",
@@ -8597,7 +9727,16 @@ export type Sigil = {
             "docs": [
               "Phase B2: Snapshots of target account bytes captured in validate_and_authorize",
               "before DeFi instruction executes. Index i corresponds to PostAssertionEntry i.",
-              "Used by delta assertion modes (1=MaxDecrease, 2=MaxIncrease, 3=NoChange)."
+              "Used by delta assertion modes (1=MaxDecrease, 2=MaxIncrease, 3=NoChange).",
+              "",
+              "Phase 6 grow: array length 4 → 8 to match MAX_POST_ASSERTION_ENTRIES.",
+              "Adds 128 bytes (4 × 32) to SessionAuthority.",
+              "",
+              "**Phase 6 R-1 MintDeltaCap reuse:** for mode-4 entries, the snapshot",
+              "stores `pre_sum: u64 LE` in bytes [0..8] of the 32-byte slot. Remaining",
+              "24 bytes are zero-padded. `snapshot_lens[i]` is set to 8 (the u64",
+              "width) so finalize can distinguish a captured R-1 snapshot from an",
+              "uncaptured slot."
             ],
             "type": {
               "array": [
@@ -8607,7 +9746,7 @@ export type Sigil = {
                     32
                   ]
                 },
-                4
+                8
               ]
             }
           },
@@ -8616,14 +9755,80 @@ export type Sigil = {
             "docs": [
               "Phase B2: Actual value_len captured for each snapshot.",
               "0 = no snapshot captured (mode 0 entries). Non-zero = snapshot was captured.",
-              "finalize_session cross-checks snapshot_lens[i] == entry.value_len."
+              "finalize_session cross-checks snapshot_lens[i] == entry.value_len for",
+              "modes 1..3. For mode 4 (R-1 MintDeltaCap) the field is set to 8 and",
+              "finalize asserts snapshot_lens[i] == 8 before re-summing.",
+              "",
+              "Phase 6 grow: array length 4 → 8. Adds 4 bytes."
             ],
             "type": {
               "array": [
                 "u8",
-                4
+                8
               ]
             }
+          },
+          {
+            "name": "nonce",
+            "docs": [
+              "AC-10 (Phase 4) — monotonic session nonce closing durable-nonce replay",
+              "(per Audit #1 C-1).",
+              "",
+              "**Semantics**",
+              "- New session: `init` zero-initializes the account, so the field starts",
+              "at 0. `validate_and_authorize` accepts `expected_nonce` and requires",
+              "it to equal `self.nonce` at entry — a fresh session therefore demands",
+              "`expected_nonce = 0` from the caller.",
+              "- `finalize_session` increments `self.nonce` by 1 on every successful",
+              "finalize (including the expired-cleanup path — see finalize_session.rs",
+              "for the atomicity argument). The increment is atomic with the",
+              "account-close: if finalize errors, the close is rolled back by the",
+              "runtime and the persisted nonce stays at the pre-increment value, so",
+              "a partial-fail does NOT permanent-increment the nonce.",
+              "- Because `validate_and_authorize` uses `init` (not `init_if_needed`),",
+              "the (vault, agent, mint) session PDA is closed at finalize and the",
+              "next validate creates a fresh account starting at nonce=0. The nonce",
+              "field therefore functions as an in-session counter and is checked",
+              "against `expected_nonce` ONLY when the SessionAuthority account is",
+              "not closed between validates — currently a no-op in the steady-state",
+              "flow, present so Phase 8 ownership-transfer replay protection (M-5)",
+              "can extend the same field without a state-shape migration.",
+              "",
+              "**Phase 8 extension contract:** the ownership-transfer flow (M-5) will",
+              "reuse this field as a per-vault monotonic counter scoped to the",
+              "session PDA, preserving the existing finalize-time increment semantics.",
+              "Adding seeds / scope is additive; the on-chain field stays a `u64`.",
+              "",
+              "**Why NOT in TA-19 canonical digest:** SessionAuthority is per-session",
+              "ephemeral state, not policy-owned. Including the nonce in the policy",
+              "digest would require digest recomputation on every successful seal,",
+              "which collapses the queue/apply timelock semantics. The nonce is",
+              "orthogonal to the policy_preview_digest binding.",
+              "",
+              "**APPEND-ONLY**: new field at the END of SessionAuthority. SIZE grows",
+              "by 8 bytes (375 → 383). Pre-existing accounts at the prior layout are",
+              "not migrated (the program close+init cycle naturally retires them at",
+              "the next finalize), so this is safe under a V2 program ID redeploy."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "outputStablecoinAccount",
+            "docs": [
+              "F-Q8 — the vault stablecoin ATA pinned at validate for the",
+              "non-stablecoin-input outcome check. finalize_session asserts the",
+              "account it measures has THIS exact pubkey, so a compromised agent",
+              "cannot substitute a different vault-owned stablecoin ATA (whose",
+              "owner+mint also pass) to spoof the `current > before` return check.",
+              "Set to output_stablecoin_account.key() on the non-stablecoin-input",
+              "spending path; Pubkey::default() otherwise (stablecoin-input uses",
+              "vault_token_account, already pinned via delegation_token_account).",
+              "",
+              "**APPEND-ONLY**: new field at the END of SessionAuthority. SIZE grows",
+              "by 32 bytes (515 → 547). Sessions are init/close per cycle, so no",
+              "migration is required."
+            ],
+            "type": "pubkey"
           }
         ]
       }
@@ -8666,13 +9871,6 @@ export type Sigil = {
               "Vault stablecoin balance after this transaction (0 for non-spending)."
             ],
             "type": "u64"
-          },
-          {
-            "name": "isSpending",
-            "docs": [
-              "Whether this was a spending action."
-            ],
-            "type": "bool"
           }
         ]
       }
@@ -8720,7 +9918,24 @@ export type Sigil = {
           {
             "name": "protocolCounters",
             "docs": [
-              "Reserved per-protocol spend counters (zeroed, no enforcement yet)"
+              "Per-protocol rolling 24h counters. Enforcement wired in",
+              "`finalize_session.rs` — search for \"TA-13 (Phase 5 ratification)\"",
+              "(two sites: the stablecoin-input branch around line 314 and the",
+              "non-stablecoin-input branch around line 408). See",
+              "`policy.protocol_caps` for the cap values and",
+              "`PolicyConfig::get_protocol_cap` for the lookup logic. Per-protocol",
+              "entries are populated by `record_protocol_spend()` when",
+              "`policy.has_protocol_caps == true`.",
+              "",
+              "TA-13 ratification (Phase 5): the prior doc-comment claimed",
+              "\"zeroed, no enforcement yet\" — this was stale. The enforcement",
+              "has lived in `finalize_session` since Phase 2; this comment was",
+              "the only artifact suggesting otherwise. Phase 5 ratifies the",
+              "existing require! with the dedicated `ErrDailyCapExceeded` (6086)",
+              "error code so off-chain monitors can disambiguate the \"rolling",
+              "24h cap hit\" semantic from the legacy \"slot allocation exhausted\"",
+              "path (which still returns `ProtocolCapExceeded` from inside",
+              "`record_protocol_spend`)."
             ],
             "type": {
               "array": [
@@ -8752,6 +9967,52 @@ export type Sigil = {
             "name": "padding",
             "docs": [
               "Padding for 8-byte alignment"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                7
+              ]
+            }
+          },
+          {
+            "name": "perRecipient",
+            "docs": [
+              "TA-14 (Phase 5 post-exec invariant #2): per-recipient rolling 24h",
+              "outflow counters. Bounded to `MAX_PER_RECIPIENT_ENTRIES` (10)",
+              "entries — Vec NOT permitted in zero-copy account per F-14.",
+              "10 × 48 = 480 bytes. Each entry tracks one recipient pubkey",
+              "(resolved from the SPL TokenAccount.owner field — NOT the ATA",
+              "pubkey) and their rolling-24h outflow USD total."
+            ],
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "perRecipientCounter"
+                  }
+                },
+                10
+              ]
+            }
+          },
+          {
+            "name": "perRecipientCount",
+            "docs": [
+              "TA-14 (Phase 5): how many `per_recipient` slots are currently",
+              "active. New entries occupy `per_recipient[per_recipient_count]`",
+              "then this counter increments. Eviction is AGE-BASED only — slots",
+              "whose 24h window has elapsed are eligible; LRU/churn-eviction is",
+              "EXPLICITLY REJECTED per §RP requirement (prevents an attacker",
+              "recycling slots by paying many distinct recipients to bypass",
+              "the cap)."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "paddingRecipient",
+            "docs": [
+              "Padding for 8-byte alignment after the new u8 counter."
             ],
             "type": {
               "array": [
@@ -8836,6 +10097,16 @@ export type Sigil = {
           {
             "name": "timestamp",
             "type": "i64"
+          },
+          {
+            "name": "freezeReason",
+            "docs": [
+              "Phase 8 — discriminant of `FreezeReason` enum recording WHY the vault",
+              "was frozen. 0 = Manual (`freeze_vault`), 1 = AutoRevoke (last agent",
+              "removed via `revoke_agent`), 2 = EmergencyBoard (reserved v1.1).",
+              "APPENDED at end per APPEND-ONLY event-stability rule."
+            ],
+            "type": "u8"
           }
         ]
       }

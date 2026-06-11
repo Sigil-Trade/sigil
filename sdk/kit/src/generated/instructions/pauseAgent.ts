@@ -14,6 +14,7 @@ import {
   getAddressEncoder,
   getBytesDecoder,
   getBytesEncoder,
+  getProgramDerivedAddress,
   getStructDecoder,
   getStructEncoder,
   SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
@@ -28,6 +29,7 @@ import {
   type Instruction,
   type InstructionWithAccounts,
   type InstructionWithData,
+  type ReadonlyAccount,
   type ReadonlySignerAccount,
   type ReadonlyUint8Array,
   type TransactionSigner,
@@ -35,6 +37,7 @@ import {
 } from "@solana/kit";
 import {
   getAccountMetaFactory,
+  getAddressFromResolvedInstructionAccount,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
 import { SIGIL_PROGRAM_ADDRESS } from "../programs/index.js";
@@ -51,6 +54,10 @@ export type PauseAgentInstruction<
   TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountOwner extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
+  TAccountPolicy extends string | AccountMeta<string> = string,
+  TAccountAuditLogSuccess extends string | AccountMeta<string> = string,
+  TAccountSlotHashesSysvar extends string | AccountMeta<string> =
+    "SysvarS1otHashes111111111111111111111111111",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
   InstructionWithData<ReadonlyUint8Array> &
@@ -63,6 +70,15 @@ export type PauseAgentInstruction<
       TAccountVault extends string
         ? WritableAccount<TAccountVault>
         : TAccountVault,
+      TAccountPolicy extends string
+        ? WritableAccount<TAccountPolicy>
+        : TAccountPolicy,
+      TAccountAuditLogSuccess extends string
+        ? WritableAccount<TAccountAuditLogSuccess>
+        : TAccountAuditLogSuccess,
+      TAccountSlotHashesSysvar extends string
+        ? ReadonlyAccount<TAccountSlotHashesSysvar>
+        : TAccountSlotHashesSysvar,
       ...TRemainingAccounts,
     ]
   >;
@@ -101,23 +117,55 @@ export function getPauseAgentInstructionDataCodec(): FixedSizeCodec<
   );
 }
 
-export type PauseAgentInput<
+export type PauseAgentAsyncInput<
   TAccountOwner extends string = string,
   TAccountVault extends string = string,
+  TAccountPolicy extends string = string,
+  TAccountAuditLogSuccess extends string = string,
+  TAccountSlotHashesSysvar extends string = string,
 > = {
   owner: TransactionSigner<TAccountOwner>;
   vault: Address<TAccountVault>;
+  /**
+   * PEN-CROSS-5 (Phase 4 absorption) — bump policy_version on pause.
+   * Mirrors revoke semantics: pause is a kill-switch for an agent,
+   * and concurrent validate_and_authorize calls must reject with
+   * PolicyVersionMismatch instead of relying on the slower
+   * is_agent_paused constraint check.
+   */
+  policy?: Address<TAccountPolicy>;
+  /** Phase 7 — success audit log; entry appended after pause flip. */
+  auditLogSuccess?: Address<TAccountAuditLogSuccess>;
+  slotHashesSysvar?: Address<TAccountSlotHashesSysvar>;
   agentToPause: PauseAgentInstructionDataArgs["agentToPause"];
 };
 
-export function getPauseAgentInstruction<
+export async function getPauseAgentInstructionAsync<
   TAccountOwner extends string,
   TAccountVault extends string,
+  TAccountPolicy extends string,
+  TAccountAuditLogSuccess extends string,
+  TAccountSlotHashesSysvar extends string,
   TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
-  input: PauseAgentInput<TAccountOwner, TAccountVault>,
+  input: PauseAgentAsyncInput<
+    TAccountOwner,
+    TAccountVault,
+    TAccountPolicy,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar
+  >,
   config?: { programAddress?: TProgramAddress },
-): PauseAgentInstruction<TProgramAddress, TAccountOwner, TAccountVault> {
+): Promise<
+  PauseAgentInstruction<
+    TProgramAddress,
+    TAccountOwner,
+    TAccountVault,
+    TAccountPolicy,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar
+  >
+> {
   // Program address.
   const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
 
@@ -125,6 +173,12 @@ export function getPauseAgentInstruction<
   const originalAccounts = {
     owner: { value: input.owner ?? null, isWritable: false },
     vault: { value: input.vault ?? null, isWritable: true },
+    policy: { value: input.policy ?? null, isWritable: true },
+    auditLogSuccess: { value: input.auditLogSuccess ?? null, isWritable: true },
+    slotHashesSysvar: {
+      value: input.slotHashesSysvar ?? null,
+      isWritable: false,
+    },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -134,17 +188,163 @@ export function getPauseAgentInstruction<
   // Original args.
   const args = { ...input };
 
+  // Resolve default values.
+  if (!accounts.policy.value) {
+    accounts.policy.value = await getProgramDerivedAddress({
+      programAddress,
+      seeds: [
+        getBytesEncoder().encode(new Uint8Array([112, 111, 108, 105, 99, 121])),
+        getAddressEncoder().encode(
+          getAddressFromResolvedInstructionAccount(
+            "vault",
+            accounts.vault.value,
+          ),
+        ),
+      ],
+    });
+  }
+  if (!accounts.auditLogSuccess.value) {
+    accounts.auditLogSuccess.value = await getProgramDerivedAddress({
+      programAddress,
+      seeds: [
+        getBytesEncoder().encode(
+          new Uint8Array([
+            97, 117, 100, 105, 116, 95, 115, 117, 99, 99, 101, 115, 115,
+          ]),
+        ),
+        getAddressEncoder().encode(
+          getAddressFromResolvedInstructionAccount(
+            "vault",
+            accounts.vault.value,
+          ),
+        ),
+      ],
+    });
+  }
+  if (!accounts.slotHashesSysvar.value) {
+    accounts.slotHashesSysvar.value =
+      "SysvarS1otHashes111111111111111111111111111" as Address<"SysvarS1otHashes111111111111111111111111111">;
+  }
+
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
   return Object.freeze({
     accounts: [
       getAccountMeta("owner", accounts.owner),
       getAccountMeta("vault", accounts.vault),
+      getAccountMeta("policy", accounts.policy),
+      getAccountMeta("auditLogSuccess", accounts.auditLogSuccess),
+      getAccountMeta("slotHashesSysvar", accounts.slotHashesSysvar),
     ],
     data: getPauseAgentInstructionDataEncoder().encode(
       args as PauseAgentInstructionDataArgs,
     ),
     programAddress,
-  } as PauseAgentInstruction<TProgramAddress, TAccountOwner, TAccountVault>);
+  } as PauseAgentInstruction<
+    TProgramAddress,
+    TAccountOwner,
+    TAccountVault,
+    TAccountPolicy,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar
+  >);
+}
+
+export type PauseAgentInput<
+  TAccountOwner extends string = string,
+  TAccountVault extends string = string,
+  TAccountPolicy extends string = string,
+  TAccountAuditLogSuccess extends string = string,
+  TAccountSlotHashesSysvar extends string = string,
+> = {
+  owner: TransactionSigner<TAccountOwner>;
+  vault: Address<TAccountVault>;
+  /**
+   * PEN-CROSS-5 (Phase 4 absorption) — bump policy_version on pause.
+   * Mirrors revoke semantics: pause is a kill-switch for an agent,
+   * and concurrent validate_and_authorize calls must reject with
+   * PolicyVersionMismatch instead of relying on the slower
+   * is_agent_paused constraint check.
+   */
+  policy: Address<TAccountPolicy>;
+  /** Phase 7 — success audit log; entry appended after pause flip. */
+  auditLogSuccess: Address<TAccountAuditLogSuccess>;
+  slotHashesSysvar?: Address<TAccountSlotHashesSysvar>;
+  agentToPause: PauseAgentInstructionDataArgs["agentToPause"];
+};
+
+export function getPauseAgentInstruction<
+  TAccountOwner extends string,
+  TAccountVault extends string,
+  TAccountPolicy extends string,
+  TAccountAuditLogSuccess extends string,
+  TAccountSlotHashesSysvar extends string,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
+>(
+  input: PauseAgentInput<
+    TAccountOwner,
+    TAccountVault,
+    TAccountPolicy,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar
+  >,
+  config?: { programAddress?: TProgramAddress },
+): PauseAgentInstruction<
+  TProgramAddress,
+  TAccountOwner,
+  TAccountVault,
+  TAccountPolicy,
+  TAccountAuditLogSuccess,
+  TAccountSlotHashesSysvar
+> {
+  // Program address.
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
+
+  // Original accounts.
+  const originalAccounts = {
+    owner: { value: input.owner ?? null, isWritable: false },
+    vault: { value: input.vault ?? null, isWritable: true },
+    policy: { value: input.policy ?? null, isWritable: true },
+    auditLogSuccess: { value: input.auditLogSuccess ?? null, isWritable: true },
+    slotHashesSysvar: {
+      value: input.slotHashesSysvar ?? null,
+      isWritable: false,
+    },
+  };
+  const accounts = originalAccounts as Record<
+    keyof typeof originalAccounts,
+    ResolvedInstructionAccount
+  >;
+
+  // Original args.
+  const args = { ...input };
+
+  // Resolve default values.
+  if (!accounts.slotHashesSysvar.value) {
+    accounts.slotHashesSysvar.value =
+      "SysvarS1otHashes111111111111111111111111111" as Address<"SysvarS1otHashes111111111111111111111111111">;
+  }
+
+  const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
+  return Object.freeze({
+    accounts: [
+      getAccountMeta("owner", accounts.owner),
+      getAccountMeta("vault", accounts.vault),
+      getAccountMeta("policy", accounts.policy),
+      getAccountMeta("auditLogSuccess", accounts.auditLogSuccess),
+      getAccountMeta("slotHashesSysvar", accounts.slotHashesSysvar),
+    ],
+    data: getPauseAgentInstructionDataEncoder().encode(
+      args as PauseAgentInstructionDataArgs,
+    ),
+    programAddress,
+  } as PauseAgentInstruction<
+    TProgramAddress,
+    TAccountOwner,
+    TAccountVault,
+    TAccountPolicy,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar
+  >);
 }
 
 export type ParsedPauseAgentInstruction<
@@ -155,6 +355,17 @@ export type ParsedPauseAgentInstruction<
   accounts: {
     owner: TAccountMetas[0];
     vault: TAccountMetas[1];
+    /**
+     * PEN-CROSS-5 (Phase 4 absorption) — bump policy_version on pause.
+     * Mirrors revoke semantics: pause is a kill-switch for an agent,
+     * and concurrent validate_and_authorize calls must reject with
+     * PolicyVersionMismatch instead of relying on the slower
+     * is_agent_paused constraint check.
+     */
+    policy: TAccountMetas[2];
+    /** Phase 7 — success audit log; entry appended after pause flip. */
+    auditLogSuccess: TAccountMetas[3];
+    slotHashesSysvar: TAccountMetas[4];
   };
   data: PauseAgentInstructionData;
 };
@@ -167,12 +378,12 @@ export function parsePauseAgentInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedPauseAgentInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 2) {
+  if (instruction.accounts.length < 5) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 2,
+        expectedAccountMetas: 5,
       },
     );
   }
@@ -184,7 +395,13 @@ export function parsePauseAgentInstruction<
   };
   return {
     programAddress: instruction.programAddress,
-    accounts: { owner: getNextAccount(), vault: getNextAccount() },
+    accounts: {
+      owner: getNextAccount(),
+      vault: getNextAccount(),
+      policy: getNextAccount(),
+      auditLogSuccess: getNextAccount(),
+      slotHashesSysvar: getNextAccount(),
+    },
     data: getPauseAgentInstructionDataDecoder().decode(instruction.data),
   };
 }

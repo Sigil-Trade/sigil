@@ -95,10 +95,12 @@ export type CreatePostAssertionsInstruction<
 export type CreatePostAssertionsInstructionData = {
   discriminator: ReadonlyUint8Array;
   entries: Array<PostAssertionEntry>;
+  expectedDigest: ReadonlyUint8Array;
 };
 
 export type CreatePostAssertionsInstructionDataArgs = {
   entries: Array<PostAssertionEntryArgs>;
+  expectedDigest: ReadonlyUint8Array;
 };
 
 export function getCreatePostAssertionsInstructionDataEncoder(): Encoder<CreatePostAssertionsInstructionDataArgs> {
@@ -106,6 +108,7 @@ export function getCreatePostAssertionsInstructionDataEncoder(): Encoder<CreateP
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
       ["entries", getArrayEncoder(getPostAssertionEntryEncoder())],
+      ["expectedDigest", fixEncoderSize(getBytesEncoder(), 32)],
     ]),
     (value) => ({
       ...value,
@@ -118,6 +121,7 @@ export function getCreatePostAssertionsInstructionDataDecoder(): Decoder<CreateP
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
     ["entries", getArrayDecoder(getPostAssertionEntryDecoder())],
+    ["expectedDigest", fixDecoderSize(getBytesDecoder(), 32)],
   ]);
 }
 
@@ -144,6 +148,7 @@ export type CreatePostAssertionsAsyncInput<
   postAssertions?: Address<TAccountPostAssertions>;
   systemProgram?: Address<TAccountSystemProgram>;
   entries: CreatePostAssertionsInstructionDataArgs["entries"];
+  expectedDigest: CreatePostAssertionsInstructionDataArgs["expectedDigest"];
 };
 
 export async function getCreatePostAssertionsInstructionAsync<
@@ -266,6 +271,7 @@ export type CreatePostAssertionsInput<
   postAssertions: Address<TAccountPostAssertions>;
   systemProgram?: Address<TAccountSystemProgram>;
   entries: CreatePostAssertionsInstructionDataArgs["entries"];
+  expectedDigest: CreatePostAssertionsInstructionDataArgs["expectedDigest"];
 };
 
 export function getCreatePostAssertionsInstruction<

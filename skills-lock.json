@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "skills": {
+    "colosseum-copilot": {
+      "source": "ColosseumOrg/colosseum-copilot",
+      "sourceType": "github",
+      "computedHash": "f3670f572731d430bb6e651bd40d94beac5caf07a2cfd9046b53fa2d9a8586ff"
+    },
+    "pr-review-toolkit:silent-failure-hunter": {
+      "source": "claude-code-plugins/pr-review-toolkit",
+      "sourceType": "plugin-marketplace",
+      "marketplaceCommitSha": "8bdbb7296d3fa2217283d3ef94452dd64097393b",
+      "agentFile": "agents/silent-failure-hunter.md",
+      "computedHash": "fa9b0daec5a267e7e66435cc48b3328301fc9f70c3af259fe248881327a1babc"
+    },
+    "pr-review-toolkit:code-reviewer": {
+      "source": "claude-code-plugins/pr-review-toolkit",
+      "sourceType": "plugin-marketplace",
+      "marketplaceCommitSha": "8bdbb7296d3fa2217283d3ef94452dd64097393b",
+      "agentFile": "agents/code-reviewer.md",
+      "computedHash": "533b9967ca21b7e9572236935cada4bfd03d7dd362cb2e680a2d13aa0d699232"
+    }
+  }
+}

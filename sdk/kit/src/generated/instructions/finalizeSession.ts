@@ -68,6 +68,10 @@ export type FinalizeSessionInstruction<
     "11111111111111111111111111111111",
   TAccountInstructionsSysvar extends string | AccountMeta<string> =
     "Sysvar1nstructions1111111111111111111111111",
+  TAccountAuditLogSuccess extends string | AccountMeta<string> = string,
+  TAccountAuditLogRejected extends string | AccountMeta<string> = string,
+  TAccountSlotHashesSysvar extends string | AccountMeta<string> =
+    "SysvarS1otHashes111111111111111111111111111",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
   InstructionWithData<ReadonlyUint8Array> &
@@ -110,6 +114,15 @@ export type FinalizeSessionInstruction<
       TAccountInstructionsSysvar extends string
         ? ReadonlyAccount<TAccountInstructionsSysvar>
         : TAccountInstructionsSysvar,
+      TAccountAuditLogSuccess extends string
+        ? WritableAccount<TAccountAuditLogSuccess>
+        : TAccountAuditLogSuccess,
+      TAccountAuditLogRejected extends string
+        ? WritableAccount<TAccountAuditLogRejected>
+        : TAccountAuditLogRejected,
+      TAccountSlotHashesSysvar extends string
+        ? ReadonlyAccount<TAccountSlotHashesSysvar>
+        : TAccountSlotHashesSysvar,
       ...TRemainingAccounts,
     ]
   >;
@@ -156,6 +169,9 @@ export type FinalizeSessionAsyncInput<
   TAccountTokenProgram extends string = string,
   TAccountSystemProgram extends string = string,
   TAccountInstructionsSysvar extends string = string,
+  TAccountAuditLogSuccess extends string = string,
+  TAccountAuditLogRejected extends string = string,
+  TAccountSlotHashesSysvar extends string = string,
 > = {
   payer: TransactionSigner<TAccountPayer>;
   vault: Address<TAccountVault>;
@@ -182,6 +198,19 @@ export type FinalizeSessionAsyncInput<
   systemProgram?: Address<TAccountSystemProgram>;
   /** Instructions sysvar for post-finalize instruction verification. */
   instructionsSysvar?: Address<TAccountInstructionsSysvar>;
+  /**
+   * Phase 7 — SUCCESS-path audit log. Written when the finalize completes
+   * the non-expired branch.
+   */
+  auditLogSuccess?: Address<TAccountAuditLogSuccess>;
+  /**
+   * Phase 7 — REJECTED-path audit log. Written when the finalize takes
+   * the expired branch (permissionless-crank cleanup). Audit #2 F-19
+   * keeps this separate from the success buffer so a crank-attacker
+   * cannot displace legitimate success history.
+   */
+  auditLogRejected?: Address<TAccountAuditLogRejected>;
+  slotHashesSysvar?: Address<TAccountSlotHashesSysvar>;
 };
 
 export async function getFinalizeSessionInstructionAsync<
@@ -197,6 +226,9 @@ export async function getFinalizeSessionInstructionAsync<
   TAccountTokenProgram extends string,
   TAccountSystemProgram extends string,
   TAccountInstructionsSysvar extends string,
+  TAccountAuditLogSuccess extends string,
+  TAccountAuditLogRejected extends string,
+  TAccountSlotHashesSysvar extends string,
   TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: FinalizeSessionAsyncInput<
@@ -211,7 +243,10 @@ export async function getFinalizeSessionInstructionAsync<
     TAccountOutputStablecoinAccount,
     TAccountTokenProgram,
     TAccountSystemProgram,
-    TAccountInstructionsSysvar
+    TAccountInstructionsSysvar,
+    TAccountAuditLogSuccess,
+    TAccountAuditLogRejected,
+    TAccountSlotHashesSysvar
   >,
   config?: { programAddress?: TProgramAddress },
 ): Promise<
@@ -228,7 +263,10 @@ export async function getFinalizeSessionInstructionAsync<
     TAccountOutputStablecoinAccount,
     TAccountTokenProgram,
     TAccountSystemProgram,
-    TAccountInstructionsSysvar
+    TAccountInstructionsSysvar,
+    TAccountAuditLogSuccess,
+    TAccountAuditLogRejected,
+    TAccountSlotHashesSysvar
   >
 > {
   // Program address.
@@ -261,6 +299,15 @@ export async function getFinalizeSessionInstructionAsync<
     systemProgram: { value: input.systemProgram ?? null, isWritable: false },
     instructionsSysvar: {
       value: input.instructionsSysvar ?? null,
+      isWritable: false,
+    },
+    auditLogSuccess: { value: input.auditLogSuccess ?? null, isWritable: true },
+    auditLogRejected: {
+      value: input.auditLogRejected ?? null,
+      isWritable: true,
+    },
+    slotHashesSysvar: {
+      value: input.slotHashesSysvar ?? null,
       isWritable: false,
     },
   };
@@ -312,6 +359,46 @@ export async function getFinalizeSessionInstructionAsync<
     accounts.instructionsSysvar.value =
       "Sysvar1nstructions1111111111111111111111111" as Address<"Sysvar1nstructions1111111111111111111111111">;
   }
+  if (!accounts.auditLogSuccess.value) {
+    accounts.auditLogSuccess.value = await getProgramDerivedAddress({
+      programAddress,
+      seeds: [
+        getBytesEncoder().encode(
+          new Uint8Array([
+            97, 117, 100, 105, 116, 95, 115, 117, 99, 99, 101, 115, 115,
+          ]),
+        ),
+        getAddressEncoder().encode(
+          getAddressFromResolvedInstructionAccount(
+            "vault",
+            accounts.vault.value,
+          ),
+        ),
+      ],
+    });
+  }
+  if (!accounts.auditLogRejected.value) {
+    accounts.auditLogRejected.value = await getProgramDerivedAddress({
+      programAddress,
+      seeds: [
+        getBytesEncoder().encode(
+          new Uint8Array([
+            97, 117, 100, 105, 116, 95, 114, 101, 106, 101, 99, 116, 101, 100,
+          ]),
+        ),
+        getAddressEncoder().encode(
+          getAddressFromResolvedInstructionAccount(
+            "vault",
+            accounts.vault.value,
+          ),
+        ),
+      ],
+    });
+  }
+  if (!accounts.slotHashesSysvar.value) {
+    accounts.slotHashesSysvar.value =
+      "SysvarS1otHashes111111111111111111111111111" as Address<"SysvarS1otHashes111111111111111111111111111">;
+  }
 
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
   return Object.freeze({
@@ -331,6 +418,9 @@ export async function getFinalizeSessionInstructionAsync<
       getAccountMeta("tokenProgram", accounts.tokenProgram),
       getAccountMeta("systemProgram", accounts.systemProgram),
       getAccountMeta("instructionsSysvar", accounts.instructionsSysvar),
+      getAccountMeta("auditLogSuccess", accounts.auditLogSuccess),
+      getAccountMeta("auditLogRejected", accounts.auditLogRejected),
+      getAccountMeta("slotHashesSysvar", accounts.slotHashesSysvar),
     ],
     data: getFinalizeSessionInstructionDataEncoder().encode({}),
     programAddress,
@@ -347,7 +437,10 @@ export async function getFinalizeSessionInstructionAsync<
     TAccountOutputStablecoinAccount,
     TAccountTokenProgram,
     TAccountSystemProgram,
-    TAccountInstructionsSysvar
+    TAccountInstructionsSysvar,
+    TAccountAuditLogSuccess,
+    TAccountAuditLogRejected,
+    TAccountSlotHashesSysvar
   >);
 }
 
@@ -364,6 +457,9 @@ export type FinalizeSessionInput<
   TAccountTokenProgram extends string = string,
   TAccountSystemProgram extends string = string,
   TAccountInstructionsSysvar extends string = string,
+  TAccountAuditLogSuccess extends string = string,
+  TAccountAuditLogRejected extends string = string,
+  TAccountSlotHashesSysvar extends string = string,
 > = {
   payer: TransactionSigner<TAccountPayer>;
   vault: Address<TAccountVault>;
@@ -390,6 +486,19 @@ export type FinalizeSessionInput<
   systemProgram?: Address<TAccountSystemProgram>;
   /** Instructions sysvar for post-finalize instruction verification. */
   instructionsSysvar?: Address<TAccountInstructionsSysvar>;
+  /**
+   * Phase 7 — SUCCESS-path audit log. Written when the finalize completes
+   * the non-expired branch.
+   */
+  auditLogSuccess: Address<TAccountAuditLogSuccess>;
+  /**
+   * Phase 7 — REJECTED-path audit log. Written when the finalize takes
+   * the expired branch (permissionless-crank cleanup). Audit #2 F-19
+   * keeps this separate from the success buffer so a crank-attacker
+   * cannot displace legitimate success history.
+   */
+  auditLogRejected: Address<TAccountAuditLogRejected>;
+  slotHashesSysvar?: Address<TAccountSlotHashesSysvar>;
 };
 
 export function getFinalizeSessionInstruction<
@@ -405,6 +514,9 @@ export function getFinalizeSessionInstruction<
   TAccountTokenProgram extends string,
   TAccountSystemProgram extends string,
   TAccountInstructionsSysvar extends string,
+  TAccountAuditLogSuccess extends string,
+  TAccountAuditLogRejected extends string,
+  TAccountSlotHashesSysvar extends string,
   TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: FinalizeSessionInput<
@@ -419,7 +531,10 @@ export function getFinalizeSessionInstruction<
     TAccountOutputStablecoinAccount,
     TAccountTokenProgram,
     TAccountSystemProgram,
-    TAccountInstructionsSysvar
+    TAccountInstructionsSysvar,
+    TAccountAuditLogSuccess,
+    TAccountAuditLogRejected,
+    TAccountSlotHashesSysvar
   >,
   config?: { programAddress?: TProgramAddress },
 ): FinalizeSessionInstruction<
@@ -435,7 +550,10 @@ export function getFinalizeSessionInstruction<
   TAccountOutputStablecoinAccount,
   TAccountTokenProgram,
   TAccountSystemProgram,
-  TAccountInstructionsSysvar
+  TAccountInstructionsSysvar,
+  TAccountAuditLogSuccess,
+  TAccountAuditLogRejected,
+  TAccountSlotHashesSysvar
 > {
   // Program address.
   const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
@@ -469,6 +587,15 @@ export function getFinalizeSessionInstruction<
       value: input.instructionsSysvar ?? null,
       isWritable: false,
     },
+    auditLogSuccess: { value: input.auditLogSuccess ?? null, isWritable: true },
+    auditLogRejected: {
+      value: input.auditLogRejected ?? null,
+      isWritable: true,
+    },
+    slotHashesSysvar: {
+      value: input.slotHashesSysvar ?? null,
+      isWritable: false,
+    },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -487,6 +614,10 @@ export function getFinalizeSessionInstruction<
   if (!accounts.instructionsSysvar.value) {
     accounts.instructionsSysvar.value =
       "Sysvar1nstructions1111111111111111111111111" as Address<"Sysvar1nstructions1111111111111111111111111">;
+  }
+  if (!accounts.slotHashesSysvar.value) {
+    accounts.slotHashesSysvar.value =
+      "SysvarS1otHashes111111111111111111111111111" as Address<"SysvarS1otHashes111111111111111111111111111">;
   }
 
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
@@ -507,6 +638,9 @@ export function getFinalizeSessionInstruction<
       getAccountMeta("tokenProgram", accounts.tokenProgram),
       getAccountMeta("systemProgram", accounts.systemProgram),
       getAccountMeta("instructionsSysvar", accounts.instructionsSysvar),
+      getAccountMeta("auditLogSuccess", accounts.auditLogSuccess),
+      getAccountMeta("auditLogRejected", accounts.auditLogRejected),
+      getAccountMeta("slotHashesSysvar", accounts.slotHashesSysvar),
     ],
     data: getFinalizeSessionInstructionDataEncoder().encode({}),
     programAddress,
@@ -523,7 +657,10 @@ export function getFinalizeSessionInstruction<
     TAccountOutputStablecoinAccount,
     TAccountTokenProgram,
     TAccountSystemProgram,
-    TAccountInstructionsSysvar
+    TAccountInstructionsSysvar,
+    TAccountAuditLogSuccess,
+    TAccountAuditLogRejected,
+    TAccountSlotHashesSysvar
   >);
 }
 
@@ -558,6 +695,19 @@ export type ParsedFinalizeSessionInstruction<
     systemProgram: TAccountMetas[10];
     /** Instructions sysvar for post-finalize instruction verification. */
     instructionsSysvar: TAccountMetas[11];
+    /**
+     * Phase 7 — SUCCESS-path audit log. Written when the finalize completes
+     * the non-expired branch.
+     */
+    auditLogSuccess: TAccountMetas[12];
+    /**
+     * Phase 7 — REJECTED-path audit log. Written when the finalize takes
+     * the expired branch (permissionless-crank cleanup). Audit #2 F-19
+     * keeps this separate from the success buffer so a crank-attacker
+     * cannot displace legitimate success history.
+     */
+    auditLogRejected: TAccountMetas[13];
+    slotHashesSysvar: TAccountMetas[14];
   };
   data: FinalizeSessionInstructionData;
 };
@@ -570,12 +720,12 @@ export function parseFinalizeSessionInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedFinalizeSessionInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 12) {
+  if (instruction.accounts.length < 15) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 12,
+        expectedAccountMetas: 15,
       },
     );
   }
@@ -606,6 +756,9 @@ export function parseFinalizeSessionInstruction<
       tokenProgram: getNextAccount(),
       systemProgram: getNextAccount(),
       instructionsSysvar: getNextAccount(),
+      auditLogSuccess: getNextAccount(),
+      auditLogRejected: getNextAccount(),
+      slotHashesSysvar: getNextAccount(),
     },
     data: getFinalizeSessionInstructionDataDecoder().decode(instruction.data),
   };

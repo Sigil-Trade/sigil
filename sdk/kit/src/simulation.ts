@@ -91,7 +91,25 @@ export interface SimulationError {
 
 // ─── Anchor Error Map ────────────────────────────────────────────────────────
 
-const ANCHOR_ERROR_MAP: Record<number, { name: string; suggestion: string }> = {
+/**
+ * Anchor error code → diagnostic name + recovery suggestion. Exported so
+ * pre-flight-simulation tests can assert the map covers all on-chain
+ * error codes the SDK might surface during a `simulateBeforeSend` call.
+ *
+ * The full canonical error registry lives in
+ * `sdk/kit/src/agent-errors.ts` (`ON_CHAIN_ERROR_MAP`) — that map is the
+ * source-of-truth for runtime UX surfaces. This simulation-side map is a
+ * narrower DIAGNOSTIC table: it includes only the codes that can plausibly
+ * surface during a pre-flight transaction simulation (Anchor `require!`
+ * trips from `validate_and_authorize`, `agent_transfer`, `finalize_session`,
+ * etc.). Codes that only fire from owner-mutation paths (Phase 0/1)
+ * intentionally don't need a simulation suggestion because the caller is
+ * the owner and the error message ships directly from on-chain.
+ */
+export const ANCHOR_ERROR_MAP: Record<
+  number,
+  { name: string; suggestion: string }
+> = {
   6000: {
     name: "VaultNotActive",
     suggestion: "Check vault status — must be Active.",
@@ -213,199 +231,312 @@ const ANCHOR_ERROR_MAP: Record<number, { name: string; suggestion: string }> = {
     suggestion: "Non-stablecoin swap must return stablecoin.",
   },
   6030: {
-    name: "SwapSlippageExceeded",
-    suggestion: "Slippage exceeds policy max_slippage_bps.",
-  },
-  6031: {
-    name: "InvalidJupiterInstruction",
-    suggestion: "Cannot parse Jupiter swap instruction.",
-  },
-  6032: {
     name: "UnauthorizedTokenTransfer",
     suggestion:
       "Top-level SPL Token transfer not allowed between validate and finalize.",
   },
-  6033: {
+  6031: {
     name: "SlippageBpsTooHigh",
     suggestion: "Slippage BPS exceeds maximum (5000 = 50%).",
   },
-  6034: {
+  6032: {
     name: "ProtocolMismatch",
     suggestion:
       "DeFi instruction program doesn't match declared target_protocol.",
   },
-  6035: {
+  6033: {
     name: "TooManyDeFiInstructions",
     suggestion: "Non-stablecoin swap allows exactly one DeFi instruction.",
   },
-  6036: {
+  6034: {
     name: "MaxAgentsReached",
     suggestion: "Remove an agent first (max 10).",
   },
-  6037: {
+  6035: {
     name: "InsufficientPermissions",
     suggestion: "Agent lacks permission for this action type.",
   },
-  6038: {
+  6036: {
     name: "InvalidPermissions",
     suggestion: "Permission bitmask contains invalid bits.",
   },
-  6039: {
-    name: "EscrowNotActive",
-    suggestion: "Escrow is not in Active status.",
-  },
-  6040: {
-    name: "EscrowExpired",
-    suggestion: "Escrow has expired.",
-  },
-  6041: {
-    name: "EscrowNotExpired",
-    suggestion: "Escrow has not expired yet — wait for expiry.",
-  },
-  6042: {
-    name: "InvalidEscrowVault",
-    suggestion: "Invalid escrow vault.",
-  },
-  6043: {
-    name: "EscrowConditionsNotMet",
-    suggestion: "Escrow conditions not met.",
-  },
-  6044: {
-    name: "EscrowDurationExceeded",
-    suggestion: "Escrow duration exceeds max (30 days).",
-  },
-  6045: {
+  6037: {
     name: "InvalidConstraintConfig",
     suggestion: "Constraint configuration exceeds bounds.",
   },
-  6046: {
-    name: "ConstraintViolated",
-    suggestion: "Instruction violates a constraint.",
-  },
-  6047: {
-    name: "InvalidConstraintsPda",
-    suggestion: "Wrong constraints PDA owner or vault.",
-  },
-  6048: {
-    name: "InvalidPendingConstraintsPda",
-    suggestion: "Wrong pending constraints PDA.",
-  },
-  6049: {
+  6038: {
     name: "AgentSpendLimitExceeded",
     suggestion: "Agent rolling 24h spend exceeds per-agent limit.",
   },
-  6050: {
+  6039: {
     name: "OverlaySlotExhausted",
     suggestion:
       "Per-agent overlay full — cannot register agent with spending limit.",
   },
-  6051: {
+  6040: {
     name: "AgentSlotNotFound",
     suggestion: "Agent has spending limit but no overlay tracking slot.",
   },
-  6052: {
+  6041: {
     name: "UnauthorizedTokenApproval",
     suggestion: "Unauthorized SPL Token Approve between validate and finalize.",
   },
-  6053: {
+  6042: {
     name: "InvalidSessionExpiry",
     suggestion: "Session expiry slots out of range (10-450).",
   },
-  6054: {
-    name: "UnconstrainedProgramBlocked",
-    suggestion: "Program has no constraint entry and strict mode is enabled.",
-  },
-  6055: {
+  6043: {
     name: "ProtocolCapExceeded",
-    suggestion: "Per-protocol rolling 24h spending cap exceeded.",
+    // §RP-1 V5: 6047 semantics flipped. Rolling 24h per-protocol cap
+    // moved to 6095 (ErrDailyCapExceeded). 6047 now signals only the
+    // slot-allocation exhausted case from state/tracker.rs:313.
+    suggestion:
+      "Per-protocol counter slot allocation exhausted (max 10 protocols tracked). Wait for an existing slot's 24h window to elapse, or reuse one of the protocols already tracked.",
   },
-  6056: {
+  6044: {
     name: "ProtocolCapsMismatch",
     suggestion: "protocol_caps length must match protocols length.",
   },
-  6057: {
-    name: "ActiveEscrowsExist",
-    suggestion: "Close active escrow deposits before closing vault.",
-  },
-  6058: {
-    name: "ConstraintsNotClosed",
-    suggestion: "Close instruction constraints before closing vault.",
-  },
-  6059: {
+  6045: {
     name: "PendingPolicyExists",
     suggestion: "Apply or cancel pending policy update before closing vault.",
   },
-  6060: {
+  6046: {
     name: "AgentPaused",
     suggestion: "Agent is paused — unpause before executing actions.",
   },
-  6061: {
+  6047: {
     name: "AgentAlreadyPaused",
     suggestion: "Agent is already paused.",
   },
-  6062: {
+  6048: {
     name: "AgentNotPaused",
     suggestion: "Agent is not paused.",
   },
-  6063: {
+  6049: {
     name: "UnauthorizedPostFinalizeInstruction",
     suggestion:
       "UnauthorizedPostFinalizeInstruction — see Sigil error-code documentation.",
   },
-  6064: {
+  6050: {
     name: "UnexpectedBalanceDecrease",
     suggestion:
       "UnexpectedBalanceDecrease — see Sigil error-code documentation.",
   },
-  6065: {
+  6051: {
     name: "TimelockTooShort",
     suggestion: "TimelockTooShort — see Sigil error-code documentation.",
   },
-  6066: {
+  6052: {
     name: "PolicyVersionMismatch",
     suggestion: "PolicyVersionMismatch — see Sigil error-code documentation.",
   },
-  6067: {
+  6053: {
     name: "ActiveSessionsExist",
     suggestion: "ActiveSessionsExist — see Sigil error-code documentation.",
   },
-  6068: {
+  6054: {
     name: "PostAssertionFailed",
     suggestion: "PostAssertionFailed — see Sigil error-code documentation.",
   },
-  6069: {
+  6055: {
     name: "InvalidPostAssertionIndex",
     suggestion:
       "InvalidPostAssertionIndex — see Sigil error-code documentation.",
   },
-  6070: {
+  6056: {
     name: "UnauthorizedPreValidateInstruction",
     suggestion:
       "UnauthorizedPreValidateInstruction — see Sigil error-code documentation.",
   },
-  6071: {
+  6057: {
     name: "SnapshotNotCaptured",
     suggestion: "SnapshotNotCaptured — see Sigil error-code documentation.",
   },
-  6072: {
+  6058: {
     name: "InvalidConstraintOperator",
     suggestion:
       "InvalidConstraintOperator — see Sigil error-code documentation.",
   },
-  6073: {
-    name: "ConstraintsVaultMismatch",
-    suggestion:
-      "ConstraintsVaultMismatch — see Sigil error-code documentation.",
-  },
-  6074: {
-    name: "BlockedSplOpcode",
-    suggestion: "BlockedSplOpcode — see Sigil error-code documentation.",
+  6059: {
+    name: "ZeroCopyVaultMismatch",
+    suggestion: "ZeroCopyVaultMismatch — see Sigil error-code documentation.",
   },
   // F-10 audit fix: durable-nonce pre-signing defense
-  6075: {
+  6060: {
     name: "QueuedUpdateExpired",
     suggestion:
-      "Queued update is too old — re-queue via queue_policy_update / queue_constraints_update / queue_close_constraints / queue_agent_permissions_update.",
+      "Queued update is too old — re-queue via queue_policy_update / queue_constraints_update / queue_close_constraints / queue_agent_permissions_update / queue_agent_grant / initiate_ownership_transfer (CH-1 audit 2026-05-23 extended to timelocked-admin PDAs).",
+  },
+  6061: {
+    name: "AccountWritabilityMismatch",
+    suggestion:
+      "Account writability flag does not match constraint requirement.",
+  },
+  6062: {
+    name: "SysvarScanBoundExceeded",
+    suggestion:
+      "Sysvar instruction scan exceeded the per-tx safety bound — reduce transaction size.",
+  },
+  6063: {
+    name: "AsyncFulfillmentNotPermitted",
+    suggestion:
+      "Async-fulfillment program is not permitted in V1 (Jupiter Perps, Drift, Drift JIT). Keeper-deferred fills cannot be measured by finalize_session.",
+  },
+  6064: {
+    name: "ConfidentialTransferBlocked",
+    suggestion:
+      "Token-2022 ConfidentialTransfer not permitted between validate and finalize.",
+  },
+  6065: {
+    name: "PermanentDelegateBlocked",
+    suggestion:
+      "Token-2022 PermanentDelegate not permitted between validate and finalize.",
+  },
+  6066: {
+    name: "TransferHookBlocked",
+    suggestion:
+      "Token-2022 TransferHook not permitted between validate and finalize.",
+  },
+  6067: {
+    name: "LamportDrainBlocked",
+    suggestion:
+      "Token-2022 destructive-balance ix (opcodes 38/45/46) not permitted between validate and finalize.",
+  },
+  6068: {
+    name: "BatchInstructionBlocked",
+    suggestion:
+      "Token-2022 Batch instruction (opcode 255) is blocked — wraps inner instructions and bypasses byte-0 blocklist.",
+  },
+  6069: {
+    name: "InvalidDestinationMode",
+    suggestion:
+      "Invalid destination mode — must be 0 (Restricted) or 1 (OpenWithCap).",
+  },
+
+  // ─── Phase 5 §RP-1 V5: post-execution invariants ───
+  // Map mirrors the Rust SigilError codes 6094-6096 added in Phase 5.
+  // Older 6079-6093 entries are intentionally not mapped here (this
+  // suggestion table is partial — only the codes actually emitted in
+  // pre-flight simulation are required). 6094-6096 emit from
+  // `finalize_session` / `agent_transfer` so they CAN surface in a
+  // simulation result and benefit from a friendly suggestion.
+
+  6085: {
+    name: "ErrStableFloorViolation",
+    suggestion:
+      "Stable balance floor violated — the combined USDC+USDT vault balance after this transaction would drop below policy.stable_balance_floor. Reduce the transfer amount or deposit more stablecoin before retrying.",
+  },
+  6086: {
+    name: "ErrDailyCapExceeded",
+    suggestion:
+      "Per-protocol daily cap exceeded — this protocol's rolling 24h spending cap would be exceeded. Reduce the amount, route through a different allowlisted protocol, or wait for the rolling window to release capacity.",
+  },
+  6087: {
+    name: "ErrRecipientCapExceeded",
+    suggestion:
+      "Per-recipient daily cap exceeded — the recipient's rolling 24h outflow would breach policy.per_recipient_daily_cap_usd. Reduce the amount, route to a different allowed destination, or wait for the rolling window to release capacity.",
+  },
+
+  // ─── Phase 5 R-1..R-4 post-execution assertions (codes 6097-6101) ───
+  // Emitted from `finalize_session` after the DeFi instruction runs.
+  // Visible in simulation because the full sandwich (validate ix + DeFi ix +
+  // finalize ix) is simulated as one transaction.
+  6088: {
+    name: "ErrMintDeltaCapExceeded",
+    suggestion:
+      "R-1 MintDeltaCap: vault-mint balance decreased by more than the policy's `max_net_decrease` for this mint. Reduce the outflow, raise the cap on PolicyConfig, or split into smaller transactions.",
+  },
+  6089: {
+    name: "MintDeltaCapMisconfigured",
+    suggestion:
+      "R-1 MintDeltaCap target account is missing, has a mint mismatch, or has owner != vault. Re-derive the target token account and re-check the PolicyConfig entry.",
+  },
+  6090: {
+    name: "ErrAtaAuthorityChanged",
+    suggestion:
+      "R-2 AtaAuthorityPin: a vault-owned token account had its authority changed or was closed/reinitialized mid-sandwich. Re-check that no foreign instruction is touching the vault's ATAs in this transaction.",
+  },
+  6091: {
+    name: "ErrOutputBelowFloor",
+    suggestion:
+      "R-3 OutputBalanceFloor: the post-execution balance increase fell below the configured `min_increase` floor. Adjust slippage settings or raise the floor, then retry.",
+  },
+  6092: {
+    name: "ErrDeclarationInconsistent",
+    suggestion:
+      "R-4 DeclarationConsistency: the recipient/mint declared on validate_and_authorize does not match the actual CPI account-meta. Re-derive the declared accounts from the same accounts the DeFi instruction will consume.",
+  },
+
+  // ─── destination-check + floor-walk meta budget (code 6093) ───
+  6093: {
+    name: "IxMetaCountExceeded",
+    suggestion:
+      "Foreign instruction exceeded the account-meta processing budget (destination check: max 24 writable metas). Use a shorter route — Sigil reverts an unguardable route rather than reshaping it.",
+  },
+
+  // ─── Phase 8 ownership-transfer ───
+  6094: {
+    name: "ErrPendingOwnershipExists",
+    suggestion:
+      "An ownership transfer is already pending. Cancel the existing transfer with `cancelOwnershipTransfer` before initiating a new one.",
+  },
+  6095: {
+    name: "ErrPendingOwnershipNotReady",
+    suggestion:
+      "Ownership transfer timelock has not elapsed. Wait for the 48h cool-down to expire before calling `acceptOwnershipTransfer`.",
+  },
+  6096: {
+    name: "ErrInvalidFreezeReason",
+    suggestion:
+      "freeze_reason value must be one of {0, 1, 2}. Re-check the FreezeReason discriminant on freezeVault.",
+  },
+  6097: {
+    name: "ErrReactivateCooldownActive",
+    suggestion:
+      "Reactivate requires a 5-minute observation cooldown to elapse since the freeze. Wait, then retry.",
+  },
+  6098: {
+    name: "ErrInvalidOwnershipTarget",
+    suggestion:
+      "new_owner cannot be a system/program/sysvar address (Council ISC-128). Pass a real wallet pubkey.",
+  },
+
+  // ─── Phase 8 freeze + post-assertions ───
+  6099: {
+    name: "ErrTooManyRevokePairs",
+    suggestion:
+      "freeze_internal MAX_REVOKE_PAIRS = 10 exceeded (Council ISC-136). Split the freeze into multiple transactions revoking ≤10 token-account pairs each.",
+  },
+  6100: {
+    name: "ErrPostAssertionsNotClosed",
+    suggestion:
+      "PostExecutionAssertions PDA still active. Call `closePostAssertions` before closing the vault or creating a new assertions set.",
+  },
+  6101: {
+    name: "ErrDestinationIsProtectedPda",
+    suggestion:
+      "Destination is a Sigil-protected PDA — rejected at queue time. Pick a different recipient that is not a Sigil-owned account.",
+  },
+
+  // ─── Bucket-2 intent-digest binding ───
+  // D-1 codes: emitted when the digest signed at queue/preview does not
+  // match the digest recomputed at apply/execute. Surfaces during
+  // pre-flight simulation because the digest computation lives on-chain.
+  6102: {
+    name: "ErrIntentDigestMismatch",
+    suggestion:
+      "AL3 intent-digest mismatch — the preview digest signed at seal time does not match the executed bundle. Re-build the seal with the live instructions and re-sign.",
+  },
+  6103: {
+    name: "ErrPendingAgentGrantDigestMismatch",
+    suggestion:
+      "PendingAgentGrant digest mismatch between queue and apply. The agent grant state changed between queue and apply — re-queue with the current vault state.",
+  },
+  6104: {
+    name: "ErrReactivateCosignRequiredForFullCapability",
+    suggestion:
+      "Reactivate with a FULL_CAPABILITY new agent requires cosign. Pass a cosigner signature to `reactivateVault`, or use a lower capability tier for the new agent.",
   },
 };
 

@@ -10,7 +10,7 @@
 
 # --- MaliciousSimulation ---
 # X-Ray flags suspicious code patterns heuristically. Sigil is
-# formally verified by Certora (16/16 rules), fuzz-tested (Trident,
+# formally verified by Certora (21/21 rules), fuzz-tested (Trident,
 # 1000 iterations), and covered by 174 on-chain tests + 81 security
 # exploit tests. No malicious behavior present.
 MaliciousSimulation
@@ -26,11 +26,6 @@ MaliciousSimulation
 # runtime validation. Oracle remaining_accounts are validated in
 # oracle.rs by owner program ID and expected feed pubkey.
 UnvalidatedAccount
-
-# X-Ray embeds ==============VULNERABLE: inline within source code lines,
-# producing fragments that lack the category keyword. These orphan lines
-# are part of the same UnvalidatedAccount findings above.
-==============VULNERABLE:
 
 # --- anchorVersionTooOld ---
 # X-Ray flags anchor_lang < latest as "anchorVersionTooOld". Sigil

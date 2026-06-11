@@ -25,6 +25,8 @@ import {
   getStructEncoder,
   getU16Decoder,
   getU16Encoder,
+  getU32Decoder,
+  getU32Encoder,
   getU64Decoder,
   getU64Encoder,
   getU8Decoder,
@@ -113,6 +115,14 @@ export type QueuePolicyUpdateInstructionData = {
   hasProtocolCaps: Option<boolean>;
   protocolCaps: Option<Array<bigint>>;
   destinationMode: Option<number>;
+  operatingHours: Option<number>;
+  stableBalanceFloor: Option<bigint>;
+  perRecipientDailyCapUsd: Option<bigint>;
+  cosignRequired: Option<boolean>;
+  cosignSessionPubkey: Option<Address>;
+  operatorGrantDelaySeconds: Option<bigint>;
+  cosignSession: Address;
+  newPolicyPreviewDigest: ReadonlyUint8Array;
 };
 
 export type QueuePolicyUpdateInstructionDataArgs = {
@@ -128,6 +138,14 @@ export type QueuePolicyUpdateInstructionDataArgs = {
   hasProtocolCaps: OptionOrNullable<boolean>;
   protocolCaps: OptionOrNullable<Array<number | bigint>>;
   destinationMode: OptionOrNullable<number>;
+  operatingHours: OptionOrNullable<number>;
+  stableBalanceFloor: OptionOrNullable<number | bigint>;
+  perRecipientDailyCapUsd: OptionOrNullable<number | bigint>;
+  cosignRequired: OptionOrNullable<boolean>;
+  cosignSessionPubkey: OptionOrNullable<Address>;
+  operatorGrantDelaySeconds: OptionOrNullable<number | bigint>;
+  cosignSession: Address;
+  newPolicyPreviewDigest: ReadonlyUint8Array;
 };
 
 export function getQueuePolicyUpdateInstructionDataEncoder(): Encoder<QueuePolicyUpdateInstructionDataArgs> {
@@ -149,6 +167,14 @@ export function getQueuePolicyUpdateInstructionDataEncoder(): Encoder<QueuePolic
       ["hasProtocolCaps", getOptionEncoder(getBooleanEncoder())],
       ["protocolCaps", getOptionEncoder(getArrayEncoder(getU64Encoder()))],
       ["destinationMode", getOptionEncoder(getU8Encoder())],
+      ["operatingHours", getOptionEncoder(getU32Encoder())],
+      ["stableBalanceFloor", getOptionEncoder(getU64Encoder())],
+      ["perRecipientDailyCapUsd", getOptionEncoder(getU64Encoder())],
+      ["cosignRequired", getOptionEncoder(getBooleanEncoder())],
+      ["cosignSessionPubkey", getOptionEncoder(getAddressEncoder())],
+      ["operatorGrantDelaySeconds", getOptionEncoder(getU64Encoder())],
+      ["cosignSession", getAddressEncoder()],
+      ["newPolicyPreviewDigest", fixEncoderSize(getBytesEncoder(), 32)],
     ]),
     (value) => ({ ...value, discriminator: QUEUE_POLICY_UPDATE_DISCRIMINATOR }),
   );
@@ -172,6 +198,14 @@ export function getQueuePolicyUpdateInstructionDataDecoder(): Decoder<QueuePolic
     ["hasProtocolCaps", getOptionDecoder(getBooleanDecoder())],
     ["protocolCaps", getOptionDecoder(getArrayDecoder(getU64Decoder()))],
     ["destinationMode", getOptionDecoder(getU8Decoder())],
+    ["operatingHours", getOptionDecoder(getU32Decoder())],
+    ["stableBalanceFloor", getOptionDecoder(getU64Decoder())],
+    ["perRecipientDailyCapUsd", getOptionDecoder(getU64Decoder())],
+    ["cosignRequired", getOptionDecoder(getBooleanDecoder())],
+    ["cosignSessionPubkey", getOptionDecoder(getAddressDecoder())],
+    ["operatorGrantDelaySeconds", getOptionDecoder(getU64Decoder())],
+    ["cosignSession", getAddressDecoder()],
+    ["newPolicyPreviewDigest", fixDecoderSize(getBytesDecoder(), 32)],
   ]);
 }
 
@@ -209,6 +243,14 @@ export type QueuePolicyUpdateAsyncInput<
   hasProtocolCaps: QueuePolicyUpdateInstructionDataArgs["hasProtocolCaps"];
   protocolCaps: QueuePolicyUpdateInstructionDataArgs["protocolCaps"];
   destinationMode: QueuePolicyUpdateInstructionDataArgs["destinationMode"];
+  operatingHours: QueuePolicyUpdateInstructionDataArgs["operatingHours"];
+  stableBalanceFloor: QueuePolicyUpdateInstructionDataArgs["stableBalanceFloor"];
+  perRecipientDailyCapUsd: QueuePolicyUpdateInstructionDataArgs["perRecipientDailyCapUsd"];
+  cosignRequired: QueuePolicyUpdateInstructionDataArgs["cosignRequired"];
+  cosignSessionPubkey: QueuePolicyUpdateInstructionDataArgs["cosignSessionPubkey"];
+  operatorGrantDelaySeconds: QueuePolicyUpdateInstructionDataArgs["operatorGrantDelaySeconds"];
+  cosignSession: QueuePolicyUpdateInstructionDataArgs["cosignSession"];
+  newPolicyPreviewDigest: QueuePolicyUpdateInstructionDataArgs["newPolicyPreviewDigest"];
 };
 
 export async function getQueuePolicyUpdateInstructionAsync<
@@ -341,6 +383,14 @@ export type QueuePolicyUpdateInput<
   hasProtocolCaps: QueuePolicyUpdateInstructionDataArgs["hasProtocolCaps"];
   protocolCaps: QueuePolicyUpdateInstructionDataArgs["protocolCaps"];
   destinationMode: QueuePolicyUpdateInstructionDataArgs["destinationMode"];
+  operatingHours: QueuePolicyUpdateInstructionDataArgs["operatingHours"];
+  stableBalanceFloor: QueuePolicyUpdateInstructionDataArgs["stableBalanceFloor"];
+  perRecipientDailyCapUsd: QueuePolicyUpdateInstructionDataArgs["perRecipientDailyCapUsd"];
+  cosignRequired: QueuePolicyUpdateInstructionDataArgs["cosignRequired"];
+  cosignSessionPubkey: QueuePolicyUpdateInstructionDataArgs["cosignSessionPubkey"];
+  operatorGrantDelaySeconds: QueuePolicyUpdateInstructionDataArgs["operatorGrantDelaySeconds"];
+  cosignSession: QueuePolicyUpdateInstructionDataArgs["cosignSession"];
+  newPolicyPreviewDigest: QueuePolicyUpdateInstructionDataArgs["newPolicyPreviewDigest"];
 };
 
 export function getQueuePolicyUpdateInstruction<

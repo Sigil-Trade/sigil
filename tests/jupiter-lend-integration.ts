@@ -17,6 +17,12 @@ import {
 } from "@solana/spl-token";
 import { expect } from "chai";
 import BN from "bn.js";
+import { initVaultPreviewDigest } from "./helpers/policy-digest";
+import { registerOperatorAgent } from "./helpers/register-operator-agent";
+import {
+  buildExpectedIntentDigest,
+  digestAsArgs,
+} from "./helpers/intent-digest-fixture";
 // Inlined constants — sdk/typescript was deleted in Phase 0 nuclear cleanup
 const JUPITER_LEND_PROGRAM_ID = new PublicKey(
   "JLend2fEim9xUFcaHsyGePEoBzFLvkjMi3MnPcSuCdu",
@@ -36,6 +42,8 @@ import {
   printCUSummary,
   TestEnv,
   LiteSVM,
+  MOCK_DEFI_PROGRAM_ID,
+  buildMockDefiNoopIx,
 } from "./helpers/litesvm-setup";
 
 const FULL_CAPABILITY = 2; // CAPABILITY_OPERATOR
@@ -66,13 +74,19 @@ describe("jupiter-lend-integration", () => {
 
   // Protocol treasury (must match hardcoded constant in program)
   const protocolTreasury = new PublicKey(
-    "ASHie1dFTnDSnrHMPGmniJhMgfJVGPm3rAaEPnrtWDiT",
+    "6wrkKTM2pjkcCAbMfRz2j3AXspavu6pq3ePcuJUE3Azp",
   );
   let protocolTreasuryUsdcAta: PublicKey;
   let ownerUsdcAta: PublicKey;
 
   // Use Jupiter Lend program ID as the allowed protocol
   const lendProtocol = JUPITER_LEND_PROGRAM_ID;
+  // F-Q2: spending sandwiches require EXACTLY ONE counted DeFi instruction.
+  // The mock lend action is mock-defi's no-op open_position on
+  // MOCK_DEFI_PROGRAM_ID (counted, zero-spend). Spending (deposit) call sites
+  // authorize against this program; every vault allowlists it alongside
+  // lendProtocol.
+  const mockDefiProtocol = MOCK_DEFI_PROGRAM_ID;
 
   // Vault IDs 500+ to avoid collision with other test files
   const vaultId = new BN(500);
@@ -83,14 +97,15 @@ describe("jupiter-lend-integration", () => {
   let vaultUsdcAta: PublicKey;
 
   /**
-   * Create a mock Lend instruction (no-op transfer to self).
+   * Create a mock Lend instruction. F-Q2: must be a COUNTED DeFi ix (reaches
+   * the protocol-allowlist match in validate_and_authorize's spending scan), so
+   * we use mock-defi's no-op open_position on MOCK_DEFI_PROGRAM_ID. It moves
+   * zero tokens (outcome-based actual spend = 0) while satisfying the
+   * exactly-one-DeFi-ix rule. A SystemProgram no-op is Infrastructure → not
+   * counted → would now fail TooManyDeFiInstructions on spending sandwiches.
    */
   function createMockLendInstruction(payer: PublicKey): TransactionInstruction {
-    return SystemProgram.transfer({
-      fromPubkey: payer,
-      toPubkey: payer,
-      lamports: 0,
-    });
+    return buildMockDefiNoopIx(payer);
   }
 
   /**
@@ -132,13 +147,24 @@ describe("jupiter-lend-integration", () => {
       program.programId,
     );
 
-    // 2. Validate and authorize
+    // 2. Validate and authorize — read live policy_version for TOCTOU guard
+    const livePolicy = await program.account.policyConfig.fetch(policy);
     const validateIx = await program.methods
       .validateAndAuthorize(
         tokenMint,
         amount,
         targetProtocol,
-        new BN(0), // expectedPolicyVersion
+        livePolicy.policyVersion, // expectedPolicyVersion (TOCTOU guard)
+        new BN(0), // AC-10 expectedNonce (fresh session)
+        digestAsArgs(
+          buildExpectedIntentDigest({
+            vault,
+            agent: agentKp.publicKey,
+            tokenMint,
+            amount,
+            targetProtocol,
+          }),
+        ),
       )
       .accountsPartial({
         agent: agentKp.publicKey,
@@ -156,6 +182,13 @@ describe("jupiter-lend-integration", () => {
         systemProgram: SystemProgram.programId,
         instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
+      // F-Q1a completeness: the mock-defi no-op ix lists the agent signer (the
+      // writable fee-payer in the compiled v0 message). validate's
+      // destination-completeness guard requires every writable DeFi meta
+      // resolvable in remaining_accounts, so append the agent (mirrors seal()).
+      .remainingAccounts([
+        { pubkey: agentKp.publicKey, isSigner: false, isWritable: false },
+      ])
       .instruction();
 
     // 3. Mock Lend instruction
@@ -241,15 +274,34 @@ describe("jupiter-lend-integration", () => {
     await program.methods
       .initializeVault(
         vaultId,
-        new BN(500_000_000), // daily cap: 500 USDC
-        new BN(200_000_000), // max tx: 200 USDC
-        1, // protocolMode: allowlist
-        [lendProtocol],
-        0, // developer fee rate
-        100, // maxSlippageBps
-        new BN(1800), // timelockDuration
-        [], // allowedDestinations
-        [], // protocolCaps
+        new BN(500_000_000),
+        new BN(200_000_000),
+        1,
+        [lendProtocol, mockDefiProtocol],
+        0,
+        100,
+        new BN(1800),
+        [],
+        [],
+        false, // observeOnly (Phase 2 TA-19)
+        0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+        false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+        5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+        new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+        new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+        false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+        initVaultPreviewDigest({
+          dailySpendingCapUsd: new BN(500_000_000),
+          maxTransactionSizeUsd: new BN(200_000_000),
+          maxSlippageBps: 100,
+          protocolMode: 1,
+          protocols: [lendProtocol, mockDefiProtocol],
+          allowedDestinations: [],
+          timelockDuration: new BN(1800),
+          operatingHours: 0x00ffffff,
+          autoPromoteGrays: false,
+          autoRevokeThreshold: 5,
+        }),
       )
       .accountsPartial({
         owner: owner.publicKey,
@@ -262,15 +314,14 @@ describe("jupiter-lend-integration", () => {
       })
       .rpc();
 
-    // Register agent
-    await program.methods
-      .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-      .accountsPartial({
-        owner: owner.publicKey,
-        vault: vaultPda,
-        agentSpendOverlay: overlayPda,
-      })
-      .rpc();
+    // Register agent (OPERATOR on single-key vault → timelocked queue→apply)
+    await registerOperatorAgent({
+      program,
+      svm,
+      owner: owner.publicKey,
+      vault: vaultPda,
+      agent: agent.publicKey,
+    });
 
     // Fund the vault with USDC
     ownerUsdcAta = createAtaHelper(
@@ -319,7 +370,7 @@ describe("jupiter-lend-integration", () => {
         agent,
         usdcMint,
         amount,
-        lendProtocol,
+        mockDefiProtocol,
       );
 
       expect(result.signature).to.be.a("string");
@@ -373,7 +424,7 @@ describe("jupiter-lend-integration", () => {
         agent,
         usdcMint,
         new BN(200_000_000),
-        lendProtocol,
+        mockDefiProtocol,
       );
 
       await sendComposedLend(
@@ -383,7 +434,7 @@ describe("jupiter-lend-integration", () => {
         agent,
         usdcMint,
         new BN(200_000_000),
-        lendProtocol,
+        mockDefiProtocol,
       );
 
       // Would exceed 500 USDC cap if declaration-based, but succeeds
@@ -395,7 +446,7 @@ describe("jupiter-lend-integration", () => {
         agent,
         usdcMint,
         new BN(1_000_000),
-        lendProtocol,
+        mockDefiProtocol,
       );
 
       // Verify all TXs succeeded
@@ -467,13 +518,32 @@ describe("jupiter-lend-integration", () => {
           frozenVaultId,
           new BN(500_000_000),
           new BN(200_000_000),
-          0,
-          [lendProtocol],
+          1,
+          [lendProtocol, mockDefiProtocol],
           0,
           100,
           new BN(1800),
           [],
-          [], // protocolCaps
+          [],
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(500_000_000),
+            maxTransactionSizeUsd: new BN(200_000_000),
+            maxSlippageBps: 100,
+            protocolMode: 1,
+            protocols: [lendProtocol, mockDefiProtocol],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accountsPartial({
           owner: owner.publicKey,
@@ -486,14 +556,13 @@ describe("jupiter-lend-integration", () => {
         })
         .rpc();
 
-      await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accountsPartial({
-          owner: owner.publicKey,
-          vault: frozenVault,
-          agentSpendOverlay: frozenOverlay,
-        })
-        .rpc();
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: frozenVault,
+        agent: agent.publicKey,
+      });
 
       // Freeze via revoke
       const [frozenOverlayRevoke] = PublicKey.findProgramAddressSync(
@@ -505,6 +574,10 @@ describe("jupiter-lend-integration", () => {
         .accountsPartial({
           owner: owner.publicKey,
           vault: frozenVault,
+          policy: PublicKey.findProgramAddressSync(
+            [Buffer.from("policy"), frozenVault.toBuffer()],
+            program.programId,
+          )[0],
           agentSpendOverlay: frozenOverlayRevoke,
         })
         .rpc();
@@ -582,15 +655,34 @@ describe("jupiter-lend-integration", () => {
       await program.methods
         .initializeVault(
           rollingVaultId,
-          new BN(100_000_000), // 100 USDC daily cap
-          new BN(60_000_000), // 60 USDC max tx
-          0,
-          [lendProtocol],
+          new BN(100_000_000),
+          new BN(60_000_000),
+          1,
+          [lendProtocol, mockDefiProtocol],
           0,
           100,
           new BN(1800),
           [],
-          [], // protocolCaps
+          [],
+          false, // observeOnly (Phase 2 TA-19)
+          0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
+          false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
+          5, // auto_revoke_threshold (TA-17 Phase 3 — default)
+          new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
+          new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
+          false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(100_000_000),
+            maxTransactionSizeUsd: new BN(60_000_000),
+            maxSlippageBps: 100,
+            protocolMode: 1,
+            protocols: [lendProtocol, mockDefiProtocol],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
         )
         .accountsPartial({
           owner: owner.publicKey,
@@ -603,14 +695,13 @@ describe("jupiter-lend-integration", () => {
         })
         .rpc();
 
-      await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accountsPartial({
-          owner: owner.publicKey,
-          vault: rollingVault,
-          agentSpendOverlay: rollingOverlay,
-        })
-        .rpc();
+      await registerOperatorAgent({
+        program,
+        svm,
+        owner: owner.publicKey,
+        vault: rollingVault,
+        agent: agent.publicKey,
+      });
 
       rollingVaultUsdcAta = getAssociatedTokenAddressSync(
         usdcMint,
@@ -644,7 +735,7 @@ describe("jupiter-lend-integration", () => {
         agent,
         usdcMint,
         new BN(40_000_000),
-        lendProtocol,
+        mockDefiProtocol,
         rollingVaultUsdcAta,
         rollingOverlay,
       );
@@ -660,7 +751,7 @@ describe("jupiter-lend-integration", () => {
         agent,
         usdcMint,
         new BN(40_000_000),
-        lendProtocol,
+        mockDefiProtocol,
         rollingVaultUsdcAta,
         rollingOverlay,
       );
@@ -677,7 +768,7 @@ describe("jupiter-lend-integration", () => {
         agent,
         usdcMint,
         new BN(30_000_000),
-        lendProtocol,
+        mockDefiProtocol,
         rollingVaultUsdcAta,
         rollingOverlay,
       );

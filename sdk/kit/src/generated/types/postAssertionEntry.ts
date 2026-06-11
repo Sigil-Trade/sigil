@@ -10,6 +10,8 @@ import {
   addDecoderSizePrefix,
   addEncoderSizePrefix,
   combineCodec,
+  fixDecoderSize,
+  fixEncoderSize,
   getAddressDecoder,
   getAddressEncoder,
   getBytesDecoder,
@@ -29,7 +31,16 @@ import {
   type ReadonlyUint8Array,
 } from "@solana/kit";
 
-/** Borsh-serializable assertion entry (instruction parameter form). */
+/**
+ * Borsh-serializable assertion entry (instruction parameter form).
+ *
+ * Phase B3 fields (cross_field_offset_b, cross_field_multiplier_bps,
+ * cross_field_flags) DELETED in Phase 1 Option A demolition.
+ *
+ * Phase 6 appended `aux_value: [u8; 8]` + `aux_byte: u8` for the four new
+ * variants (R-1/R-2/R-3/R-4). Modes 0..3 must set both to zero; the
+ * validator enforces it.
+ */
 export type PostAssertionEntry = {
   targetAccount: Address;
   offset: number;
@@ -37,12 +48,10 @@ export type PostAssertionEntry = {
   operator: number;
   expectedValue: ReadonlyUint8Array;
   assertionMode: number;
-  /** Phase B3: second field offset for CrossFieldLte (0 if unused) */
-  crossFieldOffsetB: number;
-  /** Phase B3: multiplier in BPS for CrossFieldLte (0 if unused) */
-  crossFieldMultiplierBps: number;
-  /** Phase B3: flags byte — bit 0 = enable CrossFieldLte (0 if unused) */
-  crossFieldFlags: number;
+  /** Phase 6: u64 LE auxiliary value. Per-mode meaning — see ZC struct. */
+  auxValue: ReadonlyUint8Array;
+  /** Phase 6: u8 auxiliary byte. Per-mode meaning — see ZC struct. */
+  auxByte: number;
 };
 
 export type PostAssertionEntryArgs = PostAssertionEntry;
@@ -55,9 +64,8 @@ export function getPostAssertionEntryEncoder(): Encoder<PostAssertionEntryArgs> 
     ["operator", getU8Encoder()],
     ["expectedValue", addEncoderSizePrefix(getBytesEncoder(), getU32Encoder())],
     ["assertionMode", getU8Encoder()],
-    ["crossFieldOffsetB", getU16Encoder()],
-    ["crossFieldMultiplierBps", getU32Encoder()],
-    ["crossFieldFlags", getU8Encoder()],
+    ["auxValue", fixEncoderSize(getBytesEncoder(), 8)],
+    ["auxByte", getU8Encoder()],
   ]);
 }
 
@@ -69,9 +77,8 @@ export function getPostAssertionEntryDecoder(): Decoder<PostAssertionEntry> {
     ["operator", getU8Decoder()],
     ["expectedValue", addDecoderSizePrefix(getBytesDecoder(), getU32Decoder())],
     ["assertionMode", getU8Decoder()],
-    ["crossFieldOffsetB", getU16Decoder()],
-    ["crossFieldMultiplierBps", getU32Decoder()],
-    ["crossFieldFlags", getU8Decoder()],
+    ["auxValue", fixDecoderSize(getBytesDecoder(), 8)],
+    ["auxByte", getU8Decoder()],
   ]);
 }
 

@@ -22,7 +22,11 @@ import type {
   SolanaRpcApi,
   TransactionSigner,
 } from "./kit-adapter.js";
-import { compileTransaction, AccountRole } from "./kit-adapter.js";
+import {
+  compileTransaction,
+  AccountRole,
+  fetchEncodedAccounts,
+} from "./kit-adapter.js";
 import { getSigilModuleLogger, setSigilModuleLogger } from "./logger.js";
 import {
   newCorrelationId,
@@ -39,21 +43,26 @@ import {
 import { VaultStatus } from "./generated/types/vaultStatus.js";
 import { getValidateAndAuthorizeInstructionAsync } from "./generated/instructions/validateAndAuthorize.js";
 import { getFinalizeSessionInstructionAsync } from "./generated/instructions/finalizeSession.js";
+import {
+  computeScalarIntentDigest,
+  computeSealInputDigest,
+} from "./seal/intent-digest.js";
+import {
+  deriveNetworkIdentity,
+  type SigilCaip2Chain,
+} from "./caip2-network.js";
 
 import {
   resolveVaultState,
   resolveVaultStateForOwner,
   resolveVaultBudget,
+  bytesToAddress,
   type ResolvedVaultState,
   type ResolvedVaultStateForOwner,
   type EffectiveBudget,
   type ResolvedBudget,
 } from "./state-resolver.js";
-import {
-  getSessionPDA,
-  getAgentOverlayPDA,
-  getConstraintsPDA,
-} from "./resolve-accounts.js";
+import { getSessionPDA, getAgentOverlayPDA } from "./resolve-accounts.js";
 import { composeSigilTransaction, measureTransactionSize } from "./composer.js";
 import {
   BlockhashCache,
@@ -114,6 +123,7 @@ import {
   SIGIL_ERROR__SDK__ATA_NON_CANONICAL,
   SIGIL_ERROR__SDK__SEAL_FAILED,
   SIGIL_ERROR__SDK__HOOK_ABORTED,
+  SIGIL_ERROR__SDK__MAINNET_CONFIRMATION_REQUIRED,
   SIGIL_ERROR__RPC__TX_FAILED,
   SIGIL_ERROR__RPC__TX_TOO_LARGE,
 } from "./errors/codes.js";
@@ -222,11 +232,33 @@ export interface SealParams {
   plugins?: readonly SigilPolicyPlugin[];
 }
 
+/**
+ * Result of building (but NOT sending) a Sigil-sealed transaction.
+ *
+ * `SealResult` is a BUILD-time artifact — it carries the compiled transaction
+ * and pre-flight diagnostics. It does NOT include emitted events: events come
+ * from on-chain `emit!()` calls during execution, parseable from the resulting
+ * transaction's log messages.
+ *
+ * To consume events, call `executeAndConfirm()` (returns `ExecuteResult` with
+ * the signature) and then fetch + parse the transaction logs using the
+ * discriminator map in `generated/event-discriminators.ts` (which covers all
+ * Phase 3-8 events including AutoRevoked, SandwichIntegrityViolation,
+ * ProtectedWritableRejected, StableFloorViolation, RecipientCapExceeded,
+ * MintDeltaCapExceeded, AtaAuthorityChanged, OutputBelowFloor,
+ * DeclarationInconsistent, OwnershipTransferInitiated/Accepted/Cancelled,
+ * and FreezeVaultEvent with `freeze_reason`).
+ *
+ * `intentDigest` is the AL3 per-call SealInput digest — SHA-256 over the
+ * canonical encoding of (vault, agent, mint, amount, target_protocol,
+ * network, instructions[]). See `sdk/kit/src/seal/intent-digest.ts` for the
+ * canonical-encoding spec. Callers that want intent-binding (Phase 9 Batch I)
+ * can surface this digest in their preview UI and re-verify it at
+ * execute-time via `computeSealInputDigest(...)`.
+ */
 export interface SealResult {
   ok: true;
   transaction: ReturnType<typeof compileTransaction>;
-  /** Whether this action is spending (amount > 0). */
-  isSpending: boolean;
   warnings: string[];
   txSizeBytes: number;
   /** Block height after which the blockhash expires. Sign and send before this. */
@@ -238,9 +270,38 @@ export interface SealResult {
     tokenBalance: bigint;
     knownRecipients: Set<string>;
   };
+  /**
+   * AL3 per-call intent digest (Phase 9 Batch I). 32-byte SHA-256 over the
+   * canonical SealInput encoding. Surfaces the exact intent the SDK sealed,
+   * so consumers (preview UIs, executeSeal re-verification) can bind owner
+   * approval to this specific bundle.
+   */
+  intentDigest: Uint8Array;
+  /**
+   * AL4 network identity (Phase 9 Batch J). CAIP-2 chain id of the network
+   * the bundle targets. Carries enough information to differentiate
+   * mainnet from devnet (and, in future, testnet / localnet) for UI
+   * confirmation prompts. The chain id is bound into AL3's `intentDigest`
+   * via `network_id` at canonical position 2 (intent-digest.ts), so a
+   * bundle approved on devnet cannot be replayed on mainnet without
+   * detection.
+   */
+  network: SigilCaip2Chain;
+  /**
+   * AL4 isMainnet boolean (Phase 9 Batch J). `true` only when `network`
+   * matches the canonical mainnet-beta CAIP-2 chain id. Wire to UI
+   * confirmation chrome (mainnet warning banner, etc).
+   */
+  isMainnet: boolean;
 }
 
 // ─── Internal helpers ───────────────────────────────────────────────────────
+
+/** One decoded account as returned by `fetchEncodedAccounts`. */
+type FetchedAccount = Awaited<ReturnType<typeof fetchEncodedAccounts>>[number];
+
+/** A readonly account meta appended to an instruction's remaining_accounts. */
+type ReadonlyMeta = { address: Address; role: AccountRole };
 
 /** Replace agent ATAs with vault ATAs in DeFi instruction account lists. */
 export function replaceAgentAtas(
@@ -265,6 +326,116 @@ export function replaceAgentAtas(
       return acc;
     }),
   }));
+}
+
+/**
+ * F-Q4 satisfier helper — resolve the mints of VAULT-OWNED Token-2022 token
+ * accounts among the sandwiched DeFi instruction's writable accounts.
+ *
+ * The on-chain F-Q4 gate (`validate_and_authorize` → `destination_check`) vets
+ * the mint EXTENSIONS of any vault-owned Token-2022 token account a swap
+ * delivers into the vault — a PermanentDelegate / TransferHook /
+ * ConfidentialTransfer mint could let a third party drain or hide the holding
+ * out-of-band. To do so it reads the token account's mint (bytes[0..32]) and
+ * REQUIRES that mint resolvable in validate's `remaining_accounts`, else it
+ * reverts `ErrToken2022OutputMintUnresolvable` (6106). The F-Q1a writable set
+ * does NOT carry the mint (a mint is read-only in a swap), so this resolves it.
+ *
+ * Mirrors the on-chain demand EXACTLY (destination_check.rs:166-219): an account
+ * triggers the gate iff it is owned by the Token-2022 program, has >= 72 bytes,
+ * and its token-account authority (bytes[32..64]) is the vault. For each such
+ * account this returns its mint (bytes[0..32]) as a READONLY meta.
+ *
+ * It is PLUMBING, not enforcement: it only adds read-only classification
+ * accounts; the on-chain gate stays the sole enforcer. A mint missed here can
+ * only cause a fail-closed 6106 revert (never a drain); a mint added that the
+ * gate does not demand is harmless (the gate looks it up by pubkey on demand).
+ *
+ * @param fetched     results of `fetchEncodedAccounts` over the candidate
+ *                    writable accounts (each carries its own on-chain bytes).
+ * @param vault       the vault PDA — only token accounts it authorizes are vetted.
+ * @param alreadySeen pubkeys already appended to remaining_accounts (the F-Q1a
+ *                    writable set) — skip re-adding them.
+ * @returns deduped READONLY metas, one per distinct vault-owned T22 output mint.
+ */
+export function resolveT22OutputMintMetas(
+  fetched: ReadonlyArray<FetchedAccount>,
+  vault: Address,
+  alreadySeen: ReadonlySet<Address>,
+): ReadonlyMeta[] {
+  const metas: ReadonlyMeta[] = [];
+  const mintSeen = new Set<Address>();
+  for (const acc of fetched) {
+    // Non-existent on-chain (e.g. a lagging RPC view): the gate can only demand
+    // a mint for an account it reads as a vault-owned T22 token account.
+    if (!acc.exists) continue;
+    // Only Token-2022-owned accounts can be vault-owned T22 token accounts.
+    if (acc.programAddress !== TOKEN_2022_PROGRAM) continue;
+    // Mirror the on-chain length guard (destination_check.rs:180) BEFORE any
+    // slice — a token account's base layout is 165+ bytes; <72 cannot be one.
+    if (acc.data.length < 72) continue;
+    // Token-account authority ("owner" field, bytes[32..64]); only accounts the
+    // VAULT authorizes are the swap's deliver-into-vault target.
+    const authority = bytesToAddress(acc.data.slice(32, 64));
+    if (authority !== vault) continue;
+    // The acquired token's mint (bytes[0..32]) — what the gate vets + demands.
+    const mint = bytesToAddress(acc.data.slice(0, 32));
+    if (alreadySeen.has(mint) || mintSeen.has(mint)) continue;
+    mintSeen.add(mint);
+    metas.push({ address: mint, role: AccountRole.READONLY });
+  }
+  return metas;
+}
+
+/**
+ * M3-01 satisfier helper (derivation half) — the vault's canonical USDC + USDT
+ * associated token accounts that finalize's `stable_balance_floor` must see.
+ *
+ * The on-chain floor (finalize_session) sums the vault's combined USDC+USDT
+ * balance and counts ONLY each stablecoin's CANONICAL ATA (M3-01 pin). Sources
+ * 1+2 (the named vaultTokenAccount + outputStablecoinAccount) cover the session
+ * token and — sometimes — USDC, so a vault that holds reserve in the OTHER
+ * stablecoin would under-count and falsely revert. This derives both canonical
+ * stablecoin ATAs and drops any already present on finalize (a named account or
+ * the F-Q1a writable set); the remainder are fed to finalize's
+ * remaining_accounts (on-chain "Source 3").
+ *
+ * Pure derivation (no RPC) — existence is checked separately — so it is
+ * trivially testable. `deriveAta` is legacy-SPL (correct for the current
+ * USDC/USDT mints; a Token-2022 stablecoin would need a T22-aware derivation,
+ * matching the on-chain SCOPE note in finalize_session.rs).
+ */
+export async function deriveStablecoinFloorCandidates(
+  vault: Address,
+  usdcMint: Address,
+  usdtMint: Address,
+  alreadyPresent: ReadonlySet<Address>,
+): Promise<Address[]> {
+  const [usdcAta, usdtAta] = await Promise.all([
+    deriveAta(vault, usdcMint),
+    deriveAta(vault, usdtMint),
+  ]);
+  return [usdcAta, usdtAta].filter((ata) => !alreadyPresent.has(ata));
+}
+
+/**
+ * M3-01 satisfier helper (existence half) — given the fetched candidate
+ * accounts (parallel to `candidates`), return the EXISTING ones as READONLY
+ * metas for finalize's remaining_accounts. A non-existent ATA is harmless
+ * on-chain (the floor skips any non-token-program account), but we omit it to
+ * save wire bytes. Mirrors the F-Q4 `resolveT22OutputMintMetas` existence gate.
+ */
+export function resolveStablecoinFloorMetas(
+  fetched: ReadonlyArray<FetchedAccount>,
+  candidates: ReadonlyArray<Address>,
+): ReadonlyMeta[] {
+  const metas: ReadonlyMeta[] = [];
+  for (let i = 0; i < candidates.length; i++) {
+    if (fetched[i]?.exists) {
+      metas.push({ address: candidates[i], role: AccountRole.READONLY });
+    }
+  }
+  return metas;
 }
 
 // ACTION_TYPE_KEYS removed — ActionType enum eliminated in v6.
@@ -730,7 +901,141 @@ export async function seal(params: SealParams): Promise<SealResult> {
     ataReplacements,
   );
 
-  // Step 8: Build validate_and_authorize instruction
+  // F-Q1a SATISFIER (not enforcer). The on-chain destination COMPLETENESS
+  // invariant requires every writable, non-vault account of the sandwiched
+  // DeFi instruction to be resolvable in validate's AND finalize's
+  // remaining_accounts, so the guard can read each owner byte and classify it
+  // (an absent writable meta is now rejected fail-closed:
+  // DestinationAccountUnresolvable). Reviving the per-recipient cap + floor sum
+  // depends on the same accounts reaching finalize. We extract every writable
+  // account of the *rewritten* DeFi ixs (post agent-ATA->vault-ATA rewrite, so
+  // the addresses are exactly what executes — iterating the pre-rewrite list
+  // would capture stale agent ATAs) and attach them as READONLY remaining
+  // accounts on both wrapper ixs. READONLY grants no write/sign; the compiled
+  // message de-dups by pubkey (mergeRoles keeps the DeFi ix's WRITABLE), and
+  // accounts already referenced by the DeFi ix cost ~1 index byte each. This
+  // only gives the guard visibility — it never changes the route or intent
+  // (atomic-guard principle: feed accounts to inspect, never reshape the tx).
+  const feePayer = params.agent.address;
+  const defiWritableSeen = new Set<Address>();
+  const defiWritableReadonlyMetas: ReadonlyMeta[] = [];
+  for (const ix of rewrittenDefiInstructions) {
+    for (const acc of ix.accounts ?? []) {
+      const declaredWritable =
+        acc.role === AccountRole.WRITABLE ||
+        acc.role === AccountRole.WRITABLE_SIGNER;
+      // The fee-payer agent is WRITABLE in the compiled v0 message regardless of
+      // the role the DeFi ix declares for it. The on-chain completeness check
+      // reads writability from the compiled message (via
+      // load_instruction_at_checked), so a DeFi ix that lists the agent as a
+      // readonly signer still surfaces it as a writable meta on-chain — include
+      // it so completeness is satisfiable. (Vault ATAs that validate marks
+      // writable already appear writable in the swap ix, so the fee payer is the
+      // only writability divergence between the ix role and the compiled view.)
+      const onChainWritable = declaredWritable || acc.address === feePayer;
+      if (onChainWritable && !defiWritableSeen.has(acc.address)) {
+        defiWritableSeen.add(acc.address);
+        defiWritableReadonlyMetas.push({
+          address: acc.address,
+          role: AccountRole.READONLY,
+        });
+      }
+    }
+  }
+
+  // F-Q4 SATISFIER — vault-owned Token-2022 output-mint resolution.
+  //
+  // When a swap delivers a Token-2022 token INTO a vault-owned ATA, the on-chain
+  // F-Q4 gate (validate_and_authorize → destination_check) vets that mint's
+  // extensions and REQUIRES the mint resolvable in validate's remaining_accounts
+  // (else `ErrToken2022OutputMintUnresolvable` 6106). The F-Q1a writable set
+  // above does NOT carry it (a mint is read-only in a swap), so resolve + append
+  // it here. Validate is the SOLE consumer — finalize_session does not run
+  // destination_check — so these go on validate ONLY.
+  //
+  // PERF GATE (sound + fail-closed): only fetch when the Token-2022 program
+  // appears in the bundle. Writing a vault Token-2022 account REQUIRES invoking
+  // Token-2022, and any invoked program must appear in the invoking ix's account
+  // list — so a vault-owned T22 account can never be written without T22 showing
+  // up here. If this gate were ever wrong it can only SKIP the fetch → an honest
+  // T22 swap reverts 6106 (fail-closed DX), never a bypass. Classic-SPL swaps
+  // (the common case) skip the fetch entirely, and existing classic/mock seal
+  // tests never trigger the extra RPC round-trip.
+  //
+  // Rule B: this gate is NON-WEIGHTING on security — under-fire is impossible
+  // (the program that touches a vault T22 account is always present in the
+  // invoking ix's account metas, so the scan cannot miss it), so the round-trip
+  // saving never trades against the (fail-closed) security feed. No pre-flight
+  // warning is emitted: a gate skip cannot coincide with a vault T22 write, and
+  // detecting one would require the very fetch the gate is optimizing away.
+  let t22OutputMintReadonlyMetas: ReadonlyMeta[] = [];
+  const bundleTouchesToken2022 = rewrittenDefiInstructions.some(
+    (ix) =>
+      ix.programAddress === TOKEN_2022_PROGRAM ||
+      (ix.accounts ?? []).some((acc) => acc.address === TOKEN_2022_PROGRAM),
+  );
+  if (bundleTouchesToken2022 && defiWritableReadonlyMetas.length > 0) {
+    // One batched getMultipleAccounts over the (<=24) writable DeFi accounts.
+    const candidateAddresses = defiWritableReadonlyMetas.map((m) => m.address);
+    let fetchedCandidates;
+    try {
+      fetchedCandidates = await fetchEncodedAccounts(
+        params.rpc,
+        candidateAddresses,
+      );
+    } catch (err) {
+      // Fail CLOSED with CONTEXT (not swallow-and-continue): if the bundle
+      // delivers a Token-2022 token into the vault, feeding no mint would make
+      // the on-chain gate revert 6106 — a far more opaque failure. Surface a
+      // domain-typed, step-named error so the caller knows it was the F-Q4
+      // output-mint resolution that failed (mirrors how the sibling stablecoin-
+      // ATA and balance fetches contextualize their RPC errors).
+      throw new SigilSdkDomainError(
+        SIGIL_ERROR__SDK__SEAL_FAILED,
+        "F-Q4 output-mint resolution failed: could not fetch the swap's " +
+          "writable accounts to detect vault-owned Token-2022 outputs. If the " +
+          "bundle delivers a Token-2022 token into the vault, on-chain " +
+          "validation would revert 6106 (ErrToken2022OutputMintUnresolvable). " +
+          "Retry once the RPC is reachable.",
+        { context: { candidateAddresses, cause: redactCause(err) } as never },
+      );
+    }
+    t22OutputMintReadonlyMetas = resolveT22OutputMintMetas(
+      fetchedCandidates,
+      params.vault,
+      defiWritableSeen,
+    );
+  }
+
+  // Step 8: Build validate_and_authorize instruction.
+  //
+  // AC-10 (Phase 4): pass `expectedNonce = 0n`. The session PDA is created
+  // via `init` (not `init_if_needed`) on every validate, so a fresh session
+  // account starts at nonce=0. The on-chain handler requires
+  // `session.nonce == expected_nonce`, so callers MUST pass 0 in the
+  // steady-state flow. Phase 8 ownership-transfer flow (M-5) reuses the
+  // same field with non-close semantics; that path will resolve the stored
+  // value off-chain before calling `seal`.
+  //
+  // D-1 + D-6 (Bucket 2 audit 2026-05-21): AL3 scalar intent digest. We
+  // compute SHA-256 over the canonical SealInput SCALARS (magic prefix +
+  // intent_version + network + vault + agent + token_mint + amount +
+  // target_protocol) — the on-chain verifier in `validate_and_authorize`
+  // recomputes the same digest from its handler args and rejects on byte-
+  // equal mismatch with `ErrIntentDigestMismatch` (6102). This closes the
+  // preview→execute scalar-tamper class (recipient/amount/mint/protocol
+  // swap between the user's signed preview and the submitted bundle).
+  // The full ix-bound digest (`computeSealInputDigest` above) remains
+  // client-side only — ATA-rewrite mapping for on-chain ix binding is
+  // v0.17 work.
+  const scalarIntentDigest = computeScalarIntentDigest({
+    vault: params.vault,
+    agent: params.agent.address,
+    tokenMint: params.tokenMint,
+    amount: params.amount,
+    targetProtocol,
+    network: params.network,
+  });
   const validateIxBase = await getValidateAndAuthorizeInstructionAsync({
     agent: params.agent,
     vault: params.vault,
@@ -744,34 +1049,26 @@ export async function seal(params: SealParams): Promise<SealResult> {
     amount: params.amount,
     targetProtocol,
     expectedPolicyVersion: state.policy.policyVersion ?? 0n,
+    expectedNonce: 0n,
+    expectedIntentDigest: scalarIntentDigest,
   });
 
-  // Step 8b: When the vault has instruction constraints configured, the on-chain
-  // matcher reads the InstructionConstraints PDA from `ctx.remaining_accounts[0]`
-  // (programs/sigil/src/instructions/validate_and_authorize.rs:141-177). If this
-  // PDA is not appended, the matcher is silently skipped — and the on-chain
-  // handler hard-fails with InvalidConstraintsPda when has_constraints == true
-  // and remaining_accounts is empty (rs:175). Append it as a READONLY remaining
-  // account so constraint enforcement is reachable.
-  //
-  // The codama-generated instruction is Object.freeze'd (see validateAndAuthorize.ts
-  // line 408), so we cannot mutate its `accounts` array in place. We construct a
-  // new Instruction object that copies the existing accounts and appends the
-  // constraints PDA as the first (and only) remaining account — matching the
-  // on-chain handler's positional read at index 0 of remaining_accounts.
-  let validateIx = validateIxBase as Instruction;
-  if (state.policy.hasConstraints) {
-    const [constraintsPda] = await getConstraintsPDA(params.vault);
-    validateIx = {
-      ...validateIxBase,
-      accounts: [
-        ...(validateIxBase.accounts ?? []),
-        { address: constraintsPda, role: AccountRole.READONLY },
-      ],
-    } as Instruction;
-  }
+  // F-Q1a satisfier: append the DeFi ix's writable accounts (as READONLY) to
+  // validate's remaining_accounts so the on-chain completeness invariant is
+  // satisfiable. Spread into a NEW array — Instruction.accounts is readonly.
+  const validateIx: Instruction = {
+    ...validateIxBase,
+    accounts: [
+      ...(validateIxBase.accounts ?? []),
+      ...defiWritableReadonlyMetas,
+      // F-Q4: vault-owned Token-2022 output mints (validate-only consumer; the
+      // on-chain gate searches remaining_accounts positionally, so append even
+      // when a mint is also a named account such as the input tokenMintAccount).
+      ...t22OutputMintReadonlyMetas,
+    ],
+  };
 
-  const finalizeIx = await getFinalizeSessionInstructionAsync({
+  const finalizeIxBase = await getFinalizeSessionInstructionAsync({
     payer: params.agent,
     vault: params.vault,
     session: sessionPda,
@@ -780,6 +1077,86 @@ export async function seal(params: SealParams): Promise<SealResult> {
     vaultTokenAccount,
     outputStablecoinAccount,
   });
+
+  // M3-01: feed the vault's other canonical stablecoin ATA(s) into finalize so
+  // the combined USDC+USDT stable_balance_floor sees the vault's FULL stablecoin
+  // holdings. On-chain Sources 1+2 only cover the session token + the output
+  // stablecoin, so a vault holding reserve in the OTHER stablecoin would
+  // under-count and falsely revert ErrStableFloorViolation. Only canonical ATAs
+  // count on-chain (M3-01 pin), so feeding exactly those is sufficient + minimal.
+  // Gated on stable_balance_floor > 0 — the default (no floor) adds no accounts
+  // and no RPC. Existence-checked + de-duped against named/fed metas.
+  let stablecoinFloorMetas: ReadonlyMeta[] = [];
+  // Coerce defensively: the resolver always decodes this as a bigint, but a
+  // hand-built cachedState could pass a number/null (the pending-mutation form
+  // of this field uses null). BigInt(x ?? 0n) gates correctly for all of them
+  // so the satisfier never SILENTLY skips when a floor is actually set.
+  if (BigInt(state.policy.stableBalanceFloor ?? 0n) > 0n) {
+    const usdcMintForFloor =
+      net === "devnet" ? USDC_MINT_DEVNET : USDC_MINT_MAINNET;
+    const usdtMintForFloor =
+      net === "devnet" ? USDT_MINT_DEVNET : USDT_MINT_MAINNET;
+    const alreadyPresent = new Set<Address>([
+      vaultTokenAccount,
+      ...(outputStablecoinAccount ? [outputStablecoinAccount] : []),
+      ...defiWritableReadonlyMetas.map((m) => m.address),
+    ]);
+    const floorCandidates = await deriveStablecoinFloorCandidates(
+      params.vault,
+      usdcMintForFloor,
+      usdtMintForFloor,
+      alreadyPresent,
+    );
+    if (floorCandidates.length > 0) {
+      try {
+        const fetchedFloor = await fetchEncodedAccounts(
+          params.rpc,
+          floorCandidates,
+        );
+        // fetchEncodedAccounts is contractually length-preserving; if a
+        // malformed RPC response ever returned fewer entries, the index-parallel
+        // existence filter would drop an ATA silently. Surface it (the drop is
+        // still fail-safe: a missing ATA only makes the floor stricter).
+        if (fetchedFloor.length !== floorCandidates.length) {
+          warnings.push(
+            `M3-01 stable-floor: RPC returned ${fetchedFloor.length} of ` +
+              `${floorCandidates.length} requested stablecoin ATA(s); any ` +
+              `omitted ATA is dropped from the floor (over-strict, never a bypass).`,
+          );
+        }
+        stablecoinFloorMetas = resolveStablecoinFloorMetas(
+          fetchedFloor,
+          floorCandidates,
+        );
+      } catch (err: unknown) {
+        // Resilient, NOT silent: the on-chain floor still enforces — feeding no
+        // extra ATA only makes it stricter (fail-safe), never a bypass. Surface
+        // a warning so a vault holding reserve in the OTHER stablecoin can
+        // explain a possible on-chain ErrStableFloorViolation. Mirrors the
+        // output-stablecoin ATA existence check above.
+        const cause = redactCause(err);
+        warnings.push(
+          `M3-01 stable-floor ATA resolution failed due to RPC error (${cause.message ?? cause.name ?? cause.code ?? "unknown"}). ` +
+            `Proceeding without the extra stablecoin ATA(s); if this vault holds ` +
+            `reserve in the non-session stablecoin, finalize may revert ` +
+            `ErrStableFloorViolation. Retry once the RPC is reachable.`,
+        );
+      }
+    }
+  }
+
+  // F-Q1a satisfier: finalize's per-recipient cap + floor sum walk the SAME
+  // DeFi metas and resolve them in finalize's own remaining_accounts, so the
+  // writable accounts must reach finalize too (validate and finalize each carry
+  // their own remaining_accounts).
+  const finalizeIx: Instruction = {
+    ...finalizeIxBase,
+    accounts: [
+      ...(finalizeIxBase.accounts ?? []),
+      ...defiWritableReadonlyMetas,
+      ...stablecoinFloorMetas,
+    ],
+  };
 
   // Step 10: Compose + compile + measure
   const blockhash =
@@ -903,10 +1280,31 @@ export async function seal(params: SealParams): Promise<SealResult> {
   // bare seal()) with exactly one invocation per seal.
   await invokeHook(params.hooks, "onBeforeSign", _hookCtx, compiledTx);
 
+  // AL3 — Phase 9 Batch I per-call intent digest. Computed over the
+  // user-approved (vault, agent, mint, amount, target_protocol, network,
+  // instructions[]) projection. Excludes wallet-side mutations (Compute
+  // Budget ixs prepended later by signers) so the digest reflects exactly
+  // what the user approved, not what the wallet wrapped around it.
+  const intentDigest = computeSealInputDigest({
+    vault: params.vault,
+    agent: params.agent.address,
+    tokenMint: params.tokenMint,
+    amount: params.amount,
+    targetProtocol: params.targetProtocol,
+    network: params.network,
+    instructions: defiInstructions,
+  });
+
+  // AL4 — Phase 9 Batch J network identity. CAIP-2 chain id + derived
+  // isMainnet boolean. The chain id is also bound into the AL3 digest
+  // above via the network_id byte, so a mainnet bundle cannot be
+  // replayed on devnet (and vice versa) without producing a different
+  // intentDigest.
+  const networkIdentity = deriveNetworkIdentity(params.network);
+
   return {
     ok: true,
     transaction: compiledTx,
-    isSpending: spending,
     warnings,
     txSizeBytes: byteLength,
     lastValidBlockHeight: blockhash.lastValidBlockHeight,
@@ -916,6 +1314,9 @@ export async function seal(params: SealParams): Promise<SealResult> {
       tokenBalance,
       knownRecipients,
     },
+    intentDigest,
+    network: networkIdentity.network,
+    isMainnet: networkIdentity.isMainnet,
   };
 }
 
@@ -976,6 +1377,26 @@ export interface SigilClientConfig {
    * throws `SigilSdkDomainError(SIGIL_ERROR__SDK__PLUGIN_REJECTED)`.
    */
   plugins?: readonly import("./plugin.js").SigilPolicyPlugin[];
+  /**
+   * AL2 mainnet confirmation gate (Phase 9 Batch K). Per Council
+   * D-3 this defaults to **`false`** in 0.16.x for back-compat;
+   * the default flips to `true` in v1.0.
+   *
+   * When `true` AND `network === "mainnet"`, every `executeAndConfirm`
+   * call requires the per-call opts to carry `mainnetConfirmed: true`
+   * or it throws `SIGIL_ERROR__SDK__MAINNET_CONFIRMATION_REQUIRED`
+   * with full context (vault, network, docs URL, opt-in snippet).
+   * Narrow on the string code; there is no numeric alias.
+   *
+   * When unset on a mainnet client, the SDK emits `console.warn` on
+   * every mainnet `executeAndConfirm` to telegraph the v1.0 flip.
+   * Set explicitly to `false` to silence the warning during your
+   * migration window.
+   *
+   * Devnet clients ignore this flag entirely — the gate never fires
+   * off-mainnet.
+   */
+  requireMainnetConfirmation?: boolean;
 }
 
 /**
@@ -1007,8 +1428,32 @@ export interface ClientSealOpts {
    * Defaults to a fresh `newCorrelationId()` if omitted.
    */
   correlationId?: string;
+  /**
+   * AL2 explicit mainnet confirmation (Phase 9 Batch K). Pair with
+   * `SigilClientConfig.requireMainnetConfirmation: true` to opt into
+   * the mainnet gate. When `true`, `executeAndConfirm` on a mainnet
+   * client proceeds; when `false` or undefined (with the gate enabled),
+   * throws `SIGIL_ERROR__SDK__MAINNET_CONFIRMATION_REQUIRED` (legacy
+   * numeric code 7020).
+   *
+   * Devnet clients ignore this flag entirely. Mainnet clients with the
+   * gate DISABLED (default in 0.16.x) only `console.warn` if this is
+   * undefined — they do not throw. Narrow rejections on the string
+   * code `SIGIL_ERROR__SDK__MAINNET_CONFIRMATION_REQUIRED`.
+   */
+  mainnetConfirmed?: boolean;
 }
 
+/**
+ * Result of `executeAndConfirm()` — a Sigil-sealed transaction that has been
+ * signed, sent, and confirmed on-chain.
+ *
+ * To consume on-chain events emitted by the sealed transaction (e.g.
+ * `OwnershipTransferAccepted`, `FreezeVaultEvent`, `SandwichIntegrityViolation`),
+ * fetch the transaction with `rpc.getTransaction(signature)` and parse the log
+ * messages against `generated/event-discriminators.ts`. Phase 7 + Phase 8 added
+ * 12 new event types; all are present in the discriminator map.
+ */
 export interface ExecuteResult {
   signature: string;
   sealResult: SealResult;
@@ -1129,6 +1574,20 @@ export function createSigilClient(config: SigilClientConfig): SigilClientApi {
   const vault = config.vault;
   const agent = config.agent;
   const network = config.network;
+  // §RP Batch K HIGH-2: snapshot AL2 flag at factory entry. Subsequent
+  // config.requireMainnetConfirmation mutations cannot disable the
+  // gate without recreating the client.
+  const requireMainnetConfirmation = config.requireMainnetConfirmation;
+  if (network !== "devnet" && network !== "mainnet") {
+    // §RP Batch K MEDIUM-1: runtime guard for JS / any-cast consumers
+    // that pass `cluster: "mainnet-beta"` etc. Type system catches it in
+    // pure TS but `.d.ts` doesn't help JS callers.
+    throw new SigilSdkDomainError(
+      SIGIL_ERROR__SDK__INVALID_CONFIG,
+      `SigilClientConfig.network must be 'devnet' or 'mainnet'; got ${String(network)}.`,
+      { context: { field: "network", expected: "'devnet' | 'mainnet'" } },
+    );
+  }
   const blockhashCache = new BlockhashCache(config.blockhashTtlMs);
   const localAltCache = new AltCache();
   const onErrorCallback = config.onError;
@@ -1205,6 +1664,61 @@ export function createSigilClient(config: SigilClientConfig): SigilClientApi {
     seal: clientSeal,
 
     async executeAndConfirm(instructions, opts) {
+      // AL2 mainnet confirmation gate (Phase 9 Batch K). Three states:
+      //   1. Devnet client: ignore the gate entirely — no throw, no warn.
+      //   2. Mainnet client + requireMainnetConfirmation: true:
+      //      - opts.mainnetConfirmed === true → proceed
+      //      - else → throw 7020 with full context
+      //   3. Mainnet client + requireMainnetConfirmation undefined (0.16.x
+      //      default per D-3):
+      //      - opts.mainnetConfirmed === undefined → console.warn (telegraphs
+      //        the v1.0 flip) and proceed
+      //      - opts.mainnetConfirmed set either way → proceed silently
+      //   4. Mainnet client + requireMainnetConfirmation: false → proceed
+      //      silently (explicit opt-out; no warn).
+      if (network === "mainnet") {
+        const gateEnabled = requireMainnetConfirmation === true;
+        const explicitOptOut = requireMainnetConfirmation === false;
+        const confirmed = opts.mainnetConfirmed === true;
+        if (gateEnabled && !confirmed) {
+          throw new SigilSdkDomainError(
+            SIGIL_ERROR__SDK__MAINNET_CONFIRMATION_REQUIRED,
+            "Mainnet confirmation required — pass `mainnetConfirmed: true` " +
+              "in the executeAndConfirm options or set " +
+              "`requireMainnetConfirmation: false` on the SigilClientConfig. " +
+              "Opt-in: executeAndConfirm(ixs, { ..., mainnetConfirmed: true }). " +
+              "Opt-out: createSigilClient({ ..., requireMainnetConfirmation: false }). " +
+              "Docs: https://github.com/Sigil-Trade/sigil/blob/main/sdk/kit/MIGRATION.md",
+            {
+              context: {
+                vault: vault.toString(),
+                network: "mainnet",
+              },
+            },
+          );
+        }
+        if (
+          !gateEnabled &&
+          !explicitOptOut &&
+          opts.mainnetConfirmed === undefined
+        ) {
+          // §RP Batch K LOW-2 fix: use the structured logger (respects
+          // config.logger) instead of raw console.warn so consumers who
+          // installed a custom logger (pino, OpenTelemetry, etc.) capture
+          // the warning in their pipeline.
+          getSigilModuleLogger().warn(
+            "[Sigil] @usesigil/kit 0.16.x defaults `requireMainnetConfirmation` to false. " +
+              "v1.0 will flip the default to true; mainnet `executeAndConfirm` calls without " +
+              "`mainnetConfirmed: true` will throw SIGIL_ERROR__SDK__MAINNET_CONFIRMATION_REQUIRED. " +
+              "Adopt the v1.0 default early by setting " +
+              "`requireMainnetConfirmation: true` on SigilClientConfig and passing " +
+              "`mainnetConfirmed: true` per call, OR silence this warning by explicitly setting " +
+              "`requireMainnetConfirmation: false`. " +
+              "See: https://github.com/Sigil-Trade/sigil/blob/main/sdk/kit/MIGRATION.md",
+          );
+        }
+      }
+
       // Sprint 2 B3: compose client-level and per-call hooks. Client hooks
       // run first at every stage (onBeforeBuild → ... → onFinalize), then
       // per-call hooks. composeHooks handles the conditional-merge when
@@ -1486,6 +2000,13 @@ export class SigilClient {
   private readonly blockhashCacheInstance: BlockhashCache;
   private readonly altCacheInstance: AltCache;
   private readonly onErrorCallback?: SigilClientConfig["onError"];
+  /**
+   * AL2 mainnet confirmation flag, snapshotted at construction (Phase 9
+   * Batch K §RP HIGH-2 fix). Captured by value so subsequent
+   * `config.requireMainnetConfirmation = ...` mutations cannot silently
+   * disable the gate post-construction.
+   */
+  private readonly requireMainnetConfirmation?: boolean;
   readonly rpc: Rpc<SolanaRpcApi>;
   readonly vault: Address;
   readonly agent: TransactionSigner;
@@ -1551,10 +2072,22 @@ export class SigilClient {
         { context: { field: "network", expected: "'devnet' | 'mainnet'" } },
       );
 
+    if (config.network !== "devnet" && config.network !== "mainnet") {
+      throw new SigilSdkDomainError(
+        SIGIL_ERROR__SDK__INVALID_CONFIG,
+        `SigilClientConfig.network must be 'devnet' or 'mainnet'; got ${String(config.network)}. Phase 9 Batch K §RP MEDIUM-1 hardens this against JS / any-cast bypass.`,
+        { context: { field: "network", expected: "'devnet' | 'mainnet'" } },
+      );
+    }
+
     this.rpc = config.rpc;
     this.vault = config.vault;
     this.agent = config.agent;
     this.network = config.network;
+    // §RP HIGH-2: snapshot AL2 flag at construction. Post-construction
+    // mutation of config.requireMainnetConfirmation cannot disable the
+    // gate without recreating the client.
+    this.requireMainnetConfirmation = config.requireMainnetConfirmation;
     this.blockhashCacheInstance = new BlockhashCache(config.blockhashTtlMs);
     this.altCacheInstance = new AltCache();
     this.onErrorCallback = config.onError;
@@ -1691,6 +2224,46 @@ export class SigilClient {
     instructions: Instruction[],
     opts: ClientSealOpts & { confirmOptions?: SendAndConfirmOptions },
   ): Promise<ExecuteResult> {
+    // §RP CRITICAL fix (Batch K): the legacy class path MUST mirror
+    // the AL2 gate from `createSigilClient.executeAndConfirm` — otherwise
+    // any consumer still on `SigilClient.create()` bypasses the gate on
+    // mainnet. Reuses the snapshotted requireMainnetConfirmation field
+    // captured at construction (§RP HIGH-2 fix).
+    if (this.network === "mainnet") {
+      const gateEnabled = this.requireMainnetConfirmation === true;
+      const explicitOptOut = this.requireMainnetConfirmation === false;
+      const confirmed = opts.mainnetConfirmed === true;
+      if (gateEnabled && !confirmed) {
+        throw new SigilSdkDomainError(
+          SIGIL_ERROR__SDK__MAINNET_CONFIRMATION_REQUIRED,
+          "Mainnet confirmation required — pass `mainnetConfirmed: true` " +
+            "in the executeAndConfirm options or set " +
+            "`requireMainnetConfirmation: false` on the SigilClientConfig. " +
+            "Opt-in: executeAndConfirm(ixs, { ..., mainnetConfirmed: true }). " +
+            "Opt-out: SigilClient.create({ ..., requireMainnetConfirmation: false }). " +
+            "Docs: https://github.com/Sigil-Trade/sigil/blob/main/sdk/kit/MIGRATION.md",
+          {
+            context: {
+              vault: this.vault.toString(),
+              network: "mainnet",
+            },
+          },
+        );
+      }
+      if (
+        !gateEnabled &&
+        !explicitOptOut &&
+        opts.mainnetConfirmed === undefined
+      ) {
+        getSigilModuleLogger().warn(
+          "[Sigil] @usesigil/kit 0.16.x defaults `requireMainnetConfirmation` to false. " +
+            "v1.0 will flip the default to true; mainnet `executeAndConfirm` calls without " +
+            "`mainnetConfirmed: true` will throw SIGIL_ERROR__SDK__MAINNET_CONFIRMATION_REQUIRED. " +
+            "See: https://github.com/Sigil-Trade/sigil/blob/main/sdk/kit/MIGRATION.md",
+        );
+      }
+    }
+
     try {
       const result = await this.seal(instructions, opts);
       const encoded = await signAndEncode(this.agent, result.transaction);

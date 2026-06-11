@@ -6,10 +6,10 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-sigil = "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL"
+sigil = "7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK"
 
 [programs.localnet]
-sigil = "4ZeVCqnjUgUtFrHHPG7jELUxvJeoVGHhGNgPrhBPwrHL"
+sigil = "7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK"
 # mock_defi is not registered here because it is not built by anchor build.
 # Its compiled .so lives as a committed fixture (tests/fixtures/mock-defi.so)
 # and is loaded directly by LiteSVM via addProgramFromFile. See root
@@ -23,4 +23,4 @@ cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
-test = "npx ts-mocha -p ./tsconfig.json -t 300000 tests/sigil.ts tests/jupiter-integration.ts tests/flash-trade-integration.ts tests/post-assertion-integration.ts"
+test = "npx ts-mocha -p ./tsconfig.json -t 300000 tests/sigil.ts tests/jupiter-integration.ts tests/flash-trade-integration.ts tests/missing-coverage.ts"

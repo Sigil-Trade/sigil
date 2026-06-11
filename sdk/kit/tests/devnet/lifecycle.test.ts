@@ -122,6 +122,42 @@ describe("Kit SDK Devnet — Vault Lifecycle", function () {
   it("queuePolicyUpdate + cancel via Codama builder (can't apply on devnet — 30min timelock)", async function () {
     const newCap = 1_000_000_000n; // $1000
 
+    // Phase 2 TA-19: re-compute the merged policy digest off-chain and bind
+    // it to the queue. We fetch live policy + vault so the projection is
+    // accurate; only daily_spending_cap_usd is changing in this test.
+    const { fetchAgentVault } =
+      await import("../../src/generated/accounts/agentVault.js");
+    const { fetchPolicyConfig } =
+      await import("../../src/generated/accounts/policyConfig.js");
+    const { computePolicyPreviewDigest } =
+      await import("../../src/policy/compute-policy-preview-digest.js");
+    const livePolicy = await fetchPolicyConfig(rpc, vault.policyAddress);
+    const liveVault = await fetchAgentVault(rpc, vault.vaultAddress);
+    const newPolicyPreviewDigest = computePolicyPreviewDigest({
+      dailySpendingCapUsd: newCap, // changed
+      maxTransactionSizeUsd: livePolicy.data.maxTransactionSizeUsd,
+      maxSlippageBps: livePolicy.data.maxSlippageBps,
+      developerFeeRate: livePolicy.data.developerFeeRate,
+      protocolMode: livePolicy.data.protocolMode,
+      protocols: livePolicy.data.protocols,
+      destinationMode: livePolicy.data.destinationMode,
+      allowedDestinations: livePolicy.data.allowedDestinations,
+      timelockDuration: livePolicy.data.timelockDuration,
+      sessionExpirySeconds: livePolicy.data.sessionExpirySeconds,
+      observeOnly: liveVault.data.observeOnly,
+      hasPostAssertions: livePolicy.data.hasPostAssertions,
+      // PEN-CROSS-2: created_at_slot is immutable post-init.
+      createdAtSlot: livePolicy.data.createdAtSlot,
+      // TA-05 (Phase 3): operating_hours is policy-owned.
+      operatingHours: livePolicy.data.operatingHours,
+      // TA-07/17 (Phase 3): pass-through from live policy.
+      autoPromoteGrays: livePolicy.data.autoPromoteGrays,
+      autoRevokeThreshold: livePolicy.data.autoRevokeThreshold,
+      // TA-12/14 (Phase 5): pass-through from live policy.
+      stableBalanceFloor: livePolicy.data.stableBalanceFloor,
+      perRecipientDailyCapUsd: livePolicy.data.perRecipientDailyCapUsd,
+    });
+
     const queueIx = await getQueuePolicyUpdateInstructionAsync({
       owner,
       vault: vault.vaultAddress,
@@ -137,6 +173,24 @@ describe("Kit SDK Devnet — Vault Lifecycle", function () {
       hasProtocolCaps: null,
       protocolCaps: null,
       destinationMode: null,
+      operatingHours: null,
+      // TA-12/14 (Phase 5): non-elevated path — pass null for fall-through.
+      stableBalanceFloor: null,
+      perRecipientDailyCapUsd: null,
+      // G6 (audit 2026-05-18 cosign opt-in): non-elevated path —
+      // pass null for fall-through. cosign opt-in is left at the
+      // initial-vault value for this lifecycle test.
+      cosignRequired: null,
+      // D-5 (Bucket 2 audit 2026-05-21, F-RP3-1): non-elevated path —
+      // pass null for fall-through. Owner sets cosign_session_pubkey via
+      // a dedicated elevated helper that verifies the new pubkey isn't a
+      // Sigil-protected PDA at queue time.
+      cosignSessionPubkey: null,
+      // F-Q6 (2026-06-02): non-elevated path — pass null for fall-through.
+      operatorGrantDelaySeconds: null,
+      // TA-09 (Phase 3): zero pubkey for non-elevated path.
+      cosignSession: "11111111111111111111111111111111" as unknown as Address,
+      newPolicyPreviewDigest,
     });
 
     await sendKitTransaction(rpc, owner, [queueIx as Instruction]);

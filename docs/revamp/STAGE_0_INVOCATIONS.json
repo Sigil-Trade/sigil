@@ -1,0 +1,197 @@
+{
+  "stage": "stage-0-baseline",
+  "branch": "revamp/v2-2026-05",
+  "session_started_utc": "2026-05-17T02:52:49Z",
+  "session_baseline_committed_utc": "2026-05-17T04:02:00Z",
+  "invocations": [
+    {
+      "phase": "B",
+      "kind": "Task",
+      "type": "ClaudeResearcher",
+      "description": "TA-K signed config registry prior-art (Lighthouse IdlCreateAccount squat, Codama IDL pin, Squads upgrade-key-signed)",
+      "timestamp_utc": "2026-05-17T02:55:00Z",
+      "output_path": "/private/tmp/claude-501/-Users-kalebrupe-Downloads-Middleware-Agent-Layer/6aedf4aa-8e4f-4e43-b845-1c8f4d2ae7aa/tasks/a87f68b1718e9f976.output",
+      "duration_ms": 135588
+    },
+    {
+      "phase": "B",
+      "kind": "Task",
+      "type": "CodexResearcher",
+      "description": "Codama IDL workflow + Anchor 0.32 IDL-diff tooling for CI guardrail",
+      "timestamp_utc": "2026-05-17T02:55:00Z",
+      "output_path": "/private/tmp/claude-501/-Users-kalebrupe-Downloads-Middleware-Agent-Layer/6aedf4aa-8e4f-4e43-b845-1c8f4d2ae7aa/tasks/aa146870edcf958e6.output",
+      "duration_ms": 226342
+    },
+    {
+      "phase": "B",
+      "kind": "Task",
+      "type": "GeminiResearcher",
+      "description": "Sample-driven 5-claim validator (Squads V4 ID, Lighthouse 14, Maestro swap_only, Codama determinism, AgentLayer envelope)",
+      "timestamp_utc": "2026-05-17T02:55:00Z",
+      "output_path": "/private/tmp/claude-501/-Users-kalebrupe-Downloads-Middleware-Agent-Layer/6aedf4aa-8e4f-4e43-b845-1c8f4d2ae7aa/tasks/a6cdbd7581a55604f.output",
+      "duration_ms": 133807,
+      "outcome": "2 VERIFIED, 2 MISMATCH, 1 SOURCE-NOT-FOUND — corrections applied to REVAMP_PLAN §0 and §1.2"
+    },
+    {
+      "phase": "C",
+      "kind": "Task",
+      "type": "Architect",
+      "description": "tier-model.mmd canonical Mermaid + 23-primitive dependency-graph audit",
+      "timestamp_utc": "2026-05-17T02:55:00Z",
+      "output_path": "/private/tmp/claude-501/-Users-kalebrupe-Downloads-Middleware-Agent-Layer/6aedf4aa-8e4f-4e43-b845-1c8f4d2ae7aa/tasks/ad2d2672a999e3d16.output",
+      "duration_ms": 679914,
+      "key_output": "Load-bearing 5 = K1, K6, K7, TA-10, TA-16. Deepest chain = TA-12→TA-13→TA-14. Highest-leverage single dep = K6 event emission."
+    },
+    {
+      "phase": "C",
+      "kind": "Skill",
+      "name": "full-output-enforcement",
+      "timestamp_utc": "2026-05-17T02:55:00Z"
+    },
+    {
+      "phase": "C",
+      "kind": "Skill",
+      "name": "Thinking",
+      "args": "FirstPrinciples + Council Debate on 16 TA load-bearing vs DiD + T1/T2/T3 boundaries + TierRegistry trust",
+      "timestamp_utc": "2026-05-17T03:00:00Z"
+    },
+    {
+      "phase": "C",
+      "kind": "Skill",
+      "name": "Security",
+      "args": "AC-1..AC-11 + T-21 + T-DoS-1/2 + T-K6-1 threat model context",
+      "timestamp_utc": "2026-05-17T03:00:00Z"
+    },
+    {
+      "phase": "C",
+      "kind": "Skill",
+      "name": "Research",
+      "args": "Reuse prior + 3 fresh researchers strategy",
+      "timestamp_utc": "2026-05-17T03:00:00Z"
+    },
+    {
+      "phase": "D",
+      "kind": "MCP",
+      "name": "mcp__context7__resolve-library-id",
+      "args": "Lighthouse Solana assertion types",
+      "timestamp_utc": "2026-05-17T03:00:00Z",
+      "outcome": "Returned web-app Lighthouse (Google), not Solana Lighthouse — used direct GitHub cite via GeminiResearcher instead"
+    },
+    {
+      "phase": "D",
+      "kind": "MCP",
+      "name": "mcp__context7__resolve-library-id",
+      "args": "Anchor 0.32 IDL instruction sysvar introspection",
+      "timestamp_utc": "2026-05-17T03:05:00Z",
+      "outcome": "Returned /websites/anchor-lang — used for Q1 IDL build modes"
+    },
+    {
+      "phase": "D",
+      "kind": "MCP",
+      "name": "mcp__context7__resolve-library-id",
+      "args": "Codama Solana IDL pin deterministic Anchor 0.30",
+      "timestamp_utc": "2026-05-17T03:05:00Z",
+      "outcome": "Returned /codama-idl/codama"
+    },
+    {
+      "phase": "D",
+      "kind": "MCP",
+      "name": "mcp__context7__resolve-library-id",
+      "args": "Squads V4 multisig program upgrade authority vault PDA",
+      "timestamp_utc": "2026-05-17T03:05:00Z",
+      "outcome": "Returned /websites/squads_so_main_development; V4 program ID SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf VERIFIED"
+    },
+    {
+      "phase": "D",
+      "kind": "MCP",
+      "name": "mcp__context7__query-docs",
+      "args": "Anchor IDL idl-build feature flag, instruction sysvar introspection",
+      "libraryId": "/websites/anchor-lang",
+      "timestamp_utc": "2026-05-17T03:05:00Z"
+    },
+    {
+      "phase": "D",
+      "kind": "MCP",
+      "name": "mcp__context7__query-docs",
+      "args": "Squads V4 program ID + autonomous mode + time_lock",
+      "libraryId": "/websites/squads_so_main_development",
+      "timestamp_utc": "2026-05-17T03:05:00Z"
+    },
+    {
+      "phase": "D",
+      "kind": "MCP",
+      "name": "mcp__context7__query-docs",
+      "args": "Codama Anchor 0.30+ IDL pin deterministic generation discriminator",
+      "libraryId": "/codama-idl/codama",
+      "timestamp_utc": "2026-05-17T03:05:00Z"
+    },
+    {
+      "phase": "F",
+      "kind": "Task",
+      "type": "pr-review-toolkit:code-reviewer",
+      "description": "§RP pass 1 — code-reviewer over 7 Stage 0 artifacts",
+      "timestamp_utc": "2026-05-17T03:20:00Z",
+      "output_path": "/Users/kalebrupe/Downloads/Middleware-Agent-Layer/agent-middleware/docs/revamp/STAGE_0_REVIEW/reviewer.md",
+      "findings": "21 CRIT+HIGH (9 CRIT + 12 HIGH) + 12 MED + 10 LOW = 43 total"
+    },
+    {
+      "phase": "F",
+      "kind": "Task",
+      "type": "pr-review-toolkit:silent-failure-hunter",
+      "description": "§RP pass 1 — silent-failure-hunter over 7 Stage 0 artifacts",
+      "timestamp_utc": "2026-05-17T03:20:00Z",
+      "output_path": "/Users/kalebrupe/Downloads/Middleware-Agent-Layer/agent-middleware/docs/revamp/STAGE_0_REVIEW/hunter.md",
+      "findings": "14 CRIT+HIGH (6 CRIT + 8 HIGH) + 9 MED + 6 LOW = 29 total"
+    },
+    {
+      "phase": "F",
+      "kind": "Task",
+      "type": "pr-review-toolkit:comment-analyzer",
+      "description": "§RP pass 1 — comment-analyzer (bonus) over 7 Stage 0 artifacts",
+      "timestamp_utc": "2026-05-17T03:20:00Z",
+      "output_path": "/Users/kalebrupe/Downloads/Middleware-Agent-Layer/agent-middleware/docs/revamp/STAGE_0_REVIEW/comments.md",
+      "findings": "4 CRIT + 5 MED + 1 LOW = 10 total"
+    },
+    {
+      "phase": "H",
+      "kind": "Task",
+      "type": "pr-review-toolkit:silent-failure-hunter",
+      "description": "§RP reverify pass 2 — silent-failure-hunter reverifies code-reviewer's findings + sweep for new",
+      "timestamp_utc": "2026-05-17T03:48:00Z",
+      "output_path": "/Users/kalebrupe/Downloads/Middleware-Agent-Layer/agent-middleware/docs/revamp/STAGE_0_REVIEW/reverify.md (Sections 1+2)",
+      "findings": "21 reviewer-finding verdicts (9 CONFIRMED, 4 INCORRECT, 8 MISSING/DEFERRED) + 4 NEW-CRIT + 4 NEW-HIGH"
+    },
+    {
+      "phase": "H",
+      "kind": "Task",
+      "type": "pr-review-toolkit:code-reviewer",
+      "description": "§RP reverify pass 2 — code-reviewer reverifies silent-failure-hunter's findings + sweep for new",
+      "timestamp_utc": "2026-05-17T03:48:00Z",
+      "output_path": "/Users/kalebrupe/Downloads/Middleware-Agent-Layer/agent-middleware/docs/revamp/STAGE_0_REVIEW/reverify.md (Sections 3+4)",
+      "findings": "14 hunter-finding verdicts (6 CONFIRMED, 1 INCORRECT, 7 MISSING/DEFERRED) + 3 NEW-CRIT + 3 NEW-HIGH"
+    }
+  ],
+  "rp_compliance": {
+    "code_reviewer_crit_high_count": 21,
+    "silent_failure_hunter_crit_high_count": 14,
+    "rp_minimum_per_reviewer": 10,
+    "rp_minimum_satisfied": true,
+    "rp_reverify_swap_executed": true,
+    "rp_iteration_count": 2,
+    "rp_iteration_bound_rationale": "iter-2 closes Stage 0 §RP. All iter-1 CRIT + all iter-2 NEW-CRIT fixed. Residual MED+LOW + Stage 2+ deferred items tracked in REVAMP_PLAN §9 Stage 0 Fix Log for Stage 1+ §RP review."
+  },
+  "verification_gates": {
+    "line_counts": {
+      "REVAMP_PLAN.md": "≥800",
+      "THREAT_MODEL_V2.md": "≥800",
+      "ACCEPTANCE_V2.md": "≥800"
+    },
+    "tier_model_mmd_embedded_in_3_docs": true,
+    "interfaces_v2_id_registry_complete": true,
+    "council_outputs_locked": true,
+    "funding_signature_pending": true,
+    "ci_workflow_exists": ".github/workflows/revamp-ci.yml",
+    "diff_scope_clean": "verified in STAGE_0_DIFF.txt"
+  },
+  "manifest_signature": "Claude (Opus 4.7) + Kaleb Rupe, 2026-05-17"
+}

@@ -9,8 +9,9 @@
  * 2. Sign the hash with the API private key (P-256 ECDSA)
  * 3. Send the stamp in the X-Stamp header as JSON
  *
- * Works with shieldWallet() out of the box:
- *   const wallet = shieldWallet(await turnkey({ organizationId, apiKeyId, apiPrivateKey }), { maxSpend: '500 USDC/day' });
+ * Works with shield() out of the box:
+ *   const wallet = await turnkey({ organizationId, apiKeyId, apiPrivateKey });
+ *   const shieldCtx = shield({ maxSpend: '500 USDC/day' });
  */
 
 import { PublicKey, Transaction, VersionedTransaction } from "@solana/web3.js";
@@ -245,7 +246,7 @@ export class TurnkeyRESTClient implements TurnkeySDKClient {
  *
  * Use the static `create()` method to instantiate:
  *   const wallet = await TurnkeyWallet.create({ organizationId: '...', apiKeyId: '...', apiPrivateKey: '...' });
- *   const shielded = shieldWallet(wallet, { maxSpend: '500 USDC/day' });
+ *   const shieldCtx = shield({ maxSpend: '500 USDC/day' });
  */
 export class TurnkeyWallet implements WalletLike {
   readonly publicKey: PublicKey;

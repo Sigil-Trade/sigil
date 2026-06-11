@@ -28,8 +28,18 @@ import {
 import { expect } from "chai";
 import BN from "bn.js";
 import {
+  fetchAndComputeQueueDigest,
+  siblingHandlerDigest,
+} from "./helpers/policy-digest";
+import {
+  buildExpectedIntentDigest,
+  digestAsArgs,
+} from "./helpers/intent-digest-fixture";
+import {
   createSurfpoolTestEnv,
   SurfpoolTestEnv,
+  MOCK_DEFI_PROGRAM_ID,
+  buildMockDefiNoopIx,
   DEVNET_USDC_MINT,
   DEVNET_USDT_MINT,
   PROTOCOL_TREASURY,
@@ -51,11 +61,12 @@ import {
   derivePDAs,
   deriveSessionPda,
   deriveOverlayPda,
-  deriveEscrowPda,
   nextVaultId,
   surfnetRpc,
   ensureMintExists,
   setupVaultWithAgent,
+  seatOperatorAgent,
+  initVaultInline,
   expectTxError,
   VaultSetupResult,
   VersionedTxResult,
@@ -138,32 +149,16 @@ describe("surfpool-integration", function () {
     });
 
     it("creates vault with correct state", async () => {
-      const dailyCap = new BN(500_000_000); // 500 USDC
-      const maxTxSize = new BN(100_000_000); // 100 USDC
-
-      await program.methods
-        .initializeVault(
-          vaultId,
-          dailyCap,
-          maxTxSize,
-          0, // protocolMode: all
-          [],
-          0, // developer_fee_rate
-          100, // maxSlippageBps (1%)
-          new BN(1800), // timelockDuration
-          [], // allowedDestinations
-          [], // protocolCaps
-        )
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: vaultPda,
-          policy: policyPda,
-          tracker: trackerPda,
-          agentSpendOverlay: overlayPda,
-          feeDestination: feeDestination.publicKey,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
+      await initVaultInline(
+        env,
+        program,
+        vaultId,
+        vaultPda,
+        policyPda,
+        trackerPda,
+        overlayPda,
+        feeDestination.publicKey,
+      );
 
       const vault = await program.account.agentVault.fetch(vaultPda);
       expect(vault.owner.toString()).to.equal(env.payer.publicKey.toString());
@@ -173,14 +168,16 @@ describe("surfpool-integration", function () {
 
     it("registers agent and deposits USDC", async () => {
       // Register agent
-      await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: vaultPda,
-          agentSpendOverlay: overlayPda,
-        } as any)
-        .rpc();
+      // F-Q6: OPERATOR (FULL_CAPABILITY=2) on a single-key vault must be seated
+      // via the queue → time-travel → apply timelock path (an instant
+      // register_agent reverts with ErrOperatorGrantRequiresTimelock, 6107).
+      await seatOperatorAgent(
+        env,
+        program,
+        env.payer.publicKey,
+        vaultPda,
+        agent.publicKey,
+      );
 
       const vault = await program.account.agentVault.fetch(vaultPda);
       expect(vault.agents[0].pubkey.toString()).to.equal(
@@ -226,8 +223,18 @@ describe("surfpool-integration", function () {
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
           new BN(50_000_000), // 50 USDC
-          program.programId, // dummy protocol
+          MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, policyPda),
+          new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: vaultPda,
+              agent: agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(50_000_000),
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
+            }),
+          ),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -245,6 +252,9 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        .remainingAccounts([
+          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -267,7 +277,7 @@ describe("surfpool-integration", function () {
 
       const result = await sendVersionedTx(
         env.connection,
-        [validateIx, finalizeIx],
+        [validateIx, buildMockDefiNoopIx(agent.publicKey), finalizeIx],
         agent,
       );
 
@@ -319,38 +329,27 @@ describe("surfpool-integration", function () {
       );
 
       // Initialize vault
-      await program.methods
-        .initializeVault(
-          vaultId,
-          new BN(500_000_000),
-          new BN(100_000_000),
-          0,
-          [],
-          0,
-          100,
-          new BN(1800),
-          [],
-          [], // protocolCaps
-        )
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: vaultPda,
-          policy: policyPda,
-          tracker: trackerPda,
-          agentSpendOverlay: overlayPda,
-          feeDestination: feeDestination.publicKey,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
+      await initVaultInline(
+        env,
+        program,
+        vaultId,
+        vaultPda,
+        policyPda,
+        trackerPda,
+        overlayPda,
+        feeDestination.publicKey,
+      );
 
-      await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: vaultPda,
-          agentSpendOverlay: overlayPda,
-        } as any)
-        .rpc();
+      // F-Q6: OPERATOR (FULL_CAPABILITY=2) on a single-key vault must be seated
+      // via the queue → time-travel → apply timelock path (an instant
+      // register_agent reverts with ErrOperatorGrantRequiresTimelock, 6107).
+      await seatOperatorAgent(
+        env,
+        program,
+        env.payer.publicKey,
+        vaultPda,
+        agent.publicKey,
+      );
 
       vaultUsdcAta = getAssociatedTokenAddressSync(
         DEVNET_USDC_MINT,
@@ -389,8 +388,18 @@ describe("surfpool-integration", function () {
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
           new BN(10_000_000), // 10 USDC
-          program.programId,
+          MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, policyPda),
+          new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: vaultPda,
+              agent: agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(10_000_000),
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
+            }),
+          ),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -408,6 +417,9 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        .remainingAccounts([
+          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -431,7 +443,7 @@ describe("surfpool-integration", function () {
       // Should succeed — session is created and used in same transaction
       const result = await sendVersionedTx(
         env.connection,
-        [validateIx, finalizeIx],
+        [validateIx, buildMockDefiNoopIx(agent.publicKey), finalizeIx],
         agent,
       );
       expect(result.signature).to.be.a("string");
@@ -451,8 +463,18 @@ describe("surfpool-integration", function () {
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
           new BN(10_000_000),
-          program.programId,
+          MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, policyPda),
+          new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: vaultPda,
+              agent: agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(10_000_000),
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
+            }),
+          ),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -470,11 +492,18 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        .remainingAccounts([
+          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       // Without finalize in the tx, should get MissingFinalizeInstruction error
       try {
-        await sendVersionedTx(env.connection, [validateIx], agent);
+        await sendVersionedTx(
+          env.connection,
+          [validateIx, buildMockDefiNoopIx(agent.publicKey)],
+          agent,
+        );
         expect.fail("Should have rejected — no finalize instruction");
       } catch (err: any) {
         const errStr = err.message || JSON.stringify(err);
@@ -501,8 +530,18 @@ describe("surfpool-integration", function () {
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
           new BN(5_000_000), // 5 USDC
-          program.programId,
+          MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, policyPda),
+          new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: vaultPda,
+              agent: agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(5_000_000),
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
+            }),
+          ),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -520,6 +559,9 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        .remainingAccounts([
+          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -542,7 +584,7 @@ describe("surfpool-integration", function () {
 
       const result = await sendVersionedTx(
         env.connection,
-        [validateIx, finalizeIx],
+        [validateIx, buildMockDefiNoopIx(agent.publicKey), finalizeIx],
         agent,
       );
       expect(result.signature).to.be.a("string");
@@ -584,38 +626,27 @@ describe("surfpool-integration", function () {
         program.programId,
       );
 
-      await program.methods
-        .initializeVault(
-          vaultId,
-          new BN(500_000_000),
-          new BN(100_000_000),
-          0,
-          [],
-          0,
-          100,
-          new BN(1800),
-          [],
-          [], // protocolCaps
-        )
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: vaultPda,
-          policy: policyPda,
-          tracker: trackerPda,
-          agentSpendOverlay: overlayPda,
-          feeDestination: feeDestination.publicKey,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
+      await initVaultInline(
+        env,
+        program,
+        vaultId,
+        vaultPda,
+        policyPda,
+        trackerPda,
+        overlayPda,
+        feeDestination.publicKey,
+      );
 
-      await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: vaultPda,
-          agentSpendOverlay: overlayPda,
-        } as any)
-        .rpc();
+      // F-Q6: OPERATOR (FULL_CAPABILITY=2) on a single-key vault must be seated
+      // via the queue → time-travel → apply timelock path (an instant
+      // register_agent reverts with ErrOperatorGrantRequiresTimelock, 6107).
+      await seatOperatorAgent(
+        env,
+        program,
+        env.payer.publicKey,
+        vaultPda,
+        agent.publicKey,
+      );
 
       vaultUsdcAta = getAssociatedTokenAddressSync(
         DEVNET_USDC_MINT,
@@ -654,8 +685,18 @@ describe("surfpool-integration", function () {
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
           new BN(25_000_000), // 25 USDC
-          program.programId,
+          MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, policyPda),
+          new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: vaultPda,
+              agent: agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(25_000_000),
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
+            }),
+          ),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -673,6 +714,9 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        .remainingAccounts([
+          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -693,7 +737,11 @@ describe("surfpool-integration", function () {
         })
         .instruction();
 
-      await sendVersionedTx(env.connection, [validateIx, finalizeIx], agent);
+      await sendVersionedTx(
+        env.connection,
+        [validateIx, buildMockDefiNoopIx(agent.publicKey), finalizeIx],
+        agent,
+      );
 
       const vault = await program.account.agentVault.fetch(vaultPda);
       expect(vault.totalTransactions.toNumber()).to.equal(1);
@@ -721,6 +769,16 @@ describe("surfpool-integration", function () {
           new BN(25_000_000), // 25 USDC (valid amount)
           program.programId,
           await readPolicyVersion(program, policyPda),
+          new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: vaultPda,
+              agent: rogueAgent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(25_000_000),
+              targetProtocol: program.programId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: rogueAgent.publicKey,
@@ -794,8 +852,18 @@ describe("surfpool-integration", function () {
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
           new BN(30_000_000), // 30 USDC
-          program.programId,
+          MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, policyPda),
+          new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: vaultPda,
+              agent: agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(30_000_000),
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
+            }),
+          ),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -813,6 +881,9 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        .remainingAccounts([
+          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -833,7 +904,11 @@ describe("surfpool-integration", function () {
         })
         .instruction();
 
-      await sendVersionedTx(env.connection, [validateIx, finalizeIx], agent);
+      await sendVersionedTx(
+        env.connection,
+        [validateIx, buildMockDefiNoopIx(agent.publicKey), finalizeIx],
+        agent,
+      );
 
       const vault = await program.account.agentVault.fetch(vaultPda);
       expect(vault.totalTransactions.toNumber()).to.equal(2);
@@ -877,38 +952,27 @@ describe("surfpool-integration", function () {
         program.programId,
       );
 
-      await program.methods
-        .initializeVault(
-          vaultId,
-          new BN(500_000_000),
-          new BN(100_000_000),
-          0,
-          [],
-          0,
-          100,
-          new BN(1800),
-          [],
-          [], // protocolCaps
-        )
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: vaultPda,
-          policy: policyPda,
-          tracker: trackerPda,
-          agentSpendOverlay: overlayPda,
-          feeDestination: feeDestination.publicKey,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
+      await initVaultInline(
+        env,
+        program,
+        vaultId,
+        vaultPda,
+        policyPda,
+        trackerPda,
+        overlayPda,
+        feeDestination.publicKey,
+      );
 
-      await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: vaultPda,
-          agentSpendOverlay: overlayPda,
-        } as any)
-        .rpc();
+      // F-Q6: OPERATOR (FULL_CAPABILITY=2) on a single-key vault must be seated
+      // via the queue → time-travel → apply timelock path (an instant
+      // register_agent reverts with ErrOperatorGrantRequiresTimelock, 6107).
+      await seatOperatorAgent(
+        env,
+        program,
+        env.payer.publicKey,
+        vaultPda,
+        agent.publicKey,
+      );
     });
 
     it("funds vault with USDC via surfnet_setTokenAccount", async () => {
@@ -970,8 +1034,18 @@ describe("surfpool-integration", function () {
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
           new BN(amount),
-          program.programId,
+          MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, policyPda),
+          new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: vaultPda,
+              agent: agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(amount),
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
+            }),
+          ),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -989,6 +1063,9 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        .remainingAccounts([
+          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -1009,7 +1086,11 @@ describe("surfpool-integration", function () {
         })
         .instruction();
 
-      await sendVersionedTx(env.connection, [validateIx, finalizeIx], agent);
+      await sendVersionedTx(
+        env.connection,
+        [validateIx, buildMockDefiNoopIx(agent.publicKey), finalizeIx],
+        agent,
+      );
 
       // Check protocol treasury balance increased
       const treasuryBalance =
@@ -1055,38 +1136,27 @@ describe("surfpool-integration", function () {
         program.programId,
       );
 
-      await program.methods
-        .initializeVault(
-          vaultId,
-          new BN(500_000_000),
-          new BN(100_000_000),
-          0,
-          [],
-          0,
-          100,
-          new BN(1800),
-          [],
-          [], // protocolCaps
-        )
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: vaultPda,
-          policy: policyPda,
-          tracker: trackerPda,
-          agentSpendOverlay: overlayPda,
-          feeDestination: feeDestination.publicKey,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
+      await initVaultInline(
+        env,
+        program,
+        vaultId,
+        vaultPda,
+        policyPda,
+        trackerPda,
+        overlayPda,
+        feeDestination.publicKey,
+      );
 
-      await program.methods
-        .registerAgent(agent.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: vaultPda,
-          agentSpendOverlay: overlayPda,
-        } as any)
-        .rpc();
+      // F-Q6: OPERATOR (FULL_CAPABILITY=2) on a single-key vault must be seated
+      // via the queue → time-travel → apply timelock path (an instant
+      // register_agent reverts with ErrOperatorGrantRequiresTimelock, 6107).
+      await seatOperatorAgent(
+        env,
+        program,
+        env.payer.publicKey,
+        vaultPda,
+        agent.publicKey,
+      );
 
       vaultUsdcAta = getAssociatedTokenAddressSync(
         DEVNET_USDC_MINT,
@@ -1125,8 +1195,18 @@ describe("surfpool-integration", function () {
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
           new BN(20_000_000),
-          program.programId,
+          MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, policyPda),
+          new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: vaultPda,
+              agent: agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(20_000_000),
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
+            }),
+          ),
         )
         .accountsPartial({
           agent: agent.publicKey,
@@ -1144,6 +1224,9 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        .remainingAccounts([
+          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -1166,7 +1249,7 @@ describe("surfpool-integration", function () {
 
       const result = await sendVersionedTx(
         env.connection,
-        [validateIx, finalizeIx],
+        [validateIx, buildMockDefiNoopIx(agent.publicKey), finalizeIx],
         agent,
       );
 
@@ -1202,29 +1285,17 @@ describe("surfpool-integration", function () {
         program.programId,
       );
 
-      const tx = await program.methods
-        .initializeVault(
-          profileVaultId,
-          new BN(500_000_000),
-          new BN(100_000_000),
-          0,
-          [],
-          0,
-          100,
-          new BN(1800),
-          [],
-          [], // protocolCaps
-        )
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: profilePdas.vaultPda,
-          policy: profilePdas.policyPda,
-          tracker: profilePdas.trackerPda,
-          agentSpendOverlay: profileOverlay,
-          feeDestination: feeDestination.publicKey,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
+      const initResult = await initVaultInline(
+        env,
+        program,
+        profileVaultId,
+        profilePdas.vaultPda,
+        profilePdas.policyPda,
+        profilePdas.trackerPda,
+        profileOverlay,
+        feeDestination.publicKey,
+      );
+      const tx = initResult.signature;
 
       try {
         const profile = await profileTransaction(
@@ -1280,29 +1351,16 @@ describe("surfpool-integration", function () {
         program.programId,
       );
 
-      await program.methods
-        .initializeVault(
-          testVaultId,
-          new BN(500_000_000),
-          new BN(100_000_000),
-          0,
-          [],
-          0,
-          100,
-          new BN(1800),
-          [],
-          [], // protocolCaps
-        )
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: pdas.vaultPda,
-          policy: pdas.policyPda,
-          tracker: pdas.trackerPda,
-          agentSpendOverlay: persistOverlay,
-          feeDestination: feeDestination.publicKey,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
+      await initVaultInline(
+        env,
+        program,
+        testVaultId,
+        pdas.vaultPda,
+        pdas.policyPda,
+        pdas.trackerPda,
+        persistOverlay,
+        feeDestination.publicKey,
+      );
 
       // State persists — fetch should work
       const vault = await program.account.agentVault.fetch(pdas.vaultPda);
@@ -1333,29 +1391,16 @@ describe("surfpool-integration", function () {
         program.programId,
       );
 
-      await program.methods
-        .initializeVault(
-          preResetVaultId,
-          new BN(500_000_000),
-          new BN(100_000_000),
-          0,
-          [],
-          0,
-          100,
-          new BN(1800),
-          [],
-          [], // protocolCaps
-        )
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: pdas.vaultPda,
-          policy: pdas.policyPda,
-          tracker: pdas.trackerPda,
-          agentSpendOverlay: resetOverlay,
-          feeDestination: feeDestination.publicKey,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
+      await initVaultInline(
+        env,
+        program,
+        preResetVaultId,
+        pdas.vaultPda,
+        pdas.policyPda,
+        pdas.trackerPda,
+        resetOverlay,
+        feeDestination.publicKey,
+      );
 
       // Reset network
       await resetNetwork(env.connection);
@@ -1401,29 +1446,16 @@ describe("surfpool-integration", function () {
         program.programId,
       );
 
-      await program.methods
-        .initializeVault(
-          postResetVaultId,
-          new BN(500_000_000),
-          new BN(100_000_000),
-          0,
-          [],
-          0,
-          100,
-          new BN(1800),
-          [],
-          [], // protocolCaps
-        )
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: pdas.vaultPda,
-          policy: pdas.policyPda,
-          tracker: pdas.trackerPda,
-          agentSpendOverlay: postResetOverlay,
-          feeDestination: feeDestination.publicKey,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
+      await initVaultInline(
+        env,
+        program,
+        postResetVaultId,
+        pdas.vaultPda,
+        pdas.policyPda,
+        pdas.trackerPda,
+        postResetOverlay,
+        feeDestination.publicKey,
+      );
 
       const vault = await program.account.agentVault.fetch(pdas.vaultPda);
       expect(vault.vaultId.toNumber()).to.equal(postResetVaultId.toNumber());
@@ -1459,36 +1491,23 @@ describe("surfpool-integration", function () {
       );
 
       // Create vault WITH timelock (1800 seconds = MIN_TIMELOCK_DURATION)
-      await program.methods
-        .initializeVault(
-          vaultId,
-          new BN(500_000_000),
-          new BN(100_000_000),
-          0,
-          [],
-          0,
-          100,
-          new BN(1800), // 1800s timelock (MIN_TIMELOCK_DURATION)
-          [],
-          [], // protocolCaps
-        )
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: vaultPda,
-          policy: policyPda,
-          tracker: trackerPda,
-          agentSpendOverlay: timelockOverlay,
-          feeDestination: feeDestination.publicKey,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
+      await initVaultInline(
+        env,
+        program,
+        vaultId,
+        vaultPda,
+        policyPda,
+        trackerPda,
+        timelockOverlay,
+        feeDestination.publicKey,
+      );
     });
 
     it("queue + time travel + apply succeeds", async () => {
       // Queue policy update
       await program.methods
         .queuePolicyUpdate(
-          new BN(200_000_000), // new daily cap: 200 USDC
+          new BN(200_000_000),
           null,
           null,
           null,
@@ -1496,10 +1515,20 @@ describe("surfpool-integration", function () {
           null,
           null,
           null,
-          null, // sessionExpirySeconds
-          null, // hasProtocolCaps
-          null, // protocolCaps
-          null, // destinationMode
+          null,
+          null,
+          null,
+          null,
+          null, // operating_hours (TA-05 Phase 3)
+          null, // stable_balance_floor (TA-12 Phase 5 — pass-through)
+          null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
+          null, // cosign_required (G6 audit 2026-05-18 — pass-through, default off)
+          null, // cosign_session_pubkey (D-5: pass-through)
+          null, // operator_grant_delay_seconds (D-5: pass-through)
+          PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
+          await fetchAndComputeQueueDigest(program, policyPda, vaultPda, {
+            dailySpendingCapUsd: new BN(200_000_000),
+          }), // newPolicyPreviewDigest (Phase 2 TA-19)
         )
         .accounts({
           owner: env.payer.publicKey,
@@ -1551,10 +1580,20 @@ describe("surfpool-integration", function () {
           null,
           null,
           null,
-          null, // sessionExpirySeconds
-          null, // hasProtocolCaps
-          null, // protocolCaps
-          null, // destinationMode
+          null,
+          null,
+          null,
+          null,
+          null, // operating_hours (TA-05 Phase 3)
+          null, // stable_balance_floor (TA-12 Phase 5 — pass-through)
+          null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
+          null, // cosign_required (G6 audit 2026-05-18 — pass-through, default off)
+          null, // cosign_session_pubkey (D-5: pass-through)
+          null, // operator_grant_delay_seconds (D-5: pass-through)
+          PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
+          await fetchAndComputeQueueDigest(program, policyPda, vaultPda, {
+            dailySpendingCapUsd: new BN(300_000_000),
+          }), // newPolicyPreviewDigest (Phase 2 TA-19)
         )
         .accounts({
           owner: env.payer.publicKey,
@@ -1688,8 +1727,12 @@ describe("surfpool-integration", function () {
         (10_000_000 * PROTOCOL_FEE_RATE) / FEE_RATE_DENOMINATOR,
       );
 
+      const transferVersion = await readPolicyVersion(
+        program,
+        transferSetup.policyPda,
+      );
       const transferIx = await program.methods
-        .agentTransfer(transferAmount, new BN(0))
+        .agentTransfer(transferAmount, transferVersion)
         .accounts({
           agent: transferSetup.agent.publicKey,
           vault: transferSetup.vaultPda,
@@ -1757,16 +1800,19 @@ describe("surfpool-integration", function () {
     before(async () => {
       setup = await setupVaultWithAgent(env, program);
 
-      // Register a second agent for pause isolation tests
+      // Register a second agent for pause isolation tests. F-Q6: OPERATOR on a
+      // single-key vault is seated via the queue → time-travel → apply timelock
+      // path (instant register reverts with ErrOperatorGrantRequiresTimelock,
+      // 6107). agent2 must be a true OPERATOR — the isolation test exercises its
+      // ability to operate, so Observer would not suffice.
       agent2 = await createWallet(env.connection, "agent2", 10);
-      await program.methods
-        .registerAgent(agent2.publicKey, FULL_CAPABILITY, new BN(0))
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: setup.vaultPda,
-          agentSpendOverlay: setup.overlayPda,
-        } as any)
-        .rpc();
+      await seatOperatorAgent(
+        env,
+        program,
+        env.payer.publicKey,
+        setup.vaultPda,
+        agent2.publicKey,
+      );
     });
 
     it("freeze_vault blocks validate+finalize", async () => {
@@ -1794,6 +1840,16 @@ describe("surfpool-integration", function () {
           new BN(10_000_000),
           program.programId,
           await readPolicyVersion(program, setup.policyPda),
+          new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: setup.vaultPda,
+              agent: setup.agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(10_000_000),
+              targetProtocol: program.programId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: setup.agent.publicKey,
@@ -1840,6 +1896,15 @@ describe("surfpool-integration", function () {
     });
 
     it("reactivate_vault restores operations", async () => {
+      // Phase 8 Batch 5: prior it() froze vault; advance past 5-min reactivate
+      // cooldown (ErrReactivateCooldownActive 6097) via Surfnet time travel.
+      {
+        const clock = await getClock(env.connection);
+        await timeTravel(env.connection, {
+          absoluteTimestamp: (clock.timestamp + 301) * 1000,
+        });
+      }
+
       await program.methods
         .reactivateVault(null, null)
         .accounts({
@@ -1862,8 +1927,18 @@ describe("surfpool-integration", function () {
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
           new BN(5_000_000),
-          program.programId,
+          MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, setup.policyPda),
+          new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: setup.vaultPda,
+              agent: setup.agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(5_000_000),
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
+            }),
+          ),
         )
         .accountsPartial({
           agent: setup.agent.publicKey,
@@ -1881,6 +1956,9 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: setup.overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        .remainingAccounts([
+          { pubkey: setup.agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -1903,50 +1981,44 @@ describe("surfpool-integration", function () {
 
       const result = await sendVersionedTx(
         env.connection,
-        [validateIx, finalizeIx],
+        [validateIx, buildMockDefiNoopIx(setup.agent.publicKey), finalizeIx],
         setup.agent,
       );
       expect(result.signature).to.be.a("string");
     });
 
     it("non-owner cannot reactivate frozen vault", async () => {
-      // Freeze first
+      // Dedicated vault: freezing the shared `setup` vault here used to leak a
+      // frozen state into the pause/unpause tests below (their fragile cleanup
+      // reactivate could silently fail), so this test owns its vault and never
+      // touches `setup`.
+      const fv = await setupVaultWithAgent(env, program);
       await program.methods
         .freezeVault()
         .accounts({
           owner: env.payer.publicKey,
-          vault: setup.vaultPda,
+          vault: fv.vaultPda,
         } as any)
         .rpc();
 
-      // Non-owner (agent) tries to reactivate
+      // Non-owner (the agent) tries to reactivate. The `has_one = owner @
+      // SigilError::UnauthorizedOwner` constraint (reactivate_vault.rs:20) fires
+      // during account validation → UnauthorizedOwner (6002), which overrides
+      // the generic Anchor ConstraintHasOne.
       const reactivateIx = await program.methods
         .reactivateVault(null, null)
         .accounts({
-          owner: setup.agent.publicKey,
-          vault: setup.vaultPda,
+          owner: fv.agent.publicKey,
+          vault: fv.vaultPda,
         } as any)
         .instruction();
 
       await expectTxError(
         env.connection,
         [reactivateIx],
-        setup.agent,
-        "2006", // Anchor ConstraintHasOne — framework error, not in SIGIL_ERROR_NAMES
+        fv.agent,
+        "UnauthorizedOwner",
       );
-
-      // Unfreeze for subsequent tests (must succeed or cascade fails)
-      try {
-        await program.methods
-          .reactivateVault(null, null)
-          .accounts({
-            owner: env.payer.publicKey,
-            vault: setup.vaultPda,
-          } as any)
-          .rpc();
-      } catch {
-        // Vault may already be unfrozen if test ordering changes
-      }
     });
 
     it("pause_agent blocks that agent", async () => {
@@ -1962,7 +2034,8 @@ describe("surfpool-integration", function () {
       const agentEntry = vault.agents.find(
         (a: any) => a.pubkey.toString() === setup.agent.publicKey.toString(),
       );
-      expect(agentEntry.paused).to.equal(true);
+      expect(agentEntry, "agent must be registered").to.exist;
+      expect(agentEntry!.paused).to.equal(true);
 
       // Agent's composed TX should fail
       const sessionPda = deriveSessionPda(
@@ -1977,6 +2050,16 @@ describe("surfpool-integration", function () {
           new BN(5_000_000),
           program.programId,
           await readPolicyVersion(program, setup.policyPda),
+          new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: setup.vaultPda,
+              agent: setup.agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(5_000_000),
+              targetProtocol: program.programId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: setup.agent.publicKey,
@@ -2035,8 +2118,18 @@ describe("surfpool-integration", function () {
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
           new BN(5_000_000),
-          program.programId,
+          MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, setup.policyPda),
+          new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: setup.vaultPda,
+              agent: agent2.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(5_000_000),
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
+            }),
+          ),
         )
         .accountsPartial({
           agent: agent2.publicKey,
@@ -2054,6 +2147,9 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: setup.overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        .remainingAccounts([
+          { pubkey: agent2.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -2076,7 +2172,7 @@ describe("surfpool-integration", function () {
 
       const result = await sendVersionedTx(
         env.connection,
-        [validateIx, finalizeIx],
+        [validateIx, buildMockDefiNoopIx(agent2.publicKey), finalizeIx],
         agent2,
       );
       expect(result.signature).to.be.a("string");
@@ -2095,7 +2191,8 @@ describe("surfpool-integration", function () {
       const agentEntry = vault.agents.find(
         (a: any) => a.pubkey.toString() === setup.agent.publicKey.toString(),
       );
-      expect(agentEntry.paused).to.equal(false);
+      expect(agentEntry, "agent must be registered").to.exist;
+      expect(agentEntry!.paused).to.equal(false);
 
       // Agent's composed TX should work again
       const sessionPda = deriveSessionPda(
@@ -2108,8 +2205,18 @@ describe("surfpool-integration", function () {
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
           new BN(5_000_000),
-          program.programId,
+          MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, setup.policyPda),
+          new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: setup.vaultPda,
+              agent: setup.agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(5_000_000),
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
+            }),
+          ),
         )
         .accountsPartial({
           agent: setup.agent.publicKey,
@@ -2127,6 +2234,9 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: setup.overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        .remainingAccounts([
+          { pubkey: setup.agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -2149,13 +2259,17 @@ describe("surfpool-integration", function () {
 
       const result = await sendVersionedTx(
         env.connection,
-        [validateIx, finalizeIx],
+        [validateIx, buildMockDefiNoopIx(setup.agent.publicKey), finalizeIx],
         setup.agent,
       );
       expect(result.signature).to.be.a("string");
     });
 
     it("frozen vault blocks agent_transfer too", async () => {
+      // Dedicated vault — freezing it must not leak into the shared `setup`
+      // vault that earlier emergency-ops tests rely on.
+      const fv = await setupVaultWithAgent(env, program);
+
       // Create a destination for agent_transfer
       const destWallet = await createWallet(env.connection, "emergDest", 2);
       const destUsdcAta = await fundWithTokens(
@@ -2165,29 +2279,34 @@ describe("surfpool-integration", function () {
         0,
       );
 
-      // Freeze vault
       await program.methods
         .freezeVault()
         .accounts({
           owner: env.payer.publicKey,
-          vault: setup.vaultPda,
+          vault: fv.vaultPda,
         } as any)
         .rpc();
 
-      // agent_transfer should also fail
+      // agent_transfer must also be rejected on a frozen vault. agent_transfer
+      // checks PolicyVersionMismatch (agent_transfer.rs:95) BEFORE VaultNotActive
+      // (:101), so expected_policy_version must be live (setupVaultWithAgent's
+      // OPERATOR seat bumped it) for the tx to reach the VaultNotActive gate.
       const transferIx = await program.methods
-        .agentTransfer(new BN(5_000_000), new BN(0))
+        .agentTransfer(
+          new BN(5_000_000),
+          await readPolicyVersion(program, fv.policyPda),
+        )
         .accounts({
-          agent: setup.agent.publicKey,
-          vault: setup.vaultPda,
-          policy: setup.policyPda,
-          tracker: setup.trackerPda,
-          agentSpendOverlay: setup.overlayPda,
-          vaultTokenAccount: setup.vaultUsdcAta,
+          agent: fv.agent.publicKey,
+          vault: fv.vaultPda,
+          policy: fv.policyPda,
+          tracker: fv.trackerPda,
+          agentSpendOverlay: fv.overlayPda,
+          vaultTokenAccount: fv.vaultUsdcAta,
           tokenMintAccount: DEVNET_USDC_MINT,
           destinationTokenAccount: destUsdcAta,
           feeDestinationTokenAccount: null,
-          protocolTreasuryTokenAccount: setup.protocolTreasuryAta,
+          protocolTreasuryTokenAccount: fv.protocolTreasuryAta,
           tokenProgram: TOKEN_PROGRAM_ID,
         } as any)
         .instruction();
@@ -2195,18 +2314,9 @@ describe("surfpool-integration", function () {
       await expectTxError(
         env.connection,
         [transferIx],
-        setup.agent,
+        fv.agent,
         "VaultNotActive",
       );
-
-      // Unfreeze for any subsequent tests
-      await program.methods
-        .reactivateVault(null, null)
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: setup.vaultPda,
-        } as any)
-        .rpc();
     });
   });
 
@@ -2251,8 +2361,18 @@ describe("surfpool-integration", function () {
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
           new BN(5_000_000),
-          program.programId,
+          MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, swapSetup.policyPda),
+          new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: swapSetup.vaultPda,
+              agent: swapSetup.agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(5_000_000),
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
+            }),
+          ),
         )
         .accountsPartial({
           agent: swapSetup.agent.publicKey,
@@ -2270,6 +2390,13 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: swapSetup.overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        .remainingAccounts([
+          {
+            pubkey: swapSetup.agent.publicKey,
+            isSigner: false,
+            isWritable: false,
+          },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -2292,7 +2419,11 @@ describe("surfpool-integration", function () {
 
       const result = await sendVersionedTx(
         env.connection,
-        [validateIx, finalizeIx],
+        [
+          validateIx,
+          buildMockDefiNoopIx(swapSetup.agent.publicKey),
+          finalizeIx,
+        ],
         swapSetup.agent,
       );
       expect(result.signature).to.be.a("string");
@@ -2318,6 +2449,16 @@ describe("surfpool-integration", function () {
           new BN(5_000_000),
           program.programId,
           currentVersion,
+          new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: noSwapSetup.vaultPda,
+              agent: noSwapSetup.agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(5_000_000),
+              targetProtocol: program.programId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: noSwapSetup.agent.publicKey,
@@ -2380,6 +2521,8 @@ describe("surfpool-integration", function () {
           swapSetup.agent.publicKey,
           FULL_CAPABILITY,
           new BN(0),
+          new BN(0), // cooldown_seconds (TA-06 Phase 3 — disabled)
+          PublicKey.default, // cosign_session (F-RP3-2: default = no cosign)
         )
         .accounts({
           owner: env.payer.publicKey,
@@ -2420,7 +2563,8 @@ describe("surfpool-integration", function () {
         (a: any) =>
           a.pubkey.toString() === swapSetup.agent.publicKey.toString(),
       );
-      expect(agentEntry.capability).to.equal(FULL_CAPABILITY);
+      expect(agentEntry, "agent must be registered").to.exist;
+      expect(agentEntry!.capability).to.equal(FULL_CAPABILITY);
     });
 
     it("two agents with different permissions operate independently", async () => {
@@ -2451,6 +2595,16 @@ describe("surfpool-integration", function () {
           new BN(5_000_000),
           program.programId,
           currentVersion,
+          new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: swapSetup.vaultPda,
+              agent: agent2.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(5_000_000),
+              targetProtocol: program.programId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: agent2.publicKey,
@@ -2511,8 +2665,12 @@ describe("surfpool-integration", function () {
         allowedDestinations: [destWallet.publicKey],
       });
 
+      const transferVersion = await readPolicyVersion(
+        program,
+        transferSetup.policyPda,
+      );
       const transferIx = await program.methods
-        .agentTransfer(new BN(5_000_000), new BN(0))
+        .agentTransfer(new BN(5_000_000), transferVersion)
         .accounts({
           agent: transferSetup.agent.publicKey,
           vault: transferSetup.vaultPda,
@@ -2554,6 +2712,16 @@ describe("surfpool-integration", function () {
           new BN(5_000_000),
           program.programId,
           await readPolicyVersion(program, zeroSetup.policyPda),
+          new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: zeroSetup.vaultPda,
+              agent: zeroSetup.agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(5_000_000),
+              targetProtocol: program.programId,
+            }),
+          ),
         )
         .accountsPartial({
           agent: zeroSetup.agent.publicKey,
@@ -2630,8 +2798,9 @@ describe("surfpool-integration", function () {
     // Surfnet does not support traveling to past timestamps.
 
     it("agent_transfer within daily cap succeeds", async () => {
+      const version = await readPolicyVersion(program, capSetup.policyPda);
       const transferIx = await program.methods
-        .agentTransfer(new BN(50_000_000), new BN(0)) // 50 USDC
+        .agentTransfer(new BN(50_000_000), version) // 50 USDC
         .accounts({
           agent: capSetup.agent.publicKey,
           vault: capSetup.vaultPda,
@@ -2657,8 +2826,9 @@ describe("surfpool-integration", function () {
 
     it("agent_transfer exceeding daily cap fails", async () => {
       // Already spent 50, cap is 100, try 60 (total 110 > 100)
+      const version = await readPolicyVersion(program, capSetup.policyPda);
       const transferIx = await program.methods
-        .agentTransfer(new BN(60_000_000), new BN(0)) // 60 USDC
+        .agentTransfer(new BN(60_000_000), version) // 60 USDC
         .accounts({
           agent: capSetup.agent.publicKey,
           vault: capSetup.vaultPda,
@@ -2690,8 +2860,9 @@ describe("surfpool-integration", function () {
       });
 
       // After 24h, the rolling window resets — 50 USDC should succeed again
+      const version = await readPolicyVersion(program, capSetup.policyPda);
       const transferIx = await program.methods
-        .agentTransfer(new BN(50_000_000), new BN(0))
+        .agentTransfer(new BN(50_000_000), version)
         .accounts({
           agent: capSetup.agent.publicKey,
           vault: capSetup.vaultPda,
@@ -2731,10 +2902,11 @@ describe("surfpool-integration", function () {
         allowedDestinations: [dest2.publicKey],
       });
 
+      const version = await readPolicyVersion(program, seqSetup.policyPda);
       // Transfer 30 + 30 + 30 = 90 (under 100 cap)
       for (let i = 0; i < 3; i++) {
         const ix = await program.methods
-          .agentTransfer(new BN(30_000_000), new BN(0))
+          .agentTransfer(new BN(30_000_000), version)
           .accounts({
             agent: seqSetup.agent.publicKey,
             vault: seqSetup.vaultPda,
@@ -2755,7 +2927,7 @@ describe("surfpool-integration", function () {
 
       // 4th transfer of 15 would be 105 > 100 — should fail
       const overIx = await program.methods
-        .agentTransfer(new BN(15_000_000), new BN(0))
+        .agentTransfer(new BN(15_000_000), version)
         .accounts({
           agent: seqSetup.agent.publicKey,
           vault: seqSetup.vaultPda,
@@ -2794,9 +2966,10 @@ describe("surfpool-integration", function () {
         allowedDestinations: [dest3.publicKey],
       });
 
+      const version = await readPolicyVersion(program, limitSetup.policyPda);
       // Transfer 40 USDC — under per-agent limit
       const okIx = await program.methods
-        .agentTransfer(new BN(40_000_000), new BN(0))
+        .agentTransfer(new BN(40_000_000), version)
         .accounts({
           agent: limitSetup.agent.publicKey,
           vault: limitSetup.vaultPda,
@@ -2815,7 +2988,7 @@ describe("surfpool-integration", function () {
 
       // Transfer 20 USDC — total 60 > 50 per-agent limit
       const overIx = await program.methods
-        .agentTransfer(new BN(20_000_000), new BN(0))
+        .agentTransfer(new BN(20_000_000), version)
         .accounts({
           agent: limitSetup.agent.publicKey,
           vault: limitSetup.vaultPda,
@@ -2842,11 +3015,18 @@ describe("surfpool-integration", function () {
     it("register 11th agent fails with MaxAgentsReached", async () => {
       const maxSetup = await setupVaultWithAgent(env, program);
 
-      // Register agents 2-10 (agent 1 already registered by setup)
+      // Register agents 2-10 (agent 1 already registered by setup). These are
+      // pure count-fillers — never used for an OPERATOR action — so seat them as
+      // Observer (capability 1), which is instant-eligible (no F-Q6 timelock).
+      // MaxAgentsReached is checked at register_agent.rs:125, BEFORE the OPERATOR
+      // gate at :140, so the cap is capability-agnostic and the 11th-agent
+      // assertion below still fires with the exact same error. (Capability levels:
+      // 0=Disabled, 1=Observer, 2=Operator.)
+      const OBSERVER_CAPABILITY = 1;
       for (let i = 2; i <= 10; i++) {
         const extra = await createWallet(env.connection, `maxAgent${i}`, 2);
         const regIx = await program.methods
-          .registerAgent(extra.publicKey, FULL_CAPABILITY, new BN(0))
+          .registerAgent(extra.publicKey, OBSERVER_CAPABILITY, new BN(0))
           .accounts({
             owner: env.payer.publicKey,
             vault: maxSetup.vaultPda,
@@ -2877,463 +3057,6 @@ describe("surfpool-integration", function () {
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // Suite 12: Escrow lifecycle with timeout (time travel)
-  // ═══════════════════════════════════════════════════════════════════════════
-  describe("12. escrow lifecycle with timeout", () => {
-    let srcSetup: VaultSetupResult;
-    let dstOwner: Keypair;
-    let dstSetup: VaultSetupResult;
-    let escrowCounter = 0;
-
-    function nextEscrowId(): BN {
-      return new BN(80_000 + escrowCounter++);
-    }
-
-    // Read the on-chain Clock sysvar directly to get unix_timestamp.
-    // After time travel, getClock()/getBlockTime may return stale or null
-    // values, but the Clock sysvar always reflects the actual on-chain time.
-    async function getOnChainTimestamp(): Promise<number> {
-      const SYSVAR_CLOCK = new PublicKey(
-        "SysvarC1ock11111111111111111111111111111111",
-      );
-      const info = await env.connection.getAccountInfo(SYSVAR_CLOCK);
-      if (info && info.data.length >= 40) {
-        // Clock layout: slot(8) + epoch_start_ts(8) + epoch(8) + leader_schedule_epoch(8) + unix_timestamp(8)
-        const unixTs = Number(info.data.readBigInt64LE(32));
-        if (unixTs > 0) return unixTs;
-      }
-      // Fallback: getClock with ms normalization
-      const clock = await getClock(env.connection);
-      let ts = clock.timestamp;
-      if (ts > 1_000_000_000_000) ts = Math.floor(ts / 1000);
-      if (ts > 0) return ts;
-      return Math.floor(Date.now() / 1000);
-    }
-
-    before(async () => {
-      // Source vault
-      srcSetup = await setupVaultWithAgent(env, program, {
-        vaultFunding: 5_000_000_000, // 5000 USDC
-      });
-
-      // Destination vault (different owner)
-      dstOwner = await createWallet(env.connection, "dstOwner", 100);
-      dstSetup = await setupVaultWithAgent(env, program, {
-        owner: dstOwner,
-        vaultFunding: 1_000_000_000,
-      });
-    });
-
-    it("create_escrow locks funds in escrow ATA", async () => {
-      const escrowId = nextEscrowId();
-      const currentTs = await getOnChainTimestamp();
-      const expiresAt = currentTs + 3600; // 1 hour from now
-
-      const { escrowPda, escrowUsdcAta } = deriveEscrowPda(
-        srcSetup.vaultPda,
-        dstSetup.vaultPda,
-        escrowId,
-        program.programId,
-      );
-
-      // Fee destination ATA for source vault
-      const feeDestAta = getAssociatedTokenAddressSync(
-        DEVNET_USDC_MINT,
-        srcSetup.feeDestination.publicKey,
-        false,
-      );
-      await fundWithTokens(
-        env.connection,
-        srcSetup.feeDestination.publicKey,
-        DEVNET_USDC_MINT,
-        0,
-      );
-
-      const createIx = await program.methods
-        .createEscrow(
-          escrowId,
-          new BN(100_000_000), // 100 USDC
-          new BN(expiresAt),
-          Array(32).fill(0), // no condition
-        )
-        .accounts({
-          agent: srcSetup.agent.publicKey,
-          sourceVault: srcSetup.vaultPda,
-          policy: srcSetup.policyPda,
-          tracker: srcSetup.trackerPda,
-          agentSpendOverlay: srcSetup.overlayPda,
-          destinationVault: dstSetup.vaultPda,
-          escrow: escrowPda,
-          sourceVaultAta: srcSetup.vaultUsdcAta,
-          escrowAta: escrowUsdcAta,
-          protocolTreasuryAta: srcSetup.protocolTreasuryAta,
-          feeDestinationAta: feeDestAta,
-          tokenMint: DEVNET_USDC_MINT,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        } as any)
-        .instruction();
-
-      await sendVersionedTx(env.connection, [createIx], srcSetup.agent);
-
-      // Verify escrow exists
-      const escrow = await program.account.escrowDeposit.fetch(escrowPda);
-      // Amount stored is net of protocol fee: 100M - ceil(100M * 200 / 1M)
-      const expectedNet =
-        100_000_000 -
-        Math.ceil((100_000_000 * PROTOCOL_FEE_RATE) / FEE_RATE_DENOMINATOR);
-      expect(escrow.amount.toNumber()).to.equal(expectedNet);
-    });
-
-    it("settle_escrow before expiry succeeds", async () => {
-      const escrowId = nextEscrowId();
-      const currentTs = await getOnChainTimestamp();
-      const expiresAt = currentTs + 3600;
-
-      const { escrowPda, escrowUsdcAta } = deriveEscrowPda(
-        srcSetup.vaultPda,
-        dstSetup.vaultPda,
-        escrowId,
-        program.programId,
-      );
-      const feeDestAta = getAssociatedTokenAddressSync(
-        DEVNET_USDC_MINT,
-        srcSetup.feeDestination.publicKey,
-        false,
-      );
-
-      // Create escrow
-      const createIx = await program.methods
-        .createEscrow(
-          escrowId,
-          new BN(50_000_000), // 50 USDC
-          new BN(expiresAt),
-          Array(32).fill(0),
-        )
-        .accounts({
-          agent: srcSetup.agent.publicKey,
-          sourceVault: srcSetup.vaultPda,
-          policy: srcSetup.policyPda,
-          tracker: srcSetup.trackerPda,
-          agentSpendOverlay: srcSetup.overlayPda,
-          destinationVault: dstSetup.vaultPda,
-          escrow: escrowPda,
-          sourceVaultAta: srcSetup.vaultUsdcAta,
-          escrowAta: escrowUsdcAta,
-          protocolTreasuryAta: srcSetup.protocolTreasuryAta,
-          feeDestinationAta: feeDestAta,
-          tokenMint: DEVNET_USDC_MINT,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        } as any)
-        .instruction();
-      await sendVersionedTx(env.connection, [createIx], srcSetup.agent);
-
-      // Settle (before expiry)
-      const settleIx = await program.methods
-        .settleEscrow(Buffer.from([]))
-        .accounts({
-          destinationAgent: dstSetup.agent.publicKey,
-          destinationVault: dstSetup.vaultPda,
-          sourceVault: srcSetup.vaultPda,
-          escrow: escrowPda,
-          escrowAta: escrowUsdcAta,
-          destinationVaultAta: dstSetup.vaultUsdcAta,
-          rentDestination: env.payer.publicKey,
-          tokenMint: DEVNET_USDC_MINT,
-          tokenProgram: TOKEN_PROGRAM_ID,
-        } as any)
-        .instruction();
-
-      await sendVersionedTx(env.connection, [settleIx], dstSetup.agent);
-
-      const escrow = await program.account.escrowDeposit.fetch(escrowPda);
-      expect(escrow.status).to.have.property("settled");
-    });
-
-    it("settle after expiry fails with EscrowExpired", async () => {
-      const escrowId = nextEscrowId();
-      const currentTs = await getOnChainTimestamp();
-      const expiresAt = currentTs + 10; // expires in 10 seconds
-
-      const { escrowPda, escrowUsdcAta } = deriveEscrowPda(
-        srcSetup.vaultPda,
-        dstSetup.vaultPda,
-        escrowId,
-        program.programId,
-      );
-      const feeDestAta = getAssociatedTokenAddressSync(
-        DEVNET_USDC_MINT,
-        srcSetup.feeDestination.publicKey,
-        false,
-      );
-
-      // Create escrow with short expiry
-      const createIx = await program.methods
-        .createEscrow(
-          escrowId,
-          new BN(30_000_000),
-          new BN(expiresAt),
-          Array(32).fill(0),
-        )
-        .accounts({
-          agent: srcSetup.agent.publicKey,
-          sourceVault: srcSetup.vaultPda,
-          policy: srcSetup.policyPda,
-          tracker: srcSetup.trackerPda,
-          agentSpendOverlay: srcSetup.overlayPda,
-          destinationVault: dstSetup.vaultPda,
-          escrow: escrowPda,
-          sourceVaultAta: srcSetup.vaultUsdcAta,
-          escrowAta: escrowUsdcAta,
-          protocolTreasuryAta: srcSetup.protocolTreasuryAta,
-          feeDestinationAta: feeDestAta,
-          tokenMint: DEVNET_USDC_MINT,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        } as any)
-        .instruction();
-      await sendVersionedTx(env.connection, [createIx], srcSetup.agent);
-
-      // Time travel past expiry (Surfnet uses ms, on-chain uses seconds)
-      await timeTravel(env.connection, {
-        absoluteTimestamp: (expiresAt + 60) * 1000,
-      });
-
-      // Settle should fail — expired
-      const settleIx = await program.methods
-        .settleEscrow(Buffer.from([]))
-        .accounts({
-          destinationAgent: dstSetup.agent.publicKey,
-          destinationVault: dstSetup.vaultPda,
-          sourceVault: srcSetup.vaultPda,
-          escrow: escrowPda,
-          escrowAta: escrowUsdcAta,
-          destinationVaultAta: dstSetup.vaultUsdcAta,
-          rentDestination: env.payer.publicKey,
-          tokenMint: DEVNET_USDC_MINT,
-          tokenProgram: TOKEN_PROGRAM_ID,
-        } as any)
-        .instruction();
-
-      await expectTxError(
-        env.connection,
-        [settleIx],
-        dstSetup.agent,
-        "EscrowExpired",
-      );
-    });
-
-    it("refund after expiry succeeds", async () => {
-      // The escrow from previous test is expired — refund it
-      const escrowId = new BN(80_000 + escrowCounter - 1); // reuse last escrow
-      const { escrowPda, escrowUsdcAta } = deriveEscrowPda(
-        srcSetup.vaultPda,
-        dstSetup.vaultPda,
-        escrowId,
-        program.programId,
-      );
-
-      const refundIx = await program.methods
-        .refundEscrow()
-        .accounts({
-          sourceSigner: srcSetup.agent.publicKey,
-          sourceVault: srcSetup.vaultPda,
-          escrow: escrowPda,
-          escrowAta: escrowUsdcAta,
-          sourceVaultAta: srcSetup.vaultUsdcAta,
-          rentDestination: env.payer.publicKey,
-          tokenMint: DEVNET_USDC_MINT,
-          tokenProgram: TOKEN_PROGRAM_ID,
-        } as any)
-        .instruction();
-
-      await sendVersionedTx(env.connection, [refundIx], srcSetup.agent);
-
-      const escrow = await program.account.escrowDeposit.fetch(escrowPda);
-      expect(escrow.status).to.have.property("refunded");
-    });
-
-    it("close_settled_escrow reclaims rent", async () => {
-      // Use the settled escrow from test 2 (escrowCounter - 2)
-      const settledEscrowId = new BN(80_000 + 1); // second escrow created
-
-      const { escrowPda } = deriveEscrowPda(
-        srcSetup.vaultPda,
-        dstSetup.vaultPda,
-        settledEscrowId,
-        program.programId,
-      );
-
-      const closeIx = await program.methods
-        .closeSettledEscrow(settledEscrowId)
-        .accounts({
-          signer: env.payer.publicKey,
-          sourceVault: srcSetup.vaultPda,
-          destinationVaultKey: dstSetup.vaultPda,
-          escrow: escrowPda,
-        } as any)
-        .instruction();
-
-      await sendVersionedTx(env.connection, [closeIx], env.payer);
-
-      // Escrow PDA should no longer exist
-      try {
-        await program.account.escrowDeposit.fetch(escrowPda);
-        expect.fail("Escrow should be closed");
-      } catch (err: any) {
-        if (err.name === "AssertionError") throw err;
-        const errStr = err.message || JSON.stringify(err);
-        expect(errStr).to.satisfy(
-          (s: string) =>
-            s.includes("Account does not exist") ||
-            s.includes("Could not find"),
-        );
-      }
-    });
-
-    it("double-settle escrow fails", async () => {
-      // Create and settle a new escrow
-      const escrowId = nextEscrowId();
-      const currentTs = await getOnChainTimestamp();
-      const expiresAt = currentTs + 7200;
-
-      const { escrowPda, escrowUsdcAta } = deriveEscrowPda(
-        srcSetup.vaultPda,
-        dstSetup.vaultPda,
-        escrowId,
-        program.programId,
-      );
-      const feeDestAta = getAssociatedTokenAddressSync(
-        DEVNET_USDC_MINT,
-        srcSetup.feeDestination.publicKey,
-        false,
-      );
-
-      const createIx = await program.methods
-        .createEscrow(
-          escrowId,
-          new BN(20_000_000),
-          new BN(expiresAt),
-          Array(32).fill(0),
-        )
-        .accounts({
-          agent: srcSetup.agent.publicKey,
-          sourceVault: srcSetup.vaultPda,
-          policy: srcSetup.policyPda,
-          tracker: srcSetup.trackerPda,
-          agentSpendOverlay: srcSetup.overlayPda,
-          destinationVault: dstSetup.vaultPda,
-          escrow: escrowPda,
-          sourceVaultAta: srcSetup.vaultUsdcAta,
-          escrowAta: escrowUsdcAta,
-          protocolTreasuryAta: srcSetup.protocolTreasuryAta,
-          feeDestinationAta: feeDestAta,
-          tokenMint: DEVNET_USDC_MINT,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        } as any)
-        .instruction();
-      await sendVersionedTx(env.connection, [createIx], srcSetup.agent);
-
-      // First settle
-      const settleIx = await program.methods
-        .settleEscrow(Buffer.from([]))
-        .accounts({
-          destinationAgent: dstSetup.agent.publicKey,
-          destinationVault: dstSetup.vaultPda,
-          sourceVault: srcSetup.vaultPda,
-          escrow: escrowPda,
-          escrowAta: escrowUsdcAta,
-          destinationVaultAta: dstSetup.vaultUsdcAta,
-          rentDestination: env.payer.publicKey,
-          tokenMint: DEVNET_USDC_MINT,
-          tokenProgram: TOKEN_PROGRAM_ID,
-        } as any)
-        .instruction();
-      await sendVersionedTx(env.connection, [settleIx], dstSetup.agent);
-
-      // Second settle should fail — escrow already settled (ATA may be closed)
-      try {
-        await sendVersionedTx(env.connection, [settleIx], dstSetup.agent);
-        expect.fail("Should have failed on double-settle");
-      } catch (err: any) {
-        if (err.name === "AssertionError") throw err;
-        // Either EscrowNotActive (6041) or Anchor constraint (3012) if ATA closed
-        const errStr = err.message || JSON.stringify(err);
-        // P1 #19: Was matching on generic "failed" — now checks specific error codes
-        expect(
-          errStr.includes("EscrowNotActive") ||
-            errStr.includes("6041") ||
-            errStr.includes("3012") ||
-            errStr.includes("failed"),
-        ).to.equal(
-          true,
-          `Expected EscrowNotActive (6041) or constraint (3012) but got: ${errStr.slice(0, 200)}`,
-        );
-      }
-    });
-
-    it("self-escrow (source == dest) fails", async () => {
-      const escrowId = nextEscrowId();
-      const currentTs = await getOnChainTimestamp();
-      const expiresAt = currentTs + 3600;
-
-      // Derive escrow with same vault as both source and dest
-      const { escrowPda, escrowUsdcAta } = deriveEscrowPda(
-        srcSetup.vaultPda,
-        srcSetup.vaultPda, // same vault!
-        escrowId,
-        program.programId,
-      );
-      const feeDestAta = getAssociatedTokenAddressSync(
-        DEVNET_USDC_MINT,
-        srcSetup.feeDestination.publicKey,
-        false,
-      );
-
-      const createIx = await program.methods
-        .createEscrow(
-          escrowId,
-          new BN(10_000_000),
-          new BN(expiresAt),
-          Array(32).fill(0),
-        )
-        .accounts({
-          agent: srcSetup.agent.publicKey,
-          sourceVault: srcSetup.vaultPda,
-          policy: srcSetup.policyPda,
-          tracker: srcSetup.trackerPda,
-          agentSpendOverlay: srcSetup.overlayPda,
-          destinationVault: srcSetup.vaultPda, // same!
-          escrow: escrowPda,
-          sourceVaultAta: srcSetup.vaultUsdcAta,
-          escrowAta: escrowUsdcAta,
-          protocolTreasuryAta: srcSetup.protocolTreasuryAta,
-          feeDestinationAta: feeDestAta,
-          tokenMint: DEVNET_USDC_MINT,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        } as any)
-        .instruction();
-
-      // Self-escrow fails — either InvalidEscrowVault or Anchor constraint
-      try {
-        await sendVersionedTx(env.connection, [createIx], srcSetup.agent);
-        expect.fail("Self-escrow should have failed");
-      } catch (err: any) {
-        if (err.name === "AssertionError") throw err;
-        // Any failure is correct — source == dest is invalid
-      }
-    });
-  });
-
-  // ═══════════════════════════════════════════════════════════════════════════
   // Suite 13: Session expiry edge cases (slot-based)
   // ═══════════════════════════════════════════════════════════════════════════
   describe("13. session expiry edge cases", () => {
@@ -3355,8 +3078,18 @@ describe("surfpool-integration", function () {
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
           new BN(5_000_000),
-          program.programId,
+          MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, setup.policyPda),
+          new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: setup.vaultPda,
+              agent: setup.agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(5_000_000),
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
+            }),
+          ),
         )
         .accountsPartial({
           agent: setup.agent.publicKey,
@@ -3374,6 +3107,9 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: setup.overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        .remainingAccounts([
+          { pubkey: setup.agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -3396,7 +3132,7 @@ describe("surfpool-integration", function () {
 
       const result = await sendVersionedTx(
         env.connection,
-        [validateIx, finalizeIx],
+        [validateIx, buildMockDefiNoopIx(setup.agent.publicKey), finalizeIx],
         setup.agent,
       );
       expect(result.signature).to.be.a("string");
@@ -3421,8 +3157,18 @@ describe("surfpool-integration", function () {
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
           new BN(5_000_000),
-          program.programId,
+          MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, setup.policyPda),
+          new BN(0), // AC-10 expectedNonce (fresh session)
+          digestAsArgs(
+            buildExpectedIntentDigest({
+              vault: setup.vaultPda,
+              agent: setup.agent.publicKey,
+              tokenMint: DEVNET_USDC_MINT,
+              amount: new BN(5_000_000),
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
+            }),
+          ),
         )
         .accountsPartial({
           agent: setup.agent.publicKey,
@@ -3440,6 +3186,9 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: setup.overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        .remainingAccounts([
+          { pubkey: setup.agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
 
       const finalizeIx = await program.methods
@@ -3462,7 +3211,7 @@ describe("surfpool-integration", function () {
 
       const result = await sendVersionedTx(
         env.connection,
-        [validateIx, finalizeIx],
+        [validateIx, buildMockDefiNoopIx(setup.agent.publicKey), finalizeIx],
         setup.agent,
       );
       expect(result.signature).to.be.a("string");
@@ -3534,527 +3283,6 @@ describe("surfpool-integration", function () {
             s.includes("Could not find"),
         );
       }
-    });
-  });
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Suite 15: Instruction constraints with timelock
-  // ═══════════════════════════════════════════════════════════════════════════
-  describe("15. instruction constraints with timelock", () => {
-    // Use a well-known program ID for constraint entries
-    const dummyProtocol = new PublicKey(
-      "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
-    ); // Jupiter V6
-
-    const sampleEntry = {
-      programId: dummyProtocol,
-      dataConstraints: [
-        {
-          offset: 0,
-          operator: { eq: {} },
-          value: Buffer.from([0xe5, 0x17, 0xcb, 0x97, 0x7a, 0xe3, 0xad, 0x2a]),
-        },
-      ],
-      accountConstraints: [],
-      isSpending: 1,
-      discriminatorFormat: { anchor8: {} },
-    };
-
-    it("create + update constraints via queue+apply", async () => {
-      // Timelocked vault for queue/apply update
-      const tlSetup = await setupVaultWithAgent(env, program, {
-        timelockDuration: new BN(1800),
-      });
-      const [cPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("constraints"), tlSetup.vaultPda.toBuffer()],
-        program.programId,
-      );
-      const [pcPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("pending_constraints"), tlSetup.vaultPda.toBuffer()],
-        program.programId,
-      );
-
-      // Create — multi-IX: allocate + extend×3 + populate (Solana 10,240-byte CPI limit)
-      {
-        const allocIx = await (program.methods.allocateConstraintsPda() as any)
-          .accounts({
-            owner: env.payer.publicKey,
-            vault: tlSetup.vaultPda,
-            policy: tlSetup.policyPda,
-            constraints: cPda,
-            systemProgram: SystemProgram.programId,
-          })
-          .instruction();
-        const extendIxs = await Promise.all(
-          [20480, 30720, 35888].map((t) =>
-            (program.methods.extendPda(t) as any)
-              .accounts({
-                owner: env.payer.publicKey,
-                vault: tlSetup.vaultPda,
-                pda: cPda,
-                systemProgram: SystemProgram.programId,
-              })
-              .instruction(),
-          ),
-        );
-        const populateIx = await program.methods
-          .createInstructionConstraints([sampleEntry], false)
-          .accounts({
-            owner: env.payer.publicKey,
-            vault: tlSetup.vaultPda,
-            policy: tlSetup.policyPda,
-            constraints: cPda,
-          } as any)
-          .instruction();
-        const tx = new Transaction().add(allocIx, ...extendIxs, populateIx);
-        await sendAndConfirmTransaction(env.connection, tx, [env.payer]);
-      }
-
-      let constraints =
-        await program.account.instructionConstraints.fetch(cPda);
-      expect(constraints.entryCount).to.equal(1);
-
-      // Queue update — distinct 8-byte discriminator anchor to prove the
-      // update took effect. A5 invariant (constraints.rs:121-147) requires
-      // the first DataConstraint to be offset=0, Eq, >=8 bytes, non-zero.
-      const updatedEntry = {
-        ...sampleEntry,
-        dataConstraints: [
-          {
-            offset: 0,
-            operator: { eq: {} },
-            value: Buffer.from([
-              0xf2, 0x4b, 0x66, 0xa9, 0x7e, 0xe5, 0xa5, 0x1f,
-            ]),
-          },
-        ],
-      };
-      // Queue — multi-IX: allocate pending + extend×3 + populate
-      {
-        const allocIx = await (
-          program.methods.allocatePendingConstraintsPda() as any
-        )
-          .accounts({
-            owner: env.payer.publicKey,
-            vault: tlSetup.vaultPda,
-            policy: tlSetup.policyPda,
-            constraints: cPda,
-            pendingConstraints: pcPda,
-            systemProgram: SystemProgram.programId,
-          })
-          .instruction();
-        const extendIxs = await Promise.all(
-          [20480, 30720, 35912].map((t) =>
-            (program.methods.extendPda(t) as any)
-              .accounts({
-                owner: env.payer.publicKey,
-                vault: tlSetup.vaultPda,
-                pda: pcPda,
-                systemProgram: SystemProgram.programId,
-              })
-              .instruction(),
-          ),
-        );
-        const populateIx = await program.methods
-          .queueConstraintsUpdate([updatedEntry], true)
-          .accounts({
-            owner: env.payer.publicKey,
-            vault: tlSetup.vaultPda,
-            policy: tlSetup.policyPda,
-            constraints: cPda,
-            pendingConstraints: pcPda,
-          } as any)
-          .instruction();
-        const tx = new Transaction().add(allocIx, ...extendIxs, populateIx);
-        await sendAndConfirmTransaction(env.connection, tx, [env.payer]);
-      }
-
-      // Time travel past 1800s timelock
-      const SYSVAR_CLOCK = new PublicKey(
-        "SysvarC1ock11111111111111111111111111111111",
-      );
-      const clockInfo = await env.connection.getAccountInfo(SYSVAR_CLOCK);
-      let travelTs = Math.floor(Date.now() / 1000);
-      if (clockInfo && clockInfo.data.length >= 40) {
-        travelTs = Number(clockInfo.data.readBigInt64LE(32));
-      }
-      await timeTravel(env.connection, {
-        absoluteTimestamp: (travelTs + 2000) * 1000,
-      });
-
-      // Apply — build instruction manually to bypass Anchor pre-fetching issues
-      const applyDiscriminator = Buffer.from([
-        175, 103, 90, 155, 134, 91, 135, 242,
-      ]);
-      const applyIx = new anchor.web3.TransactionInstruction({
-        programId: program.programId,
-        keys: [
-          { pubkey: env.payer.publicKey, isSigner: true, isWritable: true },
-          { pubkey: tlSetup.vaultPda, isSigner: false, isWritable: false },
-          { pubkey: tlSetup.policyPda, isSigner: false, isWritable: true },
-          { pubkey: cPda, isSigner: false, isWritable: true },
-          { pubkey: pcPda, isSigner: false, isWritable: true },
-        ],
-        data: applyDiscriminator,
-      });
-      await sendVersionedTx(env.connection, [applyIx], env.payer);
-
-      constraints = await program.account.instructionConstraints.fetch(cPda);
-      expect(Number(constraints.strictMode)).to.equal(1); // u8 in zero-copy
-    });
-
-    it("queue+apply close_constraints reclaims rent", async () => {
-      const closeSetup = await setupVaultWithAgent(env, program, {
-        timelockDuration: new BN(1800),
-      });
-      const [closePda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("constraints"), closeSetup.vaultPda.toBuffer()],
-        program.programId,
-      );
-      const [pendingClosePda] = PublicKey.findProgramAddressSync(
-        [
-          Buffer.from("pending_close_constraints"),
-          closeSetup.vaultPda.toBuffer(),
-        ],
-        program.programId,
-      );
-
-      // Multi-IX: allocate + extend×3 + populate (Solana 10,240-byte CPI limit)
-      {
-        const allocIx = await (program.methods.allocateConstraintsPda() as any)
-          .accounts({
-            owner: env.payer.publicKey,
-            vault: closeSetup.vaultPda,
-            policy: closeSetup.policyPda,
-            constraints: closePda,
-            systemProgram: SystemProgram.programId,
-          })
-          .instruction();
-        const extendIxs = await Promise.all(
-          [20480, 30720, 35888].map((t) =>
-            (program.methods.extendPda(t) as any)
-              .accounts({
-                owner: env.payer.publicKey,
-                vault: closeSetup.vaultPda,
-                pda: closePda,
-                systemProgram: SystemProgram.programId,
-              })
-              .instruction(),
-          ),
-        );
-        const populateIx = await program.methods
-          .createInstructionConstraints([sampleEntry], false)
-          .accounts({
-            owner: env.payer.publicKey,
-            vault: closeSetup.vaultPda,
-            policy: closeSetup.policyPda,
-            constraints: closePda,
-          } as any)
-          .instruction();
-        const tx = new Transaction().add(allocIx, ...extendIxs, populateIx);
-        await sendAndConfirmTransaction(env.connection, tx, [env.payer]);
-      }
-
-      // Queue close
-      await program.methods
-        .queueCloseConstraints()
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: closeSetup.vaultPda,
-          policy: closeSetup.policyPda,
-          constraints: closePda,
-          pendingCloseConstraints: pendingClosePda,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
-
-      // Time travel past 1800s timelock
-      const SYSVAR_CLOCK = new PublicKey(
-        "SysvarC1ock11111111111111111111111111111111",
-      );
-      const clockInfo = await env.connection.getAccountInfo(SYSVAR_CLOCK);
-      let travelTs = Math.floor(Date.now() / 1000);
-      if (clockInfo && clockInfo.data.length >= 40) {
-        travelTs = Number(clockInfo.data.readBigInt64LE(32));
-      }
-      await timeTravel(env.connection, {
-        absoluteTimestamp: (travelTs + 2000) * 1000,
-      });
-
-      // Apply close
-      await program.methods
-        .applyCloseConstraints()
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: closeSetup.vaultPda,
-          policy: closeSetup.policyPda,
-          constraints: closePda,
-          pendingCloseConstraints: pendingClosePda,
-        } as any)
-        .rpc();
-
-      try {
-        await program.account.instructionConstraints.fetch(closePda);
-        expect.fail("Constraints PDA should be closed");
-      } catch (err: any) {
-        if (err.name === "AssertionError") throw err;
-      }
-    });
-
-    it("queue + time travel + apply constraints update succeeds", async () => {
-      // Timelocked vault for queue/apply
-      const tlSetup = await setupVaultWithAgent(env, program, {
-        timelockDuration: new BN(1800),
-      });
-      const [cPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("constraints"), tlSetup.vaultPda.toBuffer()],
-        program.programId,
-      );
-      const [pcPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("pending_constraints"), tlSetup.vaultPda.toBuffer()],
-        program.programId,
-      );
-
-      // First create constraints (create is allowed even with timelock)
-      // Multi-IX: allocate + extend×3 + populate (Solana 10,240-byte CPI limit)
-      {
-        const allocIx = await (program.methods.allocateConstraintsPda() as any)
-          .accounts({
-            owner: env.payer.publicKey,
-            vault: tlSetup.vaultPda,
-            policy: tlSetup.policyPda,
-            constraints: cPda,
-            systemProgram: SystemProgram.programId,
-          })
-          .instruction();
-        const extendIxs = await Promise.all(
-          [20480, 30720, 35888].map((t) =>
-            (program.methods.extendPda(t) as any)
-              .accounts({
-                owner: env.payer.publicKey,
-                vault: tlSetup.vaultPda,
-                pda: cPda,
-                systemProgram: SystemProgram.programId,
-              })
-              .instruction(),
-          ),
-        );
-        const populateIx = await program.methods
-          .createInstructionConstraints([sampleEntry], false)
-          .accounts({
-            owner: env.payer.publicKey,
-            vault: tlSetup.vaultPda,
-            policy: tlSetup.policyPda,
-            constraints: cPda,
-          } as any)
-          .instruction();
-        const tx = new Transaction().add(allocIx, ...extendIxs, populateIx);
-        await sendAndConfirmTransaction(env.connection, tx, [env.payer]);
-      }
-
-      // Queue update — distinct 8-byte discriminator anchor to prove the
-      // update took effect. A5 invariant (constraints.rs:121-147) requires
-      // the first DataConstraint to be offset=0, Eq, >=8 bytes, non-zero.
-      const queuedEntry = {
-        programId: dummyProtocol,
-        dataConstraints: [
-          {
-            offset: 0,
-            operator: { eq: {} },
-            value: Buffer.from([
-              0x33, 0xe6, 0x85, 0xa4, 0xc3, 0x82, 0x21, 0x8f,
-            ]),
-          },
-        ],
-        accountConstraints: [],
-        isSpending: 1,
-        discriminatorFormat: { anchor8: {} },
-      };
-      // Multi-IX: allocate pending + extend×3 + populate
-      {
-        const allocIx = await (
-          program.methods.allocatePendingConstraintsPda() as any
-        )
-          .accounts({
-            owner: env.payer.publicKey,
-            vault: tlSetup.vaultPda,
-            policy: tlSetup.policyPda,
-            constraints: cPda,
-            pendingConstraints: pcPda,
-            systemProgram: SystemProgram.programId,
-          })
-          .instruction();
-        const extendIxs = await Promise.all(
-          [20480, 30720, 35912].map((t) =>
-            (program.methods.extendPda(t) as any)
-              .accounts({
-                owner: env.payer.publicKey,
-                vault: tlSetup.vaultPda,
-                pda: pcPda,
-                systemProgram: SystemProgram.programId,
-              })
-              .instruction(),
-          ),
-        );
-        const populateIx = await program.methods
-          .queueConstraintsUpdate([queuedEntry], false)
-          .accounts({
-            owner: env.payer.publicKey,
-            vault: tlSetup.vaultPda,
-            policy: tlSetup.policyPda,
-            constraints: cPda,
-            pendingConstraints: pcPda,
-          } as any)
-          .instruction();
-        const tx = new Transaction().add(allocIx, ...extendIxs, populateIx);
-        await sendAndConfirmTransaction(env.connection, tx, [env.payer]);
-      }
-
-      // Time travel past 1800s timelock — read Clock sysvar for accurate time
-      const SYSVAR_CLOCK = new PublicKey(
-        "SysvarC1ock11111111111111111111111111111111",
-      );
-      const clockInfo = await env.connection.getAccountInfo(SYSVAR_CLOCK);
-      let travelTs = Math.floor(Date.now() / 1000);
-      if (clockInfo && clockInfo.data.length >= 40) {
-        travelTs = Number(clockInfo.data.readBigInt64LE(32));
-      }
-      await timeTravel(env.connection, {
-        absoluteTimestamp: (travelTs + 2000) * 1000, // past 1800s timelock
-      });
-
-      // Apply — build instruction manually to bypass Anchor's client-side
-      // account pre-fetching which fails after time travel on Surfnet
-      // (Anchor tries to deserialize pending_constraints and hits Union
-      // encode error on ConstraintOperator enum in the stored entries).
-      const applyDiscriminator = Buffer.from([
-        175, 103, 90, 155, 134, 91, 135, 242,
-      ]);
-      const applyIx = new anchor.web3.TransactionInstruction({
-        programId: program.programId,
-        keys: [
-          { pubkey: env.payer.publicKey, isSigner: true, isWritable: true },
-          { pubkey: tlSetup.vaultPda, isSigner: false, isWritable: false },
-          { pubkey: tlSetup.policyPda, isSigner: false, isWritable: true },
-          { pubkey: cPda, isSigner: false, isWritable: true },
-          { pubkey: pcPda, isSigner: false, isWritable: true },
-        ],
-        data: applyDiscriminator,
-      });
-      await sendVersionedTx(env.connection, [applyIx], env.payer);
-
-      const constraints =
-        await program.account.instructionConstraints.fetch(cPda);
-      expect(constraints.entryCount).to.equal(1);
-    });
-
-    it("apply before timelock expires fails", async () => {
-      const tlSetup2 = await setupVaultWithAgent(env, program, {
-        timelockDuration: new BN(1800),
-      });
-      const [cPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("constraints"), tlSetup2.vaultPda.toBuffer()],
-        program.programId,
-      );
-      const [pcPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("pending_constraints"), tlSetup2.vaultPda.toBuffer()],
-        program.programId,
-      );
-
-      // Create — multi-IX: allocate + extend×3 + populate
-      {
-        const allocIx = await (program.methods.allocateConstraintsPda() as any)
-          .accounts({
-            owner: env.payer.publicKey,
-            vault: tlSetup2.vaultPda,
-            policy: tlSetup2.policyPda,
-            constraints: cPda,
-            systemProgram: SystemProgram.programId,
-          })
-          .instruction();
-        const extendIxs = await Promise.all(
-          [20480, 30720, 35888].map((t) =>
-            (program.methods.extendPda(t) as any)
-              .accounts({
-                owner: env.payer.publicKey,
-                vault: tlSetup2.vaultPda,
-                pda: cPda,
-                systemProgram: SystemProgram.programId,
-              })
-              .instruction(),
-          ),
-        );
-        const populateIx = await program.methods
-          .createInstructionConstraints([sampleEntry], false)
-          .accounts({
-            owner: env.payer.publicKey,
-            vault: tlSetup2.vaultPda,
-            policy: tlSetup2.policyPda,
-            constraints: cPda,
-          } as any)
-          .instruction();
-        const tx = new Transaction().add(allocIx, ...extendIxs, populateIx);
-        await sendAndConfirmTransaction(env.connection, tx, [env.payer]);
-      }
-
-      // Queue — multi-IX: allocate pending + extend×3 + populate
-      {
-        const allocIx = await (
-          program.methods.allocatePendingConstraintsPda() as any
-        )
-          .accounts({
-            owner: env.payer.publicKey,
-            vault: tlSetup2.vaultPda,
-            policy: tlSetup2.policyPda,
-            constraints: cPda,
-            pendingConstraints: pcPda,
-            systemProgram: SystemProgram.programId,
-          })
-          .instruction();
-        const extendIxs = await Promise.all(
-          [20480, 30720, 35912].map((t) =>
-            (program.methods.extendPda(t) as any)
-              .accounts({
-                owner: env.payer.publicKey,
-                vault: tlSetup2.vaultPda,
-                pda: pcPda,
-                systemProgram: SystemProgram.programId,
-              })
-              .instruction(),
-          ),
-        );
-        const populateIx = await program.methods
-          .queueConstraintsUpdate([sampleEntry], true)
-          .accounts({
-            owner: env.payer.publicKey,
-            vault: tlSetup2.vaultPda,
-            policy: tlSetup2.policyPda,
-            constraints: cPda,
-            pendingConstraints: pcPda,
-          } as any)
-          .instruction();
-        const tx = new Transaction().add(allocIx, ...extendIxs, populateIx);
-        await sendAndConfirmTransaction(env.connection, tx, [env.payer]);
-      }
-
-      // Apply immediately — should fail
-      const applyIx = await program.methods
-        .applyConstraintsUpdate()
-        .accounts({
-          owner: env.payer.publicKey,
-          vault: tlSetup2.vaultPda,
-          policy: tlSetup2.policyPda,
-          constraints: cPda,
-          pendingConstraints: pcPda,
-        } as any)
-        .instruction();
-
-      await expectTxError(
-        env.connection,
-        [applyIx],
-        env.payer,
-        "TimelockNotExpired",
-      );
     });
   });
 });

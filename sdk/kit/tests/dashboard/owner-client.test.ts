@@ -92,31 +92,45 @@ describe("OwnerClient", () => {
       }
     });
 
-    it("has 22 mutation methods", () => {
+    it("exposes the full mutation surface (M-2: ownership transfer added)", () => {
       const client = new OwnerClient(validConfig());
+      // The list below is exhaustive — every mutation method on
+      // OwnerClient must appear here. M-2 (pre-redeploy audit 2026-05-21)
+      // added the four Phase 8 ownership-transfer methods at the end of
+      // this list.
       const mutations = [
+        // Vault lifecycle
         "freezeVault",
         "resumeVault",
+        "reactivateVault",
+        "setObserveOnly",
         "closeVault",
+        // Fund movements
         "deposit",
         "withdraw",
+        // Agent management — direct
         "addAgent",
         "pauseAgent",
         "unpauseAgent",
         "revokeAgent",
+        // Agent management — Phase 8 grant queue
+        "queueAgentGrant",
+        "applyAgentGrant",
+        "cancelAgentGrant",
+        // Agent management — timelocked permissions update
         "queueAgentPermissions",
         "applyAgentPermissions",
         "cancelAgentPermissions",
+        // Policy — timelocked
         "queuePolicyUpdate",
         "applyPendingPolicy",
         "cancelPendingPolicy",
-        "createConstraints",
-        "queueConstraintsUpdate",
-        "applyConstraintsUpdate",
-        "cancelConstraintsUpdate",
-        "queueCloseConstraints",
-        "applyCloseConstraints",
-        "cancelCloseConstraints",
+        // M1-04: 7 constraint mutation methods removed (engine deleted).
+        // M-2 (audit 2026-05-21): Phase 8 ownership transfer
+        "initiateOwnershipTransfer",
+        "acceptOwnershipTransfer",
+        "acceptOwnershipTransferMultisig",
+        "cancelOwnershipTransfer",
       ];
       for (const name of mutations) {
         expect(typeof (client as any)[name]).to.equal(

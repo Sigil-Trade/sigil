@@ -10,7 +10,7 @@
  *      exposed to consumers for targeted 6000-range UI routing.
  *
  * Boundary coverage is the point of this file — the category boundaries
- * between 5999/6000, 6074/6075, 6999/7000, 7099/7100, 7199/7200, and the
+ * between 5999/6000, 6080/6075, 6999/7000, 7099/7100, 7199/7200, and the
  * `DX_ERROR_CODE_UNMAPPED` (7999) sentinel must all route deterministically.
  * A future range split (e.g., RPC codes gaining a new subrange) would
  * fail here first.
@@ -23,6 +23,7 @@ import {
   DX_ERROR_CODE_UNMAPPED,
   type DxErrorCategory,
 } from "../../src/dashboard/errors.js";
+import { SIGIL_ON_CHAIN_ERROR_MAX } from "../../src/agent-errors.js";
 import type { DxError } from "../../src/dashboard/types.js";
 
 // ─── isOnChainReverted ────────────────────────────────────────────────────
@@ -32,16 +33,47 @@ describe("isOnChainReverted — exact range boundaries", () => {
     expect(isOnChainReverted(6000)).to.equal(true);
   });
 
-  it("true at 6074 (upper bound)", () => {
-    expect(isOnChainReverted(6074)).to.equal(true);
+  it("true at 6078 (within range)", () => {
+    expect(isOnChainReverted(6078)).to.equal(true);
   });
 
   it("false at 5999 (one below)", () => {
     expect(isOnChainReverted(5999)).to.equal(false);
   });
 
-  it("false at 6075 (one above)", () => {
-    expect(isOnChainReverted(6075)).to.equal(false);
+  it("true at a mid post-execution-assertion code (6100)", () => {
+    expect(isOnChainReverted(6100)).to.equal(true);
+  });
+
+  // Ceiling anchored to SIGIL_ON_CHAIN_ERROR_MAX (currently 6110 post F-Q9)
+  // so it tracks future renumbers instead of pinning a literal.
+  it("true at the on-chain ceiling (SIGIL_ON_CHAIN_ERROR_MAX)", () => {
+    expect(isOnChainReverted(SIGIL_ON_CHAIN_ERROR_MAX)).to.equal(true);
+  });
+
+  it("false one above the on-chain ceiling", () => {
+    expect(isOnChainReverted(SIGIL_ON_CHAIN_ERROR_MAX + 1)).to.equal(false);
+  });
+
+  it("CRIT-3 invariant: every code in SIGIL_ERRORS classifies as on-chain", async () => {
+    // Asserts that EVERY generated SDK error code IS classified as
+    // on-chain. If the program grows a new error variant and the SDK is
+    // regenerated without bumping ANCHOR_ERROR_MAX, this test fails.
+    // Stronger than checking just the max — guards against gaps in the
+    // range that would silently mis-categorize a real on-chain error.
+    const generated = await import("../../src/generated/errors/sigil.js");
+    const codes = Object.entries(generated)
+      .filter(
+        ([k, v]) => k.startsWith("SIGIL_ERROR__") && typeof v === "number",
+      )
+      .map(([, v]) => v as number);
+    expect(codes.length).to.be.greaterThan(0);
+    for (const code of codes) {
+      expect(
+        isOnChainReverted(code),
+        `code ${code} should be on-chain`,
+      ).to.equal(true);
+    }
   });
 
   it("false for 0 (zero sentinel)", () => {
@@ -70,10 +102,25 @@ describe("categorizeDxError — exact range boundaries", () => {
     category: DxErrorCategory;
     description: string;
   }> = [
-    // Program range (Anchor 6000-6074)
+    // Program range (Anchor 6000-6110 post F-Q9)
     { code: 6000, category: "program", description: "program lower bound" },
-    { code: 6074, category: "program", description: "program upper bound" },
-    { code: 6030, category: "program", description: "mid program range" },
+    { code: 6110, category: "program", description: "program upper bound" },
+    { code: 6050, category: "program", description: "mid program range" },
+    {
+      code: 6088,
+      category: "program",
+      description: "Phase 6 R-1 (ErrMintDeltaCapExceeded)",
+    },
+    {
+      code: 6092,
+      category: "program",
+      description: "Phase 6 R-4 (ErrDeclarationInconsistent)",
+    },
+    {
+      code: 6096,
+      category: "program",
+      description: "Phase 8 freeze hardening (ErrInvalidFreezeReason)",
+    },
 
     // User / SDK range (7000-7099)
     { code: 7000, category: "user", description: "user lower bound" },
@@ -87,7 +134,7 @@ describe("categorizeDxError — exact range boundaries", () => {
 
     // Unknown — outside all defined ranges
     { code: 5999, category: "unknown", description: "one below program range" },
-    { code: 6075, category: "unknown", description: "one above program range" },
+    { code: 6111, category: "unknown", description: "one above program range" },
     { code: 6999, category: "unknown", description: "one below user range" },
     { code: 7200, category: "unknown", description: "one above network range" },
     { code: 7999, category: "unknown", description: "DX_ERROR_CODE_UNMAPPED" },
@@ -135,7 +182,7 @@ describe("toDxError — populates onChainReverted", () => {
     const err = { message: "custom program error: 0x1776" };
     const dx = toDxError(err);
     expect(dx.code).to.be.at.least(6000);
-    expect(dx.code).to.be.at.most(6074);
+    expect(dx.code).to.be.at.most(6078);
     expect(dx.onChainReverted).to.equal(true);
   });
 

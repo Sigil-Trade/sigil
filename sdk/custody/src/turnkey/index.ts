@@ -4,24 +4,23 @@
  * Turnkey TEE custody adapter for Sigil.
  * Hardware-enclave signing — the private key never leaves Turnkey's secure infrastructure.
  *
- * @example One-liner with shieldWallet():
+ * @example Pair with shield() for client-side policy enforcement:
  * ```typescript
- * import { shieldWallet } from '@usesigil/kit';
+ * import { shield } from '@usesigil/kit';
  * import { turnkey } from '@usesigil/custody/turnkey';
  *
- * const wallet = shieldWallet(
- *   await turnkey({ organizationId: '...', apiKeyId: '...', apiPrivateKey: '...' }),
- *   { maxSpend: '500 USDC/day' }
- * );
+ * const wallet = await turnkey({ organizationId: '...', apiKeyId: '...', apiPrivateKey: '...' });
+ * const shieldCtx = shield({ maxSpend: '500 USDC/day' });
  * ```
  *
  * @example Zero-config from environment:
  * ```typescript
- * import { shieldWallet } from '@usesigil/kit';
+ * import { shield } from '@usesigil/kit';
  * import { turnkeyFromEnv } from '@usesigil/custody/turnkey';
  *
  * // Reads TURNKEY_ORGANIZATION_ID + TURNKEY_API_KEY_ID + TURNKEY_API_PRIVATE_KEY from env
- * const wallet = shieldWallet(await turnkeyFromEnv(), { maxSpend: '500 USDC/day' });
+ * const wallet = await turnkeyFromEnv();
+ * const shieldCtx = shield({ maxSpend: '500 USDC/day' });
  * ```
  */
 
