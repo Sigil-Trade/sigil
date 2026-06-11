@@ -29,7 +29,7 @@ import BN from "bn.js";
 import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import { initVaultPreviewDigest } from "./policy-digest";
 import { SIGIL_ERRORS } from "./strict-errors";
 
@@ -202,18 +202,29 @@ async function deployLocalProgram(connection: Connection): Promise<void> {
   // 4. Deploy via solana CLI (properly updates SVM program cache)
   //    Retry up to 3 times — Surfnet can be slow after reset or on cold CI cache
   const rpcUrl = (connection as any)._rpcEndpoint || SURFPOOL_RPC_URL;
-  const deployCmd =
-    `solana program deploy "${soPath}" ` +
-    `--program-id ${PROGRAM_ID.toString()} ` +
-    `--keypair "${deployerPath}" ` +
-    `--url ${rpcUrl} ` +
-    `--upgrade-authority "${deployerPath}"`;
+  // execFileSync (argv array, NO shell) so the RPC URL / paths can't be
+  // interpreted as shell metacharacters — closes the CodeQL "indirect
+  // uncontrolled command line" vector. (Inputs here are operator-controlled
+  // test config, but argv-passing removes the injection class entirely.)
+  const deployArgs = [
+    "program",
+    "deploy",
+    soPath,
+    "--program-id",
+    PROGRAM_ID.toString(),
+    "--keypair",
+    deployerPath,
+    "--url",
+    rpcUrl,
+    "--upgrade-authority",
+    deployerPath,
+  ];
 
   let lastErr: unknown;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       // Deploying ~1.27MB takes ~1250 chunk writes; allow up to 5 min/attempt.
-      execSync(deployCmd, { stdio: "pipe", timeout: 300_000 });
+      execFileSync("solana", deployArgs, { stdio: "pipe", timeout: 300_000 });
       return;
     } catch (err) {
       lastErr = err;
