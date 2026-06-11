@@ -153,6 +153,18 @@ export interface PolicyDigestFields {
    * Bound by TA-19, appended last in the canonical encoding.
    */
   operatorGrantDelaySeconds?: BN | bigint | number;
+  /**
+   * M-1 (2026-06-11): per-protocol-caps master switch. Bound at canonical
+   * position 23 (default false). Mirrors the on-chain init derivation
+   * `!protocol_caps.is_empty()` when caps are supplied.
+   */
+  hasProtocolCaps?: boolean;
+  /**
+   * M-1 (2026-06-11): per-protocol caps, aligned 1:1 with `protocols` (≤10).
+   * Bound at canonical position 24: u32 LE length ++ each u64 LE. Default []
+   * so legacy fixtures match an on-chain policy with no per-protocol caps.
+   */
+  protocolCaps?: (BN | bigint | number)[];
 }
 
 function u64le(v: BN | bigint | number): Buffer {
@@ -247,6 +259,13 @@ export function computePolicyPreviewDigest(
   // F-Q6 (2026-06-02): operator_grant_delay_seconds (u64 LE), appended last.
   // Default 0 so legacy fixtures match the on-chain default-0 value.
   parts.push(u64le(fields.operatorGrantDelaySeconds ?? 0));
+  // M-1 (2026-06-11): has_protocol_caps (pos 23, bool as u8) + protocol_caps
+  // (pos 24, u32 LE length prefix ++ each u64 LE). Defaults false/[] so legacy
+  // fixtures match an on-chain policy with no per-protocol caps.
+  parts.push(u8(fields.hasProtocolCaps ? 1 : 0));
+  const protocolCaps = fields.protocolCaps ?? [];
+  parts.push(u32le(protocolCaps.length));
+  for (const c of protocolCaps) parts.push(u64le(c));
 
   const buf = Buffer.concat(parts);
   return Array.from(createHash("sha256").update(buf).digest());

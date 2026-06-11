@@ -200,9 +200,16 @@ async function siblingHandlerExpectedDigest(
     // this via `queue_policy_update` only.
     cosignRequired: livePolicy.data.cosignRequired,
     // D-5 (Bucket 2 audit 2026-05-21, F-RP3-1): pass-through from live
-    // policy. Position 22 of the canonical TA-19 digest. Sibling handlers
+    // policy. Position 21 of the canonical TA-19 digest. Sibling handlers
     // never mutate this — owner sets via queue_policy_update only.
     cosignSessionPubkey: livePolicy.data.cosignSessionPubkey,
+    // M-1 (audit 2026-06-11): per-protocol caps (positions 23-24). Sibling
+    // handlers never mutate the caps — pass-through from live policy so the
+    // re-bind digest matches the on-chain recompute (create_post_assertions
+    // .rs:138-139 / close_post_assertions.rs read policy.has_protocol_caps +
+    // policy.protocol_caps).
+    hasProtocolCaps: livePolicy.data.hasProtocolCaps,
+    protocolCaps: livePolicy.data.protocolCaps,
   });
 }
 
@@ -840,6 +847,15 @@ export async function queuePolicyUpdate(
       : livePolicy.data.timelockDuration;
   const effSessionExpiry =
     changes.sessionExpirySeconds ?? livePolicy.data.sessionExpirySeconds;
+  // M-1 (audit 2026-06-11): per-protocol caps ARE mutable through this surface
+  // (passed as the queue ix args below). Project the merged-effective value the
+  // same way as the other Option<…> fields so the digest matches the on-chain
+  // queue merge (queue_policy_update.rs:325-327 — each field independently
+  // `unwrap_or` the live value).
+  const effHasProtocolCaps =
+    changes.hasProtocolCaps ?? livePolicy.data.hasProtocolCaps;
+  const effProtocolCaps =
+    changes.protocolCaps ?? livePolicy.data.protocolCaps;
 
   const newPolicyPreviewDigest = computePolicyPreviewDigest({
     dailySpendingCapUsd: effDaily,
@@ -879,6 +895,10 @@ export async function queuePolicyUpdate(
     // surface — pass-through from live policy so the digest matches the
     // on-chain merged (eff) value at canonical position 22.
     operatorGrantDelaySeconds: livePolicy.data.operatorGrantDelaySeconds,
+    // M-1 (audit 2026-06-11): merged-effective per-protocol caps at canonical
+    // positions 23-24 (see eff bindings above).
+    hasProtocolCaps: effHasProtocolCaps,
+    protocolCaps: effProtocolCaps,
   });
 
   const ix = await getQueuePolicyUpdateInstructionAsync({

@@ -46,7 +46,8 @@ use crate::utils::policy_digest::{
 #[allow(dead_code)]
 // M1-04: was 22; has_constraints removed (digest-version bump).
 // F-Q6 (2026-06-02): 21 → 22, binds operator_grant_delay_seconds.
-const EXPECTED_DIGEST_FIELD_COUNT: usize = 22;
+// M-1 (2026-06-11): 22 → 24, binds has_protocol_caps + protocol_caps.
+const EXPECTED_DIGEST_FIELD_COUNT: usize = 24;
 const _: () = assert!(
     EXPECTED_DIGEST_FIELD_COUNT == crate::utils::policy_digest::POLICY_PREVIEW_FIELD_COUNT,
     "P0.2 PEN-7: PolicyPreviewFields count diverged from TA-19 binding. \
@@ -453,6 +454,9 @@ pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
         // (not yet a pending field) — read the live policy value so the
         // second-pass digest matches the queue-time digest.
         operator_grant_delay_seconds: policy.operator_grant_delay_seconds,
+        // M-1 (audit 2026-06-11): bind per-protocol caps (positions 23-24).
+        has_protocol_caps: policy.has_protocol_caps,
+        protocol_caps: &policy.protocol_caps,
     });
     require!(
         recomputed_digest == pending.new_policy_preview_digest,

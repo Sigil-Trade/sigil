@@ -18,7 +18,9 @@
  *     discriminator-collision attack). Both cases reject — the owner sees a
  *     mismatch error rather than silently committing.
  *
- * CANONICAL ENCODING (FIXED — DO NOT REORDER):
+ * CANONICAL ENCODING (FIXED — DO NOT REORDER). Positions are the live byte
+ * order — see PER_FIELD_FIXED_SIZES below, the single source of truth that a
+ * module-load assertion pins against POLICY_PREVIEW_FIELD_COUNT:
  *   1. daily_spending_cap_usd: u64 LE (8 bytes)
  *   2. max_transaction_size_usd: u64 LE (8 bytes)
  *   3. max_slippage_bps: u16 LE (2 bytes)
@@ -30,36 +32,39 @@
  *   9. timelock_duration: u64 LE (8 bytes)
  *   10. session_expiry_seconds: u64 LE (8 bytes)
  *   11. observe_only: bool as 1 byte (0 or 1)
- *   12. has_constraints: bool as 1 byte (0 or 1)
- *   13. has_post_assertions: u8 (1 byte)
- *   14. created_at_slot: u64 LE (8 bytes) — PEN-CROSS-2 (Phase 2 close-up)
- *   15. operating_hours: u32 LE (4 bytes) — TA-05 (Phase 3 pre-exec)
- *   16. auto_promote_grays: bool as 1 byte (0/1) — TA-07 (Phase 3 pre-exec)
- *   17. auto_revoke_threshold: u8 (1 byte) — TA-17 (Phase 3 pre-exec)
- *   18. stable_balance_floor: u64 LE (8 bytes) — TA-12 (Phase 5 post-exec)
- *   19. per_recipient_daily_cap_usd: u64 LE (8 bytes) — TA-14 (Phase 5 post-exec)
- *   20. cosign_required: bool (1 byte 0/1) — G6 (audit 2026-05-18 cosign opt-in)
- *   21. agent_set_hash: [u8; 32] — Phase 8 PEN-CROSS-1 (audit 2026-05-19)
- *   22. cosign_session_pubkey: Pubkey (32 bytes) — D-5 (audit 2026-05-19, F-RP3-1)
+ *   12. has_post_assertions: u8 (1 byte) — M1-04 removed the former
+ *       has_constraints byte (digest-version bump); positions renumbered down.
+ *   13. created_at_slot: u64 LE (8 bytes) — PEN-CROSS-2 (Phase 2 close-up)
+ *   14. operating_hours: u32 LE (4 bytes) — TA-05 (Phase 3 pre-exec)
+ *   15. auto_promote_grays: bool as 1 byte (0/1) — TA-07 (Phase 3 pre-exec)
+ *   16. auto_revoke_threshold: u8 (1 byte) — TA-17 (Phase 3 pre-exec)
+ *   17. stable_balance_floor: u64 LE (8 bytes) — TA-12 (Phase 5 post-exec)
+ *   18. per_recipient_daily_cap_usd: u64 LE (8 bytes) — TA-14 (Phase 5 post-exec)
+ *   19. cosign_required: bool (1 byte 0/1) — G6 (audit 2026-05-18 cosign opt-in)
+ *   20. agent_set_hash: [u8; 32] — Phase 8 PEN-CROSS-1 (audit 2026-05-19)
+ *   21. cosign_session_pubkey: Pubkey (32 bytes) — D-5 (audit 2026-05-19, F-RP3-1)
+ *   22. operator_grant_delay_seconds: u64 LE (8 bytes) — F-Q6 (2026-06-02)
+ *   23. has_protocol_caps: bool as 1 byte (0/1) — M-1 (audit 2026-06-11)
+ *   24. protocol_caps: u32 LE length (4 bytes) ++ each cap u64 LE (8 bytes) — M-1
  *
  * Phase 3 append-only additions (TA-05/07/17): operating_hours,
  * auto_promote_grays, auto_revoke_threshold are appended at positions 15-17
  * to preserve the 14-field prefix (F-14 APPEND-ONLY rule).
  *
  * Phase 5 append-only additions (TA-12/TA-14): stable_balance_floor at
- * position 18, per_recipient_daily_cap_usd at position 19. Both bound by
+ * position 17, per_recipient_daily_cap_usd at position 18. Both bound by
  * TA-19 so silent SDK / pending-PDA mutations can't bypass the owner's
  * signed digest.
  *
  * G6 append-only addition (audit 2026-05-18 cosign opt-in): cosign_required
- * at position 20 (1 byte, 0/1). Owner's choice to opt into TA-09 cosign
+ * at position 19 (1 byte, 0/1). Owner's choice to opt into TA-09 cosign
  * enforcement is part of the signed policy — a compromised SDK cannot
  * silently disable cosign between owner approval and on-chain landing.
  * Disabling cosign on a live policy where this is true is itself an
  * elevated mutation per `queue_policy_update` (one-way ratchet).
  *
  * Phase 8 PEN-CROSS-1 append-only addition (Council ISC-66/A8/A9): the
- * `agent_set_hash` at position 21 binds the EXISTING agent set into the
+ * `agent_set_hash` at position 20 binds the EXISTING agent set into the
  * signed digest. SHA-256 over Borsh of `Vec<(Pubkey, u8 capability)>`
  * sorted by pubkey ascending. Closes the silent-insertion vector where
  * a phished-owner `register_agent(capability=OPERATOR)` would otherwise
@@ -68,7 +73,7 @@
  * (`EMPTY_AGENT_SET_HASH` — SHA-256 of [0x00,0x00,0x00,0x00]).
  *
  * D-5 append-only addition (audit 2026-05-19, F-RP3-1): the
- * `cosign_session_pubkey` at position 22 binds the owner's chosen
+ * `cosign_session_pubkey` at position 21 binds the owner's chosen
  * reactivate-time cosigner pubkey into the signed digest. The
  * `reactivate_vault` handler reads this pubkey at runtime and requires
  * a matching `is_signer == true` entry in `remaining_accounts` whenever
@@ -135,7 +140,7 @@ export interface PolicyPreviewFields {
   hasPostAssertions: number;
   /**
    * PEN-CROSS-2 (Phase 2 close-up): the slot at which `initialize_vault`
-   * minted the live policy. Bound by TA-19 at position 14. Closes the
+   * minted the live policy. Bound by TA-19 at position 13. Closes the
    * close+reinit replay window.
    */
   createdAtSlot: bigint;
@@ -145,14 +150,14 @@ export interface PolicyPreviewFields {
    * omitted by legacy callers (preserves existing test fixtures). Production
    * SDK consumers should pass 0xFFFFFF (all 24h enabled) explicitly.
    * Upper 8 bits MUST be zero — on-chain handler rejects with
-   * `ErrOutsideOperatingHours` (6084) if violated. Bound at position 15
+   * `ErrOutsideOperatingHours` (6084) if violated. Bound at position 14
    * of the canonical encoding.
    */
   operatingHours?: number;
   /**
    * TA-07 (Phase 3): owner-side toggle to bypass the 24h graylist friction
    * for newly-added destinations. Default false (friction enforced).
-   * Bound by TA-19 at canonical position 16 so silent flips can't change
+   * Bound by TA-19 at canonical position 15 so silent flips can't change
    * the friction model.
    */
   autoPromoteGrays?: boolean;
@@ -160,7 +165,7 @@ export interface PolicyPreviewFields {
    * TA-17 (Phase 3): consecutive-failure threshold for agent auto-revoke.
    * Range 3..=20. Default 0 (legacy callers — but on-chain handler now
    * requires this to be in [3, 20] at policy-write time). Bound at
-   * canonical position 17.
+   * canonical position 16.
    */
   autoRevokeThreshold?: number;
   /**
@@ -168,14 +173,14 @@ export interface PolicyPreviewFields {
    * USDC+USDT vault balance, asserted at every `finalize_session`
    * spending path completion. 6-decimal USDC face value (e.g.
    * `$100 = 100_000_000n`). Default 0 (no reserve — preserves existing
-   * vault behavior). Bound at canonical position 18.
+   * vault behavior). Bound at canonical position 17.
    */
   stableBalanceFloor?: bigint;
   /**
    * TA-14 (Phase 5 post-exec): owner-chosen rolling 24h per-recipient
    * outflow cap. 6-decimal USDC face value. Default 0 (no per-recipient
    * cap — preserves existing vault behavior). Bound at canonical
-   * position 19.
+   * position 18.
    */
   perRecipientDailyCapUsd?: bigint;
   /**
@@ -186,7 +191,7 @@ export interface PolicyPreviewFields {
    * 7-trigger elevation gate (raises caps, expands allowlists, weakens
    * floor / per-recipient / protocol caps) requires a cosign session.
    * Disabling cosign on a live policy where this is true is itself an
-   * elevated mutation (one-way ratchet). Bound at canonical position 20.
+   * elevated mutation (one-way ratchet). Bound at canonical position 19.
    */
   cosignRequired?: boolean;
   /**
@@ -195,7 +200,7 @@ export interface PolicyPreviewFields {
    * result of `computeAgentSetHash(...)` over the live vault's agent set
    * (use empty array for a freshly-initialized vault). Empty vault produces
    * the deterministic `EMPTY_AGENT_SET_HASH` value. Bound at canonical
-   * position 21. Optional with default `EMPTY_AGENT_SET_HASH` so legacy
+   * position 20. Optional with default `EMPTY_AGENT_SET_HASH` so legacy
    * fixtures (no agents) continue to compute the canonical digest.
    */
   agentSetHash?: Uint8Array;
@@ -205,7 +210,7 @@ export interface PolicyPreviewFields {
    * as 32 zero bytes) when omitted, matching the on-chain init state
    * where the gate is disabled. Owners opt in by passing a non-default
    * pubkey via `queue_policy_update` (the SDK helper here mirrors that
-   * value into the digest). Bound at canonical position 22.
+   * value into the digest). Bound at canonical position 21.
    *
    * Type: base58 string (e.g. an Address) OR a 32-byte raw Uint8Array.
    * The encoder accepts both shapes for parity with the protocols /
@@ -222,6 +227,21 @@ export interface PolicyPreviewFields {
    * `queue_policy_update` path.
    */
   operatorGrantDelaySeconds?: bigint;
+  /**
+   * M-1 (audit 2026-06-11): owner's per-protocol-caps master switch. Bound at
+   * canonical position 23 (default false when omitted, matching the on-chain
+   * init/legacy state). Mirrors the cosign digest's order (hasProtocolCaps
+   * before protocolCaps). Closes the gap where a tampered SDK could flip the
+   * caps switch without the owner's signed preview detecting it.
+   */
+  hasProtocolCaps?: boolean;
+  /**
+   * M-1 (audit 2026-06-11): owner's per-protocol rolling-24h spend caps,
+   * aligned 1:1 with `protocols` (≤ 10). Bound at canonical position 24 as a
+   * u32 LE length prefix ++ each cap as u64 LE (mirrors the `protocols` Vec
+   * pattern). Default [] when omitted.
+   */
+  protocolCaps?: readonly bigint[];
 }
 
 // Base58 decode + sha256 + cursor writers now live in `../canonical-encode.ts`
@@ -256,8 +276,9 @@ export interface PolicyPreviewFields {
 
 /** Mirrors `policy_digest.rs::POLICY_PREVIEW_FIELD_COUNT`.
  *  M1-04: was 22; has_constraints removed (digest-version bump).
- *  F-Q6 (2026-06-02): 21 → 22, binds operator_grant_delay_seconds. */
-export const POLICY_PREVIEW_FIELD_COUNT = 22;
+ *  F-Q6 (2026-06-02): 21 → 22, binds operator_grant_delay_seconds.
+ *  M-1 (2026-06-11): 22 → 24, binds has_protocol_caps (23) + protocol_caps (24). */
+export const POLICY_PREVIEW_FIELD_COUNT = 24;
 
 /**
  * Phase 8 PEN-CROSS-1 (Council ISC-141): SHA-256 of the Borsh-encoded
@@ -345,6 +366,8 @@ const PER_FIELD_FIXED_SIZES = [
   32, // 20. agent_set_hash              ([u8;32]) Phase 8 PEN-CROSS-1
   32, // 21. cosign_session_pubkey       (Pubkey)  D-5 (audit 2026-05-19, F-RP3-1)
   8, // 22. operator_grant_delay_seconds (u64 LE)  F-Q6 (2026-06-02)
+  1, // 23. has_protocol_caps            (bool as u8)  M-1 (2026-06-11)
+  4, // 24. protocol_caps                (u32 LE length prefix; u64 caps variable)  M-1
 ] as const;
 
 /** Derived sum — must match the encoder's `fixedSize` exactly. */
@@ -399,7 +422,12 @@ export function computePolicyPreviewDigest(
   // developer to update both the table AND the encoder body when adding
   // a field (the offset assertion at the bottom catches the inconsistency).
   const fixedSize = EXPECTED_FIXED_SIZE;
-  const variableSize = protoBytes.length * 32 + destBytes.length * 32;
+  // M-1 (2026-06-11): + each protocol_cap (u64 = 8 bytes); the u32 length
+  // prefix is already counted in PER_FIELD_FIXED_SIZES (field 24 = 4).
+  const variableSize =
+    protoBytes.length * 32 +
+    destBytes.length * 32 +
+    (fields.protocolCaps?.length ?? 0) * 8;
   const buf = new Uint8Array(fixedSize + variableSize);
   const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
 
@@ -426,23 +454,23 @@ export function computePolicyPreviewDigest(
   buf[off++] = fields.observeOnly ? 1 : 0;
   // M1-04: has_constraints byte removed (digest-version bump).
   buf[off++] = fields.hasPostAssertions;
-  // PEN-CROSS-2: created_at_slot at position 14 of canonical encoding.
+  // PEN-CROSS-2: created_at_slot at position 13 of canonical encoding.
   off = writeU64Le(view, off, fields.createdAtSlot);
-  // TA-05 (Phase 3): operating_hours at position 15 of canonical encoding.
+  // TA-05 (Phase 3): operating_hours at position 14 of canonical encoding.
   // Default 0 when omitted by legacy callers; production SDK consumers
   // should pass 0xFFFFFF explicitly via `initializeVault`/`queuePolicyUpdate`.
   off = writeU32Le(view, off, fields.operatingHours ?? 0);
-  // TA-07 (Phase 3): auto_promote_grays at position 16.
+  // TA-07 (Phase 3): auto_promote_grays at position 15.
   buf[off++] = fields.autoPromoteGrays ? 1 : 0;
-  // TA-17 (Phase 3): auto_revoke_threshold at position 17.
+  // TA-17 (Phase 3): auto_revoke_threshold at position 16.
   buf[off++] = fields.autoRevokeThreshold ?? 0;
-  // TA-12 (Phase 5): stable_balance_floor at position 18.
+  // TA-12 (Phase 5): stable_balance_floor at position 17.
   off = writeU64Le(view, off, fields.stableBalanceFloor ?? 0n);
-  // TA-14 (Phase 5): per_recipient_daily_cap_usd at position 19.
+  // TA-14 (Phase 5): per_recipient_daily_cap_usd at position 18.
   off = writeU64Le(view, off, fields.perRecipientDailyCapUsd ?? 0n);
-  // G6 (audit 2026-05-18 cosign opt-in): cosign_required at position 20.
+  // G6 (audit 2026-05-18 cosign opt-in): cosign_required at position 19.
   buf[off++] = fields.cosignRequired ? 1 : 0;
-  // Phase 8 PEN-CROSS-1: agent_set_hash at position 21. Default
+  // Phase 8 PEN-CROSS-1: agent_set_hash at position 20. Default
   // EMPTY_AGENT_SET_HASH so legacy callers (no agents) continue to
   // produce a canonical digest without explicit setup.
   const agentSetHash = fields.agentSetHash ?? EMPTY_AGENT_SET_HASH;
@@ -479,6 +507,16 @@ export function computePolicyPreviewDigest(
   // Default 0n so legacy callers that don't configure a delay continue to
   // produce the canonical digest. Owner opts in via queue_policy_update.
   off = writeU64Le(view, off, fields.operatorGrantDelaySeconds ?? 0n);
+  // 23. has_protocol_caps: bool as u8 — M-1 (2026-06-11). Parity with the Rust
+  // encoder + the cosign digest (position 8).
+  buf[off++] = fields.hasProtocolCaps ? 1 : 0;
+  // 24. protocol_caps: u32 LE length prefix ++ each cap u64 LE — M-1, parity with
+  // the `protocols` Vec pattern above + the cosign digest (position 9).
+  const protocolCaps = fields.protocolCaps ?? [];
+  off = writeU32Le(view, off, protocolCaps.length);
+  for (const cap of protocolCaps) {
+    off = writeU64Le(view, off, cap);
+  }
 
   // §RP-2 L-NEW-1 forward-looking ratchet: the encoder MUST write
   // exactly `fixedSize + variableSize` bytes. `fixedSize` is now

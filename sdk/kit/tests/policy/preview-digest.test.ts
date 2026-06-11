@@ -64,10 +64,11 @@ import {
 //   Pre-F-Q6 (post-D-5):
 //     HEX_MINIMAL   = 8d80e131f0fca07e71d173cd5c559f0041a6ef9391e3a87ecac5f249c5bda36d
 //     HEX_REALISTIC = 21155d71a1d0a466cf57676658dcae577b3cab8d1cc512c4589f9ebba10bae03
+// M-1 (2026-06-11): regenerated for the 24-field digest (+has_protocol_caps=false, +protocol_caps=[]).
 const HEX_MINIMAL =
-  "a213672e16ff350a5c4f6bb5920ee7b357507dd5f13dcdffb9ff5eae1ba8f125";
+  "7e2958e4e38802d5416e3965a5eb22e51daa192ca093dbebe776cdae8d469780";
 const HEX_REALISTIC =
-  "55326e99a6f919f574719c9cf13b3aae6120e973de2e969fdad1561d278bc1d1";
+  "67f71921a83501d6a517e18894820d9375d5c4080d22ff1d2b76455cf4049313";
 /**
  * Phase 8 PEN-CROSS-1 (audit 2026-05-19): empty-vault agent_set_hash.
  * SHA-256 of [0x00,0x00,0x00,0x00]. Mirrors Rust
@@ -600,6 +601,9 @@ function referenceDigest(fields: {
   cosignSessionPubkey: Uint8Array;
   // F-Q6 (2026-06-02): operator_grant_delay_seconds, u64 LE, appended last.
   operatorGrantDelaySeconds: bigint;
+  // M-1 (2026-06-11): per-protocol caps at canonical positions 23-24.
+  hasProtocolCaps: boolean;
+  protocolCaps: readonly bigint[];
 }): string {
   const parts: number[] = [];
   const pushU64 = (v: bigint) => {
@@ -666,6 +670,11 @@ function referenceDigest(fields: {
   for (const x of fields.cosignSessionPubkey) parts.push(x);
   // F-Q6 (2026-06-02): operator_grant_delay_seconds, u64 LE, appended last.
   pushU64(fields.operatorGrantDelaySeconds);
+  // M-1 (2026-06-11): has_protocol_caps (pos 23, bool as u8) + protocol_caps
+  // (pos 24, u32 LE length prefix ++ each u64 LE).
+  pushU8(fields.hasProtocolCaps ? 1 : 0);
+  pushU32(fields.protocolCaps.length);
+  for (const c of fields.protocolCaps) pushU64(c);
 
   const buf = Buffer.from(parts);
   return createHash("sha256").update(buf).digest("hex");
@@ -701,6 +710,11 @@ describe("TA-19 — property test: SDK encoder == reference encoder (PEN-CROSS-7
         fc.uint8Array({ minLength: 32, maxLength: 32 }), // agent_set_hash (PEN-CROSS-1)
         fc.uint8Array({ minLength: 32, maxLength: 32 }), // cosign_session_pubkey (D-5 audit 2026-05-19, F-RP3-1)
         fc.bigUint({ max: (1n << 64n) - 1n }), // operator_grant_delay_seconds (F-Q6 2026-06-02)
+        fc.boolean(), // has_protocol_caps (M-1 2026-06-11)
+        fc.array(fc.bigUint({ max: (1n << 64n) - 1n }), {
+          minLength: 0,
+          maxLength: 10,
+        }), // protocol_caps (M-1 2026-06-11)
         (
           dailyCap,
           maxTx,
@@ -724,6 +738,8 @@ describe("TA-19 — property test: SDK encoder == reference encoder (PEN-CROSS-7
           agentSetHash,
           cosignSessionPubkey,
           operatorGrantDelaySeconds,
+          hasProtocolCaps,
+          protocolCaps,
         ) => {
           const sdkDigest = computePolicyPreviewDigest({
             dailySpendingCapUsd: dailyCap,
@@ -754,6 +770,9 @@ describe("TA-19 — property test: SDK encoder == reference encoder (PEN-CROSS-7
             cosignSessionPubkey,
             // F-Q6 (2026-06-02): operator_grant_delay_seconds.
             operatorGrantDelaySeconds,
+            // M-1 (2026-06-11): per-protocol caps.
+            hasProtocolCaps,
+            protocolCaps,
           });
           const refDigest = referenceDigest({
             dailySpendingCapUsd: dailyCap,
@@ -779,6 +798,9 @@ describe("TA-19 — property test: SDK encoder == reference encoder (PEN-CROSS-7
             cosignSessionPubkey,
             // F-Q6 (2026-06-02): operator_grant_delay_seconds.
             operatorGrantDelaySeconds,
+            // M-1 (2026-06-11): per-protocol caps.
+            hasProtocolCaps,
+            protocolCaps,
           });
           const sdkHex = Array.from(sdkDigest)
             .map((x) => x.toString(16).padStart(2, "0"))

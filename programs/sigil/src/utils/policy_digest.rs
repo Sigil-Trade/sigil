@@ -179,6 +179,17 @@ pub struct PolicyPreviewFields<'a> {
     /// (`max(field, 600)`) and the per-tier grant logic live in
     /// `register_agent` / `queue_agent_grant`; this field is the persisted knob.
     pub operator_grant_delay_seconds: u64,
+    /// M-1 (audit 2026-06-11): owner's per-protocol-caps master switch. Bound at
+    /// canonical position 23 (after operator_grant_delay_seconds), mirroring the
+    /// cosign digest's order (has_protocol_caps before protocol_caps). Closes the
+    /// gap where a tampered SDK could enable/disable per-protocol caps without the
+    /// owner's signed preview detecting it (same class as developer_fee_rate).
+    pub has_protocol_caps: bool,
+    /// M-1 (audit 2026-06-11): owner's per-protocol rolling-24h spend caps
+    /// (≤ MAX_ALLOWED_PROTOCOLS, aligned 1:1 with `protocols`). Bound at canonical
+    /// position 24 as a borrowed slice mirroring `protocols`: u32-LE length prefix
+    /// then each cap as u64 LE.
+    pub protocol_caps: &'a [u64],
 }
 
 /// P0.2 PEN-7 defense-in-depth ratchet (audit 2026-05-19).
@@ -195,7 +206,8 @@ pub struct PolicyPreviewFields<'a> {
 /// the apply-side constant must change in lockstep.
 // M1-04: was 22; has_constraints removed (digest-version bump).
 // F-Q6 (2026-06-02): 21 → 22, binds `operator_grant_delay_seconds`.
-pub const POLICY_PREVIEW_FIELD_COUNT: usize = 22;
+// M-1 (2026-06-11): 22 → 24, binds `has_protocol_caps` (23) + `protocol_caps` (24).
+pub const POLICY_PREVIEW_FIELD_COUNT: usize = 24;
 
 /// Phase 8 PEN-CROSS-1 (Council ISC-66/A8/A9 / ISC-141 empty-set determinism).
 ///
@@ -280,6 +292,8 @@ mod field_count_invariant {
             // disabled.
             cosign_session_pubkey: Pubkey::default(),
             operator_grant_delay_seconds: 0,
+            has_protocol_caps: false,
+            protocol_caps: &[],
         };
         // The destructuring pattern below is exhaustive. If a 23rd field
         // lands on PolicyPreviewFields, this match fails to compile with
@@ -308,8 +322,10 @@ mod field_count_invariant {
             agent_set_hash: _,
             cosign_session_pubkey: _,
             operator_grant_delay_seconds: _,
+            has_protocol_caps: _,
+            protocol_caps: _,
         } = fields;
-        assert_eq!(POLICY_PREVIEW_FIELD_COUNT, 22);
+        assert_eq!(POLICY_PREVIEW_FIELD_COUNT, 24);
     }
 }
 
@@ -388,6 +404,18 @@ pub fn compute_policy_preview_digest(fields: &PolicyPreviewFields<'_>) -> [u8; 3
     // pending-PDA mutation cannot silently lower it between owner approval
     // and on-chain landing.
     buf.extend_from_slice(&fields.operator_grant_delay_seconds.to_le_bytes());
+    // 23. has_protocol_caps: bool as 1 byte — M-1 (audit 2026-06-11). Parity with
+    // the cosign digest (position 8). Closes the gap where a tampered SDK could
+    // flip the per-protocol-caps master switch without the owner's signed digest
+    // detecting it.
+    buf.push(u8::from(fields.has_protocol_caps));
+    // 24. protocol_caps: Vec<u64> — u32 LE length prefix then each cap u64 LE.
+    // M-1, parity with the cosign digest (position 9) and the `protocols` Vec
+    // pattern above.
+    buf.extend_from_slice(&(fields.protocol_caps.len() as u32).to_le_bytes());
+    for cap in fields.protocol_caps.iter() {
+        buf.extend_from_slice(&cap.to_le_bytes());
+    }
 
     hashv(&[&buf]).to_bytes()
 }
@@ -435,6 +463,8 @@ mod tests {
             // byte layout for fixtures that don't exercise the field.
             cosign_session_pubkey: Pubkey::default(),
             operator_grant_delay_seconds: 0,
+            has_protocol_caps: false,
+            protocol_caps: &[],
         };
         let d1 = compute_policy_preview_digest(&f);
         let d2 = compute_policy_preview_digest(&f);
@@ -476,6 +506,8 @@ mod tests {
             // byte layout for fixtures that don't exercise the field.
             cosign_session_pubkey: Pubkey::default(),
             operator_grant_delay_seconds: 0,
+            has_protocol_caps: false,
+            protocol_caps: &[],
         };
         let mut flipped = base.daily_spending_cap_usd;
         let _ = &mut flipped; // suppress unused
@@ -526,6 +558,8 @@ mod tests {
             // byte layout for fixtures that don't exercise the field.
             cosign_session_pubkey: Pubkey::default(),
             operator_grant_delay_seconds: 0,
+            has_protocol_caps: false,
+            protocol_caps: &[],
         };
         let f2 = PolicyPreviewFields {
             protocols: &b,
@@ -575,6 +609,8 @@ mod tests {
             // byte layout for fixtures that don't exercise the field.
             cosign_session_pubkey: Pubkey::default(),
             operator_grant_delay_seconds: 0,
+            has_protocol_caps: false,
+            protocol_caps: &[],
         };
         let narrow = PolicyPreviewFields {
             // 13:00-17:00 UTC = bits 13..17 = 0x1E000
@@ -624,6 +660,8 @@ mod tests {
             // byte layout for fixtures that don't exercise the field.
             cosign_session_pubkey: Pubkey::default(),
             operator_grant_delay_seconds: 0,
+            has_protocol_caps: false,
+            protocol_caps: &[],
         };
         let flipped = PolicyPreviewFields {
             auto_promote_grays: true,
@@ -671,6 +709,8 @@ mod tests {
             // byte layout for fixtures that don't exercise the field.
             cosign_session_pubkey: Pubkey::default(),
             operator_grant_delay_seconds: 0,
+            has_protocol_caps: false,
+            protocol_caps: &[],
         };
         let lower = PolicyPreviewFields {
             auto_revoke_threshold: 3,
@@ -723,6 +763,8 @@ mod tests {
             // byte layout for fixtures that don't exercise the field.
             cosign_session_pubkey: Pubkey::default(),
             operator_grant_delay_seconds: 0,
+            has_protocol_caps: false,
+            protocol_caps: &[],
         };
         let raised = PolicyPreviewFields {
             per_recipient_daily_cap_usd: 50_000_000, // $50 cap
@@ -775,6 +817,8 @@ mod tests {
             // byte layout for fixtures that don't exercise the field.
             cosign_session_pubkey: Pubkey::default(),
             operator_grant_delay_seconds: 0,
+            has_protocol_caps: false,
+            protocol_caps: &[],
         };
         let raised = PolicyPreviewFields {
             // $100 floor in 6-decimal USDC face value
@@ -825,6 +869,8 @@ mod tests {
             // byte layout for fixtures that don't exercise the field.
             cosign_session_pubkey: Pubkey::default(),
             operator_grant_delay_seconds: 0,
+            has_protocol_caps: false,
+            protocol_caps: &[],
         };
         let flipped = PolicyPreviewFields {
             cosign_required: true,
@@ -867,6 +913,8 @@ mod tests {
             agent_set_hash: [0u8; 32],
             cosign_session_pubkey: Pubkey::default(),
             operator_grant_delay_seconds: 0,
+            has_protocol_caps: false,
+            protocol_caps: &[],
         };
         let with_cosigner = PolicyPreviewFields {
             cosign_session_pubkey: pk(99),
@@ -956,6 +1004,8 @@ mod tests {
             // D-5: cosign_session_pubkey at position 22 — default off.
             cosign_session_pubkey: Pubkey::default(),
             operator_grant_delay_seconds: 0,
+            has_protocol_caps: false,
+            protocol_caps: &[],
         };
         // Build a mutated agent set: one OPERATOR agent inserted.
         let new_agent = AgentEntry {
@@ -1024,6 +1074,8 @@ mod tests {
             // enabled path.
             cosign_session_pubkey: Pubkey::default(),
             operator_grant_delay_seconds: 0,
+            has_protocol_caps: false,
+            protocol_caps: &[],
         };
         // Encoding: 8 zero + 8 zero + 2 zero + 2 zero (developer_fee_rate)
         //   + 0x01 + 4 zero + 0x00 + 4 zero + 8 zero + 8 zero + 0 + 0 + 0
@@ -1119,6 +1171,8 @@ mod tests {
             // cosign_session_pubkey = Pubkey::default() — gate disabled.
             cosign_session_pubkey: Pubkey::default(),
             operator_grant_delay_seconds: 0,
+            has_protocol_caps: false,
+            protocol_caps: &[],
         };
         let digest = compute_policy_preview_digest(&f);
         // Prior digests:
@@ -1170,9 +1224,10 @@ mod tests {
 #[cfg(test)]
 // M1-04: regenerated for the 21-field digest (has_constraints removed).
 // F-Q6 (2026-06-02): regenerated for the 22-field digest (+operator_grant_delay_seconds=0).
+// M-1 (2026-06-11): regenerated for the 24-field digest (+has_protocol_caps=false, +protocol_caps=[]).
 const REGENERATED_HEX_MINIMAL: [u8; 32] = [
-    0xa2, 0x13, 0x67, 0x2e, 0x16, 0xff, 0x35, 0x0a, 0x5c, 0x4f, 0x6b, 0xb5, 0x92, 0x0e, 0xe7, 0xb3,
-    0x57, 0x50, 0x7d, 0xd5, 0xf1, 0x3d, 0xcd, 0xff, 0xb9, 0xff, 0x5e, 0xae, 0x1b, 0xa8, 0xf1, 0x25,
+    0x7e, 0x29, 0x58, 0xe4, 0xe3, 0x88, 0x02, 0xd5, 0x41, 0x6e, 0x39, 0x65, 0xa5, 0xeb, 0x22, 0xe5,
+    0x1d, 0xaa, 0x19, 0x2c, 0xa0, 0x93, 0xdb, 0xeb, 0xe7, 0x76, 0xcd, 0xae, 0x8d, 0x46, 0x97, 0x80,
 ];
 
 /// D-5 (audit 2026-05-19, F-RP3-1) realistic-policy expected digest.
@@ -1191,9 +1246,10 @@ const REGENERATED_HEX_MINIMAL: [u8; 32] = [
 #[cfg(test)]
 // M1-04: regenerated for the 21-field digest (has_constraints removed).
 // F-Q6 (2026-06-02): regenerated for the 22-field digest (+operator_grant_delay_seconds=0).
+// M-1 (2026-06-11): regenerated for the 24-field digest (+has_protocol_caps=false, +protocol_caps=[]).
 const REGENERATED_HEX_REALISTIC: [u8; 32] = [
-    0x55, 0x32, 0x6e, 0x99, 0xa6, 0xf9, 0x19, 0xf5, 0x74, 0x71, 0x9c, 0x9c, 0xf1, 0x3b, 0x3a, 0xae,
-    0x61, 0x20, 0xe9, 0x73, 0xde, 0x2e, 0x96, 0x9f, 0xda, 0xd1, 0x56, 0x1d, 0x27, 0x8b, 0xc1, 0xd1,
+    0x67, 0xf7, 0x19, 0x21, 0xa8, 0x35, 0x01, 0xd6, 0xa5, 0x17, 0xe1, 0x88, 0x94, 0x82, 0x0d, 0x93,
+    0x75, 0xd5, 0xc4, 0x08, 0x0d, 0x22, 0xff, 0x1d, 0x2b, 0x76, 0x45, 0x5c, 0xf4, 0x04, 0x93, 0x13,
 ];
 
 /// Phase 8 PEN-CROSS-1 (Council ISC-141): empty-agent-set hash. SHA-256 of
