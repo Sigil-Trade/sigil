@@ -57,3 +57,10 @@ impl PendingAgentPermissionsUpdate {
         current_timestamp >= self.executes_at
     }
 }
+
+// L-11 (audit 2026-06-11): compile-time SIZE pin, matching the sibling pending
+// PDAs. A future field change that forgets to update SIZE fails the build
+// instead of silently under-allocating (init DoS / wrong rent).
+const _PENDING_AGENT_PERMS_SIZE_PIN: () = assert!(
+    PendingAgentPermissionsUpdate::SIZE == 8 + 32 + 32 + 1 + 7 + 8 + 8 + 8 + 8 + 1 + 8 + 32 + 32
+);
