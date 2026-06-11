@@ -28,6 +28,7 @@ import { getValidateAndAuthorizeInstructionAsync } from "../../src/generated/ins
 import { getFinalizeSessionInstructionAsync } from "../../src/generated/instructions/finalizeSession.js";
 import { resolveVaultState } from "../../src/state-resolver.js";
 import { deriveAta } from "../../src/x402/transfer-builder.js";
+import { computeScalarIntentDigest } from "../../src/seal/intent-digest.js";
 import {
   USDC_MINT_DEVNET,
   PROTOCOL_TREASURY,
@@ -45,6 +46,21 @@ async function buildSwapInstructions(
   protocolTreasuryAta: Address,
   amount: bigint,
 ) {
+  // D-1 (Bucket 2): the on-chain verifier recomputes the canonical scalar
+  // intent digest from validate_and_authorize's typed args (vault, agent,
+  // token_mint, amount, target_protocol, network) and rejects a byte-mismatch
+  // with ErrIntentDigestMismatch (6102). Compute the real digest here — a
+  // zero-filled placeholder would always reject. Must mirror exactly the
+  // scalar args passed to the instruction below.
+  const expectedIntentDigest = computeScalarIntentDigest({
+    vault: vault.vaultAddress,
+    agent: agent.address,
+    tokenMint: USDC_MINT_DEVNET,
+    amount,
+    targetProtocol: JUPITER_PROGRAM_ADDRESS,
+    network: "devnet",
+  });
+
   const validateIx = await getValidateAndAuthorizeInstructionAsync({
     agent,
     vault: vault.vaultAddress,
@@ -58,13 +74,7 @@ async function buildSwapInstructions(
     expectedPolicyVersion: 0n,
     // AC-10 (Phase 4): fresh session always starts at nonce=0.
     expectedNonce: 0n,
-    // D-1 (Bucket 2): devnet integration test — zero-filled digest matches
-    // the scalar verifier only if the on-chain program is also configured
-    // to accept zero (it isn't), so this test will reject with 6111. The
-    // test relies on a successful seal, so it MUST compute the correct
-    // scalar digest. Skipped in CI until the test computes via
-    // computeScalarIntentDigest (devnet tests run separately from CI).
-    expectedIntentDigest: new Uint8Array(32),
+    expectedIntentDigest,
   });
 
   const finalizeIx = await getFinalizeSessionInstructionAsync({
@@ -85,7 +95,11 @@ async function buildSwapInstructions(
 describe("Kit SDK Devnet — Composed Transaction", function () {
   if (SKIP) return;
 
-  this.timeout(300_000);
+  // 15 min: the `before` hook provisions a FULL_CAPABILITY (operator) vault,
+  // which routes through the F-Q6 queue → on-chain 600s single-key timelock
+  // floor → apply path (one real ~600s cluster-clock wait) on top of the
+  // normal RPC roundtrips.
+  this.timeout(900_000);
 
   let rpc: Rpc<SolanaRpcApi>;
   let owner: KeyPairSigner;
@@ -107,9 +121,20 @@ describe("Kit SDK Devnet — Composed Transaction", function () {
       2_000_000_000,
     );
 
+    // On-chain V2 (initialize_vault.rs:123-126) requires ALLOWLIST mode (1) —
+    // the permissive ALL/DENYLIST modes were deleted. validate_and_authorize
+    // then rejects any target_protocol not in the allowlist (ProtocolNotAllowed),
+    // so the swap target (Jupiter) MUST be allowlisted here. Default
+    // capability is OPERATOR (FULL_CAPABILITY) → provisionVault routes the
+    // agent through queue→wait(600s)→apply (one real timelock wait).
     vault = await provisionVault(rpc, owner, agent, USDC_MINT_DEVNET, {
-      protocolMode: 0,
+      protocols: [JUPITER_PROGRAM_ADDRESS],
       dailySpendingCapUsd: 500_000_000n,
+      // Unique high id so inscribe skips its first-unused-id probe. The shared
+      // devnet wallet has many accumulated vaults and the public RPC's view can
+      // be stale, so the probe otherwise picks an already-allocated id and init
+      // fails with the system program's "account already in use" (custom 0x0).
+      vaultId: BigInt(Date.now()),
     });
 
     vaultTokenAta = await deriveAta(vault.vaultAddress, USDC_MINT_DEVNET);

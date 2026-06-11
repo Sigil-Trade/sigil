@@ -3,7 +3,7 @@
 # Runs on every push to main and on pull requests.
 # Eight jobs (1 detection + 6 parallel + 1 gate):
 #   0. changes                — Detect which file groups changed (package-level path filtering)
-#   1. build-lint-test        — TypeScript builds, Prettier, 1913 TS tests (conditional: any-ts or push)
+#   1. build-lint-test        — TypeScript builds, Prettier, 1919 TS tests (conditional: any-ts or push)
 #   2. rust-checks            — cargo fmt + cargo clippy (conditional: rust changes or push)
 #   3. on-chain-tests         — Anchor build + LiteSVM 523 tests (conditional: rust changes or push)
 #  3b. build-verification     — Feature flag safety net (conditional: rust changes or push)
@@ -23,7 +23,7 @@
 #   sdk/custody → Custody adapter tests (96 tests)
 #   packages/plugins → Plugin tests (14 tests)
 #
-# Total: ~2,625 tests across 20 suites (1913 TS + 523 on-chain + 49 Surfpool + 140 devnet)
+# Total: ~2,631 tests across 20 suites (1919 TS + 523 on-chain + 49 Surfpool + 140 devnet)
 # All security checks are BLOCKING — zero tolerance for known issues.
 
 name: CI
@@ -97,7 +97,7 @@ jobs:
               - 'tsconfig*.json'
 
   # ──────────────────────────────────────────────────────────────
-  # Job 1: TypeScript build, lint, and tests (4 suites, 1913 tests)
+  # Job 1: TypeScript build, lint, and tests (4 suites, 1919 tests)
   # ──────────────────────────────────────────────────────────────
   build-lint-test:
     name: Build, Lint & TS Tests
@@ -225,7 +225,7 @@ jobs:
           github.event_name == 'push'
         run: pnpm -C sdk/kit run verify-lockfile-pins
 
-      - name: Kit SDK tests (1786 tests)
+      - name: Kit SDK tests (1792 tests)
         if: >-
           needs.changes.outputs.sdk-kit == 'true' ||
           github.event_name == 'push'
