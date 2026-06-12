@@ -9,13 +9,15 @@
 # The deploy-devnet.yml workflow handles: build → deploy → test (chained).
 # This prevents tests from running against a stale program binary.
 #
-# 141 tests across 9 files. Costs SOL — never runs on PRs.
+# 184 tests across 11 files. Costs SOL — never runs on PRs.
 #
-# RUNTIME: ~110 min. F-Q6 forbids instant OPERATOR grants on single-key
+# RUNTIME: ~150 min. F-Q6 forbids instant OPERATOR grants on single-key
 # vaults; devnet has no clock cheatcodes, so each file pays one REAL 600s
-# queue→apply wait in its before() (grants are batched per file). 7 of the
-# 8 files carry a wait. This is the cost of testing the genuine on-chain
-# timelock path — do not "optimize" it away by weakening the program.
+# queue→apply wait in its before() (grants are batched per file). This is
+# the cost of testing the genuine on-chain timelock path — do not
+# "optimize" it away by weakening the program. The extended scenarios
+# (flash-trade ~12 min incl. one wait; stress ~30 min incl. one batched
+# wait + a real 301s reactivate cooldown) run after the core 8 files.
 
 name: Devnet Tests
 
@@ -58,9 +60,11 @@ permissions:
 jobs:
   devnet-test:
     runs-on: ubuntu-latest
-    # ~110 min runtime: 7 files × one real 600s OPERATOR-seating wait each
-    # (F-Q6 single-key floor) + setup/exec. Margin for devnet RPC weather.
-    timeout-minutes: 150
+    # ~150 min runtime: the core files each pay one real 600s OPERATOR-seating
+    # wait (F-Q6 single-key floor), plus the extended scenarios (flash-trade
+    # ~12 min, stress ~30 min incl. its 301s reactivate cooldown). Margin for
+    # devnet RPC weather.
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -174,6 +178,22 @@ jobs:
               tests/devnet-timelock.ts \
               tests/devnet-routing.ts
           fi
+
+      # Extended scenarios (revived 2026-06-12): flash-trade composes REAL
+      # flash-sdk instructions through the guard (adaptive: lands the swap
+      # when Flash's devnet Pyth oracle is fresh, else pins the failure to
+      # their StaleOraclePrice via the instruction-indexed sim error);
+      # stress exercises caps/limits/multi-agent with a single batched
+      # operator wait + a real 301s reactivate cooldown. Run separately from
+      # the core files so a flash-sdk/oracle-side failure is immediately
+      # attributable.
+      - name: Run extended devnet scenarios (flash-trade + stress)
+        env:
+          NODE_OPTIONS: "--no-experimental-strip-types"
+        run: |
+          npx ts-mocha -p ./tsconfig.json -t 1800000 \
+            tests/devnet/flash-trade-devnet.ts \
+            tests/devnet/stress-test.ts
 
       - name: Run Kit SDK devnet tests (dashboard, lifecycle, composed-tx)
         working-directory: sdk/kit

@@ -39,12 +39,16 @@ import {
   ensureStablecoinMint,
   TEST_USDC_KEYPAIR,
   PROTOCOL_TREASURY,
-  derivePDAs,
   deriveSessionPda,
   getTokenBalance,
   calculateFees,
+  createFullVault,
+  queueOperatorGrant,
+  applyOperatorGrants,
+  type OperatorGrantHandle,
+  MOCK_DEFI_PROGRAM_ID,
+  buildMockDefiNoopIx,
 } from "../helpers/devnet-setup";
-import { initVaultPreviewDigest } from "../helpers/policy-digest";
 import {
   buildExpectedIntentDigest,
   digestAsArgs,
@@ -63,13 +67,19 @@ let protocolTreasuryUsdcAta: PublicKey;
 const agentA = Keypair.generate();
 const agentB = Keypair.generate();
 const feeDestination = Keypair.generate();
+// Phase 7 multi-agent pair (module scope: their grants are queued/applied by
+// the top-level before alongside every other vault's).
+const multiAgent1 = Keypair.generate();
+const multiAgent2 = Keypair.generate();
 
-// Use a known protocol for allowlist — just a random pubkey for the policy
-const allowedProtocol = Keypair.generate().publicKey;
+// V2: the protocol allowlist gate applies to ALL actions
+// (validate_and_authorize.rs "Protocol must be allowed — ALL actions") and a
+// spending sandwich must carry EXACTLY ONE counted, EXECUTABLE DeFi
+// instruction whose program_id == target_protocol (F-Q2). A random pubkey
+// can't execute, so every composed-TX path targets the deployed mock-defi
+// fixture program and uses its `open_position` no-op as the counted leg.
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
-
-const FULL_CAPABILITY = 2;
 
 async function createVault(opts: {
   dailyCap: BN;
@@ -85,99 +95,57 @@ async function createVault(opts: {
   tracker: PublicKey;
   overlay: PublicKey;
   vaultAta: PublicKey;
+  /**
+   * F-Q6: the agent's OPERATOR grant is QUEUED here, not applied — a
+   * single-key vault can never seat a spending grant instantly (6107). The
+   * top-level before() batches every handle into ONE applyOperatorGrants()
+   * call (a single ~600s cluster-clock wait for the whole file).
+   */
+  operatorGrant: OperatorGrantHandle;
 }> {
-  const vaultId = nextVaultId(1);
-  const pdas = derivePDAs(owner.publicKey, vaultId, program.programId);
-  const [overlay] = PublicKey.findProgramAddressSync(
-    [Buffer.from("agent_spend"), pdas.vaultPda.toBuffer(), Buffer.from([0])],
-    program.programId,
-  );
-
-  await program.methods
-    .initializeVault(
-      vaultId,
-      opts.dailyCap,
-      opts.maxTx,
-      0, // protocolMode: allow all
-      [],
-      opts.devFeeRate ?? 0,
-      500, // maxSlippageBps
-      new BN(1800),
-      opts.destinations ?? [],
-      [],
-      false, // observe_only (Phase 2 TA-19)
-      0x00ffffff, // operating_hours (TA-05 Phase 3 — all 24h)
-      false, // auto_promote_grays (TA-07 Phase 3 — friction enabled)
-      5, // auto_revoke_threshold (TA-17 Phase 3 — default)
-      new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
-      new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
-      false, // cosignRequired (G6 audit 2026-05-18 — opt-in, default off)
-      initVaultPreviewDigest({
-        dailySpendingCapUsd: opts.dailyCap,
-        maxTransactionSizeUsd: opts.maxTx,
-        maxSlippageBps: 500,
-        developerFeeRate: opts.devFeeRate ?? 0,
-        protocolMode: 0,
-        protocols: [],
-        allowedDestinations: opts.destinations ?? [],
-        timelockDuration: new BN(1800),
-        operatingHours: 0x00ffffff,
-        autoPromoteGrays: false,
-        autoRevokeThreshold: 5,
-      }),
-    )
-    .accounts({
-      owner: owner.publicKey,
-      vault: pdas.vaultPda,
-      policy: pdas.policyPda,
-      tracker: pdas.trackerPda,
-      agentSpendOverlay: overlay,
-      feeDestination: feeDestination.publicKey,
-      systemProgram: SystemProgram.programId,
-    } as any)
-    .rpc();
-
-  await program.methods
-    .registerAgent(
-      opts.agent.publicKey,
-      FULL_CAPABILITY,
-      opts.agentSpendLimit ?? new BN(0),
-    )
-    .accounts({
-      owner: owner.publicKey,
-      vault: pdas.vaultPda,
-      agentSpendOverlay: overlay,
-    } as any)
-    .rpc();
-
-  // Create vault ATA + deposit
-  const vaultAta = anchor.utils.token.associatedAddress({
+  // createFullVault routes the init through sendInitVault's processed+offset
+  // slot-bind retry (initialize_vault recomputes the owner-signed TA-19 digest
+  // with the EXACT slot it executes in — a digest built without a live slot
+  // always reverts with PolicyPreviewMismatch 6071), and uses ALLOWLIST mode:
+  // V2 deleted protocolMode 0 (initialize_vault.rs requires mode == 1) and
+  // F-11 requires an active vault to allowlist at least one protocol or
+  // destination. skipAgent: the grant is queued separately below so the
+  // per-agent spend limit (Phase 5/7) can be forwarded.
+  const r = await createFullVault({
+    program,
+    connection,
+    owner,
+    agent: opts.agent,
+    feeDestination: feeDestination.publicKey,
     mint: usdcMint,
-    owner: pdas.vaultPda,
+    vaultId: nextVaultId(1),
+    dailyCap: opts.dailyCap,
+    maxTx: opts.maxTx,
+    allowedProtocols: [MOCK_DEFI_PROGRAM_ID],
+    allowedDestinations: opts.destinations ?? [],
+    devFeeRate: opts.devFeeRate ?? 0,
+    depositAmount: opts.deposit,
+    skipDeposit: opts.deposit.lte(new BN(0)),
+    skipAgent: true,
   });
 
-  if (opts.deposit.gt(new BN(0))) {
-    await program.methods
-      .depositFunds(opts.deposit)
-      .accounts({
-        owner: owner.publicKey,
-        vault: pdas.vaultPda,
-        mint: usdcMint,
-        ownerTokenAccount: ownerUsdcAta,
-        vaultTokenAccount: vaultAta,
-        tokenProgram: TOKEN_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-      } as any)
-      .rpc();
-  }
+  const operatorGrant = await queueOperatorGrant(
+    program,
+    connection,
+    owner,
+    r.vaultPda,
+    opts.agent.publicKey,
+    2, // CAPABILITY_OPERATOR — spending tests need a seated operator
+    opts.agentSpendLimit ?? new BN(0),
+  );
 
   return {
-    vault: pdas.vaultPda,
-    policy: pdas.policyPda,
-    tracker: pdas.trackerPda,
-    overlay,
-    vaultAta,
+    vault: r.vaultPda,
+    policy: r.policyPda,
+    tracker: r.trackerPda,
+    overlay: r.overlayPda,
+    vaultAta: r.vaultTokenAta,
+    operatorGrant,
   };
 }
 
@@ -192,7 +160,14 @@ async function doAgentTransfer(
   amount: BN,
 ): Promise<void> {
   await program.methods
-    .agentTransfer(amount, new BN(0))
+    .agentTransfer(
+      amount,
+      // Live read: agent_transfer pins expected_policy_version exactly like
+      // validate (agent_transfer.rs:95) and the operator-grant apply bumped
+      // the version — a hardcoded 0 always trips PolicyVersionMismatch (6052).
+      ((await program.account.policyConfig.fetch(policy))
+        .policyVersion as BN) ?? new BN(0),
+    )
     .accounts({
       agent: agent.publicKey,
       vault,
@@ -234,16 +209,19 @@ async function doComposedTx(
     .validateAndAuthorize(
       usdcMint,
       amount,
-      allowedProtocol,
-      new BN(0), // expectedPolicyVersion
-      new BN(0), // AC-10 expectedNonce
+      MOCK_DEFI_PROGRAM_ID,
+      // Live read: queue→apply of the operator grant bumps policy_version, so
+      // a hardcoded 0 always trips PolicyVersionMismatch (6052).
+      ((await program.account.policyConfig.fetch(policy))
+        .policyVersion as BN) ?? new BN(0),
+      new BN(0), // AC-10 expectedNonce (each sandwich opens a FRESH session)
       digestAsArgs(
         buildExpectedIntentDigest({
           vault,
           agent: agent.publicKey,
           tokenMint: usdcMint,
           amount,
-          targetProtocol: allowedProtocol,
+          targetProtocol: MOCK_DEFI_PROGRAM_ID,
         }),
       ),
     )
@@ -263,15 +241,21 @@ async function doComposedTx(
       systemProgram: SystemProgram.programId,
       instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
     } as any)
+    // F-Q1a completeness: the mock-defi no-op lists the agent signer — the
+    // writable fee payer in the compiled message — so validate's destination
+    // walk requires it resolvable in remaining_accounts (mirrors sigil.ts).
+    .remainingAccounts([
+      { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+    ])
     .instruction();
 
-  // Real on-chain instruction — SystemProgram.transfer is whitelisted
-  // This doesn't move tokens but exercises the full composition flow
-  const deFiIx = SystemProgram.transfer({
-    fromPubkey: agent.publicKey,
-    toPubkey: agent.publicKey,
-    lamports: 0,
-  });
+  // F-Q2: a spending sandwich must carry EXACTLY ONE counted DeFi instruction
+  // whose program_id == target_protocol. SystemProgram is classified as
+  // infrastructure (count 0 → TooManyDeFiInstructions), so the counted leg is
+  // the deployed mock-defi fixture's `open_position` no-op — executable,
+  // counted, and zero token movement (finalize measures actual_spend from the
+  // vault balance delta, so the charge is the protocol fee only).
+  const deFiIx = buildMockDefiNoopIx(agent.publicKey);
 
   const finalizeIx = await program.methods
     .finalizeSession()
@@ -308,8 +292,38 @@ async function doComposedTx(
 
 // ─── Test Suite ────────────────────────────────────────────────────────────
 
+// Per-phase pre-created vault (see the top-level before): the base vault plus
+// a pre-allowlisted destination — V2's TA-02 enforces the destination
+// allowlist on agent_transfer, so each phase's transfer destination is baked
+// into its vault's policy at init (init-time destinations are NOT graylisted).
+type StressVault = Awaited<ReturnType<typeof createVault>> & {
+  destOwner: PublicKey;
+  destAta: PublicKey;
+};
+
 describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function () {
-  this.timeout(600_000);
+  // 30 min ceiling: the top-level before() creates EVERY phase's vault
+  // up-front (init slot-bind retries + deposits), queues all F-Q6 operator
+  // grants, and pays ONE batched ~600s cluster-clock wait — plus Phase 4's
+  // real 301s reactivate cooldown and Phase 7's amortized second grant.
+  this.timeout(1_800_000);
+
+  let vaults: Record<
+    | "p1"
+    | "p2"
+    | "p3"
+    | "p4"
+    | "p5"
+    | "p7"
+    | "p8edge"
+    | "p8cap"
+    | "p8ns"
+    | "p8fee",
+    StressVault
+  >;
+  // Phase 7's SECOND grant on the same vault: a vault has ONE pending-grant
+  // slot, so multiAgent2's grant can only be queued after the batch applies.
+  let p7Agent2Grant: OperatorGrantHandle;
 
   before(async function () {
     console.log("\n  ══════════════════════════════════════════════════");
@@ -324,6 +338,8 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
     await fundKeypair(provider, agentA.publicKey);
     await fundKeypair(provider, agentB.publicKey);
     await fundKeypair(provider, feeDestination.publicKey);
+    await fundKeypair(provider, multiAgent1.publicKey);
+    await fundKeypair(provider, multiAgent2.publicKey);
 
     // Ensure USDC mint + owner balance
     usdcMint = await ensureStablecoinMint(
@@ -365,6 +381,121 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
     console.log(`  Owner USDC balance: ${(bal / 1_000_000).toFixed(2)} USDC`);
     console.log(`  USDC Mint: ${usdcMint.toString()}`);
     console.log(`  Treasury ATA: ${protocolTreasuryUsdcAta.toString()}\n`);
+
+    // Pre-create EVERY phase's vault and QUEUE its operator grant, then pay
+    // ONE batched F-Q6 wait for the whole file (the established per-file
+    // batching pattern — see devnet-spending.ts). Each vault also gets a
+    // pre-allowlisted transfer destination (TA-02).
+    const buildVault = async (cfg: {
+      dailyCap: BN;
+      maxTx: BN;
+      deposit: BN;
+      agent: Keypair;
+      devFeeRate?: number;
+      agentSpendLimit?: BN;
+    }): Promise<StressVault> => {
+      const destOwner = Keypair.generate().publicKey;
+      const destAta = (
+        await getOrCreateAssociatedTokenAccount(
+          connection,
+          payer,
+          usdcMint,
+          destOwner,
+        )
+      ).address;
+      const v = await createVault({ ...cfg, destinations: [destOwner] });
+      return { ...v, destOwner, destAta };
+    };
+
+    vaults = {
+      p1: await buildVault({
+        dailyCap: new BN(500_000_000), // $500
+        maxTx: new BN(100_000_000), // $100
+        deposit: new BN(1_000_000_000), // $1000
+        agent: agentA,
+      }),
+      p2: await buildVault({
+        dailyCap: new BN(100_000_000), // $100 daily cap
+        maxTx: new BN(50_000_000), // $50 max per TX
+        deposit: new BN(500_000_000), // $500 in vault
+        agent: agentA,
+      }),
+      p3: await buildVault({
+        dailyCap: new BN(500_000_000),
+        maxTx: new BN(200_000_000),
+        deposit: new BN(1_000_000_000),
+        agent: agentA,
+      }),
+      p4: await buildVault({
+        dailyCap: new BN(500_000_000),
+        maxTx: new BN(100_000_000),
+        deposit: new BN(500_000_000),
+        agent: agentA,
+      }),
+      p5: await buildVault({
+        dailyCap: new BN(1_000_000_000), // $1000 vault cap
+        maxTx: new BN(500_000_000),
+        deposit: new BN(1_000_000_000),
+        agent: agentA,
+        agentSpendLimit: new BN(100_000_000), // $100 per-agent limit
+      }),
+      p7: await buildVault({
+        dailyCap: new BN(1_000_000_000), // $1000 vault cap
+        maxTx: new BN(200_000_000),
+        deposit: new BN(1_000_000_000), // $1000
+        agent: multiAgent1,
+        agentSpendLimit: new BN(50_000_000), // $50 per-agent
+      }),
+      p8edge: await buildVault({
+        dailyCap: new BN(100_000_000), // $100 exact
+        maxTx: new BN(100_000_000),
+        deposit: new BN(500_000_000),
+        agent: agentA,
+      }),
+      p8cap: await buildVault({
+        dailyCap: new BN(10_000_000), // $10 cap
+        maxTx: new BN(10_000_000),
+        deposit: new BN(100_000_000), // $100
+        agent: agentA,
+      }),
+      p8ns: await buildVault({
+        dailyCap: new BN(500_000_000),
+        maxTx: new BN(100_000_000),
+        deposit: new BN(100_000_000),
+        agent: agentA,
+      }),
+      p8fee: await buildVault({
+        dailyCap: new BN(500_000_000),
+        maxTx: new BN(200_000_000),
+        deposit: new BN(500_000_000),
+        agent: agentA,
+        devFeeRate: 500, // 5 BPS = 0.05%
+      }),
+    };
+
+    await applyOperatorGrants(
+      program,
+      connection,
+      owner,
+      Object.values(vaults).map((v) => v.operatorGrant),
+    );
+    console.log(
+      `  ${Object.keys(vaults).length} vaults created, operators seated\n`,
+    );
+
+    // Phase 7's SECOND agent: queued immediately after the batch applies (one
+    // pending-grant slot per vault). Its 600s floor amortizes behind Phases
+    // 1-5 — incl. Phase 4's real 301s reactivate cooldown — so Phase 7's
+    // before() waits only the remainder.
+    p7Agent2Grant = await queueOperatorGrant(
+      program,
+      connection,
+      owner,
+      vaults.p7.vault,
+      multiAgent2.publicKey,
+      2, // CAPABILITY_OPERATOR
+      new BN(75_000_000), // $75 per-agent
+    );
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -375,21 +506,10 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
     let v: Awaited<ReturnType<typeof createVault>>;
     let destAta: PublicKey;
 
-    before(async () => {
-      v = await createVault({
-        dailyCap: new BN(500_000_000), // $500
-        maxTx: new BN(100_000_000), // $100
-        deposit: new BN(1_000_000_000), // $1000
-        agent: agentA,
-      });
-
-      const dest = await getOrCreateAssociatedTokenAccount(
-        connection,
-        payer,
-        usdcMint,
-        Keypair.generate().publicKey,
-      );
-      destAta = dest.address;
+    before(() => {
+      // Pre-created (and operator-seated) by the top-level before().
+      v = vaults.p1;
+      destAta = vaults.p1.destAta;
     });
 
     it("vault created with $1000 USDC deposit", async () => {
@@ -464,21 +584,9 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
     let v: Awaited<ReturnType<typeof createVault>>;
     let destAta: PublicKey;
 
-    before(async () => {
-      v = await createVault({
-        dailyCap: new BN(100_000_000), // $100 daily cap
-        maxTx: new BN(50_000_000), // $50 max per TX
-        deposit: new BN(500_000_000), // $500 in vault
-        agent: agentA,
-      });
-
-      const dest = await getOrCreateAssociatedTokenAccount(
-        connection,
-        payer,
-        usdcMint,
-        Keypair.generate().publicKey,
-      );
-      destAta = dest.address;
+    before(() => {
+      v = vaults.p2;
+      destAta = vaults.p2.destAta;
     });
 
     it("$50 transfer succeeds (within limits)", async () => {
@@ -565,13 +673,8 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
   describe("Phase 3: Composed Transactions — Real On-Chain", () => {
     let v: Awaited<ReturnType<typeof createVault>>;
 
-    before(async () => {
-      v = await createVault({
-        dailyCap: new BN(500_000_000),
-        maxTx: new BN(200_000_000),
-        deposit: new BN(1_000_000_000),
-        agent: agentA,
-      });
+    before(() => {
+      v = vaults.p3;
     });
 
     it("composed TX: validate + DeFi + finalize (success=true)", async () => {
@@ -637,20 +740,9 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
     let v: Awaited<ReturnType<typeof createVault>>;
     let destAta: PublicKey;
 
-    before(async () => {
-      v = await createVault({
-        dailyCap: new BN(500_000_000),
-        maxTx: new BN(100_000_000),
-        deposit: new BN(500_000_000),
-        agent: agentA,
-      });
-      const dest = await getOrCreateAssociatedTokenAccount(
-        connection,
-        payer,
-        usdcMint,
-        Keypair.generate().publicKey,
-      );
-      destAta = dest.address;
+    before(() => {
+      v = vaults.p4;
+      destAta = vaults.p4.destAta;
     });
 
     it("unregistered agent CANNOT transfer from vault", async () => {
@@ -763,21 +855,9 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
     let v: Awaited<ReturnType<typeof createVault>>;
     let destAta: PublicKey;
 
-    before(async () => {
-      v = await createVault({
-        dailyCap: new BN(1_000_000_000), // $1000 vault cap
-        maxTx: new BN(500_000_000),
-        deposit: new BN(1_000_000_000),
-        agent: agentA,
-        agentSpendLimit: new BN(100_000_000), // $100 per-agent limit
-      });
-      const dest = await getOrCreateAssociatedTokenAccount(
-        connection,
-        payer,
-        usdcMint,
-        Keypair.generate().publicKey,
-      );
-      destAta = dest.address;
+    before(() => {
+      v = vaults.p5;
+      destAta = vaults.p5.destAta;
     });
 
     it("$50 transfer within per-agent limit succeeds", async () => {
@@ -824,43 +904,16 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
   describe("Phase 7: Multi-Agent Vault", () => {
     let v: Awaited<ReturnType<typeof createVault>>;
     let destAta: PublicKey;
-    const multiAgent1 = Keypair.generate();
-    const multiAgent2 = Keypair.generate();
 
-    before(async () => {
-      await fundKeypair(provider, multiAgent1.publicKey);
-      await fundKeypair(provider, multiAgent2.publicKey);
-
-      // Create vault with first agent ($50 per-agent limit)
-      v = await createVault({
-        dailyCap: new BN(1_000_000_000), // $1000 vault cap
-        maxTx: new BN(200_000_000),
-        deposit: new BN(1_000_000_000), // $1000
-        agent: multiAgent1,
-        agentSpendLimit: new BN(50_000_000), // $50 per-agent
-      });
-
-      // Register second agent with $75 per-agent limit
-      await program.methods
-        .registerAgent(
-          multiAgent2.publicKey,
-          FULL_CAPABILITY,
-          new BN(75_000_000), // $75 per-agent
-        )
-        .accounts({
-          owner: owner.publicKey,
-          vault: v.vault,
-          agentSpendOverlay: v.overlay,
-        } as any)
-        .rpc();
-
-      const dest = await getOrCreateAssociatedTokenAccount(
-        connection,
-        payer,
-        usdcMint,
-        Keypair.generate().publicKey,
-      );
-      destAta = dest.address;
+    before(async function () {
+      // Vault + multiAgent1's grant were pre-created/seated by the top-level
+      // before(). multiAgent2's grant (a vault has ONE pending-grant slot, so
+      // it was queued right after the batch applied) has been aging through
+      // Phases 1-5 — apply it now, waiting only the remainder of its 600s
+      // F-Q6 floor.
+      v = vaults.p7;
+      destAta = vaults.p7.destAta;
+      await applyOperatorGrants(program, connection, owner, [p7Agent2Grant]);
     });
 
     it("agent1 transfers $40 (within $50 limit)", async () => {
@@ -942,18 +995,8 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
 
   describe("Phase 8: Edge Cases", () => {
     it("exact cap boundary: $100 cap, spend exactly $100", async () => {
-      const edgeV = await createVault({
-        dailyCap: new BN(100_000_000), // $100 exact
-        maxTx: new BN(100_000_000),
-        deposit: new BN(500_000_000),
-        agent: agentA,
-      });
-      const dest = await getOrCreateAssociatedTokenAccount(
-        connection,
-        payer,
-        usdcMint,
-        Keypair.generate().publicKey,
-      );
+      // Pre-created (and operator-seated) by the top-level before().
+      const edgeV = vaults.p8edge;
       // Spend exactly $100 — should succeed (cap check is <=, not <)
       await doAgentTransfer(
         agentA,
@@ -962,7 +1005,7 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
         edgeV.tracker,
         edgeV.overlay,
         edgeV.vaultAta,
-        dest.address,
+        edgeV.destAta,
         new BN(100_000_000),
       );
       console.log("    ✓ Exact $100 on $100 cap succeeds (<=, not <)");
@@ -976,7 +1019,7 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
           edgeV.tracker,
           edgeV.overlay,
           edgeV.vaultAta,
-          dest.address,
+          edgeV.destAta,
           new BN(1_000_000), // $1
         );
         expect.fail("Should have thrown");
@@ -988,18 +1031,8 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
     });
 
     it("deposit after cap exhaustion — owner can still deposit", async () => {
-      const capV = await createVault({
-        dailyCap: new BN(10_000_000), // $10 cap
-        maxTx: new BN(10_000_000),
-        deposit: new BN(100_000_000), // $100
-        agent: agentA,
-      });
-      const dest = await getOrCreateAssociatedTokenAccount(
-        connection,
-        payer,
-        usdcMint,
-        Keypair.generate().publicKey,
-      );
+      // Pre-created (and operator-seated) by the top-level before().
+      const capV = vaults.p8cap;
 
       // Exhaust cap
       await doAgentTransfer(
@@ -1009,7 +1042,7 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
         capV.tracker,
         capV.overlay,
         capV.vaultAta,
-        dest.address,
+        capV.destAta,
         new BN(10_000_000),
       );
 
@@ -1036,14 +1069,15 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
     });
 
     it("non-spending composed TX: amount=0, no delegation", async () => {
-      const nsV = await createVault({
-        dailyCap: new BN(500_000_000),
-        maxTx: new BN(100_000_000),
-        deposit: new BN(100_000_000),
-        agent: agentA,
-      });
+      // Pre-created (and operator-seated) by the top-level before().
+      const nsV = vaults.p8ns;
 
-      // Non-spending action (withdraw type, amount=0)
+      // Non-spending action (withdraw type, amount=0). The protocol-allowlist
+      // gate applies to ALL actions in V2, so even a non-spending validate
+      // must target an allowlisted program (the mock-defi fixture). The
+      // System self-transfer leg below stays valid HERE: the non-spending
+      // window scan only requires finalize be present — the exactly-one-DeFi
+      // count (F-Q2) is a SPENDING-path rule.
       const session = deriveSessionPda(
         nsV.vault,
         agentA.publicKey,
@@ -1057,8 +1091,11 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
         .validateAndAuthorize(
           usdcMint,
           new BN(0), // amount=0 for non-spending
-          allowedProtocol,
-          new BN(0), // expectedPolicyVersion
+          MOCK_DEFI_PROGRAM_ID,
+          // Live read: the operator-grant apply bumped policy_version (6052
+          // on a hardcoded 0).
+          ((await program.account.policyConfig.fetch(nsV.policy))
+            .policyVersion as BN) ?? new BN(0),
           new BN(0), // AC-10 expectedNonce
           digestAsArgs(
             buildExpectedIntentDigest({
@@ -1066,7 +1103,7 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
               agent: agentA.publicKey,
               tokenMint: usdcMint,
               amount: new BN(0),
-              targetProtocol: allowedProtocol,
+              targetProtocol: MOCK_DEFI_PROGRAM_ID,
             }),
           ),
         )
@@ -1135,24 +1172,18 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
         usdcMint,
         feeDestination.publicKey,
       );
-      const feeV = await createVault({
-        dailyCap: new BN(500_000_000),
-        maxTx: new BN(200_000_000),
-        deposit: new BN(500_000_000),
-        agent: agentA,
-        devFeeRate: 500, // 5 BPS = 0.05%
-      });
-      const dest = await getOrCreateAssociatedTokenAccount(
-        connection,
-        payer,
-        usdcMint,
-        Keypair.generate().publicKey,
-      );
+      // Pre-created (and operator-seated) by the top-level before().
+      const feeV = vaults.p8fee;
 
       const beforeFee = await getTokenBalance(connection, feeDestAta.address);
 
       await program.methods
-        .agentTransfer(new BN(100_000_000), new BN(0)) // $100
+        .agentTransfer(
+          new BN(100_000_000), // $100
+          // Live read — same 6052 class as doAgentTransfer (agent_transfer.rs:95).
+          ((await program.account.policyConfig.fetch(feeV.policy))
+            .policyVersion as BN) ?? new BN(0),
+        )
         .accounts({
           agent: agentA.publicKey,
           vault: feeV.vault,
@@ -1160,7 +1191,7 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
           tracker: feeV.tracker,
           vaultTokenAccount: feeV.vaultAta,
           tokenMintAccount: usdcMint,
-          destinationTokenAccount: dest.address,
+          destinationTokenAccount: feeV.destAta,
           feeDestinationTokenAccount: feeDestAta.address,
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
           tokenProgram: TOKEN_PROGRAM_ID,
