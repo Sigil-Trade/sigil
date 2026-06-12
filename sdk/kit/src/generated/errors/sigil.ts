@@ -236,6 +236,8 @@ export const SIGIL_ERROR__ERR_OPERATOR_GRANT_DELAY_TOO_LONG = 0x17dc; // 6108
 export const SIGIL_ERROR__INVALID_OWNER_TYPE = 0x17dd; // 6109
 /** SpendAccountingUnderflow: finalize spend accounting underflow: collected fees exceed realized stablecoin outflow */
 export const SIGIL_ERROR__SPEND_ACCOUNTING_UNDERFLOW = 0x17de; // 6110
+/** ErrMultisigCustodyUnsupported: Squads multisig ownership custody is not supported in V1 (use a standard EOA owner) */
+export const SIGIL_ERROR__ERR_MULTISIG_CUSTODY_UNSUPPORTED = 0x17df; // 6111
 
 export type SigilError =
   | typeof SIGIL_ERROR__ACCOUNT_WRITABILITY_MISMATCH
@@ -269,6 +271,7 @@ export type SigilError =
   | typeof SIGIL_ERROR__ERR_INVALID_OWNERSHIP_TARGET
   | typeof SIGIL_ERROR__ERR_MINT_DELTA_CAP_EXCEEDED
   | typeof SIGIL_ERROR__ERR_MINT_NOT_PINNED
+  | typeof SIGIL_ERROR__ERR_MULTISIG_CUSTODY_UNSUPPORTED
   | typeof SIGIL_ERROR__ERR_OPERATOR_GRANT_DELAY_TOO_LONG
   | typeof SIGIL_ERROR__ERR_OPERATOR_GRANT_REQUIRES_TIMELOCK
   | typeof SIGIL_ERROR__ERR_OUTPUT_BELOW_FLOOR
@@ -384,6 +387,7 @@ if (process.env.NODE_ENV !== "production") {
     [SIGIL_ERROR__ERR_INVALID_OWNERSHIP_TARGET]: `new_owner cannot be system/program/sysvar addresses (Council ISC-128)`,
     [SIGIL_ERROR__ERR_MINT_DELTA_CAP_EXCEEDED]: `R-1 MintDeltaCap: vault-mint balance decreased by more than max_net_decrease`,
     [SIGIL_ERROR__ERR_MINT_NOT_PINNED]: `Deposit mint is not a build-time-pinned stablecoin (USDC or USDT)`,
+    [SIGIL_ERROR__ERR_MULTISIG_CUSTODY_UNSUPPORTED]: `Squads multisig ownership custody is not supported in V1 (use a standard EOA owner)`,
     [SIGIL_ERROR__ERR_OPERATOR_GRANT_DELAY_TOO_LONG]: `operator_grant_delay_seconds exceeds the maximum (48h) — would brick grant applicability`,
     [SIGIL_ERROR__ERR_OPERATOR_GRANT_REQUIRES_TIMELOCK]: `OPERATOR grant requires the timelock queue path on this vault — use queue_agent_grant`,
     [SIGIL_ERROR__ERR_OUTPUT_BELOW_FLOOR]: `R-3 OutputBalanceFloor: post-execution balance increase fell below the configured min_increase floor`,

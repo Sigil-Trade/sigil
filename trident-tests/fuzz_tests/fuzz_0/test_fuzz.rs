@@ -210,6 +210,8 @@ impl FuzzTest {
             agent_set_hash: compute_agent_set_hash(&[]),
             cosign_session_pubkey: Pubkey::default(),
             operator_grant_delay_seconds: 0,
+            has_protocol_caps: false,
+            protocol_caps: &[],
         });
 
         let data = sigil::instruction::InitializeVault {

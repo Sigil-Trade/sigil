@@ -210,24 +210,12 @@
         {
           "name": "multisig_pda",
           "docs": [
-            "vault PDAs have no private key — authority is enforced by:",
-            "1. `owner == SQUADS_V4_PROGRAM_ID` (verified in handler)",
-            "2. `key() == pending.new_owner` (verified in handler)",
-            "3. `pending.is_multisig_target == true` (verified in handler)",
-            "",
-            "Marked `mut` so the closed `pending` PDA's rent returns here."
+            "(multisig custody disabled in V1) before reading any account."
           ],
           "writable": true
         },
         {
           "name": "vault",
-          "docs": [
-            "Vault is mutated (owner field overwritten). PDA derivation uses the",
-            "immutable `vault.vault_authority` field (LBL-01) so the seed binding",
-            "survives ownership transfer. Handler-level `require_keys_eq!(",
-            "pending.current_owner, vault.owner)` replaces the implicit seed",
-            "binding that previously enforced the queue→accept owner match."
-          ],
           "writable": true,
           "pda": {
             "seeds": [
@@ -259,10 +247,6 @@
         },
         {
           "name": "policy",
-          "docs": [
-            "Policy is mutated (policy_version bump + `policy_preview_digest`",
-            "recompute — see handler lines 180-230, mirroring the EOA path)."
-          ],
           "writable": true,
           "pda": {
             "seeds": [
@@ -287,9 +271,9 @@
         {
           "name": "pending",
           "docs": [
-            "PendingOwnershipTransfer PDA. `close = multisig_pda` returns rent to the",
-            "new authority. `has_one = vault` binds the PDA to this vault explicitly",
-            "(defense-in-depth against future seeds drift; same pattern as §RP-1 I-2)."
+            "`has_one = vault` + the close target are retained for IDL stability. The",
+            "close never runs because the handler returns `Err` before any Anchor",
+            "post-handler step executes."
           ],
           "writable": true,
           "pda": {
@@ -321,9 +305,6 @@
         },
         {
           "name": "audit_log_success",
-          "docs": [
-            "Phase 7 — success audit log; entry appended after state mutation."
-          ],
           "writable": true,
           "pda": {
             "seeds": [
