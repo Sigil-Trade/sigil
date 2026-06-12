@@ -28,12 +28,11 @@ import { createVault } from "../../src/create-vault.js";
 import { seal } from "../../src/seal.js";
 import { resolveVaultState } from "../../src/state-resolver.js";
 import { TransactionExecutor } from "../../src/transaction-executor.js";
-import { parseSigilEvents } from "../../src/events.js";
 import { VaultStatus } from "../../src/generated/types/vaultStatus.js";
 import {
   USDC_MINT_DEVNET,
   JUPITER_PROGRAM_ADDRESS,
-  FULL_CAPABILITY,
+  capability,
   usd,
 } from "../../src/types.js";
 import { getSetComputeUnitLimitInstruction } from "@solana-program/compute-budget";
@@ -45,10 +44,26 @@ import {
 // Skip if no devnet env
 const SKIP = !process.env.ANCHOR_PROVIDER_URL;
 
+// Memo program — exists on every cluster, a true no-op that logs its data. Used
+// as the counted DeFi leg of the V2 sandwich (it is neither infrastructure nor
+// an SPL-token op, so it counts toward F-Q2's defi_ix_count) and must therefore
+// be on the vault's protocol allowlist (V2 deleted protocolMode=0/ALL).
+const MEMO_PROGRAM = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr" as Address;
+
+// Capability tiers (mirror programs/sigil/src/state/mod.rs). OBSERVER (1) is
+// non-spending and seats INSTANTLY via register_agent; OPERATOR (FULL_CAPABILITY
+// = 2) is spending and on a single-key vault must route through the F-Q6
+// queue→600s→apply path. Tests that only exercise non-spending or SDK-level
+// paths use OBSERVER to skip the 600s wait; spending paths need OPERATOR.
+const OBSERVER = capability(1n);
+
 describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
   if (SKIP) return;
 
-  this.timeout(300_000);
+  // 15 min: the 3.3b describe seats a spending OPERATOR agent, which V2 (F-Q6)
+  // routes through the queue → on-chain 600s single-key timelock → apply path
+  // (one real ~600s cluster-clock wait). 5 min is not enough.
+  this.timeout(900_000);
 
   let rpc: Rpc<SolanaRpcApi>;
   let owner: KeyPairSigner;
@@ -64,31 +79,79 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
   describe("createVault()", function () {
     it("provisions a vault on devnet and reads it back", async function () {
       // 1. Build vault instructions via createVault()
-      const result = await createVault({
+      // createVault() builds an INSTANT register_agent — which V2 (F-Q6) rejects
+      // for an OPERATOR grant on a single-key vault (6107). So this test seats an
+      // OBSERVER agent (instant, the path createVault actually supports); the
+      // OPERATOR queue→600s→apply path is covered by lifecycle/composed-tx.
+      // V2 also requires ALLOWLIST mode (1) with a non-empty allowlist (F-11),
+      // so allowlist Jupiter explicitly (no spend is performed here).
+      // Explicit unique id skips createVault's findNextVaultId probe loop
+      // (which otherwise hammers the shared public RPC into 429s).
+      const vaultId = BigInt(Date.now());
+      const createOpts = {
         rpc,
-        network: "devnet",
+        network: "devnet" as const,
         owner,
         agent,
         dailySpendingCapUsd: usd(500_000_000n), // $500
         maxTransactionSizeUsd: usd(100_000_000n), // $100
-        permissions: FULL_CAPABILITY,
+        permissions: OBSERVER,
         spendingLimitUsd: usd(0n),
         timelockDuration: 1800,
-      });
+        protocolMode: 1,
+        protocols: [JUPITER_PROGRAM_ADDRESS],
+        vaultId,
+      };
+
+      // createVault binds ONE created_at_slot into the TA-19 digest (it reads
+      // `confirmed`, which LAGS execution); the live devnet clock advances before
+      // the init lands, tripping PolicyPreviewMismatch (6071). createVault is a
+      // builder, not a submitter — production consumers retry with a fresh slot.
+      // Mirror provisionVault here: bind `processed + offset` and retry, fanning
+      // the offset across attempts.
+      const cuIx = getSetComputeUnitLimitInstruction({ units: 400_000 });
+      const slotOffsets = [2, 3, 4, 5, 6, 8, 10, 12, 1, 9, 11, 14, 16, 18, 20];
+      let result: Awaited<ReturnType<typeof createVault>> | undefined;
+      let initLanded = false;
+      for (let attempt = 0; attempt < 30 && !initLanded; attempt++) {
+        const base = await rpc.getSlot({ commitment: "processed" }).send();
+        const createdAtSlot =
+          base + BigInt(slotOffsets[attempt % slotOffsets.length]!);
+        result = await createVault({ ...createOpts, createdAtSlot });
+        try {
+          // skipPreflight: the digest binds a FUTURE slot, so a preflight sim at
+          // the current slot would always reject it (6071) before it can land.
+          await sendKitTransaction(
+            rpc,
+            owner,
+            [cuIx as Instruction, result.initializeVaultIx],
+            { skipPreflight: true },
+          );
+          initLanded = true;
+        } catch (e) {
+          const detail = `${e instanceof Error ? e.message : String(e)} ${
+            (e as any)?.cause?.message ?? ""
+          }`;
+          if (
+            detail.includes("6071") ||
+            detail.includes("PolicyPreviewMismatch")
+          )
+            continue; // slot advanced past the signed digest — re-read + retry
+          throw e;
+        }
+      }
+      if (!result || !initLanded) {
+        throw new Error(
+          "createVault: initialize_vault slot-bind failed after 30 attempts (6071)",
+        );
+      }
 
       expect(result.vaultAddress).to.be.a("string");
       expect(result.vaultId).to.be.a("bigint");
       expect(result.initializeVaultIx).to.exist;
       expect(result.registerAgentIx).to.exist;
 
-      // 2. Send initializeVault
-      const cuIx = getSetComputeUnitLimitInstruction({ units: 400_000 });
-      await sendKitTransaction(rpc, owner, [
-        cuIx as Instruction,
-        result.initializeVaultIx,
-      ]);
-
-      // 3. Send registerAgent
+      // Seat the OBSERVER agent (instant register — no F-Q6 timelock).
       await sendKitTransaction(rpc, owner, [result.registerAgentIx]);
 
       // 4. Verify vault exists on-chain
@@ -102,7 +165,9 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
       expect(state.vault.owner).to.equal(owner.address);
       expect(state.vault.agents).to.have.length(1);
       expect(state.vault.agents[0].pubkey).to.equal(agent.address);
-      expect(state.vault.agents[0].capability).to.equal(FULL_CAPABILITY);
+      // Decoded AgentEntry.capability is a u8 number; OBSERVER is a branded
+      // bigint — compare numerically.
+      expect(state.vault.agents[0].capability).to.equal(Number(OBSERVER));
       expect(state.policy.dailySpendingCapUsd).to.equal(500_000_000n);
 
       // Store for seal test
@@ -136,7 +201,9 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
         network: "devnet",
         tokenMint: USDC_MINT_DEVNET,
         amount: 1_000_000n, // $1
-        // actionType removed in v6 — spending determined by amount > 0
+        // Empty ALT → seal() skips Sigil-ALT resolution + verifySigilAlt
+        // (seal.ts:1167); this fresh test vault is not in the devnet Sigil ALT.
+        addressLookupTables: {},
         cachedState: state,
         blockhash: {
           blockhash: "GHtXQBpokCiBP6spMNfMW9qLBjfQJhmR4GWzCiQ2ATQA",
@@ -167,16 +234,19 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
     let vault: ProvisionVaultResult;
 
     before(async function () {
+      // amount=0 (non-spending) → an OBSERVER agent suffices and seats
+      // INSTANTLY (no 600s operator wait). The memo leg must be allowlisted.
       vault = await provisionVault(rpc, owner, agent, USDC_MINT_DEVNET, {
         dailySpendingCapUsd: 500_000_000n,
         depositAmount: 10_000_000n, // $10 USDC
+        protocols: [MEMO_PROGRAM],
+        permissions: OBSERVER,
+        vaultId: BigInt(Date.now()),
       });
     });
 
     it("sends composed TX to devnet and succeeds", async function () {
       // Memo program — exists on all clusters, no-op, passes protocolMode=0
-      const MEMO_PROGRAM =
-        "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr" as Address;
       const memoIx: Instruction = {
         programAddress: MEMO_PROGRAM,
         accounts: [],
@@ -199,6 +269,10 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
         amount: 0n, // no-op — zero spending
         // actionType removed in v6 — spending determined by amount > 0
         targetProtocol: MEMO_PROGRAM,
+        // Provide an (empty) ALT so seal() skips its Sigil-ALT resolution +
+        // verifySigilAlt (seal.ts:1167) — a fresh test vault is not in the
+        // devnet Sigil ALT; the uncompressed tx is fine for these tests.
+        addressLookupTables: {},
         cachedState: state,
       });
 
@@ -236,15 +310,19 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
     let vault: ProvisionVaultResult;
 
     before(async function () {
+      // The "exactly one DeFi instruction" rule (F-Q2, defi_ix_count == 1) is
+      // enforced ONLY on the spending path — so this rejection test must seat a
+      // spending OPERATOR agent (default → queue→600s→apply) and seal a spending
+      // amount below. The memo leg must be allowlisted.
       vault = await provisionVault(rpc, owner, agent, USDC_MINT_DEVNET, {
         dailySpendingCapUsd: 500_000_000n,
         depositAmount: 10_000_000n,
+        protocols: [MEMO_PROGRAM],
+        vaultId: BigInt(Date.now()),
       });
     });
 
     it("seal() with 2 DeFi instructions is rejected on-chain", async function () {
-      const MEMO_PROGRAM =
-        "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr" as Address;
       const memoIx1: Instruction = {
         programAddress: MEMO_PROGRAM,
         accounts: [],
@@ -270,9 +348,14 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
         rpc,
         network: "devnet",
         tokenMint: USDC_MINT_DEVNET,
-        amount: 0n,
-        // actionType removed in v6 — spending determined by amount > 0
+        // Spending ($1, within cap) so the on-chain defi_ix_count==1 rule is in
+        // force — two DeFi legs then revert with TooManyDeFiInstructions.
+        amount: 1_000_000n,
         targetProtocol: MEMO_PROGRAM,
+        // Provide an (empty) ALT so seal() skips its Sigil-ALT resolution +
+        // verifySigilAlt (seal.ts:1167) — a fresh test vault is not in the
+        // devnet Sigil ALT; the uncompressed tx is fine for these tests.
+        addressLookupTables: {},
         cachedState: state,
       });
 
@@ -316,16 +399,26 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
     let vault: ProvisionVaultResult;
 
     before(async function () {
+      // seal() rejects the over-cap spend at the SDK level (below), before any
+      // transaction is built or sent — so an instant OBSERVER agent suffices
+      // (no 600s operator wait). The memo leg is allowlisted so the vault
+      // initializes; it is never reached because seal() aborts first.
       vault = await provisionVault(rpc, owner, agent, USDC_MINT_DEVNET, {
         dailySpendingCapUsd: 10_000_000n, // $10 cap
         maxTransactionSizeUsd: 100_000_000n,
         depositAmount: 50_000_000n, // $50 deposit (more than cap)
+        protocols: [MEMO_PROGRAM],
+        permissions: OBSERVER,
+        vaultId: BigInt(Date.now()),
       });
     });
 
-    it("TX exceeding daily cap is rejected on-chain", async function () {
-      const MEMO_PROGRAM =
-        "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr" as Address;
+    it("seal() rejects a spend that exceeds the daily cap (SDK hard error)", async function () {
+      // V2: seal()'s fee-inclusive cap-headroom check is a HARD ERROR
+      // (seal.ts:756-775) — a $20 spend against a $10 cap throws before the
+      // transaction is built, rather than building a tx that the on-chain
+      // validate_and_authorize would later reject. (On-chain SpendingCapExceeded
+      // atomic-revert is covered by the LiteSVM suite.)
       const memoIx: Instruction = {
         programAddress: MEMO_PROGRAM,
         accounts: [],
@@ -338,48 +431,29 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
         agent.address,
       );
 
-      // seal() with $20 amount (exceeds $10 cap) — SDK warns but builds TX
-      const result = await seal({
-        vault: vault.vaultAddress,
-        agent,
-        instructions: [memoIx],
-        rpc,
-        network: "devnet",
-        tokenMint: USDC_MINT_DEVNET,
-        amount: 20_000_000n, // $20 > $10 cap
-        // actionType removed in v6 — spending determined by amount > 0
-        targetProtocol: MEMO_PROGRAM,
-        cachedState: state,
-      });
-
-      expect(result.transaction).to.exist;
-      // Should have cap headroom warning
-      const capWarning = result.warnings.find(
-        (w) => w.includes("cap headroom") || w.includes("exceeds"),
-      );
-      expect(capWarning).to.exist;
-
-      // Send to devnet — on-chain validate_and_authorize rejects (SpendingCapExceeded)
-      const executor = new TransactionExecutor(rpc, agent, {
-        skipSimulation: true,
-      });
       try {
-        await executor.signSendConfirm(result.transaction);
-        expect.fail(
-          "TX should have been rejected on-chain (SpendingCapExceeded)",
-        );
+        await seal({
+          vault: vault.vaultAddress,
+          agent,
+          instructions: [memoIx],
+          rpc,
+          network: "devnet",
+          tokenMint: USDC_MINT_DEVNET,
+          amount: 20_000_000n, // $20 > $10 cap
+          targetProtocol: MEMO_PROGRAM,
+          // Provide an (empty) ALT so seal() skips its Sigil-ALT resolution +
+          // verifySigilAlt (seal.ts:1167) — a fresh test vault is not in the
+          // devnet Sigil ALT; the uncompressed tx is fine for these tests.
+          addressLookupTables: {},
+          cachedState: state,
+        });
+        expect.fail("seal() should have thrown on cap-exceeded spend");
       } catch (e: any) {
-        expect(e.message).to.satisfy(
-          (msg: string) =>
-            msg.includes("failed") ||
-            msg.includes("error") ||
-            msg.includes("0x"),
-          `Expected SpendingCapExceeded rejection but got: ${e.message}`,
-        );
+        expect(e.message).to.match(/cap headroom|exceeds/i);
       }
     });
 
-    it("vault balance unchanged after rejected TX (atomic revert)", async function () {
+    it("vault balance unchanged after rejected seal (nothing was sent)", async function () {
       const postState = await resolveVaultState(
         rpc,
         vault.vaultAddress,
@@ -401,7 +475,11 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
 
   describe("3.3d — protocol not in allowlist is rejected", function () {
     it("seal() rejects instruction targeting non-allowed protocol", async function () {
-      // Provision vault with protocolMode=1 (allowlist) containing only Jupiter
+      // seal() rejects the disallowed protocol at the SDK level (isProtocolAllowed
+      // returns false) before building/sending — so an instant OBSERVER agent
+      // suffices. The on-chain allowlist here is irrelevant: the test overrides
+      // cachedState below to a Jupiter-only allowlist and targets the memo
+      // program, so seal()'s SDK check is what fires.
       const restrictedVault = await provisionVault(
         rpc,
         owner,
@@ -410,15 +488,12 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
         {
           dailySpendingCapUsd: 500_000_000n,
           depositAmount: 10_000_000n,
+          protocols: [MEMO_PROGRAM],
+          permissions: OBSERVER,
+          vaultId: BigInt(Date.now()),
         },
       );
 
-      // Re-create vault with restrictive policy
-      // Since provisionVault uses protocolMode=0, we need to test the SDK check
-      // by using seal() against a vault that has protocolMode=1
-      // For now, test the SDK-level rejection by checking isProtocolAllowed
-      const MEMO_PROGRAM =
-        "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr" as Address;
       const memoIx: Instruction = {
         programAddress: MEMO_PROGRAM,
         accounts: [],

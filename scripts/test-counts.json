@@ -91,9 +91,9 @@
     },
     {
       "name": "Kit SDK devnet tests (`@usesigil/kit` devnet)",
-      "count": 33,
+      "count": 34,
       "devnet": true,
-      "claudePattern": "sdk/kit/tests/devnet/` (mocha + tsx, %d tests — lifecycle, composed-tx, dashboard-integration)"
+      "claudePattern": "sdk/kit/tests/devnet/` (mocha + tsx, %d tests — lifecycle, composed-tx, dashboard-integration, seal-e2e)"
     },
     {
       "name": "Plugins (`@usesigil/plugins`)",
