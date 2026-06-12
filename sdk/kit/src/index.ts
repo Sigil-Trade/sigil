@@ -663,6 +663,10 @@ export {
   cosignDigestsEqual,
 } from "./policy/compute-cosign-digest.js";
 export type { CosignDigestFields } from "./policy/compute-cosign-digest.js";
+// Elevated agent-permissions cosign digest (audit 2026-06-12). Mirrors the
+// on-chain compute_agent_perms_cosign_digest byte-for-byte.
+export { computeAgentPermsCosignDigest } from "./policy/compute-agent-perms-cosign-digest.js";
+export type { AgentPermsCosignDigestFields } from "./policy/compute-agent-perms-cosign-digest.js";
 
 // ─── TA-18 / G6 — Squads V4 Detection Helper (audit 2026-05-18) ─────────────
 // Read-only off-chain helper that inspects whether a vault owner pubkey is
@@ -796,6 +800,11 @@ export type DashboardErrorType =
 // canonical source with additional exports (fromJSON, overview builders).
 export { createOwnerClient, OwnerClient } from "./dashboard/index.js";
 export type { OwnerClientConfig } from "./dashboard/types.js";
+// Elevated-cosign surface (audit 2026-06-12): the richer change input + the
+// partial-sign handoff bundle. The elevated mutations themselves are methods on
+// OwnerClient (queue*Elevated / buildQueue*Elevated).
+export type { PolicyElevatedChanges } from "./dashboard/types.js";
+export type { ElevatedCosignBundle } from "./dashboard/mutations.js";
 
 // ─── Balance Tracker / P&L ──────────────────────────────────────────────────
 export {

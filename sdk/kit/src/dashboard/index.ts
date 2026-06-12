@@ -40,6 +40,7 @@ import type {
   HealthData,
   PolicyData,
   PolicyChanges,
+  PolicyElevatedChanges,
   DiscoveredVault,
   OverviewData,
   GetOverviewOptions,
@@ -47,6 +48,7 @@ import type {
   AuditTrailEntry,
   AuditTrailOptions,
 } from "./types.js";
+import type { ElevatedCosignBundle } from "./mutations.js";
 
 import * as reads from "./reads.js";
 import * as mutations from "./mutations.js";
@@ -699,6 +701,93 @@ export class OwnerClient {
       agent,
       permissions,
       spendingLimit,
+      opts,
+    );
+  }
+
+  // ── Elevated-cosign surface (audit 2026-06-12) ──────────────────────────
+  // On a cosign_required vault, raising an agent's capability/limit, setting a
+  // cooldown, or making an elevated policy change requires a cosigner. Each pair
+  // offers single-builder dual-sign (caller holds the cosigner key) and a
+  // partial-sign handoff (returns a partial tx + cosign digest for a separate
+  // cosigner to complete + send — true 2-of-2).
+
+  /** Elevated agent-permissions queue — single-builder dual-sign. */
+  async queueAgentPermissionsElevated(
+    agent: Address,
+    permissions: CapabilityTier,
+    spendingLimit: UsdBaseUnits,
+    cooldownSeconds: bigint,
+    cosigner: TransactionSigner,
+    opts?: TxOpts,
+  ): Promise<TxResult> {
+    this.assertMainnetConfirmed("queueAgentPermissionsElevated", opts);
+    return mutations.queueAgentPermissionsElevated(
+      this.rpc,
+      this.vault,
+      this.owner,
+      this.network,
+      agent,
+      permissions,
+      spendingLimit,
+      cooldownSeconds,
+      cosigner,
+      opts,
+    );
+  }
+
+  /** Elevated agent-permissions queue — partial-sign handoff (2-of-2). */
+  async buildQueueAgentPermissionsElevated(
+    agent: Address,
+    permissions: CapabilityTier,
+    spendingLimit: UsdBaseUnits,
+    cooldownSeconds: bigint,
+    cosignSession: Address,
+    opts?: TxOpts,
+  ): Promise<ElevatedCosignBundle> {
+    return mutations.buildQueueAgentPermissionsElevated(
+      this.rpc,
+      this.vault,
+      this.owner,
+      agent,
+      permissions,
+      spendingLimit,
+      cooldownSeconds,
+      cosignSession,
+      opts,
+    );
+  }
+
+  /** Elevated policy queue — single-builder dual-sign. */
+  async queuePolicyElevated(
+    changes: PolicyElevatedChanges,
+    cosigner: TransactionSigner,
+    opts?: TxOpts,
+  ): Promise<TxResult> {
+    this.assertMainnetConfirmed("queuePolicyElevated", opts);
+    return mutations.queuePolicyElevated(
+      this.rpc,
+      this.vault,
+      this.owner,
+      this.network,
+      changes,
+      cosigner,
+      opts,
+    );
+  }
+
+  /** Elevated policy queue — partial-sign handoff (2-of-2). */
+  async buildQueuePolicyElevated(
+    changes: PolicyElevatedChanges,
+    cosignSession: Address,
+    opts?: TxOpts,
+  ): Promise<ElevatedCosignBundle> {
+    return mutations.buildQueuePolicyElevated(
+      this.rpc,
+      this.vault,
+      this.owner,
+      changes,
+      cosignSession,
       opts,
     );
   }
