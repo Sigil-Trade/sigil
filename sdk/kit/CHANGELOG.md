@@ -1,5 +1,270 @@
 # @usesigil/kit
 
+## 0.17.0
+
+### Minor Changes
+
+- [#327](https://github.com/Sigil-Trade/sigil/pull/327) [`46a2f26`](https://github.com/Sigil-Trade/sigil/commit/46a2f265dde096872751b5314a99156814b3beca) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - Lane A — FE↔BE contract v2.2 commitments C2 + C5.
+
+  > NOTE 2026-05-20 (Phase 9 Batch A): The C6 (Protocol registry + tier
+  > resolver primitives) portion of this changeset has been removed.
+  > `PROTOCOL_ANNOTATIONS`, `VERIFIED_PROGRAMS`, `lookupProtocolAnnotation`,
+  > `resolveProtocolTier`, and the associated trust-tier types
+  > (`ProtocolAnnotation`, `ProtocolTrustTier`, `ConstrainabilityResult`,
+  > `CheckConstrainabilityFn`, `NonConstrainableReason`, `IdlSource`) were
+  > deleted per the L-1 generic constitution as part of the Phase 9 SDK
+  > redesign. A separate Phase 9 changeset will narrate the removal.
+
+  ### C2 — DxError.onChainReverted + categorizeDxError
+  - `DxError` gains a required `onChainReverted: boolean` field. Always
+    populated by `toDxError()`; set true when the resolved code falls in
+    the Anchor on-chain range [6000, 6074]. FE renders specific
+    "vault's rules prevented this" messaging when true, generic error
+    otherwise.
+  - `categorizeDxError(e): DxErrorCategory` — helper mapping code to one
+    of four stable strings: `"program" | "user" | "network" | "unknown"`.
+    Named `categorizeDxError` (not `categorizeError`) to avoid collision
+    with the pre-existing `categorizeError(AgentError): SigilErrorCategory`
+    at `src/agent-errors.ts`.
+  - `isOnChainReverted(code): boolean` — public helper for the specific
+    6000-range check.
+  - `DX_ERROR_CODE_UNMAPPED` now re-exported from `@usesigil/kit/dashboard`.
+  - `PostAssertionValidationError` + `FlashTradeLeverageOutOfRangeError`
+    classes gained `onChainReverted: false` (they're client-side
+    validation errors, thrown before any RPC round-trip).
+
+  ### C5 — composeAgentBootstrap + getHandoffPromptTemplate
+  - `composeAgentBootstrap(config): AgentBootstrap` — fills the canonical
+    handoff-prompt template with vault-specific data. Returns
+    `{ agentWallet, vaultPubkey, onboardingPrompt, capabilities }`.
+    Deterministic: same input → byte-identical output.
+  - `getHandoffPromptTemplate(): string` — returns the raw template with
+    `${placeholder}` slots. For callers doing their own substitution.
+  - `capabilityTierToNames(tier): readonly string[]` — maps the 0/1/2
+    capability tier to friendly names. Exported from what was previously
+    an unexported internal constant in `advanced-analytics.ts`.
+  - `AgentBootstrap` + `AgentBootstrapConfig` types.
+
+  Template is prompt-injection safe — single-pass regex substitution
+  blocks both `$&`-style back-reference attacks AND `${placeholder}`
+  nested-value attacks. Validated with adversarial tests.
+
+  ### Breaking
+  - **`engines.node`** bumped from `>=18.0.0` to `>=20.10.0`. Node 18 is
+    EOL upstream (April 2025) and several modern Solana ecosystem deps
+    (codama, @solana/kit consumers) require Node 20+.
+  - **`DxError.onChainReverted`** is a new required field. All internal
+    kit callers route through `toDxError()` which sets it; external
+    consumers constructing `DxError` literals (none found in audit) must
+    add the field. Two sibling classes (`PostAssertionValidationError`,
+    `FlashTradeLeverageOutOfRangeError`) updated in this release.
+  - **`ConstrainabilityResult`** is now a discriminated union on
+    `constrainable`. Consumers constructing results must provide
+    `idlSource` when `constrainable: true` and `reason` when
+    `constrainable: false`. Compile-time enforcement of the iff-invariant
+    the prose docstring previously described.
+
+  ### Test coverage
+
+  57 new tests in `sdk/kit/tests/`:
+  - `dashboard/errors-categorize.test.ts` (32) — DxError range boundaries
+  - `agent-bootstrap.test.ts` (25) — template determinism + substitution +
+    injection resistance + input validation
+
+  (Originally the C6 protocol-registry + protocol-tier suites added another
+  22 tests; those were removed in Phase 9 Batch A along with the modules.)
+
+  Counts manifest + CI updated.
+
+- [#327](https://github.com/Sigil-Trade/sigil/pull/327) [`46a2f26`](https://github.com/Sigil-Trade/sigil/commit/46a2f265dde096872751b5314a99156814b3beca) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - Phase 7 (audit log + N1 temporal binding) + §RP-2 breaking rename:
+
+  **Breaking (rename, code unchanged):**
+  - `SigilError::ConstraintsVaultMismatch` (code 6064) → `ZeroCopyVaultMismatch`.
+    Generic message "Zero-copy account vault key mismatch (defense-in-depth)"
+    now applies to BOTH `InstructionConstraints` zero-copy paths AND the
+    new `AuditLogSuccess`/`AuditLogRejected` zero-copy paths. Error code
+    number unchanged at 6064; only the variant name + message text changed.
+    Affects: `sdk/kit/src/agent-errors.ts`,
+    `sdk/kit/src/generated/errors/sigil.ts`,
+    `sdk/kit/src/testing/errors/names.generated.ts`. If consumers imported
+    the symbol by name, rename to `ZeroCopyVaultMismatch`.
+
+  **Breaking (field rename):**
+  - `AuditEntry.target_protocol` → `AuditEntry.subject` (32-byte raw pubkey).
+    The field is semantically polymorphic per discriminator (mint for
+    deposit/withdraw, vault for freeze/reactivate/policy/constraints, agent
+    for pause/unpause/revoke/register, protocol for finalize). Codama
+    regenerated the SDK type; consumers must read `entry.subject` instead of
+    `entry.targetProtocol`. A deprecated `targetProtocolBytes()` helper is
+    retained for one release; `subjectBytes()` is the canonical accessor.
+
+  **Additive (new APIs):**
+  - `fetchAuditLogSuccess(rpc, vault)`, `fetchAuditLogRejected(rpc, vault)`
+  - `subjectBytes(entry)` — canonical accessor for the renamed field
+  - `AUDIT_DISC_*` constants (0..=16) — discriminator labels
+  - `AUDIT_DISC_FINALIZE_REJECT = 16` — NEW, for expired-finalize cranks
+    on the REJECT path (was incorrectly reusing disc=1 in Phase 7 initial
+    ship; fixed §RP-1 HIGH-1).
+
+  **Operational:**
+  - `prepublishOnly` build hook added to sdk/kit/package.json (and sibling
+    sdk/platform, sdk/agent, packages/plugins) to prevent stale dist on
+    next publish. Caught by §RP-2 CRIT-2 in the prior audit closure cycle
+    for sdk/custody and now generalized.
+
+- [#327](https://github.com/Sigil-Trade/sigil/pull/327) [`46a2f26`](https://github.com/Sigil-Trade/sigil/commit/46a2f265dde096872751b5314a99156814b3beca) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - Phase 9 SDK redesign — bring the SDK fully in sync with the on-chain
+  layer (V2 Phases 1-8), delete the tier classifier, ship the Phase 8
+  ownership/freeze/observe-only helpers, and stage the canonical-encoder
+  shared utility that AL3/AL4/AL2 envelope intent-binding will consume
+  in 0.16.1.
+
+  See `CHANGELOG.md` for the full surface diff and `MIGRATION.md` for
+  breaking-change recipes (notably the upcoming
+  `requireMainnetConfirmation` default flip in v1.0).
+
+- [#327](https://github.com/Sigil-Trade/sigil/pull/327) [`46a2f26`](https://github.com/Sigil-Trade/sigil/commit/46a2f265dde096872751b5314a99156814b3beca) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - refactor(sigil): delete `SessionAuthority.is_spending` field (Option A V2)
+
+  The `is_spending: bool` field on `SessionAuthority` was redundant —
+  it was always set to `authorized_amount > 0` at validate time. All
+  consumers now derive directly from `authorized_amount`. The
+  `ActionAuthorized` and `SessionFinalized` events lose the same field;
+  off-chain consumers should check `amount > 0` instead.
+
+  This is a breaking event/account change. Shipped under the V2 program
+  ID at Stage 6 (no in-place upgrade of devnet `7FtAXUcr...`).
+
+  The SDK `isSpendingAction()` and `ACTION_TYPE_NAMES_BY_INDEX` helpers
+  were also deleted — they were marked zombie code for legacy indexer
+  compatibility, and Option A removes zombie code.
+
+### Patch Changes
+
+- [#337](https://github.com/Sigil-Trade/sigil/pull/337) [`09906b0`](https://github.com/Sigil-Trade/sigil/commit/09906b0a9a96e74c9827647e8f7e6c74fdf49374) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - Fix `createVault` to default to a V2-valid policy and fail fast on inert configs:
+  - `protocolMode` now defaults to `1` (ALLOWLIST) instead of `0`. Phase 2
+    Option A deleted the permissive ALL (0) / DENYLIST modes; the on-chain
+    `initialize_vault` handler hard-rejects any `protocol_mode != 1`. The old
+    default of `0` built an initialize instruction the deployed program reverts
+    on, so any caller that didn't pass an explicit `protocolMode` produced an
+    un-landable transaction.
+  - `createVault` now throws `INVALID_PARAMS` up front when an active
+    (non-`observeOnly`) vault is given no protocols AND no destinations on its
+    allowlist. The on-chain program rejects that as inert
+    (`ActiveVaultRequiresAllowlist`, 6073); failing fast in the SDK surfaces an
+    actionable message before the owner signs. `observeOnly` vaults (explicitly
+    inert) are exempt. `previewCreateVault` surfaces this via its existing
+    throw-propagation path.
+
+- [#334](https://github.com/Sigil-Trade/sigil/pull/334) [`b59818b`](https://github.com/Sigil-Trade/sigil/commit/b59818b0918358d8368b128a92e508302a7abf20) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - fix(kit): make `findVaultsByOwner` resilient when an RPC restricts `getProgramAccounts`
+
+  A devnet / public RPC that excludes a high-account-count program from its
+  secondary index can silently return `[]` from `getProgramAccounts` (Strategy
+  A) instead of erroring. Previously `findVaultsByOwner` returned that `[]`
+  verbatim, so `discoverVaults` reported "no vaults" for an owner that actually
+  has them — a silent under-reporting bug that surfaced as a flaky devnet CI
+  failure (`dashboard-integration › finds vaults` got length 0 despite ~30
+  vaults existing for the wallet at ids ≥ 1,000,000).
+
+  `findVaultsByOwner` now runs the Strategy B PDA-probing safety-net whenever
+  Strategy A yields **zero** verified vaults (not only when it throws a
+  gpa-unsupported error). Probing is PDA-authoritative — every returned address
+  is re-derived client-side from `(owner, vaultId)`, so it can only ADD real
+  low-id vaults the restricted gPA hid; it never fabricates a vault and returns
+  `[]` for a genuinely vault-less owner. Rate-limit (429) and network errors
+  still propagate unchanged.
+
+  Also adds an optional `vaultId` to the `provisionVault` devnet test helper so
+  callers can provision a vault at a deterministic id (used by the
+  dashboard-integration test to pin a low-id vault that PDA probing reliably
+  discovers regardless of the RPC's gPA support).
+
+- [#335](https://github.com/Sigil-Trade/sigil/pull/335) [`e681e12`](https://github.com/Sigil-Trade/sigil/commit/e681e12f481842d942471ef4c5fb475532775068) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - Fix transaction signing for partial signers, and enable operator-grant test provisioning:
+  - `signAndEncode` now correctly signs a compiled transaction with a
+    `TransactionPartialSigner` (e.g. a `@solana/kit` KeyPairSigner). It previously
+    assumed the signer returned a signed transaction, but a partial signer returns
+    a `SignatureDictionary` (a signature map with no `messageBytes`), so
+    `getBase64EncodedWireTransaction` threw `TypeError: Cannot read properties of
+undefined (reading 'length')` — breaking `executeTransaction` and any
+    programmatic `seal()` / `createVault` caller that passes a bare keypair. It now
+    delegates to `signTransactionWithSigners`, the canonical Kit primitive that
+    handles both partial and modifying signers and asserts full-signedness. Error
+    codes (`SIGNER_INVALID` / `SIGNATURE_INVALID`) are preserved.
+  - `provisionVault` (testing helper) now seats OPERATOR-capability agents through
+    the on-chain queue → timelock → apply path. V2 rejects an instant OPERATOR
+    grant on a single-key vault with `ErrOperatorGrantRequiresTimelock` (6107), so
+    the helper queues the grant, waits out the on-chain delay against the cluster
+    clock, then applies it (observer/disabled grants stay instant). It also
+    tolerates transient public-devnet RPC 429s on its reads (test-only retry).
+
+- [#327](https://github.com/Sigil-Trade/sigil/pull/327) [`46a2f26`](https://github.com/Sigil-Trade/sigil/commit/46a2f265dde096872751b5314a99156814b3beca) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - Fix devnet test-helper + RPC error reporting against the V2 program:
+  - `sendAndConfirmTransaction` no longer masks on-chain errors that carry BigInt
+    fields. A failed transaction whose `status.err` contained a u64 (e.g. an
+    instruction index) previously threw `TypeError: Do not know how to serialize a
+BigInt` from the error path itself, hiding the real `Custom` program code.
+  - `sendAndConfirmTransaction` / `sendKitTransaction` accept a `skipPreflight`
+    option. Slot-bound transactions (e.g. `initialize_vault`'s PEN-CROSS-2 preview
+    digest, which binds the execution slot) cannot be preflight-simulated: the sim
+    runs at the current slot and rejects the future-slot digest with
+    `PolicyPreviewMismatch` before the tx can land.
+  - `provisionVault` (testing helper) now works against the live program: it
+    retries the slot-bind (`PolicyPreviewMismatch` 6071) with `skipPreflight`, and
+    accepts a `protocols` allowlist so callers can create a non-inert ACTIVE vault
+    that passes the F-11 init guard (6073) and the M-9 reactivate guard
+    (`ActiveVaultRequiresAllowlist`).
+
+- [#327](https://github.com/Sigil-Trade/sigil/pull/327) [`46a2f26`](https://github.com/Sigil-Trade/sigil/commit/46a2f265dde096872751b5314a99156814b3beca) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - fix(kit): seal() resolves vault-owned Token-2022 output mints (F-Q4 honest path)
+
+  `seal()` now auto-resolves the mints of vault-owned Token-2022 token accounts the
+  sandwiched DeFi instruction writes and feeds them into `validate_and_authorize`'s
+  `remaining_accounts`. Previously a legitimate swap delivering a Token-2022 token
+  into a pre-existing vault ATA reverted on-chain with
+  `ErrToken2022OutputMintUnresolvable` (6106) because the on-chain F-Q4 gate could
+  not resolve the mint to vet its extensions. The honest path now succeeds while the
+  on-chain gate remains the sole, non-omittable enforcer (a PermanentDelegate /
+  TransferHook / ConfidentialTransfer mint is still rejected on-chain).
+  - New exported pure helper `resolveT22OutputMintMetas()` mirrors the on-chain
+    demand exactly (Token-2022-owned + account length >= 72 + token-account
+    authority == vault) and appends each distinct mint as a READONLY meta to
+    `validate` only (`finalize_session` does not run the gate).
+  - A batched `getMultipleAccounts` fetch runs only when the Token-2022 program
+    appears in the bundle — classic-SPL swaps are unaffected (no extra round-trip).
+    The fetch fails closed with a contextual error on RPC failure.
+  - Completes the SDK propagation of error 6106 (the hand-maintained
+    `ON_CHAIN_ERROR_MAP`, `SIGIL_ON_CHAIN_ERROR_MAX`, and the Codama
+    `generated/errors/sigil.ts` now all carry `ErrToken2022OutputMintUnresolvable`).
+
+- [#327](https://github.com/Sigil-Trade/sigil/pull/327) [`46a2f26`](https://github.com/Sigil-Trade/sigil/commit/46a2f265dde096872751b5314a99156814b3beca) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - fix(kit): add error 6106 (ErrToken2022OutputMintUnresolvable) to the error maps
+
+  The on-chain program gained error 6106 for the F-Q4 Token-2022 swap-path
+  extension gate — a vault-owned Token-2022 output ATA whose mint is absent from
+  `remaining_accounts` (or is not Token-2022-owned) fails closed so its mint
+  extensions can be vetted. Regenerated the kit error projections
+  (`agent-errors.generated.ts`, `names.generated.ts`) so SDK error
+  decoding/classification recognizes 6106. Additive, non-breaking.
+
+  Note: the SDK `seal()` output-mint satisfier (which feeds the vault-owned
+  Token-2022 output mints into `remaining_accounts` on the honest path) is a
+  separate follow-on change; the on-chain gate is fail-closed-safe without it.
+
+- [#327](https://github.com/Sigil-Trade/sigil/pull/327) [`46a2f26`](https://github.com/Sigil-Trade/sigil/commit/46a2f265dde096872751b5314a99156814b3beca) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - fix(kit): regenerate the SessionAuthority codec for the F-Q8 output-stablecoin-ATA pin
+
+  The on-chain `SessionAuthority` account gained an appended
+  `output_stablecoin_account: Pubkey` field (F-Q8: `finalize_session` now pins
+  the measured stablecoin ATA by pubkey, blocking substitution of a different
+  vault-owned stablecoin ATA on the non-stablecoin-input spend path). SIZE grew
+  515 → 547.
+
+  Regenerated `sdk/kit/src/generated/accounts/sessionAuthority.ts` via Codama so
+  the kit codec matches the program:
+  - `getSessionAuthoritySize()` now returns `547` (was `515`).
+  - The decoder/encoder include the new `outputStablecoinAccount: Address` field.
+
+  This fixes a latent session-discovery break: `findSessionsByVault()`
+  (`state-resolver.ts`) filters `getProgramAccounts` on `{ dataSize:
+getSessionAuthoritySize() }`. Against the upgraded program (547-byte sessions),
+  the stale 515-byte filter would have matched zero accounts, silently returning
+  no sessions. Additive, non-breaking for consumers (new field on decoded
+  SessionAuthority objects).
+
 ## 0.16.0
 
 ### Phase 9 SDK redesign — engineering notes
