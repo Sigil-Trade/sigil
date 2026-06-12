@@ -1131,7 +1131,7 @@ export async function queueAgentPermissions(
     //     pass a REAL session pubkey + include it as a signer in
     //     `remaining_accounts`.
     //   - Reject path: passing a non-default `cosign_session` on a
-    //     non-elevated queue surfaces `InvalidPermissions` (6088).
+    //     non-elevated queue surfaces `InvalidPermissions` (6036).
     //     INTENTIONAL — the on-chain handler refuses to silently
     //     downgrade a caller's declared intent (Option A behaviour).
     cosignSession: "11111111111111111111111111111111" as unknown as Address,
