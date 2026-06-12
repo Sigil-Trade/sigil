@@ -1,6 +1,7 @@
 {
   "name": "@usesigil/agent",
-  "version": "0.1.0",
+  "version": "0.1.1",
+  "private": true,
   "description": "Sigil for AI — bounded Solana agent toolkit. MCP server that gives any AI runtime (Claude Desktop, Claude Code, Cursor, Continue, Cline) typed tools to operate on a Sigil-policy-protected vault.",
   "license": "MIT",
   "type": "module",
