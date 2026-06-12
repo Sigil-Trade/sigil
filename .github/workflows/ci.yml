@@ -23,7 +23,7 @@
 #   sdk/custody → Custody adapter tests (96 tests)
 #   packages/plugins → Plugin tests (14 tests)
 #
-# Total: ~2,633 tests across 20 suites (1921 TS + 523 on-chain + 49 Surfpool + 140 devnet)
+# Total: ~2,634 tests across 20 suites (1921 TS + 523 on-chain + 49 Surfpool + 141 devnet)
 # All security checks are BLOCKING — zero tolerance for known issues.
 
 name: CI

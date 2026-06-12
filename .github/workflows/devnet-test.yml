@@ -9,7 +9,7 @@
 # The deploy-devnet.yml workflow handles: build → deploy → test (chained).
 # This prevents tests from running against a stale program binary.
 #
-# 140 tests across 9 files. Costs SOL — never runs on PRs.
+# 141 tests across 9 files. Costs SOL — never runs on PRs.
 #
 # RUNTIME: ~110 min. F-Q6 forbids instant OPERATOR grants on single-key
 # vaults; devnet has no clock cheatcodes, so each file pays one REAL 600s
@@ -190,6 +190,7 @@ jobs:
             tests/devnet/dashboard-integration.test.ts \
             tests/devnet/lifecycle.test.ts \
             tests/devnet/composed-tx.test.ts \
+            tests/devnet/seal-e2e.test.ts \
             --timeout 1200000
 
       - name: Cleanup wallet
