@@ -219,8 +219,10 @@ async function siblingHandlerExpectedDigest(
     // Omitting them here defaulted the digest to EMPTY_AGENT_SET_HASH / 0n,
     // mismatching the on-chain recompute (PolicyPreviewMismatch) for ANY vault
     // with >=1 agent or a non-zero operator-grant delay — i.e. every real vault.
-    // vault.agents is the active-agent Vec (register pushes, revoke retains),
-    // mapped 1:1 by computeAgentSetHash (mirrors compute_agent_set_hash).
+    // vault.agents is the active-agent Vec (register pushes; owner-revoke
+    // removes the entry, auto-revoke zeroes its capability in place — either
+    // way membership matches the on-chain Vec), mapped 1:1 by
+    // computeAgentSetHash (mirrors compute_agent_set_hash).
     agentSetHash: computeAgentSetHash(liveVault.data.agents),
     operatorGrantDelaySeconds: livePolicy.data.operatorGrantDelaySeconds,
   });

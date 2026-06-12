@@ -973,6 +973,46 @@ mod tests {
         );
     }
 
+    /// Cross-impl pin (audit 2026-06-11 follow-up): the SDK `computeAgentSetHash`
+    /// is now exercised with POPULATED agent sets (dashboard sibling/queue
+    /// digests). Only the empty-set hash was previously pinned cross-impl; this
+    /// pins a deterministic 2-agent fixture so any future drift in either the
+    /// Rust or TS Borsh layout / sort / hash is caught. Mirrored byte-for-byte
+    /// in `sdk/kit/tests/policy/preview-digest.test.ts` where PK_1 = [1u8;32],
+    /// PK_2 = [2u8;32], capabilities 2 and 1 (identical to pk(1)/pk(2) here).
+    #[test]
+    fn agent_set_hash_populated_cross_impl_pin() {
+        let a = AgentEntry {
+            pubkey: pk(1),
+            capability: 2,
+            consecutive_failures: 0,
+            _reserved: [0u8; 6],
+            spending_limit_usd: 0,
+            paused: false,
+        };
+        let b = AgentEntry {
+            pubkey: pk(2),
+            capability: 1,
+            consecutive_failures: 0,
+            _reserved: [0u8; 6],
+            spending_limit_usd: 0,
+            paused: false,
+        };
+        let h = compute_agent_set_hash(&[a, b]);
+        // Cross-impl pin = SHA-256 of Borsh(Vec<(Pubkey,u8)>) for the sorted set
+        // {([1;32],2),([2;32],1)}. Mirrored as hex
+        // 9b9885416074bb759440b5072807d230c7ab479d645f063356087e0386480c42 in
+        // sdk/kit/tests/policy/preview-digest.test.ts. Drift on either side fails.
+        assert_eq!(
+            h,
+            [
+                155, 152, 133, 65, 96, 116, 187, 117, 148, 64, 181, 7, 40, 7, 210, 48, 199, 171,
+                71, 157, 100, 95, 6, 51, 86, 8, 126, 3, 134, 72, 12, 66
+            ],
+            "populated agent_set_hash cross-impl pin"
+        );
+    }
+
     /// Phase 8 PEN-CROSS-1 (Council ISC-66): inserting an agent into a
     /// vault MUST diverge the agent_set_hash AND therefore the policy
     /// preview digest. Closes the silent-insertion vector.

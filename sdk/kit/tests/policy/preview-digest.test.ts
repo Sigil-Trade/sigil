@@ -457,6 +457,23 @@ describe("TA-19 — computePolicyPreviewDigest cross-impl pin", () => {
     expect(toHex(h_ab)).to.equal(toHex(h_ba));
   });
 
+  // Cross-impl pin (audit 2026-06-11 follow-up): the dashboard sibling/queue
+  // digests now feed POPULATED agent sets through computeAgentSetHash. Only the
+  // empty-set hash was pinned cross-impl before; this pins a deterministic
+  // 2-agent set byte-for-byte against the Rust `compute_agent_set_hash`
+  // (policy_digest.rs::agent_set_hash_populated_cross_impl_pin uses the
+  // identical fixture: pk(1)=[1;32] cap 2, pk(2)=[2;32] cap 1). Drift in either
+  // impl's sort / Borsh layout / hash fails here.
+  it("computeAgentSetHash matches the Rust populated-set pin (PEN-CROSS-1)", () => {
+    const h = computeAgentSetHash([
+      { pubkey: PK_1, capability: 2 },
+      { pubkey: PK_2, capability: 1 },
+    ]);
+    expect(toHex(h)).to.equal(
+      "9b9885416074bb759440b5072807d230c7ab479d645f063356087e0386480c42",
+    );
+  });
+
   // Phase 8 PEN-CROSS-1 cross-impl pin: inserting an agent into the set
   // MUST diverge the policy digest. Closes the silent-insertion vector.
   it("agent_set_hash flip changes the digest (PEN-CROSS-1)", () => {
