@@ -59,6 +59,7 @@ export {
   getProgramDerivedAddress,
   getU64Decoder,
   isSome,
+  partiallySignTransactionMessageWithSigners,
   pipe,
   setTransactionMessageFeePayer,
   setTransactionMessageLifetimeUsingBlockhash,

@@ -23,6 +23,7 @@ import {
   appendTransactionMessageInstructions,
   addSignersToTransactionMessage,
   signTransactionMessageWithSigners,
+  partiallySignTransactionMessageWithSigners,
   getBase64EncodedWireTransaction,
   type Instruction as KitInstruction,
 } from "../kit-adapter.js";
@@ -51,6 +52,7 @@ import {
   computePolicyPreviewDigest,
   computeAgentSetHash,
 } from "../policy/compute-policy-preview-digest.js";
+import { computeAgentPermsCosignDigest } from "../policy/compute-agent-perms-cosign-digest.js";
 
 // Phase 3: Simple mutations
 import { getFreezeVaultInstructionAsync } from "../generated/instructions/freezeVault.js";
@@ -234,6 +236,13 @@ async function run(
   network: "devnet" | "mainnet",
   instructions: Instruction[],
   opts: TxOpts = {},
+  // Elevated-cosign surface (audit 2026-06-12): additional signers beyond the
+  // owner (e.g. a cosign-session signer for an elevated queue mutation). The
+  // cosigner must ALSO be present in the instruction's account metas as a
+  // readonly-signer (the elevated wrappers append it); attaching it here makes
+  // its signature land in the wire tx. Default [] preserves the owner-only path
+  // for every existing non-elevated caller.
+  cosigners: readonly TransactionSigner[] = [],
 ): Promise<TxResult> {
   try {
     const cu = opts.computeUnits ?? CU_OWNER_ACTION;
@@ -261,7 +270,7 @@ async function run(
     );
 
     const txWithSigners = addSignersToTransactionMessage(
-      [owner],
+      [owner, ...cosigners],
       txMessage as any,
     );
     const signedTx = await signTransactionMessageWithSigners(
@@ -1062,6 +1071,187 @@ export async function queueAgentPermissions(
     cosignSession: "11111111111111111111111111111111" as unknown as Address,
   });
   return run(rpc, owner, network, [ix], opts);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Elevated-cosign surface (audit 2026-06-12).
+//
+// On a `cosign_required` vault, raising an agent's capability or spending limit,
+// or setting a non-zero cooldown, is an ELEVATED mutation: the on-chain
+// queue_agent_permissions_update handler requires a non-default `cosign_session`
+// that is (a) distinct from the owner and (b) present as a signer in
+// remaining_accounts. Two caller models:
+//   - queueAgentPermissionsElevated(...)      single-builder dual-sign: caller
+//     supplies the cosigner as a TransactionSigner; we sign [owner, cosigner].
+//   - buildQueueAgentPermissionsElevated(...)  partial-sign handoff: caller
+//     supplies only the cosigner PUBKEY; we owner-partial-sign and return the
+//     base64 partial tx + the cosign digest for the cosigner to complete + send.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Append a cosign-session signer to a generated instruction's account metas. */
+function withCosignerSigner(
+  ix: Instruction,
+  cosignSession: Address,
+): Instruction {
+  return {
+    ...(ix as any),
+    accounts: [
+      ...((ix as any).accounts ?? []),
+      { address: cosignSession, role: AccountRole.READONLY_SIGNER },
+    ],
+  } as Instruction;
+}
+
+/**
+ * Assemble the compute-budget-prefixed message and OWNER-partial-sign it (the
+ * cosigner — a required signer via the appended account meta — signs later).
+ * Returns the base64 wire transaction for handoff. Mirrors run()'s message
+ * assembly but does NOT send.
+ */
+async function buildOwnerPartialSignedTx(
+  rpc: Rpc<SolanaRpcApi>,
+  owner: TransactionSigner,
+  instructions: Instruction[],
+  opts: TxOpts = {},
+): Promise<string> {
+  const cu = opts.computeUnits ?? CU_OWNER_ACTION;
+  const allIx: KitInstruction[] = [
+    getSetComputeUnitLimitInstruction({
+      units: cu,
+    }) as unknown as KitInstruction,
+    ...(opts.priorityFeeMicroLamports
+      ? [
+          getSetComputeUnitPriceInstruction({
+            microLamports: BigInt(opts.priorityFeeMicroLamports),
+          }) as unknown as KitInstruction,
+        ]
+      : []),
+    ...(instructions as unknown as KitInstruction[]),
+  ];
+  const blockhash = await getBlockhashCache(rpc).get(rpc);
+  const txMessage = pipe(
+    createTransactionMessage({ version: 0 }),
+    (tx) => setTransactionMessageFeePayer(owner.address, tx),
+    (tx) => setTransactionMessageLifetimeUsingBlockhash(blockhash as any, tx),
+    (tx) => appendTransactionMessageInstructions(allIx, tx),
+  );
+  const withOwner = addSignersToTransactionMessage([owner], txMessage as any);
+  const partial = await partiallySignTransactionMessageWithSigners(
+    withOwner as any,
+  );
+  return getBase64EncodedWireTransaction(partial as any);
+}
+
+/** Result of a partial-sign elevated build, for cosigner handoff. */
+export interface ElevatedCosignBundle {
+  /** Base64 wire tx, owner-signed, awaiting the cosigner's signature. */
+  partialTransactionBase64: string;
+  /** The cosign-session pubkey bound into the transaction. */
+  cosignSession: Address;
+  /**
+   * The cosign digest the on-chain handler recomputes from the queued args.
+   * The cosigner can verify this matches what they intend to attest, and the
+   * caller can compare it against `PendingAgentPermissionsUpdate.cosignDigest`
+   * after the transaction lands.
+   */
+  cosignDigest: Uint8Array;
+}
+
+/**
+ * Elevated agent-permissions queue — single-builder dual-sign. The caller holds
+ * the cosigner key (server-side / single-operator). Signs [owner, cosigner] and
+ * sends. For a true 2-party async flow use `buildQueueAgentPermissionsElevated`.
+ */
+export async function queueAgentPermissionsElevated(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  agent: Address,
+  permissions: CapabilityTier,
+  spendingLimit: UsdBaseUnits,
+  cooldownSeconds: bigint,
+  cosigner: TransactionSigner,
+  opts?: TxOpts,
+): Promise<TxResult> {
+  requireValidAddress(agent, "Agent address");
+  requireValidPermissions(permissions);
+  requireValidAddress(cosigner.address, "Cosigner address");
+  if (cosigner.address === owner.address) {
+    throw toDxError(
+      new Error(
+        "Cosigner must be distinct from the owner (on-chain ErrCosignRequired)",
+      ),
+    );
+  }
+  const ix = await getQueueAgentPermissionsUpdateInstructionAsync({
+    owner,
+    vault,
+    agent,
+    newCapability: Number(permissions),
+    spendingLimitUsd: spendingLimit,
+    cooldownSeconds,
+    cosignSession: cosigner.address,
+  });
+  return run(
+    rpc,
+    owner,
+    network,
+    [withCosignerSigner(ix, cosigner.address)],
+    opts,
+    [cosigner],
+  );
+}
+
+/**
+ * Elevated agent-permissions queue — partial-sign handoff. Owner-signs and
+ * returns the partial transaction + cosign digest; the cosigner signs and sends
+ * out-of-band (true 2-of-2). Validation mirrors the dual-sign path.
+ */
+export async function buildQueueAgentPermissionsElevated(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  agent: Address,
+  permissions: CapabilityTier,
+  spendingLimit: UsdBaseUnits,
+  cooldownSeconds: bigint,
+  cosignSession: Address,
+  opts?: TxOpts,
+): Promise<ElevatedCosignBundle> {
+  requireValidAddress(agent, "Agent address");
+  requireValidPermissions(permissions);
+  requireValidAddress(cosignSession, "Cosigner address");
+  if (cosignSession === owner.address) {
+    throw toDxError(
+      new Error(
+        "Cosigner must be distinct from the owner (on-chain ErrCosignRequired)",
+      ),
+    );
+  }
+  const ix = await getQueueAgentPermissionsUpdateInstructionAsync({
+    owner,
+    vault,
+    agent,
+    newCapability: Number(permissions),
+    spendingLimitUsd: spendingLimit,
+    cooldownSeconds,
+    cosignSession,
+  });
+  const partialTransactionBase64 = await buildOwnerPartialSignedTx(
+    rpc,
+    owner,
+    [withCosignerSigner(ix, cosignSession)],
+    opts,
+  );
+  const cosignDigest = computeAgentPermsCosignDigest({
+    cosignSession,
+    agent,
+    newCapability: Number(permissions),
+    spendingLimitUsd: spendingLimit,
+    cooldownSeconds,
+  });
+  return { partialTransactionBase64, cosignSession, cosignDigest };
 }
 
 export async function applyAgentPermissions(
