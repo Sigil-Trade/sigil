@@ -66,7 +66,12 @@ describe("computeAgentPermsCosignDigest — cross-impl parity (elevated agent-pe
       toHex(computeAgentPermsCosignDigest({ ...base, newCapability: 2 })),
     );
     expect(d).to.not.equal(
-      toHex(computeAgentPermsCosignDigest({ ...base, spendingLimitUsd: 50_000_000n })),
+      toHex(
+        computeAgentPermsCosignDigest({
+          ...base,
+          spendingLimitUsd: 50_000_000n,
+        }),
+      ),
     );
     expect(d).to.not.equal(
       toHex(computeAgentPermsCosignDigest({ ...base, cooldownSeconds: 3600n })),

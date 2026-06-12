@@ -323,8 +323,9 @@ pub fn handler(
     // digest (positions 23-24). Clone to avoid moving the `protocol_caps` arg,
     // which the elevation check + pending write below still consume.
     let eff_has_protocol_caps = has_protocol_caps.unwrap_or(policy.has_protocol_caps);
-    let eff_protocol_caps_owned: Vec<u64> =
-        protocol_caps.clone().unwrap_or_else(|| policy.protocol_caps.clone());
+    let eff_protocol_caps_owned: Vec<u64> = protocol_caps
+        .clone()
+        .unwrap_or_else(|| policy.protocol_caps.clone());
 
     // ─── TA-09 (Phase 3): elevated mutation detection + cosign binding ─
     //

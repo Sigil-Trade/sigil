@@ -915,15 +915,13 @@ async function buildPolicyUpdateIx(
     changes.sessionExpirySeconds ?? livePolicy.data.sessionExpirySeconds;
   const effHasProtocolCaps =
     changes.hasProtocolCaps ?? livePolicy.data.hasProtocolCaps;
-  const effProtocolCaps =
-    changes.protocolCaps ?? livePolicy.data.protocolCaps;
+  const effProtocolCaps = changes.protocolCaps ?? livePolicy.data.protocolCaps;
   // Elevated-only fields (audit 2026-06-12): same merged-effective projection.
   // Undefined ⇒ live pass-through, so queuePolicyUpdate's digest is unchanged.
   const effStableFloor =
     changes.stableBalanceFloor ?? livePolicy.data.stableBalanceFloor;
   const effPerRecip =
-    changes.perRecipientDailyCapUsd ??
-    livePolicy.data.perRecipientDailyCapUsd;
+    changes.perRecipientDailyCapUsd ?? livePolicy.data.perRecipientDailyCapUsd;
   const effCosignRequired =
     changes.cosignRequired ?? livePolicy.data.cosignRequired;
   const effCosignSessionPubkey =
@@ -1009,7 +1007,13 @@ export async function queuePolicyElevated(
       ),
     );
   }
-  const ix = await buildPolicyUpdateIx(rpc, owner, vault, changes, cosigner.address);
+  const ix = await buildPolicyUpdateIx(
+    rpc,
+    owner,
+    vault,
+    changes,
+    cosigner.address,
+  );
   return run(
     rpc,
     owner,
@@ -1041,7 +1045,13 @@ export async function buildQueuePolicyElevated(
       ),
     );
   }
-  const ix = await buildPolicyUpdateIx(rpc, owner, vault, changes, cosignSession);
+  const ix = await buildPolicyUpdateIx(
+    rpc,
+    owner,
+    vault,
+    changes,
+    cosignSession,
+  );
   const partialTransactionBase64 = await buildOwnerPartialSignedTx(
     rpc,
     owner,

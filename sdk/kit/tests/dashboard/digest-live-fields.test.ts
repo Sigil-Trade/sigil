@@ -58,8 +58,7 @@ import { SIGIL_PROGRAM_ADDRESS } from "../../src/generated/programs/sigil.js";
 import { getPolicyPDA } from "../../src/resolve-accounts.js";
 import { createMockVaultState } from "../../src/testing/mock-state.js";
 
-const TARGET_ACCT =
-  "So11111111111111111111111111111111111111112" as Address;
+const TARGET_ACCT = "So11111111111111111111111111111111111111112" as Address;
 
 // All vault/agent/owner pubkeys are generated per-run (valid 32-byte base58 —
 // the mock-state placeholder constants like "Vault111…" are display-only and
@@ -172,7 +171,8 @@ function sigilInstructionData(wireB64: string): ReadonlyUint8Array {
     }>;
   };
   const sigilIx = message.instructions.find(
-    (ix) => message.staticAccounts[ix.programAddressIndex] === SIGIL_PROGRAM_ADDRESS,
+    (ix) =>
+      message.staticAccounts[ix.programAddressIndex] === SIGIL_PROGRAM_ADDRESS,
   );
   if (!sigilIx?.data) throw new Error("Sigil instruction not found in tx");
   return sigilIx.data;
@@ -200,7 +200,9 @@ async function capturePostAssertionsDigest(
   const captured = { wire: null as string | null };
   const rpc = buildMockRpc({
     policyAddress,
-    policyDataB64: toBase64(getPolicyConfigEncoder().encode(state.policy as never)),
+    policyDataB64: toBase64(
+      getPolicyConfigEncoder().encode(state.policy as never),
+    ),
     vaultAddress: MOCK_VAULT,
     vaultDataB64: toBase64(getAgentVaultEncoder().encode(state.vault as never)),
     captured,
@@ -229,7 +231,9 @@ async function captureQueueDigest(
   const captured = { wire: null as string | null };
   const rpc = buildMockRpc({
     policyAddress,
-    policyDataB64: toBase64(getPolicyConfigEncoder().encode(state.policy as never)),
+    policyDataB64: toBase64(
+      getPolicyConfigEncoder().encode(state.policy as never),
+    ),
     vaultAddress: MOCK_VAULT,
     vaultDataB64: toBase64(getAgentVaultEncoder().encode(state.vault as never)),
     captured,

@@ -196,9 +196,7 @@ pub fn is_policy_violation_code(code: u32) -> bool {
     // ErrAutoRevoked doc above explicitly excludes "nonce desync". Carve them out
     // so a benign nonce race or a caller misconfig cannot count toward auto-
     // revoking a working agent. Still by NUMERIC RANGE (renumber-sensitive).
-    (6074..=6083).contains(&code)
-        || (6085..=6088).contains(&code)
-        || (6090..=6091).contains(&code)
+    (6074..=6083).contains(&code) || (6085..=6088).contains(&code) || (6090..=6091).contains(&code)
 }
 
 /// sha256("global:finalize_session")[0..8] — used by validate_and_authorize

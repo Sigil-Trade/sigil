@@ -60,7 +60,10 @@ function accountInfo(dataB64: string) {
 function isAllZero(b: Uint8Array): boolean {
   return b.every((x) => x === 0);
 }
-function splitWire(wireB64: string): { sigs: Uint8Array[]; messageBytes: Uint8Array } {
+function splitWire(wireB64: string): {
+  sigs: Uint8Array[];
+  messageBytes: Uint8Array;
+} {
   const bytes = new Uint8Array(getBase64Encoder().encode(wireB64));
   const numSigs = bytes[0]!;
   const sigs: Uint8Array[] = [];
@@ -74,7 +77,10 @@ function decodeMessage(messageBytes: Uint8Array) {
   ) as unknown as {
     header: { numSignerAccounts: number };
     staticAccounts: Address[];
-    instructions: ReadonlyArray<{ programAddressIndex: number; data?: Uint8Array }>;
+    instructions: ReadonlyArray<{
+      programAddressIndex: number;
+      data?: Uint8Array;
+    }>;
   };
   const ix = m.instructions.find(
     (i) => m.staticAccounts[i.programAddressIndex] === SIGIL_PROGRAM_ADDRESS,
@@ -93,7 +99,11 @@ describe("elevated policy cosign wrappers (audit 2026-06-12 Phase 2)", () => {
   let vault: Address;
   let captured: { wire: string | null };
 
-  function buildMockRpc(policyB64: string, vaultB64: string, policyAddr: Address): Rpc<SolanaRpcApi> {
+  function buildMockRpc(
+    policyB64: string,
+    vaultB64: string,
+    policyAddr: Address,
+  ): Rpc<SolanaRpcApi> {
     return {
       getAccountInfo: (address: Address) => ({
         send: async () => {
@@ -111,7 +121,9 @@ describe("elevated policy cosign wrappers (audit 2026-06-12 Phase 2)", () => {
         }),
       }),
       simulateTransaction: () => ({
-        send: async () => ({ value: { err: null, logs: [], unitsConsumed: 1 } }),
+        send: async () => ({
+          value: { err: null, logs: [], unitsConsumed: 1 },
+        }),
       }),
       sendTransaction: (wire: string) => ({
         send: async () => {
@@ -120,7 +132,9 @@ describe("elevated policy cosign wrappers (audit 2026-06-12 Phase 2)", () => {
         },
       }),
       getSignatureStatuses: () => ({
-        send: async () => ({ value: [{ confirmationStatus: "confirmed", err: null }] }),
+        send: async () => ({
+          value: [{ confirmationStatus: "confirmed", err: null }],
+        }),
       }),
       getSlot: () => ({ send: async () => 100n }),
       getMinimumBalanceForRentExemption: (size: bigint) => ({
@@ -158,9 +172,11 @@ describe("elevated policy cosign wrappers (audit 2026-06-12 Phase 2)", () => {
     await queuePolicyElevated(rpc, vault, owner, "devnet", RAISE, cosigner);
     if (!captured.wire) throw new Error("no wire captured");
     const { sigs, messageBytes } = splitWire(captured.wire);
-    const { staticAccounts, numSigners, sigilIxData } = decodeMessage(messageBytes);
+    const { staticAccounts, numSigners, sigilIxData } =
+      decodeMessage(messageBytes);
 
-    const data = getQueuePolicyUpdateInstructionDataDecoder().decode(sigilIxData);
+    const data =
+      getQueuePolicyUpdateInstructionDataDecoder().decode(sigilIxData);
     expect(data.cosignSession).to.equal(cosigner.address);
 
     const signers = staticAccounts.slice(0, numSigners);
@@ -218,7 +234,8 @@ describe("elevated policy cosign wrappers (audit 2026-06-12 Phase 2)", () => {
     if (!captured.wire) throw new Error("no wire captured");
     const { sigs, messageBytes } = splitWire(captured.wire);
     const { sigilIxData } = decodeMessage(messageBytes);
-    const data = getQueuePolicyUpdateInstructionDataDecoder().decode(sigilIxData);
+    const data =
+      getQueuePolicyUpdateInstructionDataDecoder().decode(sigilIxData);
     // Non-elevated path: cosign_session = Pubkey::default() (System Program).
     expect(data.cosignSession).to.equal("11111111111111111111111111111111");
     // Owner-only signature (no cosigner attached).

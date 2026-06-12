@@ -19,7 +19,12 @@ import {
   getCompiledTransactionMessageDecoder,
   getBase64Encoder,
 } from "@solana/kit";
-import type { Address, Rpc, SolanaRpcApi, TransactionSigner } from "@solana/kit";
+import type {
+  Address,
+  Rpc,
+  SolanaRpcApi,
+  TransactionSigner,
+} from "@solana/kit";
 
 import {
   queueAgentPermissionsElevated,
@@ -66,7 +71,10 @@ function buildMockRpc(captured: { wire: string | null }): Rpc<SolanaRpcApi> {
 }
 
 /** Split a base64 wire tx into its signature slots (64 bytes each) + message. */
-function splitWire(wireB64: string): { sigs: Uint8Array[]; messageBytes: Uint8Array } {
+function splitWire(wireB64: string): {
+  sigs: Uint8Array[];
+  messageBytes: Uint8Array;
+} {
   const bytes = new Uint8Array(getBase64Encoder().encode(wireB64));
   const numSigs = bytes[0]!; // compact-u16; <128 ⇒ 1 byte
   const sigs: Uint8Array[] = [];
@@ -138,9 +146,10 @@ describe("elevated agent-permissions cosign wrappers (audit 2026-06-12 Phase 2)"
       decodeMessage(messageBytes);
 
     // cosign_session arg == cosigner pubkey
-    const data = getQueueAgentPermissionsUpdateInstructionDataDecoder().decode(
-      sigilIxData,
-    );
+    const data =
+      getQueueAgentPermissionsUpdateInstructionDataDecoder().decode(
+        sigilIxData,
+      );
     expect(data.cosignSession).to.equal(cosigner.address);
 
     // cosigner is a REQUIRED signer (in the signer section of staticAccounts)
