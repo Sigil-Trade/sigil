@@ -9,7 +9,7 @@
 # The deploy-devnet.yml workflow handles: build → deploy → test (chained).
 # This prevents tests from running against a stale program binary.
 #
-# 184 tests across 11 files. Costs SOL — never runs on PRs.
+# 141 tests across 9 files. Costs SOL — never runs on PRs.
 #
 # RUNTIME: ~150 min. F-Q6 forbids instant OPERATOR grants on single-key
 # vaults; devnet has no clock cheatcodes, so each file pays one REAL 600s
