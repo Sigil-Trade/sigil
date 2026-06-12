@@ -474,6 +474,42 @@ describe("TA-19 — computePolicyPreviewDigest cross-impl pin", () => {
     );
   });
 
+  // M-1 LOW-1 cross-impl pin (audit 2026-06-11 follow-up): the REGENERATED_HEX_*
+  // pins both use has_protocol_caps=false / protocol_caps=[]. This pins the
+  // POPULATED-caps path (2 protocols, 2 distinct caps) byte-for-byte against the
+  // Rust `populated_caps_digest_cross_impl_pin`. agentSetHash + cosignSessionPubkey
+  // are omitted so the encoder uses its EMPTY/zero defaults, matching the Rust
+  // fixture's EMPTY_AGENT_SET_HASH + Pubkey::default().
+  it("populated-caps digest matches the Rust pin (M-1 LOW-1)", () => {
+    const d = computePolicyPreviewDigest({
+      dailySpendingCapUsd: 500_000_000n,
+      maxTransactionSizeUsd: 100_000_000n,
+      maxSlippageBps: 100,
+      developerFeeRate: 0,
+      protocolMode: 1,
+      protocols: [PK_1, PK_2],
+      destinationMode: 0,
+      allowedDestinations: [PK_10],
+      timelockDuration: 1800n,
+      sessionExpirySeconds: 30n,
+      observeOnly: false,
+      hasPostAssertions: 0,
+      createdAtSlot: 12345n,
+      operatingHours: 0x00ffffff,
+      autoPromoteGrays: false,
+      autoRevokeThreshold: 5,
+      stableBalanceFloor: 0n,
+      perRecipientDailyCapUsd: 0n,
+      cosignRequired: false,
+      operatorGrantDelaySeconds: 0n,
+      hasProtocolCaps: true,
+      protocolCaps: [250_000_000n, 500_000_000n],
+    });
+    expect(toHex(d)).to.equal(
+      "bacaf95ada191ebfd2c990c185435dcef226966a04c65b40dce36a0380a95847",
+    );
+  });
+
   // Phase 8 PEN-CROSS-1 cross-impl pin: inserting an agent into the set
   // MUST diverge the policy digest. Closes the silent-insertion vector.
   it("agent_set_hash flip changes the digest (PEN-CROSS-1)", () => {

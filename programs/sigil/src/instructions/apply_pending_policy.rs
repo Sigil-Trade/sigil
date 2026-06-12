@@ -256,6 +256,23 @@ pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
     if let Some(ref caps) = pending.protocol_caps {
         policy.protocol_caps = caps.clone();
     }
+    // LOW-2 (audit 2026-06-11 follow-up): defense-in-depth caps-length invariant
+    // re-check at the apply write site. `has_protocol_caps` and `protocol_caps`
+    // are merged INDEPENDENTLY above, and the queue gate
+    // (queue_policy_update.rs:251-266) plus the TA-19 digest re-assertion below
+    // already enforce alignment — but a dedicated post-merge invariant mirrors
+    // initialize_vault.rs:178-181 so any future pending-write path that flips the
+    // caps switch ON cannot land a live policy where `protocol_caps.len() !=
+    // protocols.len()`. That mismatch is the `get_protocol_cap` Some(0)
+    // tail-unlimited hazard (policy.rs:433-441): with the switch on, protocols at
+    // indices past the caps vector would read as uncapped. Guarded on the switch
+    // (not is_empty) so an empty-caps-with-switch-on state is also rejected.
+    if policy.has_protocol_caps {
+        require!(
+            policy.protocol_caps.len() == policy.protocols.len(),
+            SigilError::ProtocolCapsMismatch
+        );
+    }
     if let Some(mode) = pending.destination_mode {
         // Phase 2 Option A: re-validate at apply time. OPEN_WITH_CAP deleted.
         require!(

@@ -928,6 +928,147 @@ mod tests {
         );
     }
 
+    /// LOW-1 (audit 2026-06-11 follow-up): flipping the `has_protocol_caps`
+    /// master switch (canonical position 23) MUST change the digest. The caps
+    /// vector is held identical so only the bool byte differs.
+    #[test]
+    fn digest_changes_on_has_protocol_caps_flip() {
+        let protocols = [pk(1)];
+        let caps = [250_000_000u64];
+        let base = PolicyPreviewFields {
+            daily_spending_cap_usd: 500_000_000,
+            max_transaction_size_usd: 100_000_000,
+            max_slippage_bps: 100,
+            developer_fee_rate: 0,
+            protocol_mode: 1,
+            protocols: &protocols,
+            destination_mode: 0,
+            allowed_destinations: &[],
+            timelock_duration: 1800,
+            session_expiry_seconds: 30,
+            observe_only: false,
+            has_post_assertions: 0,
+            created_at_slot: 12345,
+            operating_hours: 0x00FFFFFF,
+            auto_promote_grays: false,
+            auto_revoke_threshold: 5,
+            stable_balance_floor: 0,
+            per_recipient_daily_cap_usd: 0,
+            cosign_required: false,
+            agent_set_hash: [0u8; 32],
+            cosign_session_pubkey: Pubkey::default(),
+            operator_grant_delay_seconds: 0,
+            has_protocol_caps: false,
+            protocol_caps: &caps,
+        };
+        let switched_on = PolicyPreviewFields {
+            has_protocol_caps: true,
+            ..base
+        };
+        assert_ne!(
+            compute_policy_preview_digest(&base),
+            compute_policy_preview_digest(&switched_on),
+            "has_protocol_caps flip MUST change digest"
+        );
+    }
+
+    /// LOW-1 (audit 2026-06-11 follow-up): changing a per-protocol cap VALUE
+    /// (canonical position 24) MUST change the digest. Switch held on, only the
+    /// caps vector contents differ.
+    #[test]
+    fn digest_changes_on_protocol_caps_value_change() {
+        let protocols = [pk(1)];
+        let caps_a = [250_000_000u64];
+        let caps_b = [500_000_000u64];
+        let base = PolicyPreviewFields {
+            daily_spending_cap_usd: 500_000_000,
+            max_transaction_size_usd: 100_000_000,
+            max_slippage_bps: 100,
+            developer_fee_rate: 0,
+            protocol_mode: 1,
+            protocols: &protocols,
+            destination_mode: 0,
+            allowed_destinations: &[],
+            timelock_duration: 1800,
+            session_expiry_seconds: 30,
+            observe_only: false,
+            has_post_assertions: 0,
+            created_at_slot: 12345,
+            operating_hours: 0x00FFFFFF,
+            auto_promote_grays: false,
+            auto_revoke_threshold: 5,
+            stable_balance_floor: 0,
+            per_recipient_daily_cap_usd: 0,
+            cosign_required: false,
+            agent_set_hash: [0u8; 32],
+            cosign_session_pubkey: Pubkey::default(),
+            operator_grant_delay_seconds: 0,
+            has_protocol_caps: true,
+            protocol_caps: &caps_a,
+        };
+        let changed = PolicyPreviewFields {
+            protocol_caps: &caps_b,
+            ..base
+        };
+        assert_ne!(
+            compute_policy_preview_digest(&base),
+            compute_policy_preview_digest(&changed),
+            "protocol_caps value change MUST change digest"
+        );
+    }
+
+    /// LOW-1 cross-impl pin (audit 2026-06-11 follow-up): the existing
+    /// REGENERATED_HEX_* pins both use has_protocol_caps=false / protocol_caps=[].
+    /// This pins the POPULATED-caps path (2 protocols, 2 distinct caps) byte-for-
+    /// byte against the SDK so caps positions 23-24 cannot drift on a non-empty
+    /// vector. Uses EMPTY_AGENT_SET_HASH + Pubkey::default() to match the SDK
+    /// encoder's defaults (the kit mirror omits those fields). Mirrored in
+    /// sdk/kit/tests/policy/preview-digest.test.ts.
+    #[test]
+    fn populated_caps_digest_cross_impl_pin() {
+        let protocols = [pk(1), pk(2)];
+        let dests = [pk(10)];
+        let caps = [250_000_000u64, 500_000_000u64];
+        let f = PolicyPreviewFields {
+            daily_spending_cap_usd: 500_000_000,
+            max_transaction_size_usd: 100_000_000,
+            max_slippage_bps: 100,
+            developer_fee_rate: 0,
+            protocol_mode: 1,
+            protocols: &protocols,
+            destination_mode: 0,
+            allowed_destinations: &dests,
+            timelock_duration: 1800,
+            session_expiry_seconds: 30,
+            observe_only: false,
+            has_post_assertions: 0,
+            created_at_slot: 12345,
+            operating_hours: 0x00FFFFFF,
+            auto_promote_grays: false,
+            auto_revoke_threshold: 5,
+            stable_balance_floor: 0,
+            per_recipient_daily_cap_usd: 0,
+            cosign_required: false,
+            agent_set_hash: EMPTY_AGENT_SET_HASH,
+            cosign_session_pubkey: Pubkey::default(),
+            operator_grant_delay_seconds: 0,
+            has_protocol_caps: true,
+            protocol_caps: &caps,
+        };
+        let d = compute_policy_preview_digest(&f);
+        // Cross-impl pin: digest of the populated-caps fixture above. Mirrored as
+        // hex bacaf95ada191ebfd2c990c185435dcef226966a04c65b40dce36a0380a95847 in
+        // sdk/kit/tests/policy/preview-digest.test.ts. Drift on either side fails.
+        assert_eq!(
+            d,
+            [
+                186, 202, 249, 90, 218, 25, 30, 191, 210, 201, 144, 193, 133, 67, 93, 206, 242, 38,
+                150, 106, 4, 198, 91, 64, 220, 227, 106, 3, 128, 169, 88, 71
+            ],
+            "populated-caps digest cross-impl pin"
+        );
+    }
+
     /// Phase 8 PEN-CROSS-1 (Council ISC-141): the empty-agent-set hash is
     /// deterministic across two `compute_agent_set_hash(&[])` invocations,
     /// AND matches the `EMPTY_AGENT_SET_HASH` cross-impl pin. If the Borsh
