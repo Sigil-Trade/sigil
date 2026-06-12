@@ -47,7 +47,10 @@ import type { Network } from "../types.js";
 import type { AgentVault } from "../generated/accounts/agentVault.js";
 import { fetchAgentVault } from "../generated/accounts/agentVault.js";
 import { fetchPolicyConfig } from "../generated/accounts/policyConfig.js";
-import { computePolicyPreviewDigest } from "../policy/compute-policy-preview-digest.js";
+import {
+  computePolicyPreviewDigest,
+  computeAgentSetHash,
+} from "../policy/compute-policy-preview-digest.js";
 
 // Phase 3: Simple mutations
 import { getFreezeVaultInstructionAsync } from "../generated/instructions/freezeVault.js";
@@ -210,6 +213,16 @@ async function siblingHandlerExpectedDigest(
     // policy.protocol_caps).
     hasProtocolCaps: livePolicy.data.hasProtocolCaps,
     protocolCaps: livePolicy.data.protocolCaps,
+    // HIGH (audit 2026-06-11 follow-up): create_post_assertions.rs:129 and
+    // close_post_assertions.rs recompute agent_set_hash from the LIVE vault
+    // agents, and :136 reads operator_grant_delay_seconds from live policy.
+    // Omitting them here defaulted the digest to EMPTY_AGENT_SET_HASH / 0n,
+    // mismatching the on-chain recompute (PolicyPreviewMismatch) for ANY vault
+    // with >=1 agent or a non-zero operator-grant delay — i.e. every real vault.
+    // vault.agents is the active-agent Vec (register pushes, revoke retains),
+    // mapped 1:1 by computeAgentSetHash (mirrors compute_agent_set_hash).
+    agentSetHash: computeAgentSetHash(liveVault.data.agents),
+    operatorGrantDelaySeconds: livePolicy.data.operatorGrantDelaySeconds,
   });
 }
 
@@ -899,6 +912,16 @@ export async function queuePolicyUpdate(
     // positions 23-24 (see eff bindings above).
     hasProtocolCaps: effHasProtocolCaps,
     protocolCaps: effProtocolCaps,
+    // HIGH (audit 2026-06-11 follow-up): queue_policy_update.rs:559 recomputes
+    // agent_set_hash from the LIVE vault agents, and :565 binds the merged-
+    // effective cosign_session_pubkey (eff = arg.unwrap_or(live); this non-
+    // elevated surface passes the ix arg as null, so eff == live). Both are
+    // re-asserted at apply (apply_pending_policy.rs:446) against the queue-time
+    // signed digest. Omitting them defaulted to EMPTY_AGENT_SET_HASH / zero
+    // pubkey, mismatching (PolicyPreviewMismatch) at BOTH queue and apply for
+    // any vault with >=1 agent (every real vault) or a set cosign-session pubkey.
+    agentSetHash: computeAgentSetHash(liveVault.data.agents),
+    cosignSessionPubkey: livePolicy.data.cosignSessionPubkey,
   });
 
   const ix = await getQueuePolicyUpdateInstructionAsync({
