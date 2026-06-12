@@ -533,6 +533,27 @@ export interface PolicyChanges {
   destinationMode?: number;
 }
 
+/**
+ * Elevated policy change input (audit 2026-06-12). Extends PolicyChanges with the
+ * cosign-gated triggers the non-elevated `queuePolicyUpdate` cannot touch (it
+ * hardcodes them to null / live pass-through). Used by `queuePolicyElevated` /
+ * `buildQueuePolicyElevated` on a `cosign_required` vault, where a cosigner
+ * co-signs the change. Any field left undefined falls through to the live policy
+ * value at the on-chain merge (same Option<…> semantics as the base fields).
+ */
+export interface PolicyElevatedChanges extends PolicyChanges {
+  /** Stable-balance floor ($ × 1e6). Lowering it is elevated (weakens custody). */
+  stableBalanceFloor?: bigint;
+  /** Per-recipient rolling-24h cap ($ × 1e6). Raising it is elevated. */
+  perRecipientDailyCapUsd?: bigint;
+  /** Toggle cosign_required. true→false is a one-way ratchet (itself elevated). */
+  cosignRequired?: boolean;
+  /** D-5 reactivate-time cosigner pubkey (gates instant-operator reactivation). */
+  cosignSessionPubkey?: Address;
+  /** F-Q6 operator-grant delay in seconds (gates OPERATOR seating). */
+  operatorGrantDelaySeconds?: bigint;
+}
+
 // M1-04: the ConstraintEntry re-export was removed with the constraints engine.
 
 // ─── Discovery ───────────────────────────────────────────────────────────────
