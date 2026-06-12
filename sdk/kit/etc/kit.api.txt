@@ -262,7 +262,6 @@
 - PluginResult
 - PolicyAttestation
 - PolicyCheckResult
-- PolicyElevatedChanges
 - PolicyViolation
 - PortfolioOverview
 - PortfolioTimeSeries

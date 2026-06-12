@@ -27,8 +27,9 @@ import type {
 import {
   queuePolicyElevated,
   buildQueuePolicyElevated,
+  queuePolicyUpdate,
 } from "../../src/dashboard/mutations.js";
-import type { PolicyElevatedChanges } from "../../src/dashboard/types.js";
+import type { PolicyChanges } from "../../src/dashboard/types.js";
 import { getQueuePolicyUpdateInstructionDataDecoder } from "../../src/generated/instructions/queuePolicyUpdate.js";
 import { getPolicyConfigEncoder } from "../../src/generated/accounts/policyConfig.js";
 import { getAgentVaultEncoder } from "../../src/generated/accounts/agentVault.js";
@@ -38,7 +39,7 @@ import { createMockVaultState } from "../../src/testing/mock-state.js";
 import { computeCosignDigest } from "../../src/policy/compute-cosign-digest.js";
 
 // Raising the daily cap is an elevated change AND a cosign-digest field.
-const RAISE: PolicyElevatedChanges = { dailyCap: 800_000_000n };
+const RAISE: PolicyChanges = { dailyCap: 800_000_000n };
 
 function toBase64(bytes: ReadonlyUint8Array): string {
   return Buffer.from(bytes as Uint8Array).toString("base64");
@@ -201,5 +202,27 @@ describe("elevated policy cosign wrappers (audit 2026-06-12 Phase 2)", () => {
     const cosignerIdx = staticAccounts.indexOf(cosigner.address);
     expect(isAllZero(sigs[ownerIdx]!)).to.equal(false, "owner signed");
     expect(isAllZero(sigs[cosignerIdx]!)).to.equal(true, "cosigner slot empty");
+  });
+
+  // MEDIUM fix (audit 2026-06-12, "fold into non-elevated path"): the formerly
+  // unreachable fields (operatorGrantDelaySeconds / cosignSessionPubkey / cosign-
+  // enable) now have a working non-elevated path via queuePolicyUpdate — no
+  // cosigner, cosign_session = default. Before the fold, the only path that
+  // accepted these fields attached a cosigner and bricked on-chain (6036).
+  it("queuePolicyUpdate accepts operatorGrantDelaySeconds (folded field) non-elevated: default cosign_session, owner-only", async () => {
+    captured = { wire: null };
+    const { rpc } = await mocks();
+    await queuePolicyUpdate(rpc, vault, owner, "devnet", {
+      operatorGrantDelaySeconds: 3600n,
+    });
+    if (!captured.wire) throw new Error("no wire captured");
+    const { sigs, messageBytes } = splitWire(captured.wire);
+    const { sigilIxData } = decodeMessage(messageBytes);
+    const data = getQueuePolicyUpdateInstructionDataDecoder().decode(sigilIxData);
+    // Non-elevated path: cosign_session = Pubkey::default() (System Program).
+    expect(data.cosignSession).to.equal("11111111111111111111111111111111");
+    // Owner-only signature (no cosigner attached).
+    expect(sigs.length).to.equal(1);
+    expect(isAllZero(sigs[0]!)).to.equal(false);
   });
 });

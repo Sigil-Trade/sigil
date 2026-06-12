@@ -40,7 +40,6 @@ import type {
   HealthData,
   PolicyData,
   PolicyChanges,
-  PolicyElevatedChanges,
   DiscoveredVault,
   OverviewData,
   GetOverviewOptions,
@@ -760,7 +759,7 @@ export class OwnerClient {
 
   /** Elevated policy queue — single-builder dual-sign. */
   async queuePolicyElevated(
-    changes: PolicyElevatedChanges,
+    changes: PolicyChanges,
     cosigner: TransactionSigner,
     opts?: TxOpts,
   ): Promise<TxResult> {
@@ -778,7 +777,7 @@ export class OwnerClient {
 
   /** Elevated policy queue — partial-sign handoff (2-of-2). */
   async buildQueuePolicyElevated(
-    changes: PolicyElevatedChanges,
+    changes: PolicyChanges,
     cosignSession: Address,
     opts?: TxOpts,
   ): Promise<ElevatedCosignBundle> {

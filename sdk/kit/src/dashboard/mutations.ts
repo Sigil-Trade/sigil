@@ -92,12 +92,7 @@ import { getCancelOwnershipTransferInstructionAsync } from "../generated/instruc
 import type { PostAssertionEntry } from "../generated/types/postAssertionEntry.js";
 import { validatePostAssertionEntries } from "./post-assertion-validation.js";
 
-import type {
-  TxResult,
-  TxOpts,
-  PolicyChanges,
-  PolicyElevatedChanges,
-} from "./types.js";
+import type { TxResult, TxOpts, PolicyChanges } from "./types.js";
 import { toDxError } from "./errors.js";
 import { SigilSdkDomainError } from "../errors/sdk.js";
 import { SIGIL_ERROR__SDK__MAINNET_CONFIRMATION_REQUIRED } from "../errors/codes.js";
@@ -860,7 +855,7 @@ async function buildPolicyUpdateIx(
   rpc: Rpc<SolanaRpcApi>,
   owner: TransactionSigner,
   vault: Address,
-  changes: PolicyElevatedChanges,
+  changes: PolicyChanges,
   cosignSession: Address,
 ): Promise<Instruction> {
   if (Object.keys(changes).length === 0) {
@@ -1002,7 +997,7 @@ export async function queuePolicyElevated(
   vault: Address,
   owner: TransactionSigner,
   network: "devnet" | "mainnet",
-  changes: PolicyElevatedChanges,
+  changes: PolicyChanges,
   cosigner: TransactionSigner,
   opts?: TxOpts,
 ): Promise<TxResult> {
@@ -1034,7 +1029,7 @@ export async function buildQueuePolicyElevated(
   rpc: Rpc<SolanaRpcApi>,
   vault: Address,
   owner: TransactionSigner,
-  changes: PolicyElevatedChanges,
+  changes: PolicyChanges,
   cosignSession: Address,
   opts?: TxOpts,
 ): Promise<ElevatedCosignBundle> {

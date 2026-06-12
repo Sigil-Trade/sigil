@@ -800,10 +800,10 @@ export type DashboardErrorType =
 // canonical source with additional exports (fromJSON, overview builders).
 export { createOwnerClient, OwnerClient } from "./dashboard/index.js";
 export type { OwnerClientConfig } from "./dashboard/types.js";
-// Elevated-cosign surface (audit 2026-06-12): the richer change input + the
-// partial-sign handoff bundle. The elevated mutations themselves are methods on
-// OwnerClient (queue*Elevated / buildQueue*Elevated).
-export type { PolicyElevatedChanges } from "./dashboard/types.js";
+// Elevated-cosign surface (audit 2026-06-12): the partial-sign handoff bundle.
+// Elevated changes use the same PolicyChanges input (elevation is direction-
+// dependent — see PolicyChanges docs); the elevated mutations are OwnerClient
+// methods (queue*Elevated / buildQueue*Elevated).
 export type { ElevatedCosignBundle } from "./dashboard/mutations.js";
 
 // ─── Balance Tracker / P&L ──────────────────────────────────────────────────
