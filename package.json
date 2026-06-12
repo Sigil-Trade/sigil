@@ -72,12 +72,15 @@
       "brace-expansion": ">=2.0.3",
       "serialize-javascript": ">=7.0.5",
       "path-to-regexp": ">=8.4.0",
-      "langsmith": ">=0.5.19",
+      "langsmith": "^0.6.0",
       "jsondiffpatch": ">=0.7.2",
       "ai": ">=5.0.52",
       "yaml": ">=2.8.3",
-      "hono": ">=4.12.14",
-      "@hono/node-server": ">=1.19.13"
+      "hono": "^4.12.21",
+      "@hono/node-server": ">=1.19.13",
+      "qs": "^6.15.2",
+      "ws@>=8.0.0 <8.20.1": "^8.20.1",
+      "uuid@<11.1.1": "^11.1.1"
     }
   },
   "workspaces": [
