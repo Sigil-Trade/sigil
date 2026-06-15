@@ -343,4 +343,9 @@ jobs:
     name: Devnet Tests (post-deploy)
     needs: deploy
     uses: ./.github/workflows/devnet-test.yml
+    # Forces devnet-test.yml's concurrency to a per-run group so this called
+    # child never contends for the 'devnet-shared-wallet' lock the parent (this
+    # deploy) already holds — prevents the manual-dispatch self-deadlock.
+    with:
+      called-by-deploy: true
     secrets: inherit

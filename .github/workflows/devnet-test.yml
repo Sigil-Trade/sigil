@@ -23,6 +23,11 @@ name: Devnet Tests
 
 on:
   workflow_call: # Called by deploy-devnet.yml after successful deploy
+    inputs:
+      called-by-deploy:
+        description: "True when invoked by deploy-devnet.yml. Forces a per-run concurrency group so the called child never contends for the shared devnet-wallet lock its parent already holds (manual deploy dispatch otherwise self-deadlocks)."
+        type: boolean
+        default: false
   # Re-enabled 2026-06-10: fixture sweep complete — V2 sandwiches route
   # through the deployed mock-defi fixture program (2heRcf...), OPERATOR
   # seating uses the real queue→600s→apply path, and initialize_vault binds
@@ -45,12 +50,15 @@ on:
 # EXCEPTION — workflow_call: when deploy-devnet.yml CALLS this workflow, the
 # parent run ALREADY holds "devnet-shared-wallet" for the whole chain, so the
 # called child must NOT also request it or it self-deadlocks waiting on the slot
-# its own parent holds (the prior failure mode). A called run inherits the
-# caller's event (push), so only the direct schedule/dispatch triggers take the
-# shared lock; the called child uses a unique per-run group and relies on the
-# parent's lock to serialize the chain against the nightly.
+# its own parent holds. We key off the explicit `called-by-deploy` INPUT, not
+# github.event_name: the inherited event is unreliable — a manually-DISPATCHED
+# deploy makes the called child see event_name=workflow_dispatch and wrongly
+# grab the shared lock → deadlock (this broke manual deploy dispatch; the
+# post-deploy test job never ran, deploy run shown red while deploy+verify
+# succeeded). With the input, a called child always uses a per-run group and
+# relies on the parent's lock to serialize the chain against the nightly.
 concurrency:
-  group: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'devnet-shared-wallet' || format('devnet-test-{0}', github.run_id) }}
+  group: ${{ inputs.called-by-deploy && format('devnet-test-{0}', github.run_id) || 'devnet-shared-wallet' }}
   cancel-in-progress: false
 
 # M6: Least-privilege — only read repo contents
