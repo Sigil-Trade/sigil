@@ -89,6 +89,15 @@ pub fn handler(ctx: Context<DepositFunds>, amount: u64) -> Result<()> {
     // a no-op — there is no extension surface to validate.
     enforce_token2022_extension_allowlist(&ctx.accounts.mint.to_account_info())?;
 
+    // L9 (audit 2026-06-15): defensive decimals tripwire. The stablecoin
+    // value-proxy (USD == raw token amount / 10^6) assumes 6-decimal mints.
+    // Today `is_pinned_deposit_mint` admits only USDC/USDT (both 6-dp), so this
+    // never fires — it is a forward-secure guard: if a non-6-decimal mint is
+    // EVER added to the pinned/stablecoin set, deposits fail CLOSED here instead
+    // of silently mis-valuing every balance-delta downstream. (The full
+    // Token-2022 InterfaceAccount migration remains deferred — see L2-2.)
+    require!(ctx.accounts.mint.decimals == 6, SigilError::UnsupportedToken);
+
     // Transfer tokens from owner to vault PDA token account
     let cpi_accounts = Transfer {
         from: ctx.accounts.owner_token_account.to_account_info(),
