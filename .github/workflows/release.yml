@@ -32,6 +32,7 @@ permissions:
   contents: write # Push tags, update Version Packages PR
   pull-requests: write # Open/update the Version Packages PR
   id-token: write # npm OIDC Trusted Publishing (provenance)
+  actions: read # lockstep guard reads the latest 'Deploy to Devnet' run status
 
 jobs:
   # ──────────────────────────────────────────────────────────────
@@ -131,6 +132,53 @@ jobs:
       - name: Run Plugin tests
         working-directory: packages/plugins
         run: pnpm test
+
+      # ── Deploy↔publish lockstep guard (B) ────────────────────────────────
+      # @usesigil/kit's TA-19 digest encoder (compute-policy-preview-digest.ts)
+      # is lockstep-coupled to the on-chain program's POLICY_PREVIEW_FIELD_COUNT.
+      # Publishing kit while the deployed devnet program still lags its digest
+      # contract breaks queue_policy_update with PolicyPreviewMismatch (6071).
+      # This is the 0.18.0 incident: kit went 22→24 fields and published BEFORE
+      # the program redeploy landed.
+      #
+      # deploy-devnet.yml is path-filtered to programs/sigil/src/** + Anchor.toml,
+      # so the "version packages" merge (no program change) does NOT trigger a
+      # deploy — the latest 'Deploy to Devnet' run therefore reflects the program
+      # state kit is built against (no race with a concurrent re-deploy).
+      #
+      # Gate ONLY when kit is actually publishing (local version ahead of npm),
+      # so plugins/custody/platform-only releases are unaffected. Fail-closed: if
+      # the deploy isn't green, block and re-run Release (workflow_dispatch) once
+      # the deploy lands.
+      - name: Lockstep guard — kit must not publish ahead of the devnet program
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          LOCAL=$(node -p "require('./sdk/kit/package.json').version")
+          NPM=$(npm view @usesigil/kit version 2>/dev/null || echo "0.0.0")
+          if [ "$LOCAL" = "$NPM" ]; then
+            echo "kit $LOCAL already on npm — kit is not publishing in this run; lockstep guard N/A."
+            exit 0
+          fi
+          echo "kit will publish $NPM -> $LOCAL; verifying the on-chain program deploy is green..."
+          # Gate on the PROGRAM-DEPLOY jobs (Build & Deploy + Verify Program
+          # Binary), NOT the deploy run's overall conclusion. The run also chains
+          # a post-deploy devnet-test job that can fail on a flaky test (retries
+          # don't cover before()-hook flakes) or self-deadlock on the shared-wallet
+          # concurrency lock when the deploy is manually dispatched — while the
+          # program itself deployed + binary-verified fine. So the run conclusion
+          # is an unreliable proxy for "is the program deployed"; the two deploy
+          # jobs are the authoritative signal.
+          RUN=$(gh run list --workflow=deploy-devnet.yml --branch main --limit 1 --json databaseId --jq '.[0].databaseId')
+          DEPLOY_OK=$(gh run view "$RUN" --json jobs --jq '[.jobs[] | select(.name=="Build & Deploy" or .name=="Verify Program Binary") | .conclusion] as $c | (($c|length)==2) and ($c|all(.=="success"))')
+          echo "latest 'Deploy to Devnet' run $RUN — program-deploy jobs OK=${DEPLOY_OK:-false}"
+          if [ "$DEPLOY_OK" != "true" ]; then
+            echo "::error::Refusing to publish @usesigil/kit $LOCAL — the program-deploy jobs (Build & Deploy + Verify Program Binary) of the latest 'Deploy to Devnet' run ($RUN) are not both green."
+            echo "The deployed devnet program may not match kit's digest contract; clients would hit PolicyPreviewMismatch (6071) on queue_policy_update."
+            echo "Fix: ensure 'Deploy to Devnet' redeployed + verified the current program (re-run it if the deploy itself failed), then re-run this Release via workflow_dispatch."
+            exit 1
+          fi
+          echo "Program-deploy jobs green — kit/program digest lockstep OK."
 
       - name: Create Release Pull Request or Publish
         id: changesets
