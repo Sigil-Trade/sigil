@@ -797,7 +797,7 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
   // predicate `pending.cosign_required == Some(false) && live_cosign_required`
   // evaluates to (Some(true) == Some(false)) && false = false, so the gate
   // is skipped entirely.
-  it("apply-cosigner-rebind PASS-THROUGH: enable-cosign apply with no cosigner → succeeds", async () => {
+  it("apply-cosigner-rebind REJECT (L1-2 force-bind): enable-cosign apply WITHOUT binding a cosigner → ErrCosignRequired (6080)", async () => {
     const vaultId = new BN(5010);
     // Vault starts with cosign_required=false (the default).
     const { vault, policy } = await initVaultFor(vaultId, {
@@ -858,25 +858,35 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
 
     advanceTime(svm, 1801);
 
-    // ACT: apply with owner-only signature, no remaining_accounts.
-    // Pre-fix, would have worked; post-fix MUST still work because the
-    // gate only fires on the DISABLE direction.
-    await program.methods
-      .applyPendingPolicy()
-      .accounts({
-        owner: owner.publicKey,
-        vault,
-        policy,
-        pendingPolicy,
-      } as any)
-      .rpc();
+    // ACT + ASSERT: applying an ENABLE-cosign update that did NOT bind a
+    // cosigner pubkey MUST now reject (L1-2 force-bind, audit 2026-06-15).
+    // Pre-fix this silently succeeded into the inert
+    // {cosign_required=true, cosign_session_pubkey=default} single-factor
+    // state, where has_bound_cosigner's unbound fallback accepts any
+    // non-owner signer. That is the vulnerability this test now guards.
+    let caughtCode: number | null = null;
+    try {
+      await program.methods
+        .applyPendingPolicy()
+        .accounts({
+          owner: owner.publicKey,
+          vault,
+          policy,
+          pendingPolicy,
+        } as any)
+        .rpc();
+    } catch (err: any) {
+      caughtCode = err?.error?.errorCode?.number ?? null;
+    }
+    expect(caughtCode, "enable-cosign without binding a cosigner must reject").to.not
+      .be.null;
+    expect(caughtCode).to.equal(6080); // ErrCosignRequired
 
-    // ASSERT: cosign_required flipped to true.
+    // ASSERT: cosign_required did NOT flip on — apply reverted atomically.
     const policyAfter = await program.account.policyConfig.fetch(policy);
-    expect((policyAfter as any).cosignRequired).to.equal(true);
-
-    // ASSERT: pending PDA closed.
-    expect(accountExists(svm, pendingPolicy)).to.equal(false);
+    expect((policyAfter as any).cosignRequired).to.equal(false);
+    // ASSERT: pending PDA still present (apply reverted; nothing closed).
+    expect(accountExists(svm, pendingPolicy)).to.equal(true);
   });
 
   // ───────────────────────────────────────────────────────────────────────

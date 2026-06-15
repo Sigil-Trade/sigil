@@ -68,8 +68,16 @@ pub struct FinalizeSession<'info> {
     )]
     pub agent_spend_overlay: AccountLoader<'info, AgentSpendOverlay>,
 
-    /// Vault's PDA token account for the session's token
-    #[account(mut)]
+    /// Vault's PDA token account for the session's token.
+    /// L2-1 (audit 2026-06-15): fail-fast that, when present, this ATA is owned
+    /// by the vault PDA. The outcome path already re-reads the raw post-CPI
+    /// owner field and asserts owner==vault, so this is defense-in-depth — but
+    /// it rejects a substituted token account at account-resolution rather than
+    /// deep in the handler.
+    #[account(
+        mut,
+        constraint = vault_token_account.owner == vault.key() @ SigilError::ZeroCopyVaultMismatch,
+    )]
     pub vault_token_account: Option<Account<'info, TokenAccount>>,
 
     /// Vault's stablecoin ATA for outcome-based spending verification.
@@ -222,6 +230,12 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
 
     // P&L tracking: track actual spend and balance for enriched SessionFinalized event
     let mut actual_spend_tracked: u64 = 0;
+    // L11-2 (audit 2026-06-15): track spend DIRECTION for the audit log. A
+    // non-stablecoin-input swap returns stablecoins INTO the vault, so its
+    // measured `actual_spend_tracked` is an INFLOW (logged as balance_delta_in);
+    // a stablecoin-input spend leaves the vault (balance_delta_out). Set true in
+    // the non-stablecoin branch below; stays false for stablecoin-input/expired.
+    let mut spend_is_inflow: bool = false;
     let mut balance_after_tracked: u64 = 0;
 
     // --- Outcome-based spending verification (ALL non-expired spending transactions) ---
@@ -445,6 +459,7 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
                 .checked_sub(session_balance_before)
                 .ok_or(SigilError::Overflow)?;
             actual_spend_tracked = stablecoin_delta;
+            spend_is_inflow = true; // L11-2: INFLOW (stablecoin received from non-stablecoin-input swap)
 
             // Per-transaction limit
             let policy = &ctx.accounts.policy;
@@ -1227,12 +1242,17 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
     // audit entries, so disc=1 on the rejected buffer was a forensic-
     // correctness lie. Disc=16 fixes the ambiguity.
     {
-        let delta_out: i64 = actual_spend_tracked.min(i64::MAX as u64) as i64;
+        // L11-2 (audit 2026-06-15): log the measured stablecoin movement in the
+        // CORRECT direction — inflow (non-stablecoin-input swap) → balance_delta_in,
+        // outflow (stablecoin-input spend) → balance_delta_out. Expired/0 → both 0.
+        let measured: i64 = actual_spend_tracked.min(i64::MAX as u64) as i64;
+        let (delta_in, delta_out): (i64, i64) =
+            if spend_is_inflow { (measured, 0) } else { (0, measured) };
         if is_expired {
             let entry = build_audit_entry(
                 AUDIT_DISC_FINALIZE_REJECT,
                 session_authorized_protocol,
-                0,
+                delta_in,
                 delta_out,
                 clock.unix_timestamp,
                 &ctx.accounts.slot_hashes_sysvar.to_account_info(),
@@ -1249,7 +1269,7 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
             let entry = build_audit_entry(
                 AUDIT_DISC_FINALIZE_SUCCESS,
                 session_authorized_protocol,
-                0,
+                delta_in,
                 delta_out,
                 clock.unix_timestamp,
                 &ctx.accounts.slot_hashes_sysvar.to_account_info(),

@@ -392,6 +392,20 @@ pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
         );
     }
 
+    // L1-2 (audit 2026-06-15): FORCE-BIND on the ENABLE transition. When this
+    // update turns cosign ON (`pending.cosign_required == Some(true)`), it MUST
+    // also result in a bound cosigner pubkey — otherwise the gate silently
+    // degrades to single-factor (`has_bound_cosigner`'s unbound fallback accepts
+    // ANY non-owner signer). The owner binds a pubkey in the same update.
+    // Narrow by design: unrelated updates to a vault that already has cosign on
+    // are unaffected; only NEWLY enabling cosign without binding is rejected.
+    if pending.cosign_required == Some(true) {
+        require!(
+            policy.cosign_session_pubkey != Pubkey::default(),
+            SigilError::ErrCosignRequired
+        );
+    }
+
     // Phase 2 Option A: defense-in-depth — re-validate protocol_mode if pending overrode it.
     if let Some(mode) = pending.protocol_mode {
         require!(
