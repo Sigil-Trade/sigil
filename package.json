@@ -59,6 +59,7 @@
   },
   "pnpm": {
     "overrides": {
+      "esbuild@<0.28.1": ">=0.28.1",
       "fast-xml-parser": ">=5.3.5",
       "@solana/web3.js": "^1.98.4",
       "bn.js": ">=5.2.3",
