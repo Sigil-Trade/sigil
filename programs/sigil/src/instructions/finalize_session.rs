@@ -604,7 +604,19 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
         // than one distinct recipient is touched (the per-recipient
         // outflow attribution becomes ambiguous and is deferred to V2).
         let mut recipient_seen: Option<Pubkey> = None;
+        // L10-2 (audit 2026-06-15): explicit iteration cap on the DeFi-ix meta
+        // walk, mirroring `agent_transfer.rs:416` (M-12). validate already caps
+        // the DeFi ix at ≤64 total metas, so 64 is the structural ceiling and
+        // never rejects a legitimate route; this just makes the bound explicit
+        // and independent of tx-size mechanics (no self-grief via meta padding).
+        const MAX_RECIPIENT_WALK_ITERATIONS: usize = 64;
+        let mut recipient_walk_iterations: usize = 0;
         for meta in defi_ix.accounts.iter() {
+            require!(
+                recipient_walk_iterations < MAX_RECIPIENT_WALK_ITERATIONS,
+                SigilError::IxMetaCountExceeded
+            );
+            recipient_walk_iterations = recipient_walk_iterations.saturating_add(1);
             // Only writable token accounts could be recipients. The DeFi
             // program's read-only accounts (oracles, config PDAs) can't
             // receive outflow.
@@ -847,7 +859,19 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
                 seen.push(k);
             }
         }
+        // L10-1 (audit 2026-06-15): explicit iteration cap on the stable-floor
+        // remaining_accounts walk, mirroring `agent_transfer.rs:416` (M-12).
+        // Gives a deterministic ceiling independent of tx-size mechanics so an
+        // agent cannot CU-grief its own finalize by padding remaining_accounts.
+        // 16 >> any legitimate count (≤1 recipient ATA + a few vault stable ATAs).
+        const MAX_STABLE_FLOOR_WALK_ITERATIONS: usize = 16;
+        let mut floor_walk_iterations: usize = 0;
         for info in ctx.remaining_accounts.iter() {
+            require!(
+                floor_walk_iterations < MAX_STABLE_FLOOR_WALK_ITERATIONS,
+                SigilError::IxMetaCountExceeded
+            );
+            floor_walk_iterations = floor_walk_iterations.saturating_add(1);
             if seen.contains(&info.key()) {
                 continue;
             }
