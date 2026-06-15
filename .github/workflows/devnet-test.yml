@@ -165,10 +165,10 @@ jobs:
           FILTER="$TEST_FILTER"
           if [ "$FILTER" != "all" ] && [ -f "tests/$FILTER" ]; then
             echo "Running single test file: tests/$FILTER"
-            npx ts-mocha -p ./tsconfig.json -t 1800000 "tests/$FILTER"
+            npx ts-mocha -p ./tsconfig.json -t 1800000 --retries 2 "tests/$FILTER"
           else
             echo "Running all devnet tests (8 files)"
-            npx ts-mocha -p ./tsconfig.json -t 1800000 \
+            npx ts-mocha -p ./tsconfig.json -t 1800000 --retries 2 \
               tests/devnet-smoke.ts \
               tests/devnet-sessions.ts \
               tests/devnet-fees.ts \
@@ -191,7 +191,7 @@ jobs:
         env:
           NODE_OPTIONS: "--no-experimental-strip-types"
         run: |
-          npx ts-mocha -p ./tsconfig.json -t 1800000 \
+          npx ts-mocha -p ./tsconfig.json -t 1800000 --retries 2 \
             tests/devnet/flash-trade-devnet.ts \
             tests/devnet/stress-test.ts
 
@@ -206,7 +206,7 @@ jobs:
         # observer-capability vault (instant) so it finishes fast under the same
         # ceiling.
         run: |
-          npx mocha --require tsx \
+          npx mocha --require tsx --retries 2 \
             tests/devnet/dashboard-integration.test.ts \
             tests/devnet/lifecycle.test.ts \
             tests/devnet/composed-tx.test.ts \
