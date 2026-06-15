@@ -23,6 +23,7 @@ import {
   appendTransactionMessageInstructions,
   addSignersToTransactionMessage,
   signTransactionMessageWithSigners,
+  partiallySignTransactionMessageWithSigners,
   getBase64EncodedWireTransaction,
   type Instruction as KitInstruction,
 } from "../kit-adapter.js";
@@ -47,7 +48,12 @@ import type { Network } from "../types.js";
 import type { AgentVault } from "../generated/accounts/agentVault.js";
 import { fetchAgentVault } from "../generated/accounts/agentVault.js";
 import { fetchPolicyConfig } from "../generated/accounts/policyConfig.js";
-import { computePolicyPreviewDigest } from "../policy/compute-policy-preview-digest.js";
+import {
+  computePolicyPreviewDigest,
+  computeAgentSetHash,
+} from "../policy/compute-policy-preview-digest.js";
+import { computeAgentPermsCosignDigest } from "../policy/compute-agent-perms-cosign-digest.js";
+import { computeCosignDigest } from "../policy/compute-cosign-digest.js";
 
 // Phase 3: Simple mutations
 import { getFreezeVaultInstructionAsync } from "../generated/instructions/freezeVault.js";
@@ -200,9 +206,28 @@ async function siblingHandlerExpectedDigest(
     // this via `queue_policy_update` only.
     cosignRequired: livePolicy.data.cosignRequired,
     // D-5 (Bucket 2 audit 2026-05-21, F-RP3-1): pass-through from live
-    // policy. Position 22 of the canonical TA-19 digest. Sibling handlers
+    // policy. Position 21 of the canonical TA-19 digest. Sibling handlers
     // never mutate this — owner sets via queue_policy_update only.
     cosignSessionPubkey: livePolicy.data.cosignSessionPubkey,
+    // M-1 (audit 2026-06-11): per-protocol caps (positions 23-24). Sibling
+    // handlers never mutate the caps — pass-through from live policy so the
+    // re-bind digest matches the on-chain recompute (create_post_assertions
+    // .rs:138-139 / close_post_assertions.rs read policy.has_protocol_caps +
+    // policy.protocol_caps).
+    hasProtocolCaps: livePolicy.data.hasProtocolCaps,
+    protocolCaps: livePolicy.data.protocolCaps,
+    // HIGH (audit 2026-06-11 follow-up): create_post_assertions.rs:129 and
+    // close_post_assertions.rs recompute agent_set_hash from the LIVE vault
+    // agents, and :136 reads operator_grant_delay_seconds from live policy.
+    // Omitting them here defaulted the digest to EMPTY_AGENT_SET_HASH / 0n,
+    // mismatching the on-chain recompute (PolicyPreviewMismatch) for ANY vault
+    // with >=1 agent or a non-zero operator-grant delay — i.e. every real vault.
+    // vault.agents is the active-agent Vec (register pushes; owner-revoke
+    // removes the entry, auto-revoke zeroes its capability in place — either
+    // way membership matches the on-chain Vec), mapped 1:1 by
+    // computeAgentSetHash (mirrors compute_agent_set_hash).
+    agentSetHash: computeAgentSetHash(liveVault.data.agents),
+    operatorGrantDelaySeconds: livePolicy.data.operatorGrantDelaySeconds,
   });
 }
 
@@ -212,6 +237,13 @@ async function run(
   network: "devnet" | "mainnet",
   instructions: Instruction[],
   opts: TxOpts = {},
+  // Elevated-cosign surface (audit 2026-06-12): additional signers beyond the
+  // owner (e.g. a cosign-session signer for an elevated queue mutation). The
+  // cosigner must ALSO be present in the instruction's account metas as a
+  // readonly-signer (the elevated wrappers append it); attaching it here makes
+  // its signature land in the wire tx. Default [] preserves the owner-only path
+  // for every existing non-elevated caller.
+  cosigners: readonly TransactionSigner[] = [],
 ): Promise<TxResult> {
   try {
     const cu = opts.computeUnits ?? CU_OWNER_ACTION;
@@ -239,7 +271,7 @@ async function run(
     );
 
     const txWithSigners = addSignersToTransactionMessage(
-      [owner],
+      [owner, ...cosigners],
       txMessage as any,
     );
     const signedTx = await signTransactionMessageWithSigners(
@@ -779,6 +811,53 @@ export async function queuePolicyUpdate(
   changes: PolicyChanges,
   opts?: TxOpts,
 ): Promise<TxResult> {
+  // Non-elevated path: cosign_session = Pubkey::default(), no cosigner in
+  // remaining_accounts, owner-only signature. Shares buildPolicyUpdateIx (the
+  // merged-effective projection + TA-19 digest) with queuePolicyElevated — the
+  // single source of truth that prevents digest drift between the two surfaces.
+  // An elevated change submitted here (e.g. raising a cap on a cosign_required
+  // vault) fails closed on-chain with ErrCosignRequired; use queuePolicyElevated.
+  const ix = await buildPolicyUpdateIx(
+    rpc,
+    owner,
+    vault,
+    changes,
+    DEFAULT_COSIGN_SESSION,
+  );
+  return run(rpc, owner, network, [ix], opts);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Elevated-cosign surface (audit 2026-06-12) — policy path.
+//
+// queuePolicyElevated / buildQueuePolicyElevated mirror the agent-perms pair for
+// policy changes. They share buildPolicyUpdateIx with queuePolicyUpdate (DRY —
+// the single source of truth for the merged-effective projection + TA-19 digest;
+// duplicating it is the exact digest-drift failure mode the 2026-06-11 audit
+// fixed). The only difference between non-elevated and elevated is the
+// cosign_session arg (default vs a real cosigner pubkey) + the elevated-only
+// change fields, all plumbed through `eff = changes.X ?? live`.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Pubkey::default() (System Program) — the non-elevated cosign_session arg. */
+const DEFAULT_COSIGN_SESSION =
+  "11111111111111111111111111111111" as unknown as Address;
+
+/**
+ * Shared queue_policy_update instruction builder. Validates `changes`, fetches
+ * live policy+vault, projects the merged-effective policy (`eff = changes.X ??
+ * live.X` for EVERY field, so omitted fields fall through to live — the
+ * non-elevated path is byte-identical to the prior inline impl), computes the
+ * TA-19 digest over it, and builds the ix with the supplied `cosignSession`
+ * (DEFAULT_COSIGN_SESSION = non-elevated; a real cosigner pubkey = elevated).
+ */
+async function buildPolicyUpdateIx(
+  rpc: Rpc<SolanaRpcApi>,
+  owner: TransactionSigner,
+  vault: Address,
+  changes: PolicyChanges,
+  cosignSession: Address,
+): Promise<Instruction> {
   if (Object.keys(changes).length === 0) {
     throw toDxError(new Error("At least one policy change is required"));
   }
@@ -810,10 +889,6 @@ export async function queuePolicyUpdate(
       ),
     );
   }
-  // Phase 2 TA-19: fetch live policy + vault state to compute the digest of
-  // the merged-effective policy that WILL result if this update is applied.
-  // The on-chain handler re-asserts the same digest at queue time, so any
-  // owner blind-sign that diverges from the SDK-projected update is rejected.
   const [policyPda] = await getPolicyPDA(vault);
   const livePolicy = await fetchPolicyConfig(rpc, policyPda);
   const liveVault = await fetchAgentVault(rpc, vault);
@@ -830,8 +905,6 @@ export async function queuePolicyUpdate(
   const effDaily = changes.dailyCap ?? livePolicy.data.dailySpendingCapUsd;
   const effMaxTx = changes.maxPerTrade ?? livePolicy.data.maxTransactionSizeUsd;
   const effMaxSlip = changes.maxSlippageBps ?? livePolicy.data.maxSlippageBps;
-  // PEN-CROSS-6: developer_fee_rate is now part of the digest. Project the
-  // merged-effective value the same way as other Option<…> fields.
   const effDeveloperFeeRate =
     changes.developerFeeRate ?? livePolicy.data.developerFeeRate;
   const effTimelock =
@@ -840,6 +913,22 @@ export async function queuePolicyUpdate(
       : livePolicy.data.timelockDuration;
   const effSessionExpiry =
     changes.sessionExpirySeconds ?? livePolicy.data.sessionExpirySeconds;
+  const effHasProtocolCaps =
+    changes.hasProtocolCaps ?? livePolicy.data.hasProtocolCaps;
+  const effProtocolCaps = changes.protocolCaps ?? livePolicy.data.protocolCaps;
+  // Elevated-only fields (audit 2026-06-12): same merged-effective projection.
+  // Undefined ⇒ live pass-through, so queuePolicyUpdate's digest is unchanged.
+  const effStableFloor =
+    changes.stableBalanceFloor ?? livePolicy.data.stableBalanceFloor;
+  const effPerRecip =
+    changes.perRecipientDailyCapUsd ?? livePolicy.data.perRecipientDailyCapUsd;
+  const effCosignRequired =
+    changes.cosignRequired ?? livePolicy.data.cosignRequired;
+  const effCosignSessionPubkey =
+    changes.cosignSessionPubkey ?? livePolicy.data.cosignSessionPubkey;
+  const effOperatorDelay =
+    changes.operatorGrantDelaySeconds ??
+    livePolicy.data.operatorGrantDelaySeconds;
 
   const newPolicyPreviewDigest = computePolicyPreviewDigest({
     dailySpendingCapUsd: effDaily,
@@ -854,31 +943,18 @@ export async function queuePolicyUpdate(
     sessionExpirySeconds: effSessionExpiry,
     observeOnly: liveVault.data.observeOnly,
     hasPostAssertions: livePolicy.data.hasPostAssertions,
-    // PEN-CROSS-2: created_at_slot is immutable post-init — read from live.
     createdAtSlot: livePolicy.data.createdAtSlot,
-    // TA-05 (Phase 3): operating_hours is policy-owned and bound by TA-19.
-    // queueAgentPermissions does not currently mutate it through the
-    // dashboard mutation surface — read from live policy.
     operatingHours: livePolicy.data.operatingHours,
-    // TA-07/17 (Phase 3): same — not mutated by this dashboard surface.
     autoPromoteGrays: livePolicy.data.autoPromoteGrays,
     autoRevokeThreshold: livePolicy.data.autoRevokeThreshold,
-    // TA-12/14 (Phase 5): post-exec invariants. Not mutated by this surface;
-    // pass-through from live policy. Mutating them is elevated per TA-09.
-    stableBalanceFloor: livePolicy.data.stableBalanceFloor,
-    perRecipientDailyCapUsd: livePolicy.data.perRecipientDailyCapUsd,
-    // G6 (audit 2026-05-18 cosign opt-in): pass-through from live policy.
-    // The non-elevated dashboard surface does NOT mutate cosign_required;
-    // owners change cosign opt-in via a separate elevated workflow that
-    // includes the cosign signer (or, for false→true direction, can also
-    // be done non-elevated by passing the override directly through the
-    // ix arg below — but this dashboard helper keeps the policy stable
-    // for the default path).
-    cosignRequired: livePolicy.data.cosignRequired,
-    // F-Q6 (2026-06-02): operator_grant_delay not mutated by this dashboard
-    // surface — pass-through from live policy so the digest matches the
-    // on-chain merged (eff) value at canonical position 22.
-    operatorGrantDelaySeconds: livePolicy.data.operatorGrantDelaySeconds,
+    stableBalanceFloor: effStableFloor,
+    perRecipientDailyCapUsd: effPerRecip,
+    cosignRequired: effCosignRequired,
+    operatorGrantDelaySeconds: effOperatorDelay,
+    hasProtocolCaps: effHasProtocolCaps,
+    protocolCaps: effProtocolCaps,
+    agentSetHash: computeAgentSetHash(liveVault.data.agents),
+    cosignSessionPubkey: effCosignSessionPubkey,
   });
 
   const ix = await getQueuePolicyUpdateInstructionAsync({
@@ -897,55 +973,104 @@ export async function queuePolicyUpdate(
     hasProtocolCaps: changes.hasProtocolCaps ?? null,
     protocolCaps: changes.protocolCaps ?? null,
     destinationMode: changes.destinationMode ?? null,
-    // TA-05 (Phase 3): operating_hours is not mutated by this mutation
-    // surface — pass null to fall through to live policy at on-chain merge.
     operatingHours: null,
-    // TA-12/14 (Phase 5): not mutated by this non-elevated surface — pass
-    // null to fall through to live policy. Elevated mutations (lowering
-    // floor, raising per-recipient cap) require cosign and the
-    // `queuePolicyElevated()` helper.
-    stableBalanceFloor: null,
-    perRecipientDailyCapUsd: null,
-    // G6 (audit 2026-05-18 cosign opt-in): not mutated by this non-
-    // elevated surface — pass null to fall through to live policy.
-    // Toggling cosign on/off goes through a dedicated path that is
-    // aware of the one-way-ratchet semantics (true→false requires
-    // cosign; false→true does not).
-    cosignRequired: null,
-    // D-5 (Bucket 2 audit 2026-05-21, F-RP3-1): not mutated by this
-    // non-elevated surface — pass null to keep live policy value. Owner
-    // sets cosign_session_pubkey via a dedicated elevated helper that
-    // verifies the new pubkey isn't a Sigil-protected PDA at queue time.
-    cosignSessionPubkey: null,
-    // F-Q6 (2026-06-02): not mutated by this dashboard surface — pass null
-    // (falls through to live policy at on-chain merge). Configurability is
-    // available via the raw codama builder + owner paths.
-    operatorGrantDelaySeconds: null,
-    // TA-09 (Phase 3): non-elevated path by default — pass the
-    // System Program / zero-pubkey ("11111111111111111111111111111111").
-    // Elevated mutations through this dashboard surface require a
-    // follow-on `queuePolicyElevated()` helper (cosign-helper.ts, G4).
-    //
-    // CANONICAL `cosign_session` ARG CONTRACT (Round 2 §RP-2 B4 F-3,
-    // 2026-05-19) — for non-Codama callers reading this file as a
-    // reference impl:
-    //   - Non-elevated queue (this branch): pass `Pubkey::default()`
-    //     and OMIT any cosigner from `remaining_accounts`.
-    //   - Elevated queue (raising daily_cap, expanding destinations /
-    //     protocols, lowering stable_balance_floor, raising
-    //     per_recipient_daily_cap_usd, disabling protocol_caps, mutating
-    //     protocol_caps entries, or disabling cosign): pass a REAL session
-    //     pubkey + include it in `remaining_accounts` with
-    //     `is_signer == true`. Build the bundle via
-    //     `buildCosignBundle()` in `sdk/kit/src/cosign-helper.ts`.
-    //   - Reject path: a non-default `cosign_session` on a non-elevated
-    //     queue surfaces `InvalidPermissions` (6088). INTENTIONAL — the
-    //     on-chain handler refuses to silently downgrade a caller's
-    //     declared intent (Option A behaviour).
-    cosignSession: "11111111111111111111111111111111" as unknown as Address,
+    stableBalanceFloor: changes.stableBalanceFloor ?? null,
+    perRecipientDailyCapUsd: changes.perRecipientDailyCapUsd ?? null,
+    cosignRequired: changes.cosignRequired ?? null,
+    cosignSessionPubkey: changes.cosignSessionPubkey ?? null,
+    operatorGrantDelaySeconds: changes.operatorGrantDelaySeconds ?? null,
+    cosignSession,
     newPolicyPreviewDigest,
   });
-  return run(rpc, owner, network, [ix], opts);
+  return ix as unknown as Instruction;
+}
+
+/**
+ * Elevated policy queue — single-builder dual-sign. Caller holds the cosigner
+ * key; signs [owner, cosigner] + sends. For true 2-party async use
+ * buildQueuePolicyElevated.
+ */
+export async function queuePolicyElevated(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  changes: PolicyChanges,
+  cosigner: TransactionSigner,
+  opts?: TxOpts,
+): Promise<TxResult> {
+  requireValidAddress(cosigner.address, "Cosigner address");
+  if (cosigner.address === owner.address) {
+    throw toDxError(
+      new Error(
+        "Cosigner must be distinct from the owner (on-chain ErrCosignRequired)",
+      ),
+    );
+  }
+  const ix = await buildPolicyUpdateIx(
+    rpc,
+    owner,
+    vault,
+    changes,
+    cosigner.address,
+  );
+  return run(
+    rpc,
+    owner,
+    network,
+    [withCosignerSigner(ix, cosigner.address)],
+    opts,
+    [cosigner],
+  );
+}
+
+/**
+ * Elevated policy queue — partial-sign handoff. Owner-signs + returns the
+ * partial tx + the policy cosign digest for the cosigner to complete + send.
+ * The cosign digest binds the RAW queued args (mirrors compute_cosign_digest).
+ */
+export async function buildQueuePolicyElevated(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  changes: PolicyChanges,
+  cosignSession: Address,
+  opts?: TxOpts,
+): Promise<ElevatedCosignBundle> {
+  requireValidAddress(cosignSession, "Cosigner address");
+  if (cosignSession === owner.address) {
+    throw toDxError(
+      new Error(
+        "Cosigner must be distinct from the owner (on-chain ErrCosignRequired)",
+      ),
+    );
+  }
+  const ix = await buildPolicyUpdateIx(
+    rpc,
+    owner,
+    vault,
+    changes,
+    cosignSession,
+  );
+  const partialTransactionBase64 = await buildOwnerPartialSignedTx(
+    rpc,
+    owner,
+    [withCosignerSigner(ix, cosignSession)],
+    opts,
+  );
+  const cosignDigest = computeCosignDigest({
+    cosignSession,
+    dailySpendingCapUsd: changes.dailyCap ?? null,
+    maxTransactionAmountUsd: changes.maxPerTrade ?? null,
+    allowedDestinations: changes.allowedDestinations ?? null,
+    protocols: changes.approvedApps ?? null,
+    stableBalanceFloor: changes.stableBalanceFloor ?? null,
+    perRecipientDailyCapUsd: changes.perRecipientDailyCapUsd ?? null,
+    hasProtocolCaps: changes.hasProtocolCaps ?? null,
+    protocolCaps: changes.protocolCaps ?? null,
+    cosignRequired: changes.cosignRequired ?? null,
+  });
+  return { partialTransactionBase64, cosignSession, cosignDigest };
 }
 
 export async function applyPendingPolicy(
@@ -1011,12 +1136,193 @@ export async function queueAgentPermissions(
     //     pass a REAL session pubkey + include it as a signer in
     //     `remaining_accounts`.
     //   - Reject path: passing a non-default `cosign_session` on a
-    //     non-elevated queue surfaces `InvalidPermissions` (6088).
+    //     non-elevated queue surfaces `InvalidPermissions` (6036).
     //     INTENTIONAL — the on-chain handler refuses to silently
     //     downgrade a caller's declared intent (Option A behaviour).
     cosignSession: "11111111111111111111111111111111" as unknown as Address,
   });
   return run(rpc, owner, network, [ix], opts);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Elevated-cosign surface (audit 2026-06-12).
+//
+// On a `cosign_required` vault, raising an agent's capability or spending limit,
+// or setting a non-zero cooldown, is an ELEVATED mutation: the on-chain
+// queue_agent_permissions_update handler requires a non-default `cosign_session`
+// that is (a) distinct from the owner and (b) present as a signer in
+// remaining_accounts. Two caller models:
+//   - queueAgentPermissionsElevated(...)      single-builder dual-sign: caller
+//     supplies the cosigner as a TransactionSigner; we sign [owner, cosigner].
+//   - buildQueueAgentPermissionsElevated(...)  partial-sign handoff: caller
+//     supplies only the cosigner PUBKEY; we owner-partial-sign and return the
+//     base64 partial tx + the cosign digest for the cosigner to complete + send.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Append a cosign-session signer to a generated instruction's account metas. */
+function withCosignerSigner(
+  ix: Instruction,
+  cosignSession: Address,
+): Instruction {
+  return {
+    ...(ix as any),
+    accounts: [
+      ...((ix as any).accounts ?? []),
+      { address: cosignSession, role: AccountRole.READONLY_SIGNER },
+    ],
+  } as Instruction;
+}
+
+/**
+ * Assemble the compute-budget-prefixed message and OWNER-partial-sign it (the
+ * cosigner — a required signer via the appended account meta — signs later).
+ * Returns the base64 wire transaction for handoff. Mirrors run()'s message
+ * assembly but does NOT send.
+ */
+async function buildOwnerPartialSignedTx(
+  rpc: Rpc<SolanaRpcApi>,
+  owner: TransactionSigner,
+  instructions: Instruction[],
+  opts: TxOpts = {},
+): Promise<string> {
+  const cu = opts.computeUnits ?? CU_OWNER_ACTION;
+  const allIx: KitInstruction[] = [
+    getSetComputeUnitLimitInstruction({
+      units: cu,
+    }) as unknown as KitInstruction,
+    ...(opts.priorityFeeMicroLamports
+      ? [
+          getSetComputeUnitPriceInstruction({
+            microLamports: BigInt(opts.priorityFeeMicroLamports),
+          }) as unknown as KitInstruction,
+        ]
+      : []),
+    ...(instructions as unknown as KitInstruction[]),
+  ];
+  const blockhash = await getBlockhashCache(rpc).get(rpc);
+  const txMessage = pipe(
+    createTransactionMessage({ version: 0 }),
+    (tx) => setTransactionMessageFeePayer(owner.address, tx),
+    (tx) => setTransactionMessageLifetimeUsingBlockhash(blockhash as any, tx),
+    (tx) => appendTransactionMessageInstructions(allIx, tx),
+  );
+  const withOwner = addSignersToTransactionMessage([owner], txMessage as any);
+  const partial = await partiallySignTransactionMessageWithSigners(
+    withOwner as any,
+  );
+  return getBase64EncodedWireTransaction(partial as any);
+}
+
+/** Result of a partial-sign elevated build, for cosigner handoff. */
+export interface ElevatedCosignBundle {
+  /** Base64 wire tx, owner-signed, awaiting the cosigner's signature. */
+  partialTransactionBase64: string;
+  /** The cosign-session pubkey bound into the transaction. */
+  cosignSession: Address;
+  /**
+   * The cosign digest the on-chain handler recomputes from the queued args.
+   * The cosigner can verify this matches what they intend to attest, and the
+   * caller can compare it against `PendingAgentPermissionsUpdate.cosignDigest`
+   * after the transaction lands.
+   */
+  cosignDigest: Uint8Array;
+}
+
+/**
+ * Elevated agent-permissions queue — single-builder dual-sign. The caller holds
+ * the cosigner key (server-side / single-operator). Signs [owner, cosigner] and
+ * sends. For a true 2-party async flow use `buildQueueAgentPermissionsElevated`.
+ */
+export async function queueAgentPermissionsElevated(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  agent: Address,
+  permissions: CapabilityTier,
+  spendingLimit: UsdBaseUnits,
+  cooldownSeconds: bigint,
+  cosigner: TransactionSigner,
+  opts?: TxOpts,
+): Promise<TxResult> {
+  requireValidAddress(agent, "Agent address");
+  requireValidPermissions(permissions);
+  requireValidAddress(cosigner.address, "Cosigner address");
+  if (cosigner.address === owner.address) {
+    throw toDxError(
+      new Error(
+        "Cosigner must be distinct from the owner (on-chain ErrCosignRequired)",
+      ),
+    );
+  }
+  const ix = await getQueueAgentPermissionsUpdateInstructionAsync({
+    owner,
+    vault,
+    agent,
+    newCapability: Number(permissions),
+    spendingLimitUsd: spendingLimit,
+    cooldownSeconds,
+    cosignSession: cosigner.address,
+  });
+  return run(
+    rpc,
+    owner,
+    network,
+    [withCosignerSigner(ix, cosigner.address)],
+    opts,
+    [cosigner],
+  );
+}
+
+/**
+ * Elevated agent-permissions queue — partial-sign handoff. Owner-signs and
+ * returns the partial transaction + cosign digest; the cosigner signs and sends
+ * out-of-band (true 2-of-2). Validation mirrors the dual-sign path.
+ */
+export async function buildQueueAgentPermissionsElevated(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  agent: Address,
+  permissions: CapabilityTier,
+  spendingLimit: UsdBaseUnits,
+  cooldownSeconds: bigint,
+  cosignSession: Address,
+  opts?: TxOpts,
+): Promise<ElevatedCosignBundle> {
+  requireValidAddress(agent, "Agent address");
+  requireValidPermissions(permissions);
+  requireValidAddress(cosignSession, "Cosigner address");
+  if (cosignSession === owner.address) {
+    throw toDxError(
+      new Error(
+        "Cosigner must be distinct from the owner (on-chain ErrCosignRequired)",
+      ),
+    );
+  }
+  const ix = await getQueueAgentPermissionsUpdateInstructionAsync({
+    owner,
+    vault,
+    agent,
+    newCapability: Number(permissions),
+    spendingLimitUsd: spendingLimit,
+    cooldownSeconds,
+    cosignSession,
+  });
+  const partialTransactionBase64 = await buildOwnerPartialSignedTx(
+    rpc,
+    owner,
+    [withCosignerSigner(ix, cosignSession)],
+    opts,
+  );
+  const cosignDigest = computeAgentPermsCosignDigest({
+    cosignSession,
+    agent,
+    newCapability: Number(permissions),
+    spendingLimitUsd: spendingLimit,
+    cooldownSeconds,
+  });
+  return { partialTransactionBase64, cosignSession, cosignDigest };
 }
 
 export async function applyAgentPermissions(

@@ -85,7 +85,7 @@
     },
     {
       "name": "Kit-native SDK (`@usesigil/kit` — includes merged core + dashboard)",
-      "count": 1794,
+      "count": 1809,
       "ciStepName": "Kit SDK tests",
       "claudePattern": "sdk/kit/tests/` (mocha + tsx, %d tests — core + dashboard + errors + agent-bootstrap + preview-create-vault + audit-2026-05-23 remediation suites)"
     },
@@ -103,7 +103,7 @@
     },
     {
       "name": "Rust unit tests (cargo test)",
-      "count": 166,
+      "count": 180,
       "onChain": true,
       "claudePattern": "cargo test --manifest-path programs/sigil/Cargo.toml` (%d tests — Phase 8 + audit-2026-05-23 grew this from 110 to 244 via state-pin + canonical-encoder + intent-digest unit tests)"
     },

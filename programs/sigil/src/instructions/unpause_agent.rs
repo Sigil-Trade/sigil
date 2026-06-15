@@ -64,9 +64,10 @@ pub fn handler(ctx: Context<UnpauseAgent>, agent_to_unpause: Pubkey) -> Result<(
     // vault that requires it -> reject with 6080 ErrCosignRequired.
     if ctx.accounts.policy.cosign_required {
         let owner_key = ctx.accounts.owner.key();
-        let has_cosigner = crate::instructions::register_agent::has_non_owner_signer(
+        let has_cosigner = crate::instructions::register_agent::has_bound_cosigner(
             ctx.remaining_accounts,
             &owner_key,
+            &ctx.accounts.policy.cosign_session_pubkey,
         );
         require!(has_cosigner, SigilError::ErrCosignRequired);
     }

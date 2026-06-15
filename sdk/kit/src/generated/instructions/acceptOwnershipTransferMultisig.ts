@@ -130,35 +130,16 @@ export type AcceptOwnershipTransferMultisigAsyncInput<
   TAccountSlotHashesSysvar extends string = string,
   TAccountSystemProgram extends string = string,
 > = {
-  /**
-   * vault PDAs have no private key — authority is enforced by:
-   * 1. `owner == SQUADS_V4_PROGRAM_ID` (verified in handler)
-   * 2. `key() == pending.new_owner` (verified in handler)
-   * 3. `pending.is_multisig_target == true` (verified in handler)
-   *
-   * Marked `mut` so the closed `pending` PDA's rent returns here.
-   */
+  /** (multisig custody disabled in V1) before reading any account. */
   multisigPda: Address<TAccountMultisigPda>;
-  /**
-   * Vault is mutated (owner field overwritten). PDA derivation uses the
-   * immutable `vault.vault_authority` field (LBL-01) so the seed binding
-   * survives ownership transfer. Handler-level `require_keys_eq!(
-   * pending.current_owner, vault.owner)` replaces the implicit seed
-   * binding that previously enforced the queue→accept owner match.
-   */
   vault: Address<TAccountVault>;
-  /**
-   * Policy is mutated (policy_version bump + `policy_preview_digest`
-   * recompute — see handler lines 180-230, mirroring the EOA path).
-   */
   policy?: Address<TAccountPolicy>;
   /**
-   * PendingOwnershipTransfer PDA. `close = multisig_pda` returns rent to the
-   * new authority. `has_one = vault` binds the PDA to this vault explicitly
-   * (defense-in-depth against future seeds drift; same pattern as §RP-1 I-2).
+   * `has_one = vault` + the close target are retained for IDL stability. The
+   * close never runs because the handler returns `Err` before any Anchor
+   * post-handler step executes.
    */
   pending?: Address<TAccountPending>;
-  /** Phase 7 — success audit log; entry appended after state mutation. */
   auditLogSuccess?: Address<TAccountAuditLogSuccess>;
   slotHashesSysvar?: Address<TAccountSlotHashesSysvar>;
   systemProgram?: Address<TAccountSystemProgram>;
@@ -311,35 +292,16 @@ export type AcceptOwnershipTransferMultisigInput<
   TAccountSlotHashesSysvar extends string = string,
   TAccountSystemProgram extends string = string,
 > = {
-  /**
-   * vault PDAs have no private key — authority is enforced by:
-   * 1. `owner == SQUADS_V4_PROGRAM_ID` (verified in handler)
-   * 2. `key() == pending.new_owner` (verified in handler)
-   * 3. `pending.is_multisig_target == true` (verified in handler)
-   *
-   * Marked `mut` so the closed `pending` PDA's rent returns here.
-   */
+  /** (multisig custody disabled in V1) before reading any account. */
   multisigPda: Address<TAccountMultisigPda>;
-  /**
-   * Vault is mutated (owner field overwritten). PDA derivation uses the
-   * immutable `vault.vault_authority` field (LBL-01) so the seed binding
-   * survives ownership transfer. Handler-level `require_keys_eq!(
-   * pending.current_owner, vault.owner)` replaces the implicit seed
-   * binding that previously enforced the queue→accept owner match.
-   */
   vault: Address<TAccountVault>;
-  /**
-   * Policy is mutated (policy_version bump + `policy_preview_digest`
-   * recompute — see handler lines 180-230, mirroring the EOA path).
-   */
   policy: Address<TAccountPolicy>;
   /**
-   * PendingOwnershipTransfer PDA. `close = multisig_pda` returns rent to the
-   * new authority. `has_one = vault` binds the PDA to this vault explicitly
-   * (defense-in-depth against future seeds drift; same pattern as §RP-1 I-2).
+   * `has_one = vault` + the close target are retained for IDL stability. The
+   * close never runs because the handler returns `Err` before any Anchor
+   * post-handler step executes.
    */
   pending: Address<TAccountPending>;
-  /** Phase 7 — success audit log; entry appended after state mutation. */
   auditLogSuccess: Address<TAccountAuditLogSuccess>;
   slotHashesSysvar?: Address<TAccountSlotHashesSysvar>;
   systemProgram?: Address<TAccountSystemProgram>;
@@ -437,35 +399,16 @@ export type ParsedAcceptOwnershipTransferMultisigInstruction<
 > = {
   programAddress: Address<TProgram>;
   accounts: {
-    /**
-     * vault PDAs have no private key — authority is enforced by:
-     * 1. `owner == SQUADS_V4_PROGRAM_ID` (verified in handler)
-     * 2. `key() == pending.new_owner` (verified in handler)
-     * 3. `pending.is_multisig_target == true` (verified in handler)
-     *
-     * Marked `mut` so the closed `pending` PDA's rent returns here.
-     */
+    /** (multisig custody disabled in V1) before reading any account. */
     multisigPda: TAccountMetas[0];
-    /**
-     * Vault is mutated (owner field overwritten). PDA derivation uses the
-     * immutable `vault.vault_authority` field (LBL-01) so the seed binding
-     * survives ownership transfer. Handler-level `require_keys_eq!(
-     * pending.current_owner, vault.owner)` replaces the implicit seed
-     * binding that previously enforced the queue→accept owner match.
-     */
     vault: TAccountMetas[1];
-    /**
-     * Policy is mutated (policy_version bump + `policy_preview_digest`
-     * recompute — see handler lines 180-230, mirroring the EOA path).
-     */
     policy: TAccountMetas[2];
     /**
-     * PendingOwnershipTransfer PDA. `close = multisig_pda` returns rent to the
-     * new authority. `has_one = vault` binds the PDA to this vault explicitly
-     * (defense-in-depth against future seeds drift; same pattern as §RP-1 I-2).
+     * `has_one = vault` + the close target are retained for IDL stability. The
+     * close never runs because the handler returns `Err` before any Anchor
+     * post-handler step executes.
      */
     pending: TAccountMetas[3];
-    /** Phase 7 — success audit log; entry appended after state mutation. */
     auditLogSuccess: TAccountMetas[4];
     slotHashesSysvar: TAccountMetas[5];
     systemProgram: TAccountMetas[6];

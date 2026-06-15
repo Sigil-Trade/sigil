@@ -423,6 +423,16 @@ export async function createVault(
     // G6 (audit 2026-05-18 cosign opt-in): default false (low-friction).
     // Owners explicitly opt in by passing true. Bound by TA-19 at position 20.
     cosignRequired: options.cosignRequired ?? false,
+    // M-1 (audit 2026-06-11): bind per-protocol caps (positions 23-24). The
+    // `protocolCaps` value below is exactly what goes on the wire to
+    // `initialize_vault`, which derives `has_protocol_caps = !is_empty()` and
+    // stores the slice verbatim (initialize_vault.rs:256-257). Mirror that
+    // derivation here so the owner-signed digest matches the on-chain
+    // recompute. NOTE: the default path fills `protocolCaps` with all-zeros of
+    // length === protocols.length (non-empty), so `has_protocol_caps` is TRUE
+    // for any vault with ≥1 protocol — the length test below mirrors that.
+    hasProtocolCaps: protocolCaps.length > 0,
+    protocolCaps,
   });
 
   const initializeVaultIx = await getInitializeVaultInstructionAsync({

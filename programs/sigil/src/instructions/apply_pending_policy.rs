@@ -46,7 +46,8 @@ use crate::utils::policy_digest::{
 #[allow(dead_code)]
 // M1-04: was 22; has_constraints removed (digest-version bump).
 // F-Q6 (2026-06-02): 21 → 22, binds operator_grant_delay_seconds.
-const EXPECTED_DIGEST_FIELD_COUNT: usize = 22;
+// M-1 (2026-06-11): 22 → 24, binds has_protocol_caps + protocol_caps.
+const EXPECTED_DIGEST_FIELD_COUNT: usize = 24;
 const _: () = assert!(
     EXPECTED_DIGEST_FIELD_COUNT == crate::utils::policy_digest::POLICY_PREVIEW_FIELD_COUNT,
     "P0.2 PEN-7: PolicyPreviewFields count diverged from TA-19 binding. \
@@ -255,6 +256,23 @@ pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
     if let Some(ref caps) = pending.protocol_caps {
         policy.protocol_caps = caps.clone();
     }
+    // LOW-2 (audit 2026-06-11 follow-up): defense-in-depth caps-length invariant
+    // re-check at the apply write site. `has_protocol_caps` and `protocol_caps`
+    // are merged INDEPENDENTLY above, and the queue gate
+    // (queue_policy_update.rs:251-266) plus the TA-19 digest re-assertion below
+    // already enforce alignment — but a dedicated post-merge invariant mirrors
+    // initialize_vault.rs:178-181 so any future pending-write path that flips the
+    // caps switch ON cannot land a live policy where `protocol_caps.len() !=
+    // protocols.len()`. That mismatch is the `get_protocol_cap` Some(0)
+    // tail-unlimited hazard (policy.rs:433-441): with the switch on, protocols at
+    // indices past the caps vector would read as uncapped. Guarded on the switch
+    // (not is_empty) so an empty-caps-with-switch-on state is also rejected.
+    if policy.has_protocol_caps {
+        require!(
+            policy.protocol_caps.len() == policy.protocols.len(),
+            SigilError::ProtocolCapsMismatch
+        );
+    }
     if let Some(mode) = pending.destination_mode {
         // Phase 2 Option A: re-validate at apply time. OPEN_WITH_CAP deleted.
         require!(
@@ -453,6 +471,9 @@ pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
         // (not yet a pending field) — read the live policy value so the
         // second-pass digest matches the queue-time digest.
         operator_grant_delay_seconds: policy.operator_grant_delay_seconds,
+        // M-1 (audit 2026-06-11): bind per-protocol caps (positions 23-24).
+        has_protocol_caps: policy.has_protocol_caps,
+        protocol_caps: &policy.protocol_caps,
     });
     require!(
         recomputed_digest == pending.new_policy_preview_digest,

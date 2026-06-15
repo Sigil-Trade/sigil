@@ -1,31 +1,19 @@
 /**
  * Phase 8 Batch 4 — C26 ownership transfer (Squads V4 multisig accept variant).
  *
- * Sibling suite to `ownership-transfer.ts` (Batch 3). Covers the multisig
- * accept path where `pending.is_multisig_target == true` and the new owner is
- * a Squads V4 multisig vault PDA (program-owned, no private key).
+ * DISABLED in V1 (audit 2026-06-11, finding H-1). Transferring Sigil vault
+ * ownership to a Squads V4 multisig is architecturally incompatible with
+ * Sigil's top-level-only (`reject_cpi!`) model — a Squads multisig acts on
+ * external programs only by CPI from `vault_transaction_execute`, but every
+ * Sigil owner instruction rejects any CPI. The prior code path also let an
+ * unsignable Squads state account be set as owner, permanently bricking the
+ * vault. V1 disables the path:
+ *   - `initiate_ownership_transfer` rejects `is_multisig_target = true`
+ *     (ErrMultisigCustodyUnsupported, 6111); and
+ *   - `accept_ownership_transfer_multisig` rejects unconditionally (6111).
  *
- * Mock multisig strategy:
- *   LiteSVM has no real Squads V4 deployment. We forge a "mock multisig PDA"
- *   by generating a fresh Keypair and using `svm.setAccount(...)` to set its
- *   `.owner` field to `SQUADS_V4_PROGRAM_ID`. The handler's only structural
- *   check on the multisig is `multisig_pda.owner == &SQUADS_V4_PROGRAM_ID`,
- *   which this forgery satisfies. The keypair's private key is NEVER signed
- *   with — the ix passes the multisig PDA as an UncheckedAccount, not Signer.
- *
- * Coverage map (Council ISC labels in parens):
- *   1. Happy: initiate(is_multisig_target=true) → wait → multisig accept     (ISC-42..48)
- *   2. Wrong owner program: forge multisig owned by SystemProgram → REJECT   (ISC-A7, 6107)
- *   3. new_owner mismatch: pass mock_B when pending bound to mock_A          → REJECT (6104)
- *   4. is_multisig_target=false reject: standard pending via multisig handler → REJECT (6104)
- *   5. Timelock not elapsed: accept at queued_at + min_delay - 1             → REJECT (6104)
- *
- * Each test uses a unique vault_id (9100+) to keep state isolated from the
- * Batch 3 suite (9000-9010 range).
- *
- * Audit-log discriminator sanity: happy path also asserts disc=8 written
- * (mirrors the EOA accept path — the via_multisig flag lives in the event,
- * not a separate disc byte).
+ * This suite verifies BOTH rejections. Multisig custody is deferred to a
+ * future release with a proper design + re-audit.
  */
 
 import * as anchor from "@coral-xyz/anchor";
@@ -45,7 +33,6 @@ import {
   airdropSol,
   createMintAtAddress,
   DEVNET_USDC_MINT,
-  advanceTime,
   accountExists,
   TestEnv,
   LiteSVM,
@@ -55,66 +42,27 @@ const STANDARD_INIT_DAILY_CAP = new BN(500_000_000);
 const STANDARD_INIT_MAX_TX = new BN(100_000_000);
 const STANDARD_INIT_TIMELOCK = new BN(1800);
 
-// Mirrors PendingOwnershipTransfer::DEFAULT_MIN_DELAY (48h).
-const DEFAULT_MIN_DELAY = 172_800;
-
-// Audit-log discriminators (mirrors state/audit_log_success.rs).
-const DISC_OWNERSHIP_ACCEPT = 8;
-
-// Per-entry layout — must match programs/sigil/src/state/audit_log_success.rs.
-const ENTRY_SIZE = 64;
-const SUCCESS_CAPACITY = 128;
-const ENTRIES_OFFSET = 8 + 32;
+// 6111 — ErrMultisigCustodyUnsupported (multisig custody disabled in V1).
+const ERR_MULTISIG_CUSTODY_UNSUPPORTED = 6111;
 
 /**
- * Squads V4 program ID — mirrors `programs/sigil/src/state/mod.rs`.
- * Base58: SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf
- *
- * IMPORTANT: any drift between this constant and the on-chain
- * `SQUADS_V4_PROGRAM_ID` must FAIL the test suite (the mock-multisig
- * "owned by Squads" forgery would no longer satisfy the handler's check).
+ * Forge an opaque account to pass as `multisig_pda` (an UncheckedAccount). The
+ * handler rejects before reading it, so only a valid writable meta is needed.
  */
-const SQUADS_V4_PROGRAM_ID = new PublicKey(
-  "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf",
-);
-
-/** Decode the last-written audit-log success buffer entry's discriminator. */
-function lastSuccessDisc(svm: LiteSVM, auditSuccess: PublicKey): number {
-  const acct = svm.getAccount(auditSuccess);
-  if (!acct) throw new Error("audit log missing");
-  const buf = Buffer.from(acct.data);
-  const entriesEnd = 8 + 32 + ENTRY_SIZE * SUCCESS_CAPACITY;
-  const head = buf[entriesEnd];
-  const count = buf[entriesEnd + 1];
-  if (count === 0) throw new Error("audit log empty");
-  const lastIdx = (head + SUCCESS_CAPACITY - 1) % SUCCESS_CAPACITY;
-  return buf[ENTRIES_OFFSET + lastIdx * ENTRY_SIZE + 63];
-}
-
-/**
- * Forge a mock multisig PDA owned by the supplied owner program. The data
- * payload is opaque to the Sigil handler — only the `.owner` field is
- * structurally checked. Generates a fresh Keypair so each call returns a
- * unique pubkey; the keypair's private key is NEVER used (the ix passes the
- * multisig as an UncheckedAccount, not Signer).
- *
- * Returns the forged pubkey.
- */
-function forgeMockMultisig(svm: LiteSVM, ownerProgram: PublicKey): PublicKey {
+function forgeMockMultisig(svm: LiteSVM): PublicKey {
   const kp = Keypair.generate();
-  const data = Buffer.alloc(200); // arbitrary opaque payload
-  // Rent-exempt for 200 bytes (LiteSVM uses Solana's standard rent math).
+  const data = Buffer.alloc(200);
   const rentExempt = Number(svm.minimumBalanceForRentExemption(BigInt(200)));
   svm.setAccount(kp.publicKey, {
     lamports: rentExempt,
     data,
-    owner: ownerProgram,
+    owner: SystemProgram.programId,
     executable: false,
   });
   return kp.publicKey;
 }
 
-describe("ownership-transfer-multisig (Phase 8 Batch 4 — Squads V4 accept)", () => {
+describe("ownership-transfer-multisig (Phase 8 Batch 4 — DISABLED in V1, H-1)", () => {
   let env: TestEnv;
   let svm: LiteSVM;
   let program: Program<Sigil>;
@@ -135,10 +83,6 @@ describe("ownership-transfer-multisig (Phase 8 Batch 4 — Squads V4 accept)", (
     createMintAtAddress(svm, DEVNET_USDC_MINT, owner.publicKey, 6);
   });
 
-  /**
-   * Initialize a fresh vault. Returns the PDAs the ownership-transfer
-   * handlers consume. Mirrors the Batch 3 suite's helper exactly.
-   */
   async function initVault(vaultId: BN) {
     const [vault] = PublicKey.findProgramAddressSync(
       [
@@ -223,75 +167,53 @@ describe("ownership-transfer-multisig (Phase 8 Batch 4 — Squads V4 accept)", (
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 1. HAPPY PATH — initiate(is_multisig_target=true) → wait → multisig accept.
+  // 1. initiate(is_multisig_target=true) is rejected — no multisig-target
+  //    pending can be armed (H-1 disable at the source).
   // ─────────────────────────────────────────────────────────────────────────
-  it("happy path: initiate(multisig_target=true) + wait + multisig accept → vault.owner mutates to multisig PDA, pending closes", async () => {
+  it("initiate with is_multisig_target=true → reject 6111 (multisig custody disabled in V1)", async () => {
     const { vault, policy, auditSuccess, pendingOwner } = await initVault(
       new BN(9100),
     );
+    const target = Keypair.generate().publicKey;
 
-    // Forge a mock Squads-owned multisig PDA. The handler will accept this as
-    // a valid Squads multisig because its `.owner == SQUADS_V4_PROGRAM_ID`.
-    const mockMultisig = forgeMockMultisig(svm, SQUADS_V4_PROGRAM_ID);
-
-    // Initiate WITH is_multisig_target=true bound to the mock multisig pubkey.
-    await program.methods
-      .initiateOwnershipTransfer(mockMultisig, true)
-      .accounts({
-        owner: owner.publicKey,
-        vault,
-        policy,
-        pending: pendingOwner,
-        auditLogSuccess: auditSuccess,
-        systemProgram: SystemProgram.programId,
-      } as any)
-      .rpc();
-
-    // ASSERT — pending PDA bound to multisig + flag set.
-    const pendingState =
-      await program.account.pendingOwnershipTransfer.fetch(pendingOwner);
-    expect(pendingState.newOwner.toString()).to.equal(mockMultisig.toString());
-    expect(pendingState.isMultisigTarget).to.equal(true);
-
-    // Advance past the timelock window.
-    advanceTime(svm, DEFAULT_MIN_DELAY);
-
-    // ACT — multisig accept. No `.signers([...])` — multisig PDA is UncheckedAccount.
-    await program.methods
-      .acceptOwnershipTransferMultisig()
-      .accounts({
-        multisigPda: mockMultisig,
-        vault,
-        policy,
-        pending: pendingOwner,
-        auditLogSuccess: auditSuccess,
-        systemProgram: SystemProgram.programId,
-      } as any)
-      .rpc();
-
-    // ASSERT — vault.owner mutated to multisig PDA, pending closed, audit disc=8.
-    const vaultState = await program.account.agentVault.fetch(vault);
-    expect(vaultState.owner.toString()).to.equal(mockMultisig.toString());
+    let caughtCode: number | null = null;
+    try {
+      await program.methods
+        .initiateOwnershipTransfer(target, true)
+        .accounts({
+          owner: owner.publicKey,
+          vault,
+          policy,
+          pending: pendingOwner,
+          auditLogSuccess: auditSuccess,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .rpc();
+    } catch (err: any) {
+      caughtCode = err?.error?.errorCode?.number ?? null;
+    }
+    expect(caughtCode, "is_multisig_target=true MUST reject").to.equal(
+      ERR_MULTISIG_CUSTODY_UNSUPPORTED,
+    );
+    // No pending was created.
     expect(accountExists(svm, pendingOwner)).to.equal(false);
-    expect(lastSuccessDisc(svm, auditSuccess)).to.equal(DISC_OWNERSHIP_ACCEPT);
   });
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 2. WRONG OWNER PROGRAM — forge multisig owned by SystemProgram, not Squads.
-  //    Handler's `multisig_pda.owner == &SQUADS_V4_PROGRAM_ID` check rejects.
+  // 2. The accept handler rejects unconditionally (defense-in-depth for any
+  //    pending that might pre-date the fix). We create a valid EOA-target
+  //    pending (is_multisig_target=false, allowed) so account validation
+  //    passes and the handler body is reached — it returns 6111 regardless.
   // ─────────────────────────────────────────────────────────────────────────
-  it("wrong owner program: forge multisig owned by SystemProgram → reject 6107 ErrInvalidOwnershipTarget", async () => {
+  it("accept_ownership_transfer_multisig rejects unconditionally → reject 6111", async () => {
     const { vault, policy, auditSuccess, pendingOwner } = await initVault(
       new BN(9101),
     );
 
-    // Forge an account owned by SystemProgram (NOT Squads V4).
-    const fakeMultisig = forgeMockMultisig(svm, SystemProgram.programId);
-
-    // Initiate bound to the fake multisig (initiate doesn't verify owner program;
-    // it just records the target pubkey).
+    // Arm a STANDARD (EOA) pending so the pending PDA exists and validates.
+    const eoaTarget = Keypair.generate().publicKey;
     await program.methods
-      .initiateOwnershipTransfer(fakeMultisig, true)
+      .initiateOwnershipTransfer(eoaTarget, false)
       .accounts({
         owner: owner.publicKey,
         vault,
@@ -301,15 +223,16 @@ describe("ownership-transfer-multisig (Phase 8 Batch 4 — Squads V4 accept)", (
         systemProgram: SystemProgram.programId,
       } as any)
       .rpc();
+    expect(accountExists(svm, pendingOwner)).to.equal(true);
 
-    advanceTime(svm, DEFAULT_MIN_DELAY);
+    const mockMultisig = forgeMockMultisig(svm);
 
     let caughtCode: number | null = null;
     try {
       await program.methods
         .acceptOwnershipTransferMultisig()
         .accounts({
-          multisigPda: fakeMultisig,
+          multisigPda: mockMultisig,
           vault,
           policy,
           pending: pendingOwner,
@@ -320,242 +243,14 @@ describe("ownership-transfer-multisig (Phase 8 Batch 4 — Squads V4 accept)", (
     } catch (err: any) {
       caughtCode = err?.error?.errorCode?.number ?? null;
     }
-    expect(caughtCode, "wrong-owner-program multisig accept MUST reject").to.not
-      .be.null;
-    expect(caughtCode).to.equal(6098); // ErrInvalidOwnershipTarget
+    expect(
+      caughtCode,
+      "accept_ownership_transfer_multisig MUST reject (disabled in V1)",
+    ).to.equal(ERR_MULTISIG_CUSTODY_UNSUPPORTED);
 
-    // Pending PDA still alive.
-    expect(accountExists(svm, pendingOwner)).to.equal(true);
-  });
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // 3. new_owner MISMATCH — initiate bound to mock_A, pass mock_B at accept.
-  //    Handler's `require_keys_eq!(multisig_pda.key(), pending.new_owner)`
-  //    catches the substitution.
-  // ─────────────────────────────────────────────────────────────────────────
-  it("new_owner mismatch: initiate to mock_A, accept passes mock_B → reject 6104 ErrPendingOwnershipNotReady", async () => {
-    const { vault, policy, auditSuccess, pendingOwner } = await initVault(
-      new BN(9102),
-    );
-
-    const mockA = forgeMockMultisig(svm, SQUADS_V4_PROGRAM_ID);
-    const mockB = forgeMockMultisig(svm, SQUADS_V4_PROGRAM_ID);
-
-    // Initiate to mock_A.
-    await program.methods
-      .initiateOwnershipTransfer(mockA, true)
-      .accounts({
-        owner: owner.publicKey,
-        vault,
-        policy,
-        pending: pendingOwner,
-        auditLogSuccess: auditSuccess,
-        systemProgram: SystemProgram.programId,
-      } as any)
-      .rpc();
-
-    advanceTime(svm, DEFAULT_MIN_DELAY);
-
-    // Accept passes mock_B — both are Squads-owned (so the owner-program gate
-    // passes), but only mock_A is the queued target.
-    let caughtCode: number | null = null;
-    try {
-      await program.methods
-        .acceptOwnershipTransferMultisig()
-        .accounts({
-          multisigPda: mockB,
-          vault,
-          policy,
-          pending: pendingOwner,
-          auditLogSuccess: auditSuccess,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
-    } catch (err: any) {
-      caughtCode = err?.error?.errorCode?.number ?? null;
-    }
-    expect(caughtCode, "mock_B substituted for mock_A MUST reject").to.not.be
-      .null;
-    expect(caughtCode).to.equal(6095); // ErrPendingOwnershipNotReady
-
-    // Pending PDA still alive (no mutation occurred).
-    expect(accountExists(svm, pendingOwner)).to.equal(true);
-
-    // ASSERT — vault.owner UNCHANGED.
+    // Vault.owner unchanged; pending PDA still alive (no mutation, no close).
     const vaultState = await program.account.agentVault.fetch(vault);
     expect(vaultState.owner.toString()).to.equal(owner.publicKey.toString());
-  });
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // 4. is_multisig_target=false on multisig handler.
-  //    Symmetric with Batch 3 test 11 (EOA handler rejects multisig pending).
-  //    Multisig handler MUST reject standard-target pendings to prevent the
-  //    inverse back-door.
-  // ─────────────────────────────────────────────────────────────────────────
-  it("is_multisig_target=false pending on multisig handler → reject 6104 ErrPendingOwnershipNotReady", async () => {
-    const { vault, policy, auditSuccess, pendingOwner } = await initVault(
-      new BN(9103),
-    );
-
-    // Forge a Squads-owned mock multisig (so the owner-program gate passes).
-    const mockMultisig = forgeMockMultisig(svm, SQUADS_V4_PROGRAM_ID);
-
-    // Initiate WITH is_multisig_target=false (standard EOA flow). Even though
-    // we bind to a Squads-owned pubkey, the multisig handler must reject
-    // because the pending flag says "standard."
-    await program.methods
-      .initiateOwnershipTransfer(mockMultisig, false)
-      .accounts({
-        owner: owner.publicKey,
-        vault,
-        policy,
-        pending: pendingOwner,
-        auditLogSuccess: auditSuccess,
-        systemProgram: SystemProgram.programId,
-      } as any)
-      .rpc();
-
-    advanceTime(svm, DEFAULT_MIN_DELAY);
-
-    let caughtCode: number | null = null;
-    try {
-      await program.methods
-        .acceptOwnershipTransferMultisig()
-        .accounts({
-          multisigPda: mockMultisig,
-          vault,
-          policy,
-          pending: pendingOwner,
-          auditLogSuccess: auditSuccess,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
-    } catch (err: any) {
-      caughtCode = err?.error?.errorCode?.number ?? null;
-    }
-    expect(
-      caughtCode,
-      "standard-target pending on multisig handler MUST reject",
-    ).to.not.be.null;
-    expect(caughtCode).to.equal(6095); // ErrPendingOwnershipNotReady
-
-    expect(accountExists(svm, pendingOwner)).to.equal(true);
-  });
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // 5. TIMELOCK NOT ELAPSED — accept at queued_at + min_delay - 1.
-  //    Mirrors the Batch 3 boundary test but on the multisig handler.
-  // ─────────────────────────────────────────────────────────────────────────
-  it("boundary: multisig accept at queued_at + min_delay - 1 → reject 6104", async () => {
-    const { vault, policy, auditSuccess, pendingOwner } = await initVault(
-      new BN(9104),
-    );
-
-    const mockMultisig = forgeMockMultisig(svm, SQUADS_V4_PROGRAM_ID);
-
-    await program.methods
-      .initiateOwnershipTransfer(mockMultisig, true)
-      .accounts({
-        owner: owner.publicKey,
-        vault,
-        policy,
-        pending: pendingOwner,
-        auditLogSuccess: auditSuccess,
-        systemProgram: SystemProgram.programId,
-      } as any)
-      .rpc();
-
-    // Advance to ONE SECOND BEFORE the timelock window.
-    advanceTime(svm, DEFAULT_MIN_DELAY - 1);
-
-    let caughtCode: number | null = null;
-    try {
-      await program.methods
-        .acceptOwnershipTransferMultisig()
-        .accounts({
-          multisigPda: mockMultisig,
-          vault,
-          policy,
-          pending: pendingOwner,
-          auditLogSuccess: auditSuccess,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
-    } catch (err: any) {
-      caughtCode = err?.error?.errorCode?.number ?? null;
-    }
-    expect(caughtCode, "pre-timelock multisig accept MUST reject").to.not.be
-      .null;
-    expect(caughtCode).to.equal(6095); // ErrPendingOwnershipNotReady
-
-    expect(accountExists(svm, pendingOwner)).to.equal(true);
-  });
-
-  // ───────────────────────────────────────────────────────────────────────────
-  // M1-02: freeze is terminal on the multisig accept path too.
-  //
-  // Mirror of the single-sig EXPLOIT-BLOCKED test for the Squads V4 multisig
-  // accept handler. A phished owner queues a multisig-target transfer, the real
-  // owner freezes, and the attacker waits out the 48h timelock. The status==Active
-  // gate at the head of accept_ownership_transfer_multisig
-  // (require!(status == Active, VaultNotActive) === 6000) must reject the accept,
-  // leaving vault.owner unchanged and the pending PDA intact.
-  // ───────────────────────────────────────────────────────────────────────────
-  it("M1-02 EXPLOIT-BLOCKED: multisig accept on a frozen vault after timelock → reject 6000, owner unchanged", async () => {
-    const { vault, policy, auditSuccess, pendingOwner } = await initVault(
-      new BN(9300),
-    );
-    const originalOwner = owner.publicKey;
-    const mockMultisig = forgeMockMultisig(svm, SQUADS_V4_PROGRAM_ID);
-
-    // ACT 1 — initiate with is_multisig_target=true (vault still Active).
-    await program.methods
-      .initiateOwnershipTransfer(mockMultisig, true)
-      .accounts({
-        owner: owner.publicKey,
-        vault,
-        policy,
-        pending: pendingOwner,
-        auditLogSuccess: auditSuccess,
-        systemProgram: SystemProgram.programId,
-      } as any)
-      .rpc();
-
-    // ACT 2 — real owner freezes the vault (kill-switch).
-    await program.methods
-      .freezeVault()
-      .accounts({ owner: owner.publicKey, vault } as any)
-      .rpc();
-
-    // ACT 3 — advance past the full timelock and attempt the multisig accept.
-    advanceTime(svm, DEFAULT_MIN_DELAY);
-    let caughtCode: number | null = null;
-    try {
-      await program.methods
-        .acceptOwnershipTransferMultisig()
-        .accounts({
-          multisigPda: mockMultisig,
-          vault,
-          policy,
-          pending: pendingOwner,
-          auditLogSuccess: auditSuccess,
-          systemProgram: SystemProgram.programId,
-        } as any)
-        .rpc();
-    } catch (err: any) {
-      caughtCode = err?.error?.errorCode?.number ?? null;
-    }
-
-    // ASSERT — accept rejected with VaultNotActive (6000); freeze held:
-    // vault.owner is STILL the original owner, not the multisig PDA, and the
-    // pending PDA survives (accept never executed).
-    expect(
-      caughtCode,
-      "frozen-vault multisig accept MUST reject 6000",
-    ).to.equal(6000);
-    const vaultState = await program.account.agentVault.fetch(vault);
-    expect(vaultState.owner.toString()).to.equal(originalOwner.toString());
-    expect(vaultState.owner.toString()).to.not.equal(mockMultisig.toString());
     expect(accountExists(svm, pendingOwner)).to.equal(true);
   });
 });

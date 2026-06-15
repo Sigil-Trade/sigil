@@ -250,6 +250,11 @@ pub fn handler(
         // (default). Bound at canonical digest position 22; the off-chain SDK
         // computes the same default-0 value when building the init digest.
         operator_grant_delay_seconds: 0,
+        // M-1 (audit 2026-06-11): caps bound at positions 23-24. At init,
+        // has_protocol_caps is derived !protocol_caps.is_empty() (matches the
+        // policy write below) and protocol_caps is the init arg slice.
+        has_protocol_caps: !protocol_caps.is_empty(),
+        protocol_caps: &protocol_caps,
     });
     require!(
         recomputed_digest == preview_digest,

@@ -145,6 +145,7 @@ export const SIGIL_ERRORS = {
   ErrOperatorGrantDelayTooLong: 6108,
   InvalidOwnerType: 6109,
   SpendAccountingUnderflow: 6110,
+  ErrMultisigCustodyUnsupported: 6111,
 } as const;
 
 export type SigilErrorName = keyof typeof SIGIL_ERRORS;

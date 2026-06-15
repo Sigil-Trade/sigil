@@ -6778,6 +6778,10 @@ describe("sigil", () => {
             autoRevokeThreshold: 5,
             // G6 §RP-2 P2 supplementary: match on-chain init.
             cosignRequired: true,
+            // M-1 (audit 2026-06-11): vault is initialized WITH per-protocol
+            // caps [100, 200] USDC (see initializeVault arg above); bind the
+            // SAME slice into the preview digest, else PolicyPreviewMismatch.
+            protocolCaps: [new BN(100_000_000), new BN(200_000_000)],
           }),
         )
         .accounts({
@@ -7020,7 +7024,10 @@ describe("sigil", () => {
           null,
           null, // cosign_session_pubkey (D-5: pass-through)
           protoCapCosigner.publicKey, // cosign_session (TA-09 — ELEVATED, weakens_protocol_caps on cosign-opted-in vault)
-          await fetchAndComputeQueueDigest(program, pcPolicy, pcVault, {}), // newPolicyPreviewDigest (Phase 2 TA-19)
+          await fetchAndComputeQueueDigest(program, pcPolicy, pcVault, {
+            hasProtocolCaps: true,
+            protocolCaps: [new BN(0), new BN(200_000_000)],
+          }), // newPolicyPreviewDigest (Phase 2 TA-19)
         )
         .accounts({
           owner: protoCapOwner.publicKey,
@@ -7085,7 +7092,10 @@ describe("sigil", () => {
           null,
           null, // cosign_session_pubkey (D-5: pass-through)
           PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated, tightening)
-          await fetchAndComputeQueueDigest(program, pcPolicy, pcVault, {}), // newPolicyPreviewDigest (Phase 2 TA-19)
+          await fetchAndComputeQueueDigest(program, pcPolicy, pcVault, {
+            hasProtocolCaps: true,
+            protocolCaps: [new BN(100_000_000), new BN(200_000_000)],
+          }), // newPolicyPreviewDigest (Phase 2 TA-19)
         )
         .accounts({
           owner: protoCapOwner.publicKey,
@@ -7153,7 +7163,9 @@ describe("sigil", () => {
           null,
           null, // cosign_session_pubkey (D-5: pass-through)
           protoCapCosigner.publicKey, // cosign_session (TA-09 — ELEVATED, weakens_protocol_caps via has_protocol_caps=false on cosign-opted-in vault)
-          await fetchAndComputeQueueDigest(program, pcPolicy, pcVault, {}), // newPolicyPreviewDigest (Phase 2 TA-19)
+          await fetchAndComputeQueueDigest(program, pcPolicy, pcVault, {
+            hasProtocolCaps: false,
+          }), // newPolicyPreviewDigest (Phase 2 TA-19)
         )
         .accounts({
           owner: protoCapOwner.publicKey,
@@ -7217,7 +7229,10 @@ describe("sigil", () => {
           null,
           null, // cosign_session_pubkey (D-5: pass-through)
           PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated, tightening)
-          await fetchAndComputeQueueDigest(program, pcPolicy, pcVault, {}), // newPolicyPreviewDigest (Phase 2 TA-19)
+          await fetchAndComputeQueueDigest(program, pcPolicy, pcVault, {
+            hasProtocolCaps: true,
+            protocolCaps: [new BN(100_000_000), new BN(200_000_000)],
+          }), // newPolicyPreviewDigest (Phase 2 TA-19)
         )
         .accounts({
           owner: protoCapOwner.publicKey,
@@ -7520,6 +7535,10 @@ describe("sigil", () => {
             operatingHours: 0x00ffffff,
             autoPromoteGrays: false,
             autoRevokeThreshold: 5,
+            // M-1 (audit 2026-06-11): vault initialized WITH per-protocol caps
+            // [$500, $500] (see initializeVault arg above); bind the SAME slice
+            // into the preview digest, else PolicyPreviewMismatch (6071).
+            protocolCaps: [new BN(500_000_000), new BN(500_000_000)],
           }),
         )
         .accounts({
@@ -7708,7 +7727,9 @@ describe("sigil", () => {
           null,
           null, // cosign_session_pubkey (D-5: pass-through)
           PublicKey.default, // cosign_session (B4 F-3: non-elevated → must be default)
-          await fetchAndComputeQueueDigest(program, ta13Policy, ta13Vault, {}),
+          await fetchAndComputeQueueDigest(program, ta13Policy, ta13Vault, {
+            hasProtocolCaps: false,
+          }),
         )
         .accounts({
           owner: ta13Owner.publicKey,
@@ -7766,7 +7787,10 @@ describe("sigil", () => {
           null,
           null, // cosign_session_pubkey (D-5: pass-through)
           PublicKey.default,
-          await fetchAndComputeQueueDigest(program, ta13Policy, ta13Vault, {}),
+          await fetchAndComputeQueueDigest(program, ta13Policy, ta13Vault, {
+            hasProtocolCaps: true,
+            protocolCaps: [new BN(500_000_000), new BN(500_000_000)],
+          }),
         )
         .accounts({
           owner: ta13Owner.publicKey,
@@ -7835,7 +7859,10 @@ describe("sigil", () => {
           null,
           null, // cosign_session_pubkey (D-5: pass-through)
           PublicKey.default, // cosign_session (B4 F-3: non-elevated → must be default)
-          await fetchAndComputeQueueDigest(program, ta13Policy, ta13Vault, {}),
+          await fetchAndComputeQueueDigest(program, ta13Policy, ta13Vault, {
+            hasProtocolCaps: true,
+            protocolCaps: [new BN(0), new BN(500_000_000)],
+          }),
         )
         .accounts({
           owner: ta13Owner.publicKey,

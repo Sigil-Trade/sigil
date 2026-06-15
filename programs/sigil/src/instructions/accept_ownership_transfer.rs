@@ -269,6 +269,9 @@ pub fn handler(ctx: Context<AcceptOwnershipTransfer>) -> Result<()> {
             cosign_session_pubkey: policy.cosign_session_pubkey,
             // F-Q6: operator_grant_delay_seconds bound at canonical digest position 22.
             operator_grant_delay_seconds: policy.operator_grant_delay_seconds,
+            // M-1 (audit 2026-06-11): bind per-protocol caps (positions 23-24).
+            has_protocol_caps: policy.has_protocol_caps,
+            protocol_caps: &policy.protocol_caps,
         });
         policy.policy_preview_digest = new_digest;
         policy.policy_version = policy

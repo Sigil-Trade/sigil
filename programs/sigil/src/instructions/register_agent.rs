@@ -167,11 +167,17 @@ pub fn handler(
         // cannot reach it (no key to sign as the PDA owner). See the project
         // notes for the pre-existing multisig-invocation gap.]
     } else if ctx.accounts.policy.cosign_required {
-        // Observer/Disabled on a cosign-opted vault: preserve the interim
-        // cosign gate (any non-owner signer). Observers cannot move funds, so
-        // the weaker presence check is retained unchanged from V1.
+        // M-2 (audit 2026-06-11): identity-pinned cosign gate. When a cosign
+        // session pubkey is bound, the second factor must be THAT exact key
+        // (not any throwaway signer); unbound vaults fall back to the prior
+        // any-non-owner-signer check (no brick). Uniform with the other cosign
+        // lanes and the apply-lane behaviour.
         let owner_key = ctx.accounts.owner.key();
-        let has_cosigner = has_non_owner_signer(ctx.remaining_accounts, &owner_key);
+        let has_cosigner = has_bound_cosigner(
+            ctx.remaining_accounts,
+            &owner_key,
+            &ctx.accounts.policy.cosign_session_pubkey,
+        );
         require!(has_cosigner, SigilError::ErrCosignRequired);
     }
 
@@ -244,6 +250,9 @@ pub fn handler(
         cosign_session_pubkey: policy.cosign_session_pubkey,
         // F-Q6: operator_grant_delay_seconds bound at canonical digest position 22.
         operator_grant_delay_seconds: policy.operator_grant_delay_seconds,
+        // M-1 (audit 2026-06-11): bind per-protocol caps (positions 23-24).
+        has_protocol_caps: policy.has_protocol_caps,
+        protocol_caps: &policy.protocol_caps,
     });
     policy.policy_preview_digest = new_digest;
 
@@ -304,6 +313,32 @@ pub(crate) fn has_non_owner_signer(accounts: &[AccountInfo<'_>], owner_key: &Pub
     accounts
         .iter()
         .any(|ai| ai.is_signer && ai.key() != *owner_key)
+}
+
+/// M-2 (audit 2026-06-11): identity-pinned cosign gate with an unbound-safe
+/// fallback. Returns true iff the `cosign_required` gate is satisfied:
+///   - BOUND (`cosign_session_pubkey != default`): a signer in
+///     `remaining_accounts` must match that EXACT pubkey — a true second factor
+///     (a leaked owner key + any throwaway keypair no longer passes; this
+///     closes the C-1 weakness in the queue/initiate/withdraw cosign lanes).
+///   - UNBOUND (`cosign_session_pubkey == default`): falls back to
+///     `has_non_owner_signer`. Preserves back-compat for vaults that set
+///     `cosign_required = true` but never bound a session pubkey, so the upgrade
+///     does NOT brick them — a strict match against the all-zero default pubkey
+///     would be unsatisfiable (a zero-key signer is unreachable). Mirrors the
+///     canonical apply-lane behaviour at `apply_agent_grant` / `apply_pending_policy`.
+pub(crate) fn has_bound_cosigner(
+    accounts: &[AccountInfo<'_>],
+    owner_key: &Pubkey,
+    cosign_session_pubkey: &Pubkey,
+) -> bool {
+    if *cosign_session_pubkey != Pubkey::default() {
+        accounts
+            .iter()
+            .any(|ai| ai.is_signer && ai.key() == *cosign_session_pubkey)
+    } else {
+        has_non_owner_signer(accounts, owner_key)
+    }
 }
 
 #[cfg(test)]
@@ -388,5 +423,77 @@ mod cosign_gate_predicate_tests {
             !has_non_owner_signer(&remaining, &owner),
             "non-signer cosigner reference must NOT satisfy gate"
         );
+    }
+
+    // ── M-2 (audit 2026-06-11): has_bound_cosigner identity-pin + fallback ──
+
+    /// M-2: BOUND cosign_session_pubkey — a signer matching that EXACT key
+    /// satisfies the gate.
+    #[test]
+    fn bound_cosigner_matching_signer_passes() {
+        let owner = key_n(1);
+        let bound = key_n(2);
+        let mut lp = 0u64;
+        let mut d: [u8; 0] = [];
+        let info = make_info(&bound, true, &mut lp, &mut d, &bound);
+        let remaining = vec![info];
+        assert!(has_bound_cosigner(&remaining, &owner, &bound));
+    }
+
+    /// M-2: BOUND — a DIFFERENT (throwaway) signer does NOT satisfy the gate.
+    /// This is the C-1 weakness the identity-pin closes.
+    #[test]
+    fn bound_cosigner_wrong_signer_fails() {
+        let owner = key_n(1);
+        let bound = key_n(2);
+        let throwaway = key_n(3);
+        let mut lp = 0u64;
+        let mut d: [u8; 0] = [];
+        let info = make_info(&throwaway, true, &mut lp, &mut d, &throwaway);
+        let remaining = vec![info];
+        assert!(
+            !has_bound_cosigner(&remaining, &owner, &bound),
+            "a throwaway signer != bound cosigner MUST NOT satisfy the gate"
+        );
+    }
+
+    /// M-2: BOUND — a non-signing reference to the bound key does NOT satisfy.
+    #[test]
+    fn bound_cosigner_non_signer_fails() {
+        let owner = key_n(1);
+        let bound = key_n(2);
+        let mut lp = 0u64;
+        let mut d: [u8; 0] = [];
+        let info = make_info(&bound, false, &mut lp, &mut d, &bound);
+        let remaining = vec![info];
+        assert!(!has_bound_cosigner(&remaining, &owner, &bound));
+    }
+
+    /// M-2: UNBOUND (default pubkey) — falls back to any-non-owner-signer, so a
+    /// distinct signer passes. The no-brick guarantee for vaults that set
+    /// cosign_required=true without binding a session pubkey.
+    #[test]
+    fn unbound_cosigner_falls_back_to_any_signer() {
+        let owner = key_n(1);
+        let cosigner = key_n(2);
+        let default_pk = Pubkey::default();
+        let mut lp = 0u64;
+        let mut d: [u8; 0] = [];
+        let info = make_info(&cosigner, true, &mut lp, &mut d, &cosigner);
+        let remaining = vec![info];
+        assert!(
+            has_bound_cosigner(&remaining, &owner, &default_pk),
+            "unbound gate must fall back to any non-owner signer (no brick)"
+        );
+    }
+
+    /// M-2: UNBOUND + empty remaining_accounts → still rejects (fallback is the
+    /// same has_non_owner_signer check).
+    #[test]
+    fn unbound_cosigner_empty_fails() {
+        let owner = key_n(1);
+        let default_pk = Pubkey::default();
+        let remaining: Vec<AccountInfo> = vec![];
+        assert!(!has_bound_cosigner(&remaining, &owner, &default_pk));
     }
 }

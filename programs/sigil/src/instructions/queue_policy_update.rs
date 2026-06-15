@@ -319,6 +319,13 @@ pub fn handler(
     // TA-19 at canonical digest position 22 so a tampered SDK cannot
     // silently flip the gate between owner approval and on-chain landing.
     let eff_cosign_session_pubkey = cosign_session_pubkey.unwrap_or(policy.cosign_session_pubkey);
+    // M-1 (audit 2026-06-11): merged-effective per-protocol caps for the TA-19
+    // digest (positions 23-24). Clone to avoid moving the `protocol_caps` arg,
+    // which the elevation check + pending write below still consume.
+    let eff_has_protocol_caps = has_protocol_caps.unwrap_or(policy.has_protocol_caps);
+    let eff_protocol_caps_owned: Vec<u64> = protocol_caps
+        .clone()
+        .unwrap_or_else(|| policy.protocol_caps.clone());
 
     // ─── TA-09 (Phase 3): elevated mutation detection + cosign binding ─
     //
@@ -561,6 +568,9 @@ pub fn handler(
         // canonical position 22 — Stage B made it configurable. The owner's
         // signed digest binds the value they intend to apply (pending-or-live).
         operator_grant_delay_seconds: eff_operator_grant_delay_seconds,
+        // M-1 (audit 2026-06-11): merged-effective per-protocol caps (positions 23-24).
+        has_protocol_caps: eff_has_protocol_caps,
+        protocol_caps: &eff_protocol_caps_owned,
     });
     require!(
         recomputed_digest == new_policy_preview_digest,
@@ -568,9 +578,15 @@ pub fn handler(
     );
 
     let clock = Clock::get()?;
+    // L-2 (audit 2026-06-11): bound the cast. timelock_duration has a floor
+    // (MIN_TIMELOCK_DURATION) but no ceiling; `as i64` on a value > i64::MAX
+    // wraps negative → executes_at in the past → timelock bypass. checked
+    // try_from fails closed (Overflow) on an out-of-range duration.
+    let timelock_secs =
+        i64::try_from(policy.timelock_duration).map_err(|_| error!(SigilError::Overflow))?;
     let executes_at = clock
         .unix_timestamp
-        .checked_add(policy.timelock_duration as i64)
+        .checked_add(timelock_secs)
         .ok_or(SigilError::Overflow)?;
 
     let pending = &mut ctx.accounts.pending_policy;

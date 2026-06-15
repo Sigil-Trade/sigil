@@ -488,6 +488,60 @@ describe("F-Q6 — OPERATOR-grant authorization tiering (per-tier behavior)", ()
     expect(await agentCapability(v.vaultPda, agent)).to.equal(undefined);
   });
 
+  // ── M-2 (audit 2026-06-11): end-to-end coverage of has_bound_cosigner ───────
+  //    The ISC-61 tests above exercise the OPERATOR arm's pre-existing inline
+  //    pin. These exercise the NEW has_bound_cosigner helper via the
+  //    register_agent OBSERVER cosign arm (register_agent.rs ~176) — a
+  //    representative of the 10 owner lanes M-2 upgraded. They prove the bound
+  //    identity-pin rejects a wrong signer AND accepts the bound one (not
+  //    over-strict / not bricked).
+
+  it("M-2 CosignBound OBSERVER: register with NO cosigner → ErrCosignRequired (6080)", async () => {
+    const v = await freshVault(6290, { cosignRequired: true });
+    const cosigner = Keypair.generate();
+    await queuePolicyUpdate(v, { cosignSessionPubkey: cosigner.publicKey });
+    const agent = Keypair.generate().publicKey;
+    await expectRevert(registerAgentRpc(v, agent, CAPABILITY_OBSERVER), {
+      name: "ErrCosignRequired",
+      code: 6080,
+    });
+    expect(await agentCapability(v.vaultPda, agent)).to.equal(undefined);
+  });
+
+  it("M-2 CosignBound OBSERVER: register with a WRONG (unbound) signer → ErrCosignRequired (6080)", async () => {
+    const v = await freshVault(6291, { cosignRequired: true });
+    const cosigner = Keypair.generate();
+    await queuePolicyUpdate(v, { cosignSessionPubkey: cosigner.publicKey });
+    const wrong = Keypair.generate();
+    const agent = Keypair.generate().publicKey;
+    // has_bound_cosigner: a throwaway signer != the bound cosign_session_pubkey
+    // is rejected — the C-1 weakness M-2 closes for the owner lanes.
+    await expectRevert(
+      registerAgentRpc(v, agent, CAPABILITY_OBSERVER, {
+        keypair: wrong,
+        pubkey: wrong.publicKey,
+        isSigner: true,
+      }),
+      { name: "ErrCosignRequired", code: 6080 },
+    );
+    expect(await agentCapability(v.vaultPda, agent)).to.equal(undefined);
+  });
+
+  it("M-2 CosignBound OBSERVER: register WITH the bound cosigner → seated (not over-strict / not bricked)", async () => {
+    const v = await freshVault(6292, { cosignRequired: true });
+    const cosigner = Keypair.generate();
+    await queuePolicyUpdate(v, { cosignSessionPubkey: cosigner.publicKey });
+    const agent = Keypair.generate().publicKey;
+    await registerAgentRpc(v, agent, CAPABILITY_OBSERVER, {
+      keypair: cosigner,
+      pubkey: cosigner.publicKey,
+      isSigner: true,
+    });
+    expect(await agentCapability(v.vaultPda, agent)).to.equal(
+      CAPABILITY_OBSERVER,
+    );
+  });
+
   it("ISC-61d cosign_required but UNBOUND (default pubkey): instant OPERATOR → 6107 [C-1 degrades to SingleKey]", async () => {
     // cosign_required=true at init, but cosign_session_pubkey never bound →
     // classify_operator_grant_tier returns SingleKey (not CosignBound), so an

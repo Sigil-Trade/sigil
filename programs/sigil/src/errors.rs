@@ -742,4 +742,18 @@ pub enum SigilError {
         "finalize spend accounting underflow: collected fees exceed realized stablecoin outflow"
     )]
     SpendAccountingUnderflow,
+
+    /// 6111 — H-1 close (audit 2026-06-11): Squads V4 multisig ownership custody
+    /// is DISABLED in V1. Transferring vault ownership to a Squads multisig is
+    /// architecturally incompatible with Sigil's top-level-only (`reject_cpi!`)
+    /// model: a Squads multisig acts on external programs ONLY by CPI from
+    /// `vault_transaction_execute` (the vault PDA signs via `invoke_signed`),
+    /// but every Sigil owner instruction rejects any CPI — so a multisig owner
+    /// could neither complete the accept nor operate the vault afterward, and
+    /// the prior path could brick the vault by setting an unsignable account as
+    /// owner. `initiate_ownership_transfer` rejects `is_multisig_target = true`
+    /// and `accept_ownership_transfer_multisig` rejects unconditionally.
+    /// Deferred to a future release (CPI-aware or Sigil-native M-of-N) + re-audit.
+    #[msg("Squads multisig ownership custody is not supported in V1 (use a standard EOA owner)")]
+    ErrMultisigCustodyUnsupported,
 }

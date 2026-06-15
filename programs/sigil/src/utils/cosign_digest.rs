@@ -483,6 +483,88 @@ mod tests {
             "realistic-cosign digest must match SDK fixture"
         );
     }
+
+    // ── agent-perms cosign digest (elevated agent-permissions SDK surface) ──
+
+    /// Agent flip MUST change the digest — binds to a specific agent
+    /// (prevents queue-on-A / apply-on-B replay).
+    #[test]
+    fn agent_perms_cosign_digest_changes_on_agent_flip() {
+        let cs = pk(1);
+        let a = pk(2);
+        let b = pk(3);
+        let f_a = AgentPermsCosignDigestFields {
+            cosign_session: &cs,
+            agent: &a,
+            new_capability: 2,
+            spending_limit_usd: 250_000_000,
+            cooldown_seconds: 0,
+        };
+        let f_b = AgentPermsCosignDigestFields { agent: &b, ..f_a };
+        assert_ne!(
+            compute_agent_perms_cosign_digest(&f_a),
+            compute_agent_perms_cosign_digest(&f_b),
+            "agent flip MUST change the agent-perms cosign digest"
+        );
+    }
+
+    /// Capability / spending-limit / cooldown changes MUST change the digest.
+    #[test]
+    fn agent_perms_cosign_digest_changes_on_elevation_fields() {
+        let cs = pk(1);
+        let a = pk(2);
+        let base = AgentPermsCosignDigestFields {
+            cosign_session: &cs,
+            agent: &a,
+            new_capability: 1,
+            spending_limit_usd: 0,
+            cooldown_seconds: 0,
+        };
+        let raise_cap = AgentPermsCosignDigestFields {
+            new_capability: 2,
+            ..base
+        };
+        let raise_limit = AgentPermsCosignDigestFields {
+            spending_limit_usd: 50_000_000,
+            ..base
+        };
+        let set_cooldown = AgentPermsCosignDigestFields {
+            cooldown_seconds: 3600,
+            ..base
+        };
+        let d = compute_agent_perms_cosign_digest(&base);
+        assert_ne!(d, compute_agent_perms_cosign_digest(&raise_cap));
+        assert_ne!(d, compute_agent_perms_cosign_digest(&raise_limit));
+        assert_ne!(d, compute_agent_perms_cosign_digest(&set_cooldown));
+    }
+
+    /// Cross-impl pin: deterministic fixture pinned byte-for-byte against the
+    /// SDK `computeAgentPermsCosignDigest`. cosign_session=[1;32], agent=[2;32],
+    /// capability 2, limit 250_000_000, cooldown 3600. Mirrored in
+    /// sdk/kit/tests/policy/agent-perms-cosign-digest.test.ts.
+    #[test]
+    fn agent_perms_cosign_digest_cross_impl_pin() {
+        let cs = pk(1);
+        let a = pk(2);
+        let d = compute_agent_perms_cosign_digest(&AgentPermsCosignDigestFields {
+            cosign_session: &cs,
+            agent: &a,
+            new_capability: 2,
+            spending_limit_usd: 250_000_000,
+            cooldown_seconds: 3600,
+        });
+        // Cross-impl pin = hex
+        // 56ecf828e2e7e5e0ee5d979e8894a588dad3f26485147749fd6563bcfedbff31,
+        // mirrored in sdk/kit/tests/policy/agent-perms-cosign-digest.test.ts.
+        assert_eq!(
+            d,
+            [
+                86, 236, 248, 40, 226, 231, 229, 224, 238, 93, 151, 158, 136, 148, 165, 136, 218,
+                211, 242, 100, 133, 20, 119, 73, 253, 101, 99, 188, 254, 219, 255, 49
+            ],
+            "agent-perms cosign digest cross-impl pin"
+        );
+    }
 }
 
 /// G4 (audit close) — pinned cosign digest for the minimal fixture.

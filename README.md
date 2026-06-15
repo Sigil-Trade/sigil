@@ -9,7 +9,7 @@
 Your policies are enforced by Solana validators, not software promises.
 
 [![CI](https://github.com/Sigil-Trade/sigil/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Sigil-Trade/sigil/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-2634-brightgreen)
+![Tests](https://img.shields.io/badge/tests-2663-brightgreen)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 
 </div>
@@ -206,7 +206,7 @@ anchor build --no-idl
 # Generate IDL separately (requires nightly Rust — anchor-syn 0.32.1 bug)
 RUSTUP_TOOLCHAIN=nightly anchor idl build -o target/idl/sigil.json
 
-# Run on-chain tests (523 LiteSVM tests — no validator needed)
+# Run on-chain tests (537 LiteSVM tests — no validator needed)
 npx ts-mocha -p ./tsconfig.json -t 300000 \
   tests/sigil.ts tests/jupiter-integration.ts \
   tests/flash-trade-integration.ts tests/security-exploits.ts \
@@ -238,13 +238,13 @@ cargo fmt --check --manifest-path programs/sigil/Cargo.toml
 | Surfpool integration tests (local Surfnet)                                                               | 49       |
 | Platform client tests (`@usesigil/platform`)                                                             | 17       |
 | Custody adapters (`@usesigil/custody`)                                                                   | 96       |
-| Kit-native SDK (`@usesigil/kit` — includes merged core + dashboard)                                      | 1794     |
+| Kit-native SDK (`@usesigil/kit` — includes merged core + dashboard)                                      | 1809     |
 | Kit SDK devnet tests (`@usesigil/kit` devnet)                                                            | 34       |
 | Plugins (`@usesigil/plugins`)                                                                            | 14       |
-| Rust unit tests (cargo test)                                                                             | 166      |
+| Rust unit tests (cargo test)                                                                             | 180      |
 | Devnet extended scenarios (flash-trade + stress)                                                         | 43       |
 | Trident fuzz tests (1K iterations)                                                                       | 16       |
-| **Total**                                                                                                | **2634** |
+| **Total**                                                                                                | **2663** |
 
 ## Security
 

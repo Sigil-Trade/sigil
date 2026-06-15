@@ -190,7 +190,13 @@ pub const SQUADS_V4_PROGRAM_ID: Pubkey = Pubkey::new_from_array([
 /// The filter is by NUMERIC RANGE, not string match — robust against
 /// future error message changes.
 pub fn is_policy_violation_code(code: u32) -> bool {
-    (6074..=6091).contains(&code)
+    // Audit 2026-06-11 (L-1): 6084 (ErrSessionNonceMismatch — durable-nonce
+    // replay defense) and 6089 (MintDeltaCapMisconfigured — caller-side config
+    // bug, "not an attack signal" per errors.rs) are NOT policy violations. The
+    // ErrAutoRevoked doc above explicitly excludes "nonce desync". Carve them out
+    // so a benign nonce race or a caller misconfig cannot count toward auto-
+    // revoking a working agent. Still by NUMERIC RANGE (renumber-sensitive).
+    (6074..=6083).contains(&code) || (6085..=6088).contains(&code) || (6090..=6091).contains(&code)
 }
 
 /// sha256("global:finalize_session")[0..8] — used by validate_and_authorize
@@ -419,10 +425,14 @@ mod ta17_policy_violation_filter_tests {
         assert!(is_policy_violation_code(6081), "TA-17 ErrAutoRevoked");
     }
 
-    /// TA-17: reserved range 6082-6091 also accepted (Phase 4/5 future).
+    /// TA-17: reserved range 6082-6091 accepted EXCEPT the two non-violation
+    /// codes carved out in L-1 (6084 nonce-mismatch, 6089 mint-delta-misconfig).
     #[test]
     fn policy_violation_accepts_reserved_phase45_range() {
         for code in 6082..=6091 {
+            if code == 6084 || code == 6089 {
+                continue; // L-1: non-violation codes, excluded from the band
+            }
             assert!(
                 is_policy_violation_code(code),
                 "reserved {} must accept",
@@ -451,6 +461,22 @@ mod ta17_policy_violation_filter_tests {
     #[test]
     fn policy_violation_rejects_unauthorized_owner() {
         assert!(!is_policy_violation_code(6002));
+    }
+
+    /// L-1 (audit 2026-06-11): ErrSessionNonceMismatch (6084) is a durable-nonce
+    /// replay-defense signal, NOT a policy violation — must not count toward
+    /// auto-revoke (the ErrAutoRevoked doc excludes "nonce desync").
+    #[test]
+    fn policy_violation_rejects_session_nonce_mismatch() {
+        assert!(!is_policy_violation_code(6084));
+    }
+
+    /// L-1 (audit 2026-06-11): MintDeltaCapMisconfigured (6089) is a caller-side
+    /// configuration bug ("not an attack signal", per errors.rs) — must not
+    /// count toward auto-revoke.
+    #[test]
+    fn policy_violation_rejects_mint_delta_misconfigured() {
+        assert!(!is_policy_violation_code(6089));
     }
 
     /// TA-17: Codes outside 6074-6091 reject (lower boundary 6073).

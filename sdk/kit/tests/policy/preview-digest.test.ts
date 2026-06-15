@@ -64,10 +64,11 @@ import {
 //   Pre-F-Q6 (post-D-5):
 //     HEX_MINIMAL   = 8d80e131f0fca07e71d173cd5c559f0041a6ef9391e3a87ecac5f249c5bda36d
 //     HEX_REALISTIC = 21155d71a1d0a466cf57676658dcae577b3cab8d1cc512c4589f9ebba10bae03
+// M-1 (2026-06-11): regenerated for the 24-field digest (+has_protocol_caps=false, +protocol_caps=[]).
 const HEX_MINIMAL =
-  "a213672e16ff350a5c4f6bb5920ee7b357507dd5f13dcdffb9ff5eae1ba8f125";
+  "7e2958e4e38802d5416e3965a5eb22e51daa192ca093dbebe776cdae8d469780";
 const HEX_REALISTIC =
-  "55326e99a6f919f574719c9cf13b3aae6120e973de2e969fdad1561d278bc1d1";
+  "67f71921a83501d6a517e18894820d9375d5c4080d22ff1d2b76455cf4049313";
 /**
  * Phase 8 PEN-CROSS-1 (audit 2026-05-19): empty-vault agent_set_hash.
  * SHA-256 of [0x00,0x00,0x00,0x00]. Mirrors Rust
@@ -456,6 +457,59 @@ describe("TA-19 — computePolicyPreviewDigest cross-impl pin", () => {
     expect(toHex(h_ab)).to.equal(toHex(h_ba));
   });
 
+  // Cross-impl pin (audit 2026-06-11 follow-up): the dashboard sibling/queue
+  // digests now feed POPULATED agent sets through computeAgentSetHash. Only the
+  // empty-set hash was pinned cross-impl before; this pins a deterministic
+  // 2-agent set byte-for-byte against the Rust `compute_agent_set_hash`
+  // (policy_digest.rs::agent_set_hash_populated_cross_impl_pin uses the
+  // identical fixture: pk(1)=[1;32] cap 2, pk(2)=[2;32] cap 1). Drift in either
+  // impl's sort / Borsh layout / hash fails here.
+  it("computeAgentSetHash matches the Rust populated-set pin (PEN-CROSS-1)", () => {
+    const h = computeAgentSetHash([
+      { pubkey: PK_1, capability: 2 },
+      { pubkey: PK_2, capability: 1 },
+    ]);
+    expect(toHex(h)).to.equal(
+      "9b9885416074bb759440b5072807d230c7ab479d645f063356087e0386480c42",
+    );
+  });
+
+  // M-1 LOW-1 cross-impl pin (audit 2026-06-11 follow-up): the REGENERATED_HEX_*
+  // pins both use has_protocol_caps=false / protocol_caps=[]. This pins the
+  // POPULATED-caps path (2 protocols, 2 distinct caps) byte-for-byte against the
+  // Rust `populated_caps_digest_cross_impl_pin`. agentSetHash + cosignSessionPubkey
+  // are omitted so the encoder uses its EMPTY/zero defaults, matching the Rust
+  // fixture's EMPTY_AGENT_SET_HASH + Pubkey::default().
+  it("populated-caps digest matches the Rust pin (M-1 LOW-1)", () => {
+    const d = computePolicyPreviewDigest({
+      dailySpendingCapUsd: 500_000_000n,
+      maxTransactionSizeUsd: 100_000_000n,
+      maxSlippageBps: 100,
+      developerFeeRate: 0,
+      protocolMode: 1,
+      protocols: [PK_1, PK_2],
+      destinationMode: 0,
+      allowedDestinations: [PK_10],
+      timelockDuration: 1800n,
+      sessionExpirySeconds: 30n,
+      observeOnly: false,
+      hasPostAssertions: 0,
+      createdAtSlot: 12345n,
+      operatingHours: 0x00ffffff,
+      autoPromoteGrays: false,
+      autoRevokeThreshold: 5,
+      stableBalanceFloor: 0n,
+      perRecipientDailyCapUsd: 0n,
+      cosignRequired: false,
+      operatorGrantDelaySeconds: 0n,
+      hasProtocolCaps: true,
+      protocolCaps: [250_000_000n, 500_000_000n],
+    });
+    expect(toHex(d)).to.equal(
+      "bacaf95ada191ebfd2c990c185435dcef226966a04c65b40dce36a0380a95847",
+    );
+  });
+
   // Phase 8 PEN-CROSS-1 cross-impl pin: inserting an agent into the set
   // MUST diverge the policy digest. Closes the silent-insertion vector.
   it("agent_set_hash flip changes the digest (PEN-CROSS-1)", () => {
@@ -600,6 +654,9 @@ function referenceDigest(fields: {
   cosignSessionPubkey: Uint8Array;
   // F-Q6 (2026-06-02): operator_grant_delay_seconds, u64 LE, appended last.
   operatorGrantDelaySeconds: bigint;
+  // M-1 (2026-06-11): per-protocol caps at canonical positions 23-24.
+  hasProtocolCaps: boolean;
+  protocolCaps: readonly bigint[];
 }): string {
   const parts: number[] = [];
   const pushU64 = (v: bigint) => {
@@ -666,6 +723,11 @@ function referenceDigest(fields: {
   for (const x of fields.cosignSessionPubkey) parts.push(x);
   // F-Q6 (2026-06-02): operator_grant_delay_seconds, u64 LE, appended last.
   pushU64(fields.operatorGrantDelaySeconds);
+  // M-1 (2026-06-11): has_protocol_caps (pos 23, bool as u8) + protocol_caps
+  // (pos 24, u32 LE length prefix ++ each u64 LE).
+  pushU8(fields.hasProtocolCaps ? 1 : 0);
+  pushU32(fields.protocolCaps.length);
+  for (const c of fields.protocolCaps) pushU64(c);
 
   const buf = Buffer.from(parts);
   return createHash("sha256").update(buf).digest("hex");
@@ -701,6 +763,11 @@ describe("TA-19 — property test: SDK encoder == reference encoder (PEN-CROSS-7
         fc.uint8Array({ minLength: 32, maxLength: 32 }), // agent_set_hash (PEN-CROSS-1)
         fc.uint8Array({ minLength: 32, maxLength: 32 }), // cosign_session_pubkey (D-5 audit 2026-05-19, F-RP3-1)
         fc.bigUint({ max: (1n << 64n) - 1n }), // operator_grant_delay_seconds (F-Q6 2026-06-02)
+        fc.boolean(), // has_protocol_caps (M-1 2026-06-11)
+        fc.array(fc.bigUint({ max: (1n << 64n) - 1n }), {
+          minLength: 0,
+          maxLength: 10,
+        }), // protocol_caps (M-1 2026-06-11)
         (
           dailyCap,
           maxTx,
@@ -724,6 +791,8 @@ describe("TA-19 — property test: SDK encoder == reference encoder (PEN-CROSS-7
           agentSetHash,
           cosignSessionPubkey,
           operatorGrantDelaySeconds,
+          hasProtocolCaps,
+          protocolCaps,
         ) => {
           const sdkDigest = computePolicyPreviewDigest({
             dailySpendingCapUsd: dailyCap,
@@ -754,6 +823,9 @@ describe("TA-19 — property test: SDK encoder == reference encoder (PEN-CROSS-7
             cosignSessionPubkey,
             // F-Q6 (2026-06-02): operator_grant_delay_seconds.
             operatorGrantDelaySeconds,
+            // M-1 (2026-06-11): per-protocol caps.
+            hasProtocolCaps,
+            protocolCaps,
           });
           const refDigest = referenceDigest({
             dailySpendingCapUsd: dailyCap,
@@ -779,6 +851,9 @@ describe("TA-19 — property test: SDK encoder == reference encoder (PEN-CROSS-7
             cosignSessionPubkey,
             // F-Q6 (2026-06-02): operator_grant_delay_seconds.
             operatorGrantDelaySeconds,
+            // M-1 (2026-06-11): per-protocol caps.
+            hasProtocolCaps,
+            protocolCaps,
           });
           const sdkHex = Array.from(sdkDigest)
             .map((x) => x.toString(16).padStart(2, "0"))

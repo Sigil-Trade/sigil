@@ -87,7 +87,7 @@ export const SIGIL_ON_CHAIN_ERROR_MIN = 6000;
  * this map agrees with it by code AND name — so adding or renumbering an
  * on-chain error without updating this map fails at test time.
  */
-export const SIGIL_ON_CHAIN_ERROR_MAX = 6110;
+export const SIGIL_ON_CHAIN_ERROR_MAX = 6111;
 
 interface ErrorMapping {
   name: string;
@@ -1902,6 +1902,20 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
         action: "review_swap_construction",
         description:
           "This fires when a stablecoin-input action net-returned stablecoin so the measured outflow was smaller than the protocol+developer fees. Verify the DeFi instruction actually spends the declared stablecoin input; a net-return on the stablecoin-input path is anomalous and is rejected.",
+      },
+    ],
+  },
+  6111: {
+    name: "ErrMultisigCustodyUnsupported",
+    message:
+      "Squads multisig ownership custody is disabled in V1. Sigil's top-level-only (reject_cpi!) model is architecturally incompatible with a Squads multisig owner — a multisig acts on external programs only by CPI from vault_transaction_execute, but every Sigil owner instruction rejects CPI, so a multisig owner could neither accept ownership nor operate the vault afterward (and the prior path could brick the vault by setting an unsignable owner). initiate_ownership_transfer rejects is_multisig_target = true; accept_ownership_transfer_multisig rejects unconditionally (H-1, audit 2026-06-11).",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "use_eoa_owner",
+        description:
+          "Use a standard EOA (single-key) owner for the vault. Multisig custody is deferred to a future release (CPI-aware or Sigil-native M-of-N) pending re-audit.",
       },
     ],
   },

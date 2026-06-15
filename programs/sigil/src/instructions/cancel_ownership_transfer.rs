@@ -112,9 +112,10 @@ pub fn handler(ctx: Context<CancelOwnershipTransfer>) -> Result<()> {
     // phished owner cannot cancel a legitimate transfer.
     if ctx.accounts.policy.cosign_required {
         let owner_key = ctx.accounts.current_owner.key();
-        let has_cosigner = crate::instructions::register_agent::has_non_owner_signer(
+        let has_cosigner = crate::instructions::register_agent::has_bound_cosigner(
             ctx.remaining_accounts,
             &owner_key,
+            &ctx.accounts.policy.cosign_session_pubkey,
         );
         require!(has_cosigner, SigilError::ErrCosignRequired);
     }

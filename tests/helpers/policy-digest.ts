@@ -153,6 +153,18 @@ export interface PolicyDigestFields {
    * Bound by TA-19, appended last in the canonical encoding.
    */
   operatorGrantDelaySeconds?: BN | bigint | number;
+  /**
+   * M-1 (2026-06-11): per-protocol-caps master switch. Bound at canonical
+   * position 23 (default false). Mirrors the on-chain init derivation
+   * `!protocol_caps.is_empty()` when caps are supplied.
+   */
+  hasProtocolCaps?: boolean;
+  /**
+   * M-1 (2026-06-11): per-protocol caps, aligned 1:1 with `protocols` (≤10).
+   * Bound at canonical position 24: u32 LE length ++ each u64 LE. Default []
+   * so legacy fixtures match an on-chain policy with no per-protocol caps.
+   */
+  protocolCaps?: (BN | bigint | number)[];
 }
 
 function u64le(v: BN | bigint | number): Buffer {
@@ -247,6 +259,13 @@ export function computePolicyPreviewDigest(
   // F-Q6 (2026-06-02): operator_grant_delay_seconds (u64 LE), appended last.
   // Default 0 so legacy fixtures match the on-chain default-0 value.
   parts.push(u64le(fields.operatorGrantDelaySeconds ?? 0));
+  // M-1 (2026-06-11): has_protocol_caps (pos 23, bool as u8) + protocol_caps
+  // (pos 24, u32 LE length prefix ++ each u64 LE). Defaults false/[] so legacy
+  // fixtures match an on-chain policy with no per-protocol caps.
+  parts.push(u8(fields.hasProtocolCaps ? 1 : 0));
+  const protocolCaps = fields.protocolCaps ?? [];
+  parts.push(u32le(protocolCaps.length));
+  for (const c of protocolCaps) parts.push(u64le(c));
 
   const buf = Buffer.concat(parts);
   return Array.from(createHash("sha256").update(buf).digest());
@@ -335,6 +354,15 @@ export function initVaultPreviewDigest(args: {
    * unset at init and opt in later via `queue_policy_update`.
    */
   cosignSessionPubkey?: PublicKey;
+  /**
+   * M-1 (audit 2026-06-11): per-protocol daily caps, bound into the canonical
+   * preview digest at positions 23-24. Default empty. `has_protocol_caps` is
+   * DERIVED as `protocolCaps.length > 0`, mirroring the on-chain initialize_vault
+   * (`has_protocol_caps = !protocol_caps.is_empty()`). Pass the SAME slice given
+   * to the `initializeVault` ix arg, else the handler-recomputed digest diverges
+   * and `PolicyPreviewMismatch` (6071) rejects.
+   */
+  protocolCaps?: (BN | bigint | number)[];
 }): number[] {
   return computePolicyPreviewDigest({
     dailySpendingCapUsd: args.dailySpendingCapUsd,
@@ -368,6 +396,10 @@ export function initVaultPreviewDigest(args: {
     // Default here mirrors that — owners opt in later via
     // `queue_policy_update`.
     cosignSessionPubkey: args.cosignSessionPubkey ?? PublicKey.default,
+    // M-1 (audit 2026-06-11): derive has_protocol_caps from the slice length,
+    // matching initialize_vault's `!protocol_caps.is_empty()`.
+    hasProtocolCaps: (args.protocolCaps?.length ?? 0) > 0,
+    protocolCaps: args.protocolCaps ?? [],
   });
 }
 
@@ -419,6 +451,12 @@ export interface LiveLikePolicy {
   cosignSessionPubkey?: PublicKey;
   /** F-Q6 (2026-06-02): operator_grant_delay_seconds, the final canonical digest field (after cosign_session_pubkey). */
   operatorGrantDelaySeconds?: BN | bigint | number;
+  /**
+   * M-1 (audit 2026-06-11): live per-protocol caps master switch + slice, bound
+   * at canonical digest positions 23-24. Read from `PolicyConfig`.
+   */
+  hasProtocolCaps?: boolean;
+  protocolCaps?: (BN | bigint | number)[];
 }
 
 export interface QueueOverride {
@@ -469,6 +507,14 @@ export interface QueueOverride {
    * canonical digest field (after cosign_session_pubkey).
    */
   operatorGrantDelaySeconds?: BN | bigint | number | null;
+  /**
+   * M-1 (audit 2026-06-11): per-protocol caps overrides. null = pass-through
+   * from live. On-chain, has_protocol_caps and protocol_caps are independent
+   * queue args (each merged via `unwrap_or(live)`), so both are exposed
+   * separately rather than derived from one another.
+   */
+  hasProtocolCaps?: boolean | null;
+  protocolCaps?: (BN | bigint | number)[] | null;
 }
 
 function pick<T>(override: T | null | undefined, fallback: T): T {
@@ -554,6 +600,14 @@ export function queuePolicyMergedDigest(
       override.operatorGrantDelaySeconds,
       live.operatorGrantDelaySeconds ?? 0,
     ),
+    // M-1 (audit 2026-06-11): merged-effective per-protocol caps. Mirrors the
+    // on-chain queue merge (`has_protocol_caps`/`protocol_caps` each
+    // `unwrap_or(live)`) — null override = pass-through from live policy.
+    hasProtocolCaps: pick(
+      override.hasProtocolCaps,
+      live.hasProtocolCaps ?? false,
+    ),
+    protocolCaps: pick(override.protocolCaps, live.protocolCaps ?? []),
   });
 }
 
@@ -680,6 +734,14 @@ export async function fetchAndComputeQueueDigest(
     // policy (BN from Anchor). Falls back to 0 when absent (pre-F-Q6 IDL).
     operatorGrantDelaySeconds:
       (policy.operatorGrantDelaySeconds as BN | undefined) ?? 0,
+    // M-1 (audit 2026-06-11): snapshot per-protocol caps from the live policy so
+    // the merged-effective digest matches the on-chain recompute (which always
+    // reflects live caps when the queue does not override them). Falls back to
+    // false/[] when absent (pre-M-1 IDL deserialization). Callers changing caps
+    // pass the new values via the `override` arg (hasProtocolCaps/protocolCaps).
+    hasProtocolCaps: !!policy.hasProtocolCaps,
+    protocolCaps:
+      (policy.protocolCaps as Array<BN | bigint | number> | undefined) ?? [],
   };
   return queuePolicyMergedDigest(live, override, !!vault.observeOnly);
 }

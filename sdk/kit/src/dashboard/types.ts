@@ -505,8 +505,20 @@ export interface AuditTrailOptions {
 // ─── Mutation Inputs ─────────────────────────────────────────────────────────
 
 /**
- * Policy change input. All fields optional — only specified fields are changed.
- * All 15 on-chain policy fields represented (verified: policy.rs).
+ * Policy change input. All fields optional — only specified fields change; the
+ * rest fall through to the live policy value at the on-chain merge.
+ *
+ * Routing (audit 2026-06-12) — elevation is DIRECTION-dependent (raising a cap
+ * is elevated, lowering it is not; lowering the stable floor is elevated, raising
+ * it is not), so it is NOT a per-field property. The same input type serves both
+ * paths; choose by the NET effect of your change:
+ *   - `queuePolicyUpdate(changes)` — net effect NOT elevated (owner-only signature).
+ *   - `queuePolicyElevated(changes, cosigner)` — net effect IS elevated (raises a
+ *     cap, expands an allowlist, lowers the stable floor, raises the per-recipient
+ *     cap, weakens protocol caps, or disables cosign). On a cosign_required vault
+ *     these require a cosigner.
+ * Fail-closed on misroute: a cosigner on a non-elevated change → InvalidPermissions
+ * (6036); an elevated change with no cosigner → ErrCosignRequired (6080).
  *
  * Note: timelock values < 1800 are rejected on-chain (TimelockTooShort, TOCTOU fix).
  */
@@ -531,6 +543,20 @@ export interface PolicyChanges {
    * Owner must explicitly opt into OpenWithCap via the timelocked path.
    */
   destinationMode?: number;
+  // ── Cosign-gated-capable fields (audit 2026-06-12) ──────────────────────
+  // Direction matters for elevation (see the interface docstring): these are
+  // settable on EITHER path. Route through queuePolicyElevated (+ cosigner)
+  // when the net change is elevated, queuePolicyUpdate otherwise.
+  /** Stable-balance floor ($ × 1e6). LOWERING it is elevated (weakens custody); raising it is not. */
+  stableBalanceFloor?: bigint;
+  /** Per-recipient rolling-24h cap ($ × 1e6). RAISING it is elevated; lowering it is not. */
+  perRecipientDailyCapUsd?: bigint;
+  /** Toggle cosign_required. DISABLING (true→false) is elevated (one-way ratchet); enabling is not. */
+  cosignRequired?: boolean;
+  /** D-5 reactivate-time cosigner pubkey (gates instant-operator reactivation). Not an elevation trigger. */
+  cosignSessionPubkey?: Address;
+  /** F-Q6 operator-grant delay in seconds (gates OPERATOR seating). Not an elevation trigger. */
+  operatorGrantDelaySeconds?: bigint;
 }
 
 // M1-04: the ConstraintEntry re-export was removed with the constraints engine.
