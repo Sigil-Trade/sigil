@@ -13,9 +13,19 @@
 //! the architectural pieces needed for ix verification on-chain (the
 //! ATA-rewrite mapping table needs to be authenticated, which crosses the
 //! seal() / validate_and_authorize boundary in non-trivial ways). The
-//! scalar digest closes the recipient/amount/mint/protocol tamper class
-//! today; ix-data tamper remains gated by R-1..R-4 + TA-12 + TA-14
-//! post-execution invariants.
+//! scalar digest closes the AMOUNT/MINT/PROTOCOL tamper class today.
+//!
+//! RECIPIENT (audit 2026-06-15, M5 — VALIDATED, 5-comparator research): the
+//! destination is deliberately NOT in this digest. For an autonomous-agent
+//! delegation model, recipient is controlled by the persistent destination
+//! ALLOWLIST + per-recipient cap + the F-Q8 output-ATA pin — the field-standard
+//! recipient control for session-key / agent delegation (Squads SpendingLimit
+//! `destinations`, Zodiac Roles, ZeroDev CallPolicy, ERC-7715), NOT per-tx
+//! recipient signing (that is the one-shot-intent model — CoW/UniswapX — which
+//! Sigil is not). Binding the full `Vec<Instruction>` on-chain is infeasible
+//! under the ATA-rewrite (Jupiter resolves accounts/ATAs/ALTs at /swap build
+//! time) and is deferred Phase 10/11 work. ix-data tamper remains gated by
+//! R-1..R-4 + TA-12 + TA-14 post-execution invariants.
 //!
 //! ## Canonical encoding (FIXED — DO NOT REORDER)
 //!
