@@ -89,13 +89,18 @@ pub fn handler(ctx: Context<DepositFunds>, amount: u64) -> Result<()> {
     // a no-op — there is no extension surface to validate.
     enforce_token2022_extension_allowlist(&ctx.accounts.mint.to_account_info())?;
 
-    // L9 (audit 2026-06-15): defensive decimals tripwire. The stablecoin
-    // value-proxy (USD == raw token amount / 10^6) assumes 6-decimal mints.
-    // Today `is_pinned_deposit_mint` admits only USDC/USDT (both 6-dp), so this
-    // never fires — it is a forward-secure guard: if a non-6-decimal mint is
-    // EVER added to the pinned/stablecoin set, deposits fail CLOSED here instead
-    // of silently mis-valuing every balance-delta downstream. (The full
-    // Token-2022 InterfaceAccount migration remains deferred — see L2-2.)
+    // L9 (audit 2026-06-15): defensive decimals tripwire on the DEPOSIT-side
+    // valuation. The stablecoin value-proxy (USD == raw token amount / 10^6)
+    // assumes 6-decimal mints. Today `is_pinned_deposit_mint` admits only
+    // USDC/USDT (both 6-dp) so this never fires — a forward-secure guard: if a
+    // non-6-decimal mint is EVER added to the PINNED set, deposits fail CLOSED
+    // here instead of mis-valuing `total_deposited_usd`. NOTE (peer review
+    // 2026-06-16): this guards ONLY the deposit path. The spend/finalize
+    // valuation uses `is_stablecoin_mint` — a SEPARATE, independently-editable
+    // set — on a raw `.amount` delta with no decimals guard; that path is safe
+    // only because `is_stablecoin_mint` is likewise 6-dp-only. A complete fix
+    // would also make `is_stablecoin_mint` unable to admit a non-6-dp mint.
+    // (Full Token-2022 InterfaceAccount migration remains deferred — see L2-2.)
     require!(ctx.accounts.mint.decimals == 6, SigilError::UnsupportedToken);
 
     // Transfer tokens from owner to vault PDA token account

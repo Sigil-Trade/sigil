@@ -17,12 +17,17 @@
 //!
 //! RECIPIENT (audit 2026-06-15, M5 — VALIDATED, 5-comparator research): the
 //! destination is deliberately NOT in this digest. For an autonomous-agent
-//! delegation model, recipient is controlled by the persistent destination
-//! ALLOWLIST + per-recipient cap + the F-Q8 output-ATA pin — the field-standard
-//! recipient control for session-key / agent delegation (Squads SpendingLimit
-//! `destinations`, Zodiac Roles, ZeroDev CallPolicy, ERC-7715), NOT per-tx
-//! recipient signing (that is the one-shot-intent model — CoW/UniswapX — which
-//! Sigil is not). Binding the full `Vec<Instruction>` on-chain is infeasible
+//! delegation model, recipient is controlled by persistent POLICY, not a per-tx
+//! signature — the field-standard for session-key / agent delegation (Squads
+//! SpendingLimit `destinations`, Zodiac Roles, ZeroDev CallPolicy, ERC-7715),
+//! NOT the one-shot-intent per-tx recipient signing of CoW/UniswapX (which Sigil
+//! is not). Total recipient exposure is ultimately bounded by the NON-OMITTABLE
+//! global daily cap (measured on the F-Q8-pinned vault ATA) — that is the
+//! load-bearing bound. The destination allowlist and per-recipient cap are
+//! ADDITIONAL, WEAKER layers and must NOT be over-trusted as hard recipient
+//! confinement: the per-recipient cap is best-effort (evadable via finalize
+//! `remaining_accounts` omission, audit L4-1) and the swap-path allowlist is
+//! resolve-not-deny. Binding the full `Vec<Instruction>` on-chain is infeasible
 //! under the ATA-rewrite (Jupiter resolves accounts/ATAs/ALTs at /swap build
 //! time) and is deferred Phase 10/11 work. ix-data tamper remains gated by
 //! R-1..R-4 + TA-12 + TA-14 post-execution invariants.
