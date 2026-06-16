@@ -376,6 +376,15 @@ pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
     if let Some(new_cosign_pubkey) = pending.cosign_session_pubkey {
         policy.cosign_session_pubkey = new_cosign_pubkey;
     }
+    // Peer-review fix (2026-06-16): when cosign ends up DISABLED after this
+    // apply, clear the bound cosigner pubkey. Otherwise a later non-elevated
+    // re-enable would silently re-instate the RETIRED cosigner key (the L1-2
+    // force-bind below would see the stale non-default value and pass).
+    // Clearing forces a FRESH binding on re-enable. Idempotent — a no-op while
+    // cosign stays enabled.
+    if !policy.cosign_required {
+        policy.cosign_session_pubkey = Pubkey::default();
+    }
     // F-Q6 / Council C-1 defense-in-depth (2026-06-03): re-assert the bound
     // cosigner is a DISTINCT 2nd factor at this apply write site too. The
     // queue_policy_update guard is the primary check; enforcing it here as well

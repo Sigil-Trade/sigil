@@ -76,7 +76,7 @@ pub struct FinalizeSession<'info> {
     /// deep in the handler.
     #[account(
         mut,
-        constraint = vault_token_account.owner == vault.key() @ SigilError::ZeroCopyVaultMismatch,
+        constraint = vault_token_account.owner == vault.key() @ SigilError::InvalidTokenAccount,
     )]
     pub vault_token_account: Option<Account<'info, TokenAccount>>,
 
@@ -874,12 +874,18 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
                 seen.push(k);
             }
         }
-        // L10-1 (audit 2026-06-15): explicit iteration cap on the stable-floor
-        // remaining_accounts walk, mirroring `agent_transfer.rs:416` (M-12).
-        // Gives a deterministic ceiling independent of tx-size mechanics so an
-        // agent cannot CU-grief its own finalize by padding remaining_accounts.
-        // 16 >> any legitimate count (≤1 recipient ATA + a few vault stable ATAs).
-        const MAX_STABLE_FLOOR_WALK_ITERATIONS: usize = 16;
+        // L10-1 (audit 2026-06-15; cap REVISED 2026-06-16 after peer review):
+        // explicit iteration cap on the stable-floor remaining_accounts walk.
+        // The cap is 64 (the tx structural ceiling, matching validate's total-
+        // meta guard and L10-2), NOT 16. Unlike `agent_transfer` (which carries
+        // no DeFi-route metas), `seal()` feeds finalize's remaining_accounts the
+        // sandwiched DeFi ix's FULL writable set (the F-Q1a set, ≤24 per
+        // MAX_DESTINATION_WRITABLE_METAS) PLUS the vault's stablecoin ATAs for
+        // the floor sum — a legitimate multi-leg swap on a stable_balance_floor>0
+        // vault is ~12-30 metas. A cap of 16 FALSE-REJECTED those
+        // (IxMetaCountExceeded 6093, persistent). 64 bounds the pathological
+        // without rejecting any tx validate already accepted.
+        const MAX_STABLE_FLOOR_WALK_ITERATIONS: usize = 64;
         let mut floor_walk_iterations: usize = 0;
         for info in ctx.remaining_accounts.iter() {
             require!(
