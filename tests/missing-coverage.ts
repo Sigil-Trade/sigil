@@ -420,12 +420,15 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
     // PRECONDITION: pending PDA exists.
     expect(accountExists(svm, pendingAgentPerms)).to.equal(true);
 
-    // ACT: cancel.
+    // ACT: cancel. (M2b/L1-1: `policy` is now a required account so the
+    // handler can consult `cosign_required`. cosign_required=false here, so
+    // the gate is skipped and the single-signer cancel proceeds.)
     await program.methods
       .cancelAgentPermissionsUpdate()
       .accounts({
         owner: owner.publicKey,
         vault,
+        policy,
         pendingAgentPerms,
       } as any)
       .rpc();
@@ -439,6 +442,169 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
       (a: any) => a.pubkey.toString() === agent.publicKey.toString(),
     );
     expect(entryAfter!.spendingLimitUsd.toNumber()).to.equal(0);
+  });
+
+  // ───────────────────────────────────────────────────────────────────────
+  // 5b. cancel_agent_permissions_update — D4 symmetric cosign gate (M2b / L1-1,
+  //     audit 2026-06-15; coverage gap G9). Pre-M2b this handler had ONLY
+  //     `has_one = owner`, so a phished owner key alone could abort a
+  //     legitimately-cosigned pending agent-permissions change (cancel-and-
+  //     disrupt — re-queuing the elevated change still needs the cosigner, so
+  //     the residual is deny/grief, not direct escalation). M2b adds the gate
+  //     mirroring `cancel_agent_grant` / `cancel_ownership_transfer`.
+  //
+  //     Setup mirrors the known-working flow: seat + queue on a cosign=false
+  //     vault (no cosigner friction), THEN enable cosign WITH a bound cosigner
+  //     pubkey (L1-2a force-bind), THEN exercise the cancel gate both ways.
+  // ───────────────────────────────────────────────────────────────────────
+  it("cancel_agent_permissions_update REJECT (M2b/L1-1): cosign-bound vault, cancel WITHOUT cosigner → 6080; WITH it → closes", async () => {
+    const vaultId = new BN(5011);
+    const { vault, policy } = await initVaultFor(vaultId, {
+      cosignRequired: false,
+    });
+
+    const agent = Keypair.generate();
+    airdropSol(svm, agent.publicKey, 1 * LAMPORTS_PER_SOL);
+    await registerOperatorAgent({
+      program,
+      svm,
+      owner: owner.publicKey,
+      vault,
+      agent: agent.publicKey,
+    });
+
+    const [pendingAgentPerms] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("pending_agent_perms"),
+        vault.toBuffer(),
+        agent.publicKey.toBuffer(),
+      ],
+      program.programId,
+    );
+
+    // Queue a perm update while cosign_required=false → not elevated, no
+    // cosigner needed. Creates the pending_agent_perms PDA we will cancel.
+    await program.methods
+      .queueAgentPermissionsUpdate(
+        agent.publicKey,
+        FULL_CAPABILITY,
+        new BN(100_000_000),
+        new BN(0),
+        PublicKey.default,
+      )
+      .accounts({
+        owner: owner.publicKey,
+        vault,
+        policy,
+        pendingAgentPerms,
+        systemProgram: SystemProgram.programId,
+      } as any)
+      .rpc();
+    expect(accountExists(svm, pendingAgentPerms)).to.equal(true);
+
+    // Enable cosign WITH a bound cosigner pubkey. Enabling is non-elevated
+    // (so no cosigner is required at queue time), but L1-2a force-bind
+    // requires a non-default cosign_session_pubkey to be bound on the enable
+    // transition — so we pass the cosigner pubkey through (digest-bound).
+    const cosigner = Keypair.generate();
+    airdropSol(svm, cosigner.publicKey, 1 * LAMPORTS_PER_SOL);
+    const [pendingPolicy] = PublicKey.findProgramAddressSync(
+      [Buffer.from("pending_policy"), vault.toBuffer()],
+      program.programId,
+    );
+    const queueDigest = await fetchAndComputeQueueDigest(program, policy, vault, {
+      cosignRequired: true,
+      cosignSessionPubkey: cosigner.publicKey,
+    });
+    await program.methods
+      .queuePolicyUpdate(
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        true, // [15] cosign_required: Some(true) — ENABLES (non-elevated)
+        cosigner.publicKey, // [16] cosign_session_pubkey — BIND (L1-2a force-bind)
+        null, // [17] operator_grant_delay_seconds
+        PublicKey.default, // [18] cosign_session: enable is non-elevated → none
+        queueDigest,
+      )
+      .accounts({
+        owner: owner.publicKey,
+        vault,
+        policy,
+        pendingPolicy,
+        systemProgram: SystemProgram.programId,
+      } as any)
+      .rpc();
+    advanceTime(svm, 1801);
+    await program.methods
+      .applyPendingPolicy()
+      .accounts({
+        owner: owner.publicKey,
+        vault,
+        policy,
+        pendingPolicy,
+      } as any)
+      .rpc();
+    // PRECONDITION: cosign now ON and bound to `cosigner`.
+    const policyMid = await program.account.policyConfig.fetch(policy);
+    expect((policyMid as any).cosignRequired).to.equal(true);
+    expect((policyMid as any).cosignSessionPubkey.toString()).to.equal(
+      cosigner.publicKey.toString(),
+    );
+
+    // ACT 1 — cancel WITHOUT the cosigner → ErrCosignRequired (6080). The
+    // bound cosigner is absent from remaining_accounts, so has_bound_cosigner
+    // returns false and the gate rejects.
+    let caughtCode: number | null = null;
+    try {
+      await program.methods
+        .cancelAgentPermissionsUpdate()
+        .accounts({
+          owner: owner.publicKey,
+          vault,
+          policy,
+          pendingAgentPerms,
+        } as any)
+        .rpc();
+    } catch (err: any) {
+      caughtCode = err?.error?.errorCode?.number ?? null;
+    }
+    expect(
+      caughtCode,
+      "cancel on a cosign-bound vault without the cosigner must reject",
+    ).to.equal(6080);
+    // ASSERT: pending PDA still open — the reverted cancel closed nothing.
+    expect(accountExists(svm, pendingAgentPerms)).to.equal(true);
+
+    // ACT 2 — cancel WITH the bound cosigner as a signer → succeeds (the gate
+    // does not over-fire). Proves the cosign symmetry is satisfiable.
+    await program.methods
+      .cancelAgentPermissionsUpdate()
+      .accounts({
+        owner: owner.publicKey,
+        vault,
+        policy,
+        pendingAgentPerms,
+      } as any)
+      .remainingAccounts([
+        { pubkey: cosigner.publicKey, isSigner: true, isWritable: false },
+      ])
+      .signers([cosigner])
+      .rpc();
+    // ASSERT: pending PDA closed (close = owner refunds rent).
+    expect(accountExists(svm, pendingAgentPerms)).to.equal(false);
   });
 
   // ───────────────────────────────────────────────────────────────────────

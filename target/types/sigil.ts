@@ -1229,6 +1229,35 @@ export type Sigil = {
           }
         },
         {
+          "name": "policy",
+          "docs": [
+            "PolicyConfig is read-only here — only `cosign_required` (and the bound",
+            "`cosign_session_pubkey`) are consulted for the L1-1 / D4 symmetric",
+            "cosign gate (audit 2026-06-15). Mirrors `cancel_agent_grant.rs:63-67`",
+            "and `cancel_pending_policy.rs` (M2a). PDA seed derivation is the",
+            "load-bearing vault binding; a cosmetic `has_one = vault` is unnecessary."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
           "name": "pendingAgentPerms",
           "writable": true,
           "pda": {
@@ -2456,7 +2485,12 @@ export type Sigil = {
         {
           "name": "vaultTokenAccount",
           "docs": [
-            "Vault's PDA token account for the session's token"
+            "Vault's PDA token account for the session's token.",
+            "L2-1 (audit 2026-06-15): fail-fast that, when present, this ATA is owned",
+            "by the vault PDA. The outcome path already re-reads the raw post-CPI",
+            "owner field and asserts owner==vault, so this is defense-in-depth — but",
+            "it rejects a substituted token account at account-resolution rather than",
+            "deep in the handler."
           ],
           "writable": true,
           "optional": true
