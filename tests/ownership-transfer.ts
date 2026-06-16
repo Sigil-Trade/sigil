@@ -46,7 +46,7 @@ import {
 } from "@solana/spl-token";
 import { expect } from "chai";
 import BN from "bn.js";
-import { initVaultPreviewDigest } from "./helpers/policy-digest";
+import { initVaultPreviewDigest, fetchAndComputeQueueDigest } from "./helpers/policy-digest";
 import { registerOperatorAgent } from "./helpers/register-operator-agent";
 import {
   buildExpectedIntentDigest,
@@ -252,7 +252,7 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
         5, // autoRevokeThreshold
         new BN(0),
         new BN(0),
-        cosignRequired,
+        false, // take-over 2026-06-16: init cosign-OFF; enabled+bound below via queue
         initVaultPreviewDigest({
           dailySpendingCapUsd: STANDARD_INIT_DAILY_CAP,
           maxTransactionSizeUsd: STANDARD_INIT_MAX_TX,
@@ -264,7 +264,7 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
           operatingHours: 0x00ffffff,
           autoPromoteGrays: false,
           autoRevokeThreshold: 5,
-          cosignRequired,
+          cosignRequired: false,
         }),
       )
       .accounts({
@@ -280,7 +280,43 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
       } as any)
       .rpc();
 
-    return { vault, policy, tracker, overlay, auditSuccess, pendingOwner };
+    // Take-over 2026-06-16: cosign can't be enabled at init; enable+bind it via
+    // the queue->apply path (force-binds a distinct cosigner). Return the bound
+    // cosigner so callers can sign cosign-gated actions.
+    let cosigner: Keypair | undefined;
+    if (cosignRequired) {
+      cosigner = Keypair.generate();
+      airdropSol(svm, cosigner.publicKey, 1 * LAMPORTS_PER_SOL);
+      const [pendingPolicy] = PublicKey.findProgramAddressSync(
+        [Buffer.from("pending_policy"), vault.toBuffer()],
+        program.programId,
+      );
+      const queueDigest = await fetchAndComputeQueueDigest(program, policy, vault, {
+        cosignRequired: true,
+        cosignSessionPubkey: cosigner.publicKey,
+      });
+      await program.methods
+        .queuePolicyUpdate(
+          null, null, null, null, null, null, null, null, null, null,
+          null, null, null, null, null,
+          true, cosigner.publicKey, null, PublicKey.default, queueDigest,
+        )
+        .accounts({
+          owner: owner.publicKey,
+          vault,
+          policy,
+          pendingPolicy,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .rpc();
+      advanceTime(svm, STANDARD_INIT_TIMELOCK.toNumber() + 1);
+      await program.methods
+        .applyPendingPolicy()
+        .accounts({ owner: owner.publicKey, vault, policy, pendingPolicy } as any)
+        .rpc();
+    }
+
+    return { vault, policy, tracker, overlay, auditSuccess, pendingOwner, cosigner };
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1217,13 +1253,12 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
   //     Pins the legitimate cosign flow on the new ix.
   // ─────────────────────────────────────────────────────────────────────────
   it("initiate when cosign_required=true and cosigner signs → success", async () => {
-    const { vault, policy, auditSuccess, pendingOwner } = await initVault(
+    const { vault, policy, auditSuccess, pendingOwner, cosigner } = await initVault(
       new BN(9009),
       { cosignRequired: true },
     );
+    if (!cosigner) throw new Error("initVault(cosignRequired) must bind+return a cosigner");
     const newOwner = Keypair.generate();
-    const cosigner = Keypair.generate();
-    airdropSol(svm, cosigner.publicKey, 1 * LAMPORTS_PER_SOL);
 
     await program.methods
       .initiateOwnershipTransfer(newOwner.publicKey, false)
