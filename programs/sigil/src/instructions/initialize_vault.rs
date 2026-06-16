@@ -115,6 +115,25 @@ pub fn handler(
     // is itself an elevated mutation (one-way ratchet — see
     // `queue_policy_update`). Bound by TA-19 at canonical digest
     // position 20.
+    //
+    // L1-2 (audit 2026-06-15, LOW / defense-in-depth — DOCUMENTED, by-design):
+    // setting this `true` at init does NOT bind a cosigner. There is no init
+    // arg for `cosign_session_pubkey`; it is forced to `Pubkey::default()`
+    // below (see the policy write). The resulting {cosign_required=true,
+    // pubkey=default} state is INTENTIONAL and SAFE — it is the M-2 no-brick
+    // design (a strict match against the zero key would brick the vault). In
+    // that state cosign is INERT as a second factor: `has_bound_cosigner`
+    // (register_agent.rs) falls back to "any non-owner signer", and
+    // `classify_operator_grant_tier` (utils/operator_grant.rs:97) classifies
+    // the vault as the SINGLE-KEY tier (an unbound cosigner is not a real 2nd
+    // factor — Council C-1), so OPERATOR grants still route through the
+    // timelock floor rather than the instant cosign path. Cosign becomes a
+    // real second factor ONLY after the owner BINDS a `cosign_session_pubkey`
+    // via `queue_policy_update`. The enforcement half — rejecting the
+    // false→true enable transition unless a pubkey is bound — lives in
+    // `apply_pending_policy` (L1-2a); init deliberately leaves the unbound
+    // state reachable so an owner can opt into cosign without first
+    // committing (and risking the loss of) a specific cosigner key.
     cosign_required: bool,
     preview_digest: [u8; 32],
 ) -> Result<()> {
