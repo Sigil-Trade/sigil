@@ -137,7 +137,7 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
         autoRevokeThreshold,
         new BN(0), // stable_balance_floor
         new BN(0), // per_recipient_daily_cap_usd
-        cosignRequired,
+        false, // take-over 2026-06-16: init always cosign-OFF; enabled+bound below via queue if requested
         initVaultPreviewDigest({
           dailySpendingCapUsd: STANDARD_INIT_DAILY_CAP,
           maxTransactionSizeUsd: STANDARD_INIT_MAX_TX,
@@ -150,7 +150,7 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
           operatingHours: 0x00ffffff,
           autoPromoteGrays,
           autoRevokeThreshold,
-          cosignRequired,
+          cosignRequired: false,
         }),
       )
       .accounts({
@@ -164,7 +164,49 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
       } as any)
       .rpc();
 
-    return { vault, policy, tracker, overlay };
+    // Take-over hardening 2026-06-16: cosign can no longer be enabled at init
+    // (initialize_vault rejects cosign_required=true). When a cosign-bound vault
+    // is requested, enable it post-init via the queue->apply path, which
+    // force-binds a DISTINCT cosigner (the L1-2a enable-transition contract).
+    // The bound cosigner is returned so callers can sign cosign-gated actions.
+    let cosigner: Keypair | undefined;
+    if (cosignRequired) {
+      cosigner = Keypair.generate();
+      airdropSol(svm, cosigner.publicKey, 1 * LAMPORTS_PER_SOL);
+      const [pendingPolicy] = PublicKey.findProgramAddressSync(
+        [Buffer.from("pending_policy"), vault.toBuffer()],
+        program.programId,
+      );
+      const queueDigest = await fetchAndComputeQueueDigest(program, policy, vault, {
+        cosignRequired: true,
+        cosignSessionPubkey: cosigner.publicKey,
+      });
+      await program.methods
+        .queuePolicyUpdate(
+          null, null, null, null, null, null, null, null, null, null,
+          null, null, null, null, null,
+          true, // [16] cosign_required: Some(true) — ENABLE (non-elevated)
+          cosigner.publicKey, // [17] cosign_session_pubkey — BIND (L1-2a force-bind)
+          null, // [18] operator_grant_delay_seconds
+          PublicKey.default, // [19] cosign_session — enable is non-elevated
+          queueDigest,
+        )
+        .accounts({
+          owner: owner.publicKey,
+          vault,
+          policy,
+          pendingPolicy,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .rpc();
+      advanceTime(svm, STANDARD_INIT_TIMELOCK.toNumber() + 1);
+      await program.methods
+        .applyPendingPolicy()
+        .accounts({ owner: owner.publicKey, vault, policy, pendingPolicy } as any)
+        .rpc();
+    }
+
+    return { vault, policy, tracker, overlay, cosigner };
   }
 
   // ───────────────────────────────────────────────────────────────────────
@@ -755,12 +797,13 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
    * tests can attempt apply. Returns the PDAs + the cosigner Keypair.
    */
   async function setupCosignDisableQueued(vaultId: BN) {
-    const cosigner = Keypair.generate();
-    airdropSol(svm, cosigner.publicKey, 1 * LAMPORTS_PER_SOL);
-
-    const { vault, policy } = await initVaultFor(vaultId, {
+    // initVaultFor now enables+binds cosign via the queue path and returns the
+    // BOUND cosigner; reuse it (the disable below is elevated and must present
+    // the actual bound cosigner, not an arbitrary one).
+    const { vault, policy, cosigner } = await initVaultFor(vaultId, {
       cosignRequired: true,
     });
+    if (!cosigner) throw new Error("initVaultFor(cosignRequired) must bind+return a cosigner");
 
     const [pendingPolicy] = PublicKey.findProgramAddressSync(
       [Buffer.from("pending_policy"), vault.toBuffer()],

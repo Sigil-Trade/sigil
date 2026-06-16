@@ -376,15 +376,17 @@ pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
     if let Some(new_cosign_pubkey) = pending.cosign_session_pubkey {
         policy.cosign_session_pubkey = new_cosign_pubkey;
     }
-    // Peer-review fix (2026-06-16): when cosign ends up DISABLED after this
-    // apply, clear the bound cosigner pubkey. Otherwise a later non-elevated
-    // re-enable would silently re-instate the RETIRED cosigner key (the L1-2
-    // force-bind below would see the stale non-default value and pass).
-    // Clearing forces a FRESH binding on re-enable. Idempotent — a no-op while
-    // cosign stays enabled.
-    if !policy.cosign_required {
-        policy.cosign_session_pubkey = Pubkey::default();
-    }
+    // Take-over 2026-06-16: the prior "clear cosign_session_pubkey on disable"
+    // fix was REMOVED. It ran BEFORE the second-pass TA-19 digest recompute
+    // (below) and read `policy.cosign_session_pubkey` post-clear, so a legitimate
+    // owner+cosigner disable on a BOUND vault cleared the very pubkey the
+    // owner-signed queue digest committed to → permanent PolicyPreviewMismatch
+    // (disabling cosign became impossible once a cosigner was bound; the bug was
+    // masked because tests only disabled on UNBOUND vaults, where the clear is a
+    // no-op). The stale-cosigner re-enable class it targeted is now closed MORE
+    // robustly at the L1-2 enable check below (it requires the ENABLE update to
+    // carry a fresh, non-default bound pubkey — a stale live value no longer
+    // satisfies it).
     // F-Q6 / Council C-1 defense-in-depth (2026-06-03): re-assert the bound
     // cosigner is a DISTINCT 2nd factor at this apply write site too. The
     // queue_policy_update guard is the primary check; enforcing it here as well
@@ -409,8 +411,14 @@ pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
     // Narrow by design: unrelated updates to a vault that already has cosign on
     // are unaffected; only NEWLY enabling cosign without binding is rejected.
     if pending.cosign_required == Some(true) {
+        // L1-2 (take-over hardening 2026-06-16): ENABLING cosign MUST bind a
+        // fresh, distinct cosigner IN THIS update. We check `pending` (the
+        // proposed binding) — NOT the merged live value — so a stale
+        // cosign_session_pubkey left from a prior bound->disabled cycle cannot
+        // silently satisfy the gate and re-instate a RETIRED key. (cosigner !=
+        // owner is enforced at queue_policy_update + the C-1 re-assert above.)
         require!(
-            policy.cosign_session_pubkey != Pubkey::default(),
+            matches!(pending.cosign_session_pubkey, Some(pk) if pk != Pubkey::default()),
             SigilError::ErrCosignRequired
         );
     }
