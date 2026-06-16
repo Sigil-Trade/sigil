@@ -116,24 +116,20 @@ pub fn handler(
     // `queue_policy_update`). Bound by TA-19 at canonical digest
     // position 20.
     //
-    // L1-2 (audit 2026-06-15, LOW / defense-in-depth — DOCUMENTED, by-design):
-    // setting this `true` at init does NOT bind a cosigner. There is no init
-    // arg for `cosign_session_pubkey`; it is forced to `Pubkey::default()`
-    // below (see the policy write). The resulting {cosign_required=true,
-    // pubkey=default} state is INTENTIONAL and SAFE — it is the M-2 no-brick
-    // design (a strict match against the zero key would brick the vault). In
-    // that state cosign is INERT as a second factor: `has_bound_cosigner`
-    // (register_agent.rs) falls back to "any non-owner signer", and
-    // `classify_operator_grant_tier` (utils/operator_grant.rs:97) classifies
-    // the vault as the SINGLE-KEY tier (an unbound cosigner is not a real 2nd
-    // factor — Council C-1), so OPERATOR grants still route through the
-    // timelock floor rather than the instant cosign path. Cosign becomes a
-    // real second factor ONLY after the owner BINDS a `cosign_session_pubkey`
-    // via `queue_policy_update`. The enforcement half — rejecting the
-    // false→true enable transition unless a pubkey is bound — lives in
-    // `apply_pending_policy` (L1-2a); init deliberately leaves the unbound
-    // state reachable so an owner can opt into cosign without first
-    // committing (and risking the loss of) a specific cosigner key.
+    // L1-2 (take-over hardening 2026-06-16): cosign CANNOT be enabled at init.
+    // Passing `true` here is REJECTED with `ErrCosignRequired` (see the
+    // `require!(!cosign_required, ...)` guard before the policy write below).
+    // Rationale: there is no init arg for `cosign_session_pubkey`, so enabling
+    // cosign at create could only produce the inert {cosign_required=true,
+    // pubkey=default} state — which the hardened, fail-closed
+    // `has_bound_cosigner` (register_agent.rs) now LOCKS every cosign-gated
+    // owner-op against (the prior "any non-owner signer" fallback that made it
+    // merely INERT was removed). The resulting program invariant is
+    // {cosign_required==true => cosign_session_pubkey != default} EVERYWHERE. To
+    // use cosign, the owner enables it AFTER init via `queue_policy_update`,
+    // which force-binds a distinct cosigner in the same update
+    // (`apply_pending_policy` L1-2a) — so the enabled state is ALWAYS bound to a
+    // real 2nd factor.
     cosign_required: bool,
     preview_digest: [u8; 32],
 ) -> Result<()> {

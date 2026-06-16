@@ -509,8 +509,9 @@ mod cosign_gate_predicate_tests {
         );
     }
 
-    /// M-2: UNBOUND + empty remaining_accounts → still rejects (fallback is the
-    /// same has_non_owner_signer check).
+    /// M-2: UNBOUND + empty remaining_accounts → still rejects (fail closed —
+    /// take-over hardening 2026-06-16 removed the any-non-owner-signer fallback;
+    /// the unbound branch now returns false unconditionally).
     #[test]
     fn unbound_cosigner_empty_fails() {
         let owner = key_n(1);

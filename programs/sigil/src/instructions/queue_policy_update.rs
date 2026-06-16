@@ -465,6 +465,26 @@ pub fn handler(
             ctx.accounts.owner.key(),
             SigilError::ErrCosignRequired
         );
+        // Take-over 2026-06-16 (Finding 2 — user decision: pure 2-of-2, no
+        // recovery): the elevated cosigner MUST be the vault's BOUND cosigner
+        // `policy.cosign_session_pubkey`, not merely SOME non-owner key. Without
+        // this pin, a holder of the owner key alone could pick a throwaway 2nd
+        // keypair to disable cosign / weaken policy and then drain — the exact
+        // "any 2nd signer satisfies cosign" hole that was closed on the
+        // agent-grant surface via `has_bound_cosigner`. `is_elevated` implies
+        // `policy.cosign_required` (see the `disables_cosign` defn at :414 and
+        // the G6 gate at :436), and the `{cosign_required==true => bound != default}`
+        // invariant (enforced at initialize_vault, the L1-2 enable check, and the
+        // accept_ownership_transfer collapse-clear) guarantees the bound key is
+        // non-default here — so this pins the elevated cosigner to the REAL
+        // bound cosigner. Lost-K is an ACCEPTED permanent brick (self-custody;
+        // documented in ToS); there is deliberately NO recovery lane, because any
+        // owner-only escape hatch would re-open this very hole.
+        require_keys_eq!(
+            cosign_session,
+            policy.cosign_session_pubkey,
+            SigilError::ErrCosignRequired
+        );
         // The corresponding signer MUST be present in remaining_accounts
         // with `is_signer == true`. Solana enforces the signature; this
         // handler validates presence.

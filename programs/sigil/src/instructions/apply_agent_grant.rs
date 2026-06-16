@@ -181,8 +181,13 @@ pub fn handler(ctx: Context<ApplyAgentGrant>) -> Result<()> {
     //      Pubkey::default()` → exact pubkey match required on a signer
     //      in `remaining_accounts`.
     //   3. `cosign_required == true && cosign_session_pubkey ==
-    //      Pubkey::default()` → any non-owner signer counts (cosign
-    //      enforcement opted-in but specific key not yet bound).
+    //      Pubkey::default()` → REJECT (fail closed). Take-over hardening
+    //      2026-06-16: this unbound state is unreachable (init rejects
+    //      cosign-at-create; apply_pending_policy force-binds on enable + a
+    //      post-merge invariant assertion blocks any other path), so failing
+    //      closed is the backstop that keeps the old "any non-owner signer"
+    //      hole from reopening. (PRIOR behavior: any non-owner signer counted —
+    //      that was the hole.)
     //   4. None of the above match → reject with `ErrCosignRequired`.
     //
     // This runs BEFORE M-5 digest recompute (cheap pubkey check fails
