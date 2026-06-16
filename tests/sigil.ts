@@ -6764,7 +6764,7 @@ describe("sigil", () => {
           5, // auto_revoke_threshold (TA-17 Phase 3 — default)
           new BN(0), // stable_balance_floor (TA-12 Phase 5 — no reserve)
           new BN(0), // per_recipient_daily_cap_usd (TA-14 Phase 5 — no cap)
-          true, // cosignRequired (G6 §RP-2 P2 supplementary — vault OPTED IN)
+          false, // take-over 2026-06-16: init cosign-OFF; enabled+bound below via queue
           initVaultPreviewDigest({
             dailySpendingCapUsd: new BN(1_000_000_000),
             maxTransactionSizeUsd: new BN(500_000_000),
@@ -6776,8 +6776,8 @@ describe("sigil", () => {
             operatingHours: 0x00ffffff,
             autoPromoteGrays: false,
             autoRevokeThreshold: 5,
-            // G6 §RP-2 P2 supplementary: match on-chain init.
-            cosignRequired: true,
+            // take-over: cosign-OFF at init (enabled below via queue).
+            cosignRequired: false,
             // M-1 (audit 2026-06-11): vault is initialized WITH per-protocol
             // caps [100, 200] USDC (see initializeVault arg above); bind the
             // SAME slice into the preview digest, else PolicyPreviewMismatch.
@@ -6795,6 +6795,47 @@ describe("sigil", () => {
         } as any)
         .signers([protoCapOwner])
         .rpc();
+
+      // Take-over 2026-06-16: cosign can't be enabled at init; enable+bind
+      // protoCapCosigner via queue->apply so the elevated FULL_CAPABILITY grant
+      // and the weaken-protocol-caps queues below run on a cosign-BOUND vault.
+      {
+        const [pcPending] = PublicKey.findProgramAddressSync(
+          [Buffer.from("pending_policy"), pcVault.toBuffer()],
+          program.programId,
+        );
+        await program.methods
+          .queuePolicyUpdate(
+            null, null, null, null, null, null, null, null, null, null,
+            null, null, null, null, null,
+            true, protoCapCosigner.publicKey, null, PublicKey.default,
+            await fetchAndComputeQueueDigest(program, pcPolicy, pcVault, {
+              cosignRequired: true,
+              cosignSessionPubkey: protoCapCosigner.publicKey,
+            }),
+          )
+          .accounts({
+            owner: protoCapOwner.publicKey,
+            vault: pcVault,
+            policy: pcPolicy,
+            pendingPolicy: pcPending,
+            systemProgram: SystemProgram.programId,
+          } as any)
+          .signers([protoCapOwner])
+          .rpc();
+        advanceTime(svm, 1801);
+        await program.methods
+          .applyPendingPolicy()
+          .accounts({
+            owner: protoCapOwner.publicKey,
+            vault: pcVault,
+            policy: pcPolicy,
+            tracker: pcTracker,
+            pendingPolicy: pcPending,
+          } as any)
+          .signers([protoCapOwner])
+          .rpc();
+      }
 
       // Phase 8 PEN-CROSS-1 migration: register_agent now rejects
       // CAPABILITY_OPERATOR direct grants on cosign-opted vaults. Migrate
