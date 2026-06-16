@@ -359,9 +359,10 @@ pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
         // Take-over 2026-06-16 (Finding 2 defense-in-depth): the disable
         // cosigner MUST be the BOUND cosigner, not any throwaway. The live
         // `policy.cosign_session_pubkey` is still the bound K here (the D-5
-        // pubkey merge at :377 runs AFTER this gate), so pin against it. This
-        // mirrors the primary queue-time pin in queue_policy_update and removes
-        // the brittleness of single-site enforcement.
+        // `cosign_session_pubkey` merge below — the `if let Some(new_cosign_pubkey)`
+        // block — runs AFTER this gate), so pin against it. This mirrors the
+        // primary queue-time pin in queue_policy_update and removes the
+        // brittleness of single-site enforcement.
         require_keys_eq!(
             cosign_session,
             policy.cosign_session_pubkey,

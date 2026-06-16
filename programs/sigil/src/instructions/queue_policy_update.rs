@@ -413,6 +413,20 @@ pub fn handler(
     //   the symmetry obvious.
     let disables_cosign = cosign_required.is_some_and(|new| !new && policy.cosign_required);
     let _enables_cosign = cosign_required.is_some_and(|new| new && !policy.cosign_required);
+    // Take-over 2026-06-16 (Finding 3 — adversarial review of the Finding 2
+    // pin): rotating the bound cosigner is itself a cosign-WEAKENING operation
+    // (it EVICTS the current 2nd factor), so on a cosign-required vault it MUST
+    // be cosigned by the OUTGOING bound cosigner. Without this, the Finding 2
+    // pin is only a 2-tx speed bump: a leaked owner key could rotate K to an
+    // attacker key via this (otherwise non-elevated, owner-only) D-5 lane, then
+    // disable cosign with the attacker key (the pin would pass against the
+    // rotated-in key) and drain. Rotating to the SAME key is a no-op (not
+    // elevated); rotating to `default` (unbind) is independently blocked at
+    // apply by the {cosign_required => bound} invariant assertion. When this
+    // fires, the pin below forces `cosign_session == policy.cosign_session_pubkey`
+    // (the OLD K), so the incumbent cosigner signs its own replacement.
+    let rotates_cosigner = cosign_session_pubkey
+        .is_some_and(|new| policy.cosign_required && new != policy.cosign_session_pubkey);
 
     // G6 (audit 2026-05-18 cosign opt-in): the 7-trigger elevation check
     // (raises caps, expands allowlists, weakens floor / per-recipient /
@@ -441,7 +455,8 @@ pub fn handler(
             || lowers_floor
             || weakens_per_recipient_cap
             || weakens_protocol_caps))
-        || disables_cosign;
+        || disables_cosign
+        || rotates_cosigner;
 
     // D-5 (audit 2026-05-19, F-RP3-1): renamed from prior `cosign_session_pubkey`
     // to `bound_cosign_session` to avoid name collision with the new ix arg
