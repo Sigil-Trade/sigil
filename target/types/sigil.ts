@@ -498,6 +498,46 @@ export type Sigil = {
         {
           "name": "tokenProgram",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "auditLogSuccess",
+          "docs": [
+            "Phase 7 / L11-1 — success audit log; entry appended after the transfers.",
+            "PDA + address-pinned sysvar are auto-resolved by the Anchor client, so",
+            "existing `agent_transfer` callers need not pass them explicitly (same as",
+            "`deposit_funds`)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  100,
+                  105,
+                  116,
+                  95,
+                  115,
+                  117,
+                  99,
+                  99,
+                  101,
+                  115,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "slotHashesSysvar",
+          "address": "SysvarS1otHashes111111111111111111111111111"
         }
       ],
       "args": [
@@ -7420,7 +7460,8 @@ export type Sigil = {
               "disc=19 (agent_grant_cancel)→ agent pubkey (Phase 8 §RP Fix-Up B / PEN-02b)",
               "disc=20 (agent_perms_apply)→ agent pubkey (M-6 close, audit 2026-05-21)",
               "disc=21 (constraints_close_apply)→ vault pubkey (M-7 close, audit 2026-05-21)",
-              "disc=22 (agent_auto_revoked) → agent pubkey (M-8 close, audit 2026-05-21)"
+              "disc=22 (agent_auto_revoked) → agent pubkey (M-8 close, audit 2026-05-21)",
+              "disc=23 (agent_transfer)   → recipient wallet (destination ATA owner) (L11-1, audit 2026-06-15)"
             ],
             "type": {
               "array": [
