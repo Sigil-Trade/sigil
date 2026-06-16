@@ -368,10 +368,20 @@ pub fn handler(
     // G6 (audit 2026-05-18 cosign opt-in): persist owner's cosign choice.
     // Bound by TA-19 at canonical digest position 20 — a tampered SDK
     // cannot silently flip cosign on/off between owner approval and
-    // on-chain landing. Default at most call sites is `false` (low-
-    // friction) — owners explicitly opt in via this arg at vault
-    // creation, or later via `queue_policy_update` (where the false→true
-    // direction is non-elevated and the true→false direction IS elevated).
+    // on-chain landing.
+    //
+    // L1-2 (take-over hardening 2026-06-16): cosign CANNOT be enabled at vault
+    // creation. There is no init argument to BIND a specific cosigner, so
+    // allowing `cosign_required=true` here would create the inert
+    // {cosign_required=true, cosign_session_pubkey=default} state — where the
+    // gate would degrade to "any non-owner signer" (a false sense of two-factor,
+    // now fail-closed in `has_bound_cosigner`). Cosign is enabled post-creation
+    // via `queue_policy_update` (elevated + timelocked), which force-binds a
+    // DISTINCT cosigner pubkey (!= owner, per queue_policy_update's C-1 check).
+    // A single user who doesn't want a 2nd wallet simply leaves cosign off (the
+    // default). ErrCosignRequired (6080) reused: cosign required but no bound
+    // cosigner can be supplied at init.
+    require!(!cosign_required, SigilError::ErrCosignRequired);
     policy.cosign_required = cosign_required;
     // D-5 (audit 2026-05-19, F-RP3-1): initialize the reactivate-cosign
     // pubkey to `Pubkey::default()` so the gate at `reactivate_vault` is

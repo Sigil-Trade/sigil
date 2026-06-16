@@ -193,18 +193,19 @@ pub fn handler(ctx: Context<ApplyAgentGrant>) -> Result<()> {
         let policy = &ctx.accounts.policy;
         if policy.cosign_required {
             let cosign_session_pubkey = policy.cosign_session_pubkey;
-            let owner_key = ctx.accounts.owner.key();
             let cosign_ok = if cosign_session_pubkey != Pubkey::default() {
                 // Bound to a specific pubkey — match exactly.
                 ctx.remaining_accounts
                     .iter()
                     .any(|ai| ai.key() == cosign_session_pubkey && ai.is_signer)
             } else {
-                // Default policy — any non-owner signer counts.
-                crate::instructions::register_agent::has_non_owner_signer(
-                    ctx.remaining_accounts,
-                    &owner_key,
-                )
+                // FAIL CLOSED (take-over hardening 2026-06-16): cosign required
+                // but no bound cosigner. {cosign_required=true, unbound} is
+                // unreachable (init rejects it; apply_pending_policy force-binds),
+                // so this never fires in practice — failing closed is the backstop
+                // that keeps the old "any non-owner signer" hole from reopening.
+                // Mirrors `has_bound_cosigner`'s fail-closed unbound branch.
+                false
             };
             require!(cosign_ok, SigilError::ErrCosignRequired);
         }
