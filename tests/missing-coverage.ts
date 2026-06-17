@@ -177,14 +177,32 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
         [Buffer.from("pending_policy"), vault.toBuffer()],
         program.programId,
       );
-      const queueDigest = await fetchAndComputeQueueDigest(program, policy, vault, {
-        cosignRequired: true,
-        cosignSessionPubkey: cosigner.publicKey,
-      });
+      const queueDigest = await fetchAndComputeQueueDigest(
+        program,
+        policy,
+        vault,
+        {
+          cosignRequired: true,
+          cosignSessionPubkey: cosigner.publicKey,
+        },
+      );
       await program.methods
         .queuePolicyUpdate(
-          null, null, null, null, null, null, null, null, null, null,
-          null, null, null, null, null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
           true, // [16] cosign_required: Some(true) — ENABLE (non-elevated)
           cosigner.publicKey, // [17] cosign_session_pubkey — BIND (L1-2a force-bind)
           null, // [18] operator_grant_delay_seconds
@@ -202,7 +220,12 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
       advanceTime(svm, STANDARD_INIT_TIMELOCK.toNumber() + 1);
       await program.methods
         .applyPendingPolicy()
-        .accounts({ owner: owner.publicKey, vault, policy, pendingPolicy } as any)
+        .accounts({
+          owner: owner.publicKey,
+          vault,
+          policy,
+          pendingPolicy,
+        } as any)
         .rpc();
     }
 
@@ -554,10 +577,15 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
       [Buffer.from("pending_policy"), vault.toBuffer()],
       program.programId,
     );
-    const queueDigest = await fetchAndComputeQueueDigest(program, policy, vault, {
-      cosignRequired: true,
-      cosignSessionPubkey: cosigner.publicKey,
-    });
+    const queueDigest = await fetchAndComputeQueueDigest(
+      program,
+      policy,
+      vault,
+      {
+        cosignRequired: true,
+        cosignSessionPubkey: cosigner.publicKey,
+      },
+    );
     await program.methods
       .queuePolicyUpdate(
         null,
@@ -803,7 +831,10 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
     const { vault, policy, cosigner } = await initVaultFor(vaultId, {
       cosignRequired: true,
     });
-    if (!cosigner) throw new Error("initVaultFor(cosignRequired) must bind+return a cosigner");
+    if (!cosigner)
+      throw new Error(
+        "initVaultFor(cosignRequired) must bind+return a cosigner",
+      );
 
     const [pendingPolicy] = PublicKey.findProgramAddressSync(
       [Buffer.from("pending_policy"), vault.toBuffer()],
@@ -1087,8 +1118,8 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
     } catch (err: any) {
       caughtCode = err?.error?.errorCode?.number ?? null;
     }
-    expect(caughtCode, "enable-cosign without binding a cosigner must reject").to.not
-      .be.null;
+    expect(caughtCode, "enable-cosign without binding a cosigner must reject")
+      .to.not.be.null;
     expect(caughtCode).to.equal(6080); // ErrCosignRequired
 
     // ASSERT: cosign_required did NOT flip on — apply reverted atomically.

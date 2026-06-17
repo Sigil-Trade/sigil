@@ -1252,8 +1252,11 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
         // CORRECT direction — inflow (non-stablecoin-input swap) → balance_delta_in,
         // outflow (stablecoin-input spend) → balance_delta_out. Expired/0 → both 0.
         let measured: i64 = actual_spend_tracked.min(i64::MAX as u64) as i64;
-        let (delta_in, delta_out): (i64, i64) =
-            if spend_is_inflow { (measured, 0) } else { (0, measured) };
+        let (delta_in, delta_out): (i64, i64) = if spend_is_inflow {
+            (measured, 0)
+        } else {
+            (0, measured)
+        };
         if is_expired {
             let entry = build_audit_entry(
                 AUDIT_DISC_FINALIZE_REJECT,

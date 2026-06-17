@@ -46,7 +46,10 @@ import {
 } from "@solana/spl-token";
 import { expect } from "chai";
 import BN from "bn.js";
-import { initVaultPreviewDigest, fetchAndComputeQueueDigest } from "./helpers/policy-digest";
+import {
+  initVaultPreviewDigest,
+  fetchAndComputeQueueDigest,
+} from "./helpers/policy-digest";
 import { registerOperatorAgent } from "./helpers/register-operator-agent";
 import {
   buildExpectedIntentDigest,
@@ -291,15 +294,37 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
         [Buffer.from("pending_policy"), vault.toBuffer()],
         program.programId,
       );
-      const queueDigest = await fetchAndComputeQueueDigest(program, policy, vault, {
-        cosignRequired: true,
-        cosignSessionPubkey: cosigner.publicKey,
-      });
+      const queueDigest = await fetchAndComputeQueueDigest(
+        program,
+        policy,
+        vault,
+        {
+          cosignRequired: true,
+          cosignSessionPubkey: cosigner.publicKey,
+        },
+      );
       await program.methods
         .queuePolicyUpdate(
-          null, null, null, null, null, null, null, null, null, null,
-          null, null, null, null, null,
-          true, cosigner.publicKey, null, PublicKey.default, queueDigest,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          true,
+          cosigner.publicKey,
+          null,
+          PublicKey.default,
+          queueDigest,
         )
         .accounts({
           owner: owner.publicKey,
@@ -312,11 +337,24 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
       advanceTime(svm, STANDARD_INIT_TIMELOCK.toNumber() + 1);
       await program.methods
         .applyPendingPolicy()
-        .accounts({ owner: owner.publicKey, vault, policy, pendingPolicy } as any)
+        .accounts({
+          owner: owner.publicKey,
+          vault,
+          policy,
+          pendingPolicy,
+        } as any)
         .rpc();
     }
 
-    return { vault, policy, tracker, overlay, auditSuccess, pendingOwner, cosigner };
+    return {
+      vault,
+      policy,
+      tracker,
+      overlay,
+      auditSuccess,
+      pendingOwner,
+      cosigner,
+    };
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1253,11 +1291,10 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
   //     Pins the legitimate cosign flow on the new ix.
   // ─────────────────────────────────────────────────────────────────────────
   it("initiate when cosign_required=true and cosigner signs → success", async () => {
-    const { vault, policy, auditSuccess, pendingOwner, cosigner } = await initVault(
-      new BN(9009),
-      { cosignRequired: true },
-    );
-    if (!cosigner) throw new Error("initVault(cosignRequired) must bind+return a cosigner");
+    const { vault, policy, auditSuccess, pendingOwner, cosigner } =
+      await initVault(new BN(9009), { cosignRequired: true });
+    if (!cosigner)
+      throw new Error("initVault(cosignRequired) must bind+return a cosigner");
     const newOwner = Keypair.generate();
 
     await program.methods
@@ -1353,15 +1390,37 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
       [Buffer.from("pending_policy"), vault.toBuffer()],
       program.programId,
     );
-    const queueDigest = await fetchAndComputeQueueDigest(program, policy, vault, {
-      cosignRequired: true,
-      cosignSessionPubkey: newOwner.publicKey,
-    });
+    const queueDigest = await fetchAndComputeQueueDigest(
+      program,
+      policy,
+      vault,
+      {
+        cosignRequired: true,
+        cosignSessionPubkey: newOwner.publicKey,
+      },
+    );
     await program.methods
       .queuePolicyUpdate(
-        null, null, null, null, null, null, null, null, null, null,
-        null, null, null, null, null,
-        true, newOwner.publicKey, null, PublicKey.default, queueDigest,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        true,
+        newOwner.publicKey,
+        null,
+        PublicKey.default,
+        queueDigest,
       )
       .accounts({
         owner: owner.publicKey,

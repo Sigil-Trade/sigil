@@ -215,15 +215,37 @@ describe("pen-cross-1-absorption (Phase 8 Batch 6)", () => {
         [Buffer.from("pending_policy"), vault.toBuffer()],
         program.programId,
       );
-      const queueDigest = await fetchAndComputeQueueDigest(program, policy, vault, {
-        cosignRequired: true,
-        cosignSessionPubkey: cosigner.publicKey,
-      });
+      const queueDigest = await fetchAndComputeQueueDigest(
+        program,
+        policy,
+        vault,
+        {
+          cosignRequired: true,
+          cosignSessionPubkey: cosigner.publicKey,
+        },
+      );
       await program.methods
         .queuePolicyUpdate(
-          null, null, null, null, null, null, null, null, null, null,
-          null, null, null, null, null,
-          true, cosigner.publicKey, null, PublicKey.default, queueDigest,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          true,
+          cosigner.publicKey,
+          null,
+          PublicKey.default,
+          queueDigest,
         )
         .accounts({
           owner: owner.publicKey,
@@ -236,7 +258,12 @@ describe("pen-cross-1-absorption (Phase 8 Batch 6)", () => {
       advanceTime(svm, STANDARD_INIT_TIMELOCK.toNumber() + 1);
       await program.methods
         .applyPendingPolicy()
-        .accounts({ owner: owner.publicKey, vault, policy, pendingPolicy } as any)
+        .accounts({
+          owner: owner.publicKey,
+          vault,
+          policy,
+          pendingPolicy,
+        } as any)
         .rpc();
     }
 
@@ -524,11 +551,10 @@ describe("pen-cross-1-absorption (Phase 8 Batch 6)", () => {
   // 8. cosign_required=true: queue with cosigner present → ok
   // ─────────────────────────────────────────────────────────────────────────
   it("cosign_required vault: queue_agent_grant with cosigner → ok", async () => {
-    const { vault, policy, auditSuccess, pendingAgentGrant, cosigner } = await initVault(
-      new BN(11007),
-      { cosignRequired: true },
-    );
-    if (!cosigner) throw new Error("initVault(cosignRequired) must bind+return a cosigner");
+    const { vault, policy, auditSuccess, pendingAgentGrant, cosigner } =
+      await initVault(new BN(11007), { cosignRequired: true });
+    if (!cosigner)
+      throw new Error("initVault(cosignRequired) must bind+return a cosigner");
     const agent = Keypair.generate();
 
     await program.methods

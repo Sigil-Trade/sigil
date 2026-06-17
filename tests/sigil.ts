@@ -6806,9 +6806,25 @@ describe("sigil", () => {
         );
         await program.methods
           .queuePolicyUpdate(
-            null, null, null, null, null, null, null, null, null, null,
-            null, null, null, null, null,
-            true, protoCapCosigner.publicKey, null, PublicKey.default,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            true,
+            protoCapCosigner.publicKey,
+            null,
+            PublicKey.default,
             await fetchAndComputeQueueDigest(program, pcPolicy, pcVault, {
               cosignRequired: true,
               cosignSessionPubkey: protoCapCosigner.publicKey,

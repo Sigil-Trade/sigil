@@ -952,8 +952,21 @@ describe("post-assertions: Phase 6 Maestro borrows (R-1..R-4)", () => {
       // Enable + bind cosign via queue -> apply (the only path; init rejects it).
       await program.methods
         .queuePolicyUpdate(
-          null, null, null, null, null, null, null, null, null, null,
-          null, null, null, null, null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
           true, // cosign_required
           cosigner.publicKey, // cosign_session_pubkey (bind)
           null, // operator_grant_delay_seconds

@@ -101,7 +101,10 @@ pub fn handler(ctx: Context<DepositFunds>, amount: u64) -> Result<()> {
     // only because `is_stablecoin_mint` is likewise 6-dp-only. A complete fix
     // would also make `is_stablecoin_mint` unable to admit a non-6-dp mint.
     // (Full Token-2022 InterfaceAccount migration remains deferred — see L2-2.)
-    require!(ctx.accounts.mint.decimals == 6, SigilError::UnsupportedToken);
+    require!(
+        ctx.accounts.mint.decimals == 6,
+        SigilError::UnsupportedToken
+    );
 
     // Transfer tokens from owner to vault PDA token account
     let cpi_accounts = Transfer {
