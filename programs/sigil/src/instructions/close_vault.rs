@@ -96,6 +96,28 @@ pub fn handler(ctx: Context<CloseVault>) -> Result<()> {
         SigilError::ErrPostAssertionsNotClosed
     );
 
+    // Take-over 2026-06-16 (B-1, user decision "Both"): closing a cosign vault is
+    // the ULTIMATE protection-removal — it destroys the PolicyConfig that holds
+    // `cosign_session_pubkey`, which is exactly what enables the
+    // close -> reinit(cosign OFF) -> withdraw drain (threat-model T-19, previously
+    // deferred to "V1.1" for rent cost). So on a cosign-required vault, the close
+    // MUST be cosigned by the bound K — a leaked owner key alone can no longer
+    // start that chain. Mirrors withdraw_funds / set_observe_only /
+    // close_post_assertions. (The companion "vault must be empty" half of the
+    // fix is enforced separately so funds can only ever exit via the K-gated
+    // withdraw_funds.)
+    if ctx.accounts.policy.cosign_required {
+        let owner_key = ctx.accounts.owner.key();
+        require!(
+            crate::instructions::register_agent::has_bound_cosigner(
+                ctx.remaining_accounts,
+                &owner_key,
+                &ctx.accounts.policy.cosign_session_pubkey,
+            ),
+            SigilError::ErrCosignRequired
+        );
+    }
+
     // If pending policy exists, caller MUST provide it in remaining_accounts for cleanup
     if ctx.accounts.policy.has_pending_policy {
         let pending_info = ctx

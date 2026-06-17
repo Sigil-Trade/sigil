@@ -388,6 +388,16 @@ pub fn handler(
         || protocol_caps.as_ref().is_some_and(|new_caps| {
             weakens_protocol_caps_predicate(new_caps, &policy.protocol_caps)
         });
+    // Take-over 2026-06-16 (3rd-review B-2): raising max_slippage_bps is a policy
+    // WEAKENING (more value-leakage tolerated; load-bearing when a post-execution
+    // OutputBalanceFloor/slippage assertion relies on it), and raising
+    // developer_fee_rate increases the skim. Both were missing from the elevation
+    // set, so a leaked owner key alone could weaken them on a cosign-required
+    // vault without the bound cosigner. Gate both like the other weakening
+    // triggers (cosign_required-gated; the inner group below).
+    let raises_slippage = max_slippage_bps.is_some_and(|new| new > policy.max_slippage_bps);
+    let raises_developer_fee =
+        developer_fee_rate.is_some_and(|new| new > policy.developer_fee_rate);
 
     // G6 (audit 2026-05-18 cosign opt-in): one-way-ratchet semantics for
     // toggling `cosign_required`.
@@ -454,7 +464,9 @@ pub fn handler(
             || expands_protocols
             || lowers_floor
             || weakens_per_recipient_cap
-            || weakens_protocol_caps))
+            || weakens_protocol_caps
+            || raises_slippage
+            || raises_developer_fee))
         || disables_cosign
         || rotates_cosigner;
 
