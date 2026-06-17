@@ -1112,6 +1112,8 @@ impl FuzzTest {
         };
         let (agent_spend_overlay, _) =
             Pubkey::find_program_address(&[b"agent_spend", vault.as_ref(), &[0u8]], &program_id());
+        let (audit_log_success, _) =
+            Pubkey::find_program_address(&[b"audit_success", vault.as_ref()], &program_id());
         let accounts = sigil::accounts::AgentTransfer {
             agent,
             vault,
@@ -1124,6 +1126,10 @@ impl FuzzTest {
             fee_destination_token_account: Some(fee_dest_ata),
             protocol_treasury_token_account: None,
             token_program: spl_token::ID,
+            // L11-1 — success audit log; PDA + address-pinned slot_hashes sysvar
+            // (mirrors register_agent / deposit_funds construction above).
+            audit_log_success,
+            slot_hashes_sysvar: anchor_lang::solana_program::sysvar::slot_hashes::id(),
         };
 
         let ix = Instruction::new_with_bytes(
