@@ -398,6 +398,13 @@ pub fn handler(
     let raises_slippage = max_slippage_bps.is_some_and(|new| new > policy.max_slippage_bps);
     let raises_developer_fee =
         developer_fee_rate.is_some_and(|new| new > policy.developer_fee_rate);
+    // Take-over 2026-06-17 (5th-review Finding 1): WIDENING operating_hours (a
+    // spend-time guard enforced at validate_and_authorize) is a guard-weakening,
+    // so on a cosign vault it must be cosigned. `new & !live != 0` means the
+    // update enables an hour the live mask forbade; narrowing/tightening (no new
+    // bits) is exempt, like the other tighten-is-free directions.
+    let widens_operating_hours =
+        operating_hours.is_some_and(|new| (new & !policy.operating_hours) != 0);
 
     // G6 (audit 2026-05-18 cosign opt-in): one-way-ratchet semantics for
     // toggling `cosign_required`.
@@ -466,7 +473,8 @@ pub fn handler(
             || weakens_per_recipient_cap
             || weakens_protocol_caps
             || raises_slippage
-            || raises_developer_fee))
+            || raises_developer_fee
+            || widens_operating_hours))
         || disables_cosign
         || rotates_cosigner;
 
