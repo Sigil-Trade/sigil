@@ -146,7 +146,6 @@ export const SIGIL_ERRORS = {
   InvalidOwnerType: 6109,
   SpendAccountingUnderflow: 6110,
   ErrMultisigCustodyUnsupported: 6111,
-  ErrVaultNotEmpty: 6112,
 } as const;
 
 export type SigilErrorName = keyof typeof SIGIL_ERRORS;
