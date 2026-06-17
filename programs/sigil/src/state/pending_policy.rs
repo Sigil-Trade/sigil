@@ -130,6 +130,29 @@ pub struct PendingPolicyUpdate {
     /// Some(n) = update. Bound by TA-19 at canonical digest position 22.
     /// APPENDED per F-14 APPEND-ONLY rule for Borsh stability.
     pub operator_grant_delay_seconds: Option<u64>,
+
+    /// Async cosign approval (2026-06-17): set `true` by `approve_pending_policy`
+    /// when the bound cosigner K approves an elevated queued update.
+    /// `apply_pending_policy` requires this for elevated mutations — REPLACES the
+    /// synchronous apply-time cosigner re-assert. Non-elevated pendings leave it
+    /// `false` (unused). APPENDED per F-14 APPEND-ONLY rule for Borsh stability.
+    pub cosign_approved: bool,
+
+    /// Slot at which the cosigner approved (set by `approve_pending_policy`).
+    /// `apply_pending_policy` re-anchors the F-10 freshness ceiling to THIS slot
+    /// (apply within `MAX_APPLY_AGE_SLOTS` of approval, not of queue), so the
+    /// cosigner has unbounded time to approve while a held apply stays bounded
+    /// post-approval. `0` until approved.
+    /// APPENDED per F-14 APPEND-ONLY rule for Borsh stability.
+    pub approved_at_slot: u64,
+
+    /// `PolicyConfig.policy_version` snapshot at queue time. `approve_pending_policy`
+    /// and `apply_pending_policy` require the live `policy_version` still equals this
+    /// (strict staleness gate — Squads `stale_transaction_index` analog). Any policy
+    /// change (incl. cosigner rotation, which bumps `policy_version`) invalidates
+    /// this pending's pending approval.
+    /// APPENDED per F-14 APPEND-ONLY rule for Borsh stability.
+    pub queued_policy_version: u64,
 }
 
 impl PendingPolicyUpdate {
@@ -160,7 +183,10 @@ impl PendingPolicyUpdate {
         + (1 + 8) // per_recipient_daily_cap_usd [TA-14, Phase 5]
         + (1 + 1) // cosign_required Option<bool> [G6, 2026-05-18 audit]
         + (1 + 32) // cosign_session_pubkey Option<Pubkey> [D-5, 2026-05-19 audit, F-RP3-1]
-        + (1 + 8); // operator_grant_delay_seconds Option<u64> [F-Q6 2026-06-02]
+        + (1 + 8) // operator_grant_delay_seconds Option<u64> [F-Q6 2026-06-02]
+        + 1 // cosign_approved bool [async cosign 2026-06-17]
+        + 8 // approved_at_slot u64 [async cosign 2026-06-17]
+        + 8; // queued_policy_version u64 [async cosign 2026-06-17]
 
     /// Returns true if the timelock period has expired and the update
     /// can be applied.

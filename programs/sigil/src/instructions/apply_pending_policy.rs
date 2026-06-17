@@ -124,27 +124,47 @@ pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
         SigilError::TimelockNotExpired
     );
 
+    // [0u8; 32] + Pubkey::default() == "no cosign required" (non-elevated queue).
+    let zero_digest = [0u8; 32];
+    let no_cosign =
+        pending.cosign_digest == zero_digest && pending.cosign_session == Pubkey::default();
+
+    // ASYNC COSIGN (2026-06-17, design COSIGN_ASYNC_APPROVAL_2026-06-17): an
+    // elevated pending REQUIRES the bound cosigner's prior on-chain approval via
+    // `approve_pending_policy`. This REPLACES #351's synchronous apply-time
+    // cosigner re-assert. Strict staleness (the live policy_version still equals
+    // the value snapshotted at queue) is re-checked here as defense-in-depth.
+    if !no_cosign {
+        require!(pending.cosign_approved, SigilError::ErrCosignRequired);
+        require!(
+            ctx.accounts.policy.policy_version == pending.queued_policy_version,
+            SigilError::PolicyVersionMismatch
+        );
+    }
+
     // F-10 audit fix: slot-bounded freshness check defends against durable-nonce
-    // pre-signing attacks (Drift Protocol April 2026 $285M analog). Limits the
-    // time between queue and apply to MAX_APPLY_AGE_SLOTS — beyond that, the
-    // queued update is stale and must be re-queued by the owner.
+    // pre-signing attacks (Drift Protocol April 2026 $285M analog). ASYNC COSIGN
+    // re-anchor (2026-06-17): for an elevated (approved) pending, measure freshness
+    // from the APPROVAL slot — the cosigner may approve long after queue, but a
+    // held apply stays bounded to MAX_APPLY_AGE_SLOTS past the approval (the
+    // authorization-complete point). Non-elevated pendings keep the queue anchor.
+    // The `cosign_approved` gate above guarantees `approved_at_slot` is set
+    // (non-zero) whenever this branch reads it.
+    let freshness_anchor_slot = if no_cosign {
+        pending.queued_at_slot
+    } else {
+        pending.approved_at_slot
+    };
     require!(
-        clock.slot.saturating_sub(pending.queued_at_slot) < MAX_APPLY_AGE_SLOTS,
+        clock.slot.saturating_sub(freshness_anchor_slot) < MAX_APPLY_AGE_SLOTS,
         SigilError::QueuedUpdateExpired,
     );
 
     // TA-09 (Phase 3): if pending was bound to a cosign, re-validate the
-    // cosign_digest against the persisted pending args + recorded session
-    // pubkey. Defense-in-depth — queue already validated the cosign
-    // signed, but a rogue program with the same account discriminator
-    // could have rewritten the pending args between queue and apply.
-    // The re-computed digest catches any such mutation.
-    //
-    // [0u8; 32] + Pubkey::default() == "no cosign required" (non-elevated
-    // queue). For non-elevated pending, this check is a no-op.
-    let zero_digest = [0u8; 32];
-    let no_cosign =
-        pending.cosign_digest == zero_digest && pending.cosign_session == Pubkey::default();
+    // cosign_digest against the persisted pending args + recorded session pubkey.
+    // Defense-in-depth — a rogue program with the same account discriminator could
+    // have rewritten the pending args between queue and apply; the re-computed
+    // digest catches any such mutation.
     if !no_cosign {
         // Round 2 B4 F-1 fix (audit 2026-05-19): re-bind digest now
         // includes 5 new elevation triggers. See compute_cosign_digest

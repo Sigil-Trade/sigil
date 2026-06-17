@@ -135,6 +135,16 @@ pub struct PolicyChangeCancelled {
     pub vault: Pubkey,
 }
 
+/// Async cosign approval (2026-06-17): the bound cosigner K approved an elevated
+/// queued policy update via `approve_pending_policy`. `apply_pending_policy` then
+/// requires `cosign_approved == true`.
+#[event]
+pub struct PolicyCosignApproved {
+    pub vault: Pubkey,
+    pub cosigner: Pubkey,
+    pub approved_at_slot: u64,
+}
+
 #[event]
 pub struct AgentTransferExecuted {
     pub vault: Pubkey,
