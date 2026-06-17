@@ -288,6 +288,11 @@ describe("m1-output-redirection", () => {
         protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
         feeDestinationTokenAccount: program.programId,
         outputStablecoinAccount: program.programId,
+        // M1: the agent declares NO acquired-output account (program.programId =
+        // the None sentinel). On a stablecoin-input spend with actual_spend > 0,
+        // finalize's output-ownership gate then reverts (6112) — the drain brings
+        // no vault-owned acquisition back.
+        outputSwapAccount: program.programId,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
@@ -336,6 +341,11 @@ describe("m1-output-redirection", () => {
         agentSpendOverlay: overlayPda,
         vaultTokenAccount: vaultUsdcAta,
         outputStablecoinAccount: program.programId,
+        // M1: the agent declares NO acquired-output account (program.programId =
+        // the None sentinel). On a stablecoin-input spend with actual_spend > 0,
+        // finalize's output-ownership gate then reverts (6112) — the drain brings
+        // no vault-owned acquisition back.
+        outputSwapAccount: program.programId,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
@@ -346,9 +356,7 @@ describe("m1-output-redirection", () => {
     sendVersionedTx(svm, [computeIx, validateIx, drainIx, finalizeIx], agent);
   }
 
-  // SKIPPED pending Phase-2 closure (un-skip in the closure PR — see file header).
-  // Verified RED 2026-06-17: drain lands 50 USDC in the agent's own ATA, no revert.
-  it.skip("M1: the agent must NOT be able to route vault funds into its own ATA", async () => {
+  it("M1: the agent must NOT be able to route vault funds into its own ATA", async () => {
     const amount = new BN(100_000_000); // authorize 100 USDC of spend
     const drainAmount = new BN(50_000_000); // redirect 50 USDC to the agent
 
@@ -376,11 +384,19 @@ describe("m1-output-redirection", () => {
         (reverted ? ` revert="${revertMsg.slice(0, 120)}"` : ""),
     );
 
-    // SECURE expectation — RED until Phase 2's mandatory output-ownership pin:
+    // SECURE expectation — GREEN now that the M1 output-ownership closure landed.
+    // The drain MUST revert specifically at 6112 (ErrOutputNotVaultOwned): the
+    // ON-CHAIN finalize gate fired, NOT a client-side build error or a different
+    // revert (which would be a false green — pre-closure this false-greened at
+    // 6105). The agent must gain nothing.
     expect(
       reverted,
       "M1 OPEN: the drain redirecting vault USDC to the agent's own ATA did NOT revert",
     ).to.equal(true);
+    expect(
+      revertMsg,
+      `M1: expected the on-chain output-ownership gate (6112) to fire, got: ${revertMsg}`,
+    ).to.match(/6112|ErrOutputNotVaultOwned/);
     expect(
       agentGained,
       "M1 OPEN: vault USDC landed in the agent's own ATA (value left the vault to the agent)",

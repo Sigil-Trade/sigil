@@ -128,6 +128,30 @@ pub struct SessionAuthority {
     /// by 32 bytes (515 → 547). Sessions are init/close per cycle, so no
     /// migration is required.
     pub output_stablecoin_account: Pubkey,
+
+    /// M1 output-ownership closure (2026-06-17) — the vault-owned token account
+    /// that an acquiring spend on the **stablecoin-input** path MUST credit,
+    /// pinned at validate. finalize asserts this exact account is vault-owned,
+    /// holds `output_swap_mint`, and its balance strictly INCREASED, so a
+    /// compromised agent cannot redirect the swap output to its own ATA
+    /// (output-ownership / M1). GENERIC: the program never learns which protocol
+    /// produced the swap — it checks only vault-ownership + increase.
+    /// `Pubkey::default()` for non-swap / non-stablecoin-input sessions.
+    ///
+    /// **APPEND-ONLY**: new fields at the END of SessionAuthority. SIZE grows by
+    /// 72 bytes (547 → 619). Ephemeral session ⇒ no migration.
+    pub output_swap_account: Pubkey,
+
+    /// The declared acquired mint backing `output_swap_account`. Must differ from
+    /// the stablecoin input mint (a genuine acquisition, not a self-transfer).
+    /// `Pubkey::default()` when no swap output is declared.
+    pub output_swap_mint: Pubkey,
+
+    /// Pre-DeFi snapshot of `output_swap_account.amount`, taken at validate.
+    /// finalize requires the post-DeFi balance to be strictly greater
+    /// (value-blind: the vault must have acquired *something* into the pinned
+    /// account; no price/oracle). 0 when no swap output is declared.
+    pub output_swap_balance_before: u64,
 }
 
 impl SessionAuthority {
@@ -159,8 +183,13 @@ impl SessionAuthority {
     /// F-Q8 (2026-06-02): appends `output_stablecoin_account: Pubkey` (+32),
     /// SIZE 515 → 547. Append-shape (existing offsets preserved); ephemeral
     /// session ⇒ no migration.
+    ///
+    /// M1 closure (2026-06-17): appends `output_swap_account: Pubkey` (+32),
+    /// `output_swap_mint: Pubkey` (+32), `output_swap_balance_before: u64` (+8).
+    /// SIZE 547 → 619. Append-shape; ephemeral session ⇒ no migration.
     pub const SIZE: usize =
-        8 + 32 + 32 + 1 + 8 + 32 + 32 + 8 + 1 + 32 + 8 + 8 + 32 + 8 + 1 + 256 + 8 + 8 + 32;
+        8 + 32 + 32 + 1 + 8 + 32 + 32 + 8 + 1 + 32 + 8 + 8 + 32 + 8 + 1 + 256 + 8 + 8 + 32
+            + 32 + 32 + 8;
 
     /// Returns true when wall-clock has passed the session's expiry timestamp.
     pub fn is_expired(&self, current_unix_ts: i64) -> bool {
@@ -220,6 +249,9 @@ mod f5h1_tests {
             snapshot_lens: [0u8; 8],
             nonce: 0,
             output_stablecoin_account: Pubkey::default(),
+            output_swap_account: Pubkey::default(),
+            output_swap_mint: Pubkey::default(),
+            output_swap_balance_before: 0,
         }
     }
 

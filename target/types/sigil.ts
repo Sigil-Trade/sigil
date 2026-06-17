@@ -2657,6 +2657,19 @@ export type Sigil = {
           "optional": true
         },
         {
+          "name": "outputSwapAccount",
+          "docs": [
+            "M1 output-ownership closure — the validate-pinned VAULT-OWNED account an",
+            "acquiring (stablecoin-input) swap must have credited. finalize re-reads its",
+            "raw post-CPI bytes and asserts owner==vault, mint==pinned, and balance",
+            "strictly INCREASED. Owner is checked in the handler (like F-Q8 above), not",
+            "as a struct constraint. Boxed to keep try_accounts under the 4096 BPF",
+            "stack limit. Required whenever a stablecoin-input spend moves value."
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
           "name": "tokenProgram",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         },
@@ -5073,6 +5086,26 @@ export type Sigil = {
           "optional": true
         },
         {
+          "name": "outputSwapAccount",
+          "docs": [
+            "M1 output-ownership pin — the VAULT-OWNED token account an acquiring swap",
+            "on the STABLECOIN-INPUT path must credit. Pinned + snapshotted here;",
+            "finalize asserts this exact account increased, so the agent cannot",
+            "redirect the swap output to its own ATA. Must pre-exist (like the F-Q8",
+            "output ATA above — the forward scan permits no in-tx ATA-create). GENERIC:",
+            "any vault-owned token account of a non-input mint; no protocol knowledge.",
+            "Its Token-2022 extensions (if any) are vetted by the forward scan's F-Q4",
+            "destination check, since the output ATA is a writable vault-owned meta of",
+            "the swap ix.",
+            "",
+            "Boxed: an unboxed `Option<Account>` here pushed `try_accounts` 8 bytes",
+            "over the 4096 BPF stack limit; boxing moves the deserialized account to",
+            "the heap (handler access is unchanged via deref)."
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
           "name": "tokenProgram",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         },
@@ -6631,6 +6664,11 @@ export type Sigil = {
       "code": 6111,
       "name": "errMultisigCustodyUnsupported",
       "msg": "Squads multisig ownership custody is not supported in V1 (use a standard EOA owner)"
+    },
+    {
+      "code": 6112,
+      "name": "errOutputNotVaultOwned",
+      "msg": "M1: stablecoin-input swap output must land in a vault-owned account and increase (value redirection / unacquired spend rejected)"
     }
   ],
   "types": [
@@ -10075,6 +10113,42 @@ export type Sigil = {
               "migration is required."
             ],
             "type": "pubkey"
+          },
+          {
+            "name": "outputSwapAccount",
+            "docs": [
+              "M1 output-ownership closure (2026-06-17) — the vault-owned token account",
+              "that an acquiring spend on the **stablecoin-input** path MUST credit,",
+              "pinned at validate. finalize asserts this exact account is vault-owned,",
+              "holds `output_swap_mint`, and its balance strictly INCREASED, so a",
+              "compromised agent cannot redirect the swap output to its own ATA",
+              "(output-ownership / M1). GENERIC: the program never learns which protocol",
+              "produced the swap — it checks only vault-ownership + increase.",
+              "`Pubkey::default()` for non-swap / non-stablecoin-input sessions.",
+              "",
+              "**APPEND-ONLY**: new fields at the END of SessionAuthority. SIZE grows by",
+              "72 bytes (547 → 619). Ephemeral session ⇒ no migration."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "outputSwapMint",
+            "docs": [
+              "The declared acquired mint backing `output_swap_account`. Must differ from",
+              "the stablecoin input mint (a genuine acquisition, not a self-transfer).",
+              "`Pubkey::default()` when no swap output is declared."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "outputSwapBalanceBefore",
+            "docs": [
+              "Pre-DeFi snapshot of `output_swap_account.amount`, taken at validate.",
+              "finalize requires the post-DeFi balance to be strictly greater",
+              "(value-blind: the vault must have acquired *something* into the pinned",
+              "account; no price/oracle). 0 when no swap output is declared."
+            ],
+            "type": "u64"
           }
         ]
       }
