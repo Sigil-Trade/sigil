@@ -198,7 +198,7 @@ export interface CosignArgs {
   //
   // These fields are BOTH elevation triggers AND now bound by this cosign
   // digest. Mutating them between queue and apply produces a cosign-digest
-  // mismatch (ErrCosignRequired, 6089) — closing the gap where the digest
+  // mismatch (ErrCosignRequired, 6080) — closing the gap where the digest
   // previously only bound positions 1-5 of the canonical encoding.
 
   /**
@@ -295,7 +295,7 @@ export interface CosignBundle {
  */
 export function buildCosignBundle(args: CosignArgs): CosignBundle {
   // Pre-flight: the on-chain handler rejects default/owner-same cosign with
-  // ErrCosignRequired (6089). Surface the same failures at the SDK level
+  // ErrCosignRequired (6080). Surface the same failures at the SDK level
   // with a clearer error message — better DX than digging through Anchor
   // error codes after a failed simulation.
   const defaultPubkey =
@@ -304,7 +304,7 @@ export function buildCosignBundle(args: CosignArgs): CosignBundle {
     throw new Error(
       "buildCosignBundle: cosignSessionPubkey is the default pubkey " +
         "(11111111111111111111111111111111). The on-chain handler will reject " +
-        "this with ErrCosignRequired (6089). Pass a real session pubkey.",
+        "this with ErrCosignRequired (6080). Pass a real session pubkey.",
     );
   }
   if (
@@ -314,7 +314,7 @@ export function buildCosignBundle(args: CosignArgs): CosignBundle {
     throw new Error(
       "buildCosignBundle: cosignSessionPubkey equals ownerSigner.address. " +
         "The on-chain handler rejects same-key cosign with ErrCosignRequired " +
-        "(6089) because it collapses the two-signer gate. Use a distinct " +
+        "(6080) because it collapses the two-signer gate. Use a distinct " +
         "cosigning session pubkey.",
     );
   }
