@@ -10,8 +10,10 @@ import {
   combineCodec,
   fixDecoderSize,
   fixEncoderSize,
+  getAddressEncoder,
   getBytesDecoder,
   getBytesEncoder,
+  getProgramDerivedAddress,
   getStructDecoder,
   getStructEncoder,
   SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
@@ -34,6 +36,7 @@ import {
 } from "@solana/kit";
 import {
   getAccountMetaFactory,
+  getAddressFromResolvedInstructionAccount,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
 import { SIGIL_PROGRAM_ADDRESS } from "../programs/index.js";
@@ -52,6 +55,7 @@ export type CancelAgentPermissionsUpdateInstruction<
   TProgram extends string = typeof SIGIL_PROGRAM_ADDRESS,
   TAccountOwner extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
+  TAccountPolicy extends string | AccountMeta<string> = string,
   TAccountPendingAgentPerms extends string | AccountMeta<string> = string,
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
@@ -65,6 +69,9 @@ export type CancelAgentPermissionsUpdateInstruction<
       TAccountVault extends string
         ? ReadonlyAccount<TAccountVault>
         : TAccountVault,
+      TAccountPolicy extends string
+        ? ReadonlyAccount<TAccountPolicy>
+        : TAccountPolicy,
       TAccountPendingAgentPerms extends string
         ? WritableAccount<TAccountPendingAgentPerms>
         : TAccountPendingAgentPerms,
@@ -104,25 +111,131 @@ export function getCancelAgentPermissionsUpdateInstructionDataCodec(): FixedSize
   );
 }
 
-export type CancelAgentPermissionsUpdateInput<
+export type CancelAgentPermissionsUpdateAsyncInput<
   TAccountOwner extends string = string,
   TAccountVault extends string = string,
+  TAccountPolicy extends string = string,
   TAccountPendingAgentPerms extends string = string,
 > = {
   owner: TransactionSigner<TAccountOwner>;
   vault: Address<TAccountVault>;
+  /**
+   * PolicyConfig is read-only here — only `cosign_required` (and the bound
+   * `cosign_session_pubkey`) are consulted for the L1-1 / D4 symmetric
+   * cosign gate (audit 2026-06-15). Mirrors `cancel_agent_grant.rs:63-67`
+   * and `cancel_pending_policy.rs` (M2a). PDA seed derivation is the
+   * load-bearing vault binding; a cosmetic `has_one = vault` is unnecessary.
+   */
+  policy?: Address<TAccountPolicy>;
+  pendingAgentPerms: Address<TAccountPendingAgentPerms>;
+};
+
+export async function getCancelAgentPermissionsUpdateInstructionAsync<
+  TAccountOwner extends string,
+  TAccountVault extends string,
+  TAccountPolicy extends string,
+  TAccountPendingAgentPerms extends string,
+  TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
+>(
+  input: CancelAgentPermissionsUpdateAsyncInput<
+    TAccountOwner,
+    TAccountVault,
+    TAccountPolicy,
+    TAccountPendingAgentPerms
+  >,
+  config?: { programAddress?: TProgramAddress },
+): Promise<
+  CancelAgentPermissionsUpdateInstruction<
+    TProgramAddress,
+    TAccountOwner,
+    TAccountVault,
+    TAccountPolicy,
+    TAccountPendingAgentPerms
+  >
+> {
+  // Program address.
+  const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
+
+  // Original accounts.
+  const originalAccounts = {
+    owner: { value: input.owner ?? null, isWritable: true },
+    vault: { value: input.vault ?? null, isWritable: false },
+    policy: { value: input.policy ?? null, isWritable: false },
+    pendingAgentPerms: {
+      value: input.pendingAgentPerms ?? null,
+      isWritable: true,
+    },
+  };
+  const accounts = originalAccounts as Record<
+    keyof typeof originalAccounts,
+    ResolvedInstructionAccount
+  >;
+
+  // Resolve default values.
+  if (!accounts.policy.value) {
+    accounts.policy.value = await getProgramDerivedAddress({
+      programAddress,
+      seeds: [
+        getBytesEncoder().encode(new Uint8Array([112, 111, 108, 105, 99, 121])),
+        getAddressEncoder().encode(
+          getAddressFromResolvedInstructionAccount(
+            "vault",
+            accounts.vault.value,
+          ),
+        ),
+      ],
+    });
+  }
+
+  const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
+  return Object.freeze({
+    accounts: [
+      getAccountMeta("owner", accounts.owner),
+      getAccountMeta("vault", accounts.vault),
+      getAccountMeta("policy", accounts.policy),
+      getAccountMeta("pendingAgentPerms", accounts.pendingAgentPerms),
+    ],
+    data: getCancelAgentPermissionsUpdateInstructionDataEncoder().encode({}),
+    programAddress,
+  } as CancelAgentPermissionsUpdateInstruction<
+    TProgramAddress,
+    TAccountOwner,
+    TAccountVault,
+    TAccountPolicy,
+    TAccountPendingAgentPerms
+  >);
+}
+
+export type CancelAgentPermissionsUpdateInput<
+  TAccountOwner extends string = string,
+  TAccountVault extends string = string,
+  TAccountPolicy extends string = string,
+  TAccountPendingAgentPerms extends string = string,
+> = {
+  owner: TransactionSigner<TAccountOwner>;
+  vault: Address<TAccountVault>;
+  /**
+   * PolicyConfig is read-only here — only `cosign_required` (and the bound
+   * `cosign_session_pubkey`) are consulted for the L1-1 / D4 symmetric
+   * cosign gate (audit 2026-06-15). Mirrors `cancel_agent_grant.rs:63-67`
+   * and `cancel_pending_policy.rs` (M2a). PDA seed derivation is the
+   * load-bearing vault binding; a cosmetic `has_one = vault` is unnecessary.
+   */
+  policy: Address<TAccountPolicy>;
   pendingAgentPerms: Address<TAccountPendingAgentPerms>;
 };
 
 export function getCancelAgentPermissionsUpdateInstruction<
   TAccountOwner extends string,
   TAccountVault extends string,
+  TAccountPolicy extends string,
   TAccountPendingAgentPerms extends string,
   TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: CancelAgentPermissionsUpdateInput<
     TAccountOwner,
     TAccountVault,
+    TAccountPolicy,
     TAccountPendingAgentPerms
   >,
   config?: { programAddress?: TProgramAddress },
@@ -130,6 +243,7 @@ export function getCancelAgentPermissionsUpdateInstruction<
   TProgramAddress,
   TAccountOwner,
   TAccountVault,
+  TAccountPolicy,
   TAccountPendingAgentPerms
 > {
   // Program address.
@@ -139,6 +253,7 @@ export function getCancelAgentPermissionsUpdateInstruction<
   const originalAccounts = {
     owner: { value: input.owner ?? null, isWritable: true },
     vault: { value: input.vault ?? null, isWritable: false },
+    policy: { value: input.policy ?? null, isWritable: false },
     pendingAgentPerms: {
       value: input.pendingAgentPerms ?? null,
       isWritable: true,
@@ -154,6 +269,7 @@ export function getCancelAgentPermissionsUpdateInstruction<
     accounts: [
       getAccountMeta("owner", accounts.owner),
       getAccountMeta("vault", accounts.vault),
+      getAccountMeta("policy", accounts.policy),
       getAccountMeta("pendingAgentPerms", accounts.pendingAgentPerms),
     ],
     data: getCancelAgentPermissionsUpdateInstructionDataEncoder().encode({}),
@@ -162,6 +278,7 @@ export function getCancelAgentPermissionsUpdateInstruction<
     TProgramAddress,
     TAccountOwner,
     TAccountVault,
+    TAccountPolicy,
     TAccountPendingAgentPerms
   >);
 }
@@ -174,7 +291,15 @@ export type ParsedCancelAgentPermissionsUpdateInstruction<
   accounts: {
     owner: TAccountMetas[0];
     vault: TAccountMetas[1];
-    pendingAgentPerms: TAccountMetas[2];
+    /**
+     * PolicyConfig is read-only here — only `cosign_required` (and the bound
+     * `cosign_session_pubkey`) are consulted for the L1-1 / D4 symmetric
+     * cosign gate (audit 2026-06-15). Mirrors `cancel_agent_grant.rs:63-67`
+     * and `cancel_pending_policy.rs` (M2a). PDA seed derivation is the
+     * load-bearing vault binding; a cosmetic `has_one = vault` is unnecessary.
+     */
+    policy: TAccountMetas[2];
+    pendingAgentPerms: TAccountMetas[3];
   };
   data: CancelAgentPermissionsUpdateInstructionData;
 };
@@ -187,12 +312,12 @@ export function parseCancelAgentPermissionsUpdateInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedCancelAgentPermissionsUpdateInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 3) {
+  if (instruction.accounts.length < 4) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 3,
+        expectedAccountMetas: 4,
       },
     );
   }
@@ -207,6 +332,7 @@ export function parseCancelAgentPermissionsUpdateInstruction<
     accounts: {
       owner: getNextAccount(),
       vault: getNextAccount(),
+      policy: getNextAccount(),
       pendingAgentPerms: getNextAccount(),
     },
     data: getCancelAgentPermissionsUpdateInstructionDataDecoder().decode(

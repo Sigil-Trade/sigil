@@ -77,7 +77,7 @@ import { getApplyPendingPolicyInstructionAsync } from "../generated/instructions
 import { getCancelPendingPolicyInstructionAsync } from "../generated/instructions/cancelPendingPolicy.js";
 import { getQueueAgentPermissionsUpdateInstructionAsync } from "../generated/instructions/queueAgentPermissionsUpdate.js";
 import { getApplyAgentPermissionsUpdateInstructionAsync } from "../generated/instructions/applyAgentPermissionsUpdate.js";
-import { getCancelAgentPermissionsUpdateInstruction } from "../generated/instructions/cancelAgentPermissionsUpdate.js";
+import { getCancelAgentPermissionsUpdateInstructionAsync } from "../generated/instructions/cancelAgentPermissionsUpdate.js";
 import { getCreatePostAssertionsInstructionAsync } from "../generated/instructions/createPostAssertions.js";
 import { getClosePostAssertionsInstructionAsync } from "../generated/instructions/closePostAssertions.js";
 
@@ -1355,7 +1355,7 @@ export async function cancelAgentPermissions(
 ): Promise<TxResult> {
   requireValidAddress(agent, "Agent address");
   const pendingPda = await derivePendingAgentPermsPDA(vault, agent);
-  const ix = getCancelAgentPermissionsUpdateInstruction({
+  const ix = await getCancelAgentPermissionsUpdateInstructionAsync({
     owner,
     vault,
     pendingAgentPerms: pendingPda,

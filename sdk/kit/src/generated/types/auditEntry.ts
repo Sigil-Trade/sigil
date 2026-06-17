@@ -76,6 +76,7 @@ export type AuditEntry = {
    * disc=20 (agent_perms_apply)→ agent pubkey (M-6 close, audit 2026-05-21)
    * disc=21 (constraints_close_apply)→ vault pubkey (M-7 close, audit 2026-05-21)
    * disc=22 (agent_auto_revoked) → agent pubkey (M-8 close, audit 2026-05-21)
+   * disc=23 (agent_transfer)   → recipient wallet (destination ATA owner) (L11-1, audit 2026-06-15)
    */
   subject: ReadonlyUint8Array;
   /** Stablecoin delta IN (e.g. swap output, deposit). 0 when not applicable. */
@@ -118,6 +119,7 @@ export type AuditEntryArgs = {
    * disc=20 (agent_perms_apply)→ agent pubkey (M-6 close, audit 2026-05-21)
    * disc=21 (constraints_close_apply)→ vault pubkey (M-7 close, audit 2026-05-21)
    * disc=22 (agent_auto_revoked) → agent pubkey (M-8 close, audit 2026-05-21)
+   * disc=23 (agent_transfer)   → recipient wallet (destination ATA owner) (L11-1, audit 2026-06-15)
    */
   subject: ReadonlyUint8Array;
   /** Stablecoin delta IN (e.g. swap output, deposit). 0 when not applicable. */
