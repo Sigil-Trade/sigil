@@ -187,9 +187,28 @@ impl SessionAuthority {
     /// M1 closure (2026-06-17): appends `output_swap_account: Pubkey` (+32),
     /// `output_swap_mint: Pubkey` (+32), `output_swap_balance_before: u64` (+8).
     /// SIZE 547 → 619. Append-shape; ephemeral session ⇒ no migration.
-    pub const SIZE: usize =
-        8 + 32 + 32 + 1 + 8 + 32 + 32 + 8 + 1 + 32 + 8 + 8 + 32 + 8 + 1 + 256 + 8 + 8 + 32
-            + 32 + 32 + 8;
+    pub const SIZE: usize = 8
+        + 32
+        + 32
+        + 1
+        + 8
+        + 32
+        + 32
+        + 8
+        + 1
+        + 32
+        + 8
+        + 8
+        + 32
+        + 8
+        + 1
+        + 256
+        + 8
+        + 8
+        + 32
+        + 32
+        + 32
+        + 8;
 
     /// Returns true when wall-clock has passed the session's expiry timestamp.
     pub fn is_expired(&self, current_unix_ts: i64) -> bool {

@@ -247,6 +247,7 @@ describe("surfpool-integration", function () {
           protocolTreasuryTokenAccount: protocolTreasuryAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           agentSpendOverlay: overlayPda,
@@ -272,6 +273,7 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 
@@ -412,6 +414,7 @@ describe("surfpool-integration", function () {
           protocolTreasuryTokenAccount: protocolTreasuryAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           agentSpendOverlay: overlayPda,
@@ -437,6 +440,7 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 
@@ -487,6 +491,7 @@ describe("surfpool-integration", function () {
           protocolTreasuryTokenAccount: protocolTreasuryAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           agentSpendOverlay: overlayPda,
@@ -554,6 +559,7 @@ describe("surfpool-integration", function () {
           protocolTreasuryTokenAccount: protocolTreasuryAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           agentSpendOverlay: overlayPda,
@@ -579,6 +585,7 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 
@@ -709,6 +716,7 @@ describe("surfpool-integration", function () {
           protocolTreasuryTokenAccount: protocolTreasuryAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           agentSpendOverlay: overlayPda,
@@ -734,6 +742,7 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 
@@ -791,6 +800,7 @@ describe("surfpool-integration", function () {
           protocolTreasuryTokenAccount: protocolTreasuryAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           agentSpendOverlay: overlayPda,
@@ -813,6 +823,7 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 
@@ -876,6 +887,7 @@ describe("surfpool-integration", function () {
           protocolTreasuryTokenAccount: protocolTreasuryAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           agentSpendOverlay: overlayPda,
@@ -901,6 +913,7 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 
@@ -1058,6 +1071,7 @@ describe("surfpool-integration", function () {
           protocolTreasuryTokenAccount: protocolTreasuryAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           agentSpendOverlay: overlayPda,
@@ -1083,6 +1097,7 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 
@@ -1219,6 +1234,7 @@ describe("surfpool-integration", function () {
           protocolTreasuryTokenAccount: protocolTreasuryAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           agentSpendOverlay: overlayPda,
@@ -1244,6 +1260,7 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 
@@ -1862,6 +1879,7 @@ describe("surfpool-integration", function () {
           protocolTreasuryTokenAccount: setup.protocolTreasuryAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           agentSpendOverlay: setup.overlayPda,
@@ -1884,6 +1902,7 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: setup.overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 
@@ -1951,6 +1970,7 @@ describe("surfpool-integration", function () {
           protocolTreasuryTokenAccount: setup.protocolTreasuryAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           agentSpendOverlay: setup.overlayPda,
@@ -1976,6 +1996,7 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: setup.overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 
@@ -2072,6 +2093,7 @@ describe("surfpool-integration", function () {
           protocolTreasuryTokenAccount: setup.protocolTreasuryAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           agentSpendOverlay: setup.overlayPda,
@@ -2094,6 +2116,7 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: setup.overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 
@@ -2142,6 +2165,7 @@ describe("surfpool-integration", function () {
           protocolTreasuryTokenAccount: setup.protocolTreasuryAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           agentSpendOverlay: setup.overlayPda,
@@ -2167,6 +2191,7 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: setup.overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 
@@ -2229,6 +2254,7 @@ describe("surfpool-integration", function () {
           protocolTreasuryTokenAccount: setup.protocolTreasuryAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           agentSpendOverlay: setup.overlayPda,
@@ -2254,6 +2280,7 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: setup.overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 
@@ -2385,6 +2412,7 @@ describe("surfpool-integration", function () {
           protocolTreasuryTokenAccount: swapSetup.protocolTreasuryAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           agentSpendOverlay: swapSetup.overlayPda,
@@ -2414,6 +2442,7 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: swapSetup.overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 
@@ -2471,6 +2500,7 @@ describe("surfpool-integration", function () {
           protocolTreasuryTokenAccount: noSwapSetup.protocolTreasuryAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           agentSpendOverlay: noSwapSetup.overlayPda,
@@ -2493,6 +2523,7 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: noSwapSetup.overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 
@@ -2617,6 +2648,7 @@ describe("surfpool-integration", function () {
           protocolTreasuryTokenAccount: swapSetup.protocolTreasuryAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           agentSpendOverlay: swapSetup.overlayPda,
@@ -2639,6 +2671,7 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: swapSetup.overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 
@@ -2734,6 +2767,7 @@ describe("surfpool-integration", function () {
           protocolTreasuryTokenAccount: zeroSetup.protocolTreasuryAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           agentSpendOverlay: zeroSetup.overlayPda,
@@ -2756,6 +2790,7 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: zeroSetup.overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 
@@ -3102,6 +3137,7 @@ describe("surfpool-integration", function () {
           protocolTreasuryTokenAccount: setup.protocolTreasuryAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           agentSpendOverlay: setup.overlayPda,
@@ -3127,6 +3163,7 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: setup.overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 
@@ -3181,6 +3218,7 @@ describe("surfpool-integration", function () {
           protocolTreasuryTokenAccount: setup.protocolTreasuryAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           agentSpendOverlay: setup.overlayPda,
@@ -3206,6 +3244,7 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: setup.overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 

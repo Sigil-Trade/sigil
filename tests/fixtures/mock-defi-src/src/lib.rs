@@ -59,6 +59,42 @@ pub mod mock_defi {
         );
         token::transfer(cpi_ctx, amount)
     }
+
+    /// Models an ACQUIRING swap for the M1 output-ownership tests: pulls
+    /// `in_amount` of the input mint out of the vault (via the agent's
+    /// validate-time delegation) AND delivers `out_amount` of a DIFFERENT mint
+    /// INTO a vault-owned output account. Both legs are authorized by the agent
+    /// signer — leg 1 via the vault's delegation, leg 2 from an agent-seeded
+    /// reserve (test-only; a real swap sources the output from a pool). Used by
+    /// spending/cap tests so the vault input decreases (actual_spend > 0) AND
+    /// the vault acquires a vault-owned output, satisfying finalize's M1
+    /// output-ownership gate (err 6112) which gates every stablecoin-input spend.
+    pub fn swap_to_vault(ctx: Context<SwapToVault>, in_amount: u64, out_amount: u64) -> Result<()> {
+        // Leg 1: pull the input mint out of the vault via the agent's delegation.
+        token::transfer(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.source.to_account_info(),
+                    to: ctx.accounts.input_sink.to_account_info(),
+                    authority: ctx.accounts.authority.to_account_info(),
+                },
+            ),
+            in_amount,
+        )?;
+        // Leg 2: deliver a DIFFERENT mint INTO the vault-owned output account.
+        token::transfer(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.output_source.to_account_info(),
+                    to: ctx.accounts.vault_output.to_account_info(),
+                    authority: ctx.accounts.authority.to_account_info(),
+                },
+            ),
+            out_amount,
+        )
+    }
 }
 
 #[derive(Accounts)]
@@ -82,6 +118,31 @@ pub struct DrainViaDelegation<'info> {
     /// Authority signer — the validate-approved delegate. In the Sigil
     /// sandwich, this is the agent. SPL Token verifies the delegation
     /// invariant inside its `Transfer` handler.
+    pub authority: Signer<'info>,
+
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct SwapToVault<'info> {
+    /// Vault input ATA (delegated to the agent at validate). Leg 1 source.
+    #[account(mut)]
+    pub source: Account<'info, TokenAccount>,
+
+    /// Where the pulled input lands (a pool/sink). Leg 1 destination.
+    #[account(mut)]
+    pub input_sink: Account<'info, TokenAccount>,
+
+    /// Agent-owned reserve of the OUTPUT mint (test-only swap funding). Leg 2 source.
+    #[account(mut)]
+    pub output_source: Account<'info, TokenAccount>,
+
+    /// The VAULT-OWNED output account the swap credits (a DIFFERENT mint).
+    /// This is what finalize's M1 gate verifies increased. Leg 2 destination.
+    #[account(mut)]
+    pub vault_output: Account<'info, TokenAccount>,
+
+    /// Agent signer — authority for both legs (vault delegation + own reserve).
     pub authority: Signer<'info>,
 
     pub token_program: Program<'info, Token>,

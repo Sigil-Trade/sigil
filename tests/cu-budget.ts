@@ -510,6 +510,7 @@ describe("cu-budget", () => {
         protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
         feeDestinationTokenAccount: null,
         outputStablecoinAccount: null,
+        outputSwapAccount: null,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
@@ -543,6 +544,7 @@ describe("cu-budget", () => {
         agentSpendOverlay: ctx.overlay,
         vaultTokenAccount: ctx.vaultAta,
         outputStablecoinAccount: null,
+        outputSwapAccount: null,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })

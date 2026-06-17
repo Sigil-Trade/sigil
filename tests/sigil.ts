@@ -55,8 +55,7 @@ import {
   MOCK_DEFI_PROGRAM_ID,
   MOCK_DEFI_2_PROGRAM_ID,
   buildMockDefiNoopIx,
-  buildMockDefiDrainIx,
-  buildMockDefiDrain2Ix,
+  buildMockSwapToVaultIx,
 } from "./helpers/litesvm-setup";
 
 const FULL_CAPABILITY = 2; // CAPABILITY_OPERATOR
@@ -1327,6 +1326,7 @@ describe("sigil", () => {
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           agentSpendOverlay: overlayPda,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -1356,6 +1356,7 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 
@@ -1441,6 +1442,7 @@ describe("sigil", () => {
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           agentSpendOverlay: overlayPda,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -1474,6 +1476,7 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 
@@ -1615,6 +1618,7 @@ describe("sigil", () => {
             protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
             feeDestinationTokenAccount: null,
             outputStablecoinAccount: null,
+            outputSwapAccount: null,
             agentSpendOverlay: overlayPda,
             tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
@@ -1660,6 +1664,7 @@ describe("sigil", () => {
             protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
             feeDestinationTokenAccount: null,
             outputStablecoinAccount: null,
+            outputSwapAccount: null,
             agentSpendOverlay: overlayPda,
             tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
@@ -1708,6 +1713,7 @@ describe("sigil", () => {
             protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
             feeDestinationTokenAccount: null,
             outputStablecoinAccount: null,
+            outputSwapAccount: null,
             agentSpendOverlay: overlayPda,
             tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
@@ -1765,6 +1771,7 @@ describe("sigil", () => {
             protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
             feeDestinationTokenAccount: null,
             outputStablecoinAccount: null,
+            outputSwapAccount: null,
             agentSpendOverlay: overlayPda,
             tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
@@ -1829,6 +1836,7 @@ describe("sigil", () => {
             protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
             feeDestinationTokenAccount: null,
             outputStablecoinAccount: null,
+            outputSwapAccount: null,
             agentSpendOverlay: overlayPda,
             tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
@@ -1918,6 +1926,7 @@ describe("sigil", () => {
             protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
             feeDestinationTokenAccount: null,
             outputStablecoinAccount: null,
+            outputSwapAccount: null,
             agentSpendOverlay: frozenOverlay,
             tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
@@ -2573,6 +2582,7 @@ describe("sigil", () => {
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           agentSpendOverlay: feeOverlay,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -2600,6 +2610,7 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 
@@ -2728,6 +2739,7 @@ describe("sigil", () => {
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
           feeDestinationTokenAccount: feeDestUsdcAta,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           agentSpendOverlay: feeOverlay,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -2755,6 +2767,7 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 
@@ -2816,6 +2829,7 @@ describe("sigil", () => {
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
           feeDestinationTokenAccount: feeDestUsdcAta,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           agentSpendOverlay: feeOverlay,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -2843,6 +2857,7 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 
@@ -3083,6 +3098,7 @@ describe("sigil", () => {
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           agentSpendOverlay: lifecycleOverlay,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -3114,6 +3130,7 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 
@@ -3160,6 +3177,7 @@ describe("sigil", () => {
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           agentSpendOverlay: lifecycleOverlay,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -3191,6 +3209,7 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 
@@ -3236,6 +3255,7 @@ describe("sigil", () => {
             protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
             feeDestinationTokenAccount: null,
             outputStablecoinAccount: null,
+            outputSwapAccount: null,
             agentSpendOverlay: lifecycleOverlay,
             tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
@@ -3267,6 +3287,7 @@ describe("sigil", () => {
             systemProgram: SystemProgram.programId,
             instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
             outputStablecoinAccount: null,
+            outputSwapAccount: null,
           })
           .instruction();
 
@@ -3471,6 +3492,7 @@ describe("sigil", () => {
             protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
             feeDestinationTokenAccount: null,
             outputStablecoinAccount: null,
+            outputSwapAccount: null,
             agentSpendOverlay: rvOverlay,
             tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
@@ -3860,6 +3882,7 @@ describe("sigil", () => {
             protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
             feeDestinationTokenAccount: null,
             outputStablecoinAccount: null,
+            outputSwapAccount: null,
             agentSpendOverlay: cvOverlay,
             tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
@@ -4028,6 +4051,7 @@ describe("sigil", () => {
             protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
             feeDestinationTokenAccount: null,
             outputStablecoinAccount: null,
+            outputSwapAccount: null,
             agentSpendOverlay: ringOverlay,
             tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
@@ -4055,6 +4079,7 @@ describe("sigil", () => {
             systemProgram: SystemProgram.programId,
             instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
             outputStablecoinAccount: null,
+            outputSwapAccount: null,
           })
           .instruction();
 
@@ -4228,6 +4253,7 @@ describe("sigil", () => {
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           agentSpendOverlay: feeEdgeOverlay,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -4259,6 +4285,7 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 
@@ -4315,6 +4342,7 @@ describe("sigil", () => {
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           agentSpendOverlay: feeEdgeOverlay,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -4346,6 +4374,7 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 
@@ -4385,6 +4414,7 @@ describe("sigil", () => {
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           agentSpendOverlay: feeEdgeOverlay,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -4416,6 +4446,7 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 
@@ -5970,6 +6001,7 @@ describe("sigil", () => {
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           agentSpendOverlay: maOverlay,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -5993,6 +6025,7 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         } as any)
         .signers([agent])
         .instruction();
@@ -6040,6 +6073,7 @@ describe("sigil", () => {
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           agentSpendOverlay: maOverlay,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -6063,6 +6097,7 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         } as any)
         .signers([agent])
         .instruction();
@@ -6660,6 +6695,12 @@ describe("sigil", () => {
     let pcOwnerUsdc: PublicKey;
     let pcVaultUsdc: PublicKey;
     let pcFeeUsdc: PublicKey;
+    // M1 output-ownership: a non-USDC mint a spend "acquires" into a
+    // vault-owned ATA, so finalize's mandatory output gate (6112) is satisfied
+    // while the per-protocol cap still charges the USDC outflow (actual_spend).
+    let pcOutputMint: PublicKey;
+    let pcVaultOutputAta: PublicKey;
+    let pcAgentOutputReserve: PublicKey;
 
     before(async () => {
       airdropSol(svm, protoCapOwner.publicKey, 100 * LAMPORTS_PER_SOL);
@@ -6733,6 +6774,34 @@ describe("sigil", () => {
         protoCapOwner,
         usdcMint,
         protoCapDrainDest.publicKey,
+      );
+
+      // M1: a non-USDC output mint, a vault-owned ATA to receive it (the
+      // acquisition the finalize gate verifies increased), and an agent-owned
+      // reserve to fund the swap's output leg (test-only — a real swap sources
+      // output from a pool).
+      pcOutputMint = Keypair.generate().publicKey;
+      createMintAtAddress(svm, pcOutputMint, owner.publicKey, 6);
+      pcVaultOutputAta = createAtaHelper(
+        svm,
+        protoCapOwner,
+        pcOutputMint,
+        pcVault,
+        true,
+      );
+      pcAgentOutputReserve = createAtaHelper(
+        svm,
+        protoCapOwner,
+        pcOutputMint,
+        protoCapAgent.publicKey,
+      );
+      mintToHelper(
+        svm,
+        (owner as any).payer,
+        pcOutputMint,
+        pcAgentOutputReserve,
+        owner.publicKey,
+        1_000_000_000n,
       );
 
       // Initialize vault with 2 protocols + per-protocol caps:
@@ -6952,6 +7021,7 @@ describe("sigil", () => {
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: pcVaultOutputAta,
           agentSpendOverlay: pcOverlay,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -6965,6 +7035,8 @@ describe("sigil", () => {
         .remainingAccounts([
           { pubkey: pcVaultUsdc, isSigner: false, isWritable: false },
           { pubkey: pcDrainDestUsdc, isSigner: false, isWritable: false },
+          { pubkey: pcAgentOutputReserve, isSigner: false, isWritable: false },
+          { pubkey: pcVaultOutputAta, isSigner: false, isWritable: false },
           {
             pubkey: protoCapAgent.publicKey,
             isSigner: false,
@@ -6981,19 +7053,22 @@ describe("sigil", () => {
       // `actual_spend == amount` at finalize so the per-protocol cap genuinely
       // charges (a no-op would move 0 and the cap would never fire).
       const drainAmount = netDrainAmount(amount);
-      const drainIx = protocol.equals(MOCK_DEFI_2_PROGRAM_ID)
-        ? buildMockDefiDrain2Ix(
-            pcVaultUsdc,
-            pcDrainDestUsdc,
-            protoCapAgent.publicKey,
-            drainAmount,
-          )
-        : buildMockDefiDrainIx(
-            pcVaultUsdc,
-            pcDrainDestUsdc,
-            protoCapAgent.publicKey,
-            drainAmount,
-          );
+      // M1: model a real ACQUIRING swap (not a bare drain) — pull `drainAmount`
+      // USDC out of the vault AND deliver a tiny amount of a DIFFERENT mint into
+      // the vault-owned output ATA, satisfying finalize's mandatory
+      // output-ownership gate (6112). The per-protocol cap still charges
+      // `actual_spend` (= the USDC outflow). `programId == protocol` so the cap
+      // keys off the correct authorized_protocol.
+      const drainIx = buildMockSwapToVaultIx(
+        pcVaultUsdc,
+        pcDrainDestUsdc,
+        pcAgentOutputReserve,
+        pcVaultOutputAta,
+        protoCapAgent.publicKey,
+        drainAmount,
+        new BN(1_000),
+        protocol,
+      );
 
       const finalizeIx = await program.methods
         .finalizeSession()
@@ -7010,6 +7085,7 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: pcVaultOutputAta,
         })
         .instruction();
 
@@ -7511,6 +7587,11 @@ describe("sigil", () => {
     let ta13VaultUsdc: PublicKey;
     let ta13FeeUsdc: PublicKey;
     let ta13DrainDestUsdc: PublicKey;
+    // M1 output-ownership: non-USDC mint acquired into a vault-owned ATA so the
+    // mandatory finalize gate (6112) is satisfied while the cap charges USDC.
+    let ta13OutputMint: PublicKey;
+    let ta13VaultOutputAta: PublicKey;
+    let ta13AgentOutputReserve: PublicKey;
     let ta13PendingPda: PublicKey;
 
     before(async () => {
@@ -7581,6 +7662,32 @@ describe("sigil", () => {
         ta13Owner,
         usdcMint,
         ta13DrainDest.publicKey,
+      );
+
+      // M1: output mint + vault-owned acquisition ATA + agent reserve (funds
+      // the swap's output leg; test-only).
+      ta13OutputMint = Keypair.generate().publicKey;
+      createMintAtAddress(svm, ta13OutputMint, owner.publicKey, 6);
+      ta13VaultOutputAta = createAtaHelper(
+        svm,
+        ta13Owner,
+        ta13OutputMint,
+        ta13Vault,
+        true,
+      );
+      ta13AgentOutputReserve = createAtaHelper(
+        svm,
+        ta13Owner,
+        ta13OutputMint,
+        ta13Agent.publicKey,
+      );
+      mintToHelper(
+        svm,
+        (owner as any).payer,
+        ta13OutputMint,
+        ta13AgentOutputReserve,
+        owner.publicKey,
+        1_000_000_000n,
       );
 
       // F-15 fixture: daily_cap=$1000, max_tx=$501, protocols=[Jupiter, Drift],
@@ -7688,6 +7795,7 @@ describe("sigil", () => {
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: ta13VaultOutputAta,
           agentSpendOverlay: ta13Overlay,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -7700,6 +7808,12 @@ describe("sigil", () => {
         .remainingAccounts([
           { pubkey: ta13VaultUsdc, isSigner: false, isWritable: false },
           { pubkey: ta13DrainDestUsdc, isSigner: false, isWritable: false },
+          {
+            pubkey: ta13AgentOutputReserve,
+            isSigner: false,
+            isWritable: false,
+          },
+          { pubkey: ta13VaultOutputAta, isSigner: false, isWritable: false },
           { pubkey: ta13Agent.publicKey, isSigner: false, isWritable: false },
         ])
         .instruction();
@@ -7709,19 +7823,19 @@ describe("sigil", () => {
       // when targeting driftProtocol, else MOCK_DEFI's. actual_spend == amount,
       // so the per-protocol cap genuinely charges.
       const drainAmount = netDrainAmount(amount);
-      const drainIx = protocol.equals(MOCK_DEFI_2_PROGRAM_ID)
-        ? buildMockDefiDrain2Ix(
-            ta13VaultUsdc,
-            ta13DrainDestUsdc,
-            ta13Agent.publicKey,
-            drainAmount,
-          )
-        : buildMockDefiDrainIx(
-            ta13VaultUsdc,
-            ta13DrainDestUsdc,
-            ta13Agent.publicKey,
-            drainAmount,
-          );
+      // M1: acquiring swap (not a bare drain) — pull USDC out AND deliver a
+      // different mint into the vault-owned output ATA (satisfies the 6112
+      // gate); the per-protocol cap still charges the USDC outflow.
+      const drainIx = buildMockSwapToVaultIx(
+        ta13VaultUsdc,
+        ta13DrainDestUsdc,
+        ta13AgentOutputReserve,
+        ta13VaultOutputAta,
+        ta13Agent.publicKey,
+        drainAmount,
+        new BN(1_000),
+        protocol,
+      );
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
@@ -7737,6 +7851,7 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: ta13VaultOutputAta,
         })
         .instruction();
       return sendVersionedTx(svm, [validateIx, drainIx, finalizeIx], ta13Agent);

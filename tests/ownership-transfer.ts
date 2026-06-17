@@ -883,6 +883,7 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           agentSpendOverlay: ctx.overlay,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -912,6 +913,7 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 

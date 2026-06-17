@@ -343,6 +343,7 @@ describe("devnet-smoke-test", () => {
         systemProgram: SystemProgram.programId,
         instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         outputStablecoinAccount: null,
+        outputSwapAccount: null,
       } as any)
       .remainingAccounts([
         { pubkey: agent.publicKey, isSigner: false, isWritable: false },
@@ -367,6 +368,7 @@ describe("devnet-smoke-test", () => {
         systemProgram: SystemProgram.programId,
         instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         outputStablecoinAccount: null,
+        outputSwapAccount: null,
       } as any)
       .instruction();
 

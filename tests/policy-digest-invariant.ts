@@ -742,6 +742,7 @@ describe("Phase 2 close-up — F-16 negative tests", () => {
         protocolTreasuryTokenAccount: null,
         feeDestinationTokenAccount: null,
         outputStablecoinAccount: null,
+        outputSwapAccount: null,
         agentSpendOverlay: vault.overlayPda,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,

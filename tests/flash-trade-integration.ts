@@ -181,6 +181,7 @@ describe("flash-trade-integration", () => {
         protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
         feeDestinationTokenAccount: null,
         outputStablecoinAccount: null,
+        outputSwapAccount: null,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
@@ -208,6 +209,7 @@ describe("flash-trade-integration", () => {
         agentSpendOverlay: overlayForVault,
         vaultTokenAccount: effectiveVaultAta,
         outputStablecoinAccount: null,
+        outputSwapAccount: null,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
