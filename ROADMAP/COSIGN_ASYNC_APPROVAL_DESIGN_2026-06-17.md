@@ -68,7 +68,17 @@ A single account type holding a **typed action enum** + approval state (NOT arbi
 
 ## 4. Replay / staleness gate (the load-bearing safety)
 
-Every approval (both patterns) is bound to **`policy_version`** (Sigil's existing monotonic policy counter) + the content/action digest. At `approve` AND at `apply`/`execute`, require the current `policy_version` equals the value anchored when the pending/proposal was created. Because **cosigner rotation runs through `queue_policy_update` (elevated → bumps `policy_version`)**, any in-flight approval gathered under the old K is auto-invalidated — Sigil's equivalent of Squads' `stale_transaction_index`, reusing existing state rather than adding a new index. Terminal `Executed`/`Rejected` status prevents replay of a completed proposal.
+Every approval (both patterns) is bound to **`policy_version`** (Sigil's existing monotonic policy counter, `policy.rs:101`) + the content/action digest. At `approve` AND at `apply`/`execute`, require the current `policy_version` equals the value anchored when the pending/proposal was created. Because **cosigner rotation runs through `queue_policy_update` (elevated → bumps `policy_version`)**, any in-flight approval gathered under the old K is auto-invalidated — Sigil's equivalent of Squads' `stale_transaction_index`, reusing existing state rather than adding a new index. Terminal `Executed`/`Rejected` status prevents replay of a completed proposal.
+
+### 4.1 Freshness ceiling (F-10) reconciliation — REQUIRED for async
+
+`apply_pending_policy` (`:132`) enforces an F-10 freshness ceiling: `clock.slot - pending.queued_at_slot < MAX_APPLY_AGE_SLOTS` (~216,000 slots ≈ **24h**; the timelocked-admin variant `MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN` ≈ 700,000 ≈ 78h). Its purpose: bound how long a pre-signed (durable-nonce) apply tx can be held before landing — defending the queue→apply gap against drift/replay (Drift $285M analog, CH-1 audit).
+
+This **collides with the intentionally-async approval timeline** (a remote cosigner may approve days after queue). Resolution — split freshness into two correctly-anchored windows:
+- **queue → approve:** UNBOUNDED in slots; protected instead by the strict `policy_version` staleness gate (§4). The pending may wait for K indefinitely *as long as policy has not drifted* — if it drifts, approve/apply is rejected.
+- **approve → apply/execute:** keep the F-10 ceiling, **re-anchored to `approved_at_slot`** (apply must land within `MAX_APPLY_AGE_SLOTS` of the APPROVAL, not the queue). The authorization-complete point in the async model is the approval, so this preserves F-10's held-apply bound while giving the cosigner unlimited time to approve.
+
+`Decision drivers:` re-anchor to approval over simply widening the ceiling — keeps F-10's held-apply bound intact (security) instead of loosening it; the `policy_version` gate, not a slot ceiling, is the correct defense for the queue→approve wait. This changes an audit-fix (F-10) behavior, so it is explicitly flagged for the mandatory adversarial-review step before merge.
 
 ---
 
