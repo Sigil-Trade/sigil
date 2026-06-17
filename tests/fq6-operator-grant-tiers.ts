@@ -195,6 +195,7 @@ describe("F-Q6 — OPERATOR-grant authorization tiering (per-tier behavior)", ()
   async function queuePolicyUpdate(
     v: { vaultPda: PublicKey; policy: PublicKey; pendingPolicy: PublicKey },
     override: {
+      cosignRequired?: boolean;
       cosignSessionPubkey?: PublicKey;
       operatorGrantDelaySeconds?: number;
     },
@@ -205,6 +206,7 @@ describe("F-Q6 — OPERATOR-grant authorization tiering (per-tier behavior)", ()
       v.policy,
       v.vaultPda,
       {
+        cosignRequired: override.cosignRequired ?? null,
         cosignSessionPubkey: override.cosignSessionPubkey ?? null,
         operatorGrantDelaySeconds: override.operatorGrantDelaySeconds ?? null,
       },
@@ -226,7 +228,7 @@ describe("F-Q6 — OPERATOR-grant authorization tiering (per-tier behavior)", ()
         null, // 13 auto_revoke_threshold
         null, // 14 stable_balance_floor
         null, // 15 per_recipient_daily_cap_usd
-        null, // 16 cosign_required (pass-through)
+        override.cosignRequired ?? null, // 16 cosign_required (enable cosign + bind atomically)
         override.cosignSessionPubkey ?? null, // 17 cosign_session_pubkey
         override.operatorGrantDelaySeconds != null
           ? new BN(override.operatorGrantDelaySeconds)
@@ -427,9 +429,12 @@ describe("F-Q6 — OPERATOR-grant authorization tiering (per-tier behavior)", ()
   // ── ISC-60 — CosignBound: instant with the BOUND cosigner ─────────────────
 
   it("ISC-60 CosignBound (delay 0): instant register_agent(OPERATOR) WITH the bound cosigner → seated, no queue", async () => {
-    const v = await freshVault(6210, { cosignRequired: true });
+    const v = await freshVault(6210);
     const cosigner = Keypair.generate();
-    await queuePolicyUpdate(v, { cosignSessionPubkey: cosigner.publicKey });
+    await queuePolicyUpdate(v, {
+      cosignRequired: true,
+      cosignSessionPubkey: cosigner.publicKey,
+    });
     const agent = Keypair.generate().publicKey;
     await registerAgentRpc(v, agent, CAPABILITY_OPERATOR, {
       keypair: cosigner,
@@ -444,9 +449,12 @@ describe("F-Q6 — OPERATOR-grant authorization tiering (per-tier behavior)", ()
   // ── ISC-61 — CosignBound C-1: the inline signer MUST be the BOUND cosigner ─
 
   it("ISC-61a CosignBound: instant OPERATOR with NO cosigner → ErrCosignRequired (6080)", async () => {
-    const v = await freshVault(6211, { cosignRequired: true });
+    const v = await freshVault(6211);
     const cosigner = Keypair.generate();
-    await queuePolicyUpdate(v, { cosignSessionPubkey: cosigner.publicKey });
+    await queuePolicyUpdate(v, {
+      cosignRequired: true,
+      cosignSessionPubkey: cosigner.publicKey,
+    });
     const agent = Keypair.generate().publicKey;
     await expectRevert(registerAgentRpc(v, agent, CAPABILITY_OPERATOR), {
       name: "ErrCosignRequired",
@@ -456,9 +464,12 @@ describe("F-Q6 — OPERATOR-grant authorization tiering (per-tier behavior)", ()
   });
 
   it("ISC-61b CosignBound: instant OPERATOR with a WRONG (unbound) signer → ErrCosignRequired (6080)", async () => {
-    const v = await freshVault(6212, { cosignRequired: true });
+    const v = await freshVault(6212);
     const cosigner = Keypair.generate();
-    await queuePolicyUpdate(v, { cosignSessionPubkey: cosigner.publicKey });
+    await queuePolicyUpdate(v, {
+      cosignRequired: true,
+      cosignSessionPubkey: cosigner.publicKey,
+    });
     const wrong = Keypair.generate();
     const agent = Keypair.generate().publicKey;
     await expectRevert(
@@ -473,9 +484,12 @@ describe("F-Q6 — OPERATOR-grant authorization tiering (per-tier behavior)", ()
   });
 
   it("ISC-61c CosignBound: bound cosigner present but NOT a signer → ErrCosignRequired (6080)", async () => {
-    const v = await freshVault(6213, { cosignRequired: true });
+    const v = await freshVault(6213);
     const cosigner = Keypair.generate();
-    await queuePolicyUpdate(v, { cosignSessionPubkey: cosigner.publicKey });
+    await queuePolicyUpdate(v, {
+      cosignRequired: true,
+      cosignSessionPubkey: cosigner.publicKey,
+    });
     const agent = Keypair.generate().publicKey;
     // bound pubkey in remaining_accounts but isSigner=false → C-1 (is_signer && key==bound) fails.
     await expectRevert(
@@ -497,9 +511,12 @@ describe("F-Q6 — OPERATOR-grant authorization tiering (per-tier behavior)", ()
   //    over-strict / not bricked).
 
   it("M-2 CosignBound OBSERVER: register with NO cosigner → ErrCosignRequired (6080)", async () => {
-    const v = await freshVault(6290, { cosignRequired: true });
+    const v = await freshVault(6290);
     const cosigner = Keypair.generate();
-    await queuePolicyUpdate(v, { cosignSessionPubkey: cosigner.publicKey });
+    await queuePolicyUpdate(v, {
+      cosignRequired: true,
+      cosignSessionPubkey: cosigner.publicKey,
+    });
     const agent = Keypair.generate().publicKey;
     await expectRevert(registerAgentRpc(v, agent, CAPABILITY_OBSERVER), {
       name: "ErrCosignRequired",
@@ -509,9 +526,12 @@ describe("F-Q6 — OPERATOR-grant authorization tiering (per-tier behavior)", ()
   });
 
   it("M-2 CosignBound OBSERVER: register with a WRONG (unbound) signer → ErrCosignRequired (6080)", async () => {
-    const v = await freshVault(6291, { cosignRequired: true });
+    const v = await freshVault(6291);
     const cosigner = Keypair.generate();
-    await queuePolicyUpdate(v, { cosignSessionPubkey: cosigner.publicKey });
+    await queuePolicyUpdate(v, {
+      cosignRequired: true,
+      cosignSessionPubkey: cosigner.publicKey,
+    });
     const wrong = Keypair.generate();
     const agent = Keypair.generate().publicKey;
     // has_bound_cosigner: a throwaway signer != the bound cosign_session_pubkey
@@ -528,9 +548,12 @@ describe("F-Q6 — OPERATOR-grant authorization tiering (per-tier behavior)", ()
   });
 
   it("M-2 CosignBound OBSERVER: register WITH the bound cosigner → seated (not over-strict / not bricked)", async () => {
-    const v = await freshVault(6292, { cosignRequired: true });
+    const v = await freshVault(6292);
     const cosigner = Keypair.generate();
-    await queuePolicyUpdate(v, { cosignSessionPubkey: cosigner.publicKey });
+    await queuePolicyUpdate(v, {
+      cosignRequired: true,
+      cosignSessionPubkey: cosigner.publicKey,
+    });
     const agent = Keypair.generate().publicKey;
     await registerAgentRpc(v, agent, CAPABILITY_OBSERVER, {
       keypair: cosigner,
@@ -542,23 +565,11 @@ describe("F-Q6 — OPERATOR-grant authorization tiering (per-tier behavior)", ()
     );
   });
 
-  it("ISC-61d cosign_required but UNBOUND (default pubkey): instant OPERATOR → 6107 [C-1 degrades to SingleKey]", async () => {
-    // cosign_required=true at init, but cosign_session_pubkey never bound →
-    // classify_operator_grant_tier returns SingleKey (not CosignBound), so an
-    // instant OPERATOR is rejected with the timelock error, NOT ErrCosignRequired.
-    const v = await freshVault(6214, { cosignRequired: true });
-    const agent = Keypair.generate().publicKey;
-    const cosigner = Keypair.generate();
-    await expectRevert(
-      registerAgentRpc(v, agent, CAPABILITY_OPERATOR, {
-        keypair: cosigner,
-        pubkey: cosigner.publicKey,
-        isSigner: true,
-      }),
-      { name: "ErrOperatorGrantRequiresTimelock", code: 6107 },
-    );
-    expect(await agentCapability(v.vaultPda, agent)).to.equal(undefined);
-  });
+  // ISC-61d DELETED (take-over hardening 2026-06-16): the {cosign_required=true,
+  // UNBOUND} state it exercised is now UNREACHABLE — initialize_vault rejects
+  // cosign_required=true (ErrCosignRequired) and has_bound_cosigner fails closed
+  // when unbound. The SingleKey operator tier remains covered by the cosign-OFF
+  // (default) tests above. (Init-time rejection is asserted in missing-coverage.)
 
   // ── ISC-62 — Multisig instant: V1-UNREACHABLE on-chain ────────────────────
 
@@ -582,9 +593,12 @@ describe("F-Q6 — OPERATOR-grant authorization tiering (per-tier behavior)", ()
   // ── ISC-63 — A configured delay is itself timelocked (lowering is delayed) ─
 
   it("ISC-63a CosignBound + configured delay>0: instant OPERATOR even WITH bound cosigner → 6107", async () => {
-    const v = await freshVault(6220, { cosignRequired: true });
+    const v = await freshVault(6220);
     const cosigner = Keypair.generate();
-    await queuePolicyUpdate(v, { cosignSessionPubkey: cosigner.publicKey });
+    await queuePolicyUpdate(v, {
+      cosignRequired: true,
+      cosignSessionPubkey: cosigner.publicKey,
+    });
     await queuePolicyUpdate(v, { operatorGrantDelaySeconds: 3600 });
     const agent = Keypair.generate().publicKey;
     await expectRevert(
@@ -598,9 +612,12 @@ describe("F-Q6 — OPERATOR-grant authorization tiering (per-tier behavior)", ()
   });
 
   it("ISC-63b Lowering operator_grant_delay_seconds: apply_pending_policy BEFORE the timelock → TimelockNotExpired (6022)", async () => {
-    const v = await freshVault(6221, { cosignRequired: true });
+    const v = await freshVault(6221);
     const cosigner = Keypair.generate();
-    await queuePolicyUpdate(v, { cosignSessionPubkey: cosigner.publicKey });
+    await queuePolicyUpdate(v, {
+      cosignRequired: true,
+      cosignSessionPubkey: cosigner.publicKey,
+    });
     await queuePolicyUpdate(v, { operatorGrantDelaySeconds: 3600 });
     // Queue the LOWER (3600 -> 0) but do NOT advance past the policy timelock.
     await queuePolicyUpdate(v, { operatorGrantDelaySeconds: 0 }, false);
@@ -619,9 +636,12 @@ describe("F-Q6 — OPERATOR-grant authorization tiering (per-tier behavior)", ()
   });
 
   it("ISC-63c After the policy timelock elapses: delay lowered to 0 → instant OPERATOR with bound cosigner succeeds", async () => {
-    const v = await freshVault(6222, { cosignRequired: true });
+    const v = await freshVault(6222);
     const cosigner = Keypair.generate();
-    await queuePolicyUpdate(v, { cosignSessionPubkey: cosigner.publicKey });
+    await queuePolicyUpdate(v, {
+      cosignRequired: true,
+      cosignSessionPubkey: cosigner.publicKey,
+    });
     await queuePolicyUpdate(v, { operatorGrantDelaySeconds: 3600 });
     // Lower back to 0 THROUGH the timelock (applyAfter=true advances + applies).
     await queuePolicyUpdate(v, { operatorGrantDelaySeconds: 0 });

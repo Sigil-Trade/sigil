@@ -10,15 +10,17 @@
  *      asserts byte-equality. Any tamper of pending args between queue and
  *      apply (e.g. a future discriminator-collision attack on the pending PDA)
  *      produces a digest mismatch and a hard reject (`ErrCosignRequired`,
- *      6089).
+ *      6080).
  *
  * The cosign digest is INTENTIONALLY narrower than TA-19 `policy_preview_digest`:
- * only the FIELDS that participate in "elevated mutation" detection are in
- * scope. Non-elevated fields (developer_fee_rate, max_slippage_bps,
- * session_expiry_seconds, timelock_duration narrowing, protocol_mode,
- * destination_mode, operating_hours, etc.) do NOT require cosign and are NOT
- * bound by THIS digest — they are still bound by TA-19
- * `policy_preview_digest` at queue time.
+ * only the B4 F-1 elevation-detection FIELDS are bound here. Some fields are
+ * genuinely non-elevated and never need cosign (session_expiry_seconds,
+ * timelock_duration narrowing, protocol_mode, destination_mode, etc.) — bound
+ * only by TA-19. NOTE (take-over 2026-06-17): RAISING max_slippage_bps or
+ * developer_fee_rate, and WIDENING operating_hours, ARE now elevated (they
+ * require the bound cosigner) but are deliberately NOT bound by THIS digest —
+ * the cosigner attests them via its tx-signature and TA-19 binds the values, so
+ * no cosign-digest field was added for them.
  *
  * Round 2 B4 F-1 fix (audit 2026-05-19): the cosign-digest binding now
  * extends to all G3 + G6 elevation triggers that were previously NOT bound:

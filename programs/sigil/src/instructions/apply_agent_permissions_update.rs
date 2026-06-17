@@ -119,6 +119,29 @@ pub fn handler(ctx: Context<ApplyAgentPermissionsUpdate>) -> Result<()> {
         SigilError::InvalidCapability
     );
 
+    // Take-over 2026-06-16 (3rd-review Finding): H-1 mirror — re-assert the LIVE
+    // bound cosigner signs at APPLY, not just at queue. The digest re-bind below
+    // proves the pending tuple is untampered, but NOT that the CURRENT bound
+    // cosigner consents — so without this, an attacker who queued with the old K
+    // could still apply after the owner defensively ROTATES K. The queue pin +
+    // rotation-elevation close the front doors; this closes the pre-signed-apply
+    // survival path. Identical to apply_agent_grant's H-1 gate; fail-closed on
+    // the (now-unreachable) unbound state.
+    {
+        let policy = &ctx.accounts.policy;
+        if policy.cosign_required {
+            let cosign_session_pubkey = policy.cosign_session_pubkey;
+            let cosign_ok = if cosign_session_pubkey != Pubkey::default() {
+                ctx.remaining_accounts
+                    .iter()
+                    .any(|ai| ai.key() == cosign_session_pubkey && ai.is_signer)
+            } else {
+                false // fail closed — mirrors has_bound_cosigner's unbound branch
+            };
+            require!(cosign_ok, SigilError::ErrCosignRequired);
+        }
+    }
+
     // Round 2 F-RP3-2 fix (audit 2026-05-19): re-bind digest check.
     //
     // When the queue persisted a cosign_session != Pubkey::default(), it

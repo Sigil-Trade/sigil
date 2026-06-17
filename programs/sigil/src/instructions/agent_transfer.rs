@@ -5,6 +5,7 @@ use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 use crate::errors::SigilError;
 use crate::events::{AgentSpendLimitChecked, AgentTransferExecuted, FeesCollected};
 use crate::state::*;
+use crate::utils::audit_log::build_audit_entry;
 
 use super::utils::stablecoin_to_usd;
 
@@ -73,6 +74,21 @@ pub struct AgentTransfer<'info> {
     pub protocol_treasury_token_account: Option<Account<'info, TokenAccount>>,
 
     pub token_program: Program<'info, Token>,
+
+    /// Phase 7 / L11-1 — success audit log; entry appended after the transfers.
+    /// PDA + address-pinned sysvar are auto-resolved by the Anchor client, so
+    /// existing `agent_transfer` callers need not pass them explicitly (same as
+    /// `deposit_funds`).
+    #[account(
+        mut,
+        seeds = [b"audit_success", vault.key().as_ref()],
+        bump = audit_log_success.load()?.bump,
+    )]
+    pub audit_log_success: AccountLoader<'info, AuditLogSuccess>,
+
+    /// CHECK: Phase 7 — slot_hashes sysvar; address-pinned.
+    #[account(address = anchor_lang::solana_program::sysvar::slot_hashes::id())]
+    pub slot_hashes_sysvar: UncheckedAccount<'info>,
 }
 
 pub fn handler(
@@ -470,6 +486,31 @@ pub fn handler(
             combined_stable_balance >= stable_floor_policy.stable_balance_floor,
             SigilError::ErrStableFloorViolation
         );
+    }
+
+    // L11-1 (audit 2026-06-15, forensic I6): append the on-chain audit-log
+    // entry for the agent OUTFLOW. deposit/withdraw/finalize all append; this
+    // PRIMARY spend path did not. Placed after all token CPIs settle and before
+    // the emit! calls below (ISC-144 ordering). No vault borrow is active here
+    // (the immutable refs ended above; the &mut re-borrow happens just below),
+    // so the disjoint audit_log_success / slot_hashes_sysvar access is clean.
+    {
+        let entry = build_audit_entry(
+            AUDIT_DISC_AGENT_TRANSFER,
+            ctx.accounts.destination_token_account.owner,
+            0,
+            amount.min(i64::MAX as u64) as i64,
+            clock.unix_timestamp,
+            &ctx.accounts.slot_hashes_sysvar.to_account_info(),
+        )?;
+        let mut log = ctx.accounts.audit_log_success.load_mut()?;
+        // §RP-1 I-2: defense-in-depth guard against future seeds drift.
+        require_keys_eq!(
+            log.vault,
+            ctx.accounts.vault.key(),
+            SigilError::ZeroCopyVaultMismatch
+        );
+        log.append(entry);
     }
 
     // Update vault stats

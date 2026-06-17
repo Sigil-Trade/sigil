@@ -77,7 +77,7 @@ import { getApplyPendingPolicyInstructionAsync } from "../generated/instructions
 import { getCancelPendingPolicyInstructionAsync } from "../generated/instructions/cancelPendingPolicy.js";
 import { getQueueAgentPermissionsUpdateInstructionAsync } from "../generated/instructions/queueAgentPermissionsUpdate.js";
 import { getApplyAgentPermissionsUpdateInstructionAsync } from "../generated/instructions/applyAgentPermissionsUpdate.js";
-import { getCancelAgentPermissionsUpdateInstruction } from "../generated/instructions/cancelAgentPermissionsUpdate.js";
+import { getCancelAgentPermissionsUpdateInstructionAsync } from "../generated/instructions/cancelAgentPermissionsUpdate.js";
 import { getCreatePostAssertionsInstructionAsync } from "../generated/instructions/createPostAssertions.js";
 import { getClosePostAssertionsInstructionAsync } from "../generated/instructions/closePostAssertions.js";
 
@@ -517,13 +517,12 @@ export async function cancelAgentGrant(
  * created/destroyed between the read and TX execution, the on-chain program
  * will reject the TX. This is a known race window — retry on failure.
  */
-export async function closeVault(
+async function buildCloseVaultFinalIx(
   rpc: Rpc<SolanaRpcApi>,
   vault: Address,
   owner: TransactionSigner,
   network: "devnet" | "mainnet",
-  opts?: TxOpts,
-): Promise<TxResult> {
+): Promise<Instruction> {
   const net: Network = network === "mainnet" ? "mainnet-beta" : "devnet";
 
   // Resolve vault state to determine which remaining_accounts are needed
@@ -644,6 +643,23 @@ export async function closeVault(
         }
       : ix;
 
+  return finalIx as Instruction;
+}
+
+/**
+ * Close a vault (owner-only path — for vaults WITHOUT cosign). On a
+ * cosign-required vault the on-chain `close_vault` rejects an owner-only close
+ * with `ErrCosignRequired`; use {@link buildCloseVaultElevated} (partial-sign,
+ * bound cosigner co-signs) instead.
+ */
+export async function closeVault(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  opts?: TxOpts,
+): Promise<TxResult> {
+  const finalIx = await buildCloseVaultFinalIx(rpc, vault, owner, network);
   return run(rpc, owner, network, [finalIx], {
     computeUnits: opts?.computeUnits ?? 400_000,
     priorityFeeMicroLamports: opts?.priorityFeeMicroLamports,
@@ -1355,12 +1371,205 @@ export async function cancelAgentPermissions(
 ): Promise<TxResult> {
   requireValidAddress(agent, "Agent address");
   const pendingPda = await derivePendingAgentPermsPDA(vault, agent);
-  const ix = getCancelAgentPermissionsUpdateInstruction({
+  const ix = await getCancelAgentPermissionsUpdateInstructionAsync({
     owner,
     vault,
     pendingAgentPerms: pendingPda,
   });
   return run(rpc, owner, network, [ix], opts);
+}
+
+// ─── Partial-sign elevated OWNER-OP builders (genuine 2-of-2) ────────────────
+//
+// Take-over 2026-06-17: on a cosign-required vault the on-chain program now
+// requires the BOUND cosigner to co-sign these owner ops (a leaked owner key
+// alone is rejected with ErrCosignRequired):
+//   - cancel_agent_grant / cancel_agent_permissions_update / cancel_pending_policy
+//     (M2a / M2b / L1-1 symmetric cosign gates)
+//   - apply_agent_permissions_update (H-1: live bound cosigner signs at apply)
+//   - apply_pending_policy when DISABLING cosign (the disable gate)
+//   - close_vault (a leaked owner key alone cannot close → cannot start the
+//     close->reinit drain)
+// These builders mirror buildQueuePolicyElevated's PARTIAL-SIGN flow: the owner
+// signs here; a SEPARATE bound cosigner co-signs the same wire tx (true 2-of-2).
+// Unlike queue-elevated, there is NO cosign digest (the digest binds a queued
+// policy change; these ops are gated purely by the bound cosigner's signature).
+
+/**
+ * Result of a partial-sign elevated owner-op build (cancel / apply / close), for
+ * a true 2-of-2 cosigner handoff. The owner has signed; the bound cosigner must
+ * co-sign the SAME `partialTransactionBase64` before it can land.
+ */
+export interface CosignedActionBundle {
+  /** Base64 wire tx, owner-signed, awaiting the bound cosigner's signature. */
+  partialTransactionBase64: string;
+  /**
+   * The bound cosigner pubkey that must co-sign. MUST equal the vault's
+   * `policy.cosign_session_pubkey` — the on-chain gate pins to it.
+   */
+  cosignSession: Address;
+}
+
+function assertDistinctCosigner(
+  owner: TransactionSigner,
+  cosignSession: Address,
+): void {
+  requireValidAddress(cosignSession, "Cosigner address");
+  if (cosignSession === owner.address) {
+    throw toDxError(
+      new Error(
+        "Cosigner must be distinct from the owner (on-chain ErrCosignRequired)",
+      ),
+    );
+  }
+}
+
+/** Partial-sign: cancel a pending AGENT GRANT on a cosign-required vault. */
+export async function buildCancelAgentGrantElevated(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  cosignSession: Address,
+  opts?: TxOpts,
+): Promise<CosignedActionBundle> {
+  assertDistinctCosigner(owner, cosignSession);
+  const ix = await getCancelAgentGrantInstructionAsync({ owner, vault });
+  const partialTransactionBase64 = await buildOwnerPartialSignedTx(
+    rpc,
+    owner,
+    [withCosignerSigner(ix, cosignSession)],
+    opts,
+  );
+  return { partialTransactionBase64, cosignSession };
+}
+
+/** Partial-sign: cancel a pending AGENT-PERMISSIONS update (M2b gate). */
+export async function buildCancelAgentPermissionsElevated(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  agent: Address,
+  cosignSession: Address,
+  opts?: TxOpts,
+): Promise<CosignedActionBundle> {
+  assertDistinctCosigner(owner, cosignSession);
+  requireValidAddress(agent, "Agent address");
+  const pendingPda = await derivePendingAgentPermsPDA(vault, agent);
+  const ix = await getCancelAgentPermissionsUpdateInstructionAsync({
+    owner,
+    vault,
+    pendingAgentPerms: pendingPda,
+  });
+  const partialTransactionBase64 = await buildOwnerPartialSignedTx(
+    rpc,
+    owner,
+    [withCosignerSigner(ix, cosignSession)],
+    opts,
+  );
+  return { partialTransactionBase64, cosignSession };
+}
+
+/** Partial-sign: cancel a pending POLICY update (M2a gate). */
+export async function buildCancelPendingPolicyElevated(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  cosignSession: Address,
+  opts?: TxOpts,
+): Promise<CosignedActionBundle> {
+  assertDistinctCosigner(owner, cosignSession);
+  const ix = await getCancelPendingPolicyInstructionAsync({ owner, vault });
+  const partialTransactionBase64 = await buildOwnerPartialSignedTx(
+    rpc,
+    owner,
+    [withCosignerSigner(ix, cosignSession)],
+    opts,
+  );
+  return { partialTransactionBase64, cosignSession };
+}
+
+/**
+ * Partial-sign: APPLY a queued agent-permissions update on a cosign-required
+ * vault. The on-chain H-1 gate requires the LIVE bound cosigner to sign at apply
+ * (defends the pre-signed-apply-survives-rotation class).
+ */
+export async function buildApplyAgentPermissionsElevated(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  agent: Address,
+  cosignSession: Address,
+  opts?: TxOpts,
+): Promise<CosignedActionBundle> {
+  assertDistinctCosigner(owner, cosignSession);
+  requireValidAddress(agent, "Agent address");
+  const [overlayPda] = await getAgentOverlayPDA(vault, 0);
+  const pendingPda = await derivePendingAgentPermsPDA(vault, agent);
+  const ix = await getApplyAgentPermissionsUpdateInstructionAsync({
+    owner,
+    vault,
+    agentSpendOverlay: overlayPda,
+    pendingAgentPerms: pendingPda,
+  });
+  const partialTransactionBase64 = await buildOwnerPartialSignedTx(
+    rpc,
+    owner,
+    [withCosignerSigner(ix, cosignSession)],
+    opts,
+  );
+  return { partialTransactionBase64, cosignSession };
+}
+
+/**
+ * Partial-sign: APPLY a pending policy update that DISABLES cosign on a
+ * cosign-required vault (the on-chain disable gate requires the bound cosigner).
+ * Non-disable applies do NOT need the cosigner — use owner-only
+ * {@link applyPendingPolicy}.
+ */
+export async function buildApplyPendingPolicyElevated(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  cosignSession: Address,
+  opts?: TxOpts,
+): Promise<CosignedActionBundle> {
+  assertDistinctCosigner(owner, cosignSession);
+  const ix = await getApplyPendingPolicyInstructionAsync({ owner, vault });
+  const partialTransactionBase64 = await buildOwnerPartialSignedTx(
+    rpc,
+    owner,
+    [withCosignerSigner(ix, cosignSession)],
+    opts,
+  );
+  return { partialTransactionBase64, cosignSession };
+}
+
+/**
+ * Partial-sign: CLOSE a cosign-required vault. `close_vault` is now cosign-gated
+ * (a leaked owner key alone cannot close → cannot start the close->reinit
+ * drain). Reuses the owner-only close's pending-PDA cleanup enumeration, then
+ * binds the cosigner.
+ */
+export async function buildCloseVaultElevated(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  cosignSession: Address,
+  opts?: TxOpts,
+): Promise<CosignedActionBundle> {
+  assertDistinctCosigner(owner, cosignSession);
+  const finalIx = await buildCloseVaultFinalIx(rpc, vault, owner, network);
+  const partialTransactionBase64 = await buildOwnerPartialSignedTx(
+    rpc,
+    owner,
+    [withCosignerSigner(finalIx, cosignSession)],
+    {
+      computeUnits: opts?.computeUnits ?? 400_000,
+      priorityFeeMicroLamports: opts?.priorityFeeMicroLamports,
+    },
+  );
+  return { partialTransactionBase64, cosignSession };
 }
 
 // ─── Post-execution assertions (Phase 2) ─────────────────────────────────────

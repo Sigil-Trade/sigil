@@ -356,6 +356,18 @@ pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
     let disables_cosign = pending.cosign_required == Some(false) && live_cosign_required;
     if disables_cosign {
         let cosign_session = pending.cosign_session;
+        // Take-over 2026-06-16 (Finding 2 defense-in-depth): the disable
+        // cosigner MUST be the BOUND cosigner, not any throwaway. The live
+        // `policy.cosign_session_pubkey` is still the bound K here (the D-5
+        // `cosign_session_pubkey` merge below — the `if let Some(new_cosign_pubkey)`
+        // block — runs AFTER this gate), so pin against it. This mirrors the
+        // primary queue-time pin in queue_policy_update and removes the
+        // brittleness of single-site enforcement.
+        require_keys_eq!(
+            cosign_session,
+            policy.cosign_session_pubkey,
+            SigilError::ErrCosignRequired
+        );
         require_keys_neq!(
             cosign_session,
             Pubkey::default(),
@@ -376,6 +388,17 @@ pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
     if let Some(new_cosign_pubkey) = pending.cosign_session_pubkey {
         policy.cosign_session_pubkey = new_cosign_pubkey;
     }
+    // Take-over 2026-06-16: the prior "clear cosign_session_pubkey on disable"
+    // fix was REMOVED. It ran BEFORE the second-pass TA-19 digest recompute
+    // (below) and read `policy.cosign_session_pubkey` post-clear, so a legitimate
+    // owner+cosigner disable on a BOUND vault cleared the very pubkey the
+    // owner-signed queue digest committed to → permanent PolicyPreviewMismatch
+    // (disabling cosign became impossible once a cosigner was bound; the bug was
+    // masked because tests only disabled on UNBOUND vaults, where the clear is a
+    // no-op). The stale-cosigner re-enable class it targeted is now closed MORE
+    // robustly at the L1-2 enable check below (it requires the ENABLE update to
+    // carry a fresh, non-default bound pubkey — a stale live value no longer
+    // satisfies it).
     // F-Q6 / Council C-1 defense-in-depth (2026-06-03): re-assert the bound
     // cosigner is a DISTINCT 2nd factor at this apply write site too. The
     // queue_policy_update guard is the primary check; enforcing it here as well
@@ -391,6 +414,43 @@ pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
             SigilError::ErrCosignRequired
         );
     }
+
+    // L1-2 (audit 2026-06-15): FORCE-BIND on the ENABLE transition. When this
+    // update turns cosign ON (`pending.cosign_required == Some(true)`), it MUST
+    // also result in a bound cosigner pubkey — otherwise it produces the inert
+    // {cosign_required=true, unbound} state, which the hardened fail-closed
+    // `has_bound_cosigner` LOCKS every cosign-gated owner-op against (take-over
+    // 2026-06-16 removed the old any-non-owner-signer fallback). The owner binds
+    // a pubkey in the same update.
+    // Narrow by design: unrelated updates to a vault that already has cosign on
+    // are unaffected; only NEWLY enabling cosign without binding is rejected.
+    if pending.cosign_required == Some(true) {
+        // L1-2 (take-over hardening 2026-06-16): ENABLING cosign MUST bind a
+        // fresh, distinct cosigner IN THIS update. We check `pending` (the
+        // proposed binding) — NOT the merged live value — so a stale
+        // cosign_session_pubkey left from a prior bound->disabled cycle cannot
+        // silently satisfy the gate and re-instate a RETIRED key. (cosigner !=
+        // owner is enforced at queue_policy_update + the C-1 re-assert above.)
+        require!(
+            matches!(pending.cosign_session_pubkey, Some(pk) if pk != Pubkey::default()),
+            SigilError::ErrCosignRequired
+        );
+    }
+
+    // Take-over 2026-06-16 (Finding 2 invariant — defense-in-depth): the
+    // hardened fail-closed `has_bound_cosigner` LOCKS OUT every cosign-gated
+    // owner-op on the inert state {cosign_required==true, cosign_session_pubkey
+    // == default}, so that state must never persist. initialize_vault blocks it
+    // at create; the L1-2 check above blocks it on the enable transition; this
+    // final assertion (after ALL cosign merges, before the second-pass digest
+    // recompute) blocks ANY remaining apply path — e.g. a D-5 reactivate-pubkey
+    // update that set the bound key to default while cosign stayed required —
+    // from committing it. The only legal post-apply states are {false, *} and
+    // {true, non-default}.
+    require!(
+        !(policy.cosign_required && policy.cosign_session_pubkey == Pubkey::default()),
+        SigilError::ErrCosignRequired
+    );
 
     // Phase 2 Option A: defense-in-depth — re-validate protocol_mode if pending overrode it.
     if let Some(mode) = pending.protocol_mode {

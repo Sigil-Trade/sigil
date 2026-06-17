@@ -144,6 +144,21 @@ pub fn handler(
             ctx.accounts.owner.key(),
             SigilError::ErrCosignRequired
         );
+        // Take-over 2026-06-16 (3rd-review Finding — same class as the Finding 2
+        // policy-update pin): the elevated cosigner MUST be the vault's BOUND
+        // cosigner, not merely any non-owner key. Without this, a holder of the
+        // owner key alone could raise an existing agent's capability /
+        // spending_limit with a throwaway 2nd keypair, evading the 2nd factor on
+        // a cosign-guarded escalation (and silently lifting the owner's own
+        // spending guardrail). `is_elevated` implies `policy.cosign_required`
+        // (:128) and the {cosign_required => bound} invariant guarantees the
+        // bound key is non-default here. Mirrors queue_agent_grant's
+        // has_bound_cosigner pin and queue_policy_update's elevated pin.
+        require_keys_eq!(
+            cosign_session,
+            policy.cosign_session_pubkey,
+            SigilError::ErrCosignRequired
+        );
         // The corresponding signer MUST be present in remaining_accounts
         // with `is_signer == true`. Solana enforces the signature; this
         // handler validates presence.

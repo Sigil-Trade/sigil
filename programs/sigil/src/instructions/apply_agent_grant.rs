@@ -181,8 +181,13 @@ pub fn handler(ctx: Context<ApplyAgentGrant>) -> Result<()> {
     //      Pubkey::default()` → exact pubkey match required on a signer
     //      in `remaining_accounts`.
     //   3. `cosign_required == true && cosign_session_pubkey ==
-    //      Pubkey::default()` → any non-owner signer counts (cosign
-    //      enforcement opted-in but specific key not yet bound).
+    //      Pubkey::default()` → REJECT (fail closed). Take-over hardening
+    //      2026-06-16: this unbound state is unreachable (init rejects
+    //      cosign-at-create; apply_pending_policy force-binds on enable + a
+    //      post-merge invariant assertion blocks any other path), so failing
+    //      closed is the backstop that keeps the old "any non-owner signer"
+    //      hole from reopening. (PRIOR behavior: any non-owner signer counted —
+    //      that was the hole.)
     //   4. None of the above match → reject with `ErrCosignRequired`.
     //
     // This runs BEFORE M-5 digest recompute (cheap pubkey check fails
@@ -193,18 +198,19 @@ pub fn handler(ctx: Context<ApplyAgentGrant>) -> Result<()> {
         let policy = &ctx.accounts.policy;
         if policy.cosign_required {
             let cosign_session_pubkey = policy.cosign_session_pubkey;
-            let owner_key = ctx.accounts.owner.key();
             let cosign_ok = if cosign_session_pubkey != Pubkey::default() {
                 // Bound to a specific pubkey — match exactly.
                 ctx.remaining_accounts
                     .iter()
                     .any(|ai| ai.key() == cosign_session_pubkey && ai.is_signer)
             } else {
-                // Default policy — any non-owner signer counts.
-                crate::instructions::register_agent::has_non_owner_signer(
-                    ctx.remaining_accounts,
-                    &owner_key,
-                )
+                // FAIL CLOSED (take-over hardening 2026-06-16): cosign required
+                // but no bound cosigner. {cosign_required=true, unbound} is
+                // unreachable (init rejects it; apply_pending_policy force-binds),
+                // so this never fires in practice — failing closed is the backstop
+                // that keeps the old "any non-owner signer" hole from reopening.
+                // Mirrors `has_bound_cosigner`'s fail-closed unbound branch.
+                false
             };
             require!(cosign_ok, SigilError::ErrCosignRequired);
         }

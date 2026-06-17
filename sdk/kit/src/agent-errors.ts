@@ -1285,7 +1285,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
   },
   6080: {
     name: "ErrCosignRequired",
-    // §RP-2 M-NEW-3 (audit 2026-05-19): after P0.1 + H-NEW-1, 6089
+    // §RP-2 M-NEW-3 (audit 2026-05-19): after P0.1 + H-NEW-1, 6080
     // fires from four sites — queue_policy_update (original elevated
     // mutation path), register_agent, set_observe_only(false→true),
     // and unpause_agent. The message + recovery now reflect that the

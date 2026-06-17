@@ -187,7 +187,14 @@ export type FinalizeSessionAsyncInput<
   tracker?: Address<TAccountTracker>;
   /** Zero-copy AgentSpendOverlay — per-agent rolling spend */
   agentSpendOverlay: Address<TAccountAgentSpendOverlay>;
-  /** Vault's PDA token account for the session's token */
+  /**
+   * Vault's PDA token account for the session's token.
+   * L2-1 (audit 2026-06-15): fail-fast that, when present, this ATA is owned
+   * by the vault PDA. The outcome path already re-reads the raw post-CPI
+   * owner field and asserts owner==vault, so this is defense-in-depth — but
+   * it rejects a substituted token account at account-resolution rather than
+   * deep in the handler.
+   */
   vaultTokenAccount?: Address<TAccountVaultTokenAccount>;
   /**
    * Vault's stablecoin ATA for outcome-based spending verification.
@@ -475,7 +482,14 @@ export type FinalizeSessionInput<
   tracker: Address<TAccountTracker>;
   /** Zero-copy AgentSpendOverlay — per-agent rolling spend */
   agentSpendOverlay: Address<TAccountAgentSpendOverlay>;
-  /** Vault's PDA token account for the session's token */
+  /**
+   * Vault's PDA token account for the session's token.
+   * L2-1 (audit 2026-06-15): fail-fast that, when present, this ATA is owned
+   * by the vault PDA. The outcome path already re-reads the raw post-CPI
+   * owner field and asserts owner==vault, so this is defense-in-depth — but
+   * it rejects a substituted token account at account-resolution rather than
+   * deep in the handler.
+   */
   vaultTokenAccount?: Address<TAccountVaultTokenAccount>;
   /**
    * Vault's stablecoin ATA for outcome-based spending verification.
@@ -684,7 +698,14 @@ export type ParsedFinalizeSessionInstruction<
     tracker: TAccountMetas[5];
     /** Zero-copy AgentSpendOverlay — per-agent rolling spend */
     agentSpendOverlay: TAccountMetas[6];
-    /** Vault's PDA token account for the session's token */
+    /**
+     * Vault's PDA token account for the session's token.
+     * L2-1 (audit 2026-06-15): fail-fast that, when present, this ATA is owned
+     * by the vault PDA. The outcome path already re-reads the raw post-CPI
+     * owner field and asserts owner==vault, so this is defense-in-depth — but
+     * it rejects a substituted token account at account-resolution rather than
+     * deep in the handler.
+     */
     vaultTokenAccount?: TAccountMetas[7] | undefined;
     /**
      * Vault's stablecoin ATA for outcome-based spending verification.

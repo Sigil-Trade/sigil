@@ -50,7 +50,10 @@ pub const AUDIT_LOG_SUCCESS_CAPACITY: usize = 128;
 ///          `auto_revoke_threshold` and the agent was forcibly disabled.
 ///          Non-trip increments emit no audit entry (the policy state is
 ///          unchanged). Subject = agent pubkey.)
-/// 23..=255 = reserved (extensible)
+/// 23     = agent_transfer (L11-1 close, audit 2026-06-15 — the PRIMARY agent
+///          OUTFLOW path, previously unlogged. Subject = recipient wallet
+///          (destination ATA owner); balance_delta_out = GROSS transfer amount.)
+/// 24..=255 = reserved (extensible)
 pub const AUDIT_DISC_RESERVED_ZERO: u8 = 0;
 pub const AUDIT_DISC_VALIDATE: u8 = 1;
 pub const AUDIT_DISC_FINALIZE_SUCCESS: u8 = 2;
@@ -101,6 +104,16 @@ pub const AUDIT_DISC_CONSTRAINTS_CLOSE_APPLY: u8 = 21;
 /// pubkey for correlation with earlier disc=12 `AUDIT_DISC_REVOKE_AGENT`
 /// (manual revoke) and disc=10/11 pause/unpause entries.
 pub const AUDIT_DISC_AGENT_AUTO_REVOKED: u8 = 22;
+
+/// L11-1 close (audit 2026-06-15) — `agent_transfer`, the PRIMARY agent
+/// OUTFLOW path, previously wrote NO on-chain audit entry while
+/// deposit/withdraw/finalize all did (a forensic blind spot, I6). Written on
+/// the success path after all token CPIs settle. Subject is the recipient
+/// wallet (destination token account owner) for off-chain correlation;
+/// `balance_delta_out` is the GROSS transfer `amount` (the vault's total
+/// balance decrease — net + protocol fee + developer fee all leave the vault;
+/// the fee split is additionally surfaced in the `FeesCollected` event).
+pub const AUDIT_DISC_AGENT_TRANSFER: u8 = 23;
 
 /// Single audit-log entry. Zero-copy, fixed-size 64 bytes per entry.
 ///
@@ -154,6 +167,7 @@ pub struct AuditEntry {
     ///   disc=20 (agent_perms_apply)→ agent pubkey (M-6 close, audit 2026-05-21)
     ///   disc=21 (constraints_close_apply)→ vault pubkey (M-7 close, audit 2026-05-21)
     ///   disc=22 (agent_auto_revoked) → agent pubkey (M-8 close, audit 2026-05-21)
+    ///   disc=23 (agent_transfer)   → recipient wallet (destination ATA owner) (L11-1, audit 2026-06-15)
     pub subject: [u8; 32],
     /// Stablecoin delta IN (e.g. swap output, deposit). 0 when not applicable.
     pub balance_delta_in: i64,

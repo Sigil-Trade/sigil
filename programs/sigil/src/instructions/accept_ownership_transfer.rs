@@ -239,6 +239,16 @@ pub fn handler(ctx: Context<AcceptOwnershipTransfer>) -> Result<()> {
         // recompute so the bound digest reflects the reset value.
         if policy.cosign_session_pubkey == new_owner_key {
             policy.cosign_session_pubkey = Pubkey::default();
+            // Take-over 2026-06-16 (Finding 2 invariant): the collapse drops the
+            // 2nd factor, so also clear `cosign_required` — land in a clean
+            // SingleKey state {false, default}, NOT the inert {true, default}
+            // that the hardened fail-closed `has_bound_cosigner` would lock every
+            // cosign-gated owner-op against. This implements the "fail-safe to
+            // SingleKey" intent stated above (the prior code reset the pubkey but
+            // left the flag true, which only "worked" under the now-removed
+            // any-non-owner-signer fallback). The new owner may re-enable cosign
+            // with a fresh, distinct cosigner via queue_policy_update.
+            policy.cosign_required = false;
         }
         let new_agent_set_hash = compute_agent_set_hash(&ctx.accounts.vault.agents);
         let new_digest = compute_policy_preview_digest(&PolicyPreviewFields {

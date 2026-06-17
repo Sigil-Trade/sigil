@@ -388,6 +388,23 @@ pub fn handler(
         || protocol_caps.as_ref().is_some_and(|new_caps| {
             weakens_protocol_caps_predicate(new_caps, &policy.protocol_caps)
         });
+    // Take-over 2026-06-16 (3rd-review B-2): raising max_slippage_bps is a policy
+    // WEAKENING (more value-leakage tolerated; load-bearing when a post-execution
+    // OutputBalanceFloor/slippage assertion relies on it), and raising
+    // developer_fee_rate increases the skim. Both were missing from the elevation
+    // set, so a leaked owner key alone could weaken them on a cosign-required
+    // vault without the bound cosigner. Gate both like the other weakening
+    // triggers (cosign_required-gated; the inner group below).
+    let raises_slippage = max_slippage_bps.is_some_and(|new| new > policy.max_slippage_bps);
+    let raises_developer_fee =
+        developer_fee_rate.is_some_and(|new| new > policy.developer_fee_rate);
+    // Take-over 2026-06-17 (5th-review Finding 1): WIDENING operating_hours (a
+    // spend-time guard enforced at validate_and_authorize) is a guard-weakening,
+    // so on a cosign vault it must be cosigned. `new & !live != 0` means the
+    // update enables an hour the live mask forbade; narrowing/tightening (no new
+    // bits) is exempt, like the other tighten-is-free directions.
+    let widens_operating_hours =
+        operating_hours.is_some_and(|new| (new & !policy.operating_hours) != 0);
 
     // G6 (audit 2026-05-18 cosign opt-in): one-way-ratchet semantics for
     // toggling `cosign_required`.
@@ -413,6 +430,20 @@ pub fn handler(
     //   the symmetry obvious.
     let disables_cosign = cosign_required.is_some_and(|new| !new && policy.cosign_required);
     let _enables_cosign = cosign_required.is_some_and(|new| new && !policy.cosign_required);
+    // Take-over 2026-06-16 (Finding 3 — adversarial review of the Finding 2
+    // pin): rotating the bound cosigner is itself a cosign-WEAKENING operation
+    // (it EVICTS the current 2nd factor), so on a cosign-required vault it MUST
+    // be cosigned by the OUTGOING bound cosigner. Without this, the Finding 2
+    // pin is only a 2-tx speed bump: a leaked owner key could rotate K to an
+    // attacker key via this (otherwise non-elevated, owner-only) D-5 lane, then
+    // disable cosign with the attacker key (the pin would pass against the
+    // rotated-in key) and drain. Rotating to the SAME key is a no-op (not
+    // elevated); rotating to `default` (unbind) is independently blocked at
+    // apply by the {cosign_required => bound} invariant assertion. When this
+    // fires, the pin below forces `cosign_session == policy.cosign_session_pubkey`
+    // (the OLD K), so the incumbent cosigner signs its own replacement.
+    let rotates_cosigner = cosign_session_pubkey
+        .is_some_and(|new| policy.cosign_required && new != policy.cosign_session_pubkey);
 
     // G6 (audit 2026-05-18 cosign opt-in): the 7-trigger elevation check
     // (raises caps, expands allowlists, weakens floor / per-recipient /
@@ -440,8 +471,12 @@ pub fn handler(
             || expands_protocols
             || lowers_floor
             || weakens_per_recipient_cap
-            || weakens_protocol_caps))
-        || disables_cosign;
+            || weakens_protocol_caps
+            || raises_slippage
+            || raises_developer_fee
+            || widens_operating_hours))
+        || disables_cosign
+        || rotates_cosigner;
 
     // D-5 (audit 2026-05-19, F-RP3-1): renamed from prior `cosign_session_pubkey`
     // to `bound_cosign_session` to avoid name collision with the new ix arg
@@ -463,6 +498,26 @@ pub fn handler(
         require_keys_neq!(
             cosign_session,
             ctx.accounts.owner.key(),
+            SigilError::ErrCosignRequired
+        );
+        // Take-over 2026-06-16 (Finding 2 — user decision: pure 2-of-2, no
+        // recovery): the elevated cosigner MUST be the vault's BOUND cosigner
+        // `policy.cosign_session_pubkey`, not merely SOME non-owner key. Without
+        // this pin, a holder of the owner key alone could pick a throwaway 2nd
+        // keypair to disable cosign / weaken policy and then drain — the exact
+        // "any 2nd signer satisfies cosign" hole that was closed on the
+        // agent-grant surface via `has_bound_cosigner`. `is_elevated` implies
+        // `policy.cosign_required` (see the `disables_cosign` defn at :414 and
+        // the G6 gate at :436), and the `{cosign_required==true => bound != default}`
+        // invariant (enforced at initialize_vault, the L1-2 enable check, and the
+        // accept_ownership_transfer collapse-clear) guarantees the bound key is
+        // non-default here — so this pins the elevated cosigner to the REAL
+        // bound cosigner. Lost-K is an ACCEPTED permanent brick (self-custody;
+        // documented in ToS); there is deliberately NO recovery lane, because any
+        // owner-only escape hatch would re-open this very hole.
+        require_keys_eq!(
+            cosign_session,
+            policy.cosign_session_pubkey,
             SigilError::ErrCosignRequired
         );
         // The corresponding signer MUST be present in remaining_accounts

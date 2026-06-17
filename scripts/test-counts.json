@@ -8,7 +8,7 @@
     },
     {
       "name": "Missing-coverage gap-fill (DC audit 2026-05-19)",
-      "count": 12,
+      "count": 14,
       "onChain": true,
       "claudePattern": "tests/missing-coverage.ts` (ts-mocha + LiteSVM, %d tests — happy-paths + TA-17 auto-revoke + PEN-8b cosign-gate + D-5 negative cases)"
     },
@@ -32,7 +32,7 @@
     },
     {
       "name": "Security exploit scenarios",
-      "count": 170,
+      "count": 181,
       "onChain": true,
       "claudePattern": "tests/security-exploits.ts` (ts-mocha + LiteSVM, %d tests)"
     },
@@ -85,7 +85,7 @@
     },
     {
       "name": "Kit-native SDK (`@usesigil/kit` — includes merged core + dashboard)",
-      "count": 1809,
+      "count": 1816,
       "ciStepName": "Kit SDK tests",
       "claudePattern": "sdk/kit/tests/` (mocha + tsx, %d tests — core + dashboard + errors + agent-bootstrap + preview-create-vault + audit-2026-05-23 remediation suites)"
     },

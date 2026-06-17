@@ -314,6 +314,14 @@ impl SpendTracker {
     /// allowing brief overspend relative to the per-protocol cap. The global
     /// rolling cap (get_rolling_24h_usd) provides the primary enforcement and
     /// is NOT subject to this reset behavior.
+    ///
+    /// AUDIT 2026-06-15 (M3 — ACCEPTED by owner): the ~2x per-protocol overspend
+    /// possible across the 24h boundary is bounded by the global proportional
+    /// rolling cap — total vault outflow can never exceed `daily_spending_cap_usd`
+    /// regardless of per-protocol granularity — so this is a sub-limit precision
+    /// nicety, NOT a fund-loss path. A full 144-bucket-per-protocol rewrite
+    /// (~+20KB zero-copy account + a layout migration) was evaluated and rejected
+    /// as disproportionate to a non-fund-loss issue. See SIGIL_ONCHAIN_AUDIT_2026-06-15.md.
     pub fn get_protocol_spend(&self, clock: &Clock, protocol_id: &Pubkey) -> u64 {
         if clock.unix_timestamp <= 0 {
             return 0;

@@ -115,6 +115,21 @@ pub fn handler(
     // is itself an elevated mutation (one-way ratchet — see
     // `queue_policy_update`). Bound by TA-19 at canonical digest
     // position 20.
+    //
+    // L1-2 (take-over hardening 2026-06-16): cosign CANNOT be enabled at init.
+    // Passing `true` here is REJECTED with `ErrCosignRequired` (see the
+    // `require!(!cosign_required, ...)` guard before the policy write below).
+    // Rationale: there is no init arg for `cosign_session_pubkey`, so enabling
+    // cosign at create could only produce the inert {cosign_required=true,
+    // pubkey=default} state — which the hardened, fail-closed
+    // `has_bound_cosigner` (register_agent.rs) now LOCKS every cosign-gated
+    // owner-op against (the prior "any non-owner signer" fallback that made it
+    // merely INERT was removed). The resulting program invariant is
+    // {cosign_required==true => cosign_session_pubkey != default} EVERYWHERE. To
+    // use cosign, the owner enables it AFTER init via `queue_policy_update`,
+    // which force-binds a distinct cosigner in the same update
+    // (`apply_pending_policy` L1-2a) — so the enabled state is ALWAYS bound to a
+    // real 2nd factor.
     cosign_required: bool,
     preview_digest: [u8; 32],
 ) -> Result<()> {
@@ -349,10 +364,20 @@ pub fn handler(
     // G6 (audit 2026-05-18 cosign opt-in): persist owner's cosign choice.
     // Bound by TA-19 at canonical digest position 20 — a tampered SDK
     // cannot silently flip cosign on/off between owner approval and
-    // on-chain landing. Default at most call sites is `false` (low-
-    // friction) — owners explicitly opt in via this arg at vault
-    // creation, or later via `queue_policy_update` (where the false→true
-    // direction is non-elevated and the true→false direction IS elevated).
+    // on-chain landing.
+    //
+    // L1-2 (take-over hardening 2026-06-16): cosign CANNOT be enabled at vault
+    // creation. There is no init argument to BIND a specific cosigner, so
+    // allowing `cosign_required=true` here would create the inert
+    // {cosign_required=true, cosign_session_pubkey=default} state — where the
+    // gate would degrade to "any non-owner signer" (a false sense of two-factor,
+    // now fail-closed in `has_bound_cosigner`). Cosign is enabled post-creation
+    // via `queue_policy_update` (elevated + timelocked), which force-binds a
+    // DISTINCT cosigner pubkey (!= owner, per queue_policy_update's C-1 check).
+    // A single user who doesn't want a 2nd wallet simply leaves cosign off (the
+    // default). ErrCosignRequired (6080) reused: cosign required but no bound
+    // cosigner can be supplied at init.
+    require!(!cosign_required, SigilError::ErrCosignRequired);
     policy.cosign_required = cosign_required;
     // D-5 (audit 2026-05-19, F-RP3-1): initialize the reactivate-cosign
     // pubkey to `Pubkey::default()` so the gate at `reactivate_vault` is

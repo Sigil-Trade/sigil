@@ -47,6 +47,27 @@ pub fn handler(
 ) -> Result<()> {
     crate::reject_cpi!();
 
+    // Take-over 2026-06-16 (3rd-review F-2): removing the post-execution
+    // assertion guard is a protection-REDUCTION, so on a cosign-required vault it
+    // must be cosigned by the bound K — symmetric with set_observe_only (turning
+    // observe OFF), unpause_agent, and reactivate_vault, which are all
+    // cosign-gated. Without it, a holder of the owner key alone could strip an
+    // owner-installed execution guard. (create_post_assertions is `init` /
+    // create-once = strengthening, so it stays ungated, like enabling cosign;
+    // replacing assertions with weaker ones still routes through this gated
+    // close.)
+    if ctx.accounts.policy.cosign_required {
+        let owner_key = ctx.accounts.owner.key();
+        require!(
+            crate::instructions::register_agent::has_bound_cosigner(
+                ctx.remaining_accounts,
+                &owner_key,
+                &ctx.accounts.policy.cosign_session_pubkey,
+            ),
+            SigilError::ErrCosignRequired
+        );
+    }
+
     let vault_key = ctx.accounts.vault.key();
 
     // Clear the feature flag on PolicyConfig.

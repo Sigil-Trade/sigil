@@ -41,8 +41,10 @@
  *     `ErrCosignRequired`, and ALSO requires the corresponding signer in
  *     `remaining_accounts` with `is_signer == true`.
  *
- * G3 + G6 elevation triggers — what counts as "elevated" (all bound by this
- * digest as of Round 2 B4 F-1, 2026-05-19):
+ * queue_policy_update elevation triggers — what counts as "elevated" (REQUIRES
+ * the bound cosigner). Two groups, by cosign-digest binding:
+ *
+ * (a) Elevated AND bound by THIS cosign digest (Round 2 B4 F-1, 2026-05-19):
  *   - raises_daily_cap = daily_spending_cap_usd: Some(new) > live
  *   - raises_max_tx = max_transaction_amount_usd: Some(new) > live
  *   - expands_destinations = allowed_destinations: any new pubkey not in live
@@ -56,15 +58,33 @@
  *   - shrinks_or_raises_caps = protocol_caps: any entry mutated       (G3)
  *   - disables_cosign = cosign_required: Some(false) while live=true  (G6)
  *
- * Round 2 B4 F-1 fix (2026-05-19): the cosign digest binding now extends to
- * ALL G3 + G6 triggers. Previously the digest only bound positions 1-5
+ * (b) Elevated but NOT bound by this cosign digest (take-over 2026-06-17). No
+ *     digest field was added: the cosigner attests via its tx-signature, and
+ *     TA-19 policy_preview_digest already binds each value:
+ *   - raises_slippage = max_slippage_bps: Some(new) > live
+ *   - raises_developer_fee = developer_fee_rate: Some(new) > live
+ *   - widens_operating_hours = operating_hours enables an hour the live mask
+ *     forbade ((new & !live) != 0)
+ *   - rotates_cosigner = cosign_session_pubkey changed to a different non-default
+ *     value while cosign_required (the OUTGOING bound cosigner must co-sign)
+ *
+ * Beyond queue_policy_update, the BOUND cosigner is ALSO required (no cosign
+ * digest — partial-sign via the build*Elevated helpers in
+ * dashboard/mutations.ts) for: cancel_agent_grant / cancel_agent_permissions_update
+ * / cancel_pending_policy (M2a/M2b/L1-1), apply_agent_permissions_update (H-1 —
+ * the live bound cosigner signs at apply), apply_pending_policy when disabling
+ * cosign, and close_vault.
+ *
+ * Round 2 B4 F-1 fix (2026-05-19): the cosign digest binding extends to all
+ * group-(a) G3 + G6 triggers. Previously the digest only bound positions 1-5
  * (cosign_session, daily/max-tx caps, destinations, protocols) — the G3/G6
  * elevation triggers ELEVATED the queue but were NOT bound by this digest
  * (they were bound only by TA-19 policy_preview_digest). That left a gap:
  * a tampered SDK or discriminator-collision attack on the pending PDA
  * could mutate those triggers between queue and apply without producing a
- * cosign-digest mismatch. With the extension, every elevation trigger is
- * now bound by BOTH the cosign digest (intent) and TA-19 (byte safety).
+ * cosign-digest mismatch. With the extension, every group-(a) elevation trigger
+ * is bound by BOTH the cosign digest (intent) and TA-19 (byte safety); the
+ * group-(b) triggers above rely on TA-19 + the cosigner's tx-signature.
  *
  * Phase 4 PEN-CROSS-3 pattern reference:
  *   PEN-CROSS-3 introduced sibling-handler digest binding (constraints/post-
@@ -198,7 +218,7 @@ export interface CosignArgs {
   //
   // These fields are BOTH elevation triggers AND now bound by this cosign
   // digest. Mutating them between queue and apply produces a cosign-digest
-  // mismatch (ErrCosignRequired, 6089) — closing the gap where the digest
+  // mismatch (ErrCosignRequired, 6080) — closing the gap where the digest
   // previously only bound positions 1-5 of the canonical encoding.
 
   /**
@@ -295,7 +315,7 @@ export interface CosignBundle {
  */
 export function buildCosignBundle(args: CosignArgs): CosignBundle {
   // Pre-flight: the on-chain handler rejects default/owner-same cosign with
-  // ErrCosignRequired (6089). Surface the same failures at the SDK level
+  // ErrCosignRequired (6080). Surface the same failures at the SDK level
   // with a clearer error message — better DX than digging through Anchor
   // error codes after a failed simulation.
   const defaultPubkey =
@@ -304,7 +324,7 @@ export function buildCosignBundle(args: CosignArgs): CosignBundle {
     throw new Error(
       "buildCosignBundle: cosignSessionPubkey is the default pubkey " +
         "(11111111111111111111111111111111). The on-chain handler will reject " +
-        "this with ErrCosignRequired (6089). Pass a real session pubkey.",
+        "this with ErrCosignRequired (6080). Pass a real session pubkey.",
     );
   }
   if (
@@ -314,7 +334,7 @@ export function buildCosignBundle(args: CosignArgs): CosignBundle {
     throw new Error(
       "buildCosignBundle: cosignSessionPubkey equals ownerSigner.address. " +
         "The on-chain handler rejects same-key cosign with ErrCosignRequired " +
-        "(6089) because it collapses the two-signer gate. Use a distinct " +
+        "(6080) because it collapses the two-signer gate. Use a distinct " +
         "cosigning session pubkey.",
     );
   }

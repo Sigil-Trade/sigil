@@ -36,6 +36,7 @@ import { expect } from "chai";
 import BN from "bn.js";
 import {
   initVaultPreviewDigest,
+  fetchAndComputeQueueDigest,
   computeAgentSetHash,
   EMPTY_AGENT_SET_HASH,
 } from "./helpers/policy-digest";
@@ -175,7 +176,7 @@ describe("pen-cross-1-absorption (Phase 8 Batch 6)", () => {
         5, // autoRevokeThreshold
         new BN(0),
         new BN(0),
-        cosignRequired,
+        false, // take-over 2026-06-16: init cosign-OFF; enabled+bound below via queue
         initVaultPreviewDigest({
           dailySpendingCapUsd: STANDARD_INIT_DAILY_CAP,
           maxTransactionSizeUsd: STANDARD_INIT_MAX_TX,
@@ -187,7 +188,7 @@ describe("pen-cross-1-absorption (Phase 8 Batch 6)", () => {
           operatingHours: 0x00ffffff,
           autoPromoteGrays: false,
           autoRevokeThreshold: 5,
-          cosignRequired,
+          cosignRequired: false,
         }),
       )
       .accounts({
@@ -203,6 +204,69 @@ describe("pen-cross-1-absorption (Phase 8 Batch 6)", () => {
       } as any)
       .rpc();
 
+    // Take-over 2026-06-16: cosign can't be enabled at init; enable+bind it via
+    // the queue->apply path (force-binds a distinct cosigner). Return the bound
+    // cosigner so callers can sign cosign-gated actions.
+    let cosigner: Keypair | undefined;
+    if (cosignRequired) {
+      cosigner = Keypair.generate();
+      airdropSol(svm, cosigner.publicKey, 1 * LAMPORTS_PER_SOL);
+      const [pendingPolicy] = PublicKey.findProgramAddressSync(
+        [Buffer.from("pending_policy"), vault.toBuffer()],
+        program.programId,
+      );
+      const queueDigest = await fetchAndComputeQueueDigest(
+        program,
+        policy,
+        vault,
+        {
+          cosignRequired: true,
+          cosignSessionPubkey: cosigner.publicKey,
+        },
+      );
+      await program.methods
+        .queuePolicyUpdate(
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          true,
+          cosigner.publicKey,
+          null,
+          PublicKey.default,
+          queueDigest,
+        )
+        .accounts({
+          owner: owner.publicKey,
+          vault,
+          policy,
+          pendingPolicy,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .rpc();
+      advanceTime(svm, STANDARD_INIT_TIMELOCK.toNumber() + 1);
+      await program.methods
+        .applyPendingPolicy()
+        .accounts({
+          owner: owner.publicKey,
+          vault,
+          policy,
+          pendingPolicy,
+        } as any)
+        .rpc();
+    }
+
     return {
       vault,
       policy,
@@ -210,61 +274,18 @@ describe("pen-cross-1-absorption (Phase 8 Batch 6)", () => {
       overlay,
       auditSuccess,
       pendingAgentGrant,
+      cosigner,
     };
   }
 
   // ─────────────────────────────────────────────────────────────────────────
   // 1. register_agent(CAPABILITY_OPERATOR) → REJECT InvalidPermissions
   // ─────────────────────────────────────────────────────────────────────────
-  it("register_agent rejects CAPABILITY_OPERATOR on a cosign-opted-but-UNBOUND vault (single-key tier) → 6107 ErrOperatorGrantRequiresTimelock", async () => {
-    // F-Q6 (2026-06-02): the old register_agent.rs:133-138 cosign-only OPERATOR
-    // reject (6036 InvalidPermissions) was REPLACED by the tiered rule. This
-    // vault sets cosignRequired:true but never BINDS a cosign_session_pubkey, so
-    // per classify_operator_grant_tier it is the SINGLE-KEY tier (an unbound
-    // cosigner is not a real 2nd factor — Council C-1). A single-key OPERATOR
-    // grant can NEVER be instant — it must route through queue_agent_grant →
-    // apply_agent_grant (the >=10-min delay substitutes for the missing 2nd
-    // factor). So register_agent reverts 6107 ErrOperatorGrantRequiresTimelock.
-    //
-    // The randomly-generated cosigner in remaining_accounts is irrelevant: the
-    // tier is decided by the BOUND pubkey, not signer presence — so "even WITH a
-    // cosigner present" the unbound vault still rejects. (A truly cosign-BOUND
-    // vault's INSTANT OPERATOR path is covered by the Stage-D tier tests.)
-    const { vault, policy, overlay, auditSuccess } = await initVault(
-      new BN(11000),
-      { cosignRequired: true },
-    );
-    const agent = Keypair.generate();
-    const cosigner = Keypair.generate();
-    airdropSol(svm, cosigner.publicKey, 1 * LAMPORTS_PER_SOL);
-
-    let caughtCode: number | null = null;
-    let rawErrName: string | null = null;
-    try {
-      await program.methods
-        .registerAgent(agent.publicKey, CAPABILITY_OPERATOR, new BN(0))
-        .accounts({
-          owner: owner.publicKey,
-          vault,
-          policy,
-          agentSpendOverlay: overlay,
-          auditLogSuccess: auditSuccess,
-          slotHashesSysvar: SYSVAR_SLOT_HASHES_PUBKEY,
-        } as any)
-        .remainingAccounts([
-          { pubkey: cosigner.publicKey, isSigner: true, isWritable: false },
-        ])
-        .signers([cosigner])
-        .rpc();
-    } catch (err: any) {
-      caughtCode = err?.error?.errorCode?.number ?? null;
-      rawErrName = err?.error?.errorCode?.code ?? null;
-    }
-    expect(
-      caughtCode,
-      `register_agent OPERATOR MUST reject on a single-key/unbound-cosign vault (got code=${caughtCode} name=${rawErrName})`,
-    ).to.equal(6107);
-  });
+  // DELETED (take-over hardening 2026-06-16): this exercised the
+  // {cosign_required=true, UNBOUND} single-key-tier scenario, which is now
+  // UNREACHABLE — initialize_vault rejects cosign_required=true and the gate
+  // fails closed when unbound. The single-key OPERATOR-timelock rule remains
+  // covered by the cosign-OFF register_agent tests and fq6's SingleKey tiers.
 
   // ─────────────────────────────────────────────────────────────────────────
   // 2. register_agent(CAPABILITY_OBSERVER) → OK (fast path preserved)
@@ -530,13 +551,11 @@ describe("pen-cross-1-absorption (Phase 8 Batch 6)", () => {
   // 8. cosign_required=true: queue with cosigner present → ok
   // ─────────────────────────────────────────────────────────────────────────
   it("cosign_required vault: queue_agent_grant with cosigner → ok", async () => {
-    const { vault, policy, auditSuccess, pendingAgentGrant } = await initVault(
-      new BN(11007),
-      { cosignRequired: true },
-    );
+    const { vault, policy, auditSuccess, pendingAgentGrant, cosigner } =
+      await initVault(new BN(11007), { cosignRequired: true });
+    if (!cosigner)
+      throw new Error("initVault(cosignRequired) must bind+return a cosigner");
     const agent = Keypair.generate();
-    const cosigner = Keypair.generate();
-    airdropSol(svm, cosigner.publicKey, 1 * LAMPORTS_PER_SOL);
 
     await program.methods
       .queueAgentGrant(agent.publicKey, CAPABILITY_OPERATOR, new BN(0))

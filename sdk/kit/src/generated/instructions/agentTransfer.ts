@@ -69,6 +69,9 @@ export type AgentTransferInstruction<
     string,
   TAccountTokenProgram extends string | AccountMeta<string> =
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+  TAccountAuditLogSuccess extends string | AccountMeta<string> = string,
+  TAccountSlotHashesSysvar extends string | AccountMeta<string> =
+    "SysvarS1otHashes111111111111111111111111111",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
   InstructionWithData<ReadonlyUint8Array> &
@@ -108,6 +111,12 @@ export type AgentTransferInstruction<
       TAccountTokenProgram extends string
         ? ReadonlyAccount<TAccountTokenProgram>
         : TAccountTokenProgram,
+      TAccountAuditLogSuccess extends string
+        ? WritableAccount<TAccountAuditLogSuccess>
+        : TAccountAuditLogSuccess,
+      TAccountSlotHashesSysvar extends string
+        ? ReadonlyAccount<TAccountSlotHashesSysvar>
+        : TAccountSlotHashesSysvar,
       ...TRemainingAccounts,
     ]
   >;
@@ -164,6 +173,8 @@ export type AgentTransferAsyncInput<
   TAccountFeeDestinationTokenAccount extends string = string,
   TAccountProtocolTreasuryTokenAccount extends string = string,
   TAccountTokenProgram extends string = string,
+  TAccountAuditLogSuccess extends string = string,
+  TAccountSlotHashesSysvar extends string = string,
 > = {
   agent: TransactionSigner<TAccountAgent>;
   vault: Address<TAccountVault>;
@@ -183,6 +194,14 @@ export type AgentTransferAsyncInput<
   /** Protocol treasury token account */
   protocolTreasuryTokenAccount?: Address<TAccountProtocolTreasuryTokenAccount>;
   tokenProgram?: Address<TAccountTokenProgram>;
+  /**
+   * Phase 7 / L11-1 — success audit log; entry appended after the transfers.
+   * PDA + address-pinned sysvar are auto-resolved by the Anchor client, so
+   * existing `agent_transfer` callers need not pass them explicitly (same as
+   * `deposit_funds`).
+   */
+  auditLogSuccess?: Address<TAccountAuditLogSuccess>;
+  slotHashesSysvar?: Address<TAccountSlotHashesSysvar>;
   amount: AgentTransferInstructionDataArgs["amount"];
   expectedPolicyVersion: AgentTransferInstructionDataArgs["expectedPolicyVersion"];
 };
@@ -199,6 +218,8 @@ export async function getAgentTransferInstructionAsync<
   TAccountFeeDestinationTokenAccount extends string,
   TAccountProtocolTreasuryTokenAccount extends string,
   TAccountTokenProgram extends string,
+  TAccountAuditLogSuccess extends string,
+  TAccountSlotHashesSysvar extends string,
   TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: AgentTransferAsyncInput<
@@ -212,7 +233,9 @@ export async function getAgentTransferInstructionAsync<
     TAccountDestinationTokenAccount,
     TAccountFeeDestinationTokenAccount,
     TAccountProtocolTreasuryTokenAccount,
-    TAccountTokenProgram
+    TAccountTokenProgram,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar
   >,
   config?: { programAddress?: TProgramAddress },
 ): Promise<
@@ -228,7 +251,9 @@ export async function getAgentTransferInstructionAsync<
     TAccountDestinationTokenAccount,
     TAccountFeeDestinationTokenAccount,
     TAccountProtocolTreasuryTokenAccount,
-    TAccountTokenProgram
+    TAccountTokenProgram,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar
   >
 > {
   // Program address.
@@ -265,6 +290,11 @@ export async function getAgentTransferInstructionAsync<
       isWritable: true,
     },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
+    auditLogSuccess: { value: input.auditLogSuccess ?? null, isWritable: true },
+    slotHashesSysvar: {
+      value: input.slotHashesSysvar ?? null,
+      isWritable: false,
+    },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -309,6 +339,28 @@ export async function getAgentTransferInstructionAsync<
     accounts.tokenProgram.value =
       "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address<"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA">;
   }
+  if (!accounts.auditLogSuccess.value) {
+    accounts.auditLogSuccess.value = await getProgramDerivedAddress({
+      programAddress,
+      seeds: [
+        getBytesEncoder().encode(
+          new Uint8Array([
+            97, 117, 100, 105, 116, 95, 115, 117, 99, 99, 101, 115, 115,
+          ]),
+        ),
+        getAddressEncoder().encode(
+          getAddressFromResolvedInstructionAccount(
+            "vault",
+            accounts.vault.value,
+          ),
+        ),
+      ],
+    });
+  }
+  if (!accounts.slotHashesSysvar.value) {
+    accounts.slotHashesSysvar.value =
+      "SysvarS1otHashes111111111111111111111111111" as Address<"SysvarS1otHashes111111111111111111111111111">;
+  }
 
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
   return Object.freeze({
@@ -333,6 +385,8 @@ export async function getAgentTransferInstructionAsync<
         accounts.protocolTreasuryTokenAccount,
       ),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
+      getAccountMeta("auditLogSuccess", accounts.auditLogSuccess),
+      getAccountMeta("slotHashesSysvar", accounts.slotHashesSysvar),
     ],
     data: getAgentTransferInstructionDataEncoder().encode(
       args as AgentTransferInstructionDataArgs,
@@ -350,7 +404,9 @@ export async function getAgentTransferInstructionAsync<
     TAccountDestinationTokenAccount,
     TAccountFeeDestinationTokenAccount,
     TAccountProtocolTreasuryTokenAccount,
-    TAccountTokenProgram
+    TAccountTokenProgram,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar
   >);
 }
 
@@ -366,6 +422,8 @@ export type AgentTransferInput<
   TAccountFeeDestinationTokenAccount extends string = string,
   TAccountProtocolTreasuryTokenAccount extends string = string,
   TAccountTokenProgram extends string = string,
+  TAccountAuditLogSuccess extends string = string,
+  TAccountSlotHashesSysvar extends string = string,
 > = {
   agent: TransactionSigner<TAccountAgent>;
   vault: Address<TAccountVault>;
@@ -385,6 +443,14 @@ export type AgentTransferInput<
   /** Protocol treasury token account */
   protocolTreasuryTokenAccount?: Address<TAccountProtocolTreasuryTokenAccount>;
   tokenProgram?: Address<TAccountTokenProgram>;
+  /**
+   * Phase 7 / L11-1 — success audit log; entry appended after the transfers.
+   * PDA + address-pinned sysvar are auto-resolved by the Anchor client, so
+   * existing `agent_transfer` callers need not pass them explicitly (same as
+   * `deposit_funds`).
+   */
+  auditLogSuccess: Address<TAccountAuditLogSuccess>;
+  slotHashesSysvar?: Address<TAccountSlotHashesSysvar>;
   amount: AgentTransferInstructionDataArgs["amount"];
   expectedPolicyVersion: AgentTransferInstructionDataArgs["expectedPolicyVersion"];
 };
@@ -401,6 +467,8 @@ export function getAgentTransferInstruction<
   TAccountFeeDestinationTokenAccount extends string,
   TAccountProtocolTreasuryTokenAccount extends string,
   TAccountTokenProgram extends string,
+  TAccountAuditLogSuccess extends string,
+  TAccountSlotHashesSysvar extends string,
   TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: AgentTransferInput<
@@ -414,7 +482,9 @@ export function getAgentTransferInstruction<
     TAccountDestinationTokenAccount,
     TAccountFeeDestinationTokenAccount,
     TAccountProtocolTreasuryTokenAccount,
-    TAccountTokenProgram
+    TAccountTokenProgram,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar
   >,
   config?: { programAddress?: TProgramAddress },
 ): AgentTransferInstruction<
@@ -429,7 +499,9 @@ export function getAgentTransferInstruction<
   TAccountDestinationTokenAccount,
   TAccountFeeDestinationTokenAccount,
   TAccountProtocolTreasuryTokenAccount,
-  TAccountTokenProgram
+  TAccountTokenProgram,
+  TAccountAuditLogSuccess,
+  TAccountSlotHashesSysvar
 > {
   // Program address.
   const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
@@ -465,6 +537,11 @@ export function getAgentTransferInstruction<
       isWritable: true,
     },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
+    auditLogSuccess: { value: input.auditLogSuccess ?? null, isWritable: true },
+    slotHashesSysvar: {
+      value: input.slotHashesSysvar ?? null,
+      isWritable: false,
+    },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -478,6 +555,10 @@ export function getAgentTransferInstruction<
   if (!accounts.tokenProgram.value) {
     accounts.tokenProgram.value =
       "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address<"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA">;
+  }
+  if (!accounts.slotHashesSysvar.value) {
+    accounts.slotHashesSysvar.value =
+      "SysvarS1otHashes111111111111111111111111111" as Address<"SysvarS1otHashes111111111111111111111111111">;
   }
 
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
@@ -503,6 +584,8 @@ export function getAgentTransferInstruction<
         accounts.protocolTreasuryTokenAccount,
       ),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
+      getAccountMeta("auditLogSuccess", accounts.auditLogSuccess),
+      getAccountMeta("slotHashesSysvar", accounts.slotHashesSysvar),
     ],
     data: getAgentTransferInstructionDataEncoder().encode(
       args as AgentTransferInstructionDataArgs,
@@ -520,7 +603,9 @@ export function getAgentTransferInstruction<
     TAccountDestinationTokenAccount,
     TAccountFeeDestinationTokenAccount,
     TAccountProtocolTreasuryTokenAccount,
-    TAccountTokenProgram
+    TAccountTokenProgram,
+    TAccountAuditLogSuccess,
+    TAccountSlotHashesSysvar
   >);
 }
 
@@ -548,6 +633,14 @@ export type ParsedAgentTransferInstruction<
     /** Protocol treasury token account */
     protocolTreasuryTokenAccount?: TAccountMetas[9] | undefined;
     tokenProgram: TAccountMetas[10];
+    /**
+     * Phase 7 / L11-1 — success audit log; entry appended after the transfers.
+     * PDA + address-pinned sysvar are auto-resolved by the Anchor client, so
+     * existing `agent_transfer` callers need not pass them explicitly (same as
+     * `deposit_funds`).
+     */
+    auditLogSuccess: TAccountMetas[11];
+    slotHashesSysvar: TAccountMetas[12];
   };
   data: AgentTransferInstructionData;
 };
@@ -560,12 +653,12 @@ export function parseAgentTransferInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedAgentTransferInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 11) {
+  if (instruction.accounts.length < 13) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 11,
+        expectedAccountMetas: 13,
       },
     );
   }
@@ -595,6 +688,8 @@ export function parseAgentTransferInstruction<
       feeDestinationTokenAccount: getNextOptionalAccount(),
       protocolTreasuryTokenAccount: getNextOptionalAccount(),
       tokenProgram: getNextAccount(),
+      auditLogSuccess: getNextAccount(),
+      slotHashesSysvar: getNextAccount(),
     },
     data: getAgentTransferInstructionDataDecoder().decode(instruction.data),
   };

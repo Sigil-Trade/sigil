@@ -492,6 +492,46 @@
         {
           "name": "token_program",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "audit_log_success",
+          "docs": [
+            "Phase 7 / L11-1 — success audit log; entry appended after the transfers.",
+            "PDA + address-pinned sysvar are auto-resolved by the Anchor client, so",
+            "existing `agent_transfer` callers need not pass them explicitly (same as",
+            "`deposit_funds`)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  100,
+                  105,
+                  116,
+                  95,
+                  115,
+                  117,
+                  99,
+                  99,
+                  101,
+                  115,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "slot_hashes_sysvar",
+          "address": "SysvarS1otHashes111111111111111111111111111"
         }
       ],
       "args": [
@@ -1218,6 +1258,35 @@
                 "kind": "account",
                 "path": "vault.vault_id",
                 "account": "AgentVault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "policy",
+          "docs": [
+            "PolicyConfig is read-only here — only `cosign_required` (and the bound",
+            "`cosign_session_pubkey`) are consulted for the L1-1 / D4 symmetric",
+            "cosign gate (audit 2026-06-15). Mirrors `cancel_agent_grant.rs:63-67`",
+            "and `cancel_pending_policy.rs` (M2a). PDA seed derivation is the",
+            "load-bearing vault binding; a cosmetic `has_one = vault` is unnecessary."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
               }
             ]
           }
@@ -2450,7 +2519,12 @@
         {
           "name": "vault_token_account",
           "docs": [
-            "Vault's PDA token account for the session's token"
+            "Vault's PDA token account for the session's token.",
+            "L2-1 (audit 2026-06-15): fail-fast that, when present, this ATA is owned",
+            "by the vault PDA. The outcome path already re-reads the raw post-CPI",
+            "owner field and asserts owner==vault, so this is defense-in-depth — but",
+            "it rejects a substituted token account at account-resolution rather than",
+            "deep in the handler."
           ],
           "writable": true,
           "optional": true
@@ -7380,7 +7454,8 @@
               "disc=19 (agent_grant_cancel)→ agent pubkey (Phase 8 §RP Fix-Up B / PEN-02b)",
               "disc=20 (agent_perms_apply)→ agent pubkey (M-6 close, audit 2026-05-21)",
               "disc=21 (constraints_close_apply)→ vault pubkey (M-7 close, audit 2026-05-21)",
-              "disc=22 (agent_auto_revoked) → agent pubkey (M-8 close, audit 2026-05-21)"
+              "disc=22 (agent_auto_revoked) → agent pubkey (M-8 close, audit 2026-05-21)",
+              "disc=23 (agent_transfer)   → recipient wallet (destination ATA owner) (L11-1, audit 2026-06-15)"
             ],
             "type": {
               "array": [

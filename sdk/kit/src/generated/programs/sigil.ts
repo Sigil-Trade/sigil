@@ -78,7 +78,7 @@ import {
   getApplyAgentPermissionsUpdateInstructionAsync,
   getApplyPendingPolicyInstructionAsync,
   getCancelAgentGrantInstructionAsync,
-  getCancelAgentPermissionsUpdateInstruction,
+  getCancelAgentPermissionsUpdateInstructionAsync,
   getCancelOwnershipTransferInstructionAsync,
   getCancelPendingPolicyInstructionAsync,
   getClosePostAssertionsInstructionAsync,
@@ -140,7 +140,7 @@ import {
   type ApplyAgentPermissionsUpdateAsyncInput,
   type ApplyPendingPolicyAsyncInput,
   type CancelAgentGrantAsyncInput,
-  type CancelAgentPermissionsUpdateInput,
+  type CancelAgentPermissionsUpdateAsyncInput,
   type CancelOwnershipTransferAsyncInput,
   type CancelPendingPolicyAsyncInput,
   type ClosePostAssertionsAsyncInput,
@@ -1138,8 +1138,8 @@ export type SigilPluginInstructions = {
   ) => ReturnType<typeof getCancelAgentGrantInstructionAsync> &
     SelfPlanAndSendFunctions;
   cancelAgentPermissionsUpdate: (
-    input: CancelAgentPermissionsUpdateInput,
-  ) => ReturnType<typeof getCancelAgentPermissionsUpdateInstruction> &
+    input: CancelAgentPermissionsUpdateAsyncInput,
+  ) => ReturnType<typeof getCancelAgentPermissionsUpdateInstructionAsync> &
     SelfPlanAndSendFunctions;
   cancelOwnershipTransfer: (
     input: CancelOwnershipTransferAsyncInput,
@@ -1327,7 +1327,7 @@ export function sigilProgram() {
           cancelAgentPermissionsUpdate: (input) =>
             addSelfPlanAndSendFunctions(
               client,
-              getCancelAgentPermissionsUpdateInstruction(input),
+              getCancelAgentPermissionsUpdateInstructionAsync(input),
             ),
           cancelOwnershipTransfer: (input) =>
             addSelfPlanAndSendFunctions(

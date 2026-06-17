@@ -309,27 +309,35 @@ pub fn handler(
 /// `set_observe_only` to enforce the interim cosign-required gate for vaults
 /// that opted into `policy.cosign_required == true`. Pure function on the
 /// `(is_signer, key)` projection — easy to unit test without LiteSVM.
+// Take-over 2026-06-16: NO LONGER a production cosign gate — the unbound
+// "any non-owner signer" fallback it powered was the vulnerability. Quarantined
+// to test builds so it can never be wired as a gate again. The ONLY cosign gate
+// is `has_bound_cosigner` (strict pubkey match, fail-closed when unbound).
+#[cfg(test)]
 pub(crate) fn has_non_owner_signer(accounts: &[AccountInfo<'_>], owner_key: &Pubkey) -> bool {
     accounts
         .iter()
         .any(|ai| ai.is_signer && ai.key() != *owner_key)
 }
 
-/// M-2 (audit 2026-06-11): identity-pinned cosign gate with an unbound-safe
-/// fallback. Returns true iff the `cosign_required` gate is satisfied:
+/// M-2 (audit 2026-06-11; FAIL-CLOSED hardening 2026-06-16): identity-pinned
+/// cosign gate. Returns true iff the `cosign_required` gate is satisfied:
 ///   - BOUND (`cosign_session_pubkey != default`): a signer in
 ///     `remaining_accounts` must match that EXACT pubkey — a true second factor
 ///     (a leaked owner key + any throwaway keypair no longer passes; this
 ///     closes the C-1 weakness in the queue/initiate/withdraw cosign lanes).
-///   - UNBOUND (`cosign_session_pubkey == default`): falls back to
-///     `has_non_owner_signer`. Preserves back-compat for vaults that set
-///     `cosign_required = true` but never bound a session pubkey, so the upgrade
-///     does NOT brick them — a strict match against the all-zero default pubkey
-///     would be unsatisfiable (a zero-key signer is unreachable). Mirrors the
-///     canonical apply-lane behaviour at `apply_agent_grant` / `apply_pending_policy`.
+///   - UNBOUND (`cosign_session_pubkey == default`): REJECTS (returns false —
+///     fail closed). There is NO legitimate {cosign_required=true, unbound}
+///     state: `initialize_vault` rejects enabling cosign without binding and
+///     `apply_pending_policy` force-binds on the enable transition, so this is
+///     unreachable by construction. Failing closed (vs the old
+///     `has_non_owner_signer` fallback that accepted ANY non-owner signer)
+///     guarantees the "anyone can sign as the 2nd cosigner" hole cannot reopen
+///     via a future write-site bug. The same fail-closed rule is mirrored at the
+///     `apply_agent_grant` inline gate.
 pub(crate) fn has_bound_cosigner(
     accounts: &[AccountInfo<'_>],
-    owner_key: &Pubkey,
+    _owner_key: &Pubkey,
     cosign_session_pubkey: &Pubkey,
 ) -> bool {
     if *cosign_session_pubkey != Pubkey::default() {
@@ -337,7 +345,18 @@ pub(crate) fn has_bound_cosigner(
             .iter()
             .any(|ai| ai.is_signer && ai.key() == *cosign_session_pubkey)
     } else {
-        has_non_owner_signer(accounts, owner_key)
+        // FAIL CLOSED (take-over hardening 2026-06-16): cosign is required but
+        // NO specific cosigner is bound. There is no legitimate
+        // {cosign_required=true, unbound} state — `initialize_vault` rejects
+        // enabling cosign without a bound cosigner, and `apply_pending_policy`
+        // force-binds on the enable transition — so this branch is unreachable
+        // by construction. Returning `false` (instead of the old M-2
+        // `has_non_owner_signer` fallback that accepted ANY non-owner signer) is
+        // the defense-in-depth backstop: a bound, DISTINCT cosigner is MANDATORY
+        // for cosign to be a real second factor. The old fallback let a phished
+        // owner key + any throwaway 2nd keypair satisfy the gate — the hole this
+        // closes.
+        false
     }
 }
 
@@ -469,11 +488,14 @@ mod cosign_gate_predicate_tests {
         assert!(!has_bound_cosigner(&remaining, &owner, &bound));
     }
 
-    /// M-2: UNBOUND (default pubkey) — falls back to any-non-owner-signer, so a
-    /// distinct signer passes. The no-brick guarantee for vaults that set
-    /// cosign_required=true without binding a session pubkey.
+    /// FAIL CLOSED (take-over hardening 2026-06-16): UNBOUND (default pubkey)
+    /// REJECTS regardless of who signs. The old any-non-owner-signer fallback
+    /// (a phished owner key + any throwaway 2nd keypair satisfied the gate) is
+    /// gone — {cosign_required=true, unbound} is unreachable (init rejects it,
+    /// apply_pending_policy force-binds on enable), so a real distinct cosigner
+    /// is ALWAYS bound; failing closed is the defense-in-depth backstop.
     #[test]
-    fn unbound_cosigner_falls_back_to_any_signer() {
+    fn unbound_cosigner_fails_closed() {
         let owner = key_n(1);
         let cosigner = key_n(2);
         let default_pk = Pubkey::default();
@@ -482,13 +504,14 @@ mod cosign_gate_predicate_tests {
         let info = make_info(&cosigner, true, &mut lp, &mut d, &cosigner);
         let remaining = vec![info];
         assert!(
-            has_bound_cosigner(&remaining, &owner, &default_pk),
-            "unbound gate must fall back to any non-owner signer (no brick)"
+            !has_bound_cosigner(&remaining, &owner, &default_pk),
+            "unbound gate must FAIL CLOSED — no any-non-owner-signer fallback"
         );
     }
 
-    /// M-2: UNBOUND + empty remaining_accounts → still rejects (fallback is the
-    /// same has_non_owner_signer check).
+    /// M-2: UNBOUND + empty remaining_accounts → still rejects (fail closed —
+    /// take-over hardening 2026-06-16 removed the any-non-owner-signer fallback;
+    /// the unbound branch now returns false unconditionally).
     #[test]
     fn unbound_cosigner_empty_fails() {
         let owner = key_n(1);

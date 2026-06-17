@@ -40,10 +40,12 @@ import { expectAnchorError, expectSigilError } from "./helpers/strict-errors";
 import {
   initVaultPreviewDigest,
   siblingHandlerDigest,
+  fetchAndComputeQueueDigest,
 } from "./helpers/policy-digest";
 import {
   createTestEnv,
   airdropSol,
+  advanceTime,
   TestEnv,
   LiteSVM,
 } from "./helpers/litesvm-setup";
@@ -860,6 +862,213 @@ describe("post-assertions: Phase 6 Maestro borrows (R-1..R-4)", () => {
       } catch (err: any) {
         expectSigilError(err, { name: "InvalidConstraintConfig" });
       }
+    });
+  });
+
+  // ─── F-2 (take-over 2026-06-16, 3rd adversarial review) ──────────────
+  // Removing the post-execution assertion guard is a protection REDUCTION, so
+  // on a cosign-required vault it must be cosigned by the bound K — symmetric
+  // with set_observe_only. Proves the gate added to close_post_assertions.rs.
+  describe("F-2: close_post_assertions requires the bound cosigner", () => {
+    it("REJECT close without the bound cosigner → ErrCosignRequired; ACCEPT with it", async () => {
+      const cosigner = Keypair.generate();
+      airdropSol(svm, cosigner.publicKey, 5 * LAMPORTS_PER_SOL);
+      const vaultId = new BN(vaultIdCounter++);
+
+      const [vaultPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("vault"),
+          owner.publicKey.toBuffer(),
+          vaultId.toArrayLike(Buffer, "le", 8),
+        ],
+        program.programId,
+      );
+      const [policyPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("policy"), vaultPda.toBuffer()],
+        program.programId,
+      );
+      const [trackerPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("tracker"), vaultPda.toBuffer()],
+        program.programId,
+      );
+      const [overlayPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("agent_spend"), vaultPda.toBuffer(), Buffer.from([0])],
+        program.programId,
+      );
+      const [postAssertionsPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("post_assertions"), vaultPda.toBuffer()],
+        program.programId,
+      );
+      const [pendingPolicyPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("pending_policy"), vaultPda.toBuffer()],
+        program.programId,
+      );
+
+      // init cosign-OFF (cosign can't be enabled at init).
+      await program.methods
+        .initializeVault(
+          vaultId,
+          new BN(500_000_000),
+          new BN(100_000_000),
+          1,
+          [],
+          0,
+          100,
+          new BN(1800),
+          [],
+          [],
+          true,
+          0x00ffffff,
+          false,
+          5,
+          new BN(0),
+          new BN(0),
+          false,
+          initVaultPreviewDigest({
+            dailySpendingCapUsd: new BN(500_000_000),
+            maxTransactionSizeUsd: new BN(100_000_000),
+            maxSlippageBps: 100,
+            protocolMode: 1,
+            protocols: [],
+            allowedDestinations: [],
+            timelockDuration: new BN(1800),
+            observeOnly: true,
+            operatingHours: 0x00ffffff,
+            autoPromoteGrays: false,
+            autoRevokeThreshold: 5,
+          }),
+        )
+        .accounts({
+          owner: owner.publicKey,
+          vault: vaultPda,
+          policy: policyPda,
+          tracker: trackerPda,
+          agentSpendOverlay: overlayPda,
+          feeDestination: feeDestination.publicKey,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .rpc();
+
+      // Enable + bind cosign via queue -> apply (the only path; init rejects it).
+      await program.methods
+        .queuePolicyUpdate(
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          true, // cosign_required
+          cosigner.publicKey, // cosign_session_pubkey (bind)
+          null, // operator_grant_delay_seconds
+          PublicKey.default, // cosign_session (enabling cosign is non-elevated)
+          await fetchAndComputeQueueDigest(program, policyPda, vaultPda, {
+            cosignRequired: true,
+            cosignSessionPubkey: cosigner.publicKey,
+          }),
+        )
+        .accounts({
+          owner: owner.publicKey,
+          vault: vaultPda,
+          policy: policyPda,
+          pendingPolicy: pendingPolicyPda,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .rpc();
+      advanceTime(svm, 1801);
+      await program.methods
+        .applyPendingPolicy()
+        .accounts({
+          owner: owner.publicKey,
+          vault: vaultPda,
+          policy: policyPda,
+          tracker: trackerPda,
+          pendingPolicy: pendingPolicyPda,
+        } as any)
+        .rpc();
+
+      // Create post-assertions (owner-only — strengthening, ungated).
+      const expected = Buffer.alloc(32);
+      Keypair.generate().publicKey.toBuffer().copy(expected, 0);
+      await program.methods
+        .createPostAssertions(
+          [
+            {
+              targetAccount: PublicKey.default,
+              offset: 0,
+              valueLen: 0,
+              operator: 0,
+              expectedValue: expected,
+              assertionMode: 4,
+              auxValue: Array.from(new BN(1_000_000).toArray("le", 8)),
+              auxByte: 0,
+            } as any,
+          ],
+          await siblingHandlerDigest(program, policyPda, vaultPda, {
+            hasPostAssertions: 1,
+          }),
+        )
+        .accounts({
+          owner: owner.publicKey,
+          vault: vaultPda,
+          policy: policyPda,
+          postAssertions: postAssertionsPda,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .rpc();
+
+      const closeDigest = await siblingHandlerDigest(
+        program,
+        policyPda,
+        vaultPda,
+        { hasPostAssertions: 0 },
+      );
+
+      // Close WITHOUT the bound cosigner → REJECT (the F-2 gate). Pre-fix this
+      // succeeded with the owner key alone.
+      try {
+        await program.methods
+          .closePostAssertions(closeDigest)
+          .accounts({
+            owner: owner.publicKey,
+            vault: vaultPda,
+            policy: policyPda,
+            postAssertions: postAssertionsPda,
+            systemProgram: SystemProgram.programId,
+          } as any)
+          .rpc();
+        expect.fail("close_post_assertions should require the bound cosigner");
+      } catch (err: any) {
+        expectSigilError(err, { name: "ErrCosignRequired" });
+      }
+
+      // Close WITH the bound cosigner → succeeds (guard removed legitimately).
+      await program.methods
+        .closePostAssertions(closeDigest)
+        .accounts({
+          owner: owner.publicKey,
+          vault: vaultPda,
+          policy: policyPda,
+          postAssertions: postAssertionsPda,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .remainingAccounts([
+          { pubkey: cosigner.publicKey, isSigner: true, isWritable: false },
+        ])
+        .signers([cosigner])
+        .rpc();
+
+      const pol = await program.account.policyConfig.fetch(policyPda);
+      expect(pol.hasPostAssertions).to.equal(0);
     });
   });
 });
