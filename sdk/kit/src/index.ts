@@ -804,7 +804,10 @@ export type { OwnerClientConfig } from "./dashboard/types.js";
 // Elevated changes use the same PolicyChanges input (elevation is direction-
 // dependent — see PolicyChanges docs); the elevated mutations are OwnerClient
 // methods (queue*Elevated / buildQueue*Elevated).
-export type { ElevatedCosignBundle } from "./dashboard/mutations.js";
+export type {
+  ElevatedCosignBundle,
+  CosignedActionBundle,
+} from "./dashboard/mutations.js";
 
 // ─── Balance Tracker / P&L ──────────────────────────────────────────────────
 export {

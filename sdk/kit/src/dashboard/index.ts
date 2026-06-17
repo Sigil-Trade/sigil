@@ -47,7 +47,10 @@ import type {
   AuditTrailEntry,
   AuditTrailOptions,
 } from "./types.js";
-import type { ElevatedCosignBundle } from "./mutations.js";
+import type {
+  ElevatedCosignBundle,
+  CosignedActionBundle,
+} from "./mutations.js";
 
 import * as reads from "./reads.js";
 import * as mutations from "./mutations.js";
@@ -786,6 +789,101 @@ export class OwnerClient {
       this.vault,
       this.owner,
       changes,
+      cosignSession,
+      opts,
+    );
+  }
+
+  // ── Partial-sign elevated owner-ops (genuine 2-of-2) — take-over 2026-06-17 ──
+  // On a cosign-required vault these ops are rejected (ErrCosignRequired) unless
+  // the bound cosigner co-signs. Each returns a partial owner-signed wire tx for
+  // the bound cosigner to co-sign + send. Use the owner-only variants only on
+  // non-cosign vaults.
+
+  /** Cancel a pending agent grant on a cosign vault — partial-sign handoff. */
+  async buildCancelAgentGrantElevated(
+    cosignSession: Address,
+    opts?: TxOpts,
+  ): Promise<CosignedActionBundle> {
+    return mutations.buildCancelAgentGrantElevated(
+      this.rpc,
+      this.vault,
+      this.owner,
+      cosignSession,
+      opts,
+    );
+  }
+
+  /** Cancel a pending agent-permissions update on a cosign vault — partial-sign. */
+  async buildCancelAgentPermissionsElevated(
+    agent: Address,
+    cosignSession: Address,
+    opts?: TxOpts,
+  ): Promise<CosignedActionBundle> {
+    return mutations.buildCancelAgentPermissionsElevated(
+      this.rpc,
+      this.vault,
+      this.owner,
+      agent,
+      cosignSession,
+      opts,
+    );
+  }
+
+  /** Cancel a pending policy update on a cosign vault — partial-sign. */
+  async buildCancelPendingPolicyElevated(
+    cosignSession: Address,
+    opts?: TxOpts,
+  ): Promise<CosignedActionBundle> {
+    return mutations.buildCancelPendingPolicyElevated(
+      this.rpc,
+      this.vault,
+      this.owner,
+      cosignSession,
+      opts,
+    );
+  }
+
+  /** Apply a queued agent-permissions update on a cosign vault (H-1) — partial-sign. */
+  async buildApplyAgentPermissionsElevated(
+    agent: Address,
+    cosignSession: Address,
+    opts?: TxOpts,
+  ): Promise<CosignedActionBundle> {
+    return mutations.buildApplyAgentPermissionsElevated(
+      this.rpc,
+      this.vault,
+      this.owner,
+      agent,
+      cosignSession,
+      opts,
+    );
+  }
+
+  /** Apply a pending policy update that DISABLES cosign on a cosign vault — partial-sign. */
+  async buildApplyPendingPolicyElevated(
+    cosignSession: Address,
+    opts?: TxOpts,
+  ): Promise<CosignedActionBundle> {
+    return mutations.buildApplyPendingPolicyElevated(
+      this.rpc,
+      this.vault,
+      this.owner,
+      cosignSession,
+      opts,
+    );
+  }
+
+  /** Close a cosign-required vault — partial-sign handoff. */
+  async buildCloseVaultElevated(
+    cosignSession: Address,
+    opts?: TxOpts,
+  ): Promise<CosignedActionBundle> {
+    return mutations.buildCloseVaultElevated(
+      this.rpc,
+      this.vault,
+      this.owner,
+      this.network,
       cosignSession,
       opts,
     );
