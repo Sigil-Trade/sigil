@@ -940,6 +940,19 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
     const { vault, policy, pendingPolicy, cosigner } =
       await setupCosignDisableQueued(new BN(5008));
 
+    // ASYNC COSIGN (2026-06-17): the bound cosigner approves the elevated
+    // (disable-cosign) pending on-chain before apply (queue is now owner-only).
+    await program.methods
+      .approvePendingPolicy()
+      .accounts({
+        cosigner: cosigner.publicKey,
+        vault,
+        policy,
+        pendingPolicy,
+      } as any)
+      .signers([cosigner])
+      .rpc();
+
     await program.methods
       .applyPendingPolicy()
       .accounts({
