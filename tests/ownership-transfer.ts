@@ -1283,6 +1283,126 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
     );
   });
 
+  // LBL-02 (prior audit, primary defense): the bound cosigner cannot be the
+  // new_owner — initiate rejects it, so the simple transfer-to-cosigner collapse
+  // is unreachable at the source.
+  it("LBL-02: initiate transfer to the bound cosigner → ErrInvalidOwnershipTarget (6098)", async () => {
+    const { vault, policy, auditSuccess, pendingOwner, cosigner } =
+      await initVault(new BN(9013), { cosignRequired: true });
+    if (!cosigner)
+      throw new Error("initVault(cosignRequired) must bind a cosigner");
+
+    let caughtCode: number | null = null;
+    try {
+      await program.methods
+        .initiateOwnershipTransfer(cosigner.publicKey, false)
+        .accounts({
+          owner: owner.publicKey,
+          vault,
+          policy,
+          pending: pendingOwner,
+          auditLogSuccess: auditSuccess,
+          systemProgram: SystemProgram.programId,
+        } as any)
+        .remainingAccounts([
+          { pubkey: cosigner.publicKey, isSigner: true, isWritable: false },
+        ])
+        .signers([cosigner])
+        .rpc();
+    } catch (err: any) {
+      caughtCode = err?.error?.errorCode?.number ?? null;
+    }
+    expect(
+      caughtCode,
+      "initiate to the bound cosigner MUST reject (LBL-02)",
+    ).to.equal(6098); // ErrInvalidOwnershipTarget
+    expect(accountExists(svm, pendingOwner)).to.equal(false);
+  });
+
+  // Finding 1 (take-over 2026-06-17): the residual reachable collapse. With
+  // LBL-02 guarding initiate, the only way cosign_session_pubkey == new_owner at
+  // ACCEPT is if cosign is enabled+bound to an ALREADY-pending recipient. The
+  // collapse then drops the 2nd factor, so accept_ownership_transfer must reset
+  // cosign_session_pubkey AND clear cosign_required — landing in a clean
+  // {false, default} SingleKey state, NOT the inert {true, default} that the
+  // hardened fail-closed has_bound_cosigner would lock every cosign-gated
+  // owner-op against. Proves the collapse-clear (no lockout / no brick).
+  it("accept after cosign bound to the pending recipient → cosign auto-disabled, NOT bricked (Finding 1)", async () => {
+    const { vault, policy, auditSuccess, pendingOwner } = await initVault(
+      new BN(9014),
+    ); // cosign OFF
+    const newOwner = Keypair.generate();
+    airdropSol(svm, newOwner.publicKey, 1 * LAMPORTS_PER_SOL);
+
+    // Initiate transfer to newOwner (cosign off → owner-only, no LBL-02 trip).
+    await program.methods
+      .initiateOwnershipTransfer(newOwner.publicKey, false)
+      .accounts({
+        owner: owner.publicKey,
+        vault,
+        policy,
+        pending: pendingOwner,
+        auditLogSuccess: auditSuccess,
+        systemProgram: SystemProgram.programId,
+      } as any)
+      .rpc();
+
+    // Enable + bind cosign to the PENDING recipient (the exotic setup that makes
+    // accept's collapse-guard reachable: cosign_session_pubkey == new_owner).
+    const [pendingPolicy] = PublicKey.findProgramAddressSync(
+      [Buffer.from("pending_policy"), vault.toBuffer()],
+      program.programId,
+    );
+    const queueDigest = await fetchAndComputeQueueDigest(program, policy, vault, {
+      cosignRequired: true,
+      cosignSessionPubkey: newOwner.publicKey,
+    });
+    await program.methods
+      .queuePolicyUpdate(
+        null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null, null,
+        true, newOwner.publicKey, null, PublicKey.default, queueDigest,
+      )
+      .accounts({
+        owner: owner.publicKey,
+        vault,
+        policy,
+        pendingPolicy,
+        systemProgram: SystemProgram.programId,
+      } as any)
+      .rpc();
+    advanceTime(svm, STANDARD_INIT_TIMELOCK.toNumber() + 1);
+    await program.methods
+      .applyPendingPolicy()
+      .accounts({ owner: owner.publicKey, vault, policy, pendingPolicy } as any)
+      .rpc();
+
+    // Now {cosign_required=true, cosign_session_pubkey=newOwner}. Advance the
+    // ownership timelock + accept (newOwner signs).
+    advanceTime(svm, DEFAULT_MIN_DELAY);
+    await program.methods
+      .acceptOwnershipTransfer()
+      .accounts({
+        newOwner: newOwner.publicKey,
+        vault,
+        policy,
+        pending: pendingOwner,
+        auditLogSuccess: auditSuccess,
+        systemProgram: SystemProgram.programId,
+      } as any)
+      .signers([newOwner])
+      .rpc();
+
+    // ASSERT — the collapse cleared BOTH fields to {false, default} (no lockout).
+    const post = await program.account.policyConfig.fetch(policy);
+    const vaultState = await program.account.agentVault.fetch(vault);
+    expect(vaultState.owner.toString()).to.equal(newOwner.publicKey.toString());
+    expect(post.cosignRequired).to.equal(false);
+    expect(post.cosignSessionPubkey.toString()).to.equal(
+      PublicKey.default.toString(),
+    );
+  });
+
   // ─────────────────────────────────────────────────────────────────────────
   // 11. MULTISIG-TARGET INITIATE IS REJECTED (H-1, audit 2026-06-11).
   //     Squads multisig custody is DISABLED in V1 — is_multisig_target=true is
