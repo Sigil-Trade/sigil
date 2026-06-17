@@ -1,4 +1,6 @@
 use anchor_lang::prelude::*;
+use anchor_spl::associated_token::get_associated_token_address;
+use anchor_spl::token::TokenAccount;
 
 use crate::errors::SigilError;
 use crate::events::VaultClosed;
@@ -116,6 +118,35 @@ pub fn handler(ctx: Context<CloseVault>) -> Result<()> {
             ),
             SigilError::ErrCosignRequired
         );
+
+        // B-1 "empty" half (user decision "Both"): every stablecoin custody
+        // account MUST be empty/closed at close, so custody can ONLY exit via the
+        // cosign-gated withdraw_funds — never orphaned in a surviving ATA for a
+        // close->reinit to drain. A vault's token custody is exactly the pinned
+        // stablecoin set (mainnet: USDC + USDT, both classic SPL-Token; deposits
+        // are pinned and agent outputs are F-Q8-pinned to these stablecoin ATAs).
+        // Derive each vault ATA and REQUIRE the caller to supply it so the
+        // balance can be verified; a missing account or a non-zero balance fails
+        // CLOSED. (Token-2022 stablecoins are not in the pinned set today; adding
+        // one would require deriving its ATA with the Token-2022 program here.)
+        let vault_key = vault.key();
+        for stable_mint in [USDC_MINT, USDT_MINT] {
+            let ata = get_associated_token_address(&vault_key, &stable_mint);
+            match ctx.remaining_accounts.iter().find(|ai| ai.key() == ata) {
+                Some(ai) => {
+                    // An initialized SPL-Token account at the derived ATA must be
+                    // zero. A closed / never-created account (owner != Token
+                    // program — e.g. SystemProgram) holds no custody → OK.
+                    if ai.owner == &anchor_spl::token::ID {
+                        let ta =
+                            TokenAccount::try_deserialize(&mut &ai.try_borrow_data()?[..])?;
+                        require!(ta.amount == 0, SigilError::ErrVaultNotEmpty);
+                    }
+                }
+                // Not supplied → cannot prove empty → fail closed.
+                None => return Err(error!(SigilError::ErrVaultNotEmpty)),
+            }
+        }
     }
 
     // If pending policy exists, caller MUST provide it in remaining_accounts for cleanup

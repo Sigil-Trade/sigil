@@ -756,4 +756,13 @@ pub enum SigilError {
     /// Deferred to a future release (CPI-aware or Sigil-native M-of-N) + re-audit.
     #[msg("Squads multisig ownership custody is not supported in V1 (use a standard EOA owner)")]
     ErrMultisigCustodyUnsupported,
+
+    /// 6112 (take-over 2026-06-16, B-1 "empty" half): close_vault on a
+    /// cosign-required vault requires the vault's stablecoin token accounts to be
+    /// empty/closed, so custody can only ever exit via the cosign-gated
+    /// withdraw_funds — never orphaned in a surviving ATA for a close->reinit to
+    /// drain. Returned when a derived stablecoin vault ATA still holds a non-zero
+    /// balance, or was not supplied so the handler could verify it (fail-closed).
+    #[msg("vault still holds stablecoin custody — withdraw to zero before closing a cosign vault")]
+    ErrVaultNotEmpty,
 }
