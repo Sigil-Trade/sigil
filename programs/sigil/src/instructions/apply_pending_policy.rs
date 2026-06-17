@@ -393,11 +393,15 @@ pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
             Pubkey::default(),
             SigilError::ErrCosignRequired
         );
-        let cosign_present = ctx
-            .remaining_accounts
-            .iter()
-            .any(|ai| ai.key == &cosign_session && ai.is_signer);
-        require!(cosign_present, SigilError::ErrCosignRequired);
+        // ASYNC COSIGN (2026-06-17): the bound cosigner's authorization for this
+        // disable-cosign is their on-chain `approve_pending_policy` (enforced by
+        // the `cosign_approved` gate at the top of this handler) — NOT a
+        // synchronous signature on the owner's apply tx, which a REMOTE cosigner
+        // cannot provide (blockhash expiry). The recorded-binding re-assert above
+        // stays as defense-in-depth; the prior synchronous `cosign_present`
+        // remaining-accounts signer check is removed — it bricked the legitimate
+        // remote disable-cosign flow (caught by adversarial review 2026-06-17).
+        let _ = cosign_session;
     }
     // D-5 (audit 2026-05-19, F-RP3-1): apply optional cosign_session_pubkey
     // update. None preserves the live value; Some(_) overwrites unconditionally

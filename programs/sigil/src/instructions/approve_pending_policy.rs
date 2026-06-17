@@ -48,12 +48,21 @@ pub struct ApprovePendingPolicy<'info> {
 pub fn handler(ctx: Context<ApprovePendingPolicy>) -> Result<()> {
     crate::reject_cpi!();
 
+    // M1-03 (mirror queue_policy_update / apply_pending_policy): no cosign churn
+    // on a non-Active vault. Without this, an approval set during a freeze would
+    // age past the F-10 window before reactivation makes apply legal.
+    require!(
+        ctx.accounts.vault.status == VaultStatus::Active,
+        SigilError::VaultNotActive
+    );
+
     // Snapshot the policy reads + signer/vault keys BEFORE the mutable pending
     // borrow (disjoint-field clarity).
     let bound_cosigner = ctx.accounts.policy.cosign_session_pubkey;
     let live_policy_version = ctx.accounts.policy.policy_version;
     let cosigner_key = ctx.accounts.cosigner.key();
     let vault_key = ctx.accounts.vault.key();
+    let clock = Clock::get()?;
 
     let pending = &mut ctx.accounts.pending_policy;
 
@@ -71,6 +80,12 @@ pub fn handler(ctx: Context<ApprovePendingPolicy>) -> Result<()> {
     // so this also equals `pending.cosign_session`.
     require_keys_eq!(cosigner_key, bound_cosigner, SigilError::ErrCosignRequired);
 
+    // WRITE-ONCE (adversarial review 2026-06-17): approval is single-use.
+    // Re-approval would overwrite `approved_at_slot` and re-arm the F-10 freshness
+    // window indefinitely (the durable-nonce pre-signing class F-10 bounds). If
+    // the post-approval apply window lapses, the owner must cancel + re-queue.
+    require!(!pending.cosign_approved, SigilError::ErrCosignRequired);
+
     // Strict staleness gate: the live policy_version must still equal the value
     // snapshotted at queue. Any policy mutation since queue (incl. a cosigner
     // rotation, which bumps the version) invalidates this pending.
@@ -79,7 +94,16 @@ pub fn handler(ctx: Context<ApprovePendingPolicy>) -> Result<()> {
         SigilError::PolicyVersionMismatch
     );
 
-    let clock = Clock::get()?;
+    // Approve only AFTER the timelock matures (adversarial review 2026-06-17).
+    // `timelock_duration` has no upper bound; approving early on a long-timelock
+    // pending would age `approved_at_slot` past MAX_APPLY_AGE_SLOTS before apply
+    // is legal and PERMANENTLY brick the update. Gating on `is_ready` anchors the
+    // approval inside the apply-able window, keeping the F-10 re-anchor coherent.
+    require!(
+        pending.is_ready(clock.unix_timestamp),
+        SigilError::TimelockNotExpired
+    );
+
     pending.cosign_approved = true;
     pending.approved_at_slot = clock.slot;
 
