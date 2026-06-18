@@ -120,8 +120,26 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build program (devnet feature)
-        run: anchor build --no-idl
+      # Install solana-verify (reproducible docker build) — same tool & pinned
+      # image used by the Verify Program Binary job, so the deployed binary and
+      # the verify rebuild are byte-identical.
+      - name: Install solana-verify
+        run: cargo install solana-verify --locked
+
+      # Build the program REPRODUCIBLY at sBPF v3. Devnet SIMD-0500 (epoch 1088)
+      # disabled deployment of sBPF v0/v1/v2; the default `cargo build-sbf` emits
+      # v0, so `anchor build` (no --arch control) produced an undeployable binary
+      # — the cause of the "invalid account data for instruction" deploy failures.
+      # solana-verify builds inside the Agave image pinned by Cargo.toml
+      # [workspace.metadata.cli], using default cargo features (incl. `devnet`),
+      # and writes target/deploy/sigil.so.
+      - name: Build program (reproducible, sBPF v3)
+        run: solana-verify build --library-name sigil --arch v3
+
+      # solana-verify builds as root in docker; reclaim ownership so later steps
+      # (IDL restore, deploy, metadata) can read/write target/.
+      - name: Fix target ownership after docker build
+        run: sudo chown -R "$(id -u):$(id -g)" target
 
       - name: Restore committed IDL
         run: git checkout -- target/idl/ target/types/
@@ -346,11 +364,16 @@ jobs:
             echo "::error::DEVNET_RPC_URL is empty — refusing to verify against a public fallback."
             exit 1
           fi
+          # --arch v3 MUST match the deployed binary's sBPF version (built with
+          # `solana-verify build --arch v3` in the deploy job). Same tool + same
+          # pinned image (Cargo.toml [workspace.metadata.cli]) → byte-identical
+          # rebuild → hash match. Omitting it rebuilds v0 and fails the match.
           solana-verify verify-from-repo \
             https://github.com/Sigil-Trade/sigil \
             --program-id 7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK \
             --library-name sigil \
             --mount-path . \
+            --arch v3 \
             --url "$VERIFY_RPC"
 
   # ────────────────────────────────────────────────────────────────

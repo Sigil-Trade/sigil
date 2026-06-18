@@ -23,6 +23,14 @@ resolver = "2"
 [workspace.package]
 license = "Apache-2.0"
 
+# Pins the Agave version solana-verify uses for its reproducible docker build.
+# Both `solana-verify build` (deploy job) and `solana-verify verify-from-repo`
+# (verify job) resolve this same digest-pinned image, so the deployed binary
+# and the verify rebuild are byte-identical. 3.1.14 supports `cargo build-sbf
+# --arch v3` (required since devnet SIMD-0500 disabled v0/v1/v2 deployment).
+[workspace.metadata.cli]
+solana = "3.1.14"
+
 [profile.release]
 overflow-checks = true
 lto = "fat"
