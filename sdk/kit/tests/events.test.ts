@@ -140,14 +140,15 @@ describe("events", () => {
   });
 
   describe("getEventNames", () => {
-    it("returns 45 names", () => {
+    it("returns 36 names", () => {
       // 39 events post Phase 3 (added GraylistEntered, GraylistPromoted,
       // AgentAutoRevoked for TA-07/17 pre-execution guards).
       // Phase 8 added 5 events: OwnershipTransferInitiated /Accepted /
       // Cancelled (Batches 3/4 C26) + AgentGrantQueued / Applied
       // (Batch 6 PEN-CROSS-1).
       // M1-04: 10 constraint-engine events removed → 45 - 10 = 35.
-      expect(getEventNames()).to.have.length(35);
+      // Cosign async approval (2026-06-17): +1 PolicyCosignApproved → 36.
+      expect(getEventNames()).to.have.length(36);
     });
 
     it("includes known names", () => {
@@ -408,7 +409,7 @@ describe("events", () => {
       // Phase 8: +5 events (OwnershipTransferInitiated/Accepted/Cancelled +
       // AgentGrantQueued/Applied) = 39 + 5 = 44.
       // M1-04: 10 constraint-engine events removed → 35.
-      expect(discriminatorNames.size).to.equal(35);
+      expect(discriminatorNames.size).to.equal(36); // +1 PolicyCosignApproved (cosign async 2026-06-17)
     });
   });
 });
