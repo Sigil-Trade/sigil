@@ -12,7 +12,10 @@
 #
 # Requires GitHub environment "devnet" with secrets:
 #   - DEVNET_DEPLOY_KEYPAIR: upgrade authority keypair (JSON array)
-#   - DEVNET_RPC_URL: devnet RPC endpoint
+#   - DEVNET_RPC_URL: dedicated devnet RPC endpoint (e.g. Helius). NEVER a public
+#     endpoint — public RPCs throttle the deploy's buffer-write burst, leaving an
+#     incomplete buffer that the upgrade rejects with "invalid account data for
+#     instruction". A startup guard fails the deploy if this is empty or public.
 #   - DEVNET_WALLET_KEYPAIR: test wallet keypair (passed to devnet-test.yml)
 
 name: Deploy to Devnet
@@ -52,6 +55,24 @@ jobs:
     environment: devnet
     timeout-minutes: 20
     steps:
+      # Fail-closed RPC guard — runs first (before the ~4-min build) so a
+      # missing/public RPC fails fast with a clear message instead of silently
+      # deploying on a public endpoint and corrupting the buffer write.
+      - name: Guard — require a dedicated (non-public) devnet RPC
+        env:
+          RPC: ${{ secrets.DEVNET_RPC_URL }}
+        run: |
+          if [ -z "$RPC" ]; then
+            echo "::error::DEVNET_RPC_URL is empty — refusing to deploy. Set it to your dedicated (e.g. Helius) devnet endpoint: gh secret set DEVNET_RPC_URL --repo Sigil-Trade/sigil"
+            exit 1
+          fi
+          case "$RPC" in
+            *api.devnet.solana.com*|*api.testnet.solana.com*|*api.mainnet-beta.solana.com*)
+              echo "::error::DEVNET_RPC_URL points at a PUBLIC Solana RPC. Program deploys must use a dedicated RPC — public endpoints throttle the buffer-write burst and leave an incomplete buffer that the upgrade rejects ('invalid account data for instruction'). Refusing to deploy."
+              exit 1 ;;
+          esac
+          echo "DEVNET_RPC_URL is a dedicated endpoint — OK to deploy."
+
       - name: Checkout code
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
@@ -321,12 +342,16 @@ jobs:
           VERIFY_RPC: ${{ secrets.DEVNET_RPC_URL }}
         run: |
           set -e
+          if [ -z "$VERIFY_RPC" ]; then
+            echo "::error::DEVNET_RPC_URL is empty — refusing to verify against a public fallback."
+            exit 1
+          fi
           solana-verify verify-from-repo \
             https://github.com/Sigil-Trade/sigil \
             --program-id 7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK \
             --library-name sigil \
             --mount-path . \
-            --url "${VERIFY_RPC:-https://api.devnet.solana.com}"
+            --url "$VERIFY_RPC"
 
   # ────────────────────────────────────────────────────────────────
   # Job 3: Devnet tests (post-deploy)
