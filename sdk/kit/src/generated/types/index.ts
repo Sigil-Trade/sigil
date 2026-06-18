@@ -39,6 +39,7 @@ export * from "./perRecipientCounter.js";
 export * from "./policyChangeApplied.js";
 export * from "./policyChangeCancelled.js";
 export * from "./policyChangeQueued.js";
+export * from "./policyCosignApproved.js";
 export * from "./postAssertionChecked.js";
 export * from "./postAssertionEntry.js";
 export * from "./postAssertionEntryZC.js";

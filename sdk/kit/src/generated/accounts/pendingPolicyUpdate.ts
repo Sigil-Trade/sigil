@@ -193,6 +193,32 @@ export type PendingPolicyUpdate = {
    * APPENDED per F-14 APPEND-ONLY rule for Borsh stability.
    */
   operatorGrantDelaySeconds: Option<bigint>;
+  /**
+   * Async cosign approval (2026-06-17): set `true` by `approve_pending_policy`
+   * when the bound cosigner K approves an elevated queued update.
+   * `apply_pending_policy` requires this for elevated mutations — REPLACES the
+   * synchronous apply-time cosigner re-assert. Non-elevated pendings leave it
+   * `false` (unused). APPENDED per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  cosignApproved: boolean;
+  /**
+   * Slot at which the cosigner approved (set by `approve_pending_policy`).
+   * `apply_pending_policy` re-anchors the F-10 freshness ceiling to THIS slot
+   * (apply within `MAX_APPLY_AGE_SLOTS` of approval, not of queue), so the
+   * cosigner has unbounded time to approve while a held apply stays bounded
+   * post-approval. `0` until approved.
+   * APPENDED per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  approvedAtSlot: bigint;
+  /**
+   * `PolicyConfig.policy_version` snapshot at queue time. `approve_pending_policy`
+   * and `apply_pending_policy` require the live `policy_version` still equals this
+   * (strict staleness gate — Squads `stale_transaction_index` analog). Any policy
+   * change (incl. cosigner rotation, which bumps `policy_version`) invalidates
+   * this pending's pending approval.
+   * APPENDED per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  queuedPolicyVersion: bigint;
 };
 
 export type PendingPolicyUpdateArgs = {
@@ -324,6 +350,32 @@ export type PendingPolicyUpdateArgs = {
    * APPENDED per F-14 APPEND-ONLY rule for Borsh stability.
    */
   operatorGrantDelaySeconds: OptionOrNullable<number | bigint>;
+  /**
+   * Async cosign approval (2026-06-17): set `true` by `approve_pending_policy`
+   * when the bound cosigner K approves an elevated queued update.
+   * `apply_pending_policy` requires this for elevated mutations — REPLACES the
+   * synchronous apply-time cosigner re-assert. Non-elevated pendings leave it
+   * `false` (unused). APPENDED per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  cosignApproved: boolean;
+  /**
+   * Slot at which the cosigner approved (set by `approve_pending_policy`).
+   * `apply_pending_policy` re-anchors the F-10 freshness ceiling to THIS slot
+   * (apply within `MAX_APPLY_AGE_SLOTS` of approval, not of queue), so the
+   * cosigner has unbounded time to approve while a held apply stays bounded
+   * post-approval. `0` until approved.
+   * APPENDED per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  approvedAtSlot: number | bigint;
+  /**
+   * `PolicyConfig.policy_version` snapshot at queue time. `approve_pending_policy`
+   * and `apply_pending_policy` require the live `policy_version` still equals this
+   * (strict staleness gate — Squads `stale_transaction_index` analog). Any policy
+   * change (incl. cosigner rotation, which bumps `policy_version`) invalidates
+   * this pending's pending approval.
+   * APPENDED per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  queuedPolicyVersion: number | bigint;
 };
 
 /** Gets the encoder for {@link PendingPolicyUpdateArgs} account data. */
@@ -360,6 +412,9 @@ export function getPendingPolicyUpdateEncoder(): Encoder<PendingPolicyUpdateArgs
       ["cosignRequired", getOptionEncoder(getBooleanEncoder())],
       ["cosignSessionPubkey", getOptionEncoder(getAddressEncoder())],
       ["operatorGrantDelaySeconds", getOptionEncoder(getU64Encoder())],
+      ["cosignApproved", getBooleanEncoder()],
+      ["approvedAtSlot", getU64Encoder()],
+      ["queuedPolicyVersion", getU64Encoder()],
     ]),
     (value) => ({
       ...value,
@@ -401,6 +456,9 @@ export function getPendingPolicyUpdateDecoder(): Decoder<PendingPolicyUpdate> {
     ["cosignRequired", getOptionDecoder(getBooleanDecoder())],
     ["cosignSessionPubkey", getOptionDecoder(getAddressDecoder())],
     ["operatorGrantDelaySeconds", getOptionDecoder(getU64Decoder())],
+    ["cosignApproved", getBooleanDecoder()],
+    ["approvedAtSlot", getU64Decoder()],
+    ["queuedPolicyVersion", getU64Decoder()],
   ]);
 }
 

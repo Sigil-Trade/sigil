@@ -12,6 +12,7 @@ export * from "./agentTransfer.js";
 export * from "./applyAgentGrant.js";
 export * from "./applyAgentPermissionsUpdate.js";
 export * from "./applyPendingPolicy.js";
+export * from "./approvePendingPolicy.js";
 export * from "./cancelAgentGrant.js";
 export * from "./cancelAgentPermissionsUpdate.js";
 export * from "./cancelOwnershipTransfer.js";
