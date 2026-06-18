@@ -247,6 +247,13 @@ pub mod sigil {
         instructions::cancel_pending_policy::handler(ctx)
     }
 
+    /// Async cosign (2026-06-17): the bound cosigner K approves an elevated
+    /// queued policy update on-chain. `apply_pending_policy` then requires
+    /// `cosign_approved == true`. See `ROADMAP/COSIGN_ASYNC_APPROVAL_2026-06-17`.
+    pub fn approve_pending_policy(ctx: Context<ApprovePendingPolicy>) -> Result<()> {
+        instructions::approve_pending_policy::handler(ctx)
+    }
+
     // ─── Constraints engine REMOVED (M1-04, 2026-05-31) ──────────────────────
     // The instruction-data constraints engine (allocate/extend/create/
     // queue/apply/cancel/close/cleanup for InstructionConstraints +

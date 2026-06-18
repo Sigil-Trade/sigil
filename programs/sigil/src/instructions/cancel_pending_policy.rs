@@ -37,25 +37,17 @@ pub struct CancelPendingPolicy<'info> {
 pub fn handler(ctx: Context<CancelPendingPolicy>) -> Result<()> {
     crate::reject_cpi!();
 
-    // M2 (audit 2026-06-15): D4 symmetric cosign gate — mirrors
-    // `cancel_ownership_transfer.rs:111-121` / `cancel_agent_grant.rs:107-115`.
-    // On a cosign-opted-in vault, a phished owner key ALONE must not be able
-    // to cancel a queued (cosigned) policy update and then re-queue a weaker
-    // policy. The cancel therefore also requires the bound cosigner. The
-    // default `cosign_required == false` leaves the single-signer flow
-    // unchanged. No `Active` gate here (unlike ownership/grant cancels):
-    // `freeze_vault` does not drain `pending_policy`, so keeping cancel
-    // available while Frozen is a liveness benefit, and the cosign gate is the
-    // correct anti-phishing protection for this lower-stakes pending.
-    if ctx.accounts.policy.cosign_required {
-        let owner_key = ctx.accounts.owner.key();
-        let has_cosigner = crate::instructions::register_agent::has_bound_cosigner(
-            ctx.remaining_accounts,
-            &owner_key,
-            &ctx.accounts.policy.cosign_session_pubkey,
-        );
-        require!(has_cosigner, SigilError::ErrCosignRequired);
-    }
+    // ASYNC COSIGN (2026-06-17, design COSIGN_ASYNC_APPROVAL_2026-06-17): cancel
+    // is now OWNER-ONLY. #351 added a synchronous D4 cosign gate here so a phished
+    // owner key alone couldn't cancel a cosigned pending and re-queue a weaker
+    // policy. In the async model that attack is already defeated downstream: a
+    // re-queued weaker policy CANNOT be applied without the bound cosigner's
+    // on-chain approval (`apply_pending_policy` requires `cosign_approved`).
+    // Canceling is the owner withdrawing their OWN un-applied proposal (a 2-of-2
+    // where either party may decline); it moves no funds and weakens no live
+    // policy. Requiring the cosigner synchronously here would only re-introduce
+    // the blockhash-expiry problem the async model exists to solve, so the gate
+    // is removed.
 
     ctx.accounts.policy.has_pending_policy = false;
 

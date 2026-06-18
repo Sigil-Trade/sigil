@@ -7105,6 +7105,19 @@ describe("sigil", () => {
 
       advanceTime(svm, 1801);
 
+      // ASYNC COSIGN (2026-06-17): bound cosigner approves the elevated
+      // (weakens_protocol_caps) pending before apply (queue is now owner-only).
+      await program.methods
+        .approvePendingPolicy()
+        .accounts({
+          cosigner: protoCapCosigner.publicKey,
+          vault: pcVault,
+          policy: pcPolicy,
+          pendingPolicy: pcPendingPda,
+        } as any)
+        .signers([protoCapCosigner])
+        .rpc();
+
       await program.methods
         .applyPendingPolicy()
         .accounts({
@@ -7242,6 +7255,19 @@ describe("sigil", () => {
         .rpc();
 
       advanceTime(svm, 1801);
+
+      // ASYNC COSIGN (2026-06-17): bound cosigner approves the elevated
+      // (weakens_protocol_caps via has_protocol_caps=false) pending before apply.
+      await program.methods
+        .approvePendingPolicy()
+        .accounts({
+          cosigner: protoCapCosigner.publicKey,
+          vault: pcVault,
+          policy: pcPolicy,
+          pendingPolicy: pcPendingPda,
+        } as any)
+        .signers([protoCapCosigner])
+        .rpc();
 
       await program.methods
         .applyPendingPolicy()

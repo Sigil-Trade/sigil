@@ -520,14 +520,16 @@ pub fn handler(
             policy.cosign_session_pubkey,
             SigilError::ErrCosignRequired
         );
-        // The corresponding signer MUST be present in remaining_accounts
-        // with `is_signer == true`. Solana enforces the signature; this
-        // handler validates presence.
-        let cosign_present = ctx
-            .remaining_accounts
-            .iter()
-            .any(|ai| ai.key == &cosign_session && ai.is_signer);
-        require!(cosign_present, SigilError::ErrCosignRequired);
+        // ASYNC COSIGN (2026-06-17, design COSIGN_ASYNC_APPROVAL_2026-06-17):
+        // the queue is now OWNER-ONLY. The bound cosigner does NOT sign this tx
+        // — instead the pending records the binding (`cosign_session` +
+        // `cosign_digest` + `queued_policy_version`) and the cosigner approves
+        // later via `approve_pending_policy` (their own fresh tx).
+        // `apply_pending_policy` then requires `cosign_approved == true`. This
+        // REPLACES #351's synchronous co-sign so a remote cosigner can approve on
+        // their own schedule — a Solana blockhash expires in ~60-90s, so a remote
+        // party cannot co-sign the SAME tx the owner signed. The `!= default`,
+        // `!= owner`, and `== bound K` checks above still validate WHO must approve.
 
         // Compute the cosign digest binding INSTRUCTION DATA HASH per
         // HARDENED: "The session signature must cover the SAME
@@ -644,6 +646,10 @@ pub fn handler(
         .checked_add(timelock_secs)
         .ok_or(SigilError::Overflow)?;
 
+    // ASYNC COSIGN (2026-06-17): snapshot the live policy_version as the strict
+    // staleness anchor, read BEFORE the mutable `pending` borrow below.
+    let queued_policy_version = ctx.accounts.policy.policy_version;
+
     let pending = &mut ctx.accounts.pending_policy;
     pending.vault = vault.key();
     pending.queued_at = clock.unix_timestamp;
@@ -690,6 +696,14 @@ pub fn handler(
     // `policy.cosign_session_pubkey` before the second-pass TA-19 digest
     // recompute (which binds the merged value at canonical position 22).
     pending.cosign_session_pubkey = cosign_session_pubkey;
+    // ASYNC COSIGN (2026-06-17): initialize approval state. The bound cosigner
+    // approves later via `approve_pending_policy`; `apply_pending_policy` requires
+    // `cosign_approved` for elevated mutations. `queued_policy_version` is the
+    // strict-staleness anchor — approve/apply require the live policy_version to
+    // still equal it (cosigner rotation or any policy change invalidates it).
+    pending.cosign_approved = false;
+    pending.approved_at_slot = 0;
+    pending.queued_policy_version = queued_policy_version;
 
     ctx.accounts.policy.has_pending_policy = true;
 

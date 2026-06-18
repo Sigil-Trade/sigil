@@ -940,6 +940,24 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
     const { vault, policy, pendingPolicy, cosigner } =
       await setupCosignDisableQueued(new BN(5008));
 
+    // ASYNC COSIGN (2026-06-17): the bound cosigner approves the elevated
+    // (disable-cosign) pending on-chain before apply (queue is now owner-only).
+    await program.methods
+      .approvePendingPolicy()
+      .accounts({
+        cosigner: cosigner.publicKey,
+        vault,
+        policy,
+        pendingPolicy,
+      } as any)
+      .signers([cosigner])
+      .rpc();
+
+    // ASYNC COSIGN (2026-06-17): apply is OWNER-ONLY — no cosigner co-signs this
+    // tx. The bound cosigner's authorization is the prior on-chain
+    // approve_pending_policy (a remote cosigner cannot sign the owner's apply tx).
+    // This is the true remote 2-of-2 flow; the old test co-signed locally, which
+    // masked that the disable-cosign apply required a synchronous signature.
     await program.methods
       .applyPendingPolicy()
       .accounts({
@@ -948,10 +966,6 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
         policy,
         pendingPolicy,
       } as any)
-      .remainingAccounts([
-        { pubkey: cosigner.publicKey, isSigner: true, isWritable: false },
-      ])
-      .signers([cosigner])
       .rpc();
 
     // ASSERT: policy.cosign_required flipped to false.

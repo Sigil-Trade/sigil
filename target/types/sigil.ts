@@ -1043,6 +1043,118 @@ export type Sigil = {
       "args": []
     },
     {
+      "name": "approvePendingPolicy",
+      "docs": [
+        "Async cosign (2026-06-17): the bound cosigner K approves an elevated",
+        "queued policy update on-chain. `apply_pending_policy` then requires",
+        "`cosign_approved == true`. See `ROADMAP/COSIGN_ASYNC_APPROVAL_2026-06-17`."
+      ],
+      "discriminator": [
+        151,
+        218,
+        153,
+        6,
+        155,
+        67,
+        8,
+        200
+      ],
+      "accounts": [
+        {
+          "name": "cosigner",
+          "docs": [
+            "The bound cosigner K. Must equal `policy.cosign_session_pubkey`."
+          ],
+          "signer": true
+        },
+        {
+          "name": "vault",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault.vault_authority",
+                "account": "agentVault"
+              },
+              {
+                "kind": "account",
+                "path": "vault.vault_id",
+                "account": "agentVault"
+              }
+            ]
+          },
+          "relations": [
+            "policy",
+            "pendingPolicy"
+          ]
+        },
+        {
+          "name": "policy",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pendingPolicy",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  110,
+                  100,
+                  105,
+                  110,
+                  103,
+                  95,
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "cancelAgentGrant",
       "docs": [
         "Phase 8 §RP Fix-Up B (PEN-02b CRITICAL, audit 2026-05-19) — cancel a",
@@ -5842,6 +5954,19 @@ export type Sigil = {
       ]
     },
     {
+      "name": "policyCosignApproved",
+      "discriminator": [
+        139,
+        96,
+        150,
+        34,
+        139,
+        198,
+        228,
+        31
+      ]
+    },
+    {
       "name": "postAssertionChecked",
       "discriminator": [
         166,
@@ -8768,6 +8893,41 @@ export type Sigil = {
             "type": {
               "option": "u64"
             }
+          },
+          {
+            "name": "cosignApproved",
+            "docs": [
+              "Async cosign approval (2026-06-17): set `true` by `approve_pending_policy`",
+              "when the bound cosigner K approves an elevated queued update.",
+              "`apply_pending_policy` requires this for elevated mutations — REPLACES the",
+              "synchronous apply-time cosigner re-assert. Non-elevated pendings leave it",
+              "`false` (unused). APPENDED per F-14 APPEND-ONLY rule for Borsh stability."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "approvedAtSlot",
+            "docs": [
+              "Slot at which the cosigner approved (set by `approve_pending_policy`).",
+              "`apply_pending_policy` re-anchors the F-10 freshness ceiling to THIS slot",
+              "(apply within `MAX_APPLY_AGE_SLOTS` of approval, not of queue), so the",
+              "cosigner has unbounded time to approve while a held apply stays bounded",
+              "post-approval. `0` until approved.",
+              "APPENDED per F-14 APPEND-ONLY rule for Borsh stability."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "queuedPolicyVersion",
+            "docs": [
+              "`PolicyConfig.policy_version` snapshot at queue time. `approve_pending_policy`",
+              "and `apply_pending_policy` require the live `policy_version` still equals this",
+              "(strict staleness gate — Squads `stale_transaction_index` analog). Any policy",
+              "change (incl. cosigner rotation, which bumps `policy_version`) invalidates",
+              "this pending's pending approval.",
+              "APPENDED per F-14 APPEND-ONLY rule for Borsh stability."
+            ],
+            "type": "u64"
           }
         ]
       }
@@ -9296,6 +9456,31 @@ export type Sigil = {
               "",
               "APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability."
             ],
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "policyCosignApproved",
+      "docs": [
+        "Async cosign approval (2026-06-17): the bound cosigner K approved an elevated",
+        "queued policy update via `approve_pending_policy`. `apply_pending_policy` then",
+        "requires `cosign_approved == true`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "cosigner",
+            "type": "pubkey"
+          },
+          {
+            "name": "approvedAtSlot",
             "type": "u64"
           }
         ]
