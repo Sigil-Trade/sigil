@@ -238,6 +238,8 @@ export const SIGIL_ERROR__INVALID_OWNER_TYPE = 0x17dd; // 6109
 export const SIGIL_ERROR__SPEND_ACCOUNTING_UNDERFLOW = 0x17de; // 6110
 /** ErrMultisigCustodyUnsupported: Squads multisig ownership custody is not supported in V1 (use a standard EOA owner) */
 export const SIGIL_ERROR__ERR_MULTISIG_CUSTODY_UNSUPPORTED = 0x17df; // 6111
+/** ErrOutputNotVaultOwned: M1: stablecoin-input swap output must land in a vault-owned account and increase (value redirection / unacquired spend rejected) */
+export const SIGIL_ERROR__ERR_OUTPUT_NOT_VAULT_OWNED = 0x17e0; // 6112
 
 export type SigilError =
   | typeof SIGIL_ERROR__ACCOUNT_WRITABILITY_MISMATCH
@@ -275,6 +277,7 @@ export type SigilError =
   | typeof SIGIL_ERROR__ERR_OPERATOR_GRANT_DELAY_TOO_LONG
   | typeof SIGIL_ERROR__ERR_OPERATOR_GRANT_REQUIRES_TIMELOCK
   | typeof SIGIL_ERROR__ERR_OUTPUT_BELOW_FLOOR
+  | typeof SIGIL_ERROR__ERR_OUTPUT_NOT_VAULT_OWNED
   | typeof SIGIL_ERROR__ERR_OUTSIDE_OPERATING_HOURS
   | typeof SIGIL_ERROR__ERR_PENDING_AGENT_GRANT_DIGEST_MISMATCH
   | typeof SIGIL_ERROR__ERR_PENDING_OWNERSHIP_EXISTS
@@ -391,6 +394,7 @@ if (process.env.NODE_ENV !== "production") {
     [SIGIL_ERROR__ERR_OPERATOR_GRANT_DELAY_TOO_LONG]: `operator_grant_delay_seconds exceeds the maximum (48h) — would brick grant applicability`,
     [SIGIL_ERROR__ERR_OPERATOR_GRANT_REQUIRES_TIMELOCK]: `OPERATOR grant requires the timelock queue path on this vault — use queue_agent_grant`,
     [SIGIL_ERROR__ERR_OUTPUT_BELOW_FLOOR]: `R-3 OutputBalanceFloor: post-execution balance increase fell below the configured min_increase floor`,
+    [SIGIL_ERROR__ERR_OUTPUT_NOT_VAULT_OWNED]: `M1: stablecoin-input swap output must land in a vault-owned account and increase (value redirection / unacquired spend rejected)`,
     [SIGIL_ERROR__ERR_OUTSIDE_OPERATING_HOURS]: `Current UTC hour is outside the policy's operating_hours bitmask`,
     [SIGIL_ERROR__ERR_PENDING_AGENT_GRANT_DIGEST_MISMATCH]: `PendingAgentGrant digest mismatch between queue and apply`,
     [SIGIL_ERROR__ERR_PENDING_OWNERSHIP_EXISTS]: `An ownership transfer is already pending; cancel it first`,
