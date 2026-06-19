@@ -132,10 +132,9 @@ describe("seal() M1 output-ownership satisfier (err 6112)", () => {
     // RED-proof: passes ONLY because the satisfier pinned outputSwapAccount on
     // validate/finalize AND rewrote the swap output to the vault ATA. Revert the
     // seal.ts M1 block and the vault ATA is absent / the agent ATA survives.
-    expect(
-      keys,
-      "vault output-swap ATA must be pinned into the tx",
-    ).to.include(vaultSwapAta);
+    expect(keys, "vault output-swap ATA must be pinned into the tx").to.include(
+      vaultSwapAta,
+    );
     expect(
       keys,
       "agent's acquired-mint ATA must be rewritten OUT of the tx",

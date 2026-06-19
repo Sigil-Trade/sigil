@@ -914,7 +914,9 @@ export async function seal(params: SealParams): Promise<SealResult> {
         SIGIL_ERROR__SDK__INVALID_PARAMS,
         `\`outputSwapMint\` must differ from the input \`tokenMint\` (${params.tokenMint}) — ` +
           `a swap must acquire a DIFFERENT mint (on-chain 6112 requires mint != input).`,
-        { context: { field: "outputSwapMint", received: params.outputSwapMint } },
+        {
+          context: { field: "outputSwapMint", received: params.outputSwapMint },
+        },
       );
     }
     const [vaultSwapAta, agentSwapAtaDerived] = await Promise.all([
