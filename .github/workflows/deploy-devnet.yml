@@ -338,20 +338,21 @@ jobs:
         run: cargo install solana-verify --locked
 
       - name: Verify deployed program matches source
-        env:
-          VERIFY_RPC: ${{ secrets.DEVNET_RPC_URL }}
         run: |
           set -e
-          if [ -z "$VERIFY_RPC" ]; then
-            echo "::error::DEVNET_RPC_URL is empty — refusing to verify against a public fallback."
-            exit 1
-          fi
+          # Reproducible docker build, verified against the ON-CHAIN program.
+          # The on-chain fetch is READ-ONLY and uses PUBLIC devnet on purpose:
+          # solana-verify mangles Helius's query-param API key (?api-key=) and
+          # 401s on it. The #356 dedicated-RPC guard targets the DEPLOY job's
+          # buffer-write burst (which public RPCs throttle) — a single read-only
+          # program fetch is safe on public devnet. The deploy job itself still
+          # uses the guarded dedicated RPC.
           solana-verify verify-from-repo \
             https://github.com/Sigil-Trade/sigil \
             --program-id 7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK \
             --library-name sigil \
             --mount-path . \
-            --url "$VERIFY_RPC"
+            --url https://api.devnet.solana.com
 
   # ────────────────────────────────────────────────────────────────
   # Job 3: Devnet tests (post-deploy)
