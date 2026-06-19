@@ -954,8 +954,33 @@ export async function seal(params: SealParams): Promise<SealResult> {
     ataReplacements.set(agentStablecoinAta, outputStablecoinAccount);
   }
   // M1: route the acquiring swap's output to the vault's ATA (not the agent's).
+  // The rewrite is keyed on the agent's canonical ATA for `outputSwapMint`. If the
+  // swap delivers the acquired token elsewhere the rewrite is a no-op, so we make
+  // that LOUD (a surfaced warning) instead of silently building a doomed tx. It is a
+  // warning, not a throw, because: (a) the SDK is the honest-path convenience — the
+  // security boundary is the on-chain 6112 gate, which fails CLOSED if the acquired
+  // token does not reach the vault (an adversarial agent bypasses the SDK entirely);
+  // and (b) some routers create/deliver the output via accounts the SDK cannot
+  // statically match (e.g. an in-tx ATA create), so a hard throw would false-reject
+  // valid routes. The warning turns an otherwise-opaque on-chain 6112 into a signal.
   if (agentSwapAta && outputSwapAccount) {
-    ataReplacements.set(agentSwapAta, outputSwapAccount);
+    const deliversToAgentAta = defiInstructions.some((ix) =>
+      (ix.accounts ?? []).some((a) => a.address === agentSwapAta),
+    );
+    const deliversToVaultAta = defiInstructions.some((ix) =>
+      (ix.accounts ?? []).some((a) => a.address === outputSwapAccount),
+    );
+    if (deliversToAgentAta) {
+      ataReplacements.set(agentSwapAta, outputSwapAccount);
+    } else if (!deliversToVaultAta) {
+      warnings.push(
+        `seal() could not locate the acquired-mint (${params.outputSwapMint}) output ` +
+          `account in the swap to redirect to the vault. Deliver the acquired token to ` +
+          `the agent's ATA (${agentSwapAta}, which seal rewrites to the vault ` +
+          `${outputSwapAccount}) or directly to the vault ATA — as built it will not ` +
+          `reach the vault and the on-chain M1 gate will revert (error 6112).`,
+      );
+    }
   }
   // Merge additional ATA replacements for multi-token DeFi routes
   if (params.additionalAtaReplacements) {
