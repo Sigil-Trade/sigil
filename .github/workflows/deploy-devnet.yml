@@ -40,10 +40,7 @@ permissions:
   contents: read
 
 env:
-  # v4.1.0-rc.1 ships platform-tools that build sBPF v3 cleanly (4.0.3 emits a
-  # stack-frame-overflow on this program; 3.1.x lacks std for the v3 target).
-  # Required since devnet SIMD-0500 (epoch 1088) disabled v0/v1/v2 deployment.
-  SOLANA_VERSION: "v4.1.0-rc.1"
+  SOLANA_VERSION: "v2.1.14"
   ANCHOR_VERSION: "0.32.1"
   NODE_VERSION: "24"
   PROGRAM_ID: "7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK"
@@ -123,16 +120,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Build the program at sBPF v3. Devnet SIMD-0500 (epoch 1088, 2026-06-17)
-      # disabled deployment of sBPF v0/v1/v2; the default `cargo build-sbf` emits
-      # v0 and `anchor build` can't select the arch, so the previous build
-      # produced an undeployable binary ("invalid account data for instruction"
-      # at the on-chain Upgrade). `--arch v3` (SOLANA_VERSION above ships
-      # v3-capable platform-tools) builds with default cargo features (incl.
-      # `devnet`) and writes target/deploy/sigil.so. The Verify Program Binary
-      # job rebuilds with the identical toolchain + source and hash-compares.
-      - name: Build program (sBPF v3)
-        run: cargo build-sbf --manifest-path programs/sigil/Cargo.toml --arch v3
+      - name: Build program (devnet feature)
+        run: anchor build --no-idl
 
       - name: Restore committed IDL
         run: git checkout -- target/idl/ target/types/
@@ -345,27 +334,8 @@ jobs:
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y pkg-config libudev-dev
 
-      # Provides the v3-capable cargo build-sbf (same SOLANA_VERSION as deploy).
-      - name: Install Solana CLI
-        run: |
-          sh -c "$(curl -sSfL https://release.anza.xyz/${{ env.SOLANA_VERSION }}/install)"
-          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
-
       - name: Install solana-verify
         run: cargo install solana-verify --locked
-
-      # Independently rebuild the program from source with the IDENTICAL toolchain
-      # the deploy job used, then compare its executable hash to the on-chain
-      # program. NOTE: this is a same-toolchain rebuild-and-compare, NOT a docker
-      # reproducible build. The canonical `solana-verify verify-from-repo` path is
-      # unavailable for sBPF v3 today — no pinned solana-verifiable-build image
-      # ships std for the v3 target (3.1.14 fails "can't find crate for std"; no
-      # 4.x image exists). SBF builds are deterministic for a given platform-tools
-      # version + source, so deploy and verify (same SOLANA_VERSION, same commit)
-      # produce byte-identical binaries. Restore verify-from-repo once a v3-capable
-      # verifiable-build image is published.
-      - name: Build program (sBPF v3)
-        run: cargo build-sbf --manifest-path programs/sigil/Cargo.toml --arch v3
 
       - name: Verify deployed program matches source
         env:
@@ -376,15 +346,12 @@ jobs:
             echo "::error::DEVNET_RPC_URL is empty — refusing to verify against a public fallback."
             exit 1
           fi
-          LOCAL_HASH=$(solana-verify get-executable-hash target/deploy/sigil.so)
-          ONCHAIN_HASH=$(solana-verify get-program-hash --url "$VERIFY_RPC" "${{ env.PROGRAM_ID }}")
-          echo "Locally rebuilt (sBPF v3) hash: $LOCAL_HASH"
-          echo "On-chain program hash:          $ONCHAIN_HASH"
-          if [ "$LOCAL_HASH" != "$ONCHAIN_HASH" ]; then
-            echo "::error::Deployed binary does not match a fresh sBPF v3 build of the source at this commit."
-            exit 1
-          fi
-          echo "Verified: on-chain binary matches a fresh sBPF v3 build of the source."
+          solana-verify verify-from-repo \
+            https://github.com/Sigil-Trade/sigil \
+            --program-id 7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK \
+            --library-name sigil \
+            --mount-path . \
+            --url "$VERIFY_RPC"
 
   # ────────────────────────────────────────────────────────────────
   # Job 3: Devnet tests (post-deploy)
