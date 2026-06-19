@@ -1174,15 +1174,15 @@ jobs:
             fi
           fi
 
-          # rust-checks, build-program, on-chain-tests, build-verification, surfpool-integration, fuzz-test: required when Rust files changed
+          # rust-checks, build-program, on-chain-tests, build-verification, fuzz-test: required when Rust files changed.
+          # surfpool-integration is ADVISORY (non-blocking) — handled separately below.
           RUST_CHANGED="${{ needs.changes.outputs.rust }}"
-          for job_name in rust-checks build-program on-chain-tests build-verification surfpool-integration fuzz-test; do
+          for job_name in rust-checks build-program on-chain-tests build-verification fuzz-test; do
             case "$job_name" in
               rust-checks)           result="${{ needs.rust-checks.result }}" ;;
               build-program)         result="${{ needs.build-program.result }}" ;;
               on-chain-tests)        result="${{ needs.on-chain-tests.result }}" ;;
               build-verification)    result="${{ needs.build-verification.result }}" ;;
-              surfpool-integration)  result="${{ needs.surfpool-integration.result }}" ;;
               fuzz-test)             result="${{ needs.fuzz-test.result }}" ;;
             esac
 
@@ -1198,6 +1198,21 @@ jobs:
               fi
             fi
           done
+
+          # surfpool-integration: ADVISORY / non-blocking (TEMPORARY).
+          # Surfpool (<= v1.3.1) cannot host a forked sBPF v3 program. Since devnet
+          # activated SIMD-0500 (epoch 1088, 2026-06-17) the on-chain sigil program
+          # is sBPF v3; Surfpool's LiteSVM rejects loading it ("invalid account data
+          # for instruction") and CLI program ops re-fork it, so the local-deploy-
+          # over-fork step in the suite's before() hook fails. This is a Surfpool
+          # TOOLING gap, NOT a program defect — the program is fully exercised by the
+          # On-Chain Tests (LiteSVM, 406 tests) and the devnet tier.
+          # Tracked upstream: https://github.com/solana-foundation/surfpool/issues/694
+          # RESTORE to the required loop above once a Surfpool release hosts v3 programs.
+          SP="${{ needs.surfpool-integration.result }}"
+          if [ "$SP" != "success" ] && [ "$SP" != "skipped" ]; then
+            echo "::warning::surfpool-integration is ADVISORY and did not pass (got: $SP). Surfpool can't host the forked sBPF v3 program yet (tooling gap, not a program defect). Tracking: solana-foundation/surfpool#694. Restore as required once fixed."
+          fi
 
           # formal-verification: conditional on certora output
           CERTORA_CHANGED="${{ needs.changes.outputs.certora }}"
