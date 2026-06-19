@@ -39,19 +39,19 @@ pub struct QueuePolicyUpdate<'info> {
     pub pending_policy: Account<'info, PendingPolicyUpdate>,
 
     pub system_program: Program<'info, System>,
-    // TA-09 (Phase 3): co-signing session is NOT a standalone account
-    // here — it's surfaced via the `cosign_session` IX ARG (Pubkey) +
-    // `ctx.remaining_accounts`. When elevated mutations are detected,
-    // the handler searches remaining_accounts for an entry matching
-    // the cosign_session pubkey arg AND with `is_signer == true`.
+    // TA-09 (Phase 3) + async-cosign refactor (#353): the co-signing session
+    // is NOT a standalone account here — it's surfaced purely via the
+    // `cosign_session` IX ARG (Pubkey). This instruction is OWNER-ONLY: for an
+    // elevated mutation the owner passes the vault's BOUND cosigner pubkey as
+    // `cosign_session` (validated against `policy.cosign_session_pubkey` below),
+    // and the handler RECORDS that binding + a content digest into the pending
+    // account. The bound cosigner does NOT sign this tx — they approve
+    // asynchronously afterwards via `approve_pending_policy`, and
+    // `apply_pending_policy` then requires that recorded approval.
     //
-    // Why this design instead of a typed Option<UncheckedAccount>:
-    // Anchor 0.32's optional-account marshalling (passing the program_id
-    // as a sentinel for None) interferes with downstream account ordering
-    // assumptions when the test client uses `cosignSession: null`. Using
-    // a plain remaining_accounts scan with an arg-bound pubkey gives a
-    // simpler, more deterministic interface that the LiteSVM + production
-    // SDK both produce identically.
+    // (Pre-#353 this path scanned `ctx.remaining_accounts` for a synchronous
+    // entry with `is_signer == true`. That synchronous co-sign was removed: a
+    // remote cosigner cannot co-sign a tx whose blockhash expires in ~60-90s.)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -105,11 +105,12 @@ pub fn handler(
     // max(., 600); cosign/multisig always need >=2 factors). Bound by TA-19
     // (digest, position 22) and gated by timelock_duration like every policy field.
     operator_grant_delay_seconds: Option<u64>,
-    // TA-09 (Phase 3): the cosigning session pubkey. `Pubkey::default()`
-    // means "no cosign required" (non-elevated mutation). For elevated
-    // mutations the caller MUST pass a non-default pubkey AND include
-    // the corresponding signer in `remaining_accounts`. Owner cannot
-    // cosign themselves.
+    // TA-09 (Phase 3): the cosigning session pubkey (binding only — this ix is
+    // owner-only). `Pubkey::default()` means "no cosign required" (non-elevated
+    // mutation). For an elevated mutation the owner MUST pass the vault's bound
+    // cosigner pubkey here; it is recorded into the pending account and the
+    // cosigner approves later via `approve_pending_policy` (no synchronous
+    // signature on this tx). Owner cannot cosign themselves.
     cosign_session: Pubkey,
     new_policy_preview_digest: [u8; 32],
 ) -> Result<()> {
@@ -343,10 +344,12 @@ pub fn handler(
     // detected via: new vec contains any pubkey NOT in live vec, OR new
     // len > live len.
     //
-    // If ANY elevated condition is true, the handler REQUIRES the cosign
-    // signer to be present + is_signer == true, and binds the
-    // cosign_digest to a sha256 over the canonical pending args + the
-    // cosign pubkey. Apply re-validates.
+    // If ANY elevated condition is true, the handler REQUIRES `cosign_session`
+    // to equal the vault's bound cosigner pubkey and binds the cosign_digest to
+    // a sha256 over the canonical pending args + the cosign pubkey. The bound
+    // cosigner approves asynchronously via `approve_pending_policy`;
+    // `apply_pending_policy` then re-validates the digest AND requires that
+    // recorded approval (no synchronous cosigner signature on this queue tx).
     let raises_daily_cap =
         daily_spending_cap_usd.is_some_and(|new| new > policy.daily_spending_cap_usd);
     let raises_max_tx =
