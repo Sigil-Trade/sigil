@@ -45,12 +45,17 @@ pub struct FinalizeSession<'info> {
     #[account(mut)]
     pub session_rent_recipient: UncheckedAccount<'info>,
 
-    /// Policy config for outcome-based cap checking during finalization
+    /// Policy config for outcome-based cap checking during finalization.
+    /// Boxed to keep `try_accounts` under the 4096-byte BPF stack limit: PolicyConfig
+    /// is ~1.3KB and the M1 output-ownership account pushed the FinalizeSession context
+    /// 8 bytes over on stable Anchor (runtime "Access violation in stack frame").
+    /// Boxing moves the deserialized account to the heap (transparent auto-deref in the
+    /// handler) — no behavior change.
     #[account(
         seeds = [b"policy", vault.key().as_ref()],
         bump = policy.bump,
     )]
-    pub policy: Account<'info, PolicyConfig>,
+    pub policy: Box<Account<'info, PolicyConfig>>,
 
     /// Zero-copy SpendTracker for recording non-stablecoin swap value
     #[account(
