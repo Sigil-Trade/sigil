@@ -347,6 +347,7 @@ describe("devnet-security", () => {
           protocolTreasuryTokenAccount: null,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,

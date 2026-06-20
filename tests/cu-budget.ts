@@ -131,9 +131,16 @@ const PROTOCOL_TREASURY = new PublicKey(
  * raised from 90K → 100K with ~12K headroom for future regressions.
  * Other thresholds left unchanged — they had abundant headroom already.
  * Production CU budget is 1.4M so the absolute cost remains negligible.
+ *
+ * M1 output-ownership closure (2026-06-19): validate gained the optional
+ * `output_swap_account` context + the vault-owned acquired-output pin (with the
+ * symmetric finalize gate). The x64 CI-built `.so` measures validate-only at
+ * ~104K CU (arm64 local ~88K — BPF codegen differs by build host); threshold
+ * raised 100K → 120K with ~15K headroom, mirroring the prior feature-driven
+ * raises. Still ~12x under the 1.4M production budget.
  */
 const THRESHOLDS = {
-  validateOnly: 100_000,
+  validateOnly: 120_000,
   jupiter1Step: 170_000,
   jupiter10Step: 420_000,
   or64Fallthrough: 620_000,
@@ -510,6 +517,7 @@ describe("cu-budget", () => {
         protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
         feeDestinationTokenAccount: null,
         outputStablecoinAccount: null,
+        outputSwapAccount: null,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
@@ -543,6 +551,7 @@ describe("cu-budget", () => {
         agentSpendOverlay: ctx.overlay,
         vaultTokenAccount: ctx.vaultAta,
         outputStablecoinAccount: null,
+        outputSwapAccount: null,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })

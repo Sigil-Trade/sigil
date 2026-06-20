@@ -87,7 +87,7 @@ export const SIGIL_ON_CHAIN_ERROR_MIN = 6000;
  * this map agrees with it by code AND name — so adding or renumbering an
  * on-chain error without updating this map fails at test time.
  */
-export const SIGIL_ON_CHAIN_ERROR_MAX = 6111;
+export const SIGIL_ON_CHAIN_ERROR_MAX = 6112;
 
 interface ErrorMapping {
   name: string;
@@ -1916,6 +1916,20 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
         action: "use_eoa_owner",
         description:
           "Use a standard EOA (single-key) owner for the vault. Multisig custody is deferred to a future release (CPI-aware or Sigil-native M-of-N) pending re-audit.",
+      },
+    ],
+  },
+  6112: {
+    name: "ErrOutputNotVaultOwned",
+    message:
+      "M1: stablecoin-input swap output must land in a vault-owned account and increase (value redirection / unacquired spend rejected). The acquiring swap either redirected its output to a non-vault account or spent without acquiring anything back.",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "declare_output_swap_mint",
+        description:
+          "Declare the acquired mint via seal()'s `outputSwapMint` so the SDK pins the vault-owned output ATA, and ensure the swap delivers the acquired token into that vault account (not the agent's). The on-chain gate requires the pinned output to be vault-owned and to strictly increase.",
       },
     ],
   },

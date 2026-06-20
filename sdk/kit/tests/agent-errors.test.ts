@@ -17,7 +17,7 @@ describe("agent-errors", () => {
   // ─── On-chain error map completeness ──────────────────────────────────────
 
   describe("ON_CHAIN_ERROR_MAP completeness", () => {
-    it("maps all 112 error codes (6000-6111) post H-1", () => {
+    it("maps all 113 error codes (6000-6112) post M1", () => {
       const codes = getAllOnChainErrorCodes();
       // 6000-6110 inclusive = 111 codes. M1-04 Step 6 removed 10 dead
       // constraint-only variants and renumbered the enum (positional); F-Q1a
@@ -25,16 +25,17 @@ describe("agent-errors", () => {
       // (ErrToken2022OutputMintUnresolvable), F-Q6 appended 6107-6109
       // (ErrOperatorGrantRequiresTimelock / ErrOperatorGrantDelayTooLong /
       // InvalidOwnerType), F-Q9 appended 6110 (SpendAccountingUnderflow), and
-      // H-1 (audit 2026-06-11) appended 6111 (ErrMultisigCustodyUnsupported).
+      // H-1 (audit 2026-06-11) appended 6111 (ErrMultisigCustodyUnsupported);
+      // M1 output-ownership appended 6112 (ErrOutputNotVaultOwned).
       // The IDL↔generated↔hand-map bijection (incl. name-per-code) is enforced
       // by error-map-drift.test.ts; this test guards the count/extremes only.
-      expect(codes).to.have.lengthOf(112);
+      expect(codes).to.have.lengthOf(113);
       expect(codes[0]).to.equal(6000);
-      expect(codes[codes.length - 1]).to.equal(6111);
+      expect(codes[codes.length - 1]).to.equal(6112);
     });
 
-    it("every code from 6000-6111 is present with no gaps post H-1", () => {
-      for (let code = 6000; code <= 6111; code++) {
+    it("every code from 6000-6112 is present with no gaps post M1", () => {
+      for (let code = 6000; code <= 6112; code++) {
         const entry = ON_CHAIN_ERROR_MAP[code];
         expect(entry, `Missing error code ${code}`).to.exist;
         expect(entry.name).to.be.a("string").and.not.be.empty;

@@ -756,4 +756,15 @@ pub enum SigilError {
     /// Deferred to a future release (CPI-aware or Sigil-native M-of-N) + re-audit.
     #[msg("Squads multisig ownership custody is not supported in V1 (use a standard EOA owner)")]
     ErrMultisigCustodyUnsupported,
+
+    /// 6112 — M1 output-ownership closure (2026-06-17): on the stablecoin-input
+    /// spending path, an acquiring swap MUST land its output in a VAULT-OWNED
+    /// token account whose balance strictly INCREASES. Fires when the declared
+    /// output account is missing from remaining_accounts, not vault-owned, holds
+    /// the wrong mint, or did not increase — i.e. the agent tried to redirect the
+    /// swap output to its own (or any non-vault) account, or to spend without
+    /// acquiring anything back. GENERIC: no protocol knowledge; checks only
+    /// vault-ownership + balance increase of the pinned output (no price/oracle).
+    #[msg("M1: stablecoin-input swap output must land in a vault-owned account and increase (value redirection / unacquired spend rejected)")]
+    ErrOutputNotVaultOwned,
 }

@@ -81,6 +81,8 @@ function baseParams(overrides?: Partial<SealParams>): SealParams {
     rpc: {} as never,
     network: "devnet",
     tokenMint: USDC_MINT_DEVNET,
+    // M1 (6112): a stablecoin-input acquiring swap must declare the acquired mint.
+    outputSwapMint: "So11111111111111111111111111111111111111112" as Address,
     amount: 500_000_000n, // $500
     targetProtocol: JUPITER,
     cachedState: createMockVaultState({

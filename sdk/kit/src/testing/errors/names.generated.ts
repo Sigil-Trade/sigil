@@ -14,7 +14,7 @@
  */
 
 // ────────────────────────────────────────────────────────────────
-// Sigil program errors (6000-6111)
+// Sigil program errors (6000-6112)
 // ────────────────────────────────────────────────────────────────
 
 export const SIGIL_ERRORS = {
@@ -130,6 +130,7 @@ export const SIGIL_ERRORS = {
   InvalidOwnerType: 6109,
   SpendAccountingUnderflow: 6110,
   ErrMultisigCustodyUnsupported: 6111,
+  ErrOutputNotVaultOwned: 6112,
 } as const;
 
 /**

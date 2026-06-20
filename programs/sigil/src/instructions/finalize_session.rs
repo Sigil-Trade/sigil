@@ -45,12 +45,17 @@ pub struct FinalizeSession<'info> {
     #[account(mut)]
     pub session_rent_recipient: UncheckedAccount<'info>,
 
-    /// Policy config for outcome-based cap checking during finalization
+    /// Policy config for outcome-based cap checking during finalization.
+    /// Boxed to keep `try_accounts` under the 4096-byte BPF stack limit: PolicyConfig
+    /// is ~1.3KB and the M1 output-ownership account pushed the FinalizeSession context
+    /// 8 bytes over on stable Anchor (runtime "Access violation in stack frame").
+    /// Boxing moves the deserialized account to the heap (transparent auto-deref in the
+    /// handler) — no behavior change.
     #[account(
         seeds = [b"policy", vault.key().as_ref()],
         bump = policy.bump,
     )]
-    pub policy: Account<'info, PolicyConfig>,
+    pub policy: Box<Account<'info, PolicyConfig>>,
 
     /// Zero-copy SpendTracker for recording non-stablecoin swap value
     #[account(
@@ -85,6 +90,15 @@ pub struct FinalizeSession<'info> {
     #[account(mut)]
     pub output_stablecoin_account: Option<Account<'info, TokenAccount>>,
 
+    /// M1 output-ownership closure — the validate-pinned VAULT-OWNED account an
+    /// acquiring (stablecoin-input) swap must have credited. finalize re-reads its
+    /// raw post-CPI bytes and asserts owner==vault, mint==pinned, and balance
+    /// strictly INCREASED. Owner is checked in the handler (like F-Q8 above), not
+    /// as a struct constraint. Boxed to keep try_accounts under the 4096 BPF
+    /// stack limit. Required whenever a stablecoin-input spend moves value.
+    #[account(mut)]
+    pub output_swap_account: Option<Box<Account<'info, TokenAccount>>>,
+
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
 
@@ -118,6 +132,58 @@ pub struct FinalizeSession<'info> {
     /// CHECK: Phase 7 — slot_hashes sysvar; address-pinned.
     #[account(address = anchor_lang::solana_program::sysvar::slot_hashes::id())]
     pub slot_hashes_sysvar: UncheckedAccount<'info>,
+}
+
+/// M1 output-ownership check, extracted to its OWN frame (`#[inline(never)]`)
+/// so its byte-buffer locals do not inflate `finalize_session::handler`'s stack
+/// frame, which is already near the 4096-byte BPF limit. Reads the pinned
+/// acquired-output token account's raw post-CPI bytes (F19 pattern) and asserts:
+/// the EXACT validate-pinned account, owner == vault, mint == the declared
+/// acquired mint, and balance strictly INCREASED vs the validate snapshot.
+/// GENERIC — no protocol knowledge; value-blind (no price/oracle).
+#[inline(never)]
+fn enforce_output_ownership<'info>(
+    output_swap_account: &Option<Box<Account<'info, TokenAccount>>>,
+    vault_key: &Pubkey,
+    pinned_account: &Pubkey,
+    pinned_mint: &Pubkey,
+    balance_before: u64,
+) -> Result<()> {
+    // Resolve the declared account, and the AccountInfo, INSIDE this frame so
+    // the handler's frame carries neither (it is already near the BPF limit).
+    let swap_acct = output_swap_account
+        .as_ref()
+        .ok_or(error!(SigilError::ErrOutputNotVaultOwned))?;
+    // Substitution defense: measure ONLY the account pinned at validate.
+    require_keys_eq!(
+        swap_acct.key(),
+        *pinned_account,
+        SigilError::ErrOutputNotVaultOwned
+    );
+    let swap_info = swap_acct.to_account_info();
+    let data = swap_info.try_borrow_data()?;
+    require!(data.len() >= 72, SigilError::ErrOutputNotVaultOwned);
+    let mut buf = [0u8; 32];
+    // owner (bytes 32..64) == vault
+    buf.copy_from_slice(&data[32..64]);
+    require!(
+        Pubkey::new_from_array(buf) == *vault_key,
+        SigilError::ErrOutputNotVaultOwned
+    );
+    // mint (bytes 0..32) == the declared acquired mint
+    buf.copy_from_slice(&data[0..32]);
+    require!(
+        Pubkey::new_from_array(buf) == *pinned_mint,
+        SigilError::ErrOutputNotVaultOwned
+    );
+    // amount (bytes 64..72) strictly increased vs the validate snapshot
+    let mut amt = [0u8; 8];
+    amt.copy_from_slice(&data[64..72]);
+    require!(
+        u64::from_le_bytes(amt) > balance_before,
+        SigilError::ErrOutputNotVaultOwned
+    );
+    Ok(())
 }
 
 pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
@@ -162,6 +228,12 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
     // F-Q8: the validate-pinned output stablecoin ATA (Pubkey::default() on
     // the stablecoin-input path, which uses vault_token_account instead).
     let session_output_stablecoin_account = session.output_stablecoin_account;
+    // M1 output-ownership closure: validate-pinned acquired-output account, its
+    // declared mint, and the pre-DeFi balance snapshot. Default/0 when the
+    // session declared no swap output (a spend with no acquisition then reverts).
+    let session_output_swap_account = session.output_swap_account;
+    let session_output_swap_mint = session.output_swap_mint;
+    let session_output_swap_balance_before = session.output_swap_balance_before;
     let session_delegation_token_account = session.delegation_token_account;
     let session_authorized_amount = session.authorized_amount;
     let session_authorized_protocol = session.authorized_protocol;
@@ -366,6 +438,28 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
             actual_spend_tracked = actual_spend;
 
             if actual_spend > 0 {
+                // ── M1 output-ownership closure ──────────────────────────────
+                // An acquiring spend MUST have landed its output in the
+                // validate-pinned VAULT-OWNED account, which MUST have INCREASED.
+                // Closes M1: output redirection (the swap output sent to the
+                // agent's own ATA) and the unacquired drain both revert here —
+                // a declared-but-unincreased account, a non-vault owner, the
+                // wrong mint, a substituted key, or no declared output at all
+                // (key stays Pubkey::default()) all fail. GENERIC: no protocol
+                // knowledge; vault-ownership + increase only (no price/oracle).
+                // Raw post-CPI byte read (F19), mirroring the F-Q8 check above.
+                // Extracted to enforce_output_ownership (#[inline(never)]): the
+                // account resolution, AccountInfo, and byte-buffer locals all
+                // live in that helper's SEPARATE frame, keeping this handler
+                // under the 4096-byte BPF stack limit.
+                enforce_output_ownership(
+                    &ctx.accounts.output_swap_account,
+                    &vault_key,
+                    &session_output_swap_account,
+                    &session_output_swap_mint,
+                    session_output_swap_balance_before,
+                )?;
+
                 // Per-transaction limit
                 let policy = &ctx.accounts.policy;
                 require!(

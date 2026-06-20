@@ -91,6 +91,8 @@ function baseParams(overrides?: Partial<SealParams>): SealParams {
     rpc: {} as any,
     network: "devnet",
     tokenMint: USDC_MINT_DEVNET,
+    // M1 (6112): a stablecoin-input acquiring swap must declare the acquired mint.
+    outputSwapMint: "So11111111111111111111111111111111111111112" as Address,
     amount: 100_000_000n,
     cachedState: makeCachedState(0n),
     blockhash: {

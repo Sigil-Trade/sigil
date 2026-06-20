@@ -51,6 +51,36 @@ pub mod mock_defi_2 {
         );
         token::transfer(cpi_ctx, amount)
     }
+
+    /// Models an ACQUIRING swap for the M1 output-ownership tests — twin of
+    /// mock-defi's `swap_to_vault`. Pulls `in_amount` of the input mint out of
+    /// the vault (agent delegation) AND delivers `out_amount` of a DIFFERENT
+    /// mint INTO a vault-owned output account, so a stablecoin-input spend
+    /// satisfies finalize's M1 output-ownership gate (err 6112).
+    pub fn swap_to_vault(ctx: Context<SwapToVault>, in_amount: u64, out_amount: u64) -> Result<()> {
+        token::transfer(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.source.to_account_info(),
+                    to: ctx.accounts.input_sink.to_account_info(),
+                    authority: ctx.accounts.authority.to_account_info(),
+                },
+            ),
+            in_amount,
+        )?;
+        token::transfer(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.output_source.to_account_info(),
+                    to: ctx.accounts.vault_output.to_account_info(),
+                    authority: ctx.accounts.authority.to_account_info(),
+                },
+            ),
+            out_amount,
+        )
+    }
 }
 
 #[derive(Accounts)]
@@ -72,6 +102,30 @@ pub struct DrainViaDelegation<'info> {
     pub destination: Account<'info, TokenAccount>,
 
     /// Authority signer — the validate-approved delegate (the agent).
+    pub authority: Signer<'info>,
+
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct SwapToVault<'info> {
+    /// Vault input ATA (delegated to the agent at validate). Leg 1 source.
+    #[account(mut)]
+    pub source: Account<'info, TokenAccount>,
+
+    /// Where the pulled input lands (a pool/sink). Leg 1 destination.
+    #[account(mut)]
+    pub input_sink: Account<'info, TokenAccount>,
+
+    /// Agent-owned reserve of the OUTPUT mint (test-only swap funding). Leg 2 source.
+    #[account(mut)]
+    pub output_source: Account<'info, TokenAccount>,
+
+    /// The VAULT-OWNED output account the swap credits (a DIFFERENT mint).
+    #[account(mut)]
+    pub vault_output: Account<'info, TokenAccount>,
+
+    /// Agent signer — authority for both legs (vault delegation + own reserve).
     pub authority: Signer<'info>,
 
     pub token_program: Program<'info, Token>,

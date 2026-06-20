@@ -187,6 +187,18 @@ export interface SealParams {
   priorityFeeMicroLamports?: number;
   /** Output stablecoin ATA for non-stablecoin input swaps. Vault's canonical ATA derived if omitted. */
   outputStablecoinAccount?: Address;
+  /**
+   * The mint being ACQUIRED on a STABLECOIN-input swap (the swap output).
+   *
+   * REQUIRED for stablecoin-input acquiring swaps: the on-chain M1 gate (error
+   * 6112) mandates that the acquired token land in a VAULT-OWNED account that
+   * strictly increases. The SDK derives the vault's canonical ATA for this mint,
+   * pins it on validate + finalize, and rewrites the DeFi swap's output
+   * destination to it. Sigil never infers what the agent is buying — omitting
+   * this on a stablecoin-input swap throws. Must differ from `tokenMint`.
+   * Not used for non-stablecoin-input swaps (those use `outputStablecoinAccount`).
+   */
+  outputSwapMint?: Address;
   /** Pre-fetched blockhash. If omitted, fetched via RPC (cached 30s). */
   blockhash?: Blockhash;
   /**
@@ -874,11 +886,103 @@ export async function seal(params: SealParams): Promise<SealResult> {
   const outputStablecoinAccount: Address | undefined =
     params.outputStablecoinAccount ?? outputStablecoinDerived;
 
+  // Step 7a-M1 (err 6112): on a STABLECOIN-input acquiring swap, the on-chain
+  // finalize gate MANDATES that the acquired token land in a VAULT-OWNED account
+  // that strictly increased. seal() must (a) pin that vault-owned output account
+  // on validate + finalize and (b) rewrite the swap's output destination (the
+  // agent's ATA for the acquired mint) to it. The caller declares the acquired
+  // mint via `outputSwapMint` — Sigil never infers what the agent is buying.
+  const needsOutputSwap =
+    spending &&
+    isStablecoinMint(params.tokenMint, net) &&
+    defiInstructions.length > 0;
+  let outputSwapAccount: Address | undefined;
+  let agentSwapAta: Address | undefined;
+  if (needsOutputSwap) {
+    if (!params.outputSwapMint) {
+      throw new SigilSdkDomainError(
+        SIGIL_ERROR__SDK__INVALID_PARAMS,
+        `Stablecoin-input acquiring swap requires \`outputSwapMint\` (the mint ` +
+          `being acquired). The on-chain M1 gate (error 6112) requires the swap ` +
+          `output to land in a vault-owned account; pass the acquired mint so the ` +
+          `SDK can pin the vault's ATA. Sigil does not infer what the agent is buying.`,
+        { context: { field: "outputSwapMint" } },
+      );
+    }
+    if (params.outputSwapMint === params.tokenMint) {
+      throw new SigilSdkDomainError(
+        SIGIL_ERROR__SDK__INVALID_PARAMS,
+        `\`outputSwapMint\` must differ from the input \`tokenMint\` (${params.tokenMint}) — ` +
+          `a swap must acquire a DIFFERENT mint (on-chain 6112 requires mint != input).`,
+        {
+          context: { field: "outputSwapMint", received: params.outputSwapMint },
+        },
+      );
+    }
+    const [vaultSwapAta, agentSwapAtaDerived] = await Promise.all([
+      deriveAta(params.vault, params.outputSwapMint),
+      deriveAta(params.agent.address, params.outputSwapMint),
+    ]);
+    // Existence check (mirrors the F-Q8 output-stablecoin check): finalize reads
+    // this ATA's post-CPI balance delta, so a missing account reverts on-chain.
+    // Surface a warning rather than failing silently.
+    try {
+      const info = await params.rpc
+        .getAccountInfo(vaultSwapAta, { encoding: "base64" })
+        .send();
+      if (!info || !info.value) {
+        warnings.push(
+          `Vault output-swap ATA ${vaultSwapAta} (mint ${params.outputSwapMint}) ` +
+            `does not exist on-chain. The acquiring swap will fail at finalize ` +
+            `(M1 gate 6112). Create it first with createAssociatedTokenAccount.`,
+        );
+      }
+    } catch (err: unknown) {
+      const cause = redactCause(err);
+      warnings.push(
+        `Vault output-swap ATA ${vaultSwapAta} existence check failed due to RPC ` +
+          `error (${cause.message ?? cause.name ?? cause.code ?? "unknown"}). ` +
+          `Proceeding with the derived address — on-chain will reject if missing.`,
+      );
+    }
+    outputSwapAccount = vaultSwapAta;
+    agentSwapAta = agentSwapAtaDerived;
+  }
+
   // Step 7b: Replace agent ATAs with vault ATAs in DeFi instructions
   const ataReplacements = new Map<Address, Address>();
   ataReplacements.set(agentTokenAta, vaultTokenAccount);
   if (agentStablecoinAta && outputStablecoinAccount) {
     ataReplacements.set(agentStablecoinAta, outputStablecoinAccount);
+  }
+  // M1: route the acquiring swap's output to the vault's ATA (not the agent's).
+  // The rewrite is keyed on the agent's canonical ATA for `outputSwapMint`. If the
+  // swap delivers the acquired token elsewhere the rewrite is a no-op, so we make
+  // that LOUD (a surfaced warning) instead of silently building a doomed tx. It is a
+  // warning, not a throw, because: (a) the SDK is the honest-path convenience — the
+  // security boundary is the on-chain 6112 gate, which fails CLOSED if the acquired
+  // token does not reach the vault (an adversarial agent bypasses the SDK entirely);
+  // and (b) some routers create/deliver the output via accounts the SDK cannot
+  // statically match (e.g. an in-tx ATA create), so a hard throw would false-reject
+  // valid routes. The warning turns an otherwise-opaque on-chain 6112 into a signal.
+  if (agentSwapAta && outputSwapAccount) {
+    const deliversToAgentAta = defiInstructions.some((ix) =>
+      (ix.accounts ?? []).some((a) => a.address === agentSwapAta),
+    );
+    const deliversToVaultAta = defiInstructions.some((ix) =>
+      (ix.accounts ?? []).some((a) => a.address === outputSwapAccount),
+    );
+    if (deliversToAgentAta) {
+      ataReplacements.set(agentSwapAta, outputSwapAccount);
+    } else if (!deliversToVaultAta) {
+      warnings.push(
+        `seal() could not locate the acquired-mint (${params.outputSwapMint}) output ` +
+          `account in the swap to redirect to the vault. Deliver the acquired token to ` +
+          `the agent's ATA (${agentSwapAta}, which seal rewrites to the vault ` +
+          `${outputSwapAccount}) or directly to the vault ATA — as built it will not ` +
+          `reach the vault and the on-chain M1 gate will revert (error 6112).`,
+      );
+    }
   }
   // Merge additional ATA replacements for multi-token DeFi routes
   if (params.additionalAtaReplacements) {
@@ -1045,6 +1149,7 @@ export async function seal(params: SealParams): Promise<SealResult> {
     protocolTreasuryTokenAccount,
     feeDestinationTokenAccount,
     outputStablecoinAccount,
+    outputSwapAccount,
     tokenMint: params.tokenMint,
     amount: params.amount,
     targetProtocol,
@@ -1076,6 +1181,7 @@ export async function seal(params: SealParams): Promise<SealResult> {
     agentSpendOverlay: agentOverlayPda,
     vaultTokenAccount,
     outputStablecoinAccount,
+    outputSwapAccount,
   });
 
   // M3-01: feed the vault's other canonical stablecoin ATA(s) into finalize so
@@ -1413,6 +1519,8 @@ export interface ClientSealOpts {
   computeUnits?: number;
   priorityFeeMicroLamports?: number;
   outputStablecoinAccount?: Address;
+  /** Acquired mint for a stablecoin-input swap (M1 / err 6112). See `SealParams.outputSwapMint`. */
+  outputSwapMint?: Address;
   protocolAltAddresses?: Address[];
   addressLookupTables?: AddressesByLookupTableAddress;
   cachedState?: ResolvedVaultState;

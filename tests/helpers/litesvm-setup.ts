@@ -184,6 +184,50 @@ export function buildMockDefiDrain2Ix(
     MOCK_DEFI_2_PROGRAM_ID,
   );
 }
+
+// Anchor discriminator for mock-defi's `swap_to_vault` ix.
+export const MOCK_DEFI_SWAP_DISC = anchorDisc("swap_to_vault");
+
+/**
+ * Mock-defi `swap_to_vault(in_amount, out_amount)` — models an ACQUIRING swap
+ * for the M1 output-ownership gate. Leg 1 pulls `inAmount` of the input mint
+ * out of `source` (vault input ATA) via the agent's validate-time delegation;
+ * leg 2 delivers `outAmount` of a DIFFERENT mint from `outputSource` (an
+ * agent-owned reserve) into `vaultOutput` (the vault-owned acquisition account
+ * finalize's M1 gate verifies increased). Both legs authorized by `authority`
+ * (the agent). Use this — NOT buildMockDefiDrainIx — for any stablecoin-input
+ * spending test: finalize now requires a vault-owned acquisition (err 6112) on
+ * every such spend, so a bare drain reverts. `programId` defaults to
+ * MOCK_DEFI_PROGRAM_ID; pass MOCK_DEFI_2_PROGRAM_ID for per-protocol tests
+ * (same discriminator, program-independent).
+ */
+export function buildMockSwapToVaultIx(
+  source: PublicKey,
+  inputSink: PublicKey,
+  outputSource: PublicKey,
+  vaultOutput: PublicKey,
+  authority: PublicKey,
+  inAmount: BN,
+  outAmount: BN,
+  programId: PublicKey = MOCK_DEFI_PROGRAM_ID,
+): TransactionInstruction {
+  const data = Buffer.alloc(24);
+  MOCK_DEFI_SWAP_DISC.copy(data, 0);
+  data.writeBigUInt64LE(BigInt(inAmount.toString()), 8);
+  data.writeBigUInt64LE(BigInt(outAmount.toString()), 16);
+  return new TransactionInstruction({
+    programId,
+    keys: [
+      { pubkey: source, isSigner: false, isWritable: true },
+      { pubkey: inputSink, isSigner: false, isWritable: true },
+      { pubkey: outputSource, isSigner: false, isWritable: true },
+      { pubkey: vaultOutput, isSigner: false, isWritable: true },
+      { pubkey: authority, isSigner: true, isWritable: false },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    ],
+    data,
+  });
+}
 // Mock-defi's compiled .so is a committed fixture at tests/fixtures/.
 // Root Cargo.toml explains why it is not a workspace member (CI tool
 // compatibility — cargo-certora-sbf and feature-flag builds). Rebuild

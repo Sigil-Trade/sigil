@@ -116,6 +116,22 @@ pub struct ValidateAndAuthorize<'info> {
     #[account(mut)]
     pub output_stablecoin_account: Option<Account<'info, TokenAccount>>,
 
+    /// M1 output-ownership pin — the VAULT-OWNED token account an acquiring swap
+    /// on the STABLECOIN-INPUT path must credit. Pinned + snapshotted here;
+    /// finalize asserts this exact account increased, so the agent cannot
+    /// redirect the swap output to its own ATA. Must pre-exist (like the F-Q8
+    /// output ATA above — the forward scan permits no in-tx ATA-create). GENERIC:
+    /// any vault-owned token account of a non-input mint; no protocol knowledge.
+    /// Its Token-2022 extensions (if any) are vetted by the forward scan's F-Q4
+    /// destination check, since the output ATA is a writable vault-owned meta of
+    /// the swap ix.
+    ///
+    /// Boxed: an unboxed `Option<Account>` here pushed `try_accounts` 8 bytes
+    /// over the 4096 BPF stack limit; boxing moves the deserialized account to
+    /// the heap (handler access is unchanged via deref).
+    #[account(mut)]
+    pub output_swap_account: Option<Box<Account<'info, TokenAccount>>>,
+
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
 
@@ -322,12 +338,39 @@ pub fn handler(
     // F-Q8: pin the exact stablecoin ATA measured at validate so finalize
     // cannot be handed a different vault-owned stablecoin ATA.
     let mut output_stablecoin_account_key = Pubkey::default();
+    // M1 output-ownership pin (stablecoin-input swap path). Defaults stay set
+    // for non-swap / non-stablecoin-input / non-spending sessions.
+    let mut output_swap_account_key = Pubkey::default();
+    let mut output_swap_mint = Pubkey::default();
+    let mut output_swap_balance_before: u64 = 0;
     let (protocol_fee, developer_fee) = if is_spending {
         if is_stablecoin_input {
             // Snapshot stablecoin balance BEFORE fees or spending.
             // Finalize uses this to compute actual spending delta.
             stablecoin_balance_before = ctx.accounts.vault_token_account.amount;
             output_mint = token_mint;
+
+            // M1 output-ownership pin: if the caller declares an acquired-output
+            // token account (an acquiring swap), pin it VAULT-OWNED + snapshot its
+            // pre-DeFi balance. finalize requires this EXACT account to have
+            // INCREASED, so a compromised agent cannot redirect the swap output to
+            // its own ATA. Optional here (validate cannot see actual_spend);
+            // finalize mandates it when actual_spend > 0. GENERIC — any vault-owned
+            // token account of a non-input mint; no protocol knowledge.
+            if let Some(swap_acct) = ctx.accounts.output_swap_account.as_ref() {
+                require!(
+                    swap_acct.owner == vault_key,
+                    SigilError::ErrOutputNotVaultOwned
+                );
+                // Must be a genuine acquisition, not a same-mint self-move.
+                require!(
+                    swap_acct.mint != token_mint,
+                    SigilError::ErrOutputNotVaultOwned
+                );
+                output_swap_account_key = swap_acct.key();
+                output_swap_mint = swap_acct.mint;
+                output_swap_balance_before = swap_acct.amount;
+            }
 
             // Cap checks and spend recording deferred to finalize_session
             // where actual stablecoin balance delta is measured (outcome-based).
@@ -1113,6 +1156,11 @@ pub fn handler(
     session.stablecoin_balance_before = stablecoin_balance_before;
     // F-Q8: pinned output ATA (default for stablecoin-input path).
     session.output_stablecoin_account = output_stablecoin_account_key;
+    // M1: pinned acquired-output account + mint + pre-DeFi balance (defaults for
+    // non-swap / non-stablecoin-input / non-spending sessions).
+    session.output_swap_account = output_swap_account_key;
+    session.output_swap_mint = output_swap_mint;
+    session.output_swap_balance_before = output_swap_balance_before;
     session.bump = ctx.bumps.session;
     // Initialize snapshot fields to zero (default for non-delta sessions).
     // Phase 6 grow: capacity 4 → 8 to match MAX_POST_ASSERTION_ENTRIES.

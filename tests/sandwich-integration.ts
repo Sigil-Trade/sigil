@@ -75,6 +75,7 @@ import {
   MOCK_DEFI_PROGRAM_ID,
   buildMockDefiNoopIx,
   buildMockDefiDrainIx,
+  buildMockSwapToVaultIx,
   getTokenBalance,
   setRawTokenAccount,
 } from "./helpers/litesvm-setup";
@@ -496,6 +497,12 @@ describe("sandwich-integration (Phase 6.1)", () => {
      * so the AL3 intent-digest check passes and the mismatch is reached.
      */
     targetProtocolOverride?: PublicKey;
+    /**
+     * M1: the vault-owned account an acquiring spend credits. When set, validate
+     * pins it + finalize requires it increased (gate 6112). Default null (None):
+     * non-spending / zero-spend sandwiches don't trip the gate.
+     */
+    outputSwapAccount?: PublicKey | null;
   }
 
   async function buildValidateIx(
@@ -549,6 +556,7 @@ describe("sandwich-integration (Phase 6.1)", () => {
         protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
         feeDestinationTokenAccount: null,
         outputStablecoinAccount: null,
+        outputSwapAccount: opts.outputSwapAccount ?? null,
         agentSpendOverlay: ctx.overlay,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
@@ -595,6 +603,7 @@ describe("sandwich-integration (Phase 6.1)", () => {
       agentSpendOverlay: ctx.overlay,
       vaultTokenAccount: ctx.vaultUsdcAta,
       outputStablecoinAccount: null,
+      outputSwapAccount: opts.outputSwapAccount ?? null,
       tokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
       instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
@@ -605,11 +614,52 @@ describe("sandwich-integration (Phase 6.1)", () => {
     return builder.instruction();
   }
 
+  // M1: stand up an acquiring-swap output — a non-USDC mint, a VAULT-OWNED ATA
+  // to receive it (the acquisition finalize's output-ownership gate verifies),
+  // and an agent-owned reserve to fund the swap's output leg (test-only — a real
+  // swap sources output from a pool). Pair with buildMockSwapToVaultIx so a
+  // stablecoin-input spend satisfies the mandatory gate (6112) while still
+  // exercising the cap/assertion under test.
+  function setupSwapOutput(ctx: VaultCtx): {
+    outputMint: PublicKey;
+    vaultOutputAta: PublicKey;
+    agentReserve: PublicKey;
+  } {
+    const outputMint = Keypair.generate().publicKey;
+    createMintAtAddress(svm, outputMint, owner.publicKey, 6);
+    const vaultOutputAta = createAtaHelper(
+      svm,
+      (owner as any).payer,
+      outputMint,
+      ctx.vault,
+      true,
+    );
+    const agentReserve = createAtaHelper(
+      svm,
+      (owner as any).payer,
+      outputMint,
+      ctx.agent.publicKey,
+    );
+    mintToHelper(
+      svm,
+      (owner as any).payer,
+      outputMint,
+      agentReserve,
+      owner.publicKey,
+      1_000_000_000n,
+    );
+    return { outputMint, vaultOutputAta, agentReserve };
+  }
+
   // ─── 1. R-1 MintDeltaCap exceeded ────────────────────────────────────────
 
   describe("R-1 MintDeltaCap: vault-balance decrease exceeds max_net_decrease", () => {
     it("rejects with ErrMintDeltaCapExceeded (6097)", async () => {
       const ctx = await freshVault();
+      // M1: the spend must acquire a vault-owned output (else 6112 fires before
+      // the R-1 MintDeltaCap we're testing). The USDC still decreases, so R-1 on
+      // USDC still trips.
+      const swap = setupSwapOutput(ctx);
 
       // Token-2022 ATA for the same (vault, USDC) pair. R-1 scope=0 sums both
       // the SPL classic ATA AND the Token-2022 ATA at finalize, so the
@@ -658,6 +708,7 @@ describe("sandwich-integration (Phase 6.1)", () => {
       const sandwichOpts: SandwichOpts = {
         ctx,
         amount: new BN(50_000_000), // declared 50 USDC (validate-time delegation)
+        outputSwapAccount: swap.vaultOutputAta,
         validateRemainingAccounts: [
           {
             pubkey: ctx.postAssertionsPda,
@@ -670,6 +721,8 @@ describe("sandwich-integration (Phase 6.1)", () => {
           // ctx.vaultUsdcAta is already above; the agent is auto-appended by
           // buildValidateIx).
           { pubkey: drainRecipientAta, isSigner: false, isWritable: false },
+          { pubkey: swap.agentReserve, isSigner: false, isWritable: false },
+          { pubkey: swap.vaultOutputAta, isSigner: false, isWritable: false },
         ],
         finalizeRemainingAccounts: [
           {
@@ -683,11 +736,14 @@ describe("sandwich-integration (Phase 6.1)", () => {
       };
 
       const validateIx = await buildValidateIx(sandwichOpts);
-      const drainIx = buildMockDefiDrainIx(
+      const drainIx = buildMockSwapToVaultIx(
         ctx.vaultUsdcAta,
         drainRecipientAta,
+        swap.agentReserve,
+        swap.vaultOutputAta,
         ctx.agent.publicKey,
-        new BN(10_000_000), // 10 USDC drain via delegation
+        new BN(10_000_000), // 10 USDC pulled via delegation (R-1 still trips)
+        new BN(1_000), // tiny acquisition → satisfies the M1 gate
       );
       const finalizeIx = await buildFinalizeIx(sandwichOpts);
 
@@ -1092,6 +1148,10 @@ describe("sandwich-integration (Phase 6.1)", () => {
         perRecipientDailyCapUsd: new BN(1), // 1 micro-USDC cap
         allowedDestinations: [recipient.publicKey],
       });
+      // M1: the spend must acquire a vault-owned output (else 6112 fires before
+      // the TA-14 per-recipient cap we're testing). The USDC still flows to the
+      // allowlisted recipient (the swap's input sink), so TA-14 still trips.
+      const swap = setupSwapOutput(ctx);
 
       const recipientUsdcAta = createAtaHelper(
         svm,
@@ -1104,6 +1164,7 @@ describe("sandwich-integration (Phase 6.1)", () => {
       const sandwichOpts: SandwichOpts = {
         ctx,
         amount: new BN(50_000_000),
+        outputSwapAccount: swap.vaultOutputAta,
         // F-Q1a completeness: the drain ix's declared writables (source vault
         // USDC ATA + destination recipient ATA) must be resolvable in validate's
         // remaining_accounts (the agent fee-payer is auto-appended by
@@ -1111,6 +1172,8 @@ describe("sandwich-integration (Phase 6.1)", () => {
         validateRemainingAccounts: [
           { pubkey: ctx.vaultUsdcAta, isSigner: false, isWritable: false },
           { pubkey: recipientUsdcAta, isSigner: false, isWritable: false },
+          { pubkey: swap.agentReserve, isSigner: false, isWritable: false },
+          { pubkey: swap.vaultOutputAta, isSigner: false, isWritable: false },
         ],
         // TA-14 walks the DeFi ix's metas + looks up the writable token
         // accounts in finalize.remaining_accounts. The recipient ATA must
@@ -1121,11 +1184,14 @@ describe("sandwich-integration (Phase 6.1)", () => {
       };
 
       const validateIx = await buildValidateIx(sandwichOpts);
-      const drainIx = buildMockDefiDrainIx(
+      const drainIx = buildMockSwapToVaultIx(
         ctx.vaultUsdcAta,
         recipientUsdcAta,
+        swap.agentReserve,
+        swap.vaultOutputAta,
         ctx.agent.publicKey,
         drainAmount,
+        new BN(1_000), // tiny acquisition → satisfies the M1 gate
       );
       const finalizeIx = await buildFinalizeIx(sandwichOpts);
 
@@ -1313,6 +1379,10 @@ describe("sandwich-integration (Phase 6.1)", () => {
       const recipient = Keypair.generate(); // NOT in allowed_destinations
       airdropSol(svm, recipient.publicKey, 1 * LAMPORTS_PER_SOL);
       const ctx = await freshVault(); // empty allowlist + no per-recipient cap/floor
+      // M1: a real acquiring swap — the INPUT goes to the non-allowlisted hop
+      // (skipped, sink-scoped) AND the vault acquires a vault-owned output, so
+      // the swap survives the mandatory output-ownership gate (6112).
+      const swap = setupSwapOutput(ctx);
       const recipientUsdcAta = createAtaHelper(
         svm,
         (owner as any).payer,
@@ -1323,20 +1393,27 @@ describe("sandwich-integration (Phase 6.1)", () => {
       const sandwichOpts: SandwichOpts = {
         ctx,
         amount: new BN(50_000_000),
+        outputSwapAccount: swap.vaultOutputAta,
         // All writable DeFi accounts present (agent auto-appended) → completeness
-        // passes; the non-allowlisted recipient is skipped (sink-scoped).
+        // passes; the non-allowlisted recipient (the swap's input hop) is skipped
+        // (sink-scoped) while the vault-owned output is acquired.
         validateRemainingAccounts: [
           { pubkey: ctx.vaultUsdcAta, isSigner: false, isWritable: false },
           { pubkey: recipientUsdcAta, isSigner: false, isWritable: false },
+          { pubkey: swap.agentReserve, isSigner: false, isWritable: false },
+          { pubkey: swap.vaultOutputAta, isSigner: false, isWritable: false },
         ],
       };
 
       const validateIx = await buildValidateIx(sandwichOpts);
-      const drainIx = buildMockDefiDrainIx(
+      const drainIx = buildMockSwapToVaultIx(
         ctx.vaultUsdcAta,
         recipientUsdcAta,
+        swap.agentReserve,
+        swap.vaultOutputAta,
         ctx.agent.publicKey,
         new BN(10_000_000), // 10 USDC, far under the 500K daily cap
+        new BN(1_000), // tiny acquisition → satisfies the M1 gate
       );
       const finalizeIx = await buildFinalizeIx(sandwichOpts);
 

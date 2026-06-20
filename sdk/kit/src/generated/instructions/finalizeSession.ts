@@ -62,6 +62,7 @@ export type FinalizeSessionInstruction<
   TAccountAgentSpendOverlay extends string | AccountMeta<string> = string,
   TAccountVaultTokenAccount extends string | AccountMeta<string> = string,
   TAccountOutputStablecoinAccount extends string | AccountMeta<string> = string,
+  TAccountOutputSwapAccount extends string | AccountMeta<string> = string,
   TAccountTokenProgram extends string | AccountMeta<string> =
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
   TAccountSystemProgram extends string | AccountMeta<string> =
@@ -105,6 +106,9 @@ export type FinalizeSessionInstruction<
       TAccountOutputStablecoinAccount extends string
         ? WritableAccount<TAccountOutputStablecoinAccount>
         : TAccountOutputStablecoinAccount,
+      TAccountOutputSwapAccount extends string
+        ? WritableAccount<TAccountOutputSwapAccount>
+        : TAccountOutputSwapAccount,
       TAccountTokenProgram extends string
         ? ReadonlyAccount<TAccountTokenProgram>
         : TAccountTokenProgram,
@@ -166,6 +170,7 @@ export type FinalizeSessionAsyncInput<
   TAccountAgentSpendOverlay extends string = string,
   TAccountVaultTokenAccount extends string = string,
   TAccountOutputStablecoinAccount extends string = string,
+  TAccountOutputSwapAccount extends string = string,
   TAccountTokenProgram extends string = string,
   TAccountSystemProgram extends string = string,
   TAccountInstructionsSysvar extends string = string,
@@ -181,7 +186,14 @@ export type FinalizeSessionAsyncInput<
    */
   session: Address<TAccountSession>;
   sessionRentRecipient: Address<TAccountSessionRentRecipient>;
-  /** Policy config for outcome-based cap checking during finalization */
+  /**
+   * Policy config for outcome-based cap checking during finalization.
+   * Boxed to keep `try_accounts` under the 4096-byte BPF stack limit: PolicyConfig
+   * is ~1.3KB and the M1 output-ownership account pushed the FinalizeSession context
+   * 8 bytes over on stable Anchor (runtime "Access violation in stack frame").
+   * Boxing moves the deserialized account to the heap (transparent auto-deref in the
+   * handler) — no behavior change.
+   */
   policy?: Address<TAccountPolicy>;
   /** Zero-copy SpendTracker for recording non-stablecoin swap value */
   tracker?: Address<TAccountTracker>;
@@ -201,6 +213,15 @@ export type FinalizeSessionAsyncInput<
    * Required when session.output_mint != Pubkey::default() (all spending).
    */
   outputStablecoinAccount?: Address<TAccountOutputStablecoinAccount>;
+  /**
+   * M1 output-ownership closure — the validate-pinned VAULT-OWNED account an
+   * acquiring (stablecoin-input) swap must have credited. finalize re-reads its
+   * raw post-CPI bytes and asserts owner==vault, mint==pinned, and balance
+   * strictly INCREASED. Owner is checked in the handler (like F-Q8 above), not
+   * as a struct constraint. Boxed to keep try_accounts under the 4096 BPF
+   * stack limit. Required whenever a stablecoin-input spend moves value.
+   */
+  outputSwapAccount?: Address<TAccountOutputSwapAccount>;
   tokenProgram?: Address<TAccountTokenProgram>;
   systemProgram?: Address<TAccountSystemProgram>;
   /** Instructions sysvar for post-finalize instruction verification. */
@@ -230,6 +251,7 @@ export async function getFinalizeSessionInstructionAsync<
   TAccountAgentSpendOverlay extends string,
   TAccountVaultTokenAccount extends string,
   TAccountOutputStablecoinAccount extends string,
+  TAccountOutputSwapAccount extends string,
   TAccountTokenProgram extends string,
   TAccountSystemProgram extends string,
   TAccountInstructionsSysvar extends string,
@@ -248,6 +270,7 @@ export async function getFinalizeSessionInstructionAsync<
     TAccountAgentSpendOverlay,
     TAccountVaultTokenAccount,
     TAccountOutputStablecoinAccount,
+    TAccountOutputSwapAccount,
     TAccountTokenProgram,
     TAccountSystemProgram,
     TAccountInstructionsSysvar,
@@ -268,6 +291,7 @@ export async function getFinalizeSessionInstructionAsync<
     TAccountAgentSpendOverlay,
     TAccountVaultTokenAccount,
     TAccountOutputStablecoinAccount,
+    TAccountOutputSwapAccount,
     TAccountTokenProgram,
     TAccountSystemProgram,
     TAccountInstructionsSysvar,
@@ -300,6 +324,10 @@ export async function getFinalizeSessionInstructionAsync<
     },
     outputStablecoinAccount: {
       value: input.outputStablecoinAccount ?? null,
+      isWritable: true,
+    },
+    outputSwapAccount: {
+      value: input.outputSwapAccount ?? null,
       isWritable: true,
     },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
@@ -422,6 +450,7 @@ export async function getFinalizeSessionInstructionAsync<
         "outputStablecoinAccount",
         accounts.outputStablecoinAccount,
       ),
+      getAccountMeta("outputSwapAccount", accounts.outputSwapAccount),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
       getAccountMeta("systemProgram", accounts.systemProgram),
       getAccountMeta("instructionsSysvar", accounts.instructionsSysvar),
@@ -442,6 +471,7 @@ export async function getFinalizeSessionInstructionAsync<
     TAccountAgentSpendOverlay,
     TAccountVaultTokenAccount,
     TAccountOutputStablecoinAccount,
+    TAccountOutputSwapAccount,
     TAccountTokenProgram,
     TAccountSystemProgram,
     TAccountInstructionsSysvar,
@@ -461,6 +491,7 @@ export type FinalizeSessionInput<
   TAccountAgentSpendOverlay extends string = string,
   TAccountVaultTokenAccount extends string = string,
   TAccountOutputStablecoinAccount extends string = string,
+  TAccountOutputSwapAccount extends string = string,
   TAccountTokenProgram extends string = string,
   TAccountSystemProgram extends string = string,
   TAccountInstructionsSysvar extends string = string,
@@ -476,7 +507,14 @@ export type FinalizeSessionInput<
    */
   session: Address<TAccountSession>;
   sessionRentRecipient: Address<TAccountSessionRentRecipient>;
-  /** Policy config for outcome-based cap checking during finalization */
+  /**
+   * Policy config for outcome-based cap checking during finalization.
+   * Boxed to keep `try_accounts` under the 4096-byte BPF stack limit: PolicyConfig
+   * is ~1.3KB and the M1 output-ownership account pushed the FinalizeSession context
+   * 8 bytes over on stable Anchor (runtime "Access violation in stack frame").
+   * Boxing moves the deserialized account to the heap (transparent auto-deref in the
+   * handler) — no behavior change.
+   */
   policy: Address<TAccountPolicy>;
   /** Zero-copy SpendTracker for recording non-stablecoin swap value */
   tracker: Address<TAccountTracker>;
@@ -496,6 +534,15 @@ export type FinalizeSessionInput<
    * Required when session.output_mint != Pubkey::default() (all spending).
    */
   outputStablecoinAccount?: Address<TAccountOutputStablecoinAccount>;
+  /**
+   * M1 output-ownership closure — the validate-pinned VAULT-OWNED account an
+   * acquiring (stablecoin-input) swap must have credited. finalize re-reads its
+   * raw post-CPI bytes and asserts owner==vault, mint==pinned, and balance
+   * strictly INCREASED. Owner is checked in the handler (like F-Q8 above), not
+   * as a struct constraint. Boxed to keep try_accounts under the 4096 BPF
+   * stack limit. Required whenever a stablecoin-input spend moves value.
+   */
+  outputSwapAccount?: Address<TAccountOutputSwapAccount>;
   tokenProgram?: Address<TAccountTokenProgram>;
   systemProgram?: Address<TAccountSystemProgram>;
   /** Instructions sysvar for post-finalize instruction verification. */
@@ -525,6 +572,7 @@ export function getFinalizeSessionInstruction<
   TAccountAgentSpendOverlay extends string,
   TAccountVaultTokenAccount extends string,
   TAccountOutputStablecoinAccount extends string,
+  TAccountOutputSwapAccount extends string,
   TAccountTokenProgram extends string,
   TAccountSystemProgram extends string,
   TAccountInstructionsSysvar extends string,
@@ -543,6 +591,7 @@ export function getFinalizeSessionInstruction<
     TAccountAgentSpendOverlay,
     TAccountVaultTokenAccount,
     TAccountOutputStablecoinAccount,
+    TAccountOutputSwapAccount,
     TAccountTokenProgram,
     TAccountSystemProgram,
     TAccountInstructionsSysvar,
@@ -562,6 +611,7 @@ export function getFinalizeSessionInstruction<
   TAccountAgentSpendOverlay,
   TAccountVaultTokenAccount,
   TAccountOutputStablecoinAccount,
+  TAccountOutputSwapAccount,
   TAccountTokenProgram,
   TAccountSystemProgram,
   TAccountInstructionsSysvar,
@@ -593,6 +643,10 @@ export function getFinalizeSessionInstruction<
     },
     outputStablecoinAccount: {
       value: input.outputStablecoinAccount ?? null,
+      isWritable: true,
+    },
+    outputSwapAccount: {
+      value: input.outputSwapAccount ?? null,
       isWritable: true,
     },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
@@ -649,6 +703,7 @@ export function getFinalizeSessionInstruction<
         "outputStablecoinAccount",
         accounts.outputStablecoinAccount,
       ),
+      getAccountMeta("outputSwapAccount", accounts.outputSwapAccount),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
       getAccountMeta("systemProgram", accounts.systemProgram),
       getAccountMeta("instructionsSysvar", accounts.instructionsSysvar),
@@ -669,6 +724,7 @@ export function getFinalizeSessionInstruction<
     TAccountAgentSpendOverlay,
     TAccountVaultTokenAccount,
     TAccountOutputStablecoinAccount,
+    TAccountOutputSwapAccount,
     TAccountTokenProgram,
     TAccountSystemProgram,
     TAccountInstructionsSysvar,
@@ -692,7 +748,14 @@ export type ParsedFinalizeSessionInstruction<
      */
     session: TAccountMetas[2];
     sessionRentRecipient: TAccountMetas[3];
-    /** Policy config for outcome-based cap checking during finalization */
+    /**
+     * Policy config for outcome-based cap checking during finalization.
+     * Boxed to keep `try_accounts` under the 4096-byte BPF stack limit: PolicyConfig
+     * is ~1.3KB and the M1 output-ownership account pushed the FinalizeSession context
+     * 8 bytes over on stable Anchor (runtime "Access violation in stack frame").
+     * Boxing moves the deserialized account to the heap (transparent auto-deref in the
+     * handler) — no behavior change.
+     */
     policy: TAccountMetas[4];
     /** Zero-copy SpendTracker for recording non-stablecoin swap value */
     tracker: TAccountMetas[5];
@@ -712,23 +775,32 @@ export type ParsedFinalizeSessionInstruction<
      * Required when session.output_mint != Pubkey::default() (all spending).
      */
     outputStablecoinAccount?: TAccountMetas[8] | undefined;
-    tokenProgram: TAccountMetas[9];
-    systemProgram: TAccountMetas[10];
+    /**
+     * M1 output-ownership closure — the validate-pinned VAULT-OWNED account an
+     * acquiring (stablecoin-input) swap must have credited. finalize re-reads its
+     * raw post-CPI bytes and asserts owner==vault, mint==pinned, and balance
+     * strictly INCREASED. Owner is checked in the handler (like F-Q8 above), not
+     * as a struct constraint. Boxed to keep try_accounts under the 4096 BPF
+     * stack limit. Required whenever a stablecoin-input spend moves value.
+     */
+    outputSwapAccount?: TAccountMetas[9] | undefined;
+    tokenProgram: TAccountMetas[10];
+    systemProgram: TAccountMetas[11];
     /** Instructions sysvar for post-finalize instruction verification. */
-    instructionsSysvar: TAccountMetas[11];
+    instructionsSysvar: TAccountMetas[12];
     /**
      * Phase 7 — SUCCESS-path audit log. Written when the finalize completes
      * the non-expired branch.
      */
-    auditLogSuccess: TAccountMetas[12];
+    auditLogSuccess: TAccountMetas[13];
     /**
      * Phase 7 — REJECTED-path audit log. Written when the finalize takes
      * the expired branch (permissionless-crank cleanup). Audit #2 F-19
      * keeps this separate from the success buffer so a crank-attacker
      * cannot displace legitimate success history.
      */
-    auditLogRejected: TAccountMetas[13];
-    slotHashesSysvar: TAccountMetas[14];
+    auditLogRejected: TAccountMetas[14];
+    slotHashesSysvar: TAccountMetas[15];
   };
   data: FinalizeSessionInstructionData;
 };
@@ -741,12 +813,12 @@ export function parseFinalizeSessionInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedFinalizeSessionInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 15) {
+  if (instruction.accounts.length < 16) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 15,
+        expectedAccountMetas: 16,
       },
     );
   }
@@ -774,6 +846,7 @@ export function parseFinalizeSessionInstruction<
       agentSpendOverlay: getNextAccount(),
       vaultTokenAccount: getNextOptionalAccount(),
       outputStablecoinAccount: getNextOptionalAccount(),
+      outputSwapAccount: getNextOptionalAccount(),
       tokenProgram: getNextAccount(),
       systemProgram: getNextAccount(),
       instructionsSysvar: getNextAccount(),

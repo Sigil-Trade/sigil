@@ -346,6 +346,7 @@ describe("TOCTOU Security Fix", () => {
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           agentSpendOverlay: v.overlayPda,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -368,6 +369,7 @@ describe("TOCTOU Security Fix", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
         })
         .instruction();
 

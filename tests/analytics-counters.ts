@@ -256,6 +256,7 @@ describe("analytics-counters", () => {
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           agentSpendOverlay: overlayPda,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -288,6 +289,7 @@ describe("analytics-counters", () => {
         systemProgram: SystemProgram.programId,
         instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         outputStablecoinAccount: null,
+        outputSwapAccount: null,
       })
       .instruction();
   }

@@ -286,6 +286,7 @@ describe("sysvar-scan-bound (M11 / SIMD-0296 pad-attack guard)", () => {
         protocolTreasuryTokenAccount: null,
         feeDestinationTokenAccount: null,
         outputStablecoinAccount: null,
+        outputSwapAccount: null,
         agentSpendOverlay: overlayPda,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
@@ -308,6 +309,7 @@ describe("sysvar-scan-bound (M11 / SIMD-0296 pad-attack guard)", () => {
         systemProgram: SystemProgram.programId,
         instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         outputStablecoinAccount: null,
+        outputSwapAccount: null,
       })
       .instruction();
 

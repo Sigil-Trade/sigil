@@ -70,6 +70,7 @@ export type ValidateAndAuthorizeInstruction<
   TAccountFeeDestinationTokenAccount extends string | AccountMeta<string> =
     string,
   TAccountOutputStablecoinAccount extends string | AccountMeta<string> = string,
+  TAccountOutputSwapAccount extends string | AccountMeta<string> = string,
   TAccountTokenProgram extends string | AccountMeta<string> =
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
   TAccountSystemProgram extends string | AccountMeta<string> =
@@ -115,6 +116,9 @@ export type ValidateAndAuthorizeInstruction<
       TAccountOutputStablecoinAccount extends string
         ? WritableAccount<TAccountOutputStablecoinAccount>
         : TAccountOutputStablecoinAccount,
+      TAccountOutputSwapAccount extends string
+        ? WritableAccount<TAccountOutputSwapAccount>
+        : TAccountOutputSwapAccount,
       TAccountTokenProgram extends string
         ? ReadonlyAccount<TAccountTokenProgram>
         : TAccountTokenProgram,
@@ -199,6 +203,7 @@ export type ValidateAndAuthorizeAsyncInput<
   TAccountProtocolTreasuryTokenAccount extends string = string,
   TAccountFeeDestinationTokenAccount extends string = string,
   TAccountOutputStablecoinAccount extends string = string,
+  TAccountOutputSwapAccount extends string = string,
   TAccountTokenProgram extends string = string,
   TAccountSystemProgram extends string = string,
   TAccountInstructionsSysvar extends string = string,
@@ -235,6 +240,22 @@ export type ValidateAndAuthorizeAsyncInput<
    * Required when input token is NOT a stablecoin (output verification in finalize).
    */
   outputStablecoinAccount?: Address<TAccountOutputStablecoinAccount>;
+  /**
+   * M1 output-ownership pin — the VAULT-OWNED token account an acquiring swap
+   * on the STABLECOIN-INPUT path must credit. Pinned + snapshotted here;
+   * finalize asserts this exact account increased, so the agent cannot
+   * redirect the swap output to its own ATA. Must pre-exist (like the F-Q8
+   * output ATA above — the forward scan permits no in-tx ATA-create). GENERIC:
+   * any vault-owned token account of a non-input mint; no protocol knowledge.
+   * Its Token-2022 extensions (if any) are vetted by the forward scan's F-Q4
+   * destination check, since the output ATA is a writable vault-owned meta of
+   * the swap ix.
+   *
+   * Boxed: an unboxed `Option<Account>` here pushed `try_accounts` 8 bytes
+   * over the 4096 BPF stack limit; boxing moves the deserialized account to
+   * the heap (handler access is unchanged via deref).
+   */
+  outputSwapAccount?: Address<TAccountOutputSwapAccount>;
   tokenProgram?: Address<TAccountTokenProgram>;
   systemProgram?: Address<TAccountSystemProgram>;
   /**
@@ -262,6 +283,7 @@ export async function getValidateAndAuthorizeInstructionAsync<
   TAccountProtocolTreasuryTokenAccount extends string,
   TAccountFeeDestinationTokenAccount extends string,
   TAccountOutputStablecoinAccount extends string,
+  TAccountOutputSwapAccount extends string,
   TAccountTokenProgram extends string,
   TAccountSystemProgram extends string,
   TAccountInstructionsSysvar extends string,
@@ -279,6 +301,7 @@ export async function getValidateAndAuthorizeInstructionAsync<
     TAccountProtocolTreasuryTokenAccount,
     TAccountFeeDestinationTokenAccount,
     TAccountOutputStablecoinAccount,
+    TAccountOutputSwapAccount,
     TAccountTokenProgram,
     TAccountSystemProgram,
     TAccountInstructionsSysvar
@@ -298,6 +321,7 @@ export async function getValidateAndAuthorizeInstructionAsync<
     TAccountProtocolTreasuryTokenAccount,
     TAccountFeeDestinationTokenAccount,
     TAccountOutputStablecoinAccount,
+    TAccountOutputSwapAccount,
     TAccountTokenProgram,
     TAccountSystemProgram,
     TAccountInstructionsSysvar
@@ -335,6 +359,10 @@ export async function getValidateAndAuthorizeInstructionAsync<
     },
     outputStablecoinAccount: {
       value: input.outputStablecoinAccount ?? null,
+      isWritable: true,
+    },
+    outputSwapAccount: {
+      value: input.outputSwapAccount ?? null,
       isWritable: true,
     },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
@@ -444,6 +472,7 @@ export async function getValidateAndAuthorizeInstructionAsync<
         "outputStablecoinAccount",
         accounts.outputStablecoinAccount,
       ),
+      getAccountMeta("outputSwapAccount", accounts.outputSwapAccount),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
       getAccountMeta("systemProgram", accounts.systemProgram),
       getAccountMeta("instructionsSysvar", accounts.instructionsSysvar),
@@ -465,6 +494,7 @@ export async function getValidateAndAuthorizeInstructionAsync<
     TAccountProtocolTreasuryTokenAccount,
     TAccountFeeDestinationTokenAccount,
     TAccountOutputStablecoinAccount,
+    TAccountOutputSwapAccount,
     TAccountTokenProgram,
     TAccountSystemProgram,
     TAccountInstructionsSysvar
@@ -483,6 +513,7 @@ export type ValidateAndAuthorizeInput<
   TAccountProtocolTreasuryTokenAccount extends string = string,
   TAccountFeeDestinationTokenAccount extends string = string,
   TAccountOutputStablecoinAccount extends string = string,
+  TAccountOutputSwapAccount extends string = string,
   TAccountTokenProgram extends string = string,
   TAccountSystemProgram extends string = string,
   TAccountInstructionsSysvar extends string = string,
@@ -519,6 +550,22 @@ export type ValidateAndAuthorizeInput<
    * Required when input token is NOT a stablecoin (output verification in finalize).
    */
   outputStablecoinAccount?: Address<TAccountOutputStablecoinAccount>;
+  /**
+   * M1 output-ownership pin — the VAULT-OWNED token account an acquiring swap
+   * on the STABLECOIN-INPUT path must credit. Pinned + snapshotted here;
+   * finalize asserts this exact account increased, so the agent cannot
+   * redirect the swap output to its own ATA. Must pre-exist (like the F-Q8
+   * output ATA above — the forward scan permits no in-tx ATA-create). GENERIC:
+   * any vault-owned token account of a non-input mint; no protocol knowledge.
+   * Its Token-2022 extensions (if any) are vetted by the forward scan's F-Q4
+   * destination check, since the output ATA is a writable vault-owned meta of
+   * the swap ix.
+   *
+   * Boxed: an unboxed `Option<Account>` here pushed `try_accounts` 8 bytes
+   * over the 4096 BPF stack limit; boxing moves the deserialized account to
+   * the heap (handler access is unchanged via deref).
+   */
+  outputSwapAccount?: Address<TAccountOutputSwapAccount>;
   tokenProgram?: Address<TAccountTokenProgram>;
   systemProgram?: Address<TAccountSystemProgram>;
   /**
@@ -546,6 +593,7 @@ export function getValidateAndAuthorizeInstruction<
   TAccountProtocolTreasuryTokenAccount extends string,
   TAccountFeeDestinationTokenAccount extends string,
   TAccountOutputStablecoinAccount extends string,
+  TAccountOutputSwapAccount extends string,
   TAccountTokenProgram extends string,
   TAccountSystemProgram extends string,
   TAccountInstructionsSysvar extends string,
@@ -563,6 +611,7 @@ export function getValidateAndAuthorizeInstruction<
     TAccountProtocolTreasuryTokenAccount,
     TAccountFeeDestinationTokenAccount,
     TAccountOutputStablecoinAccount,
+    TAccountOutputSwapAccount,
     TAccountTokenProgram,
     TAccountSystemProgram,
     TAccountInstructionsSysvar
@@ -581,6 +630,7 @@ export function getValidateAndAuthorizeInstruction<
   TAccountProtocolTreasuryTokenAccount,
   TAccountFeeDestinationTokenAccount,
   TAccountOutputStablecoinAccount,
+  TAccountOutputSwapAccount,
   TAccountTokenProgram,
   TAccountSystemProgram,
   TAccountInstructionsSysvar
@@ -617,6 +667,10 @@ export function getValidateAndAuthorizeInstruction<
     },
     outputStablecoinAccount: {
       value: input.outputStablecoinAccount ?? null,
+      isWritable: true,
+    },
+    outputSwapAccount: {
+      value: input.outputSwapAccount ?? null,
       isWritable: true,
     },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
@@ -671,6 +725,7 @@ export function getValidateAndAuthorizeInstruction<
         "outputStablecoinAccount",
         accounts.outputStablecoinAccount,
       ),
+      getAccountMeta("outputSwapAccount", accounts.outputSwapAccount),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
       getAccountMeta("systemProgram", accounts.systemProgram),
       getAccountMeta("instructionsSysvar", accounts.instructionsSysvar),
@@ -692,6 +747,7 @@ export function getValidateAndAuthorizeInstruction<
     TAccountProtocolTreasuryTokenAccount,
     TAccountFeeDestinationTokenAccount,
     TAccountOutputStablecoinAccount,
+    TAccountOutputSwapAccount,
     TAccountTokenProgram,
     TAccountSystemProgram,
     TAccountInstructionsSysvar
@@ -736,13 +792,29 @@ export type ParsedValidateAndAuthorizeInstruction<
      * Required when input token is NOT a stablecoin (output verification in finalize).
      */
     outputStablecoinAccount?: TAccountMetas[10] | undefined;
-    tokenProgram: TAccountMetas[11];
-    systemProgram: TAccountMetas[12];
+    /**
+     * M1 output-ownership pin — the VAULT-OWNED token account an acquiring swap
+     * on the STABLECOIN-INPUT path must credit. Pinned + snapshotted here;
+     * finalize asserts this exact account increased, so the agent cannot
+     * redirect the swap output to its own ATA. Must pre-exist (like the F-Q8
+     * output ATA above — the forward scan permits no in-tx ATA-create). GENERIC:
+     * any vault-owned token account of a non-input mint; no protocol knowledge.
+     * Its Token-2022 extensions (if any) are vetted by the forward scan's F-Q4
+     * destination check, since the output ATA is a writable vault-owned meta of
+     * the swap ix.
+     *
+     * Boxed: an unboxed `Option<Account>` here pushed `try_accounts` 8 bytes
+     * over the 4096 BPF stack limit; boxing moves the deserialized account to
+     * the heap (handler access is unchanged via deref).
+     */
+    outputSwapAccount?: TAccountMetas[11] | undefined;
+    tokenProgram: TAccountMetas[12];
+    systemProgram: TAccountMetas[13];
     /**
      * Instructions sysvar for verifying DeFi instruction program_id
      * and protocol slippage enforcement.
      */
-    instructionsSysvar: TAccountMetas[13];
+    instructionsSysvar: TAccountMetas[14];
   };
   data: ValidateAndAuthorizeInstructionData;
 };
@@ -755,12 +827,12 @@ export function parseValidateAndAuthorizeInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedValidateAndAuthorizeInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 14) {
+  if (instruction.accounts.length < 15) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 14,
+        expectedAccountMetas: 15,
       },
     );
   }
@@ -790,6 +862,7 @@ export function parseValidateAndAuthorizeInstruction<
       protocolTreasuryTokenAccount: getNextOptionalAccount(),
       feeDestinationTokenAccount: getNextOptionalAccount(),
       outputStablecoinAccount: getNextOptionalAccount(),
+      outputSwapAccount: getNextOptionalAccount(),
       tokenProgram: getNextAccount(),
       systemProgram: getNextAccount(),
       instructionsSysvar: getNextAccount(),
