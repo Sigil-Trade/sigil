@@ -186,7 +186,14 @@ export type FinalizeSessionAsyncInput<
    */
   session: Address<TAccountSession>;
   sessionRentRecipient: Address<TAccountSessionRentRecipient>;
-  /** Policy config for outcome-based cap checking during finalization */
+  /**
+   * Policy config for outcome-based cap checking during finalization.
+   * Boxed to keep `try_accounts` under the 4096-byte BPF stack limit: PolicyConfig
+   * is ~1.3KB and the M1 output-ownership account pushed the FinalizeSession context
+   * 8 bytes over on stable Anchor (runtime "Access violation in stack frame").
+   * Boxing moves the deserialized account to the heap (transparent auto-deref in the
+   * handler) — no behavior change.
+   */
   policy?: Address<TAccountPolicy>;
   /** Zero-copy SpendTracker for recording non-stablecoin swap value */
   tracker?: Address<TAccountTracker>;
@@ -500,7 +507,14 @@ export type FinalizeSessionInput<
    */
   session: Address<TAccountSession>;
   sessionRentRecipient: Address<TAccountSessionRentRecipient>;
-  /** Policy config for outcome-based cap checking during finalization */
+  /**
+   * Policy config for outcome-based cap checking during finalization.
+   * Boxed to keep `try_accounts` under the 4096-byte BPF stack limit: PolicyConfig
+   * is ~1.3KB and the M1 output-ownership account pushed the FinalizeSession context
+   * 8 bytes over on stable Anchor (runtime "Access violation in stack frame").
+   * Boxing moves the deserialized account to the heap (transparent auto-deref in the
+   * handler) — no behavior change.
+   */
   policy: Address<TAccountPolicy>;
   /** Zero-copy SpendTracker for recording non-stablecoin swap value */
   tracker: Address<TAccountTracker>;
@@ -734,7 +748,14 @@ export type ParsedFinalizeSessionInstruction<
      */
     session: TAccountMetas[2];
     sessionRentRecipient: TAccountMetas[3];
-    /** Policy config for outcome-based cap checking during finalization */
+    /**
+     * Policy config for outcome-based cap checking during finalization.
+     * Boxed to keep `try_accounts` under the 4096-byte BPF stack limit: PolicyConfig
+     * is ~1.3KB and the M1 output-ownership account pushed the FinalizeSession context
+     * 8 bytes over on stable Anchor (runtime "Access violation in stack frame").
+     * Boxing moves the deserialized account to the heap (transparent auto-deref in the
+     * handler) — no behavior change.
+     */
     policy: TAccountMetas[4];
     /** Zero-copy SpendTracker for recording non-stablecoin swap value */
     tracker: TAccountMetas[5];

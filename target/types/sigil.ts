@@ -2578,7 +2578,12 @@ export type Sigil = {
         {
           "name": "policy",
           "docs": [
-            "Policy config for outcome-based cap checking during finalization"
+            "Policy config for outcome-based cap checking during finalization.",
+            "Boxed to keep `try_accounts` under the 4096-byte BPF stack limit: PolicyConfig",
+            "is ~1.3KB and the M1 output-ownership account pushed the FinalizeSession context",
+            "8 bytes over on stable Anchor (runtime \"Access violation in stack frame\").",
+            "Boxing moves the deserialized account to the heap (transparent auto-deref in the",
+            "handler) — no behavior change."
           ],
           "pda": {
             "seeds": [
