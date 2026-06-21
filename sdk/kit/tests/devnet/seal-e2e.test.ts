@@ -200,6 +200,9 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
         rpc,
         network: "devnet",
         tokenMint: USDC_MINT_DEVNET,
+        // M1 (6112): a stablecoin-input acquiring swap must declare the acquired mint.
+        outputSwapMint:
+          "So11111111111111111111111111111111111111112" as Address,
         amount: 1_000_000n, // $1
         // Empty ALT → seal() skips Sigil-ALT resolution + verifySigilAlt
         // (seal.ts:1167); this fresh test vault is not in the devnet Sigil ALT.
@@ -348,6 +351,9 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
         rpc,
         network: "devnet",
         tokenMint: USDC_MINT_DEVNET,
+        // M1 (6112): a stablecoin-input acquiring swap must declare the acquired mint.
+        outputSwapMint:
+          "So11111111111111111111111111111111111111112" as Address,
         // Spending ($1, within cap) so the on-chain defi_ix_count==1 rule is in
         // force — two DeFi legs then revert with TooManyDeFiInstructions.
         amount: 1_000_000n,
