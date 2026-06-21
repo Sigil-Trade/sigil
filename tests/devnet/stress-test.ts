@@ -237,6 +237,7 @@ async function doComposedTx(
       protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
       feeDestinationTokenAccount: null,
       outputStablecoinAccount: null,
+      outputSwapAccount: null,
       tokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
       instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
@@ -269,6 +270,7 @@ async function doComposedTx(
       agentSpendOverlay: overlay,
       vaultTokenAccount: vaultAta,
       outputStablecoinAccount: null,
+      outputSwapAccount: null,
       tokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
     } as any)
@@ -1119,6 +1121,7 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
@@ -1143,6 +1146,7 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
           agentSpendOverlay: nsV.overlay,
           vaultTokenAccount: nsV.vaultAta,
           outputStablecoinAccount: null,
+          outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         } as any)
