@@ -1,0 +1,134 @@
+# Deploy the mock-defi test fixture to devnet (manual, one-shot).
+#
+# The devnet test suites (devnet-test.yml) compose against a deployed mock-defi
+# program at a fixed address. Its binary is COMMITTED at tests/fixtures/mock-defi.so
+# and rebuilt via scripts/rebuild-mock-defi.sh, but nothing redeploys it — so when
+# the fixture grows a new instruction (e.g. `swap_to_vault` for the M1 output-
+# ownership gate), the deployed devnet copy goes stale and the spending suites
+# revert with the wrong error. This workflow upgrades the on-chain fixture to the
+# committed binary on demand.
+#
+# Trigger: Actions → "Deploy Mock-Defi (Devnet)" → Run workflow.
+#
+# Reuses the same secrets as deploy-devnet.yml:
+#   - DEVNET_DEPLOY_KEYPAIR: upgrade authority keypair (JSON array). This wallet
+#     is ALSO the mock-defi program's upgrade authority (verified on-chain), so no
+#     new secret is needed.
+#   - DEVNET_RPC_URL: dedicated devnet RPC (NEVER a public endpoint — the buffer-
+#     write burst gets throttled and leaves an incomplete buffer the upgrade rejects).
+name: Deploy Mock-Defi (Devnet)
+
+on:
+  workflow_dispatch:
+
+env:
+  SOLANA_VERSION: v2.1.14
+  MOCK_DEFI_PROGRAM_ID: 2heRcfqPUcSiWpH1rAp2Zf4c4ZxfKmKaaVbJWGRa7Qm6
+  MOCK_DEFI_SO: tests/fixtures/mock-defi.so
+
+jobs:
+  deploy-mock-defi:
+    runs-on: ubuntu-latest
+    # DEVNET_DEPLOY_KEYPAIR (the mock-defi upgrade authority) is a `devnet`
+    # ENVIRONMENT secret, not a repo secret — same as deploy-devnet.yml. Without
+    # this the secret expands empty and the deploy keypair is blank.
+    environment: devnet
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Guard — require a dedicated (non-public) devnet RPC
+        env:
+          RPC: ${{ secrets.DEVNET_RPC_URL }}
+        run: |
+          if [ -z "$RPC" ]; then
+            echo "::error::DEVNET_RPC_URL is empty — refusing to deploy. Set your dedicated (e.g. Helius) endpoint."
+            exit 1
+          fi
+          case "$RPC" in
+            *api.devnet.solana.com*|*api.mainnet*|*api.testnet*)
+              echo "::error::DEVNET_RPC_URL points at a PUBLIC Solana RPC. Program deploys must use a dedicated RPC — public endpoints throttle the buffer-write burst and leave an incomplete buffer that the upgrade rejects ('invalid account data for instruction'). Refusing to deploy."
+              exit 1
+              ;;
+          esac
+          echo "DEVNET_RPC_URL is a dedicated endpoint — OK to deploy."
+
+      - name: Install Solana CLI
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/${{ env.SOLANA_VERSION }}/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+
+      - name: Configure deploy wallet
+        run: |
+          mkdir -p "$HOME/.config/solana"
+          echo '${{ secrets.DEVNET_DEPLOY_KEYPAIR }}' > "$HOME/.config/solana/id.json"
+          solana config set \
+            --url "${{ secrets.DEVNET_RPC_URL }}" \
+            --keypair "$HOME/.config/solana/id.json" \
+            > /dev/null 2>&1
+
+      - name: Balance gate
+        run: |
+          BAL=$(solana balance | awk '{print $1}')
+          BAL_INT=$(echo "$BAL" | awk '{print int($1)}')
+          echo "Deploy wallet balance: $BAL SOL"
+          if [ "$BAL_INT" -lt 3 ]; then
+            echo "::error::Deploy wallet balance too low: ${BAL} SOL (need >= 3 SOL)"
+            exit 1
+          fi
+
+      - name: Verify committed fixture exists + report sizes
+        run: |
+          test -f "${{ env.MOCK_DEFI_SO }}" || { echo "::error::${{ env.MOCK_DEFI_SO }} not found"; exit 1; }
+          COMMITTED=$(wc -c < "${{ env.MOCK_DEFI_SO }}")
+          echo "Committed fixture size: ${COMMITTED} bytes"
+          echo "Deployed (before):"
+          solana program show "${{ env.MOCK_DEFI_PROGRAM_ID }}" || true
+
+      - name: Extend program account (defensive — the committed binary may be larger)
+        run: |
+          # The committed binary is larger than the currently-deployed one; if the
+          # ProgramData account's allocated length can't fit it the upgrade fails
+          # with "account data too small". Extending is harmless if already large
+          # enough (it just grows the account; a few lamports of extra rent). The
+          # deploy wallet is the upgrade authority, so it can extend.
+          solana program extend "${{ env.MOCK_DEFI_PROGRAM_ID }}" 30000 \
+            || echo "::warning::extend failed or unnecessary — proceeding to deploy (will surface a size error if the account is too small)."
+
+      - name: Deploy committed mock-defi.so
+        run: |
+          MAX_RETRIES=3
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "Deploy attempt $i/$MAX_RETRIES"
+            if solana program deploy "${{ env.MOCK_DEFI_SO }}" \
+                --program-id "${{ env.MOCK_DEFI_PROGRAM_ID }}" \
+                --upgrade-authority "$HOME/.config/solana/id.json" \
+                --with-compute-unit-price 1000 \
+                --max-sign-attempts 50; then
+              echo "mock-defi deploy succeeded on attempt $i"
+              break
+            fi
+            if [ "$i" -eq "$MAX_RETRIES" ]; then
+              echo "::error::mock-defi deploy failed after $MAX_RETRIES attempts"
+              exit 1
+            fi
+            echo "Deploy failed, waiting 30s before retry..."
+            sleep 30
+          done
+
+      - name: Verify deployed binary matches the committed fixture
+        run: |
+          sleep 10
+          solana program dump "${{ env.MOCK_DEFI_PROGRAM_ID }}" /tmp/deployed-mock-defi.so
+          # solana program dump pads to the account's allocated length, so compare
+          # the committed bytes as a prefix of the dump rather than byte-equality.
+          COMMITTED=$(wc -c < "${{ env.MOCK_DEFI_SO }}")
+          head -c "$COMMITTED" /tmp/deployed-mock-defi.so > /tmp/deployed-prefix.so
+          if cmp -s "${{ env.MOCK_DEFI_SO }}" /tmp/deployed-prefix.so; then
+            echo "✓ Deployed mock-defi matches the committed fixture (${COMMITTED} bytes)."
+          else
+            echo "::error::Deployed mock-defi does NOT match the committed fixture. The upgrade may have written an incomplete buffer (retry, or check the RPC)."
+            exit 1
+          fi
+          echo "Deployed (after):"
+          solana program show "${{ env.MOCK_DEFI_PROGRAM_ID }}"
