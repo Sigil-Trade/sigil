@@ -25,12 +25,14 @@ import {
   deriveSessionPda,
   createFullVault,
   applyOperatorGrants,
-  authorize,
   authorizeAndFinalize,
   sendVersionedTx,
   buildQueueDigest,
   fundKeypair,
   ensureStablecoinMint,
+  setupSwapOutput,
+  buildMockSwapToVaultIx,
+  calculateFees,
   TEST_USDC_KEYPAIR,
   TEST_USDT_KEYPAIR,
   FullVaultResult,
@@ -205,6 +207,19 @@ describe("devnet-spending", () => {
   it("1. aggregate USD cap tracks across both tokens", async () => {
     const vault = vaults[0]; // dailyCap 200 USD, maxTx 200 USD
 
+    // M1: every stablecoin-input spend must ACQUIRE a vault-owned output (else
+    // 6112 before the cap). One acquiring-swap fixture (fresh NON-stablecoin
+    // output mint, vault-owned output ATA, funded agent reserve) is reused for
+    // every leg — the acquired output is a different mint from BOTH USDC and
+    // USDT inputs, so it works for the mintA and mintB legs alike. The USDC/USDT
+    // sink (agentMint*Ata) is leg-1's inputSink.
+    const swap = await setupSwapOutput(
+      connection,
+      payer,
+      vault.vaultPda,
+      agent.publicKey,
+    );
+
     // Spend 100 USDC via mintA (6 dec, stablecoin -> 1:1 USD)
     const sessionA = deriveSessionPda(
       vault.vaultPda,
@@ -226,7 +241,16 @@ describe("devnet-spending", () => {
       protocol: MOCK_DEFI_PROGRAM_ID,
       feeDestinationAta: null,
       protocolTreasuryAta: vault.protocolTreasuryAta,
-      mockSpendDestination: agentMintAAta,
+      outputSwapAccount: swap.vaultOutputAta,
+      middleIx: buildMockSwapToVaultIx(
+        vault.vaultTokenAta,
+        agentMintAAta,
+        swap.agentReserve,
+        swap.vaultOutputAta,
+        agent.publicKey,
+        new BN(calculateFees(100_000_000, 0).netAmount),
+        new BN(1_000),
+      ),
     });
 
     // Spend 100 USDT (6 dec stablecoin -> 1:1 USD)
@@ -250,10 +274,20 @@ describe("devnet-spending", () => {
       protocol: MOCK_DEFI_PROGRAM_ID,
       feeDestinationAta: null,
       protocolTreasuryAta: vault.mintBTreasuryAta,
-      mockSpendDestination: agentMintBAta,
+      outputSwapAccount: swap.vaultOutputAta,
+      middleIx: buildMockSwapToVaultIx(
+        vault.mintBVaultAta,
+        agentMintBAta,
+        swap.agentReserve,
+        swap.vaultOutputAta,
+        agent.publicKey,
+        new BN(calculateFees(100_000_000, 0).netAmount),
+        new BN(1_000),
+      ),
     });
 
-    // Now at 200 USD cap — 1 more of either should fail
+    // Now at ~200 USD cap — 1 more of either should fail. The swap satisfies M1
+    // so execution reaches the rolling-cap check, which reverts.
     const sessionC = deriveSessionPda(
       vault.vaultPda,
       agent.publicKey,
@@ -261,7 +295,7 @@ describe("devnet-spending", () => {
       program.programId,
     );
     try {
-      await authorize({
+      await authorizeAndFinalize({
         connection,
         program,
         agent,
@@ -273,8 +307,18 @@ describe("devnet-spending", () => {
         mint: mintA,
         amount: new BN(1_000_000), // 1 USDC more
         protocol: MOCK_DEFI_PROGRAM_ID,
+        feeDestinationAta: null,
         protocolTreasuryAta: vault.protocolTreasuryAta,
-        mockSpendDestination: agentMintAAta,
+        outputSwapAccount: swap.vaultOutputAta,
+        middleIx: buildMockSwapToVaultIx(
+          vault.vaultTokenAta,
+          agentMintAAta,
+          swap.agentReserve,
+          swap.vaultOutputAta,
+          agent.publicKey,
+          new BN(calculateFees(1_000_000, 0).netAmount),
+          new BN(1_000),
+        ),
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
@@ -314,6 +358,17 @@ describe("devnet-spending", () => {
   it("3. max_transaction_size_usd enforced", async () => {
     const vault = vaults[2]; // dailyCap 500 USD, maxTx 50 USD
 
+    // M1: TransactionTooLarge sits AFTER enforce_output_ownership inside
+    // finalize's `actual_spend > 0` branch, so the spend must acquire a
+    // vault-owned output for the size check to run. inAmount = net(51) ≈ 50.99
+    // USDC still exceeds maxTx=50.
+    const swap = await setupSwapOutput(
+      connection,
+      payer,
+      vault.vaultPda,
+      agent.publicKey,
+    );
+
     const sessionPda = deriveSessionPda(
       vault.vaultPda,
       agent.publicKey,
@@ -321,7 +376,7 @@ describe("devnet-spending", () => {
       program.programId,
     );
     try {
-      await authorize({
+      await authorizeAndFinalize({
         connection,
         program,
         agent,
@@ -333,8 +388,18 @@ describe("devnet-spending", () => {
         mint: mintA,
         amount: new BN(51_000_000), // 51 > maxTx=50
         protocol: MOCK_DEFI_PROGRAM_ID,
+        feeDestinationAta: null,
         protocolTreasuryAta: vault.protocolTreasuryAta,
-        mockSpendDestination: agentMintAAta,
+        outputSwapAccount: swap.vaultOutputAta,
+        middleIx: buildMockSwapToVaultIx(
+          vault.vaultTokenAta,
+          agentMintAAta,
+          swap.agentReserve,
+          swap.vaultOutputAta,
+          agent.publicKey,
+          new BN(calculateFees(51_000_000, 0).netAmount),
+          new BN(1_000),
+        ),
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
@@ -382,6 +447,17 @@ describe("devnet-spending", () => {
   it("5. agent_transfer spends tracked alongside session spends", async () => {
     const vault = vaults[4]; // dailyCap 100 USD, maxTx 100 USD
 
+    // M1: the session-spend legs must ACQUIRE a vault-owned output (else 6112).
+    // One acquiring-swap fixture reused by both session legs; agentMintAAta is
+    // the USDC inputSink. (The agent_transfer leg below is a SEPARATE instruction
+    // — not a finalize sandwich — so the M1 gate does not apply to it.)
+    const swap = await setupSwapOutput(
+      connection,
+      payer,
+      vault.vaultPda,
+      agent.publicKey,
+    );
+
     // Session spend 50
     const sessionPda = deriveSessionPda(
       vault.vaultPda,
@@ -403,7 +479,16 @@ describe("devnet-spending", () => {
       protocol: MOCK_DEFI_PROGRAM_ID,
       feeDestinationAta: null,
       protocolTreasuryAta: vault.protocolTreasuryAta,
-      mockSpendDestination: agentMintAAta,
+      outputSwapAccount: swap.vaultOutputAta,
+      middleIx: buildMockSwapToVaultIx(
+        vault.vaultTokenAta,
+        agentMintAAta,
+        swap.agentReserve,
+        swap.vaultOutputAta,
+        agent.publicKey,
+        new BN(calculateFees(50_000_000, 0).netAmount),
+        new BN(1_000),
+      ),
     });
 
     // agent_transfer 50 — spendDest is allowlisted on this vault (V2 requires
@@ -440,7 +525,8 @@ describe("devnet-spending", () => {
       .instruction();
     await sendVersionedTx(connection, [transferIx], agent);
 
-    // Now at 100 USD — 1 more should fail
+    // Now at 100 USD (50 session + 50 agent_transfer) — 1 more should fail. The
+    // swap satisfies M1 so execution reaches the rolling-cap check, which reverts.
     const sessionPda2 = deriveSessionPda(
       vault.vaultPda,
       agent.publicKey,
@@ -448,7 +534,7 @@ describe("devnet-spending", () => {
       program.programId,
     );
     try {
-      await authorize({
+      await authorizeAndFinalize({
         connection,
         program,
         agent,
@@ -460,8 +546,18 @@ describe("devnet-spending", () => {
         mint: mintA,
         amount: new BN(1_000_000),
         protocol: MOCK_DEFI_PROGRAM_ID,
+        feeDestinationAta: null,
         protocolTreasuryAta: vault.protocolTreasuryAta,
-        mockSpendDestination: agentMintAAta,
+        outputSwapAccount: swap.vaultOutputAta,
+        middleIx: buildMockSwapToVaultIx(
+          vault.vaultTokenAta,
+          agentMintAAta,
+          swap.agentReserve,
+          swap.vaultOutputAta,
+          agent.publicKey,
+          new BN(calculateFees(1_000_000, 0).netAmount),
+          new BN(1_000),
+        ),
       });
       expect.fail("Should have thrown");
     } catch (err: any) {
