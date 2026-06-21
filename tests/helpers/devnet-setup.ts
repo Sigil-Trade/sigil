@@ -90,6 +90,9 @@ function anchorDisc(name: string): Buffer {
 
 export const MOCK_DEFI_OPEN_POSITION_DISC = anchorDisc("open_position");
 export const MOCK_DEFI_DRAIN_DISC = anchorDisc("drain_via_delegation");
+// Anchor discriminator for mock-defi's `swap_to_vault` ix (deployed on devnet
+// alongside open_position/drain_via_delegation).
+export const MOCK_DEFI_SWAP_DISC = anchorDisc("swap_to_vault");
 
 /**
  * Mock-defi `open_position` ix — true no-op (single signer, handler does
@@ -136,6 +139,119 @@ export function buildMockDefiDrainIx(
       amountBn.toArrayLike(Buffer, "le", 8),
     ]),
   });
+}
+
+/**
+ * Mock-defi `swap_to_vault(in_amount, out_amount)` — models an ACQUIRING swap
+ * for the M1 output-ownership gate (devnet mirror of litesvm-setup's builder).
+ * Leg 1 pulls `inAmount` of the input mint out of `source` (vault input ATA)
+ * via the agent's validate-time delegation; leg 2 delivers `outAmount` of a
+ * DIFFERENT mint from `outputSource` (an agent-owned reserve) into `vaultOutput`
+ * (the vault-owned acquisition account finalize's M1 gate verifies increased).
+ * Both legs authorized by `authority` (the agent). Use this — NOT
+ * buildMockDefiDrainIx — for any stablecoin-input spending test: finalize now
+ * requires a vault-owned acquisition (err 6112) on every such spend, so a bare
+ * drain reverts. Accounts/data layout mirrors litesvm-setup.ts:204-230 exactly:
+ * [source, inputSink, outputSource, vaultOutput, authority(signer),
+ * TOKEN_PROGRAM_ID]; data = 8-byte disc + u64 inAmount LE + u64 outAmount LE.
+ */
+export function buildMockSwapToVaultIx(
+  source: PublicKey,
+  inputSink: PublicKey,
+  outputSource: PublicKey,
+  vaultOutput: PublicKey,
+  authority: PublicKey,
+  inAmount: BN,
+  outAmount: BN,
+  programId: PublicKey = MOCK_DEFI_PROGRAM_ID,
+): TransactionInstruction {
+  const data = Buffer.alloc(24);
+  MOCK_DEFI_SWAP_DISC.copy(data, 0);
+  data.writeBigUInt64LE(BigInt(inAmount.toString()), 8);
+  data.writeBigUInt64LE(BigInt(outAmount.toString()), 16);
+  return new TransactionInstruction({
+    programId,
+    keys: [
+      { pubkey: source, isSigner: false, isWritable: true },
+      { pubkey: inputSink, isSigner: false, isWritable: true },
+      { pubkey: outputSource, isSigner: false, isWritable: true },
+      { pubkey: vaultOutput, isSigner: false, isWritable: true },
+      { pubkey: authority, isSigner: true, isWritable: false },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    ],
+    data,
+  });
+}
+
+export interface SwapOutputFixture {
+  /** Fresh non-stablecoin output mint (random address — not USDC/USDT). */
+  outputMint: PublicKey;
+  /** VAULT-OWNED ATA for outputMint — the M1 gate verifies this increased. */
+  vaultOutputAta: PublicKey;
+  /** Agent-owned reserve ATA funding the swap's output leg (test-only). */
+  agentReserve: PublicKey;
+}
+
+/**
+ * Devnet equivalent of litesvm-setup's `setupSwapOutput` (sandwich-integration
+ * .ts:623-651). Stands up an acquiring-swap output on the LIVE cluster: a fresh
+ * non-stablecoin mint, a VAULT-OWNED ATA to receive it (the acquisition the M1
+ * output-ownership gate verifies), and an agent-owned reserve funded so the
+ * swap's output leg has tokens to deliver (a real swap sources output from a
+ * pool; this is the test stand-in). Pair the returned `vaultOutputAta` with
+ * `outputSwapAccount` and `buildMockSwapToVaultIx(...)` as the sandwich's middle
+ * ix so a stablecoin-input spend satisfies the mandatory gate (6112) while still
+ * exercising the cap/assertion under test.
+ *
+ * `payer` is the fee payer AND the mint authority (the owner wallet's Keypair,
+ * `(owner as any).payer` — same convention as createFullVault, where
+ * owner.publicKey is the mint authority). Uses real devnet createMint / ATA /
+ * mintTo.
+ */
+export async function setupSwapOutput(
+  connection: Connection,
+  payer: Keypair,
+  vaultPda: PublicKey,
+  agent: PublicKey,
+): Promise<SwapOutputFixture> {
+  // Fresh non-stablecoin mint (random address → never matches USDC/USDT, so the
+  // acquired output is a DIFFERENT mint from the stablecoin input). Mint
+  // authority = payer.publicKey so mintTo below can sign with `payer`.
+  const outputMint = await createMint(
+    connection,
+    payer,
+    payer.publicKey,
+    null,
+    6,
+  );
+  // Vault-owned output ATA (allowOwnerOffCurve — the vault is a PDA).
+  const vaultOutputAccount = await getOrCreateAssociatedTokenAccount(
+    connection,
+    payer,
+    outputMint,
+    vaultPda,
+    true,
+  );
+  // Agent-owned reserve funding the swap's output leg.
+  const agentReserveAccount = await getOrCreateAssociatedTokenAccount(
+    connection,
+    payer,
+    outputMint,
+    agent,
+  );
+  await mintTo(
+    connection,
+    payer,
+    outputMint,
+    agentReserveAccount.address,
+    payer, // mint authority = payer.publicKey
+    1_000_000_000, // healthy reserve — far exceeds any per-test outAmount
+  );
+  return {
+    outputMint,
+    vaultOutputAta: vaultOutputAccount.address,
+    agentReserve: agentReserveAccount.address,
+  };
 }
 
 /**
@@ -969,6 +1085,7 @@ export interface AuthorizeOpts {
   protocolTreasuryAta?: PublicKey | null;
   feeDestinationAta?: PublicKey | null;
   outputStablecoinAccount?: PublicKey | null;
+  outputSwapAccount?: PublicKey | null;
   mockSpendDestination?: PublicKey | null;
   mockSpendDevFeeRate?: number;
   expectedPolicyVersion?: BN;
@@ -1007,6 +1124,7 @@ export async function buildAuthorizeIx(opts: AuthorizeOpts) {
     protocolTreasuryAta = null,
     feeDestinationAta = null,
     outputStablecoinAccount = null,
+    outputSwapAccount = null,
     remainingAccounts = [],
   } = opts;
 
@@ -1057,6 +1175,7 @@ export async function buildAuthorizeIx(opts: AuthorizeOpts) {
       protocolTreasuryTokenAccount: protocolTreasuryAta,
       feeDestinationTokenAccount: feeDestinationAta,
       outputStablecoinAccount,
+      outputSwapAccount,
       tokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
       instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
@@ -1077,6 +1196,7 @@ export interface FinalizeOpts {
   feeDestinationAta: PublicKey | null;
   protocolTreasuryAta: PublicKey | null;
   outputStablecoinAccount?: PublicKey | null;
+  outputSwapAccount?: PublicKey | null;
 }
 
 /**
@@ -1093,6 +1213,7 @@ export async function buildFinalizeIx(opts: FinalizeOpts) {
     agentPubkey,
     vaultTokenAta,
     outputStablecoinAccount = null,
+    outputSwapAccount = null,
   } = opts;
   const [overlayPda] = PublicKey.findProgramAddressSync(
     [Buffer.from("agent_spend"), vaultPda.toBuffer(), Buffer.from([0])],
@@ -1110,6 +1231,7 @@ export async function buildFinalizeIx(opts: FinalizeOpts) {
       agentSpendOverlay: overlayPda,
       vaultTokenAccount: vaultTokenAta,
       outputStablecoinAccount,
+      outputSwapAccount,
       tokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
       instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
@@ -1219,6 +1341,7 @@ export async function authorizeAndFinalize(
     feeDestinationAta: opts.feeDestinationAta,
     protocolTreasuryAta: opts.protocolTreasuryAta,
     outputStablecoinAccount: opts.outputStablecoinAccount ?? null,
+    outputSwapAccount: opts.outputSwapAccount ?? null,
   });
 
   // 3. Compose [validate, middle?, finalize] and send as ONE versioned tx via
