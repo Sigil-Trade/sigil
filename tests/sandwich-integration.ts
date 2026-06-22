@@ -624,6 +624,7 @@ describe("sandwich-integration (Phase 6.1)", () => {
     outputMint: PublicKey;
     vaultOutputAta: PublicKey;
     agentReserve: PublicKey;
+    drainRecipientAta: PublicKey;
   } {
     const outputMint = Keypair.generate().publicKey;
     createMintAtAddress(svm, outputMint, owner.publicKey, 6);
@@ -648,7 +649,17 @@ describe("sandwich-integration (Phase 6.1)", () => {
       owner.publicKey,
       1_000_000_000n,
     );
-    return { outputMint, vaultOutputAta, agentReserve };
+    // Off-vault USDC recipient for the swap's input leg. With inAmount = 0 it
+    // receives nothing, but the ix still lists it as a writable meta so it must
+    // be a valid token account resolvable in the completeness checks.
+    const drainRecipient = Keypair.generate();
+    const drainRecipientAta = createAtaHelper(
+      svm,
+      (owner as any).payer,
+      DEVNET_USDC_MINT,
+      drainRecipient.publicKey,
+    );
+    return { outputMint, vaultOutputAta, agentReserve, drainRecipientAta };
   }
 
   // ─── 1. R-1 MintDeltaCap exceeded ────────────────────────────────────────
@@ -922,15 +933,30 @@ describe("sandwich-integration (Phase 6.1)", () => {
         auxByte: 0,
       });
 
+      // Require-measurable-outcome (err 6115): the spending session needs a
+      // measurable outcome to reach the R-2 post-assertion. Use an M1 acquiring
+      // swap with inAmount = 0 (no stablecoin movement, output increases) so
+      // actual_spend stays 0 yet finalize proceeds past the 6115 guard to the
+      // post-assertion under test.
+      const swap = setupSwapOutput(ctx);
+      const swapMetas = [
+        { pubkey: ctx.vaultUsdcAta, isSigner: false, isWritable: false },
+        { pubkey: swap.drainRecipientAta, isSigner: false, isWritable: false },
+        { pubkey: swap.agentReserve, isSigner: false, isWritable: false },
+        { pubkey: swap.vaultOutputAta, isSigner: false, isWritable: false },
+        { pubkey: ctx.agent.publicKey, isSigner: false, isWritable: false },
+      ];
       const sandwichOpts: SandwichOpts = {
         ctx,
         amount: new BN(50_000_000),
+        outputSwapAccount: swap.vaultOutputAta,
         validateRemainingAccounts: [
           {
             pubkey: ctx.postAssertionsPda,
             isSigner: false,
             isWritable: false,
           },
+          ...swapMetas,
         ],
         finalizeRemainingAccounts: [
           {
@@ -941,15 +967,24 @@ describe("sandwich-integration (Phase 6.1)", () => {
           // Pass the non-vault ATA so finalize can read it. R-2 verifies its
           // authority equals vault_key and rejects on mismatch.
           { pubkey: nonVaultUsdcAta, isSigner: false, isWritable: false },
+          ...swapMetas,
         ],
       };
 
       const validateIx = await buildValidateIx(sandwichOpts);
-      const noopIx = buildMockDefiNoopIx(ctx.agent.publicKey);
+      const swapIx = buildMockSwapToVaultIx(
+        ctx.vaultUsdcAta,
+        swap.drainRecipientAta,
+        swap.agentReserve,
+        swap.vaultOutputAta,
+        ctx.agent.publicKey,
+        new BN(0),
+        new BN(1_000),
+      );
       const finalizeIx = await buildFinalizeIx(sandwichOpts);
 
       try {
-        sendVersionedTx(svm, [validateIx, noopIx, finalizeIx], ctx.agent);
+        sendVersionedTx(svm, [validateIx, swapIx, finalizeIx], ctx.agent);
         expect.fail("Expected R-2 AtaAuthorityPin to revert");
       } catch (err: any) {
         expectSigilError(err, { name: "ErrAtaAuthorityChanged" });
@@ -982,9 +1017,21 @@ describe("sandwich-integration (Phase 6.1)", () => {
         auxByte: 0,
       });
 
+      // M1 acquiring swap (inAmount = 0, output mint increases) satisfies the
+      // require-measurable-outcome invariant (err 6115) so finalize proceeds to
+      // R-3. The vault USDC ATA still does NOT increase (the swap output is a
+      // different mint), so R-3's min_increase floor still trips.
+      const swap = setupSwapOutput(ctx);
+      const swapMetas = [
+        { pubkey: swap.drainRecipientAta, isSigner: false, isWritable: false },
+        { pubkey: swap.agentReserve, isSigner: false, isWritable: false },
+        { pubkey: swap.vaultOutputAta, isSigner: false, isWritable: false },
+        { pubkey: ctx.agent.publicKey, isSigner: false, isWritable: false },
+      ];
       const sandwichOpts: SandwichOpts = {
         ctx,
         amount: new BN(50_000_000),
+        outputSwapAccount: swap.vaultOutputAta,
         validateRemainingAccounts: [
           {
             pubkey: ctx.postAssertionsPda,
@@ -992,6 +1039,7 @@ describe("sandwich-integration (Phase 6.1)", () => {
             isWritable: false,
           },
           { pubkey: ctx.vaultUsdcAta, isSigner: false, isWritable: false },
+          ...swapMetas,
         ],
         finalizeRemainingAccounts: [
           {
@@ -1000,15 +1048,24 @@ describe("sandwich-integration (Phase 6.1)", () => {
             isWritable: false,
           },
           { pubkey: ctx.vaultUsdcAta, isSigner: false, isWritable: false },
+          ...swapMetas,
         ],
       };
 
       const validateIx = await buildValidateIx(sandwichOpts);
-      const noopIx = buildMockDefiNoopIx(ctx.agent.publicKey);
+      const swapIx = buildMockSwapToVaultIx(
+        ctx.vaultUsdcAta,
+        swap.drainRecipientAta,
+        swap.agentReserve,
+        swap.vaultOutputAta,
+        ctx.agent.publicKey,
+        new BN(0),
+        new BN(1_000),
+      );
       const finalizeIx = await buildFinalizeIx(sandwichOpts);
 
       try {
-        sendVersionedTx(svm, [validateIx, noopIx, finalizeIx], ctx.agent);
+        sendVersionedTx(svm, [validateIx, swapIx, finalizeIx], ctx.agent);
         expect.fail("Expected R-3 OutputBalanceFloor to revert");
       } catch (err: any) {
         expectSigilError(err, { name: "ErrOutputBelowFloor" });
@@ -1034,23 +1091,38 @@ describe("sandwich-integration (Phase 6.1)", () => {
       DEVNET_USDT_MINT.toBuffer().copy(usdtMintBytes, 0);
       const declaredRecipient = Keypair.generate().publicKey; // arbitrary non-default
 
+      // M1 acquiring swap (inAmount = 0) so finalize reaches R-4 (err 6115
+      // otherwise fires first). The swap ix's meta[0] is the vault USDC ATA — a
+      // real SPL token account whose mint (USDC) differs from the declared USDT,
+      // so R-4's DeclarationConsistency mint check still trips with 6101.
+      const swap = setupSwapOutput(ctx);
+      const swapMetas = [
+        { pubkey: ctx.vaultUsdcAta, isSigner: false, isWritable: false },
+        { pubkey: swap.drainRecipientAta, isSigner: false, isWritable: false },
+        { pubkey: swap.agentReserve, isSigner: false, isWritable: false },
+        { pubkey: swap.vaultOutputAta, isSigner: false, isWritable: false },
+        { pubkey: ctx.agent.publicKey, isSigner: false, isWritable: false },
+      ];
+
       await installPostAssertion(ctx, {
         targetAccount: declaredRecipient,
         expectedValue: usdtMintBytes,
         assertionMode: 7, // DeclarationConsistency
         auxValue: Array.from(new BN(0).toArray("le", 8)),
-        auxByte: 0, // meta_index = 0 → mock-defi noop keys[0] = agent (wallet)
+        auxByte: 0, // meta_index = 0 → swap ix keys[0] = vault USDC ATA (mint USDC ≠ declared USDT)
       });
 
       const sandwichOpts: SandwichOpts = {
         ctx,
         amount: new BN(50_000_000),
+        outputSwapAccount: swap.vaultOutputAta,
         validateRemainingAccounts: [
           {
             pubkey: ctx.postAssertionsPda,
             isSigner: false,
             isWritable: false,
           },
+          ...swapMetas,
         ],
         finalizeRemainingAccounts: [
           {
@@ -1058,23 +1130,28 @@ describe("sandwich-integration (Phase 6.1)", () => {
             isSigner: false,
             isWritable: false,
           },
-          // R-4 looks up the meta pubkey in remaining_accounts. The mock-defi
-          // ix's meta[0] = agent.publicKey; pass it so the lookup resolves
-          // (then the SPL-owned check at the helper trips).
-          {
-            pubkey: ctx.agent.publicKey,
-            isSigner: false,
-            isWritable: false,
-          },
+          // R-4 looks up the meta pubkey (swap meta[0] = vault USDC ATA) in
+          // remaining_accounts; pass the full swap meta set so the lookup
+          // resolves, then the USDC≠USDT mint mismatch trips.
+          { pubkey: ctx.vaultUsdcAta, isSigner: false, isWritable: false },
+          ...swapMetas,
         ],
       };
 
       const validateIx = await buildValidateIx(sandwichOpts);
-      const noopIx = buildMockDefiNoopIx(ctx.agent.publicKey);
+      const swapIx = buildMockSwapToVaultIx(
+        ctx.vaultUsdcAta,
+        swap.drainRecipientAta,
+        swap.agentReserve,
+        swap.vaultOutputAta,
+        ctx.agent.publicKey,
+        new BN(0),
+        new BN(1_000),
+      );
       const finalizeIx = await buildFinalizeIx(sandwichOpts);
 
       try {
-        sendVersionedTx(svm, [validateIx, noopIx, finalizeIx], ctx.agent);
+        sendVersionedTx(svm, [validateIx, swapIx, finalizeIx], ctx.agent);
         expect.fail("Expected R-4 DeclarationConsistency to revert");
       } catch (err: any) {
         expectSigilError(err, { name: "ErrDeclarationInconsistent" });
@@ -1096,18 +1173,40 @@ describe("sandwich-integration (Phase 6.1)", () => {
         depositAmount: new BN(600_000_000), // 600 USDC
       });
 
+      // M1 acquiring swap (inAmount = 0) so finalize reaches the TA-12 floor
+      // check (err 6115 otherwise fires first). actual_spend stays 0; the
+      // combined stable balance (~600 USDC) is still below the 100K floor, so
+      // the floor still trips.
+      const swap = setupSwapOutput(ctx);
+      const swapMetas = [
+        { pubkey: ctx.vaultUsdcAta, isSigner: false, isWritable: false },
+        { pubkey: swap.drainRecipientAta, isSigner: false, isWritable: false },
+        { pubkey: swap.agentReserve, isSigner: false, isWritable: false },
+        { pubkey: swap.vaultOutputAta, isSigner: false, isWritable: false },
+        { pubkey: ctx.agent.publicKey, isSigner: false, isWritable: false },
+      ];
       const sandwichOpts: SandwichOpts = {
         ctx,
         amount: new BN(50_000_000),
-        validateRemainingAccounts: [],
+        outputSwapAccount: swap.vaultOutputAta,
+        validateRemainingAccounts: [...swapMetas],
+        finalizeRemainingAccounts: [...swapMetas],
       };
 
       const validateIx = await buildValidateIx(sandwichOpts);
-      const noopIx = buildMockDefiNoopIx(ctx.agent.publicKey);
+      const swapIx = buildMockSwapToVaultIx(
+        ctx.vaultUsdcAta,
+        swap.drainRecipientAta,
+        swap.agentReserve,
+        swap.vaultOutputAta,
+        ctx.agent.publicKey,
+        new BN(0),
+        new BN(1_000),
+      );
       const finalizeIx = await buildFinalizeIx(sandwichOpts);
 
       try {
-        sendVersionedTx(svm, [validateIx, noopIx, finalizeIx], ctx.agent);
+        sendVersionedTx(svm, [validateIx, swapIx, finalizeIx], ctx.agent);
         expect.fail("Expected TA-12 stable_balance_floor to revert");
       } catch (err: any) {
         expectSigilError(err, { name: "ErrStableFloorViolation" });
@@ -1150,20 +1249,43 @@ describe("sandwich-integration (Phase 6.1)", () => {
         );
       }
 
+      // M1 acquiring swap (inAmount = 0) so finalize reaches the floor check
+      // (err 6115 otherwise fires first). The swap output is a non-stablecoin
+      // mint, so it does not affect the USDC/USDT floor sum; the canonical ATA
+      // still holds only 600 < floor, so the floor still trips.
+      const swap = setupSwapOutput(ctx);
+      const swapMetas = [
+        { pubkey: ctx.vaultUsdcAta, isSigner: false, isWritable: false },
+        { pubkey: swap.drainRecipientAta, isSigner: false, isWritable: false },
+        { pubkey: swap.agentReserve, isSigner: false, isWritable: false },
+        { pubkey: swap.vaultOutputAta, isSigner: false, isWritable: false },
+        { pubkey: ctx.agent.publicKey, isSigner: false, isWritable: false },
+      ];
       const sandwichOpts: SandwichOpts = {
         ctx,
         amount: new BN(50_000_000),
+        outputSwapAccount: swap.vaultOutputAta,
+        validateRemainingAccounts: [...swapMetas],
         finalizeRemainingAccounts: [
           { pubkey: nonCanonical, isSigner: false, isWritable: false },
+          ...swapMetas,
         ],
       };
 
       const validateIx = await buildValidateIx(sandwichOpts);
-      const noopIx = buildMockDefiNoopIx(ctx.agent.publicKey);
+      const swapIx = buildMockSwapToVaultIx(
+        ctx.vaultUsdcAta,
+        swap.drainRecipientAta,
+        swap.agentReserve,
+        swap.vaultOutputAta,
+        ctx.agent.publicKey,
+        new BN(0),
+        new BN(1_000),
+      );
       const finalizeIx = await buildFinalizeIx(sandwichOpts);
 
       try {
-        sendVersionedTx(svm, [validateIx, noopIx, finalizeIx], ctx.agent);
+        sendVersionedTx(svm, [validateIx, swapIx, finalizeIx], ctx.agent);
         expect.fail(
           "floor must ignore the non-canonical account and revert (canonical-ATA pin)",
         );
@@ -1200,19 +1322,42 @@ describe("sandwich-integration (Phase 6.1)", () => {
         60_000_000n,
       );
 
+      // M1 acquiring swap (inAmount = 0) so finalize reaches the floor check
+      // (err 6115 otherwise fires first). actual_spend stays 0 and the swap
+      // output is non-stablecoin, so the USDC + USDT floor sum (120 ≥ 100) still
+      // passes and the sandwich succeeds.
+      const swap = setupSwapOutput(ctx);
+      const swapMetas = [
+        { pubkey: ctx.vaultUsdcAta, isSigner: false, isWritable: false },
+        { pubkey: swap.drainRecipientAta, isSigner: false, isWritable: false },
+        { pubkey: swap.agentReserve, isSigner: false, isWritable: false },
+        { pubkey: swap.vaultOutputAta, isSigner: false, isWritable: false },
+        { pubkey: ctx.agent.publicKey, isSigner: false, isWritable: false },
+      ];
       const sandwichOpts: SandwichOpts = {
         ctx,
         amount: new BN(50_000_000),
+        outputSwapAccount: swap.vaultOutputAta,
+        validateRemainingAccounts: [...swapMetas],
         finalizeRemainingAccounts: [
           { pubkey: usdtAta, isSigner: false, isWritable: false },
+          ...swapMetas,
         ],
       };
       const validateIx = await buildValidateIx(sandwichOpts);
-      const noopIx = buildMockDefiNoopIx(ctx.agent.publicKey);
+      const swapIx = buildMockSwapToVaultIx(
+        ctx.vaultUsdcAta,
+        swap.drainRecipientAta,
+        swap.agentReserve,
+        swap.vaultOutputAta,
+        ctx.agent.publicKey,
+        new BN(0),
+        new BN(1_000),
+      );
       const finalizeIx = await buildFinalizeIx(sandwichOpts);
 
       try {
-        sendVersionedTx(svm, [validateIx, noopIx, finalizeIx], ctx.agent);
+        sendVersionedTx(svm, [validateIx, swapIx, finalizeIx], ctx.agent);
       } catch (err: any) {
         throw new Error(
           `combined floor should PASS (120K >= 100K) but reverted: ${err?.message ?? err}`,
@@ -1243,17 +1388,40 @@ describe("sandwich-integration (Phase 6.1)", () => {
         60_000_000n,
       );
 
-      // usdtAta is deliberately NOT in finalizeRemainingAccounts.
+      // M1 acquiring swap (inAmount = 0) so finalize reaches the floor check
+      // (err 6115 otherwise fires first). usdtAta is deliberately NOT in
+      // finalizeRemainingAccounts — the floor under-counts (sees only 60 USDC <
+      // 100) and reverts. The swap metas are added (required for completeness),
+      // but the swap output is non-stablecoin so it does not lift the floor sum.
+      const swap = setupSwapOutput(ctx);
+      const swapMetas = [
+        { pubkey: ctx.vaultUsdcAta, isSigner: false, isWritable: false },
+        { pubkey: swap.drainRecipientAta, isSigner: false, isWritable: false },
+        { pubkey: swap.agentReserve, isSigner: false, isWritable: false },
+        { pubkey: swap.vaultOutputAta, isSigner: false, isWritable: false },
+        { pubkey: ctx.agent.publicKey, isSigner: false, isWritable: false },
+      ];
       const sandwichOpts: SandwichOpts = {
         ctx,
         amount: new BN(50_000_000),
+        outputSwapAccount: swap.vaultOutputAta,
+        validateRemainingAccounts: [...swapMetas],
+        finalizeRemainingAccounts: [...swapMetas],
       };
       const validateIx = await buildValidateIx(sandwichOpts);
-      const noopIx = buildMockDefiNoopIx(ctx.agent.publicKey);
+      const swapIx = buildMockSwapToVaultIx(
+        ctx.vaultUsdcAta,
+        swap.drainRecipientAta,
+        swap.agentReserve,
+        swap.vaultOutputAta,
+        ctx.agent.publicKey,
+        new BN(0),
+        new BN(1_000),
+      );
       const finalizeIx = await buildFinalizeIx(sandwichOpts);
 
       try {
-        sendVersionedTx(svm, [validateIx, noopIx, finalizeIx], ctx.agent);
+        sendVersionedTx(svm, [validateIx, swapIx, finalizeIx], ctx.agent);
         expect.fail("omitting the USDT ATA must under-count and revert");
       } catch (err: any) {
         if (err?.message?.startsWith("omitting the USDT")) throw err;
@@ -1413,17 +1581,39 @@ describe("sandwich-integration (Phase 6.1)", () => {
 
     it("accepts a single DeFi instruction from an allowlisted protocol (regression)", async () => {
       // The fix must NOT break the legitimate single-DeFi-ix sandwich. One
-      // no-op mock-defi ix between validate and finalize must still succeed.
+      // allowlisted DeFi ix between validate and finalize must still succeed.
+      // Under the require-measurable-outcome invariant (err 6115) a spending
+      // session needs a measurable outcome, so the single DeFi ix is an M1
+      // acquiring swap (inAmount = 0, output increases) — still exactly one
+      // allowlisted DeFi ix, and it succeeds.
       const ctx = await freshVault();
+      const swap = setupSwapOutput(ctx);
+      const swapMetas = [
+        { pubkey: ctx.vaultUsdcAta, isSigner: false, isWritable: false },
+        { pubkey: swap.drainRecipientAta, isSigner: false, isWritable: false },
+        { pubkey: swap.agentReserve, isSigner: false, isWritable: false },
+        { pubkey: swap.vaultOutputAta, isSigner: false, isWritable: false },
+        { pubkey: ctx.agent.publicKey, isSigner: false, isWritable: false },
+      ];
 
       const sandwichOpts: SandwichOpts = {
         ctx,
         amount: new BN(1_000_000),
-        validateRemainingAccounts: [],
+        outputSwapAccount: swap.vaultOutputAta,
+        validateRemainingAccounts: [...swapMetas],
+        finalizeRemainingAccounts: [...swapMetas],
       };
 
       const validateIx = await buildValidateIx(sandwichOpts);
-      const defiIx = buildMockDefiNoopIx(ctx.agent.publicKey);
+      const defiIx = buildMockSwapToVaultIx(
+        ctx.vaultUsdcAta,
+        swap.drainRecipientAta,
+        swap.agentReserve,
+        swap.vaultOutputAta,
+        ctx.agent.publicKey,
+        new BN(0),
+        new BN(1_000),
+      );
       const finalizeIx = await buildFinalizeIx(sandwichOpts);
 
       // Should NOT throw — a single allowlisted DeFi ix is the canonical path.

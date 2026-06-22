@@ -71,6 +71,7 @@ import {
   LiteSVM,
   MOCK_DEFI_PROGRAM_ID,
   buildMockDefiNoopIx,
+  buildMockSwapToVaultIx,
 } from "./helpers/litesvm-setup";
 
 const STANDARD_INIT_DAILY_CAP = new BN(500_000_000);
@@ -853,7 +854,57 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
       const policyVersion =
         ((await program.account.policyConfig.fetch(ctx.policy))
           .policyVersion as BN) ?? new BN(0);
-      const amount = new BN(50_000_000); // 50 USDC
+      const amount = new BN(50_000_000); // 50 USDC declared
+
+      // Require-measurable-outcome (err 6115): a SPENDING session must produce
+      // a measurable vault outcome, so the middle ix is a fund-moving acquiring
+      // swap (not a zero-movement no-op). The input leg drains DRAIN_AMOUNT USDC
+      // from the vault via the agent's validate-time delegation; the output leg
+      // lands a small acquisition in a vault-owned ATA (M1 gate). This still
+      // exercises BOTH post-transfer signer-seed CPIs under test
+      // (validate's token::approve + finalize's token::revoke).
+      const DRAIN_AMOUNT = new BN(10_000_000); // 10 USDC actual spend
+      const swapOutputMint = Keypair.generate().publicKey;
+      createMintAtAddress(svm, swapOutputMint, owner.publicKey, 6);
+      const swapVaultOutputAta = createAtaHelper(
+        svm,
+        (owner as any).payer,
+        swapOutputMint,
+        ctx.vault,
+        true,
+      );
+      const swapAgentReserve = createAtaHelper(
+        svm,
+        (owner as any).payer,
+        swapOutputMint,
+        ctx.agent.publicKey,
+      );
+      mintToHelper(
+        svm,
+        (owner as any).payer,
+        swapOutputMint,
+        swapAgentReserve,
+        owner.publicKey,
+        1_000_000_000n,
+      );
+      const swapDrainRecipient = Keypair.generate();
+      airdropSol(svm, swapDrainRecipient.publicKey, 1 * LAMPORTS_PER_SOL);
+      const swapDrainRecipientAta = createAtaHelper(
+        svm,
+        (owner as any).payer,
+        DEVNET_USDC_MINT,
+        swapDrainRecipient.publicKey,
+      );
+      // Writable, non-vault metas of the swap ix that BOTH validate (F-Q1a) and
+      // finalize (F-Q1b, err 6113) completeness checks require, plus the agent
+      // fee-payer. READONLY — resolved, not authorized.
+      const swapFinalizeMetas = [
+        { pubkey: ctx.vaultUsdcAta, isSigner: false, isWritable: false },
+        { pubkey: swapDrainRecipientAta, isSigner: false, isWritable: false },
+        { pubkey: swapAgentReserve, isSigner: false, isWritable: false },
+        { pubkey: swapVaultOutputAta, isSigner: false, isWritable: false },
+        { pubkey: ctx.agent.publicKey, isSigner: false, isWritable: false },
+      ];
 
       const validateIx = await program.methods
         .validateAndAuthorize(
@@ -883,19 +934,16 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
-          outputSwapAccount: null,
+          outputSwapAccount: swapVaultOutputAta,
           agentSpendOverlay: ctx.overlay,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
-        // F-Q1a completeness: the mock-defi no-op ix lists the agent signer (the
-        // writable fee-payer in the compiled v0 message). validate's
-        // destination-completeness guard requires every writable DeFi meta
-        // resolvable in remaining_accounts, so append the agent (mirrors seal()).
-        .remainingAccounts([
-          { pubkey: ctx.agent.publicKey, isSigner: false, isWritable: false },
-        ])
+        // F-Q1a completeness: every writable, non-vault DeFi meta of the swap ix
+        // plus the agent fee-payer must be resolvable in remaining_accounts
+        // (mirrors seal()).
+        .remainingAccounts(swapFinalizeMetas)
         .instruction();
 
       const finalizeIx = await program.methods
@@ -913,14 +961,26 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
-          outputSwapAccount: null,
+          outputSwapAccount: swapVaultOutputAta,
         })
+        // F-Q1b finalize completeness (err 6113): the same writable swap metas
+        // plus the agent must reach finalize too.
+        .remainingAccounts(swapFinalizeMetas)
         .instruction();
 
       // F-Q2: a spending sandwich needs EXACTLY ONE counted DeFi instruction
-      // between validate and finalize. mock-defi's no-op open_position is that
-      // ix (zero token movement → actual_spend = 0, only the protocol fee moves).
-      const defiIx = buildMockDefiNoopIx(ctx.agent.publicKey);
+      // between validate and finalize. The fund-moving acquiring swap is that ix
+      // (drains DRAIN_AMOUNT USDC + lands a vault-owned acquisition →
+      // actual_spend > 0, a measurable outcome).
+      const defiIx = buildMockSwapToVaultIx(
+        ctx.vaultUsdcAta,
+        swapDrainRecipientAta,
+        swapAgentReserve,
+        swapVaultOutputAta,
+        ctx.agent.publicKey,
+        DRAIN_AMOUNT,
+        new BN(1_000), // small acquisition → satisfies M1 gate
+      );
       const vaultBalBefore = getTokenBalance(svm, ctx.vaultUsdcAta);
       const txResult = sendVersionedTx(
         svm,
@@ -929,10 +989,13 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
       );
       expect(txResult).to.exist;
 
-      // Balance delta = protocol fee only (mock DeFi is a no-op).
-      // 50_000_000 * 200 / 1_000_000 = 10_000.
+      // Vault USDC delta = protocol fee + actual drain. Both leave the vault:
+      // the fee (50_000_000 * 200 / 1_000_000 = 10_000) during validate, and
+      // DRAIN_AMOUNT during the swap's input leg.
       const vaultBalAfter = getTokenBalance(svm, ctx.vaultUsdcAta);
-      expect(Number(vaultBalBefore - vaultBalAfter)).to.equal(10_000);
+      expect(Number(vaultBalBefore - vaultBalAfter)).to.equal(
+        10_000 + DRAIN_AMOUNT.toNumber(),
+      );
 
       // Session PDA closed by finalize.
       expect(svm.getAccount(sessionPda)).to.be.null;

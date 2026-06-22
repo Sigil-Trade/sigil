@@ -244,6 +244,8 @@ export const SIGIL_ERROR__ERR_OUTPUT_NOT_VAULT_OWNED = 0x17e0; // 6112
 export const SIGIL_ERROR__ERR_FINALIZE_META_UNRESOLVABLE = 0x17e1; // 6113
 /** ErrDeFiInstructionNotAdjacentToFinalize: The counted DeFi instruction must sit immediately before finalize_session (no interleaved instruction) so finalize's attribution walks bind to the correct instruction */
 export const SIGIL_ERROR__ERR_DE_FI_INSTRUCTION_NOT_ADJACENT_TO_FINALIZE = 0x17e2; // 6114
+/** ErrUnmeasurableSpend: Spending session produced no measurable in-transaction vault outcome (no stablecoin movement and no vault-owned acquisition) — async/keeper-settled or unmeasurable; recording 0 spend is rejected */
+export const SIGIL_ERROR__ERR_UNMEASURABLE_SPEND = 0x17e3; // 6115
 
 export type SigilError =
   | typeof SIGIL_ERROR__ACCOUNT_WRITABILITY_MISMATCH
@@ -299,6 +301,7 @@ export type SigilError =
   | typeof SIGIL_ERROR__ERR_TOKEN2022_EXTENSION_FORBIDDEN
   | typeof SIGIL_ERROR__ERR_TOKEN2022_OUTPUT_MINT_UNRESOLVABLE
   | typeof SIGIL_ERROR__ERR_TOO_MANY_REVOKE_PAIRS
+  | typeof SIGIL_ERROR__ERR_UNMEASURABLE_SPEND
   | typeof SIGIL_ERROR__INSUFFICIENT_BALANCE
   | typeof SIGIL_ERROR__INSUFFICIENT_PERMISSIONS
   | typeof SIGIL_ERROR__INVALID_AGENT_KEY
@@ -418,6 +421,7 @@ if (process.env.NODE_ENV !== "production") {
     [SIGIL_ERROR__ERR_TOKEN2022_EXTENSION_FORBIDDEN]: `Token-2022 mint has a forbidden extension (only MemoTransfer + MetadataPointer allowed)`,
     [SIGIL_ERROR__ERR_TOKEN2022_OUTPUT_MINT_UNRESOLVABLE]: `Vault-owned Token-2022 output ATA's mint is absent from remaining_accounts or not Token-2022-owned — cannot vet extensions`,
     [SIGIL_ERROR__ERR_TOO_MANY_REVOKE_PAIRS]: `freeze_internal MAX_REVOKE_PAIRS = 10 exceeded (Council ISC-136)`,
+    [SIGIL_ERROR__ERR_UNMEASURABLE_SPEND]: `Spending session produced no measurable in-transaction vault outcome (no stablecoin movement and no vault-owned acquisition) — async/keeper-settled or unmeasurable; recording 0 spend is rejected`,
     [SIGIL_ERROR__INSUFFICIENT_BALANCE]: `Insufficient vault balance for withdrawal`,
     [SIGIL_ERROR__INSUFFICIENT_PERMISSIONS]: `Agent lacks permission for this action type`,
     [SIGIL_ERROR__INVALID_AGENT_KEY]: `Invalid agent: cannot be the zero address`,

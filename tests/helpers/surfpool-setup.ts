@@ -315,6 +315,50 @@ export function buildMockDefiNoopIx(signer: PublicKey): TransactionInstruction {
   });
 }
 
+/** Mock-defi `swap_to_vault` discriminator (acquiring-swap, M1 output gate). */
+export const MOCK_DEFI_SWAP_DISC = anchorDisc("swap_to_vault");
+
+/**
+ * Mock-defi `swap_to_vault(in_amount, out_amount)` — models an ACQUIRING swap
+ * for the require-measurable-outcome invariant (err 6115) / M1 output-ownership
+ * gate (err 6112). Leg 1 pulls `inAmount` of the input mint out of `source`
+ * (vault input ATA) via the agent's validate-time delegation; leg 2 delivers
+ * `outAmount` of a DIFFERENT mint from `outputSource` (an agent-owned reserve)
+ * into `vaultOutput` (the vault-owned acquisition account finalize's M1 gate
+ * verifies INCREASED). Both legs authorized by `authority` (the agent). Use this
+ * — NOT the no-op — for a spending test (amount > 0) that must satisfy the
+ * invariant while keeping `actual_spend == 0` (set `inAmount = 0`, `outAmount > 0`
+ * → no stablecoin movement, vault output increases). Mirrors litesvm-setup's
+ * builder and sandwich-integration.ts wiring.
+ */
+export function buildMockSwapToVaultIx(
+  source: PublicKey,
+  inputSink: PublicKey,
+  outputSource: PublicKey,
+  vaultOutput: PublicKey,
+  authority: PublicKey,
+  inAmount: BN,
+  outAmount: BN,
+  programId: PublicKey = MOCK_DEFI_PROGRAM_ID,
+): TransactionInstruction {
+  const data = Buffer.alloc(24);
+  MOCK_DEFI_SWAP_DISC.copy(data, 0);
+  data.writeBigUInt64LE(BigInt(inAmount.toString()), 8);
+  data.writeBigUInt64LE(BigInt(outAmount.toString()), 16);
+  return new TransactionInstruction({
+    programId,
+    keys: [
+      { pubkey: source, isSigner: false, isWritable: true },
+      { pubkey: inputSink, isSigner: false, isWritable: true },
+      { pubkey: outputSource, isSigner: false, isWritable: true },
+      { pubkey: vaultOutput, isSigner: false, isWritable: true },
+      { pubkey: authority, isSigner: true, isWritable: false },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    ],
+    data,
+  });
+}
+
 // ─── Test environment ───────────────────────────────────────────────────────
 
 export interface SurfpoolTestEnv {

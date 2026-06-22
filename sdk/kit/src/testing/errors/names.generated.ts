@@ -14,7 +14,7 @@
  */
 
 // ────────────────────────────────────────────────────────────────
-// Sigil program errors (6000-6114)
+// Sigil program errors (6000-6115)
 // ────────────────────────────────────────────────────────────────
 
 export const SIGIL_ERRORS = {
@@ -133,6 +133,7 @@ export const SIGIL_ERRORS = {
   ErrOutputNotVaultOwned: 6112,
   ErrFinalizeMetaUnresolvable: 6113,
   ErrDeFiInstructionNotAdjacentToFinalize: 6114,
+  ErrUnmeasurableSpend: 6115,
 } as const;
 
 /**

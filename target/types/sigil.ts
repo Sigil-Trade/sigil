@@ -6684,6 +6684,11 @@ export type Sigil = {
       "code": 6114,
       "name": "errDeFiInstructionNotAdjacentToFinalize",
       "msg": "The counted DeFi instruction must sit immediately before finalize_session (no interleaved instruction) so finalize's attribution walks bind to the correct instruction"
+    },
+    {
+      "code": 6115,
+      "name": "errUnmeasurableSpend",
+      "msg": "Spending session produced no measurable in-transaction vault outcome (no stablecoin movement and no vault-owned acquisition) — async/keeper-settled or unmeasurable; recording 0 spend is rejected"
     }
   ],
   "types": [

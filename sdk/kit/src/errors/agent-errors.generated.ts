@@ -2,8 +2,8 @@
 // Regenerate via `pnpm -C sdk/kit codegen:errors` after IDL changes.
 //
 // Source: agent-middleware/target/idl/sigil.json
-// Generated: 2026-06-22T15:01:21.252Z
-// Codes: 115 (min 6000, max 6114)
+// Generated: 2026-06-22T19:42:53.237Z
+// Codes: 116 (min 6000, max 6115)
 
 /** Pure IDL projection of every Anchor error variant. */
 export interface IdlErrorEntry {
@@ -136,13 +136,14 @@ export const IDL_ERROR_MAP: Readonly<Record<number, IdlErrorEntry>> =
     6112: { code: 6112, name: "ErrOutputNotVaultOwned", msg: "M1: stablecoin-input swap output must land in a vault-owned account and increase (value redirection / unacquired spend rejected)" },
     6113: { code: 6113, name: "ErrFinalizeMetaUnresolvable", msg: "Finalize completeness: a writable DeFi account meta is absent from remaining_accounts (F-Q1b — omission would dodge per-recipient/output attribution)" },
     6114: { code: 6114, name: "ErrDeFiInstructionNotAdjacentToFinalize", msg: "The counted DeFi instruction must sit immediately before finalize_session (no interleaved instruction) so finalize's attribution walks bind to the correct instruction" },
+    6115: { code: 6115, name: "ErrUnmeasurableSpend", msg: "Spending session produced no measurable in-transaction vault outcome (no stablecoin movement and no vault-owned acquisition) — async/keeper-settled or unmeasurable; recording 0 spend is rejected" },
   });
 
 /** Total error-code count derived from the IDL at generation time. */
-export const IDL_ERROR_COUNT = 115;
+export const IDL_ERROR_COUNT = 116;
 
 /** Lowest IDL error code. */
 export const IDL_ERROR_MIN = 6000;
 
 /** Highest IDL error code. */
-export const IDL_ERROR_MAX = 6114;
+export const IDL_ERROR_MAX = 6115;

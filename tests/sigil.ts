@@ -98,6 +98,61 @@ describe("sigil", () => {
     return (pol as any).policyVersion ?? new BN(0);
   }
 
+  // Stand up an acquiring-swap output for a SPENDING session that must satisfy
+  // the require-measurable-outcome invariant (err 6115) WITHOUT moving any
+  // stablecoin: a fresh non-USDC mint, a VAULT-OWNED ATA to receive the
+  // acquisition (finalize's M1 gate verifies it strictly INCREASED), and an
+  // agent-owned reserve to fund the swap's output leg. Pairing this with
+  // `buildMockSwapToVaultIx(..., inAmount = 0, outAmount > 0)` makes the
+  // session's ONLY measurable outcome the vault-owned acquisition — so
+  // actual_spend stays 0 (only the validate-time protocol fee leaves the
+  // vault) and any fee/volume/balance-delta assertions are preserved exactly,
+  // while the spending session no longer reverts 6115.
+  function makeSwapOutput(
+    forVault: PublicKey,
+    forAgent: PublicKey,
+  ): {
+    vaultOutputAta: PublicKey;
+    agentReserve: PublicKey;
+    drainRecipientAta: PublicKey;
+  } {
+    const outputMint = Keypair.generate().publicKey;
+    createMintAtAddress(svm, outputMint, owner.publicKey, 6);
+    const vaultOutputAta = createAtaHelper(
+      svm,
+      (owner as any).payer,
+      outputMint,
+      forVault,
+      true,
+    );
+    const agentReserve = createAtaHelper(
+      svm,
+      (owner as any).payer,
+      outputMint,
+      forAgent,
+    );
+    mintToHelper(
+      svm,
+      (owner as any).payer,
+      outputMint,
+      agentReserve,
+      owner.publicKey,
+      1_000_000_000n,
+    );
+    // Off-vault USDC recipient for the swap's input leg (unused when
+    // inAmount = 0, but the ix still lists it as a writable meta, so it must be
+    // resolvable in the completeness checks).
+    const drainRecipient = Keypair.generate();
+    airdropSol(svm, drainRecipient.publicKey, 1 * LAMPORTS_PER_SOL);
+    const drainRecipientAta = createAtaHelper(
+      svm,
+      (owner as any).payer,
+      usdcMint,
+      drainRecipient.publicKey,
+    );
+    return { vaultOutputAta, agentReserve, drainRecipientAta };
+  }
+
   // F-Q2 drain sizing. validate_and_authorize arms the agent's SPL delegation
   // for only `amount - protocol_fee - developer_fee` (validate_and_authorize.rs
   // :995-1000) — the fees are CPI'd out of the vault ATA up front. A drain ix
@@ -1296,7 +1351,21 @@ describe("sigil", () => {
     });
 
     it("authorizes a valid swap action and finalizes atomically", async () => {
-      const amount = new BN(50_000_000); // 50 USDC
+      const amount = new BN(50_000_000); // 50 USDC declared
+
+      // Require-measurable-outcome (err 6115): a SPENDING session must produce a
+      // measurable vault outcome. Use an acquiring swap whose output increases
+      // (M1 path) with inAmount = 0 — no stablecoin leaves the vault beyond the
+      // validate-time protocol fee, so actual_spend stays 0 and the balance-delta
+      // (= fee only) and totalVolume (= 0) assertions below are preserved.
+      const swap = makeSwapOutput(vaultPda, agent.publicKey);
+      const swapMetas = [
+        { pubkey: vaultUsdcAta, isSigner: false, isWritable: false },
+        { pubkey: swap.drainRecipientAta, isSigner: false, isWritable: false },
+        { pubkey: swap.agentReserve, isSigner: false, isWritable: false },
+        { pubkey: swap.vaultOutputAta, isSigner: false, isWritable: false },
+        { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+      ];
 
       const validateIx = await program.methods
         .validateAndAuthorize(
@@ -1326,19 +1395,15 @@ describe("sigil", () => {
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
-          outputSwapAccount: null,
+          outputSwapAccount: swap.vaultOutputAta,
           agentSpendOverlay: overlayPda,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
-        // F-Q1a completeness: the mock-defi no-op ix lists the agent signer (the
-        // writable fee-payer in the compiled v0 message). validate's
-        // destination-completeness guard requires every writable DeFi meta
-        // resolvable in remaining_accounts, so append the agent (mirrors seal()).
-        .remainingAccounts([
-          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
-        ])
+        // F-Q1a completeness: every writable, non-vault meta of the swap ix plus
+        // the agent fee-payer must be resolvable in remaining_accounts.
+        .remainingAccounts(swapMetas)
         .instruction();
 
       const finalizeIx = await program.methods
@@ -1356,14 +1421,25 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
-          outputSwapAccount: null,
+          outputSwapAccount: swap.vaultOutputAta,
         })
+        // F-Q1b finalize completeness (err 6113): the same writable swap metas.
+        .remainingAccounts(swapMetas)
         .instruction();
 
-      // F-Q2: a spending sandwich needs EXACTLY ONE counted DeFi instruction
-      // between validate and finalize. mock-defi's no-op open_position is that ix
-      // (zero token movement → balance delta stays the protocol fee only).
-      const defiIx = buildMockDefiNoopIx(agent.publicKey);
+      // F-Q2: the single counted DeFi ix is an acquiring swap. inAmount = 0
+      // (no stablecoin outflow), outAmount > 0 (the vault-owned output ATA
+      // increases) → the measurable outcome is the acquisition (M1), so
+      // actual_spend stays 0 and the balance delta is the protocol fee only.
+      const defiIx = buildMockSwapToVaultIx(
+        vaultUsdcAta,
+        swap.drainRecipientAta,
+        swap.agentReserve,
+        swap.vaultOutputAta,
+        agent.publicKey,
+        new BN(0),
+        new BN(1_000),
+      );
 
       // P0 Finding 1: Verify vault balance before/after composed TX
       const vaultBalBefore = getTokenBalance(svm, vaultUsdcAta);
@@ -1413,7 +1489,13 @@ describe("sigil", () => {
         ],
         program.programId,
       );
-      const amount = new BN(50_000_000);
+      // Non-spending session (amount = 0): these post-finalize-scan tests
+      // assert behavior of instructions appended AFTER finalize, not the spend
+      // itself. A non-spending session is exempt from the
+      // require-measurable-outcome invariant (err 6115), so the sandwich reaches
+      // the post-finalize scan unchanged (the SPL-transfer rejection still fires
+      // with 6049).
+      const amount = new BN(0);
       const validateIx = await program.methods
         .validateAndAuthorize(
           usdcMint,
@@ -2553,6 +2635,23 @@ describe("sigil", () => {
         program.programId,
       );
 
+      // Require-measurable-outcome (err 6115): spending session needs a
+      // measurable outcome. Acquiring swap with inAmount = 0 (no stablecoin
+      // outflow) + output increase (M1) — actual_spend stays 0, so the
+      // fee-accounting assertions (dev fee == 0) are preserved exactly.
+      const fee0Swap = makeSwapOutput(feeVaultPda, agent.publicKey);
+      const fee0Metas = [
+        { pubkey: feeVaultUsdcAta, isSigner: false, isWritable: false },
+        {
+          pubkey: fee0Swap.drainRecipientAta,
+          isSigner: false,
+          isWritable: false,
+        },
+        { pubkey: fee0Swap.agentReserve, isSigner: false, isWritable: false },
+        { pubkey: fee0Swap.vaultOutputAta, isSigner: false, isWritable: false },
+        { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+      ];
+
       // Compose validate+finalize atomically
       const validateIx = await program.methods
         .validateAndAuthorize(
@@ -2582,17 +2681,14 @@ describe("sigil", () => {
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
-          outputSwapAccount: null,
+          outputSwapAccount: fee0Swap.vaultOutputAta,
           agentSpendOverlay: feeOverlay,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
-        // F-Q1a completeness: append the agent fee-payer (referenced writable by
-        // the mock-defi no-op ix). Mirrors seal().
-        .remainingAccounts([
-          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
-        ])
+        // F-Q1a completeness: swap metas + agent fee-payer.
+        .remainingAccounts(fee0Metas)
         .instruction();
 
       const finalizeIx = await program.methods
@@ -2610,12 +2706,24 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
-          outputSwapAccount: null,
+          outputSwapAccount: fee0Swap.vaultOutputAta,
         })
+        // F-Q1b finalize completeness (err 6113): same swap metas.
+        .remainingAccounts(fee0Metas)
         .instruction();
 
-      // F-Q2: counted DeFi ix between validate and finalize (zero spend).
-      const defiIx = buildMockDefiNoopIx(agent.publicKey);
+      // F-Q2: the single counted DeFi ix is an acquiring swap (inAmount = 0,
+      // outAmount > 0 → M1 measurable outcome; only the protocol fee leaves the
+      // vault).
+      const defiIx = buildMockSwapToVaultIx(
+        feeVaultUsdcAta,
+        fee0Swap.drainRecipientAta,
+        fee0Swap.agentReserve,
+        fee0Swap.vaultOutputAta,
+        agent.publicKey,
+        new BN(0),
+        new BN(1_000),
+      );
       const feeResult = sendVersionedTx(
         svm,
         [validateIx, defiIx, finalizeIx],
@@ -2710,6 +2818,27 @@ describe("sigil", () => {
         program.programId,
       );
 
+      // Require-measurable-outcome (err 6115): acquiring swap with inAmount = 0
+      // + output increase (M1). actual_spend stays 0, but the developer fee is
+      // computed on the declared amount at validate, so the fee-accounting
+      // assertion (== 5000) is preserved exactly.
+      const fee500Swap = makeSwapOutput(feeVaultPda, agent.publicKey);
+      const fee500Metas = [
+        { pubkey: feeVaultUsdcAta, isSigner: false, isWritable: false },
+        {
+          pubkey: fee500Swap.drainRecipientAta,
+          isSigner: false,
+          isWritable: false,
+        },
+        { pubkey: fee500Swap.agentReserve, isSigner: false, isWritable: false },
+        {
+          pubkey: fee500Swap.vaultOutputAta,
+          isSigner: false,
+          isWritable: false,
+        },
+        { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+      ];
+
       // Compose validate+finalize atomically
       const validateIx = await program.methods
         .validateAndAuthorize(
@@ -2739,17 +2868,14 @@ describe("sigil", () => {
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
           feeDestinationTokenAccount: feeDestUsdcAta,
           outputStablecoinAccount: null,
-          outputSwapAccount: null,
+          outputSwapAccount: fee500Swap.vaultOutputAta,
           agentSpendOverlay: feeOverlay,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
-        // F-Q1a completeness: append the agent fee-payer (referenced writable by
-        // the mock-defi no-op ix). Mirrors seal().
-        .remainingAccounts([
-          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
-        ])
+        // F-Q1a completeness: swap metas + agent fee-payer.
+        .remainingAccounts(fee500Metas)
         .instruction();
 
       const finalizeIx = await program.methods
@@ -2767,12 +2893,23 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
-          outputSwapAccount: null,
+          outputSwapAccount: fee500Swap.vaultOutputAta,
         })
+        // F-Q1b finalize completeness (err 6113): same swap metas.
+        .remainingAccounts(fee500Metas)
         .instruction();
 
-      // F-Q2: counted DeFi ix between validate and finalize (zero spend).
-      const defiIx = buildMockDefiNoopIx(agent.publicKey);
+      // F-Q2: the single counted DeFi ix is an acquiring swap (inAmount = 0,
+      // outAmount > 0 → M1 measurable outcome; only fees leave the vault).
+      const defiIx = buildMockSwapToVaultIx(
+        feeVaultUsdcAta,
+        fee500Swap.drainRecipientAta,
+        fee500Swap.agentReserve,
+        fee500Swap.vaultOutputAta,
+        agent.publicKey,
+        new BN(0),
+        new BN(1_000),
+      );
       sendVersionedTx(svm, [validateIx, defiIx, finalizeIx], agent);
 
       // developer fee = 10_000_000 * 500 / 1_000_000 = 5000
@@ -2781,12 +2918,14 @@ describe("sigil", () => {
     });
 
     it("zero-spend finalize always tracks developer fees in total_fees_collected", async () => {
-      // After removing the success param, fees are always tracked in accounting
-      // even when the DeFi leg moved nothing (fee drain fix). F-Q2: a spending
-      // sandwich must carry EXACTLY ONE counted DeFi ix, so the bundle is
-      // [validate, mock_defi(noop), finalize]; the no-op moves zero tokens so
-      // actual_spend = 0 and the fee-only accounting path is exercised — exactly
-      // the case this test pins.
+      // Developer fees are tracked in accounting even when no stablecoin moves.
+      // Under the require-measurable-outcome invariant (err 6115) a spending
+      // session must still produce SOME measurable outcome, so the bundle is
+      // [validate, mock_swap, finalize] where the swap acquires a vault-owned
+      // output (M1) with inAmount = 0 → actual_spend stays 0 (the "zero-spend"
+      // case this test pins) while the session settles instead of reverting.
+      // The developer fee is taken on the declared amount at validate, so it is
+      // tracked exactly as before.
       [feeSessionPda] = PublicKey.findProgramAddressSync(
         [
           Buffer.from("session"),
@@ -2800,7 +2939,22 @@ describe("sigil", () => {
       const vaultBefore = await program.account.agentVault.fetch(feeVaultPda);
       const feesBefore = vaultBefore.totalFeesCollected.toNumber();
 
-      // Compose validate + mock_defi(noop) + finalize atomically
+      // Acquiring swap (inAmount = 0, output increases → M1) keeps actual_spend
+      // at 0 while satisfying err 6115.
+      const feeZSwap = makeSwapOutput(feeVaultPda, agent.publicKey);
+      const feeZMetas = [
+        { pubkey: feeVaultUsdcAta, isSigner: false, isWritable: false },
+        {
+          pubkey: feeZSwap.drainRecipientAta,
+          isSigner: false,
+          isWritable: false,
+        },
+        { pubkey: feeZSwap.agentReserve, isSigner: false, isWritable: false },
+        { pubkey: feeZSwap.vaultOutputAta, isSigner: false, isWritable: false },
+        { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+      ];
+
+      // Compose validate + mock_swap + finalize atomically
       const validateIx = await program.methods
         .validateAndAuthorize(
           usdcMint,
@@ -2829,17 +2983,14 @@ describe("sigil", () => {
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
           feeDestinationTokenAccount: feeDestUsdcAta,
           outputStablecoinAccount: null,
-          outputSwapAccount: null,
+          outputSwapAccount: feeZSwap.vaultOutputAta,
           agentSpendOverlay: feeOverlay,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
-        // F-Q1a completeness: append the agent fee-payer (referenced writable by
-        // the mock-defi no-op ix). Mirrors seal().
-        .remainingAccounts([
-          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
-        ])
+        // F-Q1a completeness: swap metas + agent fee-payer.
+        .remainingAccounts(feeZMetas)
         .instruction();
 
       const finalizeIx = await program.methods
@@ -2857,12 +3008,23 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
-          outputSwapAccount: null,
+          outputSwapAccount: feeZSwap.vaultOutputAta,
         })
+        // F-Q1b finalize completeness (err 6113): same swap metas.
+        .remainingAccounts(feeZMetas)
         .instruction();
 
-      // F-Q2: counted DeFi ix between validate and finalize (zero spend).
-      const defiIx = buildMockDefiNoopIx(agent.publicKey);
+      // F-Q2: the single counted DeFi ix is an acquiring swap (inAmount = 0,
+      // outAmount > 0 → M1 measurable outcome; only fees leave the vault).
+      const defiIx = buildMockSwapToVaultIx(
+        feeVaultUsdcAta,
+        feeZSwap.drainRecipientAta,
+        feeZSwap.agentReserve,
+        feeZSwap.vaultOutputAta,
+        agent.publicKey,
+        new BN(0),
+        new BN(1_000),
+      );
       sendVersionedTx(svm, [validateIx, defiIx, finalizeIx], agent);
 
       const vault = await program.account.agentVault.fetch(feeVaultPda);
@@ -3070,10 +3232,14 @@ describe("sigil", () => {
     });
 
     it("composed validate+finalize succeeds and session is closed atomically", async () => {
+      // Lifecycle test (asserts session closed + total_transactions == 1). A
+      // non-spending session (amount = 0) is exempt from the
+      // require-measurable-outcome invariant (err 6115) and still closes the
+      // session and increments the counter — assertions preserved.
       const validateIx = await program.methods
         .validateAndAuthorize(
           usdcMint,
-          new BN(10_000_000),
+          new BN(0),
           jupiterProgramId,
           await pv(lifecyclePolicyPda),
           new BN(0), // AC-10 expectedNonce
@@ -3082,7 +3248,7 @@ describe("sigil", () => {
               vault: lifecycleVaultPda,
               agent: lifecycleAgent.publicKey,
               tokenMint: usdcMint,
-              amount: new BN(10_000_000),
+              amount: new BN(0),
               targetProtocol: jupiterProgramId,
             }),
           ),
@@ -3225,12 +3391,15 @@ describe("sigil", () => {
     });
 
     it("multiple sequential composed transactions succeed", async () => {
-      // Execute two more composed transactions to confirm sequential usage works
+      // Sequential-usage lifecycle test (asserts total_transactions == 3).
+      // Non-spending sessions (amount = 0) are exempt from the
+      // require-measurable-outcome invariant (err 6115) and still increment the
+      // counter — assertion preserved.
       for (let i = 0; i < 2; i++) {
         const validateIx = await program.methods
           .validateAndAuthorize(
             usdcMint,
-            new BN(5_000_000),
+            new BN(0),
             jupiterProgramId,
             await pv(lifecyclePolicyPda),
             new BN(0), // AC-10 expectedNonce
@@ -3239,7 +3408,7 @@ describe("sigil", () => {
                 vault: lifecycleVaultPda,
                 agent: lifecycleAgent.publicKey,
                 tokenMint: usdcMint,
-                amount: new BN(5_000_000),
+                amount: new BN(0),
                 targetProtocol: jupiterProgramId,
               }),
             ),
@@ -4021,12 +4190,16 @@ describe("sigil", () => {
         program.programId,
       );
 
-      // Execute 51 composed validate+finalize cycles
+      // Execute 51 composed validate+finalize cycles. This pins the
+      // total_transactions counter (ring-buffer eviction), which increments per
+      // non-expired finalize regardless of spend. Non-spending sessions
+      // (amount = 0) are exempt from the require-measurable-outcome invariant
+      // (err 6115); the counter still reaches 51 — assertion preserved.
       for (let i = 0; i < 51; i++) {
         const validateIx = await program.methods
           .validateAndAuthorize(
             usdcMint,
-            new BN(1_000_000), // 1 USDC each
+            new BN(0),
             jupiterProgramId,
             await pv(ringPolicyPda),
             new BN(0), // AC-10 expectedNonce
@@ -4035,7 +4208,7 @@ describe("sigil", () => {
                 vault: ringVaultPda,
                 agent: ringAgent.publicKey,
                 tokenMint: usdcMint,
-                amount: new BN(1_000_000),
+                amount: new BN(0),
                 targetProtocol: jupiterProgramId,
               }),
             ),
@@ -4224,7 +4397,24 @@ describe("sigil", () => {
       const treasuryBefore = getTokenBalance(svm, protocolTreasuryUsdcAta);
 
       // ceil(1 * 200 / 1_000_000) = 1 protocol fee (devFeeRate=0 → dev fee = 0)
-      // net = 1 - 1 = 0 → delegation = 0, 1 unit goes to treasury
+      // net = 1 - 1 = 0 → delegation = 0, 1 unit goes to treasury.
+      // Require-measurable-outcome (err 6115): the net spend is structurally 0
+      // (the whole declared amount is consumed by the fee), so the ONLY way to
+      // produce a measurable outcome without altering the fee math is an
+      // acquiring swap with inAmount = 0 + output increase (M1). actual_spend
+      // stays 0; the vault still loses exactly the 1-unit protocol fee.
+      const fe1Swap = makeSwapOutput(feeEdgeVaultPda, feeEdgeAgent.publicKey);
+      const fe1Metas = [
+        { pubkey: feeEdgeVaultUsdcAta, isSigner: false, isWritable: false },
+        {
+          pubkey: fe1Swap.drainRecipientAta,
+          isSigner: false,
+          isWritable: false,
+        },
+        { pubkey: fe1Swap.agentReserve, isSigner: false, isWritable: false },
+        { pubkey: fe1Swap.vaultOutputAta, isSigner: false, isWritable: false },
+        { pubkey: feeEdgeAgent.publicKey, isSigner: false, isWritable: false },
+      ];
       const validateIx = await program.methods
         .validateAndAuthorize(
           usdcMint,
@@ -4253,21 +4443,15 @@ describe("sigil", () => {
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
-          outputSwapAccount: null,
+          outputSwapAccount: fe1Swap.vaultOutputAta,
           agentSpendOverlay: feeEdgeOverlay,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
         // F-Q1a completeness: append the agent fee-payer (referenced writable by
-        // the mock-defi no-op ix). Mirrors seal().
-        .remainingAccounts([
-          {
-            pubkey: feeEdgeAgent.publicKey,
-            isSigner: false,
-            isWritable: false,
-          },
-        ])
+        // swap metas + agent fee-payer).
+        .remainingAccounts(fe1Metas)
         .instruction();
 
       const finalizeIx = await program.methods
@@ -4285,13 +4469,24 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
-          outputSwapAccount: null,
+          outputSwapAccount: fe1Swap.vaultOutputAta,
         })
+        // F-Q1b finalize completeness (err 6113): same swap metas.
+        .remainingAccounts(fe1Metas)
         .instruction();
 
-      // F-Q2: counted DeFi ix between validate and finalize (zero spend; the
-      // protocol fee is collected at validate, independent of the DeFi leg).
-      const defiIx = buildMockDefiNoopIx(feeEdgeAgent.publicKey);
+      // F-Q2: the single counted DeFi ix is an acquiring swap (inAmount = 0,
+      // outAmount > 0 → M1 measurable outcome). The protocol fee is collected at
+      // validate, independent of the DeFi leg.
+      const defiIx = buildMockSwapToVaultIx(
+        feeEdgeVaultUsdcAta,
+        fe1Swap.drainRecipientAta,
+        fe1Swap.agentReserve,
+        fe1Swap.vaultOutputAta,
+        feeEdgeAgent.publicKey,
+        new BN(0),
+        new BN(1_000),
+      );
       sendVersionedTx(svm, [validateIx, defiIx, finalizeIx], feeEdgeAgent);
 
       // Vault lost 1 unit (protocol fee), treasury gained 1 unit
@@ -4311,6 +4506,32 @@ describe("sigil", () => {
         ],
         program.programId,
       );
+
+      // Both sub-sessions are spending sessions whose net spend is structurally
+      // 0 (the entire tiny declared amount is consumed by the protocol fee).
+      // Require-measurable-outcome (err 6115): each needs a measurable outcome
+      // without altering the fee math → an acquiring swap with inAmount = 0 +
+      // output increase (M1). actual_spend stays 0; the vault still loses only
+      // the 1-unit fee. Each session gets its own fresh output account.
+      const fe4999Swap = makeSwapOutput(
+        feeEdgeVaultPda,
+        feeEdgeAgent.publicKey,
+      );
+      const fe4999Metas = [
+        { pubkey: feeEdgeVaultUsdcAta, isSigner: false, isWritable: false },
+        {
+          pubkey: fe4999Swap.drainRecipientAta,
+          isSigner: false,
+          isWritable: false,
+        },
+        { pubkey: fe4999Swap.agentReserve, isSigner: false, isWritable: false },
+        {
+          pubkey: fe4999Swap.vaultOutputAta,
+          isSigner: false,
+          isWritable: false,
+        },
+        { pubkey: feeEdgeAgent.publicKey, isSigner: false, isWritable: false },
+      ];
 
       // Test amount = 4999: ceil(4999 * 200 / 1_000_000) = 1 (ceiling division)
       // Compose validate+finalize atomically
@@ -4342,21 +4563,14 @@ describe("sigil", () => {
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
-          outputSwapAccount: null,
+          outputSwapAccount: fe4999Swap.vaultOutputAta,
           agentSpendOverlay: feeEdgeOverlay,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
-        // F-Q1a completeness: append the agent fee-payer (referenced writable by
-        // the mock-defi no-op ix). Mirrors seal().
-        .remainingAccounts([
-          {
-            pubkey: feeEdgeAgent.publicKey,
-            isSigner: false,
-            isWritable: false,
-          },
-        ])
+        // F-Q1a completeness: swap metas + agent fee-payer.
+        .remainingAccounts(fe4999Metas)
         .instruction();
 
       const finalizeIx1 = await program.methods
@@ -4374,17 +4588,48 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
-          outputSwapAccount: null,
+          outputSwapAccount: fe4999Swap.vaultOutputAta,
         })
+        // F-Q1b finalize completeness (err 6113): same swap metas.
+        .remainingAccounts(fe4999Metas)
         .instruction();
 
-      // F-Q2: counted DeFi ix between validate and finalize (zero spend).
-      const defiIx1 = buildMockDefiNoopIx(feeEdgeAgent.publicKey);
+      // F-Q2: acquiring swap (inAmount = 0, outAmount > 0 → M1 measurable
+      // outcome; only the 1-unit fee leaves the vault).
+      const defiIx1 = buildMockSwapToVaultIx(
+        feeEdgeVaultUsdcAta,
+        fe4999Swap.drainRecipientAta,
+        fe4999Swap.agentReserve,
+        fe4999Swap.vaultOutputAta,
+        feeEdgeAgent.publicKey,
+        new BN(0),
+        new BN(1_000),
+      );
       sendVersionedTx(svm, [validateIx1, defiIx1, finalizeIx1], feeEdgeAgent);
 
       // Test amount = 5000: ceil(5000 * 200 / 1_000_000) = 1 (exact division, same result)
       // Capture vault balance BEFORE validate (fee collected during validate)
       const vaultBalBefore = getTokenBalance(svm, feeEdgeVaultUsdcAta);
+
+      const fe5000Swap = makeSwapOutput(
+        feeEdgeVaultPda,
+        feeEdgeAgent.publicKey,
+      );
+      const fe5000Metas = [
+        { pubkey: feeEdgeVaultUsdcAta, isSigner: false, isWritable: false },
+        {
+          pubkey: fe5000Swap.drainRecipientAta,
+          isSigner: false,
+          isWritable: false,
+        },
+        { pubkey: fe5000Swap.agentReserve, isSigner: false, isWritable: false },
+        {
+          pubkey: fe5000Swap.vaultOutputAta,
+          isSigner: false,
+          isWritable: false,
+        },
+        { pubkey: feeEdgeAgent.publicKey, isSigner: false, isWritable: false },
+      ];
 
       const validateIx2 = await program.methods
         .validateAndAuthorize(
@@ -4414,21 +4659,14 @@ describe("sigil", () => {
           protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
-          outputSwapAccount: null,
+          outputSwapAccount: fe5000Swap.vaultOutputAta,
           agentSpendOverlay: feeEdgeOverlay,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
-        // F-Q1a completeness: append the agent fee-payer (referenced writable by
-        // the mock-defi no-op ix). Mirrors seal().
-        .remainingAccounts([
-          {
-            pubkey: feeEdgeAgent.publicKey,
-            isSigner: false,
-            isWritable: false,
-          },
-        ])
+        // F-Q1a completeness: swap metas + agent fee-payer.
+        .remainingAccounts(fe5000Metas)
         .instruction();
 
       const finalizeIx2 = await program.methods
@@ -4446,12 +4684,23 @@ describe("sigil", () => {
           systemProgram: SystemProgram.programId,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
-          outputSwapAccount: null,
+          outputSwapAccount: fe5000Swap.vaultOutputAta,
         })
+        // F-Q1b finalize completeness (err 6113): same swap metas.
+        .remainingAccounts(fe5000Metas)
         .instruction();
 
-      // F-Q2: counted DeFi ix between validate and finalize (zero spend).
-      const defiIx2 = buildMockDefiNoopIx(feeEdgeAgent.publicKey);
+      // F-Q2: acquiring swap (inAmount = 0, outAmount > 0 → M1 measurable
+      // outcome; only the 1-unit fee leaves the vault).
+      const defiIx2 = buildMockSwapToVaultIx(
+        feeEdgeVaultUsdcAta,
+        fe5000Swap.drainRecipientAta,
+        fe5000Swap.agentReserve,
+        fe5000Swap.vaultOutputAta,
+        feeEdgeAgent.publicKey,
+        new BN(0),
+        new BN(1_000),
+      );
       sendVersionedTx(svm, [validateIx2, defiIx2, finalizeIx2], feeEdgeAgent);
 
       // Vault balance should decrease by exactly 1 (protocol fee deducted during validate)
