@@ -102,7 +102,7 @@ describe("categorizeDxError — exact range boundaries", () => {
     category: DxErrorCategory;
     description: string;
   }> = [
-    // Program range (Anchor 6000-6112 post M1)
+    // Program range (Anchor 6000-6114 post F-Q1b)
     { code: 6000, category: "program", description: "program lower bound" },
     { code: 6110, category: "program", description: "high program range" },
     { code: 6050, category: "program", description: "mid program range" },
@@ -142,9 +142,20 @@ describe("categorizeDxError — exact range boundaries", () => {
     {
       code: 6112,
       category: "program",
-      description: "program upper bound (M1 ErrOutputNotVaultOwned)",
+      description: "program range (M1 ErrOutputNotVaultOwned)",
     },
-    { code: 6113, category: "unknown", description: "one above program range" },
+    {
+      code: 6113,
+      category: "program",
+      description: "program range (F-Q1b ErrFinalizeMetaUnresolvable)",
+    },
+    {
+      code: 6114,
+      category: "program",
+      description:
+        "program upper bound (F-Q1b adjacency ErrDeFiInstructionNotAdjacentToFinalize)",
+    },
+    { code: 6115, category: "unknown", description: "one above program range" },
     { code: 6999, category: "unknown", description: "one below user range" },
     { code: 7200, category: "unknown", description: "one above network range" },
     { code: 7999, category: "unknown", description: "DX_ERROR_CODE_UNMAPPED" },

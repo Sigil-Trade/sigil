@@ -732,6 +732,16 @@ describe("sandwich-integration (Phase 6.1)", () => {
           },
           { pubkey: ctx.vaultUsdcAta, isSigner: false, isWritable: false },
           { pubkey: vaultUsdcAta2022, isSigner: false, isWritable: false },
+          // F-Q1b finalize completeness: the swap ix's remaining writable,
+          // non-vault metas (drain dest, agent reserve, vault output ATA) and the
+          // agent fee-payer must reach finalize too (else ErrFinalizeMetaUnresolvable
+          // 6113 fires before the R-1 MintDeltaCap check). READONLY — resolved,
+          // not authorized. (buildFinalizeIx does NOT auto-append the agent, so it
+          // is listed explicitly here, unlike validate.)
+          { pubkey: drainRecipientAta, isSigner: false, isWritable: false },
+          { pubkey: swap.agentReserve, isSigner: false, isWritable: false },
+          { pubkey: swap.vaultOutputAta, isSigner: false, isWritable: false },
+          { pubkey: ctx.agent.publicKey, isSigner: false, isWritable: false },
         ],
       };
 
@@ -752,6 +762,133 @@ describe("sandwich-integration (Phase 6.1)", () => {
         expect.fail("Expected R-1 MintDeltaCap drain to revert");
       } catch (err: any) {
         expectSigilError(err, { name: "ErrMintDeltaCapExceeded" });
+      }
+    });
+  });
+
+  // ─── F-Q1b finalize-side completeness (Item 1, err 6113) ─────────────────
+  //
+  // The on-chain finalize-completeness invariant (finalize_session.rs,
+  // enforce_finalize_completeness) mirrors validate's F-Q1a: when a spend
+  // actually occurs (actual_spend > 0), EVERY writable, non-vault meta of the
+  // counted DeFi ix must be resolvable in finalize's remaining_accounts. The
+  // production seal() SDK feeds the same writable set to BOTH wrapper ixs
+  // (seal.ts:1168 + :1262); a raw-tx caller that passes a writable meta to
+  // validate but OMITS it from finalize must fail closed rather than silently
+  // shrink the per-recipient / output attribution.
+  describe("F-Q1b finalize completeness: writable DeFi meta omitted from finalize", () => {
+    async function buildOmissionSandwich(includeAllFinalizeMetas: boolean) {
+      const ctx = await freshVault();
+      const swap = setupSwapOutput(ctx);
+
+      const drainRecipient = Keypair.generate();
+      airdropSol(svm, drainRecipient.publicKey, 1 * LAMPORTS_PER_SOL);
+      const drainRecipientAta = createAtaHelper(
+        svm,
+        (owner as any).payer,
+        DEVNET_USDC_MINT,
+        drainRecipient.publicKey,
+      );
+
+      // Every writable, non-vault meta of the swap ix, fed READONLY (resolved /
+      // attributed, never authorized) — exactly the set seal() attaches.
+      const swapWritableMetas = [
+        { pubkey: drainRecipientAta, isSigner: false, isWritable: false },
+        { pubkey: swap.agentReserve, isSigner: false, isWritable: false },
+        { pubkey: swap.vaultOutputAta, isSigner: false, isWritable: false },
+        { pubkey: ctx.agent.publicKey, isSigner: false, isWritable: false },
+      ];
+
+      const sandwichOpts: SandwichOpts = {
+        ctx,
+        amount: new BN(50_000_000),
+        outputSwapAccount: swap.vaultOutputAta,
+        validateRemainingAccounts: [
+          { pubkey: ctx.vaultUsdcAta, isSigner: false, isWritable: false },
+          ...swapWritableMetas,
+        ],
+        finalizeRemainingAccounts: includeAllFinalizeMetas
+          ? [
+              { pubkey: ctx.vaultUsdcAta, isSigner: false, isWritable: false },
+              ...swapWritableMetas,
+            ]
+          : [
+              // OMIT drainRecipientAta (a writable swap meta) from finalize.
+              { pubkey: ctx.vaultUsdcAta, isSigner: false, isWritable: false },
+              { pubkey: swap.agentReserve, isSigner: false, isWritable: false },
+              {
+                pubkey: swap.vaultOutputAta,
+                isSigner: false,
+                isWritable: false,
+              },
+              {
+                pubkey: ctx.agent.publicKey,
+                isSigner: false,
+                isWritable: false,
+              },
+            ],
+      };
+
+      const validateIx = await buildValidateIx(sandwichOpts);
+      const swapIx = buildMockSwapToVaultIx(
+        ctx.vaultUsdcAta,
+        drainRecipientAta,
+        swap.agentReserve,
+        swap.vaultOutputAta,
+        ctx.agent.publicKey,
+        new BN(10_000_000), // 10 USDC spent (actual_spend > 0 → invariant runs)
+        new BN(1_000), // acquisition → satisfies the M1 output gate (6112)
+      );
+      const finalizeIx = await buildFinalizeIx(sandwichOpts);
+      return { ctx, validateIx, swapIx, finalizeIx };
+    }
+
+    it("omitting a writable swap meta from finalize reverts ErrFinalizeMetaUnresolvable (6113)", async () => {
+      const { ctx, validateIx, swapIx, finalizeIx } =
+        await buildOmissionSandwich(false);
+      try {
+        sendVersionedTx(svm, [validateIx, swapIx, finalizeIx], ctx.agent);
+        expect.fail("Expected finalize completeness to revert (6113)");
+      } catch (err: any) {
+        expectSigilError(err, { name: "ErrFinalizeMetaUnresolvable" });
+      }
+    });
+
+    it("honest path — every writable swap meta present in finalize — succeeds", async () => {
+      const { ctx, validateIx, swapIx, finalizeIx } =
+        await buildOmissionSandwich(true);
+      // Completeness satisfied → the acquiring spend passes the M1 gate + caps
+      // and finalizes with no revert (proves the omission, not the setup, is
+      // what trips 6113 above).
+      sendVersionedTx(svm, [validateIx, swapIx, finalizeIx], ctx.agent);
+    });
+
+    it("interleaving an instruction between the DeFi ix and finalize reverts ErrDeFiInstructionNotAdjacentToFinalize (6114)", async () => {
+      // Same complete, honest sandwich — but insert an inert System instruction
+      // BETWEEN the DeFi ix and finalize: [validate, swap, System-noop, finalize].
+      // validate classifies System/ComputeBudget as Infrastructure and lets them
+      // interleave, so WITHOUT the adjacency invariant finalize's current_index-1
+      // would point at the noop and the completeness / per-recipient / stable-floor
+      // walks would silently operate on the wrong instruction and pass vacuously.
+      // validate must reject the composition fail-closed.
+      const { ctx, validateIx, swapIx, finalizeIx } =
+        await buildOmissionSandwich(true);
+      const interleavedNoop = SystemProgram.transfer({
+        fromPubkey: ctx.agent.publicKey,
+        toPubkey: ctx.agent.publicKey,
+        lamports: 0,
+      });
+      try {
+        sendVersionedTx(
+          svm,
+          [validateIx, swapIx, interleavedNoop, finalizeIx],
+          ctx.agent,
+        );
+        expect.fail("Expected adjacency invariant to revert (6114)");
+      } catch (err: any) {
+        expectSigilError(err, {
+          name: "ErrDeFiInstructionNotAdjacentToFinalize",
+        });
       }
     });
   });
@@ -1178,8 +1315,17 @@ describe("sandwich-integration (Phase 6.1)", () => {
         // TA-14 walks the DeFi ix's metas + looks up the writable token
         // accounts in finalize.remaining_accounts. The recipient ATA must
         // be passed there so the recipient resolution succeeds.
+        // F-Q1b finalize completeness: ALL the swap ix's writable, non-vault
+        // metas + the agent fee-payer must ALSO be resolvable here (else
+        // ErrFinalizeMetaUnresolvable 6113 fires before TA-14). Appended READONLY
+        // — resolved, not authorized; the recipient ATA stays writable so TA-14's
+        // walker recognizes it. (buildFinalizeIx does not auto-append the agent.)
         finalizeRemainingAccounts: [
           { pubkey: recipientUsdcAta, isSigner: false, isWritable: true },
+          { pubkey: ctx.vaultUsdcAta, isSigner: false, isWritable: false },
+          { pubkey: swap.agentReserve, isSigner: false, isWritable: false },
+          { pubkey: swap.vaultOutputAta, isSigner: false, isWritable: false },
+          { pubkey: ctx.agent.publicKey, isSigner: false, isWritable: false },
         ],
       };
 
@@ -1402,6 +1548,18 @@ describe("sandwich-integration (Phase 6.1)", () => {
           { pubkey: recipientUsdcAta, isSigner: false, isWritable: false },
           { pubkey: swap.agentReserve, isSigner: false, isWritable: false },
           { pubkey: swap.vaultOutputAta, isSigner: false, isWritable: false },
+        ],
+        // F-Q1b finalize completeness: this is a real spend (actual_spend > 0),
+        // so finalize ALSO requires every writable, non-vault meta of the swap ix
+        // + the agent fee-payer (else ErrFinalizeMetaUnresolvable 6113 — the swap
+        // would not survive). Same set validate carries, READONLY; agent listed
+        // explicitly since buildFinalizeIx does not auto-append it.
+        finalizeRemainingAccounts: [
+          { pubkey: ctx.vaultUsdcAta, isSigner: false, isWritable: false },
+          { pubkey: recipientUsdcAta, isSigner: false, isWritable: false },
+          { pubkey: swap.agentReserve, isSigner: false, isWritable: false },
+          { pubkey: swap.vaultOutputAta, isSigner: false, isWritable: false },
+          { pubkey: ctx.agent.publicKey, isSigner: false, isWritable: false },
         ],
       };
 

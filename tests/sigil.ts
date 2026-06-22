@@ -7087,6 +7087,21 @@ describe("sigil", () => {
           outputStablecoinAccount: null,
           outputSwapAccount: pcVaultOutputAta,
         })
+        // F-Q1b finalize completeness: the same writable, non-vault metas of the
+        // swap ix that validate carries must ALSO be resolvable in finalize's
+        // remaining_accounts (else finalize reverts ErrFinalizeMetaUnresolvable
+        // 6113). Passed READONLY — they are resolved/attributed, not authorized.
+        .remainingAccounts([
+          { pubkey: pcVaultUsdc, isSigner: false, isWritable: false },
+          { pubkey: pcDrainDestUsdc, isSigner: false, isWritable: false },
+          { pubkey: pcAgentOutputReserve, isSigner: false, isWritable: false },
+          { pubkey: pcVaultOutputAta, isSigner: false, isWritable: false },
+          {
+            pubkey: protoCapAgent.publicKey,
+            isSigner: false,
+            isWritable: false,
+          },
+        ])
         .instruction();
 
       return sendVersionedTx(
@@ -7853,6 +7868,21 @@ describe("sigil", () => {
           outputStablecoinAccount: null,
           outputSwapAccount: ta13VaultOutputAta,
         })
+        // F-Q1b finalize completeness: the swap ix's writable, non-vault metas
+        // that validate carries must ALSO reach finalize's remaining_accounts
+        // (else ErrFinalizeMetaUnresolvable 6113). READONLY — resolved, not
+        // authorized.
+        .remainingAccounts([
+          { pubkey: ta13VaultUsdc, isSigner: false, isWritable: false },
+          { pubkey: ta13DrainDestUsdc, isSigner: false, isWritable: false },
+          {
+            pubkey: ta13AgentOutputReserve,
+            isSigner: false,
+            isWritable: false,
+          },
+          { pubkey: ta13VaultOutputAta, isSigner: false, isWritable: false },
+          { pubkey: ta13Agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
       return sendVersionedTx(svm, [validateIx, drainIx, finalizeIx], ta13Agent);
     };

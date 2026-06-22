@@ -6668,6 +6668,16 @@
       "code": 6112,
       "name": "ErrOutputNotVaultOwned",
       "msg": "M1: stablecoin-input swap output must land in a vault-owned account and increase (value redirection / unacquired spend rejected)"
+    },
+    {
+      "code": 6113,
+      "name": "ErrFinalizeMetaUnresolvable",
+      "msg": "Finalize completeness: a writable DeFi account meta is absent from remaining_accounts (F-Q1b — omission would dodge per-recipient/output attribution)"
+    },
+    {
+      "code": 6114,
+      "name": "ErrDeFiInstructionNotAdjacentToFinalize",
+      "msg": "The counted DeFi instruction must sit immediately before finalize_session (no interleaved instruction) so finalize's attribution walks bind to the correct instruction"
     }
   ],
   "types": [

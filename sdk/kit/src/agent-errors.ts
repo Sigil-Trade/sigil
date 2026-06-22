@@ -87,7 +87,7 @@ export const SIGIL_ON_CHAIN_ERROR_MIN = 6000;
  * this map agrees with it by code AND name — so adding or renumbering an
  * on-chain error without updating this map fails at test time.
  */
-export const SIGIL_ON_CHAIN_ERROR_MAX = 6112;
+export const SIGIL_ON_CHAIN_ERROR_MAX = 6114;
 
 interface ErrorMapping {
   name: string;
@@ -1930,6 +1930,34 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
         action: "declare_output_swap_mint",
         description:
           "Declare the acquired mint via seal()'s `outputSwapMint` so the SDK pins the vault-owned output ATA, and ensure the swap delivers the acquired token into that vault account (not the agent's). The on-chain gate requires the pinned output to be vault-owned and to strictly increase.",
+      },
+    ],
+  },
+  6113: {
+    name: "ErrFinalizeMetaUnresolvable",
+    message:
+      "Finalize completeness (F-Q1b): a writable DeFi account meta present at validate was omitted from finalize, which would dodge the per-recipient cap and output attribution. The composed transaction is malformed.",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "pass_all_writable_defi_accounts_to_finalize",
+        description:
+          "seal() already feeds finalize the same writable DeFi accounts it feeds validate, so this only fires for a hand-built (non-seal) transaction. Pass every writable, non-vault account of the DeFi instruction into finalize_session's accounts.",
+      },
+    ],
+  },
+  6114: {
+    name: "ErrDeFiInstructionNotAdjacentToFinalize",
+    message:
+      "The DeFi instruction must sit immediately before finalize_session in the transaction — no ComputeBudget/System or other instruction between them. The seal() SDK always composes the sandwich this way; this only fires for a hand-built transaction that interleaves an instruction before finalize.",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "place_finalize_immediately_after_the_defi_instruction",
+        description:
+          "Reorder the transaction so finalize_session immediately follows the single DeFi instruction. Put any ComputeBudget/System instructions before validate_and_authorize, not between the DeFi instruction and finalize.",
       },
     ],
   },

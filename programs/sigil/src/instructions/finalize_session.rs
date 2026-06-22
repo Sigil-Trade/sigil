@@ -12,6 +12,7 @@ use crate::errors::SigilError;
 use crate::events::{AgentSpendLimitChecked, DelegationRevoked, SessionFinalized};
 use crate::state::*;
 use crate::utils::audit_log::build_audit_entry;
+use crate::utils::destination_check::enforce_finalize_completeness_from_sysvar;
 
 #[derive(Accounts)]
 pub struct FinalizeSession<'info> {
@@ -659,6 +660,29 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
         );
         tracker.record_spend(&clock, fees_collected_total)?;
         drop(tracker);
+    }
+
+    // ─── Item 1: F-Q1b/M2 finalize-side completeness ───────────────────────
+    // When a real spend occurred, EVERY writable non-vault meta of the counted
+    // DeFi ix MUST be present in finalize's remaining_accounts (symmetric to
+    // validate's F-Q1a). Without it, a raw-tx caller could pass all metas to
+    // validate (satisfying F-Q1a) then OMIT an output/recipient leg from finalize,
+    // silently shrinking the per-recipient cap + output attribution (a dual-output
+    // CLMM close leaks the un-passed leg). Re-derive the DeFi ix from the
+    // instructions sysvar (runtime truth, same index the per-recipient walk uses)
+    // and fail closed on omission, BEFORE the per-recipient / stable-floor walks
+    // so neither can be dodged.
+    if run_outcome_check && actual_spend_tracked > 0 {
+        // Extracted to a #[inline(never)] helper so the loaded Instruction (a
+        // Vec-bearing local) does NOT inflate this handler's stack frame, which
+        // is already near the 4096-byte BPF limit on the post-assertion path
+        // (mirrors enforce_output_ownership). Inlining the load here overflowed
+        // that path in the release build.
+        enforce_finalize_completeness_from_sysvar(
+            &ctx.accounts.instructions_sysvar.to_account_info(),
+            ctx.remaining_accounts,
+            &vault_key,
+        )?;
     }
 
     // ─── TA-14 (Phase 5 post-exec invariant #2): per-recipient cap ───

@@ -51,6 +51,9 @@
 
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::instruction::AccountMeta;
+use anchor_lang::solana_program::sysvar::instructions::{
+    load_current_index_checked, load_instruction_at_checked,
+};
 
 use crate::errors::SigilError;
 use crate::state::{PolicyConfig, TOKEN_2022_PROGRAM_ID};
@@ -250,6 +253,83 @@ pub fn enforce_destination_allowlist<'info>(
     Ok(())
 }
 
+/// Finalize-side completeness invariant (F-Q1b/M2 closure).
+///
+/// Symmetric to [`enforce_destination_allowlist`]'s F-Q1a completeness, but for
+/// `finalize_session`: every WRITABLE, non-vault account meta of the counted
+/// DeFi instruction MUST be resolvable in finalize's `remaining_accounts`. An
+/// absent writable meta is rejected FAIL-CLOSED (`ErrFinalizeMetaUnresolvable`)
+/// rather than silently skipped.
+///
+/// This makes the per-recipient cap and the output/floor attribution that run in
+/// `finalize_session` NON-OMITTABLE: a raw-tx caller can no longer pass every
+/// writable meta to `validate` (satisfying F-Q1a) and then OMIT an output or
+/// recipient leg from `finalize` to shrink attribution — e.g. a dual-output CLMM
+/// close that pins one leg and routes the other, un-passed, to a non-vault
+/// account. The residual that `enforce_destination_allowlist`'s header flagged as
+/// "F-Q1b/M2 (full-bundle binding)" is closed here.
+///
+/// It does NOT classify, allowlist, or read account data — `finalize` has already
+/// measured the spend via the vault balance delta; this is COMPLETENESS ONLY
+/// (presence in `remaining_accounts`). The WHERE/MAGNITUDE/CONSERVATION checks own
+/// the rest. Same hard caps as F-Q1a (the writable set is the attribution surface
+/// and the CU driver); hard-reject, never truncate.
+pub fn enforce_finalize_completeness<'info>(
+    ix_accounts: &[AccountMeta],
+    remaining_accounts: &[AccountInfo<'info>],
+    vault_pubkey: &Pubkey,
+) -> Result<()> {
+    require!(
+        ix_accounts.len() <= MAX_DESTINATION_CHECK_TOTAL_METAS,
+        SigilError::IxMetaCountExceeded
+    );
+    let writable_count = ix_accounts.iter().filter(|m| m.is_writable).count();
+    require!(
+        writable_count <= MAX_DESTINATION_WRITABLE_METAS,
+        SigilError::IxMetaCountExceeded
+    );
+
+    for meta in ix_accounts.iter() {
+        if !meta.is_writable {
+            // Read-only accounts cannot receive value — never a destination.
+            continue;
+        }
+        if &meta.pubkey == vault_pubkey {
+            // The vault PDA is the authority, never a destination (mirrors F-Q1a).
+            continue;
+        }
+        // COMPLETENESS: a writable, non-vault meta MUST be present so finalize's
+        // per-recipient / output attribution can read it. Absent ⟹ fail closed.
+        if !remaining_accounts.iter().any(|ai| ai.key == &meta.pubkey) {
+            return Err(error!(SigilError::ErrFinalizeMetaUnresolvable));
+        }
+    }
+    Ok(())
+}
+
+/// F-Q1b completeness driven from the instructions sysvar, extracted to its OWN
+/// frame (`#[inline(never)]`) so the loaded `Instruction` (a Vec-bearing local)
+/// does NOT inflate `finalize_session::handler`'s stack frame — which is already
+/// near the 4096-byte BPF limit on the post-assertion path (same rationale as
+/// `enforce_output_ownership`; inlining this load is what pushed that path over
+/// the limit in the release build). Re-derives the counted DeFi ix as
+/// `current_index - 1` (validate enforces it sits immediately before finalize,
+/// so this is provably that ix) and applies [`enforce_finalize_completeness`].
+#[inline(never)]
+pub fn enforce_finalize_completeness_from_sysvar<'a, 'info>(
+    instructions_sysvar: &AccountInfo<'a>,
+    remaining_accounts: &[AccountInfo<'info>],
+    vault_pubkey: &Pubkey,
+) -> Result<()> {
+    let current_index = load_current_index_checked(instructions_sysvar)
+        .map_err(|_| error!(SigilError::InvalidSession))? as usize;
+    require!(current_index >= 1, SigilError::InvalidSession);
+    let defi_ix_index = current_index.saturating_sub(1);
+    let defi_ix = load_instruction_at_checked(defi_ix_index, instructions_sysvar)
+        .map_err(|_| error!(SigilError::ErrFinalizeMetaUnresolvable))?;
+    enforce_finalize_completeness(&defi_ix.accounts, remaining_accounts, vault_pubkey)
+}
+
 #[cfg(test)]
 mod cap_and_completeness_tests {
     //! F-Q1a unit tests for the entry guards: the WRITABLE-meta security cap
@@ -394,5 +474,41 @@ mod cap_and_completeness_tests {
         let remaining: Vec<AccountInfo> = vec![];
         let res = enforce_destination_allowlist(&metas, &remaining, &vault_pubkey, &policy, 0);
         assert!(res.is_ok(), "read-only metas must never trip completeness");
+    }
+
+    /// F-Q1b finalize completeness: an absent writable, non-vault meta fails
+    /// closed with the finalize-specific `ErrFinalizeMetaUnresolvable` (the
+    /// symmetric counterpart to validate's `DestinationAccountUnresolvable`).
+    #[test]
+    fn finalize_absent_writable_meta_fails_closed() {
+        let vault_pubkey = pk(0xA);
+        let metas = vec![AccountMeta::new(pk(0x20), false)]; // writable, non-vault
+        let remaining: Vec<AccountInfo> = vec![];
+        let err = enforce_finalize_completeness(&metas, &remaining, &vault_pubkey)
+            .expect_err("absent writable meta MUST fail closed at finalize");
+        let err_str = format!("{:?}", err);
+        assert!(
+            err_str.contains("ErrFinalizeMetaUnresolvable"),
+            "expected ErrFinalizeMetaUnresolvable, got: {}",
+            err_str
+        );
+    }
+
+    /// F-Q1b finalize completeness: read-only metas and the vault PDA meta are
+    /// skipped (cannot receive value / is the authority) — never trip even when
+    /// absent from `remaining_accounts`.
+    #[test]
+    fn finalize_readonly_and_vault_metas_skip() {
+        let vault_pubkey = pk(0xA);
+        let metas = vec![
+            AccountMeta::new_readonly(pk(0x20), false), // read-only, absent — OK
+            AccountMeta::new(vault_pubkey, false),      // vault PDA, absent — OK
+        ];
+        let remaining: Vec<AccountInfo> = vec![];
+        let res = enforce_finalize_completeness(&metas, &remaining, &vault_pubkey);
+        assert!(
+            res.is_ok(),
+            "read-only + vault metas must never trip finalize completeness"
+        );
     }
 }

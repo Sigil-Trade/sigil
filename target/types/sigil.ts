@@ -6674,6 +6674,16 @@ export type Sigil = {
       "code": 6112,
       "name": "errOutputNotVaultOwned",
       "msg": "M1: stablecoin-input swap output must land in a vault-owned account and increase (value redirection / unacquired spend rejected)"
+    },
+    {
+      "code": 6113,
+      "name": "errFinalizeMetaUnresolvable",
+      "msg": "Finalize completeness: a writable DeFi account meta is absent from remaining_accounts (F-Q1b — omission would dodge per-recipient/output attribution)"
+    },
+    {
+      "code": 6114,
+      "name": "errDeFiInstructionNotAdjacentToFinalize",
+      "msg": "The counted DeFi instruction must sit immediately before finalize_session (no interleaved instruction) so finalize's attribution walks bind to the correct instruction"
     }
   ],
   "types": [
