@@ -1,6 +1,6 @@
-# Error Codes (6000-6104)
+# Error Codes (6000-6115)
 
-All 105 custom errors defined in `programs/sigil/src/errors.rs`. Use `require!(condition, SigilError::Name)`.
+All 116 custom errors defined in `programs/sigil/src/errors.rs`. Use `require!(condition, SigilError::Name)`.
 
 Source of truth: `target/idl/sigil.json` (regenerate this file by running `bash scripts/regen-error-codes-doc.sh` after any change to `errors.rs`).
 
@@ -99,7 +99,7 @@ Source of truth: `target/idl/sigil.json` (regenerate this file by running `bash 
 | 6090 | `ErrAtaAuthorityChanged` | R-2 AtaAuthorityPin: vault-owned token account authority changed or account closed/reinitialized mid-sandwich |
 | 6091 | `ErrOutputBelowFloor` | R-3 OutputBalanceFloor: post-execution balance increase fell below the configured min_increase floor |
 | 6092 | `ErrDeclarationInconsistent` | R-4 DeclarationConsistency: declared recipient/mint does not match CPI account-meta |
-| 6093 | `IxMetaCountExceeded` | Foreign DeFi instruction passed more account metas than the destination-check budget (16) allows; truncate the ix or split into shorter ixs |
+| 6093 | `IxMetaCountExceeded` | Foreign instruction exceeded the account-meta processing budget; the bundle is rejected rather than partially inspected |
 | 6094 | `ErrPendingOwnershipExists` | An ownership transfer is already pending; cancel it first |
 | 6095 | `ErrPendingOwnershipNotReady` | Ownership transfer timelock has not elapsed |
 | 6096 | `ErrInvalidFreezeReason` | freeze_reason value out of {{0,1,2}} |
@@ -111,3 +111,14 @@ Source of truth: `target/idl/sigil.json` (regenerate this file by running `bash 
 | 6102 | `ErrIntentDigestMismatch` | AL3 intent-digest mismatch — preview digest does not match executed bundle |
 | 6103 | `ErrPendingAgentGrantDigestMismatch` | PendingAgentGrant digest mismatch between queue and apply |
 | 6104 | `ErrReactivateCosignRequiredForFullCapability` | Reactivate with FULL_CAPABILITY new agent requires cosign |
+| 6105 | `DestinationAccountUnresolvable` | Writable DeFi account could not be resolved in remaining_accounts — destination set incomplete |
+| 6106 | `ErrToken2022OutputMintUnresolvable` | Vault-owned Token-2022 output ATA's mint is absent from remaining_accounts or not Token-2022-owned — cannot vet extensions |
+| 6107 | `ErrOperatorGrantRequiresTimelock` | OPERATOR grant requires the timelock queue path on this vault — use queue_agent_grant |
+| 6108 | `ErrOperatorGrantDelayTooLong` | operator_grant_delay_seconds exceeds the maximum (48h) — would brick grant applicability |
+| 6109 | `InvalidOwnerType` | vault.owner_type is not a recognized discriminant (expected 0=EOA or 1=multisig) |
+| 6110 | `SpendAccountingUnderflow` | finalize spend accounting underflow: collected fees exceed realized stablecoin outflow |
+| 6111 | `ErrMultisigCustodyUnsupported` | Squads multisig ownership custody is not supported in V1 (use a standard EOA owner) |
+| 6112 | `ErrOutputNotVaultOwned` | M1: stablecoin-input swap output must land in a vault-owned account and increase (value redirection / unacquired spend rejected) |
+| 6113 | `ErrFinalizeMetaUnresolvable` | Finalize completeness: a writable DeFi account meta is absent from remaining_accounts (F-Q1b — omission would dodge per-recipient/output attribution) |
+| 6114 | `ErrDeFiInstructionNotAdjacentToFinalize` | The counted DeFi instruction must sit immediately before finalize_session (no interleaved instruction) so finalize's attribution walks bind to the correct instruction |
+| 6115 | `ErrUnmeasurableSpend` | Spending session produced no measurable in-transaction vault outcome (no stablecoin movement and no vault-owned acquisition) — async/keeper-settled or unmeasurable; recording 0 spend is rejected |
