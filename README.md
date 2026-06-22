@@ -224,11 +224,11 @@ cargo fmt --check --manifest-path programs/sigil/Cargo.toml
 
 | Suite                                                                                                    | Tests    |
 | -------------------------------------------------------------------------------------------------------- | -------- |
-| Core vault management & permission engine                                                                | 118      |
+| Core vault management & permission engine                                                                | 120      |
 | Missing-coverage gap-fill (DC audit 2026-05-19)                                                          | 14       |
-| Jupiter integration (composed swaps)                                                                     | 8        |
-| Jupiter Lend integration (deposit/withdraw)                                                              | 6        |
-| Flash Trade integration (leveraged perps)                                                                | 15       |
+| Jupiter integration (composed swaps)                                                                     | 9        |
+| Jupiter Lend integration (deposit/withdraw)                                                              | 7        |
+| Flash Trade integration (leveraged perps)                                                                | 17       |
 | Security exploit scenarios                                                                               | 184      |
 | Escrow integration (deposit/settle/refund)                                                               | 0        |
 | TOCTOU security (policy version + timelock)                                                              | 6        |
