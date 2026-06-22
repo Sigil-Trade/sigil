@@ -2,8 +2,8 @@
 // Regenerate via `pnpm -C sdk/kit codegen:errors` after IDL changes.
 //
 // Source: agent-middleware/target/idl/sigil.json
-// Generated: 2026-06-19T23:33:40.339Z
-// Codes: 113 (min 6000, max 6112)
+// Generated: 2026-06-22T15:01:21.252Z
+// Codes: 115 (min 6000, max 6114)
 
 /** Pure IDL projection of every Anchor error variant. */
 export interface IdlErrorEntry {
@@ -134,13 +134,15 @@ export const IDL_ERROR_MAP: Readonly<Record<number, IdlErrorEntry>> =
     6110: { code: 6110, name: "SpendAccountingUnderflow", msg: "finalize spend accounting underflow: collected fees exceed realized stablecoin outflow" },
     6111: { code: 6111, name: "ErrMultisigCustodyUnsupported", msg: "Squads multisig ownership custody is not supported in V1 (use a standard EOA owner)" },
     6112: { code: 6112, name: "ErrOutputNotVaultOwned", msg: "M1: stablecoin-input swap output must land in a vault-owned account and increase (value redirection / unacquired spend rejected)" },
+    6113: { code: 6113, name: "ErrFinalizeMetaUnresolvable", msg: "Finalize completeness: a writable DeFi account meta is absent from remaining_accounts (F-Q1b — omission would dodge per-recipient/output attribution)" },
+    6114: { code: 6114, name: "ErrDeFiInstructionNotAdjacentToFinalize", msg: "The counted DeFi instruction must sit immediately before finalize_session (no interleaved instruction) so finalize's attribution walks bind to the correct instruction" },
   });
 
 /** Total error-code count derived from the IDL at generation time. */
-export const IDL_ERROR_COUNT = 113;
+export const IDL_ERROR_COUNT = 115;
 
 /** Lowest IDL error code. */
 export const IDL_ERROR_MIN = 6000;
 
 /** Highest IDL error code. */
-export const IDL_ERROR_MAX = 6112;
+export const IDL_ERROR_MAX = 6114;

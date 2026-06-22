@@ -240,6 +240,10 @@ export const SIGIL_ERROR__SPEND_ACCOUNTING_UNDERFLOW = 0x17de; // 6110
 export const SIGIL_ERROR__ERR_MULTISIG_CUSTODY_UNSUPPORTED = 0x17df; // 6111
 /** ErrOutputNotVaultOwned: M1: stablecoin-input swap output must land in a vault-owned account and increase (value redirection / unacquired spend rejected) */
 export const SIGIL_ERROR__ERR_OUTPUT_NOT_VAULT_OWNED = 0x17e0; // 6112
+/** ErrFinalizeMetaUnresolvable: Finalize completeness: a writable DeFi account meta is absent from remaining_accounts (F-Q1b — omission would dodge per-recipient/output attribution) */
+export const SIGIL_ERROR__ERR_FINALIZE_META_UNRESOLVABLE = 0x17e1; // 6113
+/** ErrDeFiInstructionNotAdjacentToFinalize: The counted DeFi instruction must sit immediately before finalize_session (no interleaved instruction) so finalize's attribution walks bind to the correct instruction */
+export const SIGIL_ERROR__ERR_DE_FI_INSTRUCTION_NOT_ADJACENT_TO_FINALIZE = 0x17e2; // 6114
 
 export type SigilError =
   | typeof SIGIL_ERROR__ACCOUNT_WRITABILITY_MISMATCH
@@ -265,7 +269,9 @@ export type SigilError =
   | typeof SIGIL_ERROR__ERR_COSIGN_REQUIRED
   | typeof SIGIL_ERROR__ERR_DAILY_CAP_EXCEEDED
   | typeof SIGIL_ERROR__ERR_DECLARATION_INCONSISTENT
+  | typeof SIGIL_ERROR__ERR_DE_FI_INSTRUCTION_NOT_ADJACENT_TO_FINALIZE
   | typeof SIGIL_ERROR__ERR_DESTINATION_IS_PROTECTED_PDA
+  | typeof SIGIL_ERROR__ERR_FINALIZE_META_UNRESOLVABLE
   | typeof SIGIL_ERROR__ERR_GRAYLIST_FRICTION
   | typeof SIGIL_ERROR__ERR_GRAYLIST_FULL
   | typeof SIGIL_ERROR__ERR_INTENT_DIGEST_MISMATCH
@@ -382,7 +388,9 @@ if (process.env.NODE_ENV !== "production") {
     [SIGIL_ERROR__ERR_COSIGN_REQUIRED]: `Elevated policy mutation requires an owner-signed cosigning session`,
     [SIGIL_ERROR__ERR_DAILY_CAP_EXCEEDED]: `Per-protocol daily spending cap would be exceeded (rolling 24h)`,
     [SIGIL_ERROR__ERR_DECLARATION_INCONSISTENT]: `R-4 DeclarationConsistency: declared recipient/mint does not match CPI account-meta`,
+    [SIGIL_ERROR__ERR_DE_FI_INSTRUCTION_NOT_ADJACENT_TO_FINALIZE]: `The counted DeFi instruction must sit immediately before finalize_session (no interleaved instruction) so finalize's attribution walks bind to the correct instruction`,
     [SIGIL_ERROR__ERR_DESTINATION_IS_PROTECTED_PDA]: `Destination is a Sigil-protected PDA — rejected at queue time`,
+    [SIGIL_ERROR__ERR_FINALIZE_META_UNRESOLVABLE]: `Finalize completeness: a writable DeFi account meta is absent from remaining_accounts (F-Q1b — omission would dodge per-recipient/output attribution)`,
     [SIGIL_ERROR__ERR_GRAYLIST_FRICTION]: `Destination is graylisted (24h friction window — awaiting promote_graylist_destination or unlock)`,
     [SIGIL_ERROR__ERR_GRAYLIST_FULL]: `Destination graylist is full (max 10 entries) — wait for an existing entry to unlock or promote`,
     [SIGIL_ERROR__ERR_INTENT_DIGEST_MISMATCH]: `AL3 intent-digest mismatch — preview digest does not match executed bundle`,

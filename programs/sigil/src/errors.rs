@@ -767,4 +767,34 @@ pub enum SigilError {
     /// vault-ownership + balance increase of the pinned output (no price/oracle).
     #[msg("M1: stablecoin-input swap output must land in a vault-owned account and increase (value redirection / unacquired spend rejected)")]
     ErrOutputNotVaultOwned,
+
+    /// 6113 — F-Q1b/M2 finalize-side completeness closure (2026-06-21): on a
+    /// spending finalize (run_outcome_check && actual_spend > 0), every WRITABLE
+    /// non-vault account meta of the counted DeFi instruction MUST be resolvable
+    /// in finalize's `remaining_accounts`, exactly as validate enforces F-Q1a
+    /// (DestinationAccountUnresolvable 6105). Without this, a raw-tx caller could
+    /// pass all metas to validate (passing F-Q1a) then OMIT an output/recipient
+    /// leg from finalize, silently shrinking the per-recipient-cap and output
+    /// attribution (a dual-output CLMM close leaks the un-pinned leg). Fail-closed
+    /// rather than silently skip. GENERIC: re-derived from the instructions sysvar
+    /// (runtime truth), no protocol knowledge.
+    #[msg("Finalize completeness: a writable DeFi account meta is absent from remaining_accounts (F-Q1b — omission would dodge per-recipient/output attribution)")]
+    ErrFinalizeMetaUnresolvable,
+
+    /// 6114 — F-Q1b adjacency (audit 2026-06-22): the single counted DeFi
+    /// instruction of a spending sandwich MUST sit IMMEDIATELY before
+    /// finalize_session — no ComputeBudget/System (or any other) instruction
+    /// between them. finalize derives the DeFi ix positionally as
+    /// current_index - 1 for its completeness check, the per-recipient cap, and
+    /// the stable-floor walk; validate permits ComputeBudget/System ixs to
+    /// interleave (classified Infrastructure), so without this a raw-tx caller
+    /// could submit [validate, DeFi, noop, finalize] — making current_index - 1
+    /// point at the inert ix so all three attribution walks operate on the WRONG
+    /// instruction and pass vacuously (the dual-output leak F-Q1b targets stays
+    /// open, and the per-recipient cap silently un-enforces). Enforced at validate,
+    /// whose scan already locates both the DeFi ix and finalize. The honest seal()
+    /// sandwich always places finalize immediately after the DeFi ix, so this never
+    /// rejects a legitimate composition.
+    #[msg("The counted DeFi instruction must sit immediately before finalize_session (no interleaved instruction) so finalize's attribution walks bind to the correct instruction")]
+    ErrDeFiInstructionNotAdjacentToFinalize,
 }

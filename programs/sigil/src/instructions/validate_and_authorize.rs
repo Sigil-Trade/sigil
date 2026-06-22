@@ -877,6 +877,7 @@ pub fn handler(
     let mut single_defi_ix_verified = false;
     if is_spending {
         let mut defi_ix_count: u8 = 0;
+        let mut defi_ix_idx: Option<usize> = None;
         let mut found_finalize = false;
         let mut scan_idx = current_idx_usize.saturating_add(1);
         // M11 hardening (SIMD-0296 pad-attack DoS): bound iteration count.
@@ -895,6 +896,24 @@ pub fn handler(
                 policy,
             )? {
                 ScanAction::FoundFinalize => {
+                    // F-Q1b adjacency (audit 2026-06-22): the single counted DeFi
+                    // ix MUST sit immediately before finalize. finalize_session
+                    // derives the DeFi ix as current_index - 1 for its completeness
+                    // check, the per-recipient cap, and the stable-floor walk; since
+                    // ComputeBudget/System ixs may interleave (classified
+                    // Infrastructure above), a raw-tx caller could submit
+                    // [validate, DeFi, noop, finalize] so current_index - 1 points at
+                    // the inert ix and all three walks operate on the WRONG ix and
+                    // pass vacuously. Require finalize to immediately follow the DeFi
+                    // ix so the derivation is sound. (defi_ix_idx is None only when no
+                    // DeFi ix preceded finalize — the defi_ix_count == 1 check below
+                    // then rejects.) The honest seal() sandwich is always adjacent.
+                    if let Some(d) = defi_ix_idx {
+                        require!(
+                            scan_idx == d.saturating_add(1),
+                            SigilError::ErrDeFiInstructionNotAdjacentToFinalize
+                        );
+                    }
                     found_finalize = true;
                     break;
                 }
@@ -933,6 +952,7 @@ pub fn handler(
                         SigilError::ProtocolMismatch
                     );
                     defi_ix_count = defi_ix_count.saturating_add(1);
+                    defi_ix_idx = Some(scan_idx);
 
                     // Phase 2 TA-02: wire allowed_destinations enforcement into
                     // BOTH spending paths (stablecoin input AND non-stablecoin

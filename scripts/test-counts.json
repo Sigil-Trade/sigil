@@ -10,7 +10,7 @@
       "name": "Missing-coverage gap-fill (DC audit 2026-05-19)",
       "count": 14,
       "onChain": true,
-      "claudePattern": "tests/missing-coverage.ts` (ts-mocha + LiteSVM, %d tests — happy-paths + TA-17 auto-revoke + PEN-8b cosign-gate + D-5 negative cases)"
+      "claudePattern": "tests/missing-coverage.ts` (ts-mocha + LiteSVM, %d tests \u2014 happy-paths + TA-17 auto-revoke + PEN-8b cosign-gate + D-5 negative cases)"
     },
     {
       "name": "Jupiter integration (composed swaps)",
@@ -55,7 +55,7 @@
       "claudePattern": "tests/analytics-counters.ts` (ts-mocha + LiteSVM, %d tests)"
     },
     {
-      "name": "Post-execution assertions E2E (DELETED in Phase 1 Option A demolition — CrossFieldLte primitive removed)",
+      "name": "Post-execution assertions E2E (DELETED in Phase 1 Option A demolition \u2014 CrossFieldLte primitive removed)",
       "count": 0,
       "onChain": true,
       "claudePattern": "DELETED post-Phase-1: tests/post-assertion-integration.ts removed wholesale (was 9 tests for CrossFieldLte leverage cap)"
@@ -81,19 +81,19 @@
       "name": "Custody adapters (`@usesigil/custody`)",
       "count": 96,
       "ciStepName": "Custody adapter tests",
-      "claudePattern": "sdk/custody/tests/` (mocha + tsx, %d tests — crossmint, privy, turnkey)"
+      "claudePattern": "sdk/custody/tests/` (mocha + tsx, %d tests \u2014 crossmint, privy, turnkey)"
     },
     {
-      "name": "Kit-native SDK (`@usesigil/kit` — includes merged core + dashboard)",
+      "name": "Kit-native SDK (`@usesigil/kit` \u2014 includes merged core + dashboard)",
       "count": 1822,
       "ciStepName": "Kit SDK tests",
-      "claudePattern": "sdk/kit/tests/` (mocha + tsx, %d tests — core + dashboard + errors + agent-bootstrap + preview-create-vault + audit-2026-05-23 remediation suites)"
+      "claudePattern": "sdk/kit/tests/` (mocha + tsx, %d tests \u2014 core + dashboard + errors + agent-bootstrap + preview-create-vault + audit-2026-05-23 remediation suites)"
     },
     {
       "name": "Kit SDK devnet tests (`@usesigil/kit` devnet)",
       "count": 34,
       "devnet": true,
-      "claudePattern": "sdk/kit/tests/devnet/` (mocha + tsx, %d tests — lifecycle, composed-tx, dashboard-integration, seal-e2e)"
+      "claudePattern": "sdk/kit/tests/devnet/` (mocha + tsx, %d tests \u2014 lifecycle, composed-tx, dashboard-integration, seal-e2e)"
     },
     {
       "name": "Plugins (`@usesigil/plugins`)",
@@ -103,9 +103,9 @@
     },
     {
       "name": "Rust unit tests (cargo test)",
-      "count": 180,
+      "count": 182,
       "onChain": true,
-      "claudePattern": "cargo test --manifest-path programs/sigil/Cargo.toml` (%d tests — Phase 8 + audit-2026-05-23 grew this from 110 to 244 via state-pin + canonical-encoder + intent-digest unit tests)"
+      "claudePattern": "cargo test --manifest-path programs/sigil/Cargo.toml` (%d tests \u2014 Phase 8 + audit-2026-05-23 grew this from 110 to 244 via state-pin + canonical-encoder + intent-digest unit tests)"
     },
     {
       "name": "Devnet extended scenarios (flash-trade + stress)",
