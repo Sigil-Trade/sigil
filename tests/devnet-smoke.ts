@@ -314,7 +314,10 @@ describe("devnet-smoke-test", () => {
     const validateIx = await program.methods
       .validateAndAuthorize(
         usdcMint,
-        new BN(50_000_000), // 50 tokens
+        new BN(0), // amount=0: non-spending session — exempt from the
+        // require-measurable-outcome invariant (6115). The noop moves nothing,
+        // so a spending session (amount>0) would now revert; this test only
+        // exercises session lifecycle + stats (totalTransactions/totalVolume==0).
         MOCK_DEFI_PROGRAM_ID,
         (livePolicy as any).policyVersion,
         new BN(0),
@@ -323,7 +326,7 @@ describe("devnet-smoke-test", () => {
             vault: vaultPda,
             agent: agent.publicKey,
             tokenMint: usdcMint,
-            amount: new BN(50_000_000),
+            amount: new BN(0),
             targetProtocol: MOCK_DEFI_PROGRAM_ID,
           }),
         ),

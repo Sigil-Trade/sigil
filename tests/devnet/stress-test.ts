@@ -687,7 +687,11 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
         v.tracker,
         v.overlay,
         v.vaultAta,
-        new BN(50_000_000),
+        // amount=0: non-spending session — the noop moves nothing, so a spending
+        // session would revert require-measurable-outcome (6115). This test
+        // asserts only totalTransactions (throughput/lifecycle), so amount=0 is
+        // faithful and exempt.
+        new BN(0),
       );
       const vault = await program.account.agentVault.fetch(v.vault);
       expect(vault.totalTransactions.toNumber()).to.equal(1);
@@ -704,7 +708,7 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
         v.tracker,
         v.overlay,
         v.vaultAta,
-        new BN(50_000_000),
+        new BN(0), // non-spending (exempt from 6115; noop moves nothing)
       );
       const after = await program.account.agentVault.fetch(v.vault);
       expect(after.totalTransactions.toNumber()).to.equal(
@@ -722,7 +726,7 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
           v.tracker,
           v.overlay,
           v.vaultAta,
-          new BN(10_000_000),
+          new BN(0), // non-spending (exempt from 6115; noop moves nothing)
         );
       }
       const vault = await program.account.agentVault.fetch(v.vault);
