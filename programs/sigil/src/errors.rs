@@ -797,4 +797,23 @@ pub enum SigilError {
     /// rejects a legitimate composition.
     #[msg("The counted DeFi instruction must sit immediately before finalize_session (no interleaved instruction) so finalize's attribution walks bind to the correct instruction")]
     ErrDeFiInstructionNotAdjacentToFinalize,
+
+    /// 6115 — require-measurable-outcome (audit 2026-06-22): a SPENDING session
+    /// (run_outcome_check: non-expired, output_mint set) MUST produce a measurable
+    /// in-transaction vault outcome — either actual_spend > 0 (stablecoin
+    /// measurably left/returned) OR an acquiring swap whose pinned vault-owned
+    /// output INCREASED (M1). Fires when neither holds: the session moved no
+    /// measurable stablecoin AND declared no acquiring output. Because the
+    /// allowlist + async denylist are top-level-instruction-scoped and
+    /// program-ID-only (post-M1-04), an owner-allowlisted CPI-capable or
+    /// multi-mode program can defer the real transfer to a later block, where
+    /// finalize measures 0 and the session would otherwise settle on the dust
+    /// fee without binding the caps. Rejecting closes that cap-accounting slip.
+    /// VALUE-BLIND: no oracle / no position valuation — it requires only that
+    /// SOME measurable vault-owned delta exist in-tx. Exempt: non-spending /
+    /// expired sessions. (Unbounded async drain additionally needs owner-granted
+    /// surviving custody = position-world; Sigil's agent delegation is revoked
+    /// same-tx.)
+    #[msg("Spending session produced no measurable in-transaction vault outcome (no stablecoin movement and no vault-owned acquisition) — async/keeper-settled or unmeasurable; recording 0 spend is rejected")]
+    ErrUnmeasurableSpend,
 }

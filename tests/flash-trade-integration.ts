@@ -48,6 +48,7 @@ import {
   LiteSVM,
   MOCK_DEFI_PROGRAM_ID,
   buildMockDefiNoopIx,
+  buildMockSwapToVaultIx,
 } from "./helpers/litesvm-setup";
 
 const FULL_CAPABILITY = 2; // CAPABILITY_OPERATOR
@@ -113,8 +114,71 @@ describe("flash-trade-integration", () => {
   }
 
   /**
+   * Stand up an acquiring-swap output for a fund-moving spending session: a
+   * non-USDC mint, a VAULT-OWNED ATA to receive the acquisition (finalize's M1
+   * output-ownership gate verifies it INCREASED), an agent-owned reserve to
+   * fund the swap's output leg (test-only — a real swap sources output from a
+   * pool), and an off-vault recipient ATA for the input leg's drained USDC.
+   * Pair with `sendComposedAction({ swap: ... })` so a stablecoin-input spend
+   * produces a measurable vault outcome and satisfies the
+   * require-measurable-outcome invariant (err 6115).
+   */
+  function setupSwapOutput(
+    forVault: PublicKey = vaultPda,
+    forAgent: Keypair = agent,
+  ): {
+    vaultOutputAta: PublicKey;
+    agentReserve: PublicKey;
+    drainRecipientAta: PublicKey;
+  } {
+    const outputMint = Keypair.generate().publicKey;
+    createMintAtAddress(svm, outputMint, owner.publicKey, 6);
+    const vaultOutputAta = createAtaHelper(
+      svm,
+      (owner as any).payer,
+      outputMint,
+      forVault,
+      true,
+    );
+    const agentReserve = createAtaHelper(
+      svm,
+      (owner as any).payer,
+      outputMint,
+      forAgent.publicKey,
+    );
+    mintToHelper(
+      svm,
+      (owner as any).payer,
+      outputMint,
+      agentReserve,
+      owner.publicKey,
+      1_000_000_000n,
+    );
+    const drainRecipient = Keypair.generate();
+    airdropSol(svm, drainRecipient.publicKey, 1 * LAMPORTS_PER_SOL);
+    const drainRecipientAta = createAtaHelper(
+      svm,
+      (owner as any).payer,
+      usdcMint,
+      drainRecipient.publicKey,
+    );
+    return { vaultOutputAta, agentReserve, drainRecipientAta };
+  }
+
+  /**
    * Helper: build and send an atomic composed transaction for any action type.
-   * [ComputeBudget, ValidateAndAuthorize, mockDefiIx, FinalizeSession]
+   * [ComputeBudget, ValidateAndAuthorize, middleIx, FinalizeSession]
+   *
+   * `swap` (optional): when provided, the middle ix is a fund-moving acquiring
+   * swap (`buildMockSwapToVaultIx`) instead of the zero-movement mock-defi
+   * no-op. The input leg pulls `swap.inAmount` USDC out of the vault via the
+   * agent's validate-time delegation (→ actual_spend > 0, a measurable
+   * outcome) and the output leg lands `swap.outAmount` of a non-USDC mint in
+   * the vault-owned `swap.vaultOutputAta`. Used for spending tests that must
+   * exercise a REAL spend under the require-measurable-outcome invariant (err
+   * 6115); the swap's writable, non-vault metas are wired into BOTH validate
+   * (F-Q1a) and finalize (F-Q1b, err 6113) remaining_accounts, mirroring
+   * seal() / sandwich-integration.ts.
    */
   async function sendComposedAction(
     vault: PublicKey,
@@ -125,6 +189,13 @@ describe("flash-trade-integration", () => {
     amount: BN,
     targetProtocol: PublicKey,
     overrideVaultTokenAta?: PublicKey,
+    swap?: {
+      vaultOutputAta: PublicKey;
+      agentReserve: PublicKey;
+      drainRecipientAta: PublicKey;
+      inAmount: BN;
+      outAmount: BN;
+    },
   ): Promise<VersionedTxResult> {
     const effectiveVaultAta = overrideVaultTokenAta ?? vaultUsdcAta;
 
@@ -181,21 +252,58 @@ describe("flash-trade-integration", () => {
         protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
         feeDestinationTokenAccount: null,
         outputStablecoinAccount: null,
-        outputSwapAccount: null,
+        outputSwapAccount: swap ? swap.vaultOutputAta : null,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
-      // F-Q1a completeness: the mock-defi no-op ix lists the agent signer (the
-      // writable fee-payer in the compiled v0 message). validate's
-      // destination-completeness guard requires every writable DeFi meta
-      // resolvable in remaining_accounts, so append the agent (mirrors seal()).
-      .remainingAccounts([
-        { pubkey: agentKp.publicKey, isSigner: false, isWritable: false },
-      ])
+      // F-Q1a completeness: every writable, non-vault DeFi meta plus the agent
+      // fee-payer must be resolvable in remaining_accounts (validate reads
+      // writability from the compiled v0 message). For the no-op middle that is
+      // just the agent; for the swap middle it is also the drained input
+      // recipient, the agent reserve, and the vault output ATA (mirrors seal()).
+      .remainingAccounts(
+        swap
+          ? [
+              // The swap's writable input source (vault USDC ATA) is a
+              // non-vault-PDA meta, so completeness requires it too.
+              {
+                pubkey: effectiveVaultAta,
+                isSigner: false,
+                isWritable: false,
+              },
+              {
+                pubkey: swap.drainRecipientAta,
+                isSigner: false,
+                isWritable: false,
+              },
+              {
+                pubkey: swap.agentReserve,
+                isSigner: false,
+                isWritable: false,
+              },
+              {
+                pubkey: swap.vaultOutputAta,
+                isSigner: false,
+                isWritable: false,
+              },
+              { pubkey: agentKp.publicKey, isSigner: false, isWritable: false },
+            ]
+          : [{ pubkey: agentKp.publicKey, isSigner: false, isWritable: false }],
+      )
       .instruction();
 
-    const mockDefiIx = createMockDefiInstruction(agentKp.publicKey);
+    const middleIx = swap
+      ? buildMockSwapToVaultIx(
+          effectiveVaultAta,
+          swap.drainRecipientAta,
+          swap.agentReserve,
+          swap.vaultOutputAta,
+          agentKp.publicKey,
+          swap.inAmount,
+          swap.outAmount,
+        )
+      : createMockDefiInstruction(agentKp.publicKey);
 
     const finalizeIx = await program.methods
       .finalizeSession()
@@ -209,16 +317,49 @@ describe("flash-trade-integration", () => {
         agentSpendOverlay: overlayForVault,
         vaultTokenAccount: effectiveVaultAta,
         outputStablecoinAccount: null,
-        outputSwapAccount: null,
+        outputSwapAccount: swap ? swap.vaultOutputAta : null,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
+      // F-Q1b finalize completeness (err 6113): when a real spend occurs, every
+      // writable, non-vault meta of the counted DeFi ix plus the agent must
+      // reach finalize too (buildFinalizeIx does NOT auto-append the agent).
+      // READONLY — resolved, not authorized.
+      .remainingAccounts(
+        swap
+          ? [
+              // The swap's writable input source (vault USDC ATA) is a
+              // non-vault-PDA meta, so completeness requires it too.
+              {
+                pubkey: effectiveVaultAta,
+                isSigner: false,
+                isWritable: false,
+              },
+              {
+                pubkey: swap.drainRecipientAta,
+                isSigner: false,
+                isWritable: false,
+              },
+              {
+                pubkey: swap.agentReserve,
+                isSigner: false,
+                isWritable: false,
+              },
+              {
+                pubkey: swap.vaultOutputAta,
+                isSigner: false,
+                isWritable: false,
+              },
+              { pubkey: agentKp.publicKey, isSigner: false, isWritable: false },
+            ]
+          : [],
+      )
       .instruction();
 
     // Build and send versioned transaction via LiteSVM
     const result = sendVersionedTx(
       svm,
-      [computeIx, validateIx, mockDefiIx, finalizeIx],
+      [computeIx, validateIx, middleIx, finalizeIx],
       agentKp,
     );
     recordCU("flash_trade:composed_action", result);
@@ -365,7 +506,13 @@ describe("flash-trade-integration", () => {
   // =========================================================================
   describe("open position", () => {
     it("opens a leveraged long position within policy limits", async () => {
-      const amount = new BN(100_000_000); // 100 USDC collateral
+      // Mechanism + counter test (asserts totalVolume == 0). The
+      // require-measurable-outcome invariant (err 6115) exempts non-spending
+      // sessions, so run a non-spending session (amount = 0): the composed
+      // [validate, mock_defi, finalize] sandwich still executes,
+      // total_transactions still increments to 1, and totalVolume stays 0 —
+      // assertions preserved unchanged.
+      const amount = new BN(0);
 
       const sig = await sendComposedAction(
         vaultPda,
@@ -381,7 +528,7 @@ describe("flash-trade-integration", () => {
 
       const vault = await program.account.agentVault.fetch(vaultPda);
       expect(vault.totalTransactions.toNumber()).to.equal(1);
-      // totalVolume uses actual_spend_tracked; mock DeFi is no-op → 0
+      // totalVolume uses actual_spend_tracked; non-spending session → 0
       expect(vault.totalVolume.toNumber()).to.equal(0);
     });
   });
@@ -392,6 +539,10 @@ describe("flash-trade-integration", () => {
   describe("increase position", () => {
     // P2 #25: Verify vault state changes on IncreasePosition (not just signature)
     it("increases a position within policy limits", async () => {
+      // Counter test (asserts only that the tx is recorded). Non-spending
+      // session (amount = 0) is exempt from the require-measurable-outcome
+      // invariant; total_transactions still increments by 1, preserving the
+      // assertion.
       const vaultBefore = await program.account.agentVault.fetch(vaultPda);
       const txCountBefore = vaultBefore.totalTransactions.toNumber();
 
@@ -401,7 +552,7 @@ describe("flash-trade-integration", () => {
         trackerPda,
         agent,
         usdcMint,
-        new BN(30_000_000),
+        new BN(0),
         mockDefiProtocol,
       );
 
@@ -745,7 +896,11 @@ describe("flash-trade-integration", () => {
         })
         .rpc();
 
-      // Open position for 100 USDC (uses 100/200 cap)
+      // Open position spending 100 USDC of actual cap. Under the
+      // require-measurable-outcome invariant (err 6115) the cap is only filled
+      // by ACTUAL spend, so these setup sessions must move funds: a fund-moving
+      // acquiring swap drains 100 USDC (uses 100/200 cap).
+      const capSwap1 = setupSwapOutput(capVault, capAgentKp);
       await sendComposedAction(
         capVault,
         capPolicy,
@@ -755,9 +910,15 @@ describe("flash-trade-integration", () => {
         new BN(100_000_000),
         mockDefiProtocol,
         capVaultUsdcAta,
+        {
+          ...capSwap1,
+          inAmount: new BN(10_000_000), // 10 USDC actual (< post-fee delegation; measurable)
+          outAmount: new BN(1_000),
+        },
       );
 
-      // Swap for 100 USDC (uses 200/200 cap = AT limit)
+      // Swap spending another 100 USDC actual (uses 200/200 cap = AT limit).
+      const capSwap2 = setupSwapOutput(capVault, capAgentKp);
       await sendComposedAction(
         capVault,
         capPolicy,
@@ -767,6 +928,11 @@ describe("flash-trade-integration", () => {
         new BN(100_000_000),
         mockDefiProtocol,
         capVaultUsdcAta,
+        {
+          ...capSwap2,
+          inAmount: new BN(10_000_000), // 10 USDC actual (< post-fee delegation; measurable)
+          outAmount: new BN(1_000),
+        },
       );
     });
 
@@ -774,7 +940,10 @@ describe("flash-trade-integration", () => {
       // Advance time to fully evict rolling 24h window (24h + 1 epoch = 87000s)
       advanceTime(svm, 87_001);
 
-      // Open a position (uses cap from fresh window)
+      // Open a position spending 100 USDC actual from the fresh window. Under
+      // the require-measurable-outcome invariant (err 6115) the cap is filled
+      // only by ACTUAL spend, so use a fund-moving acquiring swap.
+      const fillSwap1 = setupSwapOutput(capVault, capAgentKp);
       await sendComposedAction(
         capVault,
         capPolicy,
@@ -784,9 +953,15 @@ describe("flash-trade-integration", () => {
         new BN(100_000_000),
         mockDefiProtocol,
         capVaultUsdcAta,
+        {
+          ...fillSwap1,
+          inAmount: new BN(10_000_000), // 10 USDC actual (< post-fee delegation; measurable)
+          outAmount: new BN(1_000),
+        },
       );
 
-      // Fill cap with a swap
+      // Fill cap with a second 100 USDC actual spend (200/200 = AT limit).
+      const fillSwap2 = setupSwapOutput(capVault, capAgentKp);
       await sendComposedAction(
         capVault,
         capPolicy,
@@ -796,6 +971,11 @@ describe("flash-trade-integration", () => {
         new BN(100_000_000),
         mockDefiProtocol,
         capVaultUsdcAta,
+        {
+          ...fillSwap2,
+          inAmount: new BN(10_000_000), // 10 USDC actual (< post-fee delegation; measurable)
+          outAmount: new BN(1_000),
+        },
       );
 
       // Now decrease with amount=0 (non-spending, risk-reducing) — bypasses cap
@@ -819,14 +999,28 @@ describe("flash-trade-integration", () => {
 
   describe("add collateral (spending)", () => {
     it("should authorize addCollateral with spending", async () => {
+      // Real spending session: the require-measurable-outcome invariant (err
+      // 6115) requires a SPENDING session to produce a measurable vault
+      // outcome, so the middle ix is a fund-moving acquiring swap (input USDC
+      // leaves the vault via delegation, a vault-owned output increases). The
+      // session still authorizes and finalizes successfully — preserving the
+      // original "with spending" intent (and now genuinely exercising the
+      // spending path instead of a zero-movement no-op).
+      const swap = setupSwapOutput();
       const sig = await sendComposedAction(
         vaultPda,
         policyPda,
         trackerPda,
         agent,
         usdcMint,
-        new BN(50_000_000), // 50 USDC
+        new BN(50_000_000), // 50 USDC declared
         mockDefiProtocol,
+        undefined,
+        {
+          ...swap,
+          inAmount: new BN(10_000_000), // 10 USDC actually spent via delegation
+          outAmount: new BN(1_000), // small acquisition → satisfies M1 gate
+        },
       );
       expect(sig.signature).to.be.a("string");
     });
@@ -890,14 +1084,25 @@ describe("flash-trade-integration", () => {
 
   describe("limit orders", () => {
     it("should authorize placeLimitOrder with spending", async () => {
+      // Real spending session under the require-measurable-outcome invariant
+      // (err 6115): fund-moving acquiring swap as the middle ix. The session
+      // authorizes and finalizes successfully, preserving the "with spending"
+      // intent.
+      const swap = setupSwapOutput();
       const sig = await sendComposedAction(
         vaultPda,
         policyPda,
         trackerPda,
         agent,
         usdcMint,
-        new BN(100_000_000), // 100 USDC (spending)
+        new BN(100_000_000), // 100 USDC declared
         mockDefiProtocol,
+        undefined,
+        {
+          ...swap,
+          inAmount: new BN(10_000_000),
+          outAmount: new BN(1_000),
+        },
       );
       expect(sig.signature).to.be.a("string");
     });
@@ -918,14 +1123,25 @@ describe("flash-trade-integration", () => {
 
   describe("swap-and-open / close-and-swap", () => {
     it("should authorize swapAndOpenPosition with spending", async () => {
+      // Real spending session under the require-measurable-outcome invariant
+      // (err 6115): fund-moving acquiring swap as the middle ix. The session
+      // authorizes and finalizes successfully, preserving the "with spending"
+      // intent.
+      const swap = setupSwapOutput();
       const sig = await sendComposedAction(
         vaultPda,
         policyPda,
         trackerPda,
         agent,
         usdcMint,
-        new BN(100_000_000), // 100 USDC
+        new BN(100_000_000), // 100 USDC declared
         mockDefiProtocol,
+        undefined,
+        {
+          ...swap,
+          inAmount: new BN(10_000_000),
+          outAmount: new BN(1_000),
+        },
       );
       expect(sig.signature).to.be.a("string");
     });

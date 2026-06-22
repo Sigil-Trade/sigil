@@ -153,9 +153,15 @@ describe("categorizeDxError — exact range boundaries", () => {
       code: 6114,
       category: "program",
       description:
-        "program upper bound (F-Q1b adjacency ErrDeFiInstructionNotAdjacentToFinalize)",
+        "program range (F-Q1b adjacency ErrDeFiInstructionNotAdjacentToFinalize)",
     },
-    { code: 6115, category: "unknown", description: "one above program range" },
+    {
+      code: 6115,
+      category: "program",
+      description:
+        "program upper bound (require-measurable ErrUnmeasurableSpend)",
+    },
+    { code: 6116, category: "unknown", description: "one above program range" },
     { code: 6999, category: "unknown", description: "one below user range" },
     { code: 7200, category: "unknown", description: "one above network range" },
     { code: 7999, category: "unknown", description: "DX_ERROR_CODE_UNMAPPED" },

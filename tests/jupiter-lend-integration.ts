@@ -45,6 +45,7 @@ import {
   MOCK_DEFI_PROGRAM_ID,
   buildMockDefiNoopIx,
 } from "./helpers/litesvm-setup";
+import { expectSigilError } from "./helpers/strict-errors";
 
 const FULL_CAPABILITY = 2; // CAPABILITY_OPERATOR
 
@@ -363,7 +364,13 @@ describe("jupiter-lend-integration", () => {
   // =========================================================================
   describe("lend deposit happy path", () => {
     it("executes a composed [validate(Deposit), mock_lend, finalize] transaction", async () => {
-      const amount = new BN(100_000_000); // 100 USDC
+      // Mechanism + counter test (asserts totalVolume == 0). The
+      // require-measurable-outcome invariant (err 6115) exempts non-spending
+      // sessions, so run a non-spending session (amount = 0): the composed
+      // [validate, mock_lend, finalize] sandwich still executes,
+      // total_transactions still increments to 1, and totalVolume stays 0 —
+      // assertions preserved unchanged.
+      const amount = new BN(0);
 
       const result = await sendComposedLend(
         vaultPda,
@@ -414,46 +421,32 @@ describe("jupiter-lend-integration", () => {
   // =========================================================================
   // Outcome-based spending: mock lend actions record zero actual spend
   // =========================================================================
-  describe("outcome-based spending with mock lend", () => {
-    it("succeeds when declared amount exceeds cap because actual spend is zero", async () => {
-      // Outcome-based enforcement (Phase 1): finalize_session measures
-      // actual stablecoin balance delta. Mock lend instructions don't move
-      // tokens, so actual_spend = 0 and the cap check is never triggered.
-      await sendComposedLend(
-        vaultPda,
-        policyPda,
-        trackerPda,
-        agent,
-        usdcMint,
-        new BN(200_000_000),
-        mockDefiProtocol,
-      );
-
-      await sendComposedLend(
-        vaultPda,
-        policyPda,
-        trackerPda,
-        agent,
-        usdcMint,
-        new BN(200_000_000),
-        mockDefiProtocol,
-      );
-
-      // Would exceed 500 USDC cap if declaration-based, but succeeds
-      // because outcome-based enforcement sees zero actual spend.
-      await sendComposedLend(
-        vaultPda,
-        policyPda,
-        trackerPda,
-        agent,
-        usdcMint,
-        new BN(1_000_000),
-        mockDefiProtocol,
-      );
-
-      // Verify all TXs succeeded
-      const vault = await program.account.agentVault.fetch(vaultPda);
-      expect(vault.totalTransactions.toNumber()).to.be.greaterThanOrEqual(5);
+  describe("zero-outcome spending session is rejected (require-measurable-outcome)", () => {
+    it("reverts a spending lend session that moves no tokens with ErrUnmeasurableSpend (6115)", async () => {
+      // Migration of the former "declared amount exceeds cap because actual
+      // spend is zero" test. A SPENDING session (amount > 0) whose mock lend ix
+      // moves zero tokens no longer settles on the dust fee — that was the
+      // cap-accounting slip the require-measurable-outcome invariant (err 6115)
+      // closes. With no measurable stablecoin movement and no declared
+      // acquisition, finalize REVERTS. The original "succeeds" assertion tested
+      // behavior that no longer exists.
+      try {
+        await sendComposedLend(
+          vaultPda,
+          policyPda,
+          trackerPda,
+          agent,
+          usdcMint,
+          new BN(200_000_000),
+          mockDefiProtocol,
+        );
+        expect.fail(
+          "Expected zero-outcome spending lend session to revert ErrUnmeasurableSpend",
+        );
+      } catch (err: any) {
+        if (err?.message === "Should have thrown") throw err;
+        expectSigilError(err, { name: "ErrUnmeasurableSpend" });
+      }
     });
   });
 
@@ -725,59 +718,39 @@ describe("jupiter-lend-integration", () => {
         .rpc();
     });
 
-    it("all deposits succeed with outcome-based enforcement (mock lend = zero spend)", async () => {
-      // Outcome-based enforcement: mock lend instructions don't move tokens,
-      // so actual_spend = 0 and all deposits succeed regardless of declared amount.
+    it("rejects a zero-outcome spending deposit with ErrUnmeasurableSpend (6115)", async () => {
+      // Migration of the former "all deposits succeed with outcome-based
+      // enforcement (mock lend = zero spend)" test. A SPENDING session
+      // (amount > 0) moving zero tokens no longer settles successfully and
+      // bypasses the rolling-window cap — the require-measurable-outcome
+      // invariant (err 6115) rejects it. A spending session with no measurable
+      // vault outcome REVERTS.
 
-      // Deposit 1: 40 USDC declared (actual spend = 0)
-      await sendComposedLend(
-        rollingVault,
-        rollingPolicy,
-        rollingTracker,
-        agent,
-        usdcMint,
-        new BN(40_000_000),
-        mockDefiProtocol,
-        rollingVaultUsdcAta,
-        rollingOverlay,
-      );
+      // 40 USDC declared, zero tokens moved by the mock lend → no measurable
+      // outcome → revert.
+      try {
+        await sendComposedLend(
+          rollingVault,
+          rollingPolicy,
+          rollingTracker,
+          agent,
+          usdcMint,
+          new BN(40_000_000),
+          mockDefiProtocol,
+          rollingVaultUsdcAta,
+          rollingOverlay,
+        );
+        expect.fail(
+          "Expected zero-outcome spending deposit to revert ErrUnmeasurableSpend",
+        );
+      } catch (err: any) {
+        if (err?.message === "Should have thrown") throw err;
+        expectSigilError(err, { name: "ErrUnmeasurableSpend" });
+      }
 
-      let vault = await program.account.agentVault.fetch(rollingVault);
-      expect(vault.totalTransactions.toNumber()).to.equal(1);
-
-      // Deposit 2: 40 USDC declared (actual spend = 0)
-      await sendComposedLend(
-        rollingVault,
-        rollingPolicy,
-        rollingTracker,
-        agent,
-        usdcMint,
-        new BN(40_000_000),
-        mockDefiProtocol,
-        rollingVaultUsdcAta,
-        rollingOverlay,
-      );
-
-      vault = await program.account.agentVault.fetch(rollingVault);
-      expect(vault.totalTransactions.toNumber()).to.equal(2);
-
-      // Deposit 3: 30 USDC — would exceed 100 cap if declaration-based,
-      // but succeeds because outcome-based enforcement sees zero actual spend.
-      await sendComposedLend(
-        rollingVault,
-        rollingPolicy,
-        rollingTracker,
-        agent,
-        usdcMint,
-        new BN(30_000_000),
-        mockDefiProtocol,
-        rollingVaultUsdcAta,
-        rollingOverlay,
-      );
-
-      // All 3 TXs succeeded
-      vault = await program.account.agentVault.fetch(rollingVault);
-      expect(vault.totalTransactions.toNumber()).to.equal(3);
+      // The reverted session left no transaction recorded.
+      const vault = await program.account.agentVault.fetch(rollingVault);
+      expect(vault.totalTransactions.toNumber()).to.equal(0);
     });
   });
 });

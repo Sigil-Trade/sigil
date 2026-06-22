@@ -40,6 +40,7 @@ import {
   SurfpoolTestEnv,
   MOCK_DEFI_PROGRAM_ID,
   buildMockDefiNoopIx,
+  buildMockSwapToVaultIx,
   DEVNET_USDC_MINT,
   DEVNET_USDT_MINT,
   PROTOCOL_TREASURY,
@@ -222,7 +223,11 @@ describe("surfpool-integration", function () {
       const validateIx = await program.methods
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
-          new BN(50_000_000), // 50 USDC
+          // require-measurable-outcome (err 6115): this lifecycle test asserts
+          // only totalTransactions/totalVolume (no spend magnitude), so a
+          // NON-spending session (amount 0) is the correct fixture — exempt from
+          // 6115, still increments totalTransactions, keeps totalVolume == 0.
+          new BN(0),
           MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
@@ -231,7 +236,8 @@ describe("surfpool-integration", function () {
               vault: vaultPda,
               agent: agent.publicKey,
               tokenMint: DEVNET_USDC_MINT,
-              amount: new BN(50_000_000),
+              // must match the validate arg above (PolicyPreviewMismatch fires otherwise)
+              amount: new BN(0),
               targetProtocol: MOCK_DEFI_PROGRAM_ID,
             }),
           ),
@@ -389,7 +395,11 @@ describe("surfpool-integration", function () {
       const validateIx = await program.methods
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
-          new BN(10_000_000), // 10 USDC
+          // require-measurable-outcome (err 6115): this test asserts only the
+          // composed TX lands within the 20-slot window (signature returned), not
+          // a spend magnitude — a NON-spending session (amount 0) is exempt and
+          // preserves the intent.
+          new BN(0),
           MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
@@ -398,7 +408,8 @@ describe("surfpool-integration", function () {
               vault: vaultPda,
               agent: agent.publicKey,
               tokenMint: DEVNET_USDC_MINT,
-              amount: new BN(10_000_000),
+              // must match the validate arg above (PolicyPreviewMismatch otherwise)
+              amount: new BN(0),
               targetProtocol: MOCK_DEFI_PROGRAM_ID,
             }),
           ),
@@ -534,7 +545,10 @@ describe("surfpool-integration", function () {
       const validateIx = await program.methods
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
-          new BN(5_000_000), // 5 USDC
+          // require-measurable-outcome (err 6115): boundary test asserts only the
+          // composed TX succeeds (signature), not a spend — non-spending session
+          // (amount 0) is exempt and preserves intent.
+          new BN(0),
           MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
@@ -543,7 +557,8 @@ describe("surfpool-integration", function () {
               vault: vaultPda,
               agent: agent.publicKey,
               tokenMint: DEVNET_USDC_MINT,
-              amount: new BN(5_000_000),
+              // must match the validate arg above (PolicyPreviewMismatch otherwise)
+              amount: new BN(0),
               targetProtocol: MOCK_DEFI_PROGRAM_ID,
             }),
           ),
@@ -691,7 +706,11 @@ describe("surfpool-integration", function () {
       const validateIx = await program.methods
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
-          new BN(25_000_000), // 25 USDC
+          // require-measurable-outcome (err 6115): asserts only
+          // totalTransactions == 1 / totalVolume == 0 (mock DeFi moves nothing),
+          // so a non-spending session (amount 0) is the correct fixture — exempt
+          // from 6115, still counts the transaction, keeps totalVolume == 0.
+          new BN(0),
           MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
@@ -700,7 +719,8 @@ describe("surfpool-integration", function () {
               vault: vaultPda,
               agent: agent.publicKey,
               tokenMint: DEVNET_USDC_MINT,
-              amount: new BN(25_000_000),
+              // must match the validate arg above (PolicyPreviewMismatch otherwise)
+              amount: new BN(0),
               targetProtocol: MOCK_DEFI_PROGRAM_ID,
             }),
           ),
@@ -862,7 +882,11 @@ describe("surfpool-integration", function () {
       const validateIx = await program.methods
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
-          new BN(30_000_000), // 30 USDC
+          // require-measurable-outcome (err 6115): asserts only the cumulative
+          // transaction count (totalTransactions == 2) and totalVolume == 0, not
+          // a spend magnitude — non-spending session (amount 0) is exempt and
+          // still increments the counter.
+          new BN(0),
           MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
@@ -871,7 +895,8 @@ describe("surfpool-integration", function () {
               vault: vaultPda,
               agent: agent.publicKey,
               tokenMint: DEVNET_USDC_MINT,
-              amount: new BN(30_000_000),
+              // must match the validate arg above (PolicyPreviewMismatch otherwise)
+              amount: new BN(0),
               targetProtocol: MOCK_DEFI_PROGRAM_ID,
             }),
           ),
@@ -1043,6 +1068,34 @@ describe("surfpool-integration", function () {
         (amount * PROTOCOL_FEE_RATE) / FEE_RATE_DENOMINATOR,
       );
 
+      // require-measurable-outcome (err 6115): the fee is collected at validate on
+      // the AUTHORIZED amount (upfront, spend-independent), so this test must keep
+      // a SPENDING session (amount > 0) to prove the fee lands. To satisfy the
+      // invariant at finalize without inflating spend, the middle ix is an
+      // ACQUIRING swap with inAmount = 0 (no stablecoin leaves the vault →
+      // actual_spend == 0) and outAmount > 0 (a non-USDC, vault-owned output
+      // INCREASES → M1 satisfied). USDT (≠ USDC) is the acquired mint; the
+      // vault-owned USDT ATA (funded earlier in this suite) is the pinned output.
+      // Mirrors sandwich-integration.ts / flash-trade-integration.ts.
+      await ensureMintExists(env.connection, DEVNET_USDT_MINT, 6);
+      const agentUsdtReserve = await fundWithTokens(
+        env.connection,
+        agent.publicKey,
+        DEVNET_USDT_MINT,
+        100_000_000, // agent-owned reserve funds the swap's output leg
+      );
+      // Off-vault USDC recipient for the swap's input leg. With inAmount = 0 it
+      // receives nothing, but the ix lists it as a writable meta so it must be a
+      // resolvable token account in the completeness checks.
+      const drainRecipient = Keypair.generate();
+      const drainRecipientUsdcAta = await fundWithTokens(
+        env.connection,
+        drainRecipient.publicKey,
+        DEVNET_USDC_MINT,
+        0,
+      );
+      const swapOutAmount = new BN(1_000); // tiny acquisition → output increases
+
       const validateIx = await program.methods
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
@@ -1071,13 +1124,21 @@ describe("surfpool-integration", function () {
           protocolTreasuryTokenAccount: protocolTreasuryAta,
           feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
-          outputSwapAccount: null,
+          // M1: pin the vault-owned USDT ATA finalize requires to have increased.
+          outputSwapAccount: vaultUsdtAta,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           agentSpendOverlay: overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
+        // F-Q1a completeness: the swap ix's writable, non-vault metas (vault USDC
+        // input source, drain recipient, agent reserve, vault output ATA) plus the
+        // agent fee-payer must be resolvable in validate's remaining_accounts.
         .remainingAccounts([
+          { pubkey: vaultUsdcAta, isSigner: false, isWritable: false },
+          { pubkey: drainRecipientUsdcAta, isSigner: false, isWritable: false },
+          { pubkey: agentUsdtReserve, isSigner: false, isWritable: false },
+          { pubkey: vaultUsdtAta, isSigner: false, isWritable: false },
           { pubkey: agent.publicKey, isSigner: false, isWritable: false },
         ])
         .instruction();
@@ -1097,17 +1158,37 @@ describe("surfpool-integration", function () {
           agentSpendOverlay: overlayPda,
           instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
           outputStablecoinAccount: null,
-          outputSwapAccount: null,
+          outputSwapAccount: vaultUsdtAta,
         })
+        // F-Q1b finalize completeness (err 6113): the swap's writable, non-vault
+        // metas plus the agent must reach finalize too. READONLY — resolved, not
+        // authorized.
+        .remainingAccounts([
+          { pubkey: vaultUsdcAta, isSigner: false, isWritable: false },
+          { pubkey: drainRecipientUsdcAta, isSigner: false, isWritable: false },
+          { pubkey: agentUsdtReserve, isSigner: false, isWritable: false },
+          { pubkey: vaultUsdtAta, isSigner: false, isWritable: false },
+          { pubkey: agent.publicKey, isSigner: false, isWritable: false },
+        ])
         .instruction();
+
+      const swapIx = buildMockSwapToVaultIx(
+        vaultUsdcAta, // input source (vault USDC) — agent's validate delegation
+        drainRecipientUsdcAta, // input sink (receives 0; inAmount = 0)
+        agentUsdtReserve, // output source (agent-owned USDT reserve)
+        vaultUsdtAta, // vault-owned acquired output — must INCREASE (M1)
+        agent.publicKey,
+        new BN(0), // inAmount = 0 → no stablecoin leaves vault (actual_spend == 0)
+        swapOutAmount, // outAmount > 0 → vault USDT increases (satisfies 6115)
+      );
 
       await sendVersionedTx(
         env.connection,
-        [validateIx, buildMockDefiNoopIx(agent.publicKey), finalizeIx],
+        [validateIx, swapIx, finalizeIx],
         agent,
       );
 
-      // Check protocol treasury balance increased
+      // Check protocol treasury balance increased (fee collected on amount > 0).
       const treasuryBalance =
         await env.connection.getTokenAccountBalance(protocolTreasuryAta);
       expect(Number(treasuryBalance.value.amount)).to.be.greaterThanOrEqual(
@@ -1209,7 +1290,10 @@ describe("surfpool-integration", function () {
       const validateIx = await program.methods
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
-          new BN(20_000_000),
+          // require-measurable-outcome (err 6115): this test only PROFILES the
+          // CU of a validate+finalize pair (amount-independent), so a non-spending
+          // session (amount 0) is exempt and exercises the same code path.
+          new BN(0),
           MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
@@ -1218,7 +1302,8 @@ describe("surfpool-integration", function () {
               vault: vaultPda,
               agent: agent.publicKey,
               tokenMint: DEVNET_USDC_MINT,
-              amount: new BN(20_000_000),
+              // must match the validate arg above (PolicyPreviewMismatch otherwise)
+              amount: new BN(0),
               targetProtocol: MOCK_DEFI_PROGRAM_ID,
             }),
           ),
@@ -1945,7 +2030,11 @@ describe("surfpool-integration", function () {
       const validateIx = await program.methods
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
-          new BN(5_000_000),
+          // require-measurable-outcome (err 6115): this test proves a reactivated
+          // vault accepts operations again (signature returned), not a spend
+          // magnitude — a non-spending session (amount 0) is exempt and preserves
+          // the intent.
+          new BN(0),
           MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, setup.policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
@@ -1954,7 +2043,8 @@ describe("surfpool-integration", function () {
               vault: setup.vaultPda,
               agent: setup.agent.publicKey,
               tokenMint: DEVNET_USDC_MINT,
-              amount: new BN(5_000_000),
+              // must match the validate arg above (PolicyPreviewMismatch otherwise)
+              amount: new BN(0),
               targetProtocol: MOCK_DEFI_PROGRAM_ID,
             }),
           ),
@@ -2140,7 +2230,11 @@ describe("surfpool-integration", function () {
       const validateIx = await program.methods
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
-          new BN(5_000_000),
+          // require-measurable-outcome (err 6115): this test proves the UNPAUSED
+          // second agent can still operate (signature returned) while a different
+          // agent is paused — no spend magnitude asserted, so a non-spending
+          // session (amount 0) is exempt and preserves the intent.
+          new BN(0),
           MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, setup.policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
@@ -2149,7 +2243,8 @@ describe("surfpool-integration", function () {
               vault: setup.vaultPda,
               agent: agent2.publicKey,
               tokenMint: DEVNET_USDC_MINT,
-              amount: new BN(5_000_000),
+              // must match the validate arg above (PolicyPreviewMismatch otherwise)
+              amount: new BN(0),
               targetProtocol: MOCK_DEFI_PROGRAM_ID,
             }),
           ),
@@ -2229,7 +2324,10 @@ describe("surfpool-integration", function () {
       const validateIx = await program.methods
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
-          new BN(5_000_000),
+          // require-measurable-outcome (err 6115): this test proves an unpaused
+          // agent can operate again (signature returned), not a spend magnitude —
+          // a non-spending session (amount 0) is exempt and preserves the intent.
+          new BN(0),
           MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, setup.policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
@@ -2238,7 +2336,8 @@ describe("surfpool-integration", function () {
               vault: setup.vaultPda,
               agent: setup.agent.publicKey,
               tokenMint: DEVNET_USDC_MINT,
-              amount: new BN(5_000_000),
+              // must match the validate arg above (PolicyPreviewMismatch otherwise)
+              amount: new BN(0),
               targetProtocol: MOCK_DEFI_PROGRAM_ID,
             }),
           ),
@@ -2387,7 +2486,12 @@ describe("surfpool-integration", function () {
       const validateIx = await program.methods
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
-          new BN(5_000_000),
+          // require-measurable-outcome (err 6115): this test proves an
+          // OPERATOR-capability agent is PERMITTED to open a session (the
+          // permission gate runs at validate, independent of amount) — it asserts
+          // only the signature, not a spend magnitude. A non-spending session
+          // (amount 0) is exempt from 6115 and preserves the permission intent.
+          new BN(0),
           MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, swapSetup.policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
@@ -2396,7 +2500,8 @@ describe("surfpool-integration", function () {
               vault: swapSetup.vaultPda,
               agent: swapSetup.agent.publicKey,
               tokenMint: DEVNET_USDC_MINT,
-              amount: new BN(5_000_000),
+              // must match the validate arg above (PolicyPreviewMismatch otherwise)
+              amount: new BN(0),
               targetProtocol: MOCK_DEFI_PROGRAM_ID,
             }),
           ),
@@ -3112,7 +3217,10 @@ describe("surfpool-integration", function () {
       const validateIx = await program.methods
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
-          new BN(5_000_000),
+          // require-measurable-outcome (err 6115): this test proves a composed TX
+          // succeeds at a normal slot (signature returned), not a spend magnitude
+          // — a non-spending session (amount 0) is exempt and preserves the intent.
+          new BN(0),
           MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, setup.policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
@@ -3121,7 +3229,8 @@ describe("surfpool-integration", function () {
               vault: setup.vaultPda,
               agent: setup.agent.publicKey,
               tokenMint: DEVNET_USDC_MINT,
-              amount: new BN(5_000_000),
+              // must match the validate arg above (PolicyPreviewMismatch otherwise)
+              amount: new BN(0),
               targetProtocol: MOCK_DEFI_PROGRAM_ID,
             }),
           ),
@@ -3193,7 +3302,11 @@ describe("surfpool-integration", function () {
       const validateIx = await program.methods
         .validateAndAuthorize(
           DEVNET_USDC_MINT,
-          new BN(5_000_000),
+          // require-measurable-outcome (err 6115): this test proves slot
+          // advancement does not break the composed TX flow (signature returned),
+          // not a spend magnitude — a non-spending session (amount 0) is exempt
+          // and preserves the intent.
+          new BN(0),
           MOCK_DEFI_PROGRAM_ID,
           await readPolicyVersion(program, setup.policyPda),
           new BN(0), // AC-10 expectedNonce (fresh session)
@@ -3202,7 +3315,8 @@ describe("surfpool-integration", function () {
               vault: setup.vaultPda,
               agent: setup.agent.publicKey,
               tokenMint: DEVNET_USDC_MINT,
-              amount: new BN(5_000_000),
+              // must match the validate arg above (PolicyPreviewMismatch otherwise)
+              amount: new BN(0),
               targetProtocol: MOCK_DEFI_PROGRAM_ID,
             }),
           ),

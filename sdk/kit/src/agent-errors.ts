@@ -87,7 +87,7 @@ export const SIGIL_ON_CHAIN_ERROR_MIN = 6000;
  * this map agrees with it by code AND name — so adding or renumbering an
  * on-chain error without updating this map fails at test time.
  */
-export const SIGIL_ON_CHAIN_ERROR_MAX = 6114;
+export const SIGIL_ON_CHAIN_ERROR_MAX = 6115;
 
 interface ErrorMapping {
   name: string;
@@ -1958,6 +1958,20 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
         action: "place_finalize_immediately_after_the_defi_instruction",
         description:
           "Reorder the transaction so finalize_session immediately follows the single DeFi instruction. Put any ComputeBudget/System instructions before validate_and_authorize, not between the DeFi instruction and finalize.",
+      },
+    ],
+  },
+  6115: {
+    name: "ErrUnmeasurableSpend",
+    message:
+      "The spending session produced no measurable in-transaction vault outcome — no stablecoin moved out of the vault and no vault-owned acquisition increased. This is an async/keeper-settled venue (its real transfer lands in a later block), a CPI-deferred or request-mode action, or a no-op. Recording it would let the spend escape the caps, so it is rejected.",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "use_a_synchronously_settling_action",
+        description:
+          "Use an action whose value movement settles in this same transaction — either a stablecoin spend Sigil can measure, or an acquiring swap that lands the acquired token in a vault-owned account (declare it via seal()'s outputSwapMint). Request/keeper-fulfillment actions that settle in a later block are not supported on the spending path.",
       },
     ],
   },

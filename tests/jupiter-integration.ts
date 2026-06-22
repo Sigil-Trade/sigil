@@ -71,6 +71,7 @@ import {
   MOCK_DEFI_PROGRAM_ID,
   buildMockDefiNoopIx,
 } from "./helpers/litesvm-setup";
+import { expectSigilError } from "./helpers/strict-errors";
 
 const FULL_CAPABILITY = 2; // CAPABILITY_OPERATOR
 
@@ -401,7 +402,14 @@ describe("jupiter-integration", () => {
   // =========================================================================
   describe("composed swap happy path", () => {
     it("executes a composed [validate, mock_swap, finalize] transaction", async () => {
-      const amount = new BN(50_000_000); // 50 USDC
+      // This test exercises the composed-sandwich MECHANISM and the
+      // total_transactions counter — not a measurable spend (it asserts
+      // totalVolume == 0). The require-measurable-outcome invariant (err 6115)
+      // exempts non-spending sessions, so run a non-spending session (amount =
+      // 0): the [validate, mock_defi, finalize] sandwich still executes,
+      // total_transactions still increments to 1, and totalVolume stays 0 — all
+      // assertions below are preserved unchanged.
+      const amount = new BN(0);
 
       const sig = await sendComposedSwap(
         vaultPda,
@@ -423,7 +431,11 @@ describe("jupiter-integration", () => {
     });
 
     it("records multiple composed swaps correctly", async () => {
-      const amount = new BN(30_000_000); // 30 USDC
+      // Mechanism + counter test (asserts totalVolume == 0). Non-spending
+      // session (amount = 0) is exempt from the require-measurable-outcome
+      // invariant; total_transactions still advances to 2 and totalVolume stays
+      // 0, preserving both assertions.
+      const amount = new BN(0);
 
       await sendComposedSwap(
         vaultPda,
@@ -445,55 +457,34 @@ describe("jupiter-integration", () => {
   // =========================================================================
   // Outcome-based spending: mock swaps record zero actual spend
   // =========================================================================
-  describe("outcome-based spending with mock swaps", () => {
-    it("succeeds when declared amount exceeds cap because actual spend is zero (outcome-based)", async () => {
-      // Outcome-based enforcement (Phase 1): finalize_session measures the
-      // actual stablecoin balance delta, not the declared amount. Mock swap
-      // instructions don't move tokens, so actual_spend = 0 and the cap check
-      // is never triggered. Cap enforcement with real token movement is tested
-      // via Rust unit tests and devnet E2E with real DeFi programs.
-
-      // Already spent 80 USDC in declared amounts from happy path tests.
-      // With outcome-based: tracker has 0 recorded spend (mock swaps).
-      // Send more swaps — all succeed because actual_spend = 0.
-      await sendComposedSwap(
-        vaultPda,
-        policyPda,
-        trackerPda,
-        agent,
-        usdcMint,
-        new BN(200_000_000),
-        mockDefiProtocol,
-      );
-      await sendComposedSwap(
-        vaultPda,
-        policyPda,
-        trackerPda,
-        agent,
-        usdcMint,
-        new BN(200_000_000),
-        mockDefiProtocol,
-      );
-
-      // This would exceed the 500 USDC cap if spending were declaration-based,
-      // but succeeds because outcome-based enforcement measures zero actual spend.
-      await sendComposedSwap(
-        vaultPda,
-        policyPda,
-        trackerPda,
-        agent,
-        usdcMint,
-        new BN(50_000_000),
-        mockDefiProtocol,
-      );
-
-      // Verify vault recorded all transactions (finalize succeeds with actual_spend=0)
-      const vault = await program.account.agentVault.fetch(vaultPda);
-      expect(vault.totalTransactions.toNumber()).to.be.greaterThanOrEqual(5);
-
-      // Fee drain fix: tracker now records protocol fees even when actual_spend=0.
-      // The key invariant: totalVolume = 0 (no real DeFi spend occurred).
-      expect(vault.totalVolume.toNumber()).to.equal(0);
+  describe("zero-outcome spending session is rejected (require-measurable-outcome)", () => {
+    it("reverts a spending session that moves no tokens with ErrUnmeasurableSpend (6115)", async () => {
+      // Migration of the former "declared amount exceeds cap because actual
+      // spend is zero (outcome-based)" test. Its premise — a SPENDING session
+      // (amount > 0) whose mock swap moves zero tokens settles successfully and
+      // never binds the cap — is exactly the cap-accounting slip the
+      // require-measurable-outcome invariant (err 6115) closes. A spending
+      // session that produces no measurable vault outcome (no stablecoin
+      // movement AND no declared acquisition) now REVERTS. The original
+      // assertion ("succeeds") tested behavior that no longer exists; the
+      // faithful migration asserts the new behavior for that exact input.
+      try {
+        await sendComposedSwap(
+          vaultPda,
+          policyPda,
+          trackerPda,
+          agent,
+          usdcMint,
+          new BN(200_000_000),
+          mockDefiProtocol,
+        );
+        expect.fail(
+          "Expected zero-outcome spending session to revert ErrUnmeasurableSpend",
+        );
+      } catch (err: any) {
+        if (err?.message === "Should have thrown") throw err;
+        expectSigilError(err, { name: "ErrUnmeasurableSpend" });
+      }
     });
   });
 
@@ -808,64 +799,45 @@ describe("jupiter-integration", () => {
         .rpc();
     });
 
-    it("all swaps succeed with outcome-based enforcement (mock swaps = zero spend)", async () => {
-      // Outcome-based enforcement: finalize_session measures actual stablecoin
-      // balance delta. Mock swaps don't move tokens → actual_spend = 0 →
-      // cap check skipped. All swaps succeed regardless of declared amounts.
+    it("rejects a zero-outcome spending swap with ErrUnmeasurableSpend (6115)", async () => {
+      // Migration of the former "all swaps succeed with outcome-based
+      // enforcement (mock swaps = zero spend)" test. The premise that a
+      // SPENDING session (amount > 0) moving zero tokens settles successfully —
+      // never binding the rolling-window cap — is the cap-accounting slip the
+      // require-measurable-outcome invariant (err 6115) now closes. A spending
+      // session with no measurable vault outcome REVERTS instead.
 
-      // Verify agent is registered
+      // Verify agent is registered (setup precondition unchanged).
       const vaultState = await program.account.agentVault.fetch(rollingVault);
       expect(vaultState.agents[0].pubkey.toString()).to.equal(
         agent.publicKey.toString(),
         "Agent should be registered for rolling window vault",
       );
 
-      // Swap 1: 40 USDC declared (actual spend = 0)
-      await sendComposedSwap(
-        rollingVault,
-        rollingPolicy,
-        rollingTracker,
-        agent,
-        usdcMint,
-        new BN(40_000_000),
-        mockDefiProtocol,
-        rollingVaultUsdcAta,
-      );
+      // 40 USDC declared, zero tokens moved by the mock swap → no measurable
+      // outcome → revert.
+      try {
+        await sendComposedSwap(
+          rollingVault,
+          rollingPolicy,
+          rollingTracker,
+          agent,
+          usdcMint,
+          new BN(40_000_000),
+          mockDefiProtocol,
+          rollingVaultUsdcAta,
+        );
+        expect.fail(
+          "Expected zero-outcome spending swap to revert ErrUnmeasurableSpend",
+        );
+      } catch (err: any) {
+        if (err?.message === "Should have thrown") throw err;
+        expectSigilError(err, { name: "ErrUnmeasurableSpend" });
+      }
 
-      let vault = await program.account.agentVault.fetch(rollingVault);
-      expect(vault.totalTransactions.toNumber()).to.equal(1);
-
-      // Swap 2: 40 USDC declared (actual spend = 0)
-      await sendComposedSwap(
-        rollingVault,
-        rollingPolicy,
-        rollingTracker,
-        agent,
-        usdcMint,
-        new BN(40_000_000),
-        mockDefiProtocol,
-        rollingVaultUsdcAta,
-      );
-
-      vault = await program.account.agentVault.fetch(rollingVault);
-      expect(vault.totalTransactions.toNumber()).to.equal(2);
-
-      // Swap 3: 30 USDC declared — would exceed 100 cap if declaration-based,
-      // but succeeds because outcome-based enforcement sees zero actual spend.
-      await sendComposedSwap(
-        rollingVault,
-        rollingPolicy,
-        rollingTracker,
-        agent,
-        usdcMint,
-        new BN(30_000_000),
-        mockDefiProtocol,
-        rollingVaultUsdcAta,
-      );
-
-      // All 3 TXs succeeded
-      vault = await program.account.agentVault.fetch(rollingVault);
-      expect(vault.totalTransactions.toNumber()).to.equal(3);
+      // The reverted session left no transaction recorded.
+      const vault = await program.account.agentVault.fetch(rollingVault);
+      expect(vault.totalTransactions.toNumber()).to.equal(0);
     });
   });
 

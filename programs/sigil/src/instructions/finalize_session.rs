@@ -135,6 +135,45 @@ pub struct FinalizeSession<'info> {
     pub slot_hashes_sysvar: UncheckedAccount<'info>,
 }
 
+/// Require-measurable-outcome guard, extracted to its OWN frame
+/// (`#[inline(never)]`) so its branch + the nested `enforce_output_ownership`
+/// call do not inflate `finalize_session::handler`'s stack frame (near the
+/// 4096-byte BPF limit on the post-assertion path; inlining it overflowed in the
+/// release build, same as the F-Q1b completeness extraction). A spending session
+/// (run_outcome_check) that measured no stablecoin movement (actual_spend == 0)
+/// must still evidence a vault-owned acquiring output that INCREASED (M1), else
+/// revert ErrUnmeasurableSpend. Exempt: non-spending / expired sessions.
+#[inline(never)]
+fn enforce_measurable_outcome<'info>(
+    run_outcome_check: bool,
+    actual_spend: u64,
+    output_swap_account: &Option<Box<Account<'info, TokenAccount>>>,
+    vault_key: &Pubkey,
+    pinned_output_account: &Pubkey,
+    pinned_output_mint: &Pubkey,
+    output_balance_before: u64,
+) -> Result<()> {
+    if run_outcome_check && actual_spend == 0 {
+        if *pinned_output_account != Pubkey::default() {
+            // Acquiring swap declared — require its pinned vault-owned output to
+            // have INCREASED in-tx (M1); enforce_output_ownership reverts
+            // (ErrOutputNotVaultOwned 6112) if it did not.
+            enforce_output_ownership(
+                output_swap_account,
+                vault_key,
+                pinned_output_account,
+                pinned_output_mint,
+                output_balance_before,
+            )?;
+        } else {
+            // No measurable stablecoin movement AND no declared acquisition → no
+            // measurable vault outcome (async/CPI/data-mode/no-op). Reject.
+            return Err(error!(SigilError::ErrUnmeasurableSpend));
+        }
+    }
+    Ok(())
+}
+
 /// M1 output-ownership check, extracted to its OWN frame (`#[inline(never)]`)
 /// so its byte-buffer locals do not inflate `finalize_session::handler`'s stack
 /// frame, which is already near the 4096-byte BPF limit. Reads the pinned
@@ -637,17 +676,52 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
         }
     }
 
-    // --- Fee-to-cap fallback (OUTSIDE run_outcome_check) ---
-    // When no DeFi spend occurred (actual_spend_tracked == 0) but fees were collected
-    // in validate_and_authorize, charge those fees to the spending cap. This prevents
-    // fee drain attacks where an agent repeatedly calls validate+finalize with no DeFi
-    // instruction to extract fees without cap enforcement.
-    // Runs unconditionally — covers both expired sessions and zero-DeFi-spend sessions.
+    // ─── Require-measurable-outcome (async/CPI/data-mode cap-bypass closure) ──
+    // A SPENDING session (run_outcome_check) that exits the outcome-measurement
+    // block with actual_spend_tracked == 0 moved no measurable stablecoin out of
+    // the vault in-transaction. Sigil's allowlist + async denylist are TOP-LEVEL-
+    // instruction-scoped (no CPI enumeration) and program-ID-only (no discriminator
+    // gate post-M1-04), so an owner-allowlisted CPI-capable program — or an
+    // allowlisted program driven into a request/keeper-fill mode — can defer the
+    // real transfer to a LATER block, where finalize measures 0 and the session
+    // would otherwise settle on the dust fee, never binding the caps. REQUIRE a
+    // measurable in-tx vault outcome instead:
+    //   - actual_spend_tracked > 0 (stablecoin measurably left / returned), OR
+    //   - an acquiring swap that landed a vault-owned output which INCREASED (M1).
+    // Otherwise REVERT. VALUE-BLIND: no oracle, no magnitude valuation of any
+    // position — it only requires SOME measurable vault-owned delta to exist in
+    // this tx. (The unbounded async drain additionally requires owner-granted
+    // surviving custody = position-world; Sigil's own agent SPL delegation is
+    // revoked in this same tx, so this closes the token-world cap-accounting slip.)
+    // Exempt: non-spending / expired sessions (run_outcome_check == false).
+    // Extracted to a #[inline(never)] helper so the guard + the nested
+    // enforce_output_ownership call live in their OWN frame, keeping this handler
+    // under the 4096-byte BPF limit on the post-assertion path (an inline version
+    // overflowed in the release build).
+    enforce_measurable_outcome(
+        run_outcome_check,
+        actual_spend_tracked,
+        &ctx.accounts.output_swap_account,
+        &vault_key,
+        &session_output_swap_account,
+        &session_output_swap_mint,
+        session_output_swap_balance_before,
+    )?;
+
+    // --- Fee-to-cap fallback (NON-SPENDING / EXPIRED sessions only) ---
+    // When a NON-spending or EXPIRED session (run_outcome_check == false) collected
+    // fees in validate_and_authorize but moved no DeFi spend, charge those fees to
+    // the spending cap (fee-drain defense). Narrowed to `!run_outcome_check`: a
+    // SPENDING session with actual_spend == 0 no longer reaches here — it reverts at
+    // the require-measurable-outcome guard above (settling on the dust fee WAS the
+    // cap-accounting slip). Fee-drain-via-no-DeFi on a spending session is
+    // independently impossible (validate requires defi_ix_count == 1 and gates the
+    // SPL Approve on it, so a zero-DeFi spending session reverts at validate).
     let fees_collected_total = session_protocol_fee
         .checked_add(session_developer_fee)
         .ok_or(SigilError::Overflow)?;
 
-    if actual_spend_tracked == 0 && fees_collected_total > 0 {
+    if !run_outcome_check && actual_spend_tracked == 0 && fees_collected_total > 0 {
         let policy = &ctx.accounts.policy;
         let mut tracker = ctx.accounts.tracker.load_mut()?;
         let rolling_usd = tracker.get_rolling_24h_usd(&clock);

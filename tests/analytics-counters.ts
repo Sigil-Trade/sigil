@@ -295,10 +295,22 @@ describe("analytics-counters", () => {
   }
 
   async function executeSession(amount?: BN): Promise<void> {
-    const validateIx = await buildValidateIx(amount ?? new BN(50_000_000));
-    // F-Q2: a spending sandwich needs EXACTLY ONE counted DeFi instruction
-    // between validate and finalize. mock-defi's no-op open_position is that ix
-    // (zero token movement → actual_spend = 0, counters still increment).
+    // These counter tests assert lifecycle behavior (total_transactions /
+    // lifetime_tx_count) on a NON-EXPIRED session — none of them depends on a
+    // measurable spend (they explicitly expect actual_spend == 0). The
+    // require-measurable-outcome invariant (err 6115) exempts non-spending
+    // sessions (amount == 0 → run_outcome_check == false), so default to a
+    // non-spending session. total_transactions still increments on every
+    // non-expired finalize (finalize_session.rs:1119), and lifetime_tx_count
+    // still only increments when actual_spend > 0 — so every assertion below is
+    // preserved unchanged.
+    const sessionAmount = amount ?? new BN(0);
+    const validateIx = await buildValidateIx(sessionAmount);
+    // A counted DeFi no-op ix is allowed (not required) on a non-spending
+    // session: validate's defi_ix_count == 1 gate is spending-only
+    // (validate_and_authorize.rs:878), and the non-spending scan treats the
+    // mock-defi ix as PassedSharedChecks. Keeping it preserves the original
+    // [validate, defi, finalize] sandwich shape these tests exercised.
     const defiIx = buildMockDefiNoopIx(agent.publicKey);
     const finalizeIx = await buildFinalizeIx();
     sendVersionedTx(svm, [validateIx, defiIx, finalizeIx], agent);
