@@ -10616,4 +10616,3 @@ export type Sigil = {
     }
   ]
 };
-
