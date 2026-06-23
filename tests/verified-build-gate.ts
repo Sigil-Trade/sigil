@@ -516,7 +516,7 @@ describe("verified-build-gate (Item 3)", () => {
   });
 
   it("(a) armed hash matching the deployed ELF → validate passes", async () => {
-    // Precondition: armed from test (e). ProgramData published in `before`.
+    // Precondition: armed in scenario (e). ProgramData published in `before`.
     const policy = await program.account.policyConfig.fetch(policyPda);
     expect(Buffer.from(policy.protocolHashes[0]).equals(correctHash)).to.equal(
       true,
