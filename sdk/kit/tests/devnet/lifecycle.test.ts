@@ -192,6 +192,9 @@ describe("Kit SDK Devnet — Vault Lifecycle", function () {
       cosignSessionPubkey: livePolicy.data.cosignSessionPubkey,
       operatorGrantDelaySeconds: livePolicy.data.operatorGrantDelaySeconds,
       agentSetHash: computeAgentSetHash(liveVault.data.agents),
+      // Item 3 (2026-06-22): protocol_hashes pass-through from live policy (the
+      // queue below passes null = no change), bound at canonical digest pos 25.
+      protocolHashes: livePolicy.data.protocolHashes,
     });
 
     const queueIx = await getQueuePolicyUpdateInstructionAsync({
@@ -224,6 +227,9 @@ describe("Kit SDK Devnet — Vault Lifecycle", function () {
       cosignSessionPubkey: null,
       // F-Q6 (2026-06-02): non-elevated path — pass null for fall-through.
       operatorGrantDelaySeconds: null,
+      // Item 3 (2026-06-22): non-elevated path — pass null (no arm/disarm of the
+      // verified-build gate). Live protocol_hashes pass through unchanged.
+      protocolHashes: null,
       // TA-09 (Phase 3): zero pubkey for non-elevated path.
       cosignSession: "11111111111111111111111111111111" as unknown as Address,
       newPolicyPreviewDigest,

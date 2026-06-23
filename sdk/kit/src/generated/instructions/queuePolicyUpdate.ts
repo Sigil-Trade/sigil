@@ -121,6 +121,7 @@ export type QueuePolicyUpdateInstructionData = {
   cosignRequired: Option<boolean>;
   cosignSessionPubkey: Option<Address>;
   operatorGrantDelaySeconds: Option<bigint>;
+  protocolHashes: Option<Array<ReadonlyUint8Array>>;
   cosignSession: Address;
   newPolicyPreviewDigest: ReadonlyUint8Array;
 };
@@ -144,6 +145,7 @@ export type QueuePolicyUpdateInstructionDataArgs = {
   cosignRequired: OptionOrNullable<boolean>;
   cosignSessionPubkey: OptionOrNullable<Address>;
   operatorGrantDelaySeconds: OptionOrNullable<number | bigint>;
+  protocolHashes: OptionOrNullable<Array<ReadonlyUint8Array>>;
   cosignSession: Address;
   newPolicyPreviewDigest: ReadonlyUint8Array;
 };
@@ -173,6 +175,12 @@ export function getQueuePolicyUpdateInstructionDataEncoder(): Encoder<QueuePolic
       ["cosignRequired", getOptionEncoder(getBooleanEncoder())],
       ["cosignSessionPubkey", getOptionEncoder(getAddressEncoder())],
       ["operatorGrantDelaySeconds", getOptionEncoder(getU64Encoder())],
+      [
+        "protocolHashes",
+        getOptionEncoder(
+          getArrayEncoder(fixEncoderSize(getBytesEncoder(), 32), { size: 10 }),
+        ),
+      ],
       ["cosignSession", getAddressEncoder()],
       ["newPolicyPreviewDigest", fixEncoderSize(getBytesEncoder(), 32)],
     ]),
@@ -204,6 +212,12 @@ export function getQueuePolicyUpdateInstructionDataDecoder(): Decoder<QueuePolic
     ["cosignRequired", getOptionDecoder(getBooleanDecoder())],
     ["cosignSessionPubkey", getOptionDecoder(getAddressDecoder())],
     ["operatorGrantDelaySeconds", getOptionDecoder(getU64Decoder())],
+    [
+      "protocolHashes",
+      getOptionDecoder(
+        getArrayDecoder(fixDecoderSize(getBytesDecoder(), 32), { size: 10 }),
+      ),
+    ],
     ["cosignSession", getAddressDecoder()],
     ["newPolicyPreviewDigest", fixDecoderSize(getBytesDecoder(), 32)],
   ]);
@@ -249,6 +263,7 @@ export type QueuePolicyUpdateAsyncInput<
   cosignRequired: QueuePolicyUpdateInstructionDataArgs["cosignRequired"];
   cosignSessionPubkey: QueuePolicyUpdateInstructionDataArgs["cosignSessionPubkey"];
   operatorGrantDelaySeconds: QueuePolicyUpdateInstructionDataArgs["operatorGrantDelaySeconds"];
+  protocolHashes: QueuePolicyUpdateInstructionDataArgs["protocolHashes"];
   cosignSession: QueuePolicyUpdateInstructionDataArgs["cosignSession"];
   newPolicyPreviewDigest: QueuePolicyUpdateInstructionDataArgs["newPolicyPreviewDigest"];
 };
@@ -389,6 +404,7 @@ export type QueuePolicyUpdateInput<
   cosignRequired: QueuePolicyUpdateInstructionDataArgs["cosignRequired"];
   cosignSessionPubkey: QueuePolicyUpdateInstructionDataArgs["cosignSessionPubkey"];
   operatorGrantDelaySeconds: QueuePolicyUpdateInstructionDataArgs["operatorGrantDelaySeconds"];
+  protocolHashes: QueuePolicyUpdateInstructionDataArgs["protocolHashes"];
   cosignSession: QueuePolicyUpdateInstructionDataArgs["cosignSession"];
   newPolicyPreviewDigest: QueuePolicyUpdateInstructionDataArgs["newPolicyPreviewDigest"];
 };

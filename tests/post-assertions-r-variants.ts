@@ -969,7 +969,8 @@ describe("post-assertions: Phase 6 Maestro borrows (R-1..R-4)", () => {
           null,
           true, // cosign_required
           cosigner.publicKey, // cosign_session_pubkey (bind)
-          null, // operator_grant_delay_seconds
+          null,
+          null /* protocol_hashes (PR-C) */, // operator_grant_delay_seconds
           PublicKey.default, // cosign_session (enabling cosign is non-elevated)
           await fetchAndComputeQueueDigest(program, policyPda, vaultPda, {
             cosignRequired: true,

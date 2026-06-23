@@ -1626,7 +1626,8 @@ describe("surfpool-integration", function () {
           null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
           null, // cosign_required (G6 audit 2026-05-18 — pass-through, default off)
           null, // cosign_session_pubkey (D-5: pass-through)
-          null, // operator_grant_delay_seconds (D-5: pass-through)
+          null,
+          null /* protocol_hashes (PR-C) */, // operator_grant_delay_seconds (D-5: pass-through)
           PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
           await fetchAndComputeQueueDigest(program, policyPda, vaultPda, {
             dailySpendingCapUsd: new BN(200_000_000),
@@ -1691,7 +1692,8 @@ describe("surfpool-integration", function () {
           null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
           null, // cosign_required (G6 audit 2026-05-18 — pass-through, default off)
           null, // cosign_session_pubkey (D-5: pass-through)
-          null, // operator_grant_delay_seconds (D-5: pass-through)
+          null,
+          null /* protocol_hashes (PR-C) */, // operator_grant_delay_seconds (D-5: pass-through)
           PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
           await fetchAndComputeQueueDigest(program, policyPda, vaultPda, {
             dailySpendingCapUsd: new BN(300_000_000),

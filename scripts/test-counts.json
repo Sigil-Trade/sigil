@@ -49,6 +49,12 @@
       "claudePattern": "tests/toctou-security.ts` (ts-mocha + LiteSVM, %d tests)"
     },
     {
+      "name": "Verified-build gate (Item 3 — upgrade-TOCTOU pin)",
+      "count": 9,
+      "onChain": true,
+      "claudePattern": "tests/verified-build-gate.ts` (ts-mocha + LiteSVM, %d tests)"
+    },
+    {
       "name": "Analytics counters (failed TX + per-agent TX count)",
       "count": 7,
       "onChain": true,

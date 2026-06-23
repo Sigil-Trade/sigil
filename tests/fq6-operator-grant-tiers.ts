@@ -232,7 +232,8 @@ describe("F-Q6 — OPERATOR-grant authorization tiering (per-tier behavior)", ()
         override.cosignSessionPubkey ?? null, // 17 cosign_session_pubkey
         override.operatorGrantDelaySeconds != null
           ? new BN(override.operatorGrantDelaySeconds)
-          : null, // 18 operator_grant_delay_seconds
+          : null,
+        null /* protocol_hashes (PR-C) */, // 18 operator_grant_delay_seconds
         PublicKey.default, // 19 cosign_session — non-elevated (no inline cosigner)
         queueDigest, // 20 expected_digest
       )

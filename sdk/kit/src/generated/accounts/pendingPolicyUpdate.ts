@@ -219,6 +219,33 @@ export type PendingPolicyUpdate = {
    * APPENDED per F-14 APPEND-ONLY rule for Borsh stability.
    */
   queuedPolicyVersion: bigint;
+  /**
+   * Item 3 — verified-build gate (2026-06-22): optional update to
+   * `PolicyConfig.protocol_hashes`. `None` = preserve the live value;
+   * `Some([[u8;32]; MAX])` = set the full index-aligned hash array (an
+   * all-zero entry within it disables the gate for that protocol). This
+   * mirrors the whole-array write semantics of `protocols` / `protocol_caps`
+   * (the owner submits the complete intended array, not a delta). Bound by
+   * TA-19 at canonical digest position 25; `apply_pending_policy` copies it
+   * into the live policy before the second-pass digest recompute.
+   *
+   * Whole-array `Option` (not a per-entry delta) keeps the merge logic
+   * trivial and the digest deterministic. Borsh size = 1 (Option tag) +
+   * 32 * MAX_ALLOWED_PROTOCOLS = 321 bytes, moving `PendingPolicyUpdate::SIZE`
+   * 1028 → 1349.
+   *
+   * MIGRATION PRECONDITION: deploy the upgrade only when NO policy update is
+   * pending (operationally trivial pre-mainnet). The struct is ephemeral
+   * (`init`-recreated at the new SIZE on every `queue_policy_update`), so any
+   * pending account created AFTER the upgrade is already new-format. A pending
+   * account created BEFORE the upgrade would be old-format (no trailing
+   * `Option` field) and would fail Borsh deserialization in apply/cancel — the
+   * precondition guarantees none exists at upgrade time. See the companion
+   * comment on `apply_pending_policy::handler`.
+   *
+   * APPENDED per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  protocolHashes: Option<Array<ReadonlyUint8Array>>;
 };
 
 export type PendingPolicyUpdateArgs = {
@@ -376,6 +403,33 @@ export type PendingPolicyUpdateArgs = {
    * APPENDED per F-14 APPEND-ONLY rule for Borsh stability.
    */
   queuedPolicyVersion: number | bigint;
+  /**
+   * Item 3 — verified-build gate (2026-06-22): optional update to
+   * `PolicyConfig.protocol_hashes`. `None` = preserve the live value;
+   * `Some([[u8;32]; MAX])` = set the full index-aligned hash array (an
+   * all-zero entry within it disables the gate for that protocol). This
+   * mirrors the whole-array write semantics of `protocols` / `protocol_caps`
+   * (the owner submits the complete intended array, not a delta). Bound by
+   * TA-19 at canonical digest position 25; `apply_pending_policy` copies it
+   * into the live policy before the second-pass digest recompute.
+   *
+   * Whole-array `Option` (not a per-entry delta) keeps the merge logic
+   * trivial and the digest deterministic. Borsh size = 1 (Option tag) +
+   * 32 * MAX_ALLOWED_PROTOCOLS = 321 bytes, moving `PendingPolicyUpdate::SIZE`
+   * 1028 → 1349.
+   *
+   * MIGRATION PRECONDITION: deploy the upgrade only when NO policy update is
+   * pending (operationally trivial pre-mainnet). The struct is ephemeral
+   * (`init`-recreated at the new SIZE on every `queue_policy_update`), so any
+   * pending account created AFTER the upgrade is already new-format. A pending
+   * account created BEFORE the upgrade would be old-format (no trailing
+   * `Option` field) and would fail Borsh deserialization in apply/cancel — the
+   * precondition guarantees none exists at upgrade time. See the companion
+   * comment on `apply_pending_policy::handler`.
+   *
+   * APPENDED per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  protocolHashes: OptionOrNullable<Array<ReadonlyUint8Array>>;
 };
 
 /** Gets the encoder for {@link PendingPolicyUpdateArgs} account data. */
@@ -415,6 +469,12 @@ export function getPendingPolicyUpdateEncoder(): Encoder<PendingPolicyUpdateArgs
       ["cosignApproved", getBooleanEncoder()],
       ["approvedAtSlot", getU64Encoder()],
       ["queuedPolicyVersion", getU64Encoder()],
+      [
+        "protocolHashes",
+        getOptionEncoder(
+          getArrayEncoder(fixEncoderSize(getBytesEncoder(), 32), { size: 10 }),
+        ),
+      ],
     ]),
     (value) => ({
       ...value,
@@ -459,6 +519,12 @@ export function getPendingPolicyUpdateDecoder(): Decoder<PendingPolicyUpdate> {
     ["cosignApproved", getBooleanDecoder()],
     ["approvedAtSlot", getU64Decoder()],
     ["queuedPolicyVersion", getU64Decoder()],
+    [
+      "protocolHashes",
+      getOptionDecoder(
+        getArrayDecoder(fixDecoderSize(getBytesDecoder(), 32), { size: 10 }),
+      ),
+    ],
   ]);
 }
 

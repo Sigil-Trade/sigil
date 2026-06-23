@@ -267,7 +267,8 @@ describe("TOCTOU Security Fix", () => {
         null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — null pass-through)
         null, // cosign_required (G6 audit 2026-05-18 — pass-through, default off)
         null,
-        null, // cosign_session_pubkey (D-5: pass-through)
+        null,
+        null /* protocol_hashes (PR-C) */, // cosign_session_pubkey (D-5: pass-through)
         PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
         newDigest,
       )
@@ -461,7 +462,8 @@ describe("TOCTOU Security Fix", () => {
           null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
           null, // cosign_required (G6 audit 2026-05-18 — pass-through, default off)
           null,
-          null, // cosign_session_pubkey (D-5: pass-through)
+          null,
+          null /* protocol_hashes (PR-C) */, // cosign_session_pubkey (D-5: pass-through)
           PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
           new Array(32).fill(0), // newPolicyPreviewDigest (Phase 2 TA-19 placeholder)
         )
@@ -504,7 +506,8 @@ describe("TOCTOU Security Fix", () => {
           null, // per_recipient_daily_cap_usd (TA-14 Phase 5 — pass-through)
           null, // cosign_required (G6 audit 2026-05-18 — pass-through, default off)
           null,
-          null, // cosign_session_pubkey (D-5: pass-through)
+          null,
+          null /* protocol_hashes (PR-C) */, // cosign_session_pubkey (D-5: pass-through)
           PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
           new Array(32).fill(0), // newPolicyPreviewDigest (Phase 2 TA-19 placeholder)
         )

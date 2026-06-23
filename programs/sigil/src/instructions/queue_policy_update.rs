@@ -27,7 +27,11 @@ pub struct QueuePolicyUpdate<'info> {
         seeds = [b"policy", vault.key().as_ref()],
         bump = policy.bump,
     )]
-    pub policy: Account<'info, PolicyConfig>,
+    // Boxed (heap) so the 1,649-byte PolicyConfig does not sit on the handler's
+    // BPF stack frame — Item 3's +320-byte protocol_hashes field pushed the
+    // unboxed handler to 4416 bytes (over the 4,096 limit). Mirrors how
+    // validate_and_authorize boxes PolicyConfig.
+    pub policy: Box<Account<'info, PolicyConfig>>,
 
     #[account(
         init,
@@ -36,7 +40,8 @@ pub struct QueuePolicyUpdate<'info> {
         seeds = [b"pending_policy", vault.key().as_ref()],
         bump,
     )]
-    pub pending_policy: Account<'info, PendingPolicyUpdate>,
+    // Boxed for the same reason (1,349-byte PendingPolicyUpdate off the stack).
+    pub pending_policy: Box<Account<'info, PendingPolicyUpdate>>,
 
     pub system_program: Program<'info, System>,
     // TA-09 (Phase 3) + async-cosign refactor (#353): the co-signing session
@@ -105,6 +110,16 @@ pub fn handler(
     // max(., 600); cosign/multisig always need >=2 factors). Bound by TA-19
     // (digest, position 22) and gated by timelock_duration like every policy field.
     operator_grant_delay_seconds: Option<u64>,
+    // Item 3 (verified-build gate, 2026-06-22): owner-controlled per-protocol
+    // pinned ELF SHA-256 array, INDEX-ALIGNED to the EFFECTIVE `protocols`.
+    // `None` = pass through from live policy; `Some([[u8;32]; MAX])` = set the
+    // full array (an all-zero entry disables the gate for that protocol).
+    // Whole-array semantics mirror `protocols` / `protocol_caps`. Bound by TA-19
+    // at canonical digest position 25. ELEVATION: arming (zero→nonzero) /
+    // re-pinning (nonzero→different-nonzero) are tightening/neutral → standard
+    // timelock; DISARMING any entry (nonzero→zero) is a WEAKENING → elevated (see
+    // the `disarms_build_hash` trigger below).
+    protocol_hashes: Option<[[u8; 32]; MAX_ALLOWED_PROTOCOLS]>,
     // TA-09 (Phase 3): the cosigning session pubkey (binding only — this ix is
     // owner-only). `Pubkey::default()` means "no cosign required" (non-elevated
     // mutation). For an elevated mutation the owner MUST pass the vault's bound
@@ -327,6 +342,12 @@ pub fn handler(
     let eff_protocol_caps_owned: Vec<u64> = protocol_caps
         .clone()
         .unwrap_or_else(|| policy.protocol_caps.clone());
+    // Item 3 (2026-06-22): merged-effective protocol_hashes for the TA-19 digest
+    // (position 25). None = pass through from live policy. Owned copy so the
+    // digest read + the disarm-elevation check + the pending write below all see
+    // the same value.
+    let eff_protocol_hashes: [[u8; 32]; MAX_ALLOWED_PROTOCOLS] =
+        protocol_hashes.unwrap_or(policy.protocol_hashes);
 
     // ─── TA-09 (Phase 3): elevated mutation detection + cosign binding ─
     //
@@ -408,6 +429,19 @@ pub fn handler(
     // bits) is exempt, like the other tighten-is-free directions.
     let widens_operating_hours =
         operating_hours.is_some_and(|new| (new & !policy.operating_hours) != 0);
+    // Item 3 (verified-build gate, 2026-06-22): DISARMING an armed build hash
+    // (any entry going nonzero→zero) is a guard-WEAKENING — it disables the
+    // anti-tamper pin that closes the upgrade-TOCTOU, so on a cosign vault it
+    // must be cosigned (cosign_required-gated; the inner group below — symmetric
+    // with expands_protocols / widens_operating_hours). Arming (zero→nonzero) and
+    // re-pinning to a DIFFERENT non-zero hash are tightening/neutral and stay
+    // standard timelock: a wrong re-pin only bricks usability (self-correcting),
+    // never enables a drain. Detection is a trivial per-entry nonzero→zero check
+    // over the merged-effective array vs the live policy.
+    let disarms_build_hash = protocol_hashes.is_some_and(|_| {
+        (0..MAX_ALLOWED_PROTOCOLS)
+            .any(|i| policy.protocol_hashes[i] != [0u8; 32] && eff_protocol_hashes[i] == [0u8; 32])
+    });
 
     // G6 (audit 2026-05-18 cosign opt-in): one-way-ratchet semantics for
     // toggling `cosign_required`.
@@ -477,7 +511,8 @@ pub fn handler(
             || weakens_protocol_caps
             || raises_slippage
             || raises_developer_fee
-            || widens_operating_hours))
+            || widens_operating_hours
+            || disarms_build_hash))
         || disables_cosign
         || rotates_cosigner;
 
@@ -631,6 +666,11 @@ pub fn handler(
         // M-1 (audit 2026-06-11): merged-effective per-protocol caps (positions 23-24).
         has_protocol_caps: eff_has_protocol_caps,
         protocol_caps: &eff_protocol_caps_owned,
+        // Item 3 (2026-06-22): merged-effective protocol_hashes bound at canonical
+        // position 25, index-aligned to the effective protocols. A tampered SDK
+        // cannot silently arm/disarm/re-pin a build hash between owner approval
+        // and on-chain landing — the recomputed digest diverges.
+        protocol_hashes: &eff_protocol_hashes,
     });
     require!(
         recomputed_digest == new_policy_preview_digest,
@@ -689,6 +729,11 @@ pub fn handler(
     // F-Q6 (2026-06-02): persist optional operator_grant_delay_seconds update.
     // None passes the live value through at apply time.
     pending.operator_grant_delay_seconds = operator_grant_delay_seconds;
+    // Item 3 (2026-06-22): persist optional protocol_hashes update. None passes
+    // the live value through at apply time; Some(array) sets the full
+    // index-aligned hash array (apply copies it into live policy + reallocs the
+    // PolicyConfig to 1649 for pre-upgrade vaults before the second-pass digest).
+    pending.protocol_hashes = protocol_hashes;
     // G6 (audit 2026-05-18 cosign opt-in): persist optional cosign_required
     // update. apply_pending_policy reads this and writes through to
     // `policy.cosign_required` before the second-pass TA-19 digest

@@ -65,10 +65,16 @@ import {
 //     HEX_MINIMAL   = 8d80e131f0fca07e71d173cd5c559f0041a6ef9391e3a87ecac5f249c5bda36d
 //     HEX_REALISTIC = 21155d71a1d0a466cf57676658dcae577b3cab8d1cc512c4589f9ebba10bae03
 // M-1 (2026-06-11): regenerated for the 24-field digest (+has_protocol_caps=false, +protocol_caps=[]).
+//   Pre-Item-3 (post-M-1):
+//     HEX_MINIMAL   = 7e2958e4e38802d5416e3965a5eb22e51daa192ca093dbebe776cdae8d469780
+//     HEX_REALISTIC = 67f71921a83501d6a517e18894820d9375d5c4080d22ff1d2b76455cf4049313
+// Item 3 (2026-06-22): regenerated for the 25-field digest (+protocol_hashes index-aligned
+//   to protocols; both fixtures omit protocolHashes ⇒ all-zero. Minimal has 0 protocols
+//   (+4-byte zero len prefix); realistic has 2 protocols (+4-byte len=2 ++ 2×32 zero bytes)).
 const HEX_MINIMAL =
-  "7e2958e4e38802d5416e3965a5eb22e51daa192ca093dbebe776cdae8d469780";
+  "38c598c8311077bf3d298bca7eb0c21fb194b66294873879f5896ff08095b986";
 const HEX_REALISTIC =
-  "67f71921a83501d6a517e18894820d9375d5c4080d22ff1d2b76455cf4049313";
+  "903e68455f5c47c625b294cef6f030d7b64f5e8f60b77495cd15b45cfbe0398a";
 /**
  * Phase 8 PEN-CROSS-1 (audit 2026-05-19): empty-vault agent_set_hash.
  * SHA-256 of [0x00,0x00,0x00,0x00]. Mirrors Rust
@@ -505,8 +511,11 @@ describe("TA-19 — computePolicyPreviewDigest cross-impl pin", () => {
       hasProtocolCaps: true,
       protocolCaps: [250_000_000n, 500_000_000n],
     });
+    // Item 3 (2026-06-22): regenerated for the 25-field digest. protocolHashes
+    // omitted ⇒ all-zero; 2 protocols ⇒ +4-byte len(2) ++ 2×32 zero bytes.
+    // Pre-Item-3: bacaf95ada191ebfd2c990c185435dcef226966a04c65b40dce36a0380a95847
     expect(toHex(d)).to.equal(
-      "bacaf95ada191ebfd2c990c185435dcef226966a04c65b40dce36a0380a95847",
+      "452766c8f800e9b37ab9ac768640986eca9dcade1d78da5fe74eb66458cf055d",
     );
   });
 
@@ -657,6 +666,9 @@ function referenceDigest(fields: {
   // M-1 (2026-06-11): per-protocol caps at canonical positions 23-24.
   hasProtocolCaps: boolean;
   protocolCaps: readonly bigint[];
+  // Item 3 (2026-06-22): per-protocol pinned ELF hashes at canonical position
+  // 25, index-aligned to protocolBytes (32 bytes each; missing ⇒ 32 zero bytes).
+  protocolHashes: readonly Uint8Array[];
 }): string {
   const parts: number[] = [];
   const pushU64 = (v: bigint) => {
@@ -728,6 +740,23 @@ function referenceDigest(fields: {
   pushU8(fields.hasProtocolCaps ? 1 : 0);
   pushU32(fields.protocolCaps.length);
   for (const c of fields.protocolCaps) pushU64(c);
+  // Item 3 (2026-06-22): protocol_hashes at position 25 — u32 LE length =
+  // protocolBytes.length ++ for each protocol the 32-byte hash (missing ⇒ 32
+  // zero bytes). Index-aligned to protocols, matching the Rust/SDK encoders.
+  pushU32(fields.protocolBytes.length);
+  for (let i = 0; i < fields.protocolBytes.length; i++) {
+    const h = fields.protocolHashes[i];
+    if (h === undefined) {
+      for (let k = 0; k < 32; k++) parts.push(0);
+    } else {
+      if (h.length !== 32) {
+        throw new Error(
+          `referenceDigest: protocolHashes[${i}] must be 32 bytes, got ${h.length}`,
+        );
+      }
+      for (const x of h) parts.push(x);
+    }
+  }
 
   const buf = Buffer.from(parts);
   return createHash("sha256").update(buf).digest("hex");
@@ -768,6 +797,7 @@ describe("TA-19 — property test: SDK encoder == reference encoder (PEN-CROSS-7
           minLength: 0,
           maxLength: 10,
         }), // protocol_caps (M-1 2026-06-11)
+        fc.array(pubkeyArb, { minLength: 0, maxLength: 10 }), // protocol_hashes (Item 3 2026-06-22) — length independent of protocols to exercise zero-fill + ignore-extra paths
         (
           dailyCap,
           maxTx,
@@ -793,6 +823,7 @@ describe("TA-19 — property test: SDK encoder == reference encoder (PEN-CROSS-7
           operatorGrantDelaySeconds,
           hasProtocolCaps,
           protocolCaps,
+          protocolHashes,
         ) => {
           const sdkDigest = computePolicyPreviewDigest({
             dailySpendingCapUsd: dailyCap,
@@ -826,6 +857,8 @@ describe("TA-19 — property test: SDK encoder == reference encoder (PEN-CROSS-7
             // M-1 (2026-06-11): per-protocol caps.
             hasProtocolCaps,
             protocolCaps,
+            // Item 3 (2026-06-22): per-protocol pinned hashes.
+            protocolHashes,
           });
           const refDigest = referenceDigest({
             dailySpendingCapUsd: dailyCap,
@@ -854,6 +887,8 @@ describe("TA-19 — property test: SDK encoder == reference encoder (PEN-CROSS-7
             // M-1 (2026-06-11): per-protocol caps.
             hasProtocolCaps,
             protocolCaps,
+            // Item 3 (2026-06-22): per-protocol pinned hashes.
+            protocolHashes,
           });
           const sdkHex = Array.from(sdkDigest)
             .map((x) => x.toString(16).padStart(2, "0"))

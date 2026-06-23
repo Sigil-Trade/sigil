@@ -46,6 +46,9 @@
  *   22. operator_grant_delay_seconds: u64 LE (8 bytes) — F-Q6 (2026-06-02)
  *   23. has_protocol_caps: bool as 1 byte (0/1) — M-1 (audit 2026-06-11)
  *   24. protocol_caps: u32 LE length (4 bytes) ++ each cap u64 LE (8 bytes) — M-1
+ *   25. protocol_hashes: u32 LE length = protocols.length (4 bytes) ++ for each
+ *       protocol the 32-byte pinned ELF SHA-256 (all-zero = gate off) — Item 3
+ *       (verified-build gate, 2026-06-22). INDEX-ALIGNED to protocols.
  *
  * Phase 3 append-only additions (TA-05/07/17): operating_hours,
  * auto_promote_grays, auto_revoke_threshold are appended at positions 15-17
@@ -95,7 +98,7 @@
  * 32 bytes each + fixed scalars ≈ 700 bytes worst case.
  */
 
-import type { Address } from "../kit-adapter.js";
+import type { Address, ReadonlyUint8Array } from "../kit-adapter.js";
 import {
   base58Decode32 as base58Decode,
   sha256,
@@ -242,6 +245,21 @@ export interface PolicyPreviewFields {
    * pattern). Default [] when omitted.
    */
   protocolCaps?: readonly bigint[];
+  /**
+   * Item 3 (verified-build gate, 2026-06-22): owner's per-protocol pinned ELF
+   * SHA-256 hashes, INDEX-ALIGNED to `protocols`. Each entry is a 32-byte
+   * `Uint8Array` (an all-zero array = gate disabled for that protocol). Bound at
+   * canonical position 25, encoded index-aligned to `protocols`:
+   * `u32-LE(protocols.length)` ++ for each i the 32 bytes `protocolHashes[i]`
+   * (missing/short entries encode 32 zero bytes). Default [] when omitted (⇒
+   * all protocols encode 32 zero bytes = gate off everywhere), matching the
+   * on-chain init/legacy state where `protocol_hashes` is all-zero. Mirrors the
+   * Rust `protocol_hashes` digest encoding byte-for-byte.
+   */
+  // Accept the codama-decoded `ReadonlyUint8Array` (what `PolicyConfig.protocolHashes`
+  // deserializes to) as well as a plain `Uint8Array`. The encoder only reads
+  // `.length` + indexes (no mutation), so read-only entries are safe.
+  protocolHashes?: readonly ReadonlyUint8Array[];
 }
 
 // Base58 decode + sha256 + cursor writers now live in `../canonical-encode.ts`
@@ -277,8 +295,9 @@ export interface PolicyPreviewFields {
 /** Mirrors `policy_digest.rs::POLICY_PREVIEW_FIELD_COUNT`.
  *  M1-04: was 22; has_constraints removed (digest-version bump).
  *  F-Q6 (2026-06-02): 21 → 22, binds operator_grant_delay_seconds.
- *  M-1 (2026-06-11): 22 → 24, binds has_protocol_caps (23) + protocol_caps (24). */
-export const POLICY_PREVIEW_FIELD_COUNT = 24;
+ *  M-1 (2026-06-11): 22 → 24, binds has_protocol_caps (23) + protocol_caps (24).
+ *  Item 3 (2026-06-22): 24 → 25, binds protocol_hashes (25, index-aligned to protocols). */
+export const POLICY_PREVIEW_FIELD_COUNT = 25;
 
 /**
  * Phase 8 PEN-CROSS-1 (Council ISC-141): SHA-256 of the Borsh-encoded
@@ -368,6 +387,7 @@ const PER_FIELD_FIXED_SIZES = [
   8, // 22. operator_grant_delay_seconds (u64 LE)  F-Q6 (2026-06-02)
   1, // 23. has_protocol_caps            (bool as u8)  M-1 (2026-06-11)
   4, // 24. protocol_caps                (u32 LE length prefix; u64 caps variable)  M-1
+  4, // 25. protocol_hashes             (u32 LE length prefix; 32-byte hashes variable)  Item 3 (2026-06-22)
 ] as const;
 
 /** Derived sum — must match the encoder's `fixedSize` exactly. */
@@ -424,10 +444,16 @@ export function computePolicyPreviewDigest(
   const fixedSize = EXPECTED_FIXED_SIZE;
   // M-1 (2026-06-11): + each protocol_cap (u64 = 8 bytes); the u32 length
   // prefix is already counted in PER_FIELD_FIXED_SIZES (field 24 = 4).
+  // Item 3 (2026-06-22): protocol_hashes is index-aligned to protocols, so its
+  // variable size is keyed on protocols.length (32 bytes each), NOT on the
+  // protocolHashes array length — matching the Rust encoder which iterates
+  // 0..protocols.len(). The u32 length prefix is already counted in
+  // PER_FIELD_FIXED_SIZES (field 25 = 4).
   const variableSize =
     protoBytes.length * 32 +
     destBytes.length * 32 +
-    (fields.protocolCaps?.length ?? 0) * 8;
+    (fields.protocolCaps?.length ?? 0) * 8 +
+    protoBytes.length * 32;
   const buf = new Uint8Array(fixedSize + variableSize);
   const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
 
@@ -516,6 +542,28 @@ export function computePolicyPreviewDigest(
   off = writeU32Le(view, off, protocolCaps.length);
   for (const cap of protocolCaps) {
     off = writeU64Le(view, off, cap);
+  }
+  // 25. protocol_hashes: index-aligned to protocols — Item 3 (2026-06-22).
+  // u32-LE(protocols.length) ++ for each i in 0..protocols.length the 32 bytes
+  // protocolHashes[i] (a missing/short entry encodes 32 zero bytes = gate
+  // disabled for that protocol). Keyed on protocols.length, NOT on
+  // protocolHashes.length, to match the Rust encoder's 0..protocols.len() walk.
+  const protocolHashes = fields.protocolHashes ?? [];
+  off = writeU32Le(view, off, protoBytes.length);
+  for (let i = 0; i < protoBytes.length; i++) {
+    const h = protocolHashes[i];
+    if (h === undefined) {
+      // No hash supplied for this protocol → 32 zero bytes (gate disabled).
+      off += 32;
+    } else {
+      if (h.length !== 32) {
+        throw new Error(
+          `protocolHashes[${i}] must be exactly 32 bytes, got ${h.length}`,
+        );
+      }
+      buf.set(h, off);
+      off += 32;
+    }
   }
 
   // §RP-2 L-NEW-1 forward-looking ratchet: the encoder MUST write

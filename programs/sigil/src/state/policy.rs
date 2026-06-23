@@ -324,6 +324,29 @@ pub struct PolicyConfig {
     ///
     /// APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
     pub operator_grant_delay_seconds: u64,
+
+    /// Item 3 — verified-build gate (2026-06-22): per-protocol pinned SHA-256 of
+    /// the deployed ELF, INDEX-ALIGNED to `protocols`. `protocol_hashes[i]` pins
+    /// the expected build hash of `protocols[i]`. An ALL-ZERO entry
+    /// (`[0u8; 32]`) means "no hash pinned for that protocol" — the gate is
+    /// DISABLED per-protocol (full back-compat: an existing vault grown to this
+    /// SIZE gets all-zero hashes = gate off everywhere). A non-zero entry arms
+    /// the gate: `validate_and_authorize` calls
+    /// `program_hash::enforce_program_build_hash` against the target's deployed
+    /// ProgramData ELF and rejects (`ErrProgramBuildMismatch` 6117) if the build
+    /// changed, or (`ErrProgramDataUnresolvable` 6116) if it cannot read the
+    /// build while armed.
+    ///
+    /// FIXED-SIZE array (no Borsh length prefix) = +320 bytes vs the prior
+    /// layout; this is what moves `PolicyConfig::SIZE` 1329 → 1649. Bound by
+    /// TA-19 at canonical digest position 25 (encoded index-aligned to
+    /// `protocols`: u32-LE(protocols.len()) ++ each `protocol_hashes[i]`),
+    /// so a tampered SDK / pending-PDA mutation cannot silently arm/disarm/re-pin
+    /// a hash between owner approval and on-chain landing. Disarming an entry
+    /// (nonzero→zero) is an ELEVATED mutation (see `queue_policy_update`).
+    ///
+    /// APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
+    pub protocol_hashes: [[u8; 32]; MAX_ALLOWED_PROTOCOLS],
 }
 
 /// TA-07 (Phase 3): one entry in `PolicyConfig.destination_graylist`.
@@ -363,7 +386,8 @@ impl PolicyConfig {
     /// per_recipient_daily_cap_usd (8) [TA-14 Phase 5] +
     /// cosign_required (1) [G6 audit 2026-05-18] +
     /// cosign_session_pubkey (32) [D-5 close audit 2026-05-19, F-RP3-1] +
-    /// operator_grant_delay_seconds (8) [F-Q6 2026-06-02]
+    /// operator_grant_delay_seconds (8) [F-Q6 2026-06-02] +
+    /// protocol_hashes (32 * MAX) [Item 3 verified-build gate 2026-06-22]
     /// [TA-19, Phase 2; PEN-CROSS-2 Phase 2 close-up;
     ///  TA-05/07/17 Phase 3 pre-exec; TA-12/TA-14 Phase 5;
     ///  G6 cosign opt-in 2026-05-18 audit;
@@ -397,7 +421,8 @@ impl PolicyConfig {
         + 8 // per_recipient_daily_cap_usd [TA-14 Phase 5]
         + 1 // cosign_required [G6 audit 2026-05-18]
         + 32 // cosign_session_pubkey [D-5 audit 2026-05-19, F-RP3-1]
-        + 8; // operator_grant_delay_seconds [F-Q6 2026-06-02]
+        + 8 // operator_grant_delay_seconds [F-Q6 2026-06-02]
+        + (32 * MAX_ALLOWED_PROTOCOLS); // protocol_hashes [Item 3 verified-build gate 2026-06-22]
 
     /// Check if a protocol is allowed.
     ///
@@ -496,14 +521,14 @@ impl PolicyConfig {
     }
 }
 
-// F-Q6 (2026-06-02) compile-time SIZE pin (mirrors the AgentVault pattern).
-// Verifies the PolicyConfig::SIZE arithmetic after appending
-// operator_grant_delay_seconds (+8): 1321 (pre-F-Q6, post-M1-04 has_constraints
-// removal) + 8 = 1329. Any future field addition that forgets to update SIZE
-// fails the build here — the same PEN-7-class ratchet AgentVault already has.
+// Item 3 verified-build gate (2026-06-22) compile-time SIZE pin (mirrors the
+// AgentVault pattern). Verifies the PolicyConfig::SIZE arithmetic after
+// appending `protocol_hashes: [[u8; 32]; MAX_ALLOWED_PROTOCOLS]` (+320):
+// 1329 (post-F-Q6) + 32 * 10 = 1649. Any future field addition that forgets to
+// update SIZE fails the build here — the same PEN-7-class ratchet AgentVault has.
 const _POLICY_CONFIG_SIZE_PIN: () = assert!(
-    PolicyConfig::SIZE == 1329,
-    "PolicyConfig::SIZE drifted from documented F-Q6 layout (1321 + 8 operator_grant_delay_seconds = 1329)"
+    PolicyConfig::SIZE == 1649,
+    "PolicyConfig::SIZE drifted from documented layout (1329 post-F-Q6 + 320 protocol_hashes = 1649)"
 );
 
 /// TA-05 (Phase 3): mask covering bits 0..=23 only. Any `operating_hours`

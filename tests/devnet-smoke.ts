@@ -271,7 +271,8 @@ describe("devnet-smoke-test", () => {
         null, // per_recipient_daily_cap_usd (TA-14 Phase 5)
         null, // cosign_required (G6 audit 2026-05-18)
         null,
-        null, // cosign_session_pubkey (D-5 Phase 10a-B7)
+        null,
+        null /* protocol_hashes (PR-C) */, // cosign_session_pubkey (D-5 Phase 10a-B7)
         PublicKey.default, // cosign_session (TA-09 Phase 3 — non-elevated)
         queueDigest,
       )

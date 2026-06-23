@@ -134,6 +134,9 @@ pub fn handler(ctx: Context<RevokeAgent>, agent_to_remove: Pubkey) -> Result<()>
         // M-1 (audit 2026-06-11): bind per-protocol caps (positions 23-24).
         has_protocol_caps: policy.has_protocol_caps,
         protocol_caps: &policy.protocol_caps,
+        // Item 3 (2026-06-22): re-derive protocol_hashes from live policy
+        // (this site never mutates it). Bound at canonical digest position 25.
+        protocol_hashes: &policy.protocol_hashes,
     });
     policy.policy_preview_digest = new_digest;
 

@@ -497,9 +497,11 @@ describe("audit-log-coverage (Phase 7.1)", () => {
       Buffer.from([0]),
       // arg 18 (F-Q6 2026-06-02): operator_grant_delay_seconds: Option<u64> = None (tag=0)
       Buffer.from([0]),
-      // arg 19: cosign_session: Pubkey = Pubkey::default() (all zeros)
+      // arg 19 (Item 3 2026-06-22): protocol_hashes: Option<[[u8;32];10]> = None (tag=0)
+      Buffer.from([0]),
+      // arg 20: cosign_session: Pubkey = Pubkey::default() (all zeros)
       Buffer.alloc(32, 0),
-      // arg 20: new_policy_preview_digest: [u8; 32]
+      // arg 21: new_policy_preview_digest: [u8; 32]
       Buffer.from(queueDigest),
     ]);
     const queueIx = new TransactionInstruction({

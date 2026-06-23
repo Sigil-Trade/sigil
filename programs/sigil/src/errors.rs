@@ -816,4 +816,31 @@ pub enum SigilError {
     /// same-tx.)
     #[msg("Spending session produced no measurable in-transaction vault outcome (no stablecoin movement and no vault-owned acquisition) — async/keeper-settled or unmeasurable; recording 0 spend is rejected")]
     ErrUnmeasurableSpend,
+
+    /// 6116 — Item 3 verified-build gate (2026-06-22): the target protocol has a
+    /// non-zero `protocol_hashes` entry armed in PolicyConfig, but its
+    /// BPFLoaderUpgradeable `ProgramData` account could not be resolved for the
+    /// hash check. Fires when: the ProgramData account is ABSENT from
+    /// `validate_and_authorize`'s `remaining_accounts` (the SDK `seal()` satisfier
+    /// must supply it whenever a hash is armed), is not the canonical
+    /// `find_program_address([target_program_id], BPFLoaderUpgradeable)` PDA, is
+    /// not owned by BPFLoaderUpgradeable, or is too small to contain an ELF past
+    /// the 45-byte ProgramData header. FAIL-CLOSED: an armed gate that cannot read
+    /// the deployed build rejects rather than silently authorizing the target —
+    /// closing the upgrade-TOCTOU (allowlist a program → it is upgraded to a drain
+    /// → pure-pubkey allowlisting keeps authorizing).
+    #[msg("Verified-build gate: the target protocol's ProgramData account is missing/unresolvable while a build hash is armed — cannot vet the deployed build (fail-closed)")]
+    ErrProgramDataUnresolvable,
+
+    /// 6117 — Item 3 verified-build gate (2026-06-22): the target protocol's
+    /// armed `protocol_hashes` entry does NOT match the SHA-256 of its currently
+    /// deployed ELF (the bytes of its BPFLoaderUpgradeable `ProgramData` account
+    /// past the 45-byte header). The on-chain build changed since the owner pinned
+    /// it — either a legitimate upgrade the owner has not re-approved, or a
+    /// malicious upgrade to a drain contract. Reject before any CPI; the owner
+    /// re-pins the new hash via `queue_policy_update` once they have re-audited the
+    /// new build. VALUE-BLIND: no oracle / no price — pure byte-equality of the
+    /// owner-attested build hash against the live deployed build.
+    #[msg("Verified-build gate: the target protocol's deployed ELF hash does not match the owner-pinned build hash — the on-chain build changed (re-pin via queue_policy_update after re-audit)")]
+    ErrProgramBuildMismatch,
 }

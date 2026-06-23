@@ -380,6 +380,8 @@ mod cap_and_completeness_tests {
             cosign_session_pubkey: Pubkey::default(),
             // F-Q6 (2026-06-02): OPERATOR-grant delay default 0 in the mock.
             operator_grant_delay_seconds: 0,
+            // Item 3 (2026-06-22): verified-build gate disabled (all-zero) in mock.
+            protocol_hashes: [[0u8; 32]; crate::state::MAX_ALLOWED_PROTOCOLS],
         }
     }
 

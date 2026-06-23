@@ -212,6 +212,9 @@ impl FuzzTest {
             operator_grant_delay_seconds: 0,
             has_protocol_caps: false,
             protocol_caps: &[],
+            // Item 3 (verified-build gate): empty — protocols is empty in this
+            // harness, so the digest encodes u32-LE(0) and reads no hash entries.
+            protocol_hashes: &[],
         });
 
         let data = sigil::instruction::InitializeVault {
@@ -733,6 +736,7 @@ impl FuzzTest {
             cosign_required: None,
             cosign_session_pubkey: None,
             operator_grant_delay_seconds: None,
+            protocol_hashes: None,
             cosign_session: Pubkey::default(),
             new_policy_preview_digest: [0u8; 32],
         };
@@ -1284,6 +1288,7 @@ impl FuzzTest {
             cosign_required: None,
             cosign_session_pubkey: None,
             operator_grant_delay_seconds: None,
+            protocol_hashes: None,
             cosign_session: Pubkey::default(),
             new_policy_preview_digest: [0u8; 32],
         };
@@ -1333,6 +1338,8 @@ impl FuzzTest {
             pending_policy: pending,
             audit_log_success,
             slot_hashes_sysvar: anchor_lang::solana_program::sysvar::slot_hashes::id(),
+            // Item 3: realloc PolicyConfig 1329->1649 requires the system program.
+            system_program: anchor_lang::system_program::ID,
         };
 
         let ix = Instruction::new_with_bytes(

@@ -190,6 +190,15 @@ pub struct PolicyPreviewFields<'a> {
     /// position 24 as a borrowed slice mirroring `protocols`: u32-LE length prefix
     /// then each cap as u64 LE.
     pub protocol_caps: &'a [u64],
+    /// Item 3 (verified-build gate, 2026-06-22): per-protocol pinned ELF SHA-256,
+    /// INDEX-ALIGNED to `protocols`. Pass the full `&policy.protocol_hashes[..]`
+    /// (a 10-entry slice); the encoder reads only the first `protocols.len()`
+    /// entries (canonical position 25: `u32-LE(protocols.len())` ++ each
+    /// `protocol_hashes[i]` 32 bytes). An all-zero entry = gate disabled for that
+    /// protocol. Bound by TA-19 so a tampered SDK / pending-PDA mutation cannot
+    /// silently arm/disarm/re-pin a hash between owner approval and on-chain
+    /// landing.
+    pub protocol_hashes: &'a [[u8; 32]],
 }
 
 /// P0.2 PEN-7 defense-in-depth ratchet (audit 2026-05-19).
@@ -207,7 +216,8 @@ pub struct PolicyPreviewFields<'a> {
 // M1-04: was 22; has_constraints removed (digest-version bump).
 // F-Q6 (2026-06-02): 21 → 22, binds `operator_grant_delay_seconds`.
 // M-1 (2026-06-11): 22 → 24, binds `has_protocol_caps` (23) + `protocol_caps` (24).
-pub const POLICY_PREVIEW_FIELD_COUNT: usize = 24;
+// Item 3 (2026-06-22): 24 → 25, binds `protocol_hashes` (25, index-aligned to protocols).
+pub const POLICY_PREVIEW_FIELD_COUNT: usize = 25;
 
 /// Phase 8 PEN-CROSS-1 (Council ISC-66/A8/A9 / ISC-141 empty-set determinism).
 ///
@@ -294,8 +304,11 @@ mod field_count_invariant {
             operator_grant_delay_seconds: 0,
             has_protocol_caps: false,
             protocol_caps: &[],
+            // Item 3 (2026-06-22): protocol_hashes bound at canonical position
+            // 25, index-aligned to protocols. Empty here (protocols is empty).
+            protocol_hashes: &[],
         };
-        // The destructuring pattern below is exhaustive. If a 23rd field
+        // The destructuring pattern below is exhaustive. If a new field
         // lands on PolicyPreviewFields, this match fails to compile with
         // E0027 — `missing structure fields`. Forces the digest encoding
         // + POLICY_PREVIEW_FIELD_COUNT to be updated in lockstep.
@@ -324,8 +337,9 @@ mod field_count_invariant {
             operator_grant_delay_seconds: _,
             has_protocol_caps: _,
             protocol_caps: _,
+            protocol_hashes: _,
         } = fields;
-        assert_eq!(POLICY_PREVIEW_FIELD_COUNT, 24);
+        assert_eq!(POLICY_PREVIEW_FIELD_COUNT, 25);
     }
 }
 
@@ -416,6 +430,30 @@ pub fn compute_policy_preview_digest(fields: &PolicyPreviewFields<'_>) -> [u8; 3
     for cap in fields.protocol_caps.iter() {
         buf.extend_from_slice(&cap.to_le_bytes());
     }
+    // 25. protocol_hashes: index-aligned to protocols — Item 3 (2026-06-22).
+    // u32-LE(protocols.len()) ++ for each i in 0..protocols.len() the 32 bytes
+    // protocol_hashes[i]. We deliberately key the length + iteration on
+    // `protocols.len()` (NOT protocol_hashes.len(), which is the full 10-entry
+    // fixed array on-chain): the gate is per-protocol and index-aligned, so only
+    // the live protocols' hashes are canonical. Empty protocols ⇒ just the 4-byte
+    // zero length prefix (this is why EVERY pre-existing digest changes by ≥4
+    // bytes — expected and intentional). An all-zero hash entry encodes 32 zero
+    // bytes (gate disabled for that protocol) and still participates so the digest
+    // distinguishes "armed" from "disabled".
+    let n_protocols = fields.protocols.len();
+    buf.extend_from_slice(&(n_protocols as u32).to_le_bytes());
+    for i in 0..n_protocols {
+        // Defense-in-depth: if a caller passed a protocol_hashes slice shorter
+        // than protocols (should never happen — callers pass the full fixed
+        // array), treat the missing entry as all-zero (gate disabled) rather
+        // than panicking. The on-chain callers always pass &policy.protocol_hashes
+        // (length MAX_ALLOWED_PROTOCOLS >= protocols.len()), so this branch is
+        // unreachable in practice but keeps the encoder total.
+        match fields.protocol_hashes.get(i) {
+            Some(h) => buf.extend_from_slice(h),
+            None => buf.extend_from_slice(&[0u8; 32]),
+        }
+    }
 
     hashv(&[&buf]).to_bytes()
 }
@@ -465,6 +503,7 @@ mod tests {
             operator_grant_delay_seconds: 0,
             has_protocol_caps: false,
             protocol_caps: &[],
+            protocol_hashes: &[],
         };
         let d1 = compute_policy_preview_digest(&f);
         let d2 = compute_policy_preview_digest(&f);
@@ -508,6 +547,7 @@ mod tests {
             operator_grant_delay_seconds: 0,
             has_protocol_caps: false,
             protocol_caps: &[],
+            protocol_hashes: &[],
         };
         let mut flipped = base.daily_spending_cap_usd;
         let _ = &mut flipped; // suppress unused
@@ -560,6 +600,7 @@ mod tests {
             operator_grant_delay_seconds: 0,
             has_protocol_caps: false,
             protocol_caps: &[],
+            protocol_hashes: &[],
         };
         let f2 = PolicyPreviewFields {
             protocols: &b,
@@ -611,6 +652,7 @@ mod tests {
             operator_grant_delay_seconds: 0,
             has_protocol_caps: false,
             protocol_caps: &[],
+            protocol_hashes: &[],
         };
         let narrow = PolicyPreviewFields {
             // 13:00-17:00 UTC = bits 13..17 = 0x1E000
@@ -662,6 +704,7 @@ mod tests {
             operator_grant_delay_seconds: 0,
             has_protocol_caps: false,
             protocol_caps: &[],
+            protocol_hashes: &[],
         };
         let flipped = PolicyPreviewFields {
             auto_promote_grays: true,
@@ -711,6 +754,7 @@ mod tests {
             operator_grant_delay_seconds: 0,
             has_protocol_caps: false,
             protocol_caps: &[],
+            protocol_hashes: &[],
         };
         let lower = PolicyPreviewFields {
             auto_revoke_threshold: 3,
@@ -765,6 +809,7 @@ mod tests {
             operator_grant_delay_seconds: 0,
             has_protocol_caps: false,
             protocol_caps: &[],
+            protocol_hashes: &[],
         };
         let raised = PolicyPreviewFields {
             per_recipient_daily_cap_usd: 50_000_000, // $50 cap
@@ -819,6 +864,7 @@ mod tests {
             operator_grant_delay_seconds: 0,
             has_protocol_caps: false,
             protocol_caps: &[],
+            protocol_hashes: &[],
         };
         let raised = PolicyPreviewFields {
             // $100 floor in 6-decimal USDC face value
@@ -871,6 +917,7 @@ mod tests {
             operator_grant_delay_seconds: 0,
             has_protocol_caps: false,
             protocol_caps: &[],
+            protocol_hashes: &[],
         };
         let flipped = PolicyPreviewFields {
             cosign_required: true,
@@ -915,6 +962,7 @@ mod tests {
             operator_grant_delay_seconds: 0,
             has_protocol_caps: false,
             protocol_caps: &[],
+            protocol_hashes: &[],
         };
         let with_cosigner = PolicyPreviewFields {
             cosign_session_pubkey: pk(99),
@@ -960,6 +1008,7 @@ mod tests {
             operator_grant_delay_seconds: 0,
             has_protocol_caps: false,
             protocol_caps: &caps,
+            protocol_hashes: &[],
         };
         let switched_on = PolicyPreviewFields {
             has_protocol_caps: true,
@@ -1005,6 +1054,7 @@ mod tests {
             operator_grant_delay_seconds: 0,
             has_protocol_caps: true,
             protocol_caps: &caps_a,
+            protocol_hashes: &[],
         };
         let changed = PolicyPreviewFields {
             protocol_caps: &caps_b,
@@ -1054,16 +1104,19 @@ mod tests {
             operator_grant_delay_seconds: 0,
             has_protocol_caps: true,
             protocol_caps: &caps,
+            protocol_hashes: &[],
         };
         let d = compute_policy_preview_digest(&f);
         // Cross-impl pin: digest of the populated-caps fixture above. Mirrored as
-        // hex bacaf95ada191ebfd2c990c185435dcef226966a04c65b40dce36a0380a95847 in
+        // hex 452766c8f800e9b37ab9ac768640986eca9dcade1d78da5fe74eb66458cf055d in
         // sdk/kit/tests/policy/preview-digest.test.ts. Drift on either side fails.
+        // Item 3 (2026-06-22): regenerated for the 25-field digest (protocol_hashes
+        // index-aligned to protocols; here all-zero ⇒ +len-prefix + 2×32 zero bytes).
         assert_eq!(
             d,
             [
-                186, 202, 249, 90, 218, 25, 30, 191, 210, 201, 144, 193, 133, 67, 93, 206, 242, 38,
-                150, 106, 4, 198, 91, 64, 220, 227, 106, 3, 128, 169, 88, 71
+                69, 39, 102, 200, 248, 0, 233, 179, 122, 185, 172, 118, 134, 64, 152, 110, 202,
+                157, 202, 222, 29, 120, 218, 95, 231, 78, 182, 100, 88, 207, 5, 93
             ],
             "populated-caps digest cross-impl pin"
         );
@@ -1187,6 +1240,7 @@ mod tests {
             operator_grant_delay_seconds: 0,
             has_protocol_caps: false,
             protocol_caps: &[],
+            protocol_hashes: &[],
         };
         // Build a mutated agent set: one OPERATOR agent inserted.
         let new_agent = AgentEntry {
@@ -1257,6 +1311,7 @@ mod tests {
             operator_grant_delay_seconds: 0,
             has_protocol_caps: false,
             protocol_caps: &[],
+            protocol_hashes: &[],
         };
         // Encoding: 8 zero + 8 zero + 2 zero + 2 zero (developer_fee_rate)
         //   + 0x01 + 4 zero + 0x00 + 4 zero + 8 zero + 8 zero + 0 + 0 + 0
@@ -1354,6 +1409,7 @@ mod tests {
             operator_grant_delay_seconds: 0,
             has_protocol_caps: false,
             protocol_caps: &[],
+            protocol_hashes: &[],
         };
         let digest = compute_policy_preview_digest(&f);
         // Prior digests:
@@ -1406,9 +1462,12 @@ mod tests {
 // M1-04: regenerated for the 21-field digest (has_constraints removed).
 // F-Q6 (2026-06-02): regenerated for the 22-field digest (+operator_grant_delay_seconds=0).
 // M-1 (2026-06-11): regenerated for the 24-field digest (+has_protocol_caps=false, +protocol_caps=[]).
+// Item 3 (2026-06-22): regenerated for the 25-field digest (+protocol_hashes index-aligned
+//   to protocols; minimal fixture has 0 protocols ⇒ just the 4-byte zero length prefix).
+//   = `38c598c8311077bf3d298bca7eb0c21fb194b66294873879f5896ff08095b986`
 const REGENERATED_HEX_MINIMAL: [u8; 32] = [
-    0x7e, 0x29, 0x58, 0xe4, 0xe3, 0x88, 0x02, 0xd5, 0x41, 0x6e, 0x39, 0x65, 0xa5, 0xeb, 0x22, 0xe5,
-    0x1d, 0xaa, 0x19, 0x2c, 0xa0, 0x93, 0xdb, 0xeb, 0xe7, 0x76, 0xcd, 0xae, 0x8d, 0x46, 0x97, 0x80,
+    0x38, 0xc5, 0x98, 0xc8, 0x31, 0x10, 0x77, 0xbf, 0x3d, 0x29, 0x8b, 0xca, 0x7e, 0xb0, 0xc2, 0x1f,
+    0xb1, 0x94, 0xb6, 0x62, 0x94, 0x87, 0x38, 0x79, 0xf5, 0x89, 0x6f, 0xf0, 0x80, 0x95, 0xb9, 0x86,
 ];
 
 /// D-5 (audit 2026-05-19, F-RP3-1) realistic-policy expected digest.
@@ -1428,9 +1487,13 @@ const REGENERATED_HEX_MINIMAL: [u8; 32] = [
 // M1-04: regenerated for the 21-field digest (has_constraints removed).
 // F-Q6 (2026-06-02): regenerated for the 22-field digest (+operator_grant_delay_seconds=0).
 // M-1 (2026-06-11): regenerated for the 24-field digest (+has_protocol_caps=false, +protocol_caps=[]).
+// Item 3 (2026-06-22): regenerated for the 25-field digest (+protocol_hashes index-aligned
+//   to protocols; realistic fixture has 2 protocols, both hashes all-zero ⇒
+//   4-byte len prefix (2) + 2×32 zero bytes).
+//   = `903e68455f5c47c625b294cef6f030d7b64f5e8f60b77495cd15b45cfbe0398a`
 const REGENERATED_HEX_REALISTIC: [u8; 32] = [
-    0x67, 0xf7, 0x19, 0x21, 0xa8, 0x35, 0x01, 0xd6, 0xa5, 0x17, 0xe1, 0x88, 0x94, 0x82, 0x0d, 0x93,
-    0x75, 0xd5, 0xc4, 0x08, 0x0d, 0x22, 0xff, 0x1d, 0x2b, 0x76, 0x45, 0x5c, 0xf4, 0x04, 0x93, 0x13,
+    0x90, 0x3e, 0x68, 0x45, 0x5f, 0x5c, 0x47, 0xc6, 0x25, 0xb2, 0x94, 0xce, 0xf6, 0xf0, 0x30, 0xd7,
+    0xb6, 0x4f, 0x5e, 0x8f, 0x60, 0xb7, 0x74, 0x95, 0xcd, 0x15, 0xb4, 0x5c, 0xfb, 0xe0, 0x39, 0x8a,
 ];
 
 /// Phase 8 PEN-CROSS-1 (Council ISC-141): empty-agent-set hash. SHA-256 of

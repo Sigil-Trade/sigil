@@ -153,6 +153,32 @@ pub struct PendingPolicyUpdate {
     /// this pending's pending approval.
     /// APPENDED per F-14 APPEND-ONLY rule for Borsh stability.
     pub queued_policy_version: u64,
+
+    /// Item 3 — verified-build gate (2026-06-22): optional update to
+    /// `PolicyConfig.protocol_hashes`. `None` = preserve the live value;
+    /// `Some([[u8;32]; MAX])` = set the full index-aligned hash array (an
+    /// all-zero entry within it disables the gate for that protocol). This
+    /// mirrors the whole-array write semantics of `protocols` / `protocol_caps`
+    /// (the owner submits the complete intended array, not a delta). Bound by
+    /// TA-19 at canonical digest position 25; `apply_pending_policy` copies it
+    /// into the live policy before the second-pass digest recompute.
+    ///
+    /// Whole-array `Option` (not a per-entry delta) keeps the merge logic
+    /// trivial and the digest deterministic. Borsh size = 1 (Option tag) +
+    /// 32 * MAX_ALLOWED_PROTOCOLS = 321 bytes, moving `PendingPolicyUpdate::SIZE`
+    /// 1028 → 1349.
+    ///
+    /// MIGRATION PRECONDITION: deploy the upgrade only when NO policy update is
+    /// pending (operationally trivial pre-mainnet). The struct is ephemeral
+    /// (`init`-recreated at the new SIZE on every `queue_policy_update`), so any
+    /// pending account created AFTER the upgrade is already new-format. A pending
+    /// account created BEFORE the upgrade would be old-format (no trailing
+    /// `Option` field) and would fail Borsh deserialization in apply/cancel — the
+    /// precondition guarantees none exists at upgrade time. See the companion
+    /// comment on `apply_pending_policy::handler`.
+    ///
+    /// APPENDED per F-14 APPEND-ONLY rule for Borsh stability.
+    pub protocol_hashes: Option<[[u8; 32]; MAX_ALLOWED_PROTOCOLS]>,
 }
 
 impl PendingPolicyUpdate {
@@ -186,7 +212,8 @@ impl PendingPolicyUpdate {
         + (1 + 8) // operator_grant_delay_seconds Option<u64> [F-Q6 2026-06-02]
         + 1 // cosign_approved bool [async cosign 2026-06-17]
         + 8 // approved_at_slot u64 [async cosign 2026-06-17]
-        + 8; // queued_policy_version u64 [async cosign 2026-06-17]
+        + 8 // queued_policy_version u64 [async cosign 2026-06-17]
+        + (1 + 32 * MAX_ALLOWED_PROTOCOLS); // protocol_hashes Option<[[u8;32]; MAX]> [Item 3 2026-06-22]
 
     /// Returns true if the timelock period has expired and the update
     /// can be applied.
@@ -194,3 +221,13 @@ impl PendingPolicyUpdate {
         current_timestamp >= self.executes_at
     }
 }
+
+// Item 3 verified-build gate (2026-06-22) compile-time SIZE pin. The prior
+// layout was 1028 bytes (documented; previously unpinned); appending
+// `protocol_hashes: Option<[[u8;32]; MAX_ALLOWED_PROTOCOLS]>` (Borsh
+// 1 + 32 * 10 = 321) yields 1349. A pin is added now so future field additions
+// fail the build (PEN-7-class ratchet) like PolicyConfig already has.
+const _PENDING_POLICY_SIZE_PIN: () = assert!(
+    PendingPolicyUpdate::SIZE == 1349,
+    "PendingPolicyUpdate::SIZE drifted from documented layout (1028 + 321 protocol_hashes Option = 1349)"
+);

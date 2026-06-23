@@ -29,7 +29,14 @@
  *   20. cosign_required: bool (1 byte 0/1) — G6 (audit 2026-05-18 cosign opt-in)
  *   21. agent_set_hash: [u8; 32] — Phase 8 PEN-CROSS-1 (audit 2026-05-19)
  *   22. cosign_session_pubkey: Pubkey (32 bytes) — D-5 (audit 2026-05-19, F-RP3-1)
- *   23. operator_grant_delay_seconds: u64 LE — F-Q6 (2026-06-02, appended last)
+ *   23. operator_grant_delay_seconds: u64 LE — F-Q6 (2026-06-02)
+ *   24. has_protocol_caps: bool (1 byte 0/1) — M-1 (audit 2026-06-11)
+ *   25. protocol_caps: Vec<u64> (u32 LE len + each u64 LE) — M-1 (audit 2026-06-11)
+ *   26. protocol_hashes: u32 LE len = protocols.length (4 bytes) ++ for each i
+ *       the 32 bytes protocol_hashes[i] — Item 3 verified-build gate (2026-06-22).
+ *       INDEX-ALIGNED to protocols: the length prefix + iteration are keyed on
+ *       protocols.length, NOT the hash array length (mirrors the Rust encoder
+ *       in policy_digest.rs, which keys position 25 on `protocols.len()`).
  */
 
 import { createHash } from "crypto";
@@ -165,6 +172,18 @@ export interface PolicyDigestFields {
    * so legacy fixtures match an on-chain policy with no per-protocol caps.
    */
   protocolCaps?: (BN | bigint | number)[];
+  /**
+   * Item 3 (verified-build gate, 2026-06-22): per-protocol pinned ELF SHA-256
+   * hashes, INDEX-ALIGNED to `protocols`. Each entry is a 32-byte Buffer (an
+   * all-zero entry = gate disabled for that protocol). Bound at canonical
+   * position 25 (Rust numbering), encoded index-aligned to `protocols`:
+   * u32-LE(protocols.length) ++ for each i the 32 bytes protocolHashes[i]
+   * (missing/short entries encode 32 zero bytes). Default [] when omitted (⇒
+   * all protocols encode 32 zero bytes = gate off everywhere), matching the
+   * on-chain init/legacy all-zero `protocol_hashes`. Mirrors the Rust encoder
+   * in `policy_digest.rs` byte-for-byte (keyed on protocols.length).
+   */
+  protocolHashes?: Buffer[];
 }
 
 function u64le(v: BN | bigint | number): Buffer {
@@ -266,6 +285,27 @@ export function computePolicyPreviewDigest(
   const protocolCaps = fields.protocolCaps ?? [];
   parts.push(u32le(protocolCaps.length));
   for (const c of protocolCaps) parts.push(u64le(c));
+  // Item 3 (2026-06-22): protocol_hashes at canonical position 25 (Rust
+  // numbering). INDEX-ALIGNED to protocols: length prefix + iteration are keyed
+  // on protocols.length (NOT protocolHashes.length), mirroring the Rust encoder
+  // (policy_digest.rs uses `n_protocols = fields.protocols.len()`). A missing /
+  // short entry encodes 32 zero bytes (gate disabled for that protocol).
+  const protocolHashes = fields.protocolHashes ?? [];
+  const nProtocols = fields.protocols.length;
+  parts.push(u32le(nProtocols));
+  for (let i = 0; i < nProtocols; i++) {
+    const h = protocolHashes[i];
+    if (h === undefined) {
+      parts.push(Buffer.alloc(32));
+    } else {
+      if (h.length !== 32) {
+        throw new Error(
+          `protocolHashes[${i}] must be exactly 32 bytes, got ${h.length}`,
+        );
+      }
+      parts.push(h);
+    }
+  }
 
   const buf = Buffer.concat(parts);
   return Array.from(createHash("sha256").update(buf).digest());
@@ -457,6 +497,13 @@ export interface LiveLikePolicy {
    */
   hasProtocolCaps?: boolean;
   protocolCaps?: (BN | bigint | number)[];
+  /**
+   * Item 3 (2026-06-22): live per-protocol pinned ELF SHA-256 hashes, bound at
+   * canonical digest position 25. Read from `PolicyConfig.protocolHashes` (the
+   * full 10-entry fixed array as decoded by Anchor). Default [] (all-zero / gate
+   * off) when absent (pre-Item-3 IDL deserialization).
+   */
+  protocolHashes?: Buffer[];
 }
 
 export interface QueueOverride {
@@ -515,6 +562,13 @@ export interface QueueOverride {
    */
   hasProtocolCaps?: boolean | null;
   protocolCaps?: (BN | bigint | number)[] | null;
+  /**
+   * Item 3 (2026-06-22): protocol_hashes override. null = pass-through from live
+   * policy (the on-chain queue merges via `unwrap_or(live)`); a Buffer[] sets the
+   * full index-aligned hash array (arm/disarm/re-pin). Bound at canonical digest
+   * position 25.
+   */
+  protocolHashes?: Buffer[] | null;
 }
 
 function pick<T>(override: T | null | undefined, fallback: T): T {
@@ -608,6 +662,10 @@ export function queuePolicyMergedDigest(
       live.hasProtocolCaps ?? false,
     ),
     protocolCaps: pick(override.protocolCaps, live.protocolCaps ?? []),
+    // Item 3 (2026-06-22): merged-effective protocol_hashes. Mirrors the on-chain
+    // queue merge `unwrap_or(live)` — null override = pass-through from live
+    // policy (default [] / gate-off when live is unset).
+    protocolHashes: pick(override.protocolHashes, live.protocolHashes ?? []),
   });
 }
 
@@ -742,6 +800,14 @@ export async function fetchAndComputeQueueDigest(
     hasProtocolCaps: !!policy.hasProtocolCaps,
     protocolCaps:
       (policy.protocolCaps as Array<BN | bigint | number> | undefined) ?? [],
+    // Item 3 (2026-06-22): snapshot the live protocol_hashes from the policy so
+    // the merged-effective digest matches the on-chain recompute (which always
+    // reflects live hashes when the queue does not override them). Anchor decodes
+    // the on-chain `[[u8;32];10]` as an array of byte arrays; normalize each to a
+    // 32-byte Buffer. Falls back to [] when absent (pre-Item-3 IDL).
+    protocolHashes: (
+      (policy.protocolHashes as Array<number[] | Uint8Array | Buffer>) ?? []
+    ).map((h) => Buffer.from(h as Uint8Array)),
   };
   return queuePolicyMergedDigest(live, override, !!vault.observeOnly);
 }

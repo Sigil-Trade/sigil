@@ -2,8 +2,8 @@
 // Regenerate via `pnpm -C sdk/kit codegen:errors` after IDL changes.
 //
 // Source: agent-middleware/target/idl/sigil.json
-// Generated: 2026-06-22T19:42:53.237Z
-// Codes: 116 (min 6000, max 6115)
+// Generated: 2026-06-23T03:13:58.068Z
+// Codes: 118 (min 6000, max 6117)
 
 /** Pure IDL projection of every Anchor error variant. */
 export interface IdlErrorEntry {
@@ -137,13 +137,15 @@ export const IDL_ERROR_MAP: Readonly<Record<number, IdlErrorEntry>> =
     6113: { code: 6113, name: "ErrFinalizeMetaUnresolvable", msg: "Finalize completeness: a writable DeFi account meta is absent from remaining_accounts (F-Q1b — omission would dodge per-recipient/output attribution)" },
     6114: { code: 6114, name: "ErrDeFiInstructionNotAdjacentToFinalize", msg: "The counted DeFi instruction must sit immediately before finalize_session (no interleaved instruction) so finalize's attribution walks bind to the correct instruction" },
     6115: { code: 6115, name: "ErrUnmeasurableSpend", msg: "Spending session produced no measurable in-transaction vault outcome (no stablecoin movement and no vault-owned acquisition) — async/keeper-settled or unmeasurable; recording 0 spend is rejected" },
+    6116: { code: 6116, name: "ErrProgramDataUnresolvable", msg: "Verified-build gate: the target protocol's ProgramData account is missing/unresolvable while a build hash is armed — cannot vet the deployed build (fail-closed)" },
+    6117: { code: 6117, name: "ErrProgramBuildMismatch", msg: "Verified-build gate: the target protocol's deployed ELF hash does not match the owner-pinned build hash — the on-chain build changed (re-pin via queue_policy_update after re-audit)" },
   });
 
 /** Total error-code count derived from the IDL at generation time. */
-export const IDL_ERROR_COUNT = 116;
+export const IDL_ERROR_COUNT = 118;
 
 /** Lowest IDL error code. */
 export const IDL_ERROR_MIN = 6000;
 
 /** Highest IDL error code. */
-export const IDL_ERROR_MAX = 6115;
+export const IDL_ERROR_MAX = 6117;
