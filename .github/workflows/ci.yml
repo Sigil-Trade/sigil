@@ -558,7 +558,8 @@ jobs:
             tests/fq6-operator-grant-tiers.ts \
             tests/intent-digest-parity.ts \
             tests/m1-03-frozen-gate.ts \
-            tests/pen-cross-1-absorption.ts
+            tests/pen-cross-1-absorption.ts \
+            tests/verified-build-gate.ts
 
   # ──────────────────────────────────────────────────────────────
   # Job 3b: Build verification (feature flag safety net)
