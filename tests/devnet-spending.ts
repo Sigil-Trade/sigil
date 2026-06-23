@@ -330,6 +330,16 @@ describe("devnet-spending", () => {
   it("2. spending exactly at cap boundary succeeds", async () => {
     const vault = vaults[1]; // dailyCap 100 USD, maxTx 100 USD
 
+    // M1 + 6115: the cap-boundary spend must ACQUIRE a vault-owned output and
+    // move real stablecoin so finalize measures actual_spend == 100 USD (else
+    // ErrUnmeasurableSpend 6115 / ErrOutputNotVaultOwned 6112 before the cap).
+    const swap = await setupSwapOutput(
+      connection,
+      payer,
+      vault.vaultPda,
+      agent.publicKey,
+    );
+
     const sessionPda = deriveSessionPda(
       vault.vaultPda,
       agent.publicKey,
@@ -351,6 +361,16 @@ describe("devnet-spending", () => {
       protocol: MOCK_DEFI_PROGRAM_ID,
       feeDestinationAta: null,
       protocolTreasuryAta: vault.protocolTreasuryAta,
+      outputSwapAccount: swap.vaultOutputAta,
+      middleIx: buildMockSwapToVaultIx(
+        vault.vaultTokenAta,
+        agentMintAAta,
+        swap.agentReserve,
+        swap.vaultOutputAta,
+        agent.publicKey,
+        new BN(calculateFees(100_000_000, 0).netAmount),
+        new BN(1_000),
+      ),
     });
     console.log("    Spend exactly at cap boundary succeeded (<=)");
   });
@@ -411,6 +431,18 @@ describe("devnet-spending", () => {
   it("4. multiple spend cycles tracked in epoch buckets", async () => {
     const vault = vaults[3]; // dailyCap 500 USD, maxTx 200 USD
 
+    // M1 + 6115: each cycle must ACQUIRE a vault-owned output and move real
+    // stablecoin so finalize measures actual_spend > 0 (else 6112/6115 before
+    // the bucket is recorded). One acquiring-swap fixture reused across all
+    // three cycles — the acquired output mint differs from the USDC input, so
+    // every leg satisfies the gate and records its 10 USD into the epoch bucket.
+    const swap = await setupSwapOutput(
+      connection,
+      payer,
+      vault.vaultPda,
+      agent.publicKey,
+    );
+
     // Execute 3 authorize+finalize cycles
     for (let i = 0; i < 3; i++) {
       const sessionPda = deriveSessionPda(
@@ -433,6 +465,16 @@ describe("devnet-spending", () => {
         protocol: MOCK_DEFI_PROGRAM_ID,
         feeDestinationAta: null,
         protocolTreasuryAta: vault.protocolTreasuryAta,
+        outputSwapAccount: swap.vaultOutputAta,
+        middleIx: buildMockSwapToVaultIx(
+          vault.vaultTokenAta,
+          agentMintAAta,
+          swap.agentReserve,
+          swap.vaultOutputAta,
+          agent.publicKey,
+          new BN(calculateFees(10_000_000, 0).netAmount),
+          new BN(1_000),
+        ),
       });
     }
 
@@ -573,6 +615,17 @@ describe("devnet-spending", () => {
     // (d) spending under the original cap succeeds.
     const vault = vaults[5]; // dailyCap 500 USD, maxTx 300 USD
 
+    // M1 + 6115: both spends must ACQUIRE a vault-owned output and move real
+    // stablecoin so finalize measures actual_spend > 0 and the 300M total
+    // accumulates under the original 500M cap (else 6112/6115 before tracking).
+    // One acquiring-swap fixture reused by both legs.
+    const swap = await setupSwapOutput(
+      connection,
+      payer,
+      vault.vaultPda,
+      agent.publicKey,
+    );
+
     // Spend 100M (first spend)
     const sessionA = deriveSessionPda(
       vault.vaultPda,
@@ -594,6 +647,16 @@ describe("devnet-spending", () => {
       protocol: MOCK_DEFI_PROGRAM_ID,
       feeDestinationAta: null,
       protocolTreasuryAta: vault.protocolTreasuryAta,
+      outputSwapAccount: swap.vaultOutputAta,
+      middleIx: buildMockSwapToVaultIx(
+        vault.vaultTokenAta,
+        agentMintAAta,
+        swap.agentReserve,
+        swap.vaultOutputAta,
+        agent.publicKey,
+        new BN(calculateFees(100_000_000, 0).netAmount),
+        new BN(1_000),
+      ),
     });
 
     // Queue a policy cap change (verify queue mechanism works on devnet).
@@ -682,6 +745,16 @@ describe("devnet-spending", () => {
       protocol: MOCK_DEFI_PROGRAM_ID,
       feeDestinationAta: null,
       protocolTreasuryAta: vault.protocolTreasuryAta,
+      outputSwapAccount: swap.vaultOutputAta,
+      middleIx: buildMockSwapToVaultIx(
+        vault.vaultTokenAta,
+        agentMintAAta,
+        swap.agentReserve,
+        swap.vaultOutputAta,
+        agent.publicKey,
+        new BN(calculateFees(200_000_000, 0).netAmount),
+        new BN(1_000),
+      ),
     });
     console.log(
       "    Second spend succeeded under original 500M cap (300M total)",

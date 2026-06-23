@@ -271,6 +271,16 @@ describe("devnet-routing", () => {
   it("1. stablecoin (USDC) input: swap action succeeds", async () => {
     const vault = routingVaults[0];
 
+    // M1 + 6115: the stablecoin-input swap action must ACQUIRE a vault-owned
+    // output and move real stablecoin so finalize measures a spend (else
+    // 6112/6115). inAmount = net-of-fees.
+    const swap = await setupSwapOutput(
+      connection,
+      payer,
+      vault.vaultPda,
+      agent.publicKey,
+    );
+
     const sessionPda = deriveSessionPda(
       vault.vaultPda,
       agent.publicKey,
@@ -291,6 +301,16 @@ describe("devnet-routing", () => {
       protocol: MOCK_DEFI_PROGRAM_ID,
       feeDestinationAta: null,
       protocolTreasuryAta: vault.protocolTreasuryAta,
+      outputSwapAccount: swap.vaultOutputAta,
+      middleIx: buildMockSwapToVaultIx(
+        vault.vaultTokenAta,
+        agentUsdcAta,
+        swap.agentReserve,
+        swap.vaultOutputAta,
+        agent.publicKey,
+        new BN(calculateFees(50_000_000, 0).netAmount),
+        new BN(1_000),
+      ),
     });
 
     const vaultData = await program.account.agentVault.fetch(vault.vaultPda);
@@ -300,6 +320,15 @@ describe("devnet-routing", () => {
 
   it("2. stablecoin (USDT) input: swap action succeeds", async () => {
     const vault = routingVaults[1];
+
+    // M1 + 6115: USDT-input swap action must ACQUIRE a vault-owned output and
+    // move real stablecoin so finalize measures a spend (else 6112/6115).
+    const swap = await setupSwapOutput(
+      connection,
+      payer,
+      vault.vaultPda,
+      agent.publicKey,
+    );
 
     const sessionPda = deriveSessionPda(
       vault.vaultPda,
@@ -321,6 +350,16 @@ describe("devnet-routing", () => {
       protocol: MOCK_DEFI_PROGRAM_ID,
       feeDestinationAta: null,
       protocolTreasuryAta: vault.usdtTreasuryAta,
+      outputSwapAccount: swap.vaultOutputAta,
+      middleIx: buildMockSwapToVaultIx(
+        vault.usdtVaultAta,
+        agentUsdtAta,
+        swap.agentReserve,
+        swap.vaultOutputAta,
+        agent.publicKey,
+        new BN(calculateFees(50_000_000, 0).netAmount),
+        new BN(1_000),
+      ),
     });
 
     const vaultData = await program.account.agentVault.fetch(vault.vaultPda);
@@ -765,6 +804,19 @@ describe("devnet-routing", () => {
     const amount = 100_000_000; // 100 tokens
     const { protocolFee } = calculateFees(amount, devFeeRate);
 
+    // M1 + 6115: this test isolates FEE math (treasury deltas), so each leg must
+    // satisfy the require-measurable-outcome gate WITHOUT moving spend that
+    // would couple the two legs through the aggregate cap. inAmount=0 →
+    // actual_spend==0 (no cap accumulation); outAmount>0 → vault-owned output
+    // increases (6115 via the M1 branch). Fees are still collected upfront on
+    // `amount`, so the treasury assertions are unchanged.
+    const swap = await setupSwapOutput(
+      connection,
+      payer,
+      vault.vaultPda,
+      agent.publicKey,
+    );
+
     // Swap USDC -- check fees
     const sessionA = deriveSessionPda(
       vault.vaultPda,
@@ -790,6 +842,16 @@ describe("devnet-routing", () => {
       protocol: MOCK_DEFI_PROGRAM_ID,
       feeDestinationAta: vault.usdcFeeDestAta,
       protocolTreasuryAta: vault.protocolTreasuryAta,
+      outputSwapAccount: swap.vaultOutputAta,
+      middleIx: buildMockSwapToVaultIx(
+        vault.vaultTokenAta,
+        agentUsdcAta,
+        swap.agentReserve,
+        swap.vaultOutputAta,
+        agent.publicKey,
+        new BN(0),
+        new BN(1_000),
+      ),
     });
     const usdcTreasuryAfter = await getTokenBalance(
       connection,
@@ -822,6 +884,16 @@ describe("devnet-routing", () => {
       protocol: MOCK_DEFI_PROGRAM_ID,
       feeDestinationAta: vault.usdtFeeDestAta,
       protocolTreasuryAta: vault.usdtTreasuryAta,
+      outputSwapAccount: swap.vaultOutputAta,
+      middleIx: buildMockSwapToVaultIx(
+        vault.usdtVaultAta,
+        agentUsdtAta,
+        swap.agentReserve,
+        swap.vaultOutputAta,
+        agent.publicKey,
+        new BN(0),
+        new BN(1_000),
+      ),
     });
     const usdtTreasuryAfter = await getTokenBalance(
       connection,

@@ -11,7 +11,10 @@
 // Strict error helpers — see MEMORY/WORK/20260420-201121_test-assertion-precision-council/
 import { expectSigilError } from "./helpers/strict-errors";
 import { Keypair, PublicKey } from "@solana/web3.js";
-import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import {
+  TOKEN_PROGRAM_ID,
+  getOrCreateAssociatedTokenAccount,
+} from "@solana/spl-token";
 import { expect } from "chai";
 import BN from "bn.js";
 import {
@@ -25,6 +28,8 @@ import {
   sendVersionedTx,
   fundKeypair,
   ensureStablecoinMint,
+  setupSwapOutput,
+  buildMockSwapToVaultIx,
   TEST_USDC_KEYPAIR,
   calculateFees,
   getTokenBalance,
@@ -47,6 +52,10 @@ describe("devnet-fees", () => {
   const transferDest = Keypair.generate();
 
   let mint: PublicKey;
+  // Agent-owned USDC ATAs — the inputSink (leg-1 destination) of the acquiring
+  // swaps that satisfy the M1 (6112) + require-measurable-outcome (6115) gates.
+  let agentAUsdcAta: PublicKey;
+  let agentBUsdcAta: PublicKey;
   let vaultA: FullVaultResult; // devFeeRate=500 (max)
   let vaultB: FullVaultResult; // devFeeRate=0
 
@@ -106,13 +115,42 @@ describe("devnet-fees", () => {
       vaultB.operatorGrant,
     ]);
 
+    // Agent USDC ATAs — leg-1 inputSink for the acquiring swaps the spending
+    // fee tests use to satisfy M1 (6112) + require-measurable-outcome (6115).
+    agentAUsdcAta = (
+      await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        mint,
+        agentA.publicKey,
+      )
+    ).address;
+    agentBUsdcAta = (
+      await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        mint,
+        agentB.publicKey,
+      )
+    ).address;
+
     console.log("  Vault A (devFee=500):", vaultA.vaultPda.toString());
     console.log("  Vault B (devFee=0):", vaultB.vaultPda.toString());
   });
 
   it("1. protocol fee credited to treasury ATA", async () => {
     const amount = 50_000_000; // 50 USDC
-    const { protocolFee } = calculateFees(amount, 0);
+    const { protocolFee, netAmount } = calculateFees(amount, 0);
+
+    // M1 + 6115: the spend must ACQUIRE a vault-owned output and move real
+    // stablecoin (else 6112/6115 before finalize). The protocol fee is still
+    // collected upfront at validate on `amount`, so the assertion is unchanged.
+    const swap = await setupSwapOutput(
+      connection,
+      payer,
+      vaultB.vaultPda,
+      agentB.publicKey,
+    );
 
     const treasuryBefore = await getTokenBalance(
       connection,
@@ -126,7 +164,7 @@ describe("devnet-fees", () => {
       program.programId,
     );
 
-    await authorize({
+    await authorizeAndFinalize({
       connection,
       program,
       agent: agentB,
@@ -139,6 +177,17 @@ describe("devnet-fees", () => {
       amount: new BN(amount),
       protocol: MOCK_DEFI_PROGRAM_ID,
       protocolTreasuryAta: vaultB.protocolTreasuryAta,
+      feeDestinationAta: null, // vaultB has devFeeRate=0
+      outputSwapAccount: swap.vaultOutputAta,
+      middleIx: buildMockSwapToVaultIx(
+        vaultB.vaultTokenAta,
+        agentBUsdcAta,
+        swap.agentReserve,
+        swap.vaultOutputAta,
+        agentB.publicKey,
+        new BN(netAmount),
+        new BN(1_000),
+      ),
     });
 
     const treasuryAfter = await getTokenBalance(
@@ -151,7 +200,16 @@ describe("devnet-fees", () => {
 
   it("2. developer fee credited to feeDestination ATA", async () => {
     const amount = 50_000_000; // 50 USDC
-    const { developerFee } = calculateFees(amount, 500);
+    const { developerFee, netAmount } = calculateFees(amount, 500);
+
+    // M1 + 6115: acquiring swap moves real stablecoin so finalize measures a
+    // spend; the developer fee is still collected upfront at validate.
+    const swap = await setupSwapOutput(
+      connection,
+      payer,
+      vaultA.vaultPda,
+      agentA.publicKey,
+    );
 
     const feeDestBefore = await getTokenBalance(
       connection,
@@ -165,7 +223,7 @@ describe("devnet-fees", () => {
       program.programId,
     );
 
-    await authorize({
+    await authorizeAndFinalize({
       connection,
       program,
       agent: agentA,
@@ -179,6 +237,16 @@ describe("devnet-fees", () => {
       protocol: MOCK_DEFI_PROGRAM_ID,
       protocolTreasuryAta: vaultA.protocolTreasuryAta,
       feeDestinationAta: vaultA.feeDestinationAta,
+      outputSwapAccount: swap.vaultOutputAta,
+      middleIx: buildMockSwapToVaultIx(
+        vaultA.vaultTokenAta,
+        agentAUsdcAta,
+        swap.agentReserve,
+        swap.vaultOutputAta,
+        agentA.publicKey,
+        new BN(netAmount),
+        new BN(1_000),
+      ),
     });
 
     const feeDestAfter = await getTokenBalance(
@@ -196,6 +264,18 @@ describe("devnet-fees", () => {
     const { protocolFee, developerFee } = calculateFees(amount, 500);
     const totalFees = protocolFee + developerFee;
 
+    // M1 + 6115: this test asserts the vault is debited by EXACTLY the fees, so
+    // the spend must move NO stablecoin out of the vault (inAmount = 0). It
+    // still satisfies the require-measurable-outcome gate (6115) via the M1
+    // branch: a vault-owned acquiring output that INCREASES (outAmount > 0).
+    // actual_spend == 0, so the only vault stablecoin debit is the upfront fee.
+    const swap = await setupSwapOutput(
+      connection,
+      payer,
+      vaultA.vaultPda,
+      agentA.publicKey,
+    );
+
     const vaultBefore = await getTokenBalance(connection, vaultA.vaultTokenAta);
 
     const sessionPda = deriveSessionPda(
@@ -205,7 +285,7 @@ describe("devnet-fees", () => {
       program.programId,
     );
 
-    await authorize({
+    await authorizeAndFinalize({
       connection,
       program,
       agent: agentA,
@@ -219,6 +299,16 @@ describe("devnet-fees", () => {
       protocol: MOCK_DEFI_PROGRAM_ID,
       protocolTreasuryAta: vaultA.protocolTreasuryAta,
       feeDestinationAta: vaultA.feeDestinationAta,
+      outputSwapAccount: swap.vaultOutputAta,
+      middleIx: buildMockSwapToVaultIx(
+        vaultA.vaultTokenAta,
+        agentAUsdcAta,
+        swap.agentReserve,
+        swap.vaultOutputAta,
+        agentA.publicKey,
+        new BN(0), // inAmount=0 → no stablecoin leaves the vault (fees-only debit)
+        new BN(1_000), // outAmount>0 → vault-owned output increases (6115 via M1)
+      ),
     });
 
     const vaultAfter = await getTokenBalance(connection, vaultA.vaultTokenAta);
@@ -243,6 +333,17 @@ describe("devnet-fees", () => {
     const vaultBefore = await program.account.agentVault.fetch(vaultA.vaultPda);
     const txCountBefore = vaultBefore.totalTransactions.toNumber();
 
+    // M1 + 6115: acquiring swap satisfies the require-measurable-outcome gate
+    // via the M1 branch (inAmount=0 → no DeFi-leg stablecoin movement; the
+    // upfront fees are still collected and asserted below; totalTransactions
+    // still increments on finalize).
+    const swap = await setupSwapOutput(
+      connection,
+      payer,
+      vaultA.vaultPda,
+      agentA.publicKey,
+    );
+
     const sessionPda = deriveSessionPda(
       vaultA.vaultPda,
       agentA.publicKey,
@@ -264,6 +365,16 @@ describe("devnet-fees", () => {
       protocol: MOCK_DEFI_PROGRAM_ID,
       protocolTreasuryAta: vaultA.protocolTreasuryAta,
       feeDestinationAta: vaultA.feeDestinationAta,
+      outputSwapAccount: swap.vaultOutputAta,
+      middleIx: buildMockSwapToVaultIx(
+        vaultA.vaultTokenAta,
+        agentAUsdcAta,
+        swap.agentReserve,
+        swap.vaultOutputAta,
+        agentA.publicKey,
+        new BN(0),
+        new BN(1_000),
+      ),
     });
 
     // Fees WERE collected (upfront in validate)
@@ -395,6 +506,18 @@ describe("devnet-fees", () => {
   });
 
   it("8. finalize with devFeeRate=0 and null feeDestination succeeds", async () => {
+    // Keep this a SPENDING session (amount>0) so the devFeeRate=0 + null
+    // feeDestination fee path is actually exercised. M1 + 6115: an acquiring
+    // swap (inAmount=0 → no DeFi-leg stablecoin movement; outAmount>0 → the
+    // vault-owned output increases) satisfies the require-measurable-outcome
+    // gate via the M1 branch, so finalize closes the session cleanly.
+    const swap = await setupSwapOutput(
+      connection,
+      payer,
+      vaultB.vaultPda,
+      agentB.publicKey,
+    );
+
     const sessionPda = deriveSessionPda(
       vaultB.vaultPda,
       agentB.publicKey,
@@ -403,7 +526,7 @@ describe("devnet-fees", () => {
     );
 
     // feeDestinationTokenAccount=null is fine when devFeeRate=0
-    await authorize({
+    await authorizeAndFinalize({
       connection,
       program,
       agent: agentB,
@@ -416,6 +539,17 @@ describe("devnet-fees", () => {
       amount: new BN(50_000_000),
       protocol: MOCK_DEFI_PROGRAM_ID,
       protocolTreasuryAta: vaultB.protocolTreasuryAta,
+      feeDestinationAta: null, // vaultB has devFeeRate=0
+      outputSwapAccount: swap.vaultOutputAta,
+      middleIx: buildMockSwapToVaultIx(
+        vaultB.vaultTokenAta,
+        agentBUsdcAta,
+        swap.agentReserve,
+        swap.vaultOutputAta,
+        agentB.publicKey,
+        new BN(0),
+        new BN(1_000),
+      ),
     });
 
     const sessionInfo = await connection.getAccountInfo(sessionPda);
