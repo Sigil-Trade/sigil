@@ -60,6 +60,8 @@ export type ApplyPendingPolicyInstruction<
   TAccountAuditLogSuccess extends string | AccountMeta<string> = string,
   TAccountSlotHashesSysvar extends string | AccountMeta<string> =
     "SysvarS1otHashes111111111111111111111111111",
+  TAccountSystemProgram extends string | AccountMeta<string> =
+    "11111111111111111111111111111111",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
   InstructionWithData<ReadonlyUint8Array> &
@@ -84,6 +86,9 @@ export type ApplyPendingPolicyInstruction<
       TAccountSlotHashesSysvar extends string
         ? ReadonlyAccount<TAccountSlotHashesSysvar>
         : TAccountSlotHashesSysvar,
+      TAccountSystemProgram extends string
+        ? ReadonlyAccount<TAccountSystemProgram>
+        : TAccountSystemProgram,
       ...TRemainingAccounts,
     ]
   >;
@@ -127,6 +132,7 @@ export type ApplyPendingPolicyAsyncInput<
   TAccountPendingPolicy extends string = string,
   TAccountAuditLogSuccess extends string = string,
   TAccountSlotHashesSysvar extends string = string,
+  TAccountSystemProgram extends string = string,
 > = {
   owner: TransactionSigner<TAccountOwner>;
   vault: Address<TAccountVault>;
@@ -135,6 +141,13 @@ export type ApplyPendingPolicyAsyncInput<
   /** Phase 7 — success audit log; entry appended after policy applied. */
   auditLogSuccess?: Address<TAccountAuditLogSuccess>;
   slotHashesSysvar?: Address<TAccountSlotHashesSysvar>;
+  /**
+   * Item 3 (verified-build gate, 2026-06-22): required by the `policy`
+   * account's `realloc` (PolicyConfig 1329 → 1649 for pre-upgrade vaults).
+   * Anchor's realloc CPI funds the rent delta from `owner` via the System
+   * program.
+   */
+  systemProgram?: Address<TAccountSystemProgram>;
 };
 
 export async function getApplyPendingPolicyInstructionAsync<
@@ -144,6 +157,7 @@ export async function getApplyPendingPolicyInstructionAsync<
   TAccountPendingPolicy extends string,
   TAccountAuditLogSuccess extends string,
   TAccountSlotHashesSysvar extends string,
+  TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: ApplyPendingPolicyAsyncInput<
@@ -152,7 +166,8 @@ export async function getApplyPendingPolicyInstructionAsync<
     TAccountPolicy,
     TAccountPendingPolicy,
     TAccountAuditLogSuccess,
-    TAccountSlotHashesSysvar
+    TAccountSlotHashesSysvar,
+    TAccountSystemProgram
   >,
   config?: { programAddress?: TProgramAddress },
 ): Promise<
@@ -163,7 +178,8 @@ export async function getApplyPendingPolicyInstructionAsync<
     TAccountPolicy,
     TAccountPendingPolicy,
     TAccountAuditLogSuccess,
-    TAccountSlotHashesSysvar
+    TAccountSlotHashesSysvar,
+    TAccountSystemProgram
   >
 > {
   // Program address.
@@ -180,6 +196,7 @@ export async function getApplyPendingPolicyInstructionAsync<
       value: input.slotHashesSysvar ?? null,
       isWritable: false,
     },
+    systemProgram: { value: input.systemProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -241,6 +258,10 @@ export async function getApplyPendingPolicyInstructionAsync<
     accounts.slotHashesSysvar.value =
       "SysvarS1otHashes111111111111111111111111111" as Address<"SysvarS1otHashes111111111111111111111111111">;
   }
+  if (!accounts.systemProgram.value) {
+    accounts.systemProgram.value =
+      "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
+  }
 
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
   return Object.freeze({
@@ -251,6 +272,7 @@ export async function getApplyPendingPolicyInstructionAsync<
       getAccountMeta("pendingPolicy", accounts.pendingPolicy),
       getAccountMeta("auditLogSuccess", accounts.auditLogSuccess),
       getAccountMeta("slotHashesSysvar", accounts.slotHashesSysvar),
+      getAccountMeta("systemProgram", accounts.systemProgram),
     ],
     data: getApplyPendingPolicyInstructionDataEncoder().encode({}),
     programAddress,
@@ -261,7 +283,8 @@ export async function getApplyPendingPolicyInstructionAsync<
     TAccountPolicy,
     TAccountPendingPolicy,
     TAccountAuditLogSuccess,
-    TAccountSlotHashesSysvar
+    TAccountSlotHashesSysvar,
+    TAccountSystemProgram
   >);
 }
 
@@ -272,6 +295,7 @@ export type ApplyPendingPolicyInput<
   TAccountPendingPolicy extends string = string,
   TAccountAuditLogSuccess extends string = string,
   TAccountSlotHashesSysvar extends string = string,
+  TAccountSystemProgram extends string = string,
 > = {
   owner: TransactionSigner<TAccountOwner>;
   vault: Address<TAccountVault>;
@@ -280,6 +304,13 @@ export type ApplyPendingPolicyInput<
   /** Phase 7 — success audit log; entry appended after policy applied. */
   auditLogSuccess: Address<TAccountAuditLogSuccess>;
   slotHashesSysvar?: Address<TAccountSlotHashesSysvar>;
+  /**
+   * Item 3 (verified-build gate, 2026-06-22): required by the `policy`
+   * account's `realloc` (PolicyConfig 1329 → 1649 for pre-upgrade vaults).
+   * Anchor's realloc CPI funds the rent delta from `owner` via the System
+   * program.
+   */
+  systemProgram?: Address<TAccountSystemProgram>;
 };
 
 export function getApplyPendingPolicyInstruction<
@@ -289,6 +320,7 @@ export function getApplyPendingPolicyInstruction<
   TAccountPendingPolicy extends string,
   TAccountAuditLogSuccess extends string,
   TAccountSlotHashesSysvar extends string,
+  TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof SIGIL_PROGRAM_ADDRESS,
 >(
   input: ApplyPendingPolicyInput<
@@ -297,7 +329,8 @@ export function getApplyPendingPolicyInstruction<
     TAccountPolicy,
     TAccountPendingPolicy,
     TAccountAuditLogSuccess,
-    TAccountSlotHashesSysvar
+    TAccountSlotHashesSysvar,
+    TAccountSystemProgram
   >,
   config?: { programAddress?: TProgramAddress },
 ): ApplyPendingPolicyInstruction<
@@ -307,7 +340,8 @@ export function getApplyPendingPolicyInstruction<
   TAccountPolicy,
   TAccountPendingPolicy,
   TAccountAuditLogSuccess,
-  TAccountSlotHashesSysvar
+  TAccountSlotHashesSysvar,
+  TAccountSystemProgram
 > {
   // Program address.
   const programAddress = config?.programAddress ?? SIGIL_PROGRAM_ADDRESS;
@@ -323,6 +357,7 @@ export function getApplyPendingPolicyInstruction<
       value: input.slotHashesSysvar ?? null,
       isWritable: false,
     },
+    systemProgram: { value: input.systemProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -334,6 +369,10 @@ export function getApplyPendingPolicyInstruction<
     accounts.slotHashesSysvar.value =
       "SysvarS1otHashes111111111111111111111111111" as Address<"SysvarS1otHashes111111111111111111111111111">;
   }
+  if (!accounts.systemProgram.value) {
+    accounts.systemProgram.value =
+      "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
+  }
 
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
   return Object.freeze({
@@ -344,6 +383,7 @@ export function getApplyPendingPolicyInstruction<
       getAccountMeta("pendingPolicy", accounts.pendingPolicy),
       getAccountMeta("auditLogSuccess", accounts.auditLogSuccess),
       getAccountMeta("slotHashesSysvar", accounts.slotHashesSysvar),
+      getAccountMeta("systemProgram", accounts.systemProgram),
     ],
     data: getApplyPendingPolicyInstructionDataEncoder().encode({}),
     programAddress,
@@ -354,7 +394,8 @@ export function getApplyPendingPolicyInstruction<
     TAccountPolicy,
     TAccountPendingPolicy,
     TAccountAuditLogSuccess,
-    TAccountSlotHashesSysvar
+    TAccountSlotHashesSysvar,
+    TAccountSystemProgram
   >);
 }
 
@@ -371,6 +412,13 @@ export type ParsedApplyPendingPolicyInstruction<
     /** Phase 7 — success audit log; entry appended after policy applied. */
     auditLogSuccess: TAccountMetas[4];
     slotHashesSysvar: TAccountMetas[5];
+    /**
+     * Item 3 (verified-build gate, 2026-06-22): required by the `policy`
+     * account's `realloc` (PolicyConfig 1329 → 1649 for pre-upgrade vaults).
+     * Anchor's realloc CPI funds the rent delta from `owner` via the System
+     * program.
+     */
+    systemProgram: TAccountMetas[6];
   };
   data: ApplyPendingPolicyInstructionData;
 };
@@ -383,12 +431,12 @@ export function parseApplyPendingPolicyInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedApplyPendingPolicyInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 6) {
+  if (instruction.accounts.length < 7) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 6,
+        expectedAccountMetas: 7,
       },
     );
   }
@@ -407,6 +455,7 @@ export function parseApplyPendingPolicyInstruction<
       pendingPolicy: getNextAccount(),
       auditLogSuccess: getNextAccount(),
       slotHashesSysvar: getNextAccount(),
+      systemProgram: getNextAccount(),
     },
     data: getApplyPendingPolicyInstructionDataDecoder().decode(
       instruction.data,

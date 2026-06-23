@@ -1038,6 +1038,16 @@ export type Sigil = {
         {
           "name": "slotHashesSysvar",
           "address": "SysvarS1otHashes111111111111111111111111111"
+        },
+        {
+          "name": "systemProgram",
+          "docs": [
+            "Item 3 (verified-build gate, 2026-06-22): required by the `policy`",
+            "account's `realloc` (PolicyConfig 1329 → 1649 for pre-upgrade vaults).",
+            "Anchor's realloc CPI funds the rent delta from `owner` via the System",
+            "program."
+          ],
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": []
@@ -4098,6 +4108,22 @@ export type Sigil = {
           }
         },
         {
+          "name": "protocolHashes",
+          "type": {
+            "option": {
+              "array": [
+                {
+                  "array": [
+                    "u8",
+                    32
+                  ]
+                },
+                10
+              ]
+            }
+          }
+        },
+        {
           "name": "cosignSession",
           "type": "pubkey"
         },
@@ -6689,6 +6715,16 @@ export type Sigil = {
       "code": 6115,
       "name": "errUnmeasurableSpend",
       "msg": "Spending session produced no measurable in-transaction vault outcome (no stablecoin movement and no vault-owned acquisition) — async/keeper-settled or unmeasurable; recording 0 spend is rejected"
+    },
+    {
+      "code": 6116,
+      "name": "errProgramDataUnresolvable",
+      "msg": "Verified-build gate: the target protocol's ProgramData account is missing/unresolvable while a build hash is armed — cannot vet the deployed build (fail-closed)"
+    },
+    {
+      "code": 6117,
+      "name": "errProgramBuildMismatch",
+      "msg": "Verified-build gate: the target protocol's deployed ELF hash does not match the owner-pinned build hash — the on-chain build changed (re-pin via queue_policy_update after re-audit)"
     }
   ],
   "types": [
@@ -8986,6 +9022,48 @@ export type Sigil = {
               "APPENDED per F-14 APPEND-ONLY rule for Borsh stability."
             ],
             "type": "u64"
+          },
+          {
+            "name": "protocolHashes",
+            "docs": [
+              "Item 3 — verified-build gate (2026-06-22): optional update to",
+              "`PolicyConfig.protocol_hashes`. `None` = preserve the live value;",
+              "`Some([[u8;32]; MAX])` = set the full index-aligned hash array (an",
+              "all-zero entry within it disables the gate for that protocol). This",
+              "mirrors the whole-array write semantics of `protocols` / `protocol_caps`",
+              "(the owner submits the complete intended array, not a delta). Bound by",
+              "TA-19 at canonical digest position 25; `apply_pending_policy` copies it",
+              "into the live policy before the second-pass digest recompute.",
+              "",
+              "Whole-array `Option` (not a per-entry delta) keeps the merge logic",
+              "trivial and the digest deterministic. Borsh size = 1 (Option tag) +",
+              "32 * MAX_ALLOWED_PROTOCOLS = 321 bytes, moving `PendingPolicyUpdate::SIZE`",
+              "1028 → 1349.",
+              "",
+              "MIGRATION PRECONDITION: deploy the upgrade only when NO policy update is",
+              "pending (operationally trivial pre-mainnet). The struct is ephemeral",
+              "(`init`-recreated at the new SIZE on every `queue_policy_update`), so any",
+              "pending account created AFTER the upgrade is already new-format. A pending",
+              "account created BEFORE the upgrade would be old-format (no trailing",
+              "`Option` field) and would fail Borsh deserialization in apply/cancel — the",
+              "precondition guarantees none exists at upgrade time. See the companion",
+              "comment on `apply_pending_policy::handler`.",
+              "",
+              "APPENDED per F-14 APPEND-ONLY rule for Borsh stability."
+            ],
+            "type": {
+              "option": {
+                "array": [
+                  {
+                    "array": [
+                      "u8",
+                      32
+                    ]
+                  },
+                  10
+                ]
+              }
+            }
           }
         ]
       }
@@ -9515,6 +9593,43 @@ export type Sigil = {
               "APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability."
             ],
             "type": "u64"
+          },
+          {
+            "name": "protocolHashes",
+            "docs": [
+              "Item 3 — verified-build gate (2026-06-22): per-protocol pinned SHA-256 of",
+              "the deployed ELF, INDEX-ALIGNED to `protocols`. `protocol_hashes[i]` pins",
+              "the expected build hash of `protocols[i]`. An ALL-ZERO entry",
+              "(`[0u8; 32]`) means \"no hash pinned for that protocol\" — the gate is",
+              "DISABLED per-protocol (full back-compat: an existing vault grown to this",
+              "SIZE gets all-zero hashes = gate off everywhere). A non-zero entry arms",
+              "the gate: `validate_and_authorize` calls",
+              "`program_hash::enforce_program_build_hash` against the target's deployed",
+              "ProgramData ELF and rejects (`ErrProgramBuildMismatch` 6117) if the build",
+              "changed, or (`ErrProgramDataUnresolvable` 6116) if it cannot read the",
+              "build while armed.",
+              "",
+              "FIXED-SIZE array (no Borsh length prefix) = +320 bytes vs the prior",
+              "layout; this is what moves `PolicyConfig::SIZE` 1329 → 1649. Bound by",
+              "TA-19 at canonical digest position 25 (encoded index-aligned to",
+              "`protocols`: u32-LE(protocols.len()) ++ each `protocol_hashes[i]`),",
+              "so a tampered SDK / pending-PDA mutation cannot silently arm/disarm/re-pin",
+              "a hash between owner approval and on-chain landing. Disarming an entry",
+              "(nonzero→zero) is an ELEVATED mutation (see `queue_policy_update`).",
+              "",
+              "APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability."
+            ],
+            "type": {
+              "array": [
+                {
+                  "array": [
+                    "u8",
+                    32
+                  ]
+                },
+                10
+              ]
+            }
           }
         ]
       }
@@ -10501,3 +10616,4 @@ export type Sigil = {
     }
   ]
 };
+

@@ -246,6 +246,10 @@ export const SIGIL_ERROR__ERR_FINALIZE_META_UNRESOLVABLE = 0x17e1; // 6113
 export const SIGIL_ERROR__ERR_DE_FI_INSTRUCTION_NOT_ADJACENT_TO_FINALIZE = 0x17e2; // 6114
 /** ErrUnmeasurableSpend: Spending session produced no measurable in-transaction vault outcome (no stablecoin movement and no vault-owned acquisition) — async/keeper-settled or unmeasurable; recording 0 spend is rejected */
 export const SIGIL_ERROR__ERR_UNMEASURABLE_SPEND = 0x17e3; // 6115
+/** ErrProgramDataUnresolvable: Verified-build gate: the target protocol's ProgramData account is missing/unresolvable while a build hash is armed — cannot vet the deployed build (fail-closed) */
+export const SIGIL_ERROR__ERR_PROGRAM_DATA_UNRESOLVABLE = 0x17e4; // 6116
+/** ErrProgramBuildMismatch: Verified-build gate: the target protocol's deployed ELF hash does not match the owner-pinned build hash — the on-chain build changed (re-pin via queue_policy_update after re-audit) */
+export const SIGIL_ERROR__ERR_PROGRAM_BUILD_MISMATCH = 0x17e5; // 6117
 
 export type SigilError =
   | typeof SIGIL_ERROR__ACCOUNT_WRITABILITY_MISMATCH
@@ -291,6 +295,8 @@ export type SigilError =
   | typeof SIGIL_ERROR__ERR_PENDING_OWNERSHIP_EXISTS
   | typeof SIGIL_ERROR__ERR_PENDING_OWNERSHIP_NOT_READY
   | typeof SIGIL_ERROR__ERR_POST_ASSERTIONS_NOT_CLOSED
+  | typeof SIGIL_ERROR__ERR_PROGRAM_BUILD_MISMATCH
+  | typeof SIGIL_ERROR__ERR_PROGRAM_DATA_UNRESOLVABLE
   | typeof SIGIL_ERROR__ERR_PROTECTED_WRITABLE
   | typeof SIGIL_ERROR__ERR_REACTIVATE_COOLDOWN_ACTIVE
   | typeof SIGIL_ERROR__ERR_REACTIVATE_COSIGN_REQUIRED_FOR_FULL_CAPABILITY
@@ -411,6 +417,8 @@ if (process.env.NODE_ENV !== "production") {
     [SIGIL_ERROR__ERR_PENDING_OWNERSHIP_EXISTS]: `An ownership transfer is already pending; cancel it first`,
     [SIGIL_ERROR__ERR_PENDING_OWNERSHIP_NOT_READY]: `Ownership transfer timelock has not elapsed`,
     [SIGIL_ERROR__ERR_POST_ASSERTIONS_NOT_CLOSED]: `PostExecutionAssertions PDA still active — call close_post_assertions first`,
+    [SIGIL_ERROR__ERR_PROGRAM_BUILD_MISMATCH]: `Verified-build gate: the target protocol's deployed ELF hash does not match the owner-pinned build hash — the on-chain build changed (re-pin via queue_policy_update after re-audit)`,
+    [SIGIL_ERROR__ERR_PROGRAM_DATA_UNRESOLVABLE]: `Verified-build gate: the target protocol's ProgramData account is missing/unresolvable while a build hash is armed — cannot vet the deployed build (fail-closed)`,
     [SIGIL_ERROR__ERR_PROTECTED_WRITABLE]: `Protected Sigil PDA passed as writable to a foreign instruction between validate and finalize`,
     [SIGIL_ERROR__ERR_REACTIVATE_COOLDOWN_ACTIVE]: `Reactivate requires 5-minute observation cooldown to elapse`,
     [SIGIL_ERROR__ERR_REACTIVATE_COSIGN_REQUIRED_FOR_FULL_CAPABILITY]: `Reactivate with FULL_CAPABILITY new agent requires cosign`,

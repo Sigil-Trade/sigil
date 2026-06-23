@@ -377,6 +377,30 @@ export type PolicyConfig = {
    * APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
    */
   operatorGrantDelaySeconds: bigint;
+  /**
+   * Item 3 — verified-build gate (2026-06-22): per-protocol pinned SHA-256 of
+   * the deployed ELF, INDEX-ALIGNED to `protocols`. `protocol_hashes[i]` pins
+   * the expected build hash of `protocols[i]`. An ALL-ZERO entry
+   * (`[0u8; 32]`) means "no hash pinned for that protocol" — the gate is
+   * DISABLED per-protocol (full back-compat: an existing vault grown to this
+   * SIZE gets all-zero hashes = gate off everywhere). A non-zero entry arms
+   * the gate: `validate_and_authorize` calls
+   * `program_hash::enforce_program_build_hash` against the target's deployed
+   * ProgramData ELF and rejects (`ErrProgramBuildMismatch` 6117) if the build
+   * changed, or (`ErrProgramDataUnresolvable` 6116) if it cannot read the
+   * build while armed.
+   *
+   * FIXED-SIZE array (no Borsh length prefix) = +320 bytes vs the prior
+   * layout; this is what moves `PolicyConfig::SIZE` 1329 → 1649. Bound by
+   * TA-19 at canonical digest position 25 (encoded index-aligned to
+   * `protocols`: u32-LE(protocols.len()) ++ each `protocol_hashes[i]`),
+   * so a tampered SDK / pending-PDA mutation cannot silently arm/disarm/re-pin
+   * a hash between owner approval and on-chain landing. Disarming an entry
+   * (nonzero→zero) is an ELEVATED mutation (see `queue_policy_update`).
+   *
+   * APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  protocolHashes: Array<ReadonlyUint8Array>;
 };
 
 export type PolicyConfigArgs = {
@@ -692,6 +716,30 @@ export type PolicyConfigArgs = {
    * APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
    */
   operatorGrantDelaySeconds: number | bigint;
+  /**
+   * Item 3 — verified-build gate (2026-06-22): per-protocol pinned SHA-256 of
+   * the deployed ELF, INDEX-ALIGNED to `protocols`. `protocol_hashes[i]` pins
+   * the expected build hash of `protocols[i]`. An ALL-ZERO entry
+   * (`[0u8; 32]`) means "no hash pinned for that protocol" — the gate is
+   * DISABLED per-protocol (full back-compat: an existing vault grown to this
+   * SIZE gets all-zero hashes = gate off everywhere). A non-zero entry arms
+   * the gate: `validate_and_authorize` calls
+   * `program_hash::enforce_program_build_hash` against the target's deployed
+   * ProgramData ELF and rejects (`ErrProgramBuildMismatch` 6117) if the build
+   * changed, or (`ErrProgramDataUnresolvable` 6116) if it cannot read the
+   * build while armed.
+   *
+   * FIXED-SIZE array (no Borsh length prefix) = +320 bytes vs the prior
+   * layout; this is what moves `PolicyConfig::SIZE` 1329 → 1649. Bound by
+   * TA-19 at canonical digest position 25 (encoded index-aligned to
+   * `protocols`: u32-LE(protocols.len()) ++ each `protocol_hashes[i]`),
+   * so a tampered SDK / pending-PDA mutation cannot silently arm/disarm/re-pin
+   * a hash between owner approval and on-chain landing. Disarming an entry
+   * (nonzero→zero) is an ELEVATED mutation (see `queue_policy_update`).
+   *
+   * APPENDED at end of struct per F-14 APPEND-ONLY rule for Borsh stability.
+   */
+  protocolHashes: Array<ReadonlyUint8Array>;
 };
 
 /** Gets the encoder for {@link PolicyConfigArgs} account data. */
@@ -730,6 +778,10 @@ export function getPolicyConfigEncoder(): Encoder<PolicyConfigArgs> {
       ["cosignRequired", getBooleanEncoder()],
       ["cosignSessionPubkey", getAddressEncoder()],
       ["operatorGrantDelaySeconds", getU64Encoder()],
+      [
+        "protocolHashes",
+        getArrayEncoder(fixEncoderSize(getBytesEncoder(), 32), { size: 10 }),
+      ],
     ]),
     (value) => ({ ...value, discriminator: POLICY_CONFIG_DISCRIMINATOR }),
   );
@@ -770,6 +822,10 @@ export function getPolicyConfigDecoder(): Decoder<PolicyConfig> {
     ["cosignRequired", getBooleanDecoder()],
     ["cosignSessionPubkey", getAddressDecoder()],
     ["operatorGrantDelaySeconds", getU64Decoder()],
+    [
+      "protocolHashes",
+      getArrayDecoder(fixDecoderSize(getBytesDecoder(), 32), { size: 10 }),
+    ],
   ]);
 }
 

@@ -150,6 +150,8 @@ export const SIGIL_ERRORS = {
   ErrFinalizeMetaUnresolvable: 6113,
   ErrDeFiInstructionNotAdjacentToFinalize: 6114,
   ErrUnmeasurableSpend: 6115,
+  ErrProgramDataUnresolvable: 6116,
+  ErrProgramBuildMismatch: 6117,
 } as const;
 
 export type SigilErrorName = keyof typeof SIGIL_ERRORS;
