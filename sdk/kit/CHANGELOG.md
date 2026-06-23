@@ -1,5 +1,17 @@
 # @usesigil/kit
 
+## 0.21.0
+
+### Minor Changes
+
+- [#385](https://github.com/Sigil-Trade/sigil/pull/385) [`0f33ebd`](https://github.com/Sigil-Trade/sigil/commit/0f33ebdb26a8f75323192d297e346a7a54ab3e4b) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - Add `getProgramDataHash(rpc, programId)` — computes the SHA-256 of a deployed program's executable ELF from its BPFLoaderUpgradeable `ProgramData` account. This is the value an owner pins into `PolicyConfig.protocol_hashes` for the upcoming verified-build gate (Item 3), so authorization can reject a target protocol whose on-chain build no longer matches the audited one. Also exports `getProgramDataAddress`, `BPF_LOADER_UPGRADEABLE_PROGRAM_ID`, and `PROGRAM_DATA_HEADER_LEN`. Mirrors the on-chain hash offset (the 45-byte `ProgramData` header) byte-for-byte so a hash pinned via this helper matches the on-chain recomputation.
+
+### Patch Changes
+
+- [#379](https://github.com/Sigil-Trade/sigil/pull/379) [`509c71a`](https://github.com/Sigil-Trade/sigil/commit/509c71a335381413212703e1d58636c0c4406881) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - Add agent-error mappings for on-chain errors 6113 (`ErrFinalizeMetaUnresolvable`) and 6114 (`ErrDeFiInstructionNotAdjacentToFinalize`) — the F-Q1b finalize-side completeness check plus the DeFi↔finalize adjacency invariant. These close a value-attribution leak where a writable DeFi account meta could be omitted from `finalize_session` (or the counted DeFi instruction displaced from immediately before finalize) to dodge the per-recipient cap, output-ownership, and stable-floor walks.
+
+- [#381](https://github.com/Sigil-Trade/sigil/pull/381) [`97de831`](https://github.com/Sigil-Trade/sigil/commit/97de831b15d84356ebd490ca9d3167919dd507c4) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - Add agent-error mapping for on-chain error 6115 (`ErrUnmeasurableSpend`) — the require-measurable-outcome invariant. A spending session that produces no measurable in-transaction vault outcome (no stablecoin movement out of the vault and no vault-owned acquisition increase) is now rejected, closing the async/CPI/data-mode cap-accounting bypass where a deferred-settlement action would otherwise slip through at dust-fee cost without binding the spending caps.
+
 ## 0.20.0
 
 ### Minor Changes
