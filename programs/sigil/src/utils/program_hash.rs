@@ -94,7 +94,10 @@ pub fn enforce_program_build_hash(
     //    the owner-pinned hash. `hashv` over a single slice is the same
     //    primitive the SDK uses (sha256 of data[45..]).
     let actual = hashv(&[&data[PROGRAM_DATA_HEADER_LEN..]]).to_bytes();
-    require!(&actual == expected_hash, SigilError::ErrProgramBuildMismatch);
+    require!(
+        &actual == expected_hash,
+        SigilError::ErrProgramBuildMismatch
+    );
 
     Ok(())
 }

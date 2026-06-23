@@ -344,11 +344,7 @@ pub fn handler(
     // validate's already-tight BPF stack frame (same pattern as the TA-11 set
     // builder). When no hash is armed for the target, this is a cheap
     // index-scan + zero-check and returns immediately (gate disabled).
-    enforce_verified_build_if_armed(
-        policy,
-        &target_protocol,
-        ctx.remaining_accounts,
-    )?;
+    enforce_verified_build_if_armed(policy, &target_protocol, ctx.remaining_accounts)?;
 
     // --- Stablecoin-only spending path ---
     let mut output_mint = Pubkey::default();

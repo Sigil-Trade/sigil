@@ -471,7 +471,8 @@ describe("policy-digest invariant (TA-19 sibling-handler recompute)", () => {
         // pass-through from live policy. Reactivate-cosign gate is not
         // exercised in this digest-invariant scope.
         null,
-        null, // Phase 3 (TA-09): cosign_session — PublicKey.default = non-elevated
+        null,
+        null /* protocol_hashes (PR-C) */, // Phase 3 (TA-09): cosign_session — PublicKey.default = non-elevated
         // (single-sig owner mutation; daily_cap is non-elevated).
         PublicKey.default,
         newPolicyPreviewDigest,
@@ -851,7 +852,8 @@ describe("Phase 2 close-up — F-16 negative tests", () => {
         // pass-through from live policy. Reactivate-cosign gate is not
         // exercised in this digest-invariant scope.
         null,
-        null, // Phase 3 (TA-09): cosign_session — PublicKey.default = non-elevated
+        null,
+        null /* protocol_hashes (PR-C) */, // Phase 3 (TA-09): cosign_session — PublicKey.default = non-elevated
         // (single-sig owner mutation; daily_cap is non-elevated).
         PublicKey.default,
         validDigest,

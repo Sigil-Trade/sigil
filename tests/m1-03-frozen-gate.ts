@@ -312,6 +312,7 @@ describe("M1-03: systemic frozen-gate", () => {
           null,
           null,
           null,
+          null, // protocol_hashes — Item 3 verified-build gate (PR-C, pass-through),
           PublicKey.default, // cosignSession (non-elevated)
           queueDigest,
         )
@@ -391,6 +392,7 @@ describe("M1-03: systemic frozen-gate", () => {
         null,
         null,
         null,
+        null, // protocol_hashes — Item 3 verified-build gate (PR-C, pass-through),
         PublicKey.default,
         queueDigest,
       )
@@ -582,6 +584,7 @@ describe("M1-03: systemic frozen-gate", () => {
         null,
         null,
         null,
+        null, // protocol_hashes — Item 3 verified-build gate (PR-C, pass-through),
         PublicKey.default,
         queueDigest,
       )

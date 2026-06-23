@@ -228,6 +228,13 @@ async function siblingHandlerExpectedDigest(
     // computeAgentSetHash (mirrors compute_agent_set_hash).
     agentSetHash: computeAgentSetHash(liveVault.data.agents),
     operatorGrantDelaySeconds: livePolicy.data.operatorGrantDelaySeconds,
+    // Item 3 (verified-build gate, 2026-06-22): protocol_hashes (canonical
+    // position 25). Sibling handlers (post-assertions flips) never mutate the
+    // verified-build pins — pass-through from live policy so the re-bind digest
+    // matches the on-chain recompute (which binds &policy.protocol_hashes). For
+    // an unarmed vault this is all-zero (== the default), but pass it explicitly
+    // so an armed vault's post-assertion flip does not mismatch (6071).
+    protocolHashes: livePolicy.data.protocolHashes,
   });
 }
 
@@ -971,6 +978,13 @@ async function buildPolicyUpdateIx(
     protocolCaps: effProtocolCaps,
     agentSetHash: computeAgentSetHash(liveVault.data.agents),
     cosignSessionPubkey: effCosignSessionPubkey,
+    // Item 3 (verified-build gate, 2026-06-22): merged-effective protocol_hashes.
+    // The dashboard mutation does NOT arm/disarm the gate (PR-C arms via a raw
+    // queue_policy_update with getProgramDataHash), so this is always a live
+    // pass-through — the queue ix passes `protocolHashes: null` below, the
+    // on-chain merge keeps the live array, and the recomputed digest must bind
+    // that same live array (else PolicyPreviewMismatch 6071).
+    protocolHashes: livePolicy.data.protocolHashes,
   });
 
   const ix = await getQueuePolicyUpdateInstructionAsync({
@@ -995,6 +1009,11 @@ async function buildPolicyUpdateIx(
     cosignRequired: changes.cosignRequired ?? null,
     cosignSessionPubkey: changes.cosignSessionPubkey ?? null,
     operatorGrantDelaySeconds: changes.operatorGrantDelaySeconds ?? null,
+    // Item 3 (verified-build gate, 2026-06-22): the dashboard policy mutation
+    // never arms/disarms the verified-build gate (arming is a raw
+    // queue_policy_update with getProgramDataHash — see PR-C). null = on-chain
+    // pass-through of the live array, matching the digest computed above.
+    protocolHashes: null,
     cosignSession,
     newPolicyPreviewDigest,
   });

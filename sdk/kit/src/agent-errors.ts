@@ -81,13 +81,13 @@ export const SIGIL_ON_CHAIN_ERROR_MIN = 6000;
 /**
  * Highest Anchor-error code currently in use. Bump when errors.rs grows.
  *
- * The enum tops out at 6106 (107 codes). The drift gate at
- * `tests/error-map-drift.test.ts` derives the expected count from
+ * The enum tops out at 6117 (Item 3 verified-build gate: 6116/6117). The drift
+ * gate at `tests/error-map-drift.test.ts` derives the expected count from
  * `target/idl/sigil.json` (the authoritative code↔name source) and asserts
  * this map agrees with it by code AND name — so adding or renumbering an
  * on-chain error without updating this map fails at test time.
  */
-export const SIGIL_ON_CHAIN_ERROR_MAX = 6115;
+export const SIGIL_ON_CHAIN_ERROR_MAX = 6117;
 
 interface ErrorMapping {
   name: string;
@@ -1972,6 +1972,42 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
         action: "use_a_synchronously_settling_action",
         description:
           "Use an action whose value movement settles in this same transaction — either a stablecoin spend Sigil can measure, or an acquiring swap that lands the acquired token in a vault-owned account (declare it via seal()'s outputSwapMint). Request/keeper-fulfillment actions that settle in a later block are not supported on the spending path.",
+      },
+    ],
+  },
+  // Item 3 (verified-build gate, 2026-06-22): the target protocol has an
+  // owner-pinned ELF hash (PolicyConfig.protocol_hashes), but the gate could not
+  // resolve the program's BPFLoaderUpgradeable ProgramData account to recompute
+  // the hash — it was absent from remaining_accounts, not owned by the
+  // upgradeable loader, or too small to hold an ELF. Fail-closed.
+  6116: {
+    name: "ErrProgramDataUnresolvable",
+    message:
+      "The target protocol has an owner-pinned verified-build hash, but its BPFLoaderUpgradeable ProgramData account could not be resolved to recompute the build hash. The gate fails closed rather than skipping the check.",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "supply_the_target_program_data_account",
+        description:
+          "Include the target protocol's ProgramData account (find_program_address([programId], BPFLoaderUpgradeable)) in the transaction's remaining accounts. The SDK seal() satisfier appends it automatically when a build hash is armed — ensure the target is an upgradeable program and is being passed through.",
+      },
+    ],
+  },
+  // Item 3 (verified-build gate, 2026-06-22): the target protocol's currently
+  // deployed ELF does NOT hash to the owner-pinned value — the program was
+  // upgraded since the owner attested it (the upgrade-TOCTOU the gate closes).
+  6117: {
+    name: "ErrProgramBuildMismatch",
+    message:
+      "The target protocol's deployed program build no longer matches the owner-attested verified-build hash (PolicyConfig.protocol_hashes). The program was upgraded since it was pinned; authorization is rejected to close the upgrade-TOCTOU.",
+    category: "POLICY_VIOLATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "re_pin_or_disarm_the_build_hash",
+        description:
+          "If the upgrade is legitimate and audited, re-pin the new build hash via queue_policy_update (getProgramDataHash recomputes it). To stop enforcing the gate for this protocol, disarm it (set its entry to all-zero) — note that disarming is an elevated mutation on a cosign-required vault.",
       },
     ],
   },

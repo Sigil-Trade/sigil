@@ -132,6 +132,8 @@ function mockState(): ResolvedVaultState {
         "11111111111111111111111111111111" as unknown as Address,
       // F-Q6 (2026-06-02): mock default 0 (no OPERATOR-grant delay).
       operatorGrantDelaySeconds: 0n,
+      // Item 3 (2026-06-22): verified-build gate off (10 all-zero entries).
+      protocolHashes: Array.from({ length: 10 }, () => new Uint8Array(32)),
     },
     tracker: null,
     overlay: null,

@@ -439,9 +439,8 @@ pub fn handler(
     // never enables a drain. Detection is a trivial per-entry nonzero→zero check
     // over the merged-effective array vs the live policy.
     let disarms_build_hash = protocol_hashes.is_some_and(|_| {
-        (0..MAX_ALLOWED_PROTOCOLS).any(|i| {
-            policy.protocol_hashes[i] != [0u8; 32] && eff_protocol_hashes[i] == [0u8; 32]
-        })
+        (0..MAX_ALLOWED_PROTOCOLS)
+            .any(|i| policy.protocol_hashes[i] != [0u8; 32] && eff_protocol_hashes[i] == [0u8; 32])
     });
 
     // G6 (audit 2026-05-18 cosign opt-in): one-way-ratchet semantics for

@@ -244,6 +244,7 @@ describe("pen-cross-1-absorption (Phase 8 Batch 6)", () => {
           true,
           cosigner.publicKey,
           null,
+          null, // protocol_hashes — Item 3 verified-build gate (PR-C, pass-through),
           PublicKey.default,
           queueDigest,
         )

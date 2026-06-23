@@ -98,7 +98,7 @@
  * 32 bytes each + fixed scalars ≈ 700 bytes worst case.
  */
 
-import type { Address } from "../kit-adapter.js";
+import type { Address, ReadonlyUint8Array } from "../kit-adapter.js";
 import {
   base58Decode32 as base58Decode,
   sha256,
@@ -256,7 +256,10 @@ export interface PolicyPreviewFields {
    * on-chain init/legacy state where `protocol_hashes` is all-zero. Mirrors the
    * Rust `protocol_hashes` digest encoding byte-for-byte.
    */
-  protocolHashes?: readonly Uint8Array[];
+  // Accept the codama-decoded `ReadonlyUint8Array` (what `PolicyConfig.protocolHashes`
+  // deserializes to) as well as a plain `Uint8Array`. The encoder only reads
+  // `.length` + indexes (no mutation), so read-only entries are safe.
+  protocolHashes?: readonly ReadonlyUint8Array[];
 }
 
 // Base58 decode + sha256 + cursor writers now live in `../canonical-encode.ts`

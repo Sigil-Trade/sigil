@@ -205,7 +205,8 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
           null,
           true, // [16] cosign_required: Some(true) — ENABLE (non-elevated)
           cosigner.publicKey, // [17] cosign_session_pubkey — BIND (L1-2a force-bind)
-          null, // [18] operator_grant_delay_seconds
+          null,
+          null /* protocol_hashes (PR-C) */, // [18] operator_grant_delay_seconds
           PublicKey.default, // [19] cosign_session — enable is non-elevated
           queueDigest,
         )
@@ -329,7 +330,8 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
         null, // perRecipientDailyCapUsd
         null, // cosignRequired
         null,
-        null, // cosignSessionPubkey (D-5: pass-through from live policy)
+        null,
+        null /* protocol_hashes (PR-C) */, // cosignSessionPubkey (D-5: pass-through from live policy)
         PublicKey.default, // cosignSession (non-elevated)
         queueDigest,
       )
@@ -605,7 +607,8 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
         null,
         true, // [15] cosign_required: Some(true) — ENABLES (non-elevated)
         cosigner.publicKey, // [16] cosign_session_pubkey — BIND (L1-2a force-bind)
-        null, // [17] operator_grant_delay_seconds
+        null,
+        null /* protocol_hashes (PR-C) */, // [17] operator_grant_delay_seconds
         PublicKey.default, // [18] cosign_session: enable is non-elevated → none
         queueDigest,
       )
@@ -870,7 +873,8 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
         null, // perRecipientDailyCapUsd
         false, // cosignRequired: Some(false) — DISABLES (elevated)
         null,
-        null, // cosignSessionPubkey (D-5: pass-through)
+        null,
+        null /* protocol_hashes (PR-C) */, // cosignSessionPubkey (D-5: pass-through)
         cosigner.publicKey, // cosignSession — distinct from owner, non-default
         queueDigest,
       )
@@ -1090,7 +1094,8 @@ describe("missing-coverage (DC audit gap-fill 2026-05-19)", () => {
         null,
         true, // cosign_required: Some(true) — ENABLES (non-elevated)
         null,
-        null, // cosign_session_pubkey (D-5: pass-through)
+        null,
+        null /* protocol_hashes (PR-C) */, // cosign_session_pubkey (D-5: pass-through)
         PublicKey.default, // cosign_session: NONE required
         queueDigest,
       )

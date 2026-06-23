@@ -324,6 +324,7 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
           true,
           cosigner.publicKey,
           null,
+          null, // protocol_hashes — Item 3 verified-build gate (PR-C, pass-through),
           PublicKey.default,
           queueDigest,
         )
@@ -1484,6 +1485,7 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
         true,
         newOwner.publicKey,
         null,
+        null, // protocol_hashes — Item 3 verified-build gate (PR-C, pass-through),
         PublicKey.default,
         queueDigest,
       )
