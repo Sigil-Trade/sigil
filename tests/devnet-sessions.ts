@@ -158,6 +158,9 @@ describe("devnet-sessions", () => {
       program.programId,
     );
 
+    // Lifecycle/stats only (session closed + totalTransactions+1): NON-SPENDING
+    // session (amount=0) — exempt from the require-measurable-outcome gate
+    // (6115); totalTransactions still increments per finalize.
     await authorizeAndFinalize({
       connection,
       program,
@@ -168,7 +171,7 @@ describe("devnet-sessions", () => {
       sessionPda,
       vaultTokenAta: vault.vaultTokenAta,
       mint: mintA,
-      amount: new BN(10_000_000),
+      amount: new BN(0),
       protocol: MOCK_DEFI_PROGRAM_ID,
       protocolTreasuryAta: vault.protocolTreasuryAta,
       feeDestinationAta: null,
@@ -197,6 +200,8 @@ describe("devnet-sessions", () => {
       program.programId,
     );
 
+    // Lifecycle/stats only (session closed + totalTransactions+1): NON-SPENDING
+    // session (amount=0) — exempt from 6115; totalTransactions still increments.
     await authorizeAndFinalize({
       connection,
       program,
@@ -207,7 +212,7 @@ describe("devnet-sessions", () => {
       sessionPda,
       vaultTokenAta: vault.vaultTokenAta,
       mint: mintA,
-      amount: new BN(10_000_000),
+      amount: new BN(0),
       protocol: MOCK_DEFI_PROGRAM_ID,
       protocolTreasuryAta: vault.protocolTreasuryAta,
       feeDestinationAta: null,
@@ -298,6 +303,9 @@ describe("devnet-sessions", () => {
     const vaultBefore = await program.account.agentVault.fetch(vault.vaultPda);
     const txCountBefore = vaultBefore.totalTransactions.toNumber();
 
+    // Lifecycle/stats only (both sessions closed + totalTransactions+2):
+    // NON-SPENDING sessions (amount=0) — exempt from 6115; the test exercises
+    // per-mint concurrent session lifecycle, not spend magnitude.
     // Composed TX for mintA
     await authorizeAndFinalize({
       connection,
@@ -309,7 +317,7 @@ describe("devnet-sessions", () => {
       sessionPda: sessionPdaA,
       vaultTokenAta: vault.vaultTokenAta,
       mint: mintA,
-      amount: new BN(10_000_000),
+      amount: new BN(0),
       protocol: MOCK_DEFI_PROGRAM_ID,
       protocolTreasuryAta: vault.protocolTreasuryAta,
       feeDestinationAta: null,
@@ -326,7 +334,7 @@ describe("devnet-sessions", () => {
       sessionPda: sessionPdaB,
       vaultTokenAta: mintBVaultAta,
       mint: mintB,
-      amount: new BN(10_000_000),
+      amount: new BN(0),
       protocol: MOCK_DEFI_PROGRAM_ID,
       protocolTreasuryAta: mintBTreasuryAta,
       feeDestinationAta: null,

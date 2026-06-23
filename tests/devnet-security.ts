@@ -610,6 +610,10 @@ describe("devnet-security", () => {
       program.programId,
     );
 
+    // This test asserts only session-PDA reuse + totalTransactions==2 (no spend
+    // magnitude), so both legs are NON-SPENDING (amount=0) — exempt from the
+    // require-measurable-outcome gate (6115), while totalTransactions still
+    // increments per finalize and the session is still created+closed each TX.
     // First composed TX
     await authorize({
       connection,
@@ -621,7 +625,7 @@ describe("devnet-security", () => {
       sessionPda,
       vaultTokenAta: freshVault.vaultTokenAta,
       mint,
-      amount: new BN(10_000_000),
+      amount: new BN(0),
       protocol: MOCK_DEFI_PROGRAM_ID,
       protocolTreasuryAta: freshVault.protocolTreasuryAta,
     });
@@ -641,7 +645,7 @@ describe("devnet-security", () => {
       sessionPda,
       vaultTokenAta: freshVault.vaultTokenAta,
       mint,
-      amount: new BN(10_000_000),
+      amount: new BN(0),
       protocol: MOCK_DEFI_PROGRAM_ID,
       protocolTreasuryAta: freshVault.protocolTreasuryAta,
     });

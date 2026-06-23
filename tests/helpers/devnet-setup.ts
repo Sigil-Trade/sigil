@@ -1197,6 +1197,20 @@ export interface FinalizeOpts {
   protocolTreasuryAta: PublicKey | null;
   outputStablecoinAccount?: PublicKey | null;
   outputSwapAccount?: PublicKey | null;
+  /**
+   * F-Q1b finalize-side completeness (err 6113): every WRITABLE, non-vault meta
+   * of the counted DeFi ix — plus the tx fee payer (compiled-writable in every
+   * instruction) — must be resolvable from finalize's remaining_accounts when a
+   * spend actually occurs (run_outcome_check && actual_spend > 0), exactly as
+   * validate enforces F-Q1a. Fed READONLY (resolved / attributed, never
+   * authorized) — the same set seal() attaches to BOTH wrapper ixs. See
+   * sandwich-integration.ts:780-839 for the canonical LiteSVM pattern.
+   */
+  finalizeRemainingAccounts?: {
+    pubkey: PublicKey;
+    isWritable: boolean;
+    isSigner: boolean;
+  }[];
 }
 
 /**
@@ -1214,29 +1228,31 @@ export async function buildFinalizeIx(opts: FinalizeOpts) {
     vaultTokenAta,
     outputStablecoinAccount = null,
     outputSwapAccount = null,
+    finalizeRemainingAccounts,
   } = opts;
   const [overlayPda] = PublicKey.findProgramAddressSync(
     [Buffer.from("agent_spend"), vaultPda.toBuffer(), Buffer.from([0])],
     program.programId,
   );
-  return program.methods
-    .finalizeSession()
-    .accountsPartial({
-      payer: payer.publicKey,
-      vault: vaultPda,
-      session: sessionPda,
-      sessionRentRecipient: agentPubkey,
-      policy: policyPda,
-      tracker: trackerPda,
-      agentSpendOverlay: overlayPda,
-      vaultTokenAccount: vaultTokenAta,
-      outputStablecoinAccount,
-      outputSwapAccount,
-      tokenProgram: TOKEN_PROGRAM_ID,
-      systemProgram: SystemProgram.programId,
-      instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
-    })
-    .instruction();
+  let builder = program.methods.finalizeSession().accountsPartial({
+    payer: payer.publicKey,
+    vault: vaultPda,
+    session: sessionPda,
+    sessionRentRecipient: agentPubkey,
+    policy: policyPda,
+    tracker: trackerPda,
+    agentSpendOverlay: overlayPda,
+    vaultTokenAccount: vaultTokenAta,
+    outputStablecoinAccount,
+    outputSwapAccount,
+    tokenProgram: TOKEN_PROGRAM_ID,
+    systemProgram: SystemProgram.programId,
+    instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+  });
+  if (finalizeRemainingAccounts && finalizeRemainingAccounts.length > 0) {
+    builder = builder.remainingAccounts(finalizeRemainingAccounts);
+  }
+  return builder.instruction();
 }
 
 /**
@@ -1342,6 +1358,13 @@ export async function authorizeAndFinalize(
     protocolTreasuryAta: opts.protocolTreasuryAta,
     outputStablecoinAccount: opts.outputStablecoinAccount ?? null,
     outputSwapAccount: opts.outputSwapAccount ?? null,
+    // F-Q1b finalize-side completeness (err 6113): feed finalize the SAME
+    // writable-DeFi-meta set (READONLY) that validate receives, exactly as
+    // seal() attaches the same set to both wrapper ixs. On a spending finalize
+    // (actual_spend > 0) every writable, non-vault DeFi meta must be resolvable
+    // here or finalize reverts ErrFinalizeMetaUnresolvable. Non-spending /
+    // zero-spend sandwiches don't run the check; passing the set is harmless.
+    finalizeRemainingAccounts: mergedRemaining,
   });
 
   // 3. Compose [validate, middle?, finalize] and send as ONE versioned tx via
