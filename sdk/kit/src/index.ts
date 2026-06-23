@@ -836,3 +836,15 @@ export type {
   AgentBootstrap,
   AgentBootstrapConfig,
 } from "./agent-bootstrap.js";
+
+// ─── Verified-build program hash (Item 3 — TA-19 verified-build gate) ────────
+// Computes sha256 of a deployed program's ELF from its BPFLoaderUpgradeable
+// ProgramData account — the value an owner pins into PolicyConfig.protocol_hashes
+// so validate_and_authorize can reject an upgraded (drain) build. Mirrors
+// programs/sigil/src/utils/program_hash.rs byte-for-byte.
+export {
+  getProgramDataHash,
+  getProgramDataAddress,
+  BPF_LOADER_UPGRADEABLE_PROGRAM_ID,
+  PROGRAM_DATA_HEADER_LEN,
+} from "./program-hash.js";
