@@ -27,7 +27,11 @@ pub struct QueuePolicyUpdate<'info> {
         seeds = [b"policy", vault.key().as_ref()],
         bump = policy.bump,
     )]
-    pub policy: Account<'info, PolicyConfig>,
+    // Boxed (heap) so the 1,649-byte PolicyConfig does not sit on the handler's
+    // BPF stack frame — Item 3's +320-byte protocol_hashes field pushed the
+    // unboxed handler to 4416 bytes (over the 4,096 limit). Mirrors how
+    // validate_and_authorize boxes PolicyConfig.
+    pub policy: Box<Account<'info, PolicyConfig>>,
 
     #[account(
         init,
@@ -36,7 +40,8 @@ pub struct QueuePolicyUpdate<'info> {
         seeds = [b"pending_policy", vault.key().as_ref()],
         bump,
     )]
-    pub pending_policy: Account<'info, PendingPolicyUpdate>,
+    // Boxed for the same reason (1,349-byte PendingPolicyUpdate off the stack).
+    pub pending_policy: Box<Account<'info, PendingPolicyUpdate>>,
 
     pub system_program: Program<'info, System>,
     // TA-09 (Phase 3) + async-cosign refactor (#353): the co-signing session
