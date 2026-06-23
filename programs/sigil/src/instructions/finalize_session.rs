@@ -226,6 +226,262 @@ fn enforce_output_ownership<'info>(
     Ok(())
 }
 
+/// Post-Execution Assertions (Phase B1) check, extracted to its OWN frame
+/// (`#[inline(never)]`) so the assertions bytemuck view, the loaded `Instruction`
+/// (DeclarationConsistency), the legacy-mode `[u8;8]` buffers, the `target_data`
+/// borrow, and — critically — the 256-byte snapshot arrays all live in THIS
+/// callee frame instead of accumulating in `finalize_session::handler`'s frame,
+/// which is at the 4096-byte BPF stack limit on this path. The snapshot arrays
+/// are borrowed (passed by reference) straight off the session account, so no
+/// copy lands in the handler frame either. Behavior is byte-for-byte identical to
+/// the previously-inline block: same gates already applied at the call site
+/// (`!is_expired && has_post_assertions != 0`), same PDA/owner/length/discriminator/
+/// vault checks, same per-entry dispatch order, same errors, same
+/// `PostAssertionChecked` events.
+#[inline(never)]
+fn enforce_post_execution_assertions(
+    remaining: &[AccountInfo],
+    ix_sysvar_info: &AccountInfo,
+    vault_key: &Pubkey,
+    session_snapshots: &[[u8; 32]; 8],
+    session_snapshot_lens: &[u8; 8],
+) -> Result<()> {
+    // CRITICAL: hard-fail if assertions are configured but PDA is missing.
+    // Soft guards would let agents bypass assertions by not passing the PDA.
+    require!(!remaining.is_empty(), SigilError::PostAssertionFailed);
+
+    // PDA-based lookup (not positional — security audit H2 fix)
+    let (expected_assertions_pda, _) =
+        Pubkey::find_program_address(&[b"post_assertions", vault_key.as_ref()], &crate::ID);
+    let assertions_info = remaining
+        .iter()
+        .find(|a| a.key() == expected_assertions_pda);
+    require!(assertions_info.is_some(), SigilError::PostAssertionFailed);
+    let assertions_info = assertions_info.unwrap();
+
+    // Hard-fail: PDA must be owned by this program
+    require!(
+        assertions_info.owner == &crate::ID,
+        SigilError::PostAssertionFailed
+    );
+
+    let assertions_data = assertions_info.try_borrow_data()?;
+    let struct_size = core::mem::size_of::<PostExecutionAssertions>();
+
+    // Hard-fail: account must be large enough
+    require!(
+        assertions_data.len() >= 8 + struct_size,
+        SigilError::PostAssertionFailed
+    );
+
+    // F-1 audit fix: verify Anchor discriminator before bytemuck cast.
+    // Cashio/Crema lesson — owner + PDA derivation are insufficient when
+    // multiple zero-copy types share byte layout. PDA derivation, owner,
+    // length, and vault checks remain; the discriminator is the 4th
+    // defense-in-depth check that prevents type-punning if a future
+    // #[account(zero_copy)] type adopts a similar layout under crate::ID.
+    require!(
+        assertions_data[..8]
+            == *<PostExecutionAssertions as anchor_lang::Discriminator>::DISCRIMINATOR,
+        SigilError::PostAssertionFailed,
+    );
+
+    let assertions: &PostExecutionAssertions =
+        bytemuck::from_bytes(&assertions_data[8..8 + struct_size]);
+
+    // Verify PDA belongs to this vault
+    require!(
+        assertions.vault == vault_key.to_bytes(),
+        SigilError::PostAssertionFailed
+    );
+
+    let clock_ts = Clock::get()?.unix_timestamp;
+    let count = assertions.entry_count as usize;
+    for i in 0..count {
+        let entry = &assertions.entries[i];
+
+        // Exhaustive match on assertion_mode — unknown modes hard-fail (security audit H3)
+        let mode = crate::state::post_assertions::AssertionMode::try_from(entry.assertion_mode)
+            .map_err(|_| error!(SigilError::InvalidConstraintConfig))?;
+
+        // Phase 6 R-1..R-4 — dispatch each via #[inline(never)] helpers
+        // to keep the handler's stack frame under the 4096-byte BPF cap.
+        // Each helper allocates its own per-mode locals in a fresh frame
+        // so the snapshot arrays / per-variant 32-byte locals don't
+        // accumulate into the outer handler frame.
+        match mode {
+            crate::state::post_assertions::AssertionMode::MintDeltaCap => {
+                crate::utils::post_assertion_helpers::verify_mint_delta_cap(
+                    entry,
+                    &session_snapshots[i],
+                    session_snapshot_lens[i],
+                    vault_key,
+                    remaining,
+                )?;
+                emit!(crate::events::PostAssertionChecked {
+                    vault: *vault_key,
+                    entry_index: i as u8,
+                    passed: true,
+                    timestamp: clock_ts,
+                });
+                continue;
+            }
+            crate::state::post_assertions::AssertionMode::AtaAuthorityPin => {
+                crate::utils::post_assertion_helpers::verify_ata_authority_pin(
+                    entry, vault_key, remaining,
+                )?;
+                emit!(crate::events::PostAssertionChecked {
+                    vault: *vault_key,
+                    entry_index: i as u8,
+                    passed: true,
+                    timestamp: clock_ts,
+                });
+                continue;
+            }
+            crate::state::post_assertions::AssertionMode::OutputBalanceFloor => {
+                crate::utils::post_assertion_helpers::verify_output_balance_floor(
+                    entry,
+                    &session_snapshots[i],
+                    session_snapshot_lens[i],
+                    vault_key,
+                    remaining,
+                )?;
+                emit!(crate::events::PostAssertionChecked {
+                    vault: *vault_key,
+                    entry_index: i as u8,
+                    passed: true,
+                    timestamp: clock_ts,
+                });
+                continue;
+            }
+            crate::state::post_assertions::AssertionMode::DeclarationConsistency => {
+                crate::utils::post_assertion_helpers::verify_declaration_consistency(
+                    entry,
+                    ix_sysvar_info,
+                    remaining,
+                )?;
+                emit!(crate::events::PostAssertionChecked {
+                    vault: *vault_key,
+                    entry_index: i as u8,
+                    passed: true,
+                    timestamp: clock_ts,
+                });
+                continue;
+            }
+            // Legacy modes (0..3) fall through to the in-loop logic below.
+            _ => {}
+        }
+
+        // Legacy modes (0..3) require the target_account to be loadable.
+        let target_pubkey = Pubkey::new_from_array(entry.target_account);
+
+        // Find the target account in remaining_accounts
+        let target = remaining.iter().find(|a| a.key() == target_pubkey);
+        require!(target.is_some(), SigilError::InvalidPostAssertionIndex);
+        let target = target.unwrap();
+        let target_data = target.try_borrow_data()?;
+
+        let offset = entry.offset as usize;
+        let len = entry.value_len as usize;
+        let end = offset
+            .checked_add(len)
+            .ok_or(error!(SigilError::PostAssertionFailed))?;
+        require!(end <= target_data.len(), SigilError::PostAssertionFailed);
+        let actual = &target_data[offset..end];
+
+        match mode {
+            crate::state::post_assertions::AssertionMode::Absolute => {
+                // Phase B1: check current value against expected_value
+                let expected = &entry.expected_value[..len];
+                let operator =
+                    crate::state::assertions::ConstraintOperator::try_from(entry.operator)
+                        .map_err(|_| error!(SigilError::InvalidConstraintOperator))?;
+
+                // Phase B3 CrossFieldLte branch DELETED in Phase 1 Option A demolition.
+                // Standard absolute comparison (B1) is now the sole path.
+                // M1-04: bytes_match relocated to state::assertions (was
+                // instructions::integrations::generic_constraints).
+                let passed = crate::state::assertions::bytes_match(actual, &operator, expected);
+                require!(passed, SigilError::PostAssertionFailed);
+            }
+            crate::state::post_assertions::AssertionMode::MaxDecrease => {
+                // Phase B2: check (snapshot - current) ≤ expected_value
+                // NOTE: If value increases, saturating sub = 0, check passes.
+                require!(
+                    session_snapshot_lens[i] == entry.value_len,
+                    SigilError::SnapshotNotCaptured
+                );
+                let snapshot = &session_snapshots[i][..len];
+                let expected = &entry.expected_value[..len];
+
+                let mut snap_buf = [0u8; 8];
+                let mut curr_buf = [0u8; 8];
+                let mut exp_buf = [0u8; 8];
+                snap_buf[..len].copy_from_slice(snapshot);
+                curr_buf[..len].copy_from_slice(actual);
+                exp_buf[..len].copy_from_slice(expected);
+                let snap_val = u64::from_le_bytes(snap_buf);
+                let curr_val = u64::from_le_bytes(curr_buf);
+                let exp_val = u64::from_le_bytes(exp_buf);
+
+                let delta = snap_val.saturating_sub(curr_val);
+                require!(delta <= exp_val, SigilError::PostAssertionFailed);
+            }
+            crate::state::post_assertions::AssertionMode::MaxIncrease => {
+                // Phase B2: check (current - snapshot) ≤ expected_value
+                // NOTE: If value decreases, saturating sub = 0, check passes.
+                require!(
+                    session_snapshot_lens[i] == entry.value_len,
+                    SigilError::SnapshotNotCaptured
+                );
+                let snapshot = &session_snapshots[i][..len];
+                let expected = &entry.expected_value[..len];
+
+                let mut snap_buf = [0u8; 8];
+                let mut curr_buf = [0u8; 8];
+                let mut exp_buf = [0u8; 8];
+                snap_buf[..len].copy_from_slice(snapshot);
+                curr_buf[..len].copy_from_slice(actual);
+                exp_buf[..len].copy_from_slice(expected);
+                let snap_val = u64::from_le_bytes(snap_buf);
+                let curr_val = u64::from_le_bytes(curr_buf);
+                let exp_val = u64::from_le_bytes(exp_buf);
+
+                let delta = curr_val.saturating_sub(snap_val);
+                require!(delta <= exp_val, SigilError::PostAssertionFailed);
+            }
+            crate::state::post_assertions::AssertionMode::NoChange => {
+                // Phase B2: check current == snapshot (byte equality)
+                require!(
+                    session_snapshot_lens[i] == entry.value_len,
+                    SigilError::SnapshotNotCaptured
+                );
+                let snapshot = &session_snapshots[i][..len];
+                require!(actual == snapshot, SigilError::PostAssertionFailed);
+            }
+            crate::state::post_assertions::AssertionMode::MintDeltaCap
+            | crate::state::post_assertions::AssertionMode::AtaAuthorityPin
+            | crate::state::post_assertions::AssertionMode::OutputBalanceFloor
+            | crate::state::post_assertions::AssertionMode::DeclarationConsistency => {
+                // Handled above before the legacy target_data load.
+                // These arms are unreachable but the exhaustive match
+                // requires them. Force an error if execution reaches
+                // here (would indicate a refactor bug in the
+                // early-return path).
+                return Err(error!(SigilError::PostAssertionFailed));
+            }
+        }
+
+        emit!(crate::events::PostAssertionChecked {
+            vault: *vault_key,
+            entry_index: i as u8,
+            passed: true,
+            timestamp: clock_ts,
+        });
+    }
+    Ok(())
+}
+
 pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
     // 0. Reject CPI calls — only top-level transaction instructions allowed.
     require!(
@@ -279,9 +535,13 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
     let session_authorized_protocol = session.authorized_protocol;
     let session_authorized_token = session.authorized_token;
     let session_protocol_fee = session.protocol_fee;
-    // Phase B2: extract snapshot data for delta assertions
-    let session_snapshots = session.assertion_snapshots;
-    let session_snapshot_lens = session.snapshot_lens;
+    // Phase B2 snapshot data (assertion_snapshots [[u8;32];8] = 256 bytes,
+    // snapshot_lens [u8;8]) is NO LONGER copied into a handler local — that
+    // 256-byte copy lived in the handler frame for the whole function while
+    // being read >900 lines later in the post-assertion block only. The
+    // extracted `enforce_post_execution_assertions` helper now borrows both
+    // arrays straight off the session account, keeping them out of this
+    // handler's near-the-limit BPF stack frame.
 
     let vault_key = ctx.accounts.vault.key();
     let vault = &mut ctx.accounts.vault;
@@ -1172,241 +1432,23 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
     // pass target accounts for byte-level comparison.
     let policy_ref = &ctx.accounts.policy;
     if !is_expired && policy_ref.has_post_assertions != 0 {
-        // CRITICAL: hard-fail if assertions are configured but PDA is missing.
-        // Soft guards would let agents bypass assertions by not passing the PDA.
-        let remaining = &ctx.remaining_accounts;
-        require!(!remaining.is_empty(), SigilError::PostAssertionFailed);
-
-        // PDA-based lookup (not positional — security audit H2 fix)
-        let (expected_assertions_pda, _) =
-            Pubkey::find_program_address(&[b"post_assertions", vault_key.as_ref()], &crate::ID);
-        let assertions_info = remaining
-            .iter()
-            .find(|a| a.key() == expected_assertions_pda);
-        require!(assertions_info.is_some(), SigilError::PostAssertionFailed);
-        let assertions_info = assertions_info.unwrap();
-
-        // Hard-fail: PDA must be owned by this program
-        require!(
-            assertions_info.owner == &crate::ID,
-            SigilError::PostAssertionFailed
-        );
-
-        let assertions_data = assertions_info.try_borrow_data()?;
-        let struct_size = core::mem::size_of::<PostExecutionAssertions>();
-
-        // Hard-fail: account must be large enough
-        require!(
-            assertions_data.len() >= 8 + struct_size,
-            SigilError::PostAssertionFailed
-        );
-
-        // F-1 audit fix: verify Anchor discriminator before bytemuck cast.
-        // Cashio/Crema lesson — owner + PDA derivation are insufficient when
-        // multiple zero-copy types share byte layout. PDA derivation, owner,
-        // length, and vault checks remain; the discriminator is the 4th
-        // defense-in-depth check that prevents type-punning if a future
-        // #[account(zero_copy)] type adopts a similar layout under crate::ID.
-        require!(
-            assertions_data[..8]
-                == *<PostExecutionAssertions as anchor_lang::Discriminator>::DISCRIMINATOR,
-            SigilError::PostAssertionFailed,
-        );
-
-        let assertions: &PostExecutionAssertions =
-            bytemuck::from_bytes(&assertions_data[8..8 + struct_size]);
-
-        // Verify PDA belongs to this vault
-        require!(
-            assertions.vault == vault_key.to_bytes(),
-            SigilError::PostAssertionFailed
-        );
-
-        let clock_ts = Clock::get()?.unix_timestamp;
-        let count = assertions.entry_count as usize;
-        for i in 0..count {
-            let entry = &assertions.entries[i];
-
-            // Exhaustive match on assertion_mode — unknown modes hard-fail (security audit H3)
-            let mode = crate::state::post_assertions::AssertionMode::try_from(entry.assertion_mode)
-                .map_err(|_| error!(SigilError::InvalidConstraintConfig))?;
-
-            // Phase 6 R-1..R-4 — dispatch each via #[inline(never)] helpers
-            // to keep the handler's stack frame under the 4096-byte BPF cap.
-            // Each helper allocates its own per-mode locals in a fresh frame
-            // so the snapshot arrays / per-variant 32-byte locals don't
-            // accumulate into the outer handler frame.
-            match mode {
-                crate::state::post_assertions::AssertionMode::MintDeltaCap => {
-                    crate::utils::post_assertion_helpers::verify_mint_delta_cap(
-                        entry,
-                        &session_snapshots[i],
-                        session_snapshot_lens[i],
-                        &vault_key,
-                        remaining,
-                    )?;
-                    emit!(crate::events::PostAssertionChecked {
-                        vault: vault_key,
-                        entry_index: i as u8,
-                        passed: true,
-                        timestamp: clock_ts,
-                    });
-                    continue;
-                }
-                crate::state::post_assertions::AssertionMode::AtaAuthorityPin => {
-                    crate::utils::post_assertion_helpers::verify_ata_authority_pin(
-                        entry, &vault_key, remaining,
-                    )?;
-                    emit!(crate::events::PostAssertionChecked {
-                        vault: vault_key,
-                        entry_index: i as u8,
-                        passed: true,
-                        timestamp: clock_ts,
-                    });
-                    continue;
-                }
-                crate::state::post_assertions::AssertionMode::OutputBalanceFloor => {
-                    crate::utils::post_assertion_helpers::verify_output_balance_floor(
-                        entry,
-                        &session_snapshots[i],
-                        session_snapshot_lens[i],
-                        &vault_key,
-                        remaining,
-                    )?;
-                    emit!(crate::events::PostAssertionChecked {
-                        vault: vault_key,
-                        entry_index: i as u8,
-                        passed: true,
-                        timestamp: clock_ts,
-                    });
-                    continue;
-                }
-                crate::state::post_assertions::AssertionMode::DeclarationConsistency => {
-                    let ix_sysvar_info = ctx.accounts.instructions_sysvar.to_account_info();
-                    crate::utils::post_assertion_helpers::verify_declaration_consistency(
-                        entry,
-                        &ix_sysvar_info,
-                        remaining,
-                    )?;
-                    emit!(crate::events::PostAssertionChecked {
-                        vault: vault_key,
-                        entry_index: i as u8,
-                        passed: true,
-                        timestamp: clock_ts,
-                    });
-                    continue;
-                }
-                // Legacy modes (0..3) fall through to the in-loop logic below.
-                _ => {}
-            }
-
-            // Legacy modes (0..3) require the target_account to be loadable.
-            let target_pubkey = Pubkey::new_from_array(entry.target_account);
-
-            // Find the target account in remaining_accounts
-            let target = remaining.iter().find(|a| a.key() == target_pubkey);
-            require!(target.is_some(), SigilError::InvalidPostAssertionIndex);
-            let target = target.unwrap();
-            let target_data = target.try_borrow_data()?;
-
-            let offset = entry.offset as usize;
-            let len = entry.value_len as usize;
-            let end = offset
-                .checked_add(len)
-                .ok_or(error!(SigilError::PostAssertionFailed))?;
-            require!(end <= target_data.len(), SigilError::PostAssertionFailed);
-            let actual = &target_data[offset..end];
-
-            match mode {
-                crate::state::post_assertions::AssertionMode::Absolute => {
-                    // Phase B1: check current value against expected_value
-                    let expected = &entry.expected_value[..len];
-                    let operator =
-                        crate::state::assertions::ConstraintOperator::try_from(entry.operator)
-                            .map_err(|_| error!(SigilError::InvalidConstraintOperator))?;
-
-                    // Phase B3 CrossFieldLte branch DELETED in Phase 1 Option A demolition.
-                    // Standard absolute comparison (B1) is now the sole path.
-                    // M1-04: bytes_match relocated to state::assertions (was
-                    // instructions::integrations::generic_constraints).
-                    let passed = crate::state::assertions::bytes_match(actual, &operator, expected);
-                    require!(passed, SigilError::PostAssertionFailed);
-                }
-                crate::state::post_assertions::AssertionMode::MaxDecrease => {
-                    // Phase B2: check (snapshot - current) ≤ expected_value
-                    // NOTE: If value increases, saturating sub = 0, check passes.
-                    require!(
-                        session_snapshot_lens[i] == entry.value_len,
-                        SigilError::SnapshotNotCaptured
-                    );
-                    let snapshot = &session_snapshots[i][..len];
-                    let expected = &entry.expected_value[..len];
-
-                    let mut snap_buf = [0u8; 8];
-                    let mut curr_buf = [0u8; 8];
-                    let mut exp_buf = [0u8; 8];
-                    snap_buf[..len].copy_from_slice(snapshot);
-                    curr_buf[..len].copy_from_slice(actual);
-                    exp_buf[..len].copy_from_slice(expected);
-                    let snap_val = u64::from_le_bytes(snap_buf);
-                    let curr_val = u64::from_le_bytes(curr_buf);
-                    let exp_val = u64::from_le_bytes(exp_buf);
-
-                    let delta = snap_val.saturating_sub(curr_val);
-                    require!(delta <= exp_val, SigilError::PostAssertionFailed);
-                }
-                crate::state::post_assertions::AssertionMode::MaxIncrease => {
-                    // Phase B2: check (current - snapshot) ≤ expected_value
-                    // NOTE: If value decreases, saturating sub = 0, check passes.
-                    require!(
-                        session_snapshot_lens[i] == entry.value_len,
-                        SigilError::SnapshotNotCaptured
-                    );
-                    let snapshot = &session_snapshots[i][..len];
-                    let expected = &entry.expected_value[..len];
-
-                    let mut snap_buf = [0u8; 8];
-                    let mut curr_buf = [0u8; 8];
-                    let mut exp_buf = [0u8; 8];
-                    snap_buf[..len].copy_from_slice(snapshot);
-                    curr_buf[..len].copy_from_slice(actual);
-                    exp_buf[..len].copy_from_slice(expected);
-                    let snap_val = u64::from_le_bytes(snap_buf);
-                    let curr_val = u64::from_le_bytes(curr_buf);
-                    let exp_val = u64::from_le_bytes(exp_buf);
-
-                    let delta = curr_val.saturating_sub(snap_val);
-                    require!(delta <= exp_val, SigilError::PostAssertionFailed);
-                }
-                crate::state::post_assertions::AssertionMode::NoChange => {
-                    // Phase B2: check current == snapshot (byte equality)
-                    require!(
-                        session_snapshot_lens[i] == entry.value_len,
-                        SigilError::SnapshotNotCaptured
-                    );
-                    let snapshot = &session_snapshots[i][..len];
-                    require!(actual == snapshot, SigilError::PostAssertionFailed);
-                }
-                crate::state::post_assertions::AssertionMode::MintDeltaCap
-                | crate::state::post_assertions::AssertionMode::AtaAuthorityPin
-                | crate::state::post_assertions::AssertionMode::OutputBalanceFloor
-                | crate::state::post_assertions::AssertionMode::DeclarationConsistency => {
-                    // Handled above before the legacy target_data load.
-                    // These arms are unreachable but the exhaustive match
-                    // requires them. Force an error if execution reaches
-                    // here (would indicate a refactor bug in the
-                    // early-return path).
-                    return Err(error!(SigilError::PostAssertionFailed));
-                }
-            }
-
-            emit!(crate::events::PostAssertionChecked {
-                vault: vault_key,
-                entry_index: i as u8,
-                passed: true,
-                timestamp: clock_ts,
-            });
-        }
+        // Extracted to a #[inline(never)] helper (`enforce_post_execution_assertions`)
+        // so the assertions bytemuck view, the per-entry legacy match locals (three
+        // [u8;8] buffers + the loaded Instruction for DeclarationConsistency + the
+        // target_data borrow), and the 256-byte snapshot arrays all live in the
+        // helper's SEPARATE frame, not this handler's. The handler frame is at the
+        // 4096-byte BPF limit on the post-assertion path; an inline version
+        // overflowed in the release build. The snapshot arrays are passed BY
+        // REFERENCE (borrowed straight off the session account) so no 256-byte copy
+        // lands in the handler frame either. Behavior is identical — same checks,
+        // same order, same errors, same PostAssertionChecked events.
+        enforce_post_execution_assertions(
+            ctx.remaining_accounts,
+            &ctx.accounts.instructions_sysvar.to_account_info(),
+            &vault_key,
+            &ctx.accounts.session.assertion_snapshots,
+            &ctx.accounts.session.snapshot_lens,
+        )?;
     }
 
     // Analytics: count expired sessions for success rate metric.
