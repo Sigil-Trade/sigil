@@ -209,6 +209,12 @@ pub mod sigil {
         cosign_session_pubkey: Option<Pubkey>,
         // F-Q6 (2026-06-02): owner-configurable OPERATOR-grant delay (seconds).
         operator_grant_delay_seconds: Option<u64>,
+        // Item 3 (verified-build gate, 2026-06-22): optional per-protocol pinned
+        // ELF SHA-256 array, index-aligned to the effective `protocols`. None =
+        // pass-through; Some(array) sets the full array (all-zero entry = gate
+        // off for that protocol). Bound by TA-19 at canonical digest position 25.
+        // `[[u8; 32]; 10]` == `[[u8; 32]; MAX_ALLOWED_PROTOCOLS]`.
+        protocol_hashes: Option<[[u8; 32]; 10]>,
         cosign_session: Pubkey,
         new_policy_preview_digest: [u8; 32],
     ) -> Result<()> {
@@ -232,6 +238,7 @@ pub mod sigil {
             cosign_required,
             cosign_session_pubkey,
             operator_grant_delay_seconds,
+            protocol_hashes,
             cosign_session,
             new_policy_preview_digest,
         )

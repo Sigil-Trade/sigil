@@ -270,6 +270,14 @@ pub fn handler(
         // policy write below) and protocol_caps is the init arg slice.
         has_protocol_caps: !protocol_caps.is_empty(),
         protocol_caps: &protocol_caps,
+        // Item 3 (2026-06-22): the verified-build gate is OFF at init — a new
+        // vault arms no hashes (all-zero). Bound at canonical digest position 25,
+        // index-aligned to `protocols`, so the encoder emits 32 zero bytes per
+        // protocol. The off-chain SDK computes the same (omits protocolHashes ⇒
+        // all-zero). Owners arm a hash later via the timelocked
+        // `queue_policy_update` path. PolicyConfig::SIZE already drives `space`,
+        // so the new account is created at 1649 with this field zero-initialized.
+        protocol_hashes: &[[0u8; 32]; MAX_ALLOWED_PROTOCOLS],
     });
     require!(
         recomputed_digest == preview_digest,

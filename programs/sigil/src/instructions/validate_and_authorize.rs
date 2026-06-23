@@ -332,6 +332,24 @@ pub fn handler(
         SigilError::ProtocolNotAllowed
     );
 
+    // 2b. Item 3 (verified-build gate, 2026-06-22): if the target protocol has a
+    // non-zero pinned build hash in `policy.protocol_hashes` (index-aligned to
+    // `policy.protocols`), enforce that the target's currently-deployed ELF still
+    // matches the owner-attested hash. Closes the upgrade-TOCTOU: an
+    // owner-allowlisted program upgraded to a drain would otherwise keep being
+    // authorized. The SDK `seal()` satisfier supplies the target's ProgramData
+    // account in `remaining_accounts` whenever a hash is armed; if it is absent
+    // while armed, the gate is FAIL-CLOSED (ErrProgramDataUnresolvable 6116). The
+    // lookup + hash compare are kept in an `#[inline(never)]` helper to protect
+    // validate's already-tight BPF stack frame (same pattern as the TA-11 set
+    // builder). When no hash is armed for the target, this is a cheap
+    // index-scan + zero-check and returns immediately (gate disabled).
+    enforce_verified_build_if_armed(
+        policy,
+        &target_protocol,
+        ctx.remaining_accounts,
+    )?;
+
     // --- Stablecoin-only spending path ---
     let mut output_mint = Pubkey::default();
     let mut stablecoin_balance_before: u64 = 0;
@@ -1514,4 +1532,69 @@ fn build_ta11_protected_set(
         protected.push(key);
     }
     protected
+}
+
+/// Item 3 (verified-build gate, 2026-06-22): enforce the target protocol's
+/// pinned ELF hash if one is armed.
+///
+/// Locates `target_protocol`'s index in `policy.protocols` and reads the
+/// index-aligned `policy.protocol_hashes[idx]`. An all-zero entry means the gate
+/// is DISABLED for that protocol → return immediately (the common case; cheap).
+/// A non-zero entry ARMS the gate: derive the target's BPFLoaderUpgradeable
+/// `ProgramData` PDA, locate it in `remaining_accounts` (the SDK `seal()`
+/// satisfier supplies it whenever a hash is armed), and call
+/// `enforce_program_build_hash`. If the account is absent while armed, reject
+/// FAIL-CLOSED with `ErrProgramDataUnresolvable` (6116) rather than silently
+/// authorizing the target whose deployed build cannot be vetted.
+///
+/// `#[inline(never)]` is REQUIRED: this borrows the ProgramData account bytes and
+/// builds a 32-byte hash buffer (via the helper); keeping it off
+/// `validate_and_authorize`'s stack frame protects the already-tight BPF 4 KB
+/// budget — the same established pattern as `build_ta11_protected_set`. Do NOT
+/// inline.
+///
+/// NOTE: the target is matched by its canonical `ProgramData` PDA derivation, so
+/// `remaining_accounts` need not be ordered; we scan for the derived key. The
+/// account's bytes are only borrowed inside the helper.
+#[inline(never)]
+fn enforce_verified_build_if_armed(
+    policy: &PolicyConfig,
+    target_protocol: &Pubkey,
+    remaining_accounts: &[AccountInfo],
+) -> Result<()> {
+    // Locate the target in the allowlist (caller already proved it is allowed).
+    let Some(idx) = policy.protocols.iter().position(|p| p == target_protocol) else {
+        // Defensive: is_protocol_allowed passed but the index is gone → fail
+        // closed rather than skipping the gate. Unreachable in practice.
+        return Err(error!(SigilError::ProtocolNotAllowed));
+    };
+
+    // Read the index-aligned pinned hash. Out-of-range (protocols longer than
+    // protocol_hashes — impossible since both are bounded by MAX_ALLOWED_PROTOCOLS
+    // and protocol_hashes is fixed-length) is treated as "no hash" defensively.
+    let Some(expected_hash) = policy.protocol_hashes.get(idx) else {
+        return Ok(());
+    };
+
+    // All-zero entry = gate disabled for this protocol. Common case.
+    if expected_hash == &[0u8; 32] {
+        return Ok(());
+    }
+
+    // Armed: derive the target's ProgramData PDA and locate it in
+    // remaining_accounts.
+    let (program_data_pda, _) = Pubkey::find_program_address(
+        &[target_protocol.as_ref()],
+        &anchor_lang::solana_program::bpf_loader_upgradeable::ID,
+    );
+    let program_data_account = remaining_accounts
+        .iter()
+        .find(|ai| ai.key == &program_data_pda)
+        .ok_or(error!(SigilError::ErrProgramDataUnresolvable))?;
+
+    crate::utils::program_hash::enforce_program_build_hash(
+        program_data_account,
+        target_protocol,
+        expected_hash,
+    )
 }

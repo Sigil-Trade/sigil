@@ -47,7 +47,8 @@ use crate::utils::policy_digest::{
 // M1-04: was 22; has_constraints removed (digest-version bump).
 // F-Q6 (2026-06-02): 21 → 22, binds operator_grant_delay_seconds.
 // M-1 (2026-06-11): 22 → 24, binds has_protocol_caps + protocol_caps.
-const EXPECTED_DIGEST_FIELD_COUNT: usize = 24;
+// Item 3 (2026-06-22): 24 → 25, binds protocol_hashes (verified-build gate).
+const EXPECTED_DIGEST_FIELD_COUNT: usize = 25;
 const _: () = assert!(
     EXPECTED_DIGEST_FIELD_COUNT == crate::utils::policy_digest::POLICY_PREVIEW_FIELD_COUNT,
     "P0.2 PEN-7: PolicyPreviewFields count diverged from TA-19 binding. \
@@ -75,6 +76,18 @@ pub struct ApplyPendingPolicy<'info> {
         has_one = vault,
         seeds = [b"policy", vault.key().as_ref()],
         bump = policy.bump,
+        // Item 3 (verified-build gate, 2026-06-22): grow a pre-upgrade
+        // PolicyConfig (1329 bytes) to the new SIZE (1649) on apply so the
+        // appended `protocol_hashes` field has backing bytes. `realloc::zero =
+        // false` is REQUIRED: Solana zero-initializes ONLY the newly grown tail
+        // bytes → all-zero hashes → the gate is DISABLED by default (the safe
+        // state). `zero = true` would wipe the WHOLE account — never use it here.
+        // A vault already at 1649 (created post-upgrade) reallocs to the same
+        // size (no-op). `owner` is a Signer (gated above), so it funds the rent
+        // delta. See the MIGRATION PRECONDITION note on `handler`.
+        realloc = PolicyConfig::SIZE,
+        realloc::payer = owner,
+        realloc::zero = false,
     )]
     pub policy: Account<'info, PolicyConfig>,
 
@@ -98,10 +111,38 @@ pub struct ApplyPendingPolicy<'info> {
     /// CHECK: Phase 7 — slot_hashes sysvar; address-pinned.
     #[account(address = anchor_lang::solana_program::sysvar::slot_hashes::id())]
     pub slot_hashes_sysvar: UncheckedAccount<'info>,
+
+    /// Item 3 (verified-build gate, 2026-06-22): required by the `policy`
+    /// account's `realloc` (PolicyConfig 1329 → 1649 for pre-upgrade vaults).
+    /// Anchor's realloc CPI funds the rent delta from `owner` via the System
+    /// program.
+    pub system_program: Program<'info, System>,
 }
 
 pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
     crate::reject_cpi!();
+
+    // ── Item 3 (verified-build gate) MIGRATION PRECONDITION (2026-06-22) ──────
+    //
+    // The `policy` account is reallocated to PolicyConfig::SIZE (1329 → 1649) by
+    // the Accounts constraint above so the appended `protocol_hashes` field has
+    // backing bytes for pre-upgrade vaults. The `pending_policy` account gained a
+    // trailing `Option<[[u8;32]; MAX]> protocol_hashes` field (1028 → 1349). That
+    // field is APPEND-ONLY, but Anchor Borsh-deserializes the WHOLE pending
+    // account here (and in `cancel_pending_policy`), so an OLD-FORMAT pending
+    // account (created before this upgrade, lacking the trailing field) would hit
+    // EOF and FAIL to deserialize — bricking both apply AND cancel for that one
+    // account.
+    //
+    // RESOLUTION (operationally trivial pre-mainnet): deploy the upgrade ONLY
+    // when no policy update is pending. `PendingPolicyUpdate` is ephemeral —
+    // `queue_policy_update` re-creates it via `init` at the new 1349 SIZE — so
+    // every pending account created AFTER the upgrade is new-format, and the
+    // precondition guarantees none from before survives. This is documented in
+    // the PR description as a release gate. (A vault that never queues a policy
+    // update keeps a 1329-byte PolicyConfig forever and can never arm the gate —
+    // correct: the gate is opt-in and arming flows through queue→timelock→apply,
+    // which performs this realloc.)
 
     // M1-03 (systemic frozen-gate, 2026-05-31): a queued policy update MUST NOT
     // apply to a frozen/closed vault. freeze_vault does not pause this timelock,
@@ -310,6 +351,14 @@ pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
             SigilError::ErrOutsideOperatingHours
         );
         policy.operating_hours = hours;
+    }
+    // Item 3 (2026-06-22): apply optional protocol_hashes update (whole-array
+    // copy, mirroring protocols / protocol_caps). The second-pass TA-19 digest
+    // below binds the merged live value at canonical position 25 (index-aligned
+    // to live protocols), so a tampered pending PDA that armed/disarmed/re-pinned
+    // a hash between queue and apply produces a digest mismatch.
+    if let Some(hashes) = pending.protocol_hashes {
+        policy.protocol_hashes = hashes;
     }
     // TA-12 (Phase 5): apply optional stable_balance_floor update.
     // The new value is recomputed into the second-pass TA-19 digest
@@ -558,6 +607,10 @@ pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
         // M-1 (audit 2026-06-11): bind per-protocol caps (positions 23-24).
         has_protocol_caps: policy.has_protocol_caps,
         protocol_caps: &policy.protocol_caps,
+        // Item 3 (2026-06-22): bind protocol_hashes at canonical position 25,
+        // index-aligned to live protocols. Read the live (post-merge) value so
+        // the second-pass digest matches the queue-time digest.
+        protocol_hashes: &policy.protocol_hashes,
     });
     require!(
         recomputed_digest == pending.new_policy_preview_digest,

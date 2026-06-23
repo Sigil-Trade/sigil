@@ -119,6 +119,9 @@ pub fn handler(
         // M-1 (audit 2026-06-11): bind per-protocol caps (positions 23-24).
         has_protocol_caps: policy.has_protocol_caps,
         protocol_caps: &policy.protocol_caps,
+        // Item 3 (2026-06-22): re-derive protocol_hashes from live policy
+        // (this site never mutates it). Bound at canonical digest position 25.
+        protocol_hashes: &policy.protocol_hashes,
     });
     // PEN-CROSS-3: owner must have signed the post-mutation digest.
     require!(

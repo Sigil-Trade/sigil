@@ -92,6 +92,7 @@ import {
 import { isProtocolAllowed } from "./protocol-resolver.js";
 import { toSigilAgentError, type AgentError } from "./agent-errors.js";
 import { redactCause } from "./network-errors.js";
+import { getProgramDataAddress } from "./program-hash.js";
 import {
   getVaultPnL,
   getVaultTokenBalances,
@@ -1158,6 +1159,45 @@ export async function seal(params: SealParams): Promise<SealResult> {
     expectedIntentDigest: scalarIntentDigest,
   });
 
+  // Item 3 (verified-build gate, 2026-06-22): if the owner has armed a non-zero
+  // build hash for the target protocol (`policy.protocol_hashes[idx] != 0`,
+  // index-aligned to `policy.protocols`), the on-chain validate gate
+  // (`enforce_verified_build_if_armed`) needs the target's BPFLoaderUpgradeable
+  // ProgramData account in validate's remaining_accounts to recompute + compare
+  // the deployed ELF hash. Supply it as a READONLY meta. When no hash is armed
+  // (the default — all-zero), append nothing (the on-chain gate returns early).
+  // The on-chain helper searches remaining_accounts by the derived PDA, so
+  // ordering does not matter. If the SDK omitted this while armed, the on-chain
+  // gate would FAIL-CLOSED with ErrProgramDataUnresolvable (6116) — so this
+  // satisfier is what keeps the honest seal() path working under an armed gate.
+  let verifiedBuildMetas: ReadonlyMeta[] = [];
+  {
+    const protocols = (state.policy.protocols ?? []) as readonly Address[];
+    const protocolHashes = (state.policy.protocolHashes ?? []) as readonly {
+      readonly [k: number]: number;
+      readonly length: number;
+    }[];
+    const idx = protocols.findIndex((p) => p === targetProtocol);
+    if (idx >= 0) {
+      const h = protocolHashes[idx];
+      // Armed iff ANY byte is non-zero. Decoded hash is a 32-element byte array.
+      const armed =
+        h !== undefined &&
+        (() => {
+          for (let i = 0; i < h.length; i++) {
+            if (h[i] !== 0) return true;
+          }
+          return false;
+        })();
+      if (armed) {
+        const programDataAddress = await getProgramDataAddress(targetProtocol);
+        verifiedBuildMetas = [
+          { address: programDataAddress, role: AccountRole.READONLY },
+        ];
+      }
+    }
+  }
+
   // F-Q1a satisfier: append the DeFi ix's writable accounts (as READONLY) to
   // validate's remaining_accounts so the on-chain completeness invariant is
   // satisfiable. Spread into a NEW array — Instruction.accounts is readonly.
@@ -1170,6 +1210,9 @@ export async function seal(params: SealParams): Promise<SealResult> {
       // on-chain gate searches remaining_accounts positionally, so append even
       // when a mint is also a named account such as the input tokenMintAccount).
       ...t22OutputMintReadonlyMetas,
+      // Item 3 (2026-06-22): target ProgramData account when a build hash is
+      // armed for the target protocol (empty otherwise).
+      ...verifiedBuildMetas,
     ],
   };
 
