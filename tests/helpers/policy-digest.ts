@@ -303,7 +303,11 @@ export function computePolicyPreviewDigest(
           `protocolHashes[${i}] must be exactly 32 bytes, got ${h.length}`,
         );
       }
-      parts.push(h);
+      // Coerce to Buffer: the devnet path (queuePolicyMergedDigest) reads the
+      // live on-chain protocol_hashes as plain number[] arrays, which
+      // Buffer.concat rejects ("must be an instance of Buffer or Uint8Array").
+      // Buffer.from is a no-op-copy for Buffer/Uint8Array and converts number[].
+      parts.push(Buffer.from(h));
     }
   }
 
