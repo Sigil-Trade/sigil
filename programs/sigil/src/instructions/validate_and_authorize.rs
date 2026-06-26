@@ -1066,7 +1066,13 @@ pub fn handler(
     ];
     let binding = [signer_seeds.as_slice()];
 
-    // 10. Collect fees and delegate (spending + stablecoin input only)
+    // 10. Collect fees and delegate. Armed for ALL spending sessions — both
+    //     stablecoin AND volatile input. The SPL `Approve` is over the INPUT
+    //     token's ATA (`vault_token_account`, constrained mint == token_mint)
+    //     whenever `is_spending`; it is NOT stablecoin-input-only. (Magnitude of
+    //     a volatile input is bounded by the agent-declared `amount` + the
+    //     program allowlist + DEX liquidity — value-blind by design; see
+    //     finalize_session for the outcome/cap checks.)
     if is_spending {
         let delegation_amount = amount
             .checked_sub(protocol_fee)

@@ -32,7 +32,7 @@
     },
     {
       "name": "Security exploit scenarios",
-      "count": 184,
+      "count": 185,
       "onChain": true,
       "claudePattern": "tests/security-exploits.ts` (ts-mocha + LiteSVM, %d tests)"
     },
