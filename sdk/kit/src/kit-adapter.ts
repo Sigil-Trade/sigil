@@ -54,6 +54,7 @@ export {
   getAddressDecoder,
   getAddressEncoder,
   getBase58Decoder,
+  getBase58Encoder,
   getBase64EncodedWireTransaction,
   getCompiledTransactionMessageDecoder,
   getProgramDerivedAddress,
