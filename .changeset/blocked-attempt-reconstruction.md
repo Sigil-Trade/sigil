@@ -15,3 +15,9 @@ error map, and recovers agent/protocol/amount by decoding the
 `success:false` item as a `blocked` row. Reconstructed fields are null when they
 cannot be verified (the agent is kept only when it is the sole tx signer, to
 avoid impersonation); no extra RPC is issued (the already-fetched tx is reused).
+
+Only **agent policy-block** error categories surface as blocked attempts
+(`SPENDING_CAP`, `POLICY_VIOLATION`, `PROTOCOL_NOT_SUPPORTED`, `RATE_LIMIT`,
+`ESCALATION_REQUIRED`). Owner-auth (`PERMISSION`, e.g. `UnauthorizedOwner`),
+internal (`FATAL`), config (`INPUT_VALIDATION`), transient, and resource errors
+are excluded, so a failed owner transaction never appears as a "blocked attempt".

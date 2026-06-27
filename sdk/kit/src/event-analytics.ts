@@ -24,6 +24,7 @@ import {
   VALIDATE_AND_AUTHORIZE_DISCRIMINATOR,
   parseValidateAndAuthorizeInstruction,
 } from "./generated/instructions/validateAndAuthorize.js";
+import { ON_CHAIN_ERROR_MAP, type ErrorCategory } from "./agent-errors.js";
 
 /** base58 → bytes encoder, built once (the factory allocates closures). */
 const BASE58_ENCODER = getBase58Encoder();
@@ -393,6 +394,29 @@ function isSigilErrorCode(code: number): boolean {
   return Object.prototype.hasOwnProperty.call(IDL_ERROR_MAP, code);
 }
 
+/**
+ * Categories that mean the AGENT was stopped by policy — the ONLY failures
+ * surfaced as "blocked attempts" in the feed. PERMISSION is excluded because it
+ * mixes owner-auth (e.g. UnauthorizedOwner) with agent-auth; FATAL (internal),
+ * INPUT_VALIDATION (config/malformed), TRANSIENT, and RESOURCE_NOT_FOUND are
+ * not agent policy-blocks. So a failed OWNER tx (e.g. a rejected policy update)
+ * never appears as a "blocked attempt".
+ */
+const AGENT_POLICY_BLOCK_CATEGORIES: ReadonlySet<ErrorCategory> =
+  new Set<ErrorCategory>([
+    "SPENDING_CAP",
+    "POLICY_VIOLATION",
+    "PROTOCOL_NOT_SUPPORTED",
+    "RATE_LIMIT",
+    "ESCALATION_REQUIRED",
+  ]);
+
+/** True iff `code` is a Sigil error whose category is an agent policy-block. */
+function isAgentPolicyBlockCode(code: number): boolean {
+  const category = ON_CHAIN_ERROR_MAP[code]?.category;
+  return category !== undefined && AGENT_POLICY_BLOCK_CATEGORIES.has(category);
+}
+
 /** Match Anchor's `Error Number: <n>` and return the decimal code. */
 function matchAnchorErrorNumber(log: string): number | null {
   const m = log.match(/Error Number: (\d+)/);
@@ -522,9 +546,10 @@ function startsWithDiscriminator(
 
 /**
  * Build a blocked VaultActivityItem from a failed transaction. Returns null when
- * the failure is not attributable to a Sigil policy block (no Sigil error code
- * in the logs) — callers must skip those (a downstream venue failure is not a
- * Sigil block).
+ * the failure is not an AGENT policy-block: either no Sigil error code in the
+ * logs (a downstream venue failure), or a Sigil error in a non-agent category
+ * (owner-auth / internal / config) — those must not appear as "blocked
+ * attempts" in the agent's activity trail.
  */
 export function buildBlockedActivityItem(
   tx: JsonTxLike,
@@ -534,6 +559,11 @@ export function buildBlockedActivityItem(
 ): VaultActivityItem | null {
   const code = parseSigilBlockErrorCode(logs);
   if (code === null) return null;
+  // Surface ONLY agent policy-blocks (what the agent TRIED and got stopped). A
+  // Sigil error in an owner/internal/config category (e.g. UnauthorizedOwner)
+  // is not an agent "blocked attempt" — skip it so the feed stays the agent's
+  // activity trail, not a dump of every Sigil revert.
+  if (!isAgentPolicyBlockCode(code)) return null;
 
   const reason = IDL_ERROR_MAP[code]?.name ?? `SigilError${code}`;
   const { agent, protocol, amount } = reconstructBlockedAttempt(tx);

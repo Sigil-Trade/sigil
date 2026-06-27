@@ -445,6 +445,28 @@ describe("getVaultActivity — blocked-attempt reconstruction", () => {
     expect(buildActivityRows(items)).to.have.lengthOf(0);
   });
 
+  it("skips a Sigil error in a NON-agent category (owner-auth 6002 UnauthorizedOwner)", async () => {
+    // 6002 IS a real Sigil code (0x1772) but its category is PERMISSION (an
+    // owner action), not an agent policy-block. A failed OWNER tx must NOT
+    // appear as a "blocked attempt" in the agent's activity trail.
+    const ownerErrLogs = [
+      `Program ${SIGIL} invoke [1]`,
+      "Program log: AnchorError thrown in src/instructions/queue_policy_update.rs:1. Error Code: UnauthorizedOwner. Error Number: 6002. Error Message: Only the vault owner may perform this action.",
+      `Program ${SIGIL} consumed 5000 of 1400000 compute units`,
+      `Program ${SIGIL} failed: custom program error: 0x1772`,
+    ];
+    const tx = failedTxWithValidateIx({ logMessages: ownerErrLogs });
+    const items = await getVaultActivity(
+      mockRpc(tx, { Custom: 6002 }),
+      VAULT,
+      10,
+      "mainnet-beta",
+    );
+    // Sigil code present, but category PERMISSION → not an agent block → no row.
+    expect(items).to.have.lengthOf(0);
+    expect(buildActivityRows(items)).to.have.lengthOf(0);
+  });
+
   it("leaves a successful tx unchanged (no blocked regression)", async () => {
     // A success tx emits a real ActionAuthorized event and meta.err == null.
     // Reuse the production decode path by feeding a Program data: line. Since
