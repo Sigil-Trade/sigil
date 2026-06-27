@@ -59,6 +59,14 @@ jobs:
   changes:
     name: Detect Changes
     runs-on: ubuntu-latest
+    # dorny/paths-filter falls back to the GitHub PR-files API when the base
+    # commit isn't present in the shallow checkout; that API call needs
+    # pull-requests: read (without it the action fails with "Resource not
+    # accessible by integration"). A job-level permissions block REPLACES the
+    # workflow-level one rather than merging, so contents: read is repeated.
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       rust: ${{ steps.filter.outputs.rust }}
       certora: ${{ steps.filter.outputs.certora }}
