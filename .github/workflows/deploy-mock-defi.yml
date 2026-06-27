@@ -21,6 +21,12 @@ name: Deploy Mock-Defi (Devnet)
 on:
   workflow_dispatch:
 
+# Serialize on the same group as deploy-devnet — both spend the one shared
+# DEVNET_DEPLOY_KEYPAIR wallet, so never let them run concurrently.
+concurrency:
+  group: devnet-shared-wallet
+  cancel-in-progress: false
+
 env:
   SOLANA_VERSION: v2.1.14
   MOCK_DEFI_PROGRAM_ID: 2heRcfqPUcSiWpH1rAp2Zf4c4ZxfKmKaaVbJWGRa7Qm6
@@ -69,11 +75,13 @@ jobs:
 
       - name: Balance gate
         run: |
+          # Headroom for the upgrade write-buffer (~1.5 SOL for this program) +
+          # fees, so a deploy never starts under-funded and strands a buffer.
           BAL=$(solana balance | awk '{print $1}')
           BAL_INT=$(echo "$BAL" | awk '{print int($1)}')
           echo "Deploy wallet balance: $BAL SOL"
-          if [ "$BAL_INT" -lt 3 ]; then
-            echo "::error::Deploy wallet balance too low: ${BAL} SOL (need >= 3 SOL)"
+          if [ "$BAL_INT" -lt 5 ]; then
+            echo "::error::Deploy wallet balance too low: ${BAL} SOL (need >= 5 SOL)"
             exit 1
           fi
 
@@ -97,12 +105,18 @@ jobs:
 
       - name: Deploy committed mock-defi.so
         run: |
+          # Fixed buffer keypair (fresh per run) so a failed attempt's partial
+          # buffer is RESUMED by the next retry instead of leaking a new one;
+          # any residual buffer is reclaimed in the Cleanup step below.
+          BUFFER_KEYPAIR="$HOME/.config/solana/mock-defi-buffer.json"
+          solana-keygen new --no-bip39-passphrase --force --silent -o "$BUFFER_KEYPAIR"
           MAX_RETRIES=3
           for i in $(seq 1 $MAX_RETRIES); do
             echo "Deploy attempt $i/$MAX_RETRIES"
             if solana program deploy "${{ env.MOCK_DEFI_SO }}" \
                 --program-id "${{ env.MOCK_DEFI_PROGRAM_ID }}" \
                 --upgrade-authority "$HOME/.config/solana/id.json" \
+                --buffer "$BUFFER_KEYPAIR" \
                 --with-compute-unit-price 1000 \
                 --max-sign-attempts 50; then
               echo "mock-defi deploy succeeded on attempt $i"
@@ -132,3 +146,26 @@ jobs:
           fi
           echo "Deployed (after):"
           solana program show "${{ env.MOCK_DEFI_PROGRAM_ID }}"
+
+      - name: Cleanup deploy wallet
+        if: always()
+        run: |
+          # Reclaim THIS run's deploy buffer if a failed/interrupted upgrade left
+          # it behind. Close by specific pubkey, NOT `--buffers` — this wallet is
+          # shared with deploy-devnet, so a blanket close could nuke a concurrent
+          # run's in-flight buffer. No-op on success (buffer consumed). stdin
+          # closed + non-fatal. set +e so a cleanup hiccup can never paint an
+          # already-successful deploy red.
+          set +e
+          BUF="$HOME/.config/solana/mock-defi-buffer.json"
+          if [ -f "$BUF" ] && [ -f "$HOME/.config/solana/id.json" ]; then
+            BUF_ADDR=$(solana-keygen pubkey "$BUF")
+            if [ -n "$BUF_ADDR" ]; then
+              solana program close "$BUF_ADDR" \
+                --keypair "$HOME/.config/solana/id.json" \
+                --url "${{ secrets.DEVNET_RPC_URL }}" \
+                < /dev/null \
+                || echo "::notice::no leftover buffer to close (${BUF_ADDR}) — deploy likely succeeded"
+            fi
+          fi
+          rm -f "$HOME/.config/solana/id.json" "$HOME/.config/solana/mock-defi-buffer.json"
