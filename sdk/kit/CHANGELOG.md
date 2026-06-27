@@ -1,5 +1,29 @@
 # @usesigil/kit
 
+## 0.22.0
+
+### Minor Changes
+
+- [#396](https://github.com/Sigil-Trade/sigil/pull/396) [`b281088`](https://github.com/Sigil-Trade/sigil/commit/b281088c48cb137169b908d7059e95f2ddb0caae) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - feed surfaces policy-blocked attempts reconstructed from failed-tx logs
+
+  `getVaultActivity` now reconstructs a single "blocked" activity item from a
+  failed transaction whose program logs carry a Sigil policy-block error code.
+  A Sigil block does `return Err` → the whole tx reverts → no event is emitted,
+  so the attempt previously never reached the activity feed. The new failed-tx
+  branch parses the Sigil error code from the runtime `Program <id> failed:` line
+  (top-level invoke depth only), maps it to its error name via the generated IDL
+  error map, and recovers agent/protocol/amount by decoding the
+  `validate_and_authorize` instruction. `buildActivityRows` already renders a
+  `success:false` item as a `blocked` row. Reconstructed fields are null when they
+  cannot be verified (the agent is kept only when it is the sole tx signer, to
+  avoid impersonation); no extra RPC is issued (the already-fetched tx is reused).
+
+  Only **agent policy-block** error categories surface as blocked attempts
+  (`SPENDING_CAP`, `POLICY_VIOLATION`, `PROTOCOL_NOT_SUPPORTED`, `RATE_LIMIT`,
+  `ESCALATION_REQUIRED`). Owner-auth (`PERMISSION`, e.g. `UnauthorizedOwner`),
+  internal (`FATAL`), config (`INPUT_VALIDATION`), transient, and resource errors
+  are excluded, so a failed owner transaction never appears as a "blocked attempt".
+
 ## 0.21.0
 
 ### Minor Changes
