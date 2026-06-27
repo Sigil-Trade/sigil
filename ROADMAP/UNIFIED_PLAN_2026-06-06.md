@@ -2,6 +2,22 @@
 
 **Status: CURRENT FORWARD PLAN.** Rolls up `00_ROADMAP.md` + `STATUS.md` (the near-complete on-chain plan), the agnostic/vault-conservation reset (`AGNOSTIC_RESET_FINDINGS_2026-06-06.md`, `SIGIL_V2_AUTHORITATIVE_ARCHITECTURE_2026-06-06.md`), and the **demand-validated product scope** (customer discovery, 2026-06-06). Nothing below deletes the previous plan — it is preserved and credited in §1.
 
+> ## ▶ RECONCILED 2026-06-27 — current state vs this 2026-06-06 plan (read first)
+> `main` has moved well past this doc. Source of truth = `programs/sigil/src/errors.rs` (now through **6117**) + `STATUS.md`. Reconciliation of the §4 build order:
+>
+> - **§4.3 W5 audit-export wedge — ✅ DONE.** Activity CSV/JSON export wired (dashboard PR #74); blocked attempts reconstructed from failed-tx program logs in the SDK (kit PR #396 → published `@usesigil/kit@0.22.0`; dashboard consumes via PR #75). The third W5 increment — wiring the `AuditLogRejected` PDA — was **dropped on purpose**: that PDA is only written in the expired-session crank branch, so the failed-tx-log reconstruction replaced it.
+> - **§4.2 on-chain hardening — ✅ largely DONE.** Shipped since this plan (errors now run to 6117): **6111** Squads-V4 ownership-custody close · **6112** output-ownership pin (the destination-owner-pin generalization this plan called for) · **6113/6114** finalize-side completeness (F-Q1b) · **6115** require-measurable-outcome · **6116/6117** verified-build gate. (= the entire `Plans/ancient-gathering-pie.md` foundation-hardening Items 1–3.)
+> - **§4.1 merge/CI the M1 branch — ✅ DONE.** `main` runs the full enforcement model and devnet auto-deploys it. **Still owed:** the formal **M1-EXIT** sign-off — devnet adversarial exploit suite green + fix the 1 pre-existing **cu-budget Scenario-6** serialization test.
+> - **§4.6 Step 6 (perp position-ownership / per-venue custody) — ⛔ SHELVED BY DECISION**, not pending work. Per-protocol custody adapters + native-stake were **rejected** (HARD PIN 2026-06-23: "no per-protocol adapter at all"); agnostic position custody is an epistemic wall; the volatile-outflow magnitude gap is **accepted human risk** (2026-06-26). Do not re-open without a new owner decision.
+>
+> **Still genuinely OPEN (the real backlog):**
+> 1. **M1-EXIT formal close** (§4.1 residual) — devnet adversarial suite + cu-budget Scenario-6 fix.
+> 2. **Remaining §4.2 pins** — `delegate` + `close_authority` authority-unchanged assertions (only `authority` is pinned today via `verify_ata_authority_pin`); centralized `fn invariant()` + **Certora I1** conservation rule (the F-Q9 code fix shipped as 6110, but the proof is still owed); self-deriving zero-copy size locks.
+> 3. **§4.5 W4 positions** — per-venue read / portfolio indexer (display only, never the guard). **Confirmed missing** (no positions/portfolio page on the dashboard).
+> 4. **§4.4 W1 allowlist editor + W2 option polish** — dashboard has `AllowlistCard` + `PolicyDrawer`, so this may be partly built; **verify before scoping**.
+>
+> Everything below this block is the **original 2026-06-06 plan, preserved unchanged** for lineage.
+
 ## 0. What changed (why this doc exists)
 The previous on-chain plan's governing rule was **"ON-CHAIN ONLY — nothing outward (SDK/MCP/dashboard) until the base is 100%"** (`00_ROADMAP.md:6`, §5). Two things overturned that rule:
 1. **The reset:** Sigil's boundary is **vault-conservation** — secure the vault (no transaction-level drain; authority can't change; owner can't be locked out); **losses are out of scope** (slippage/leverage/liquidation/debt/PnL on owner-allowlisted venues). One uniform guard: allowlist + destination-owner pin + authority-unchanged + caps + non-omittable atomic sandwich.
@@ -39,9 +55,11 @@ The M1 enforcement arc is the trustless control layer. **Shipped + green** (base
 | **W2 spend limits** | on-chain DONE; dashboard edits daily/per-tx/per-agent | "more options" (weekly/monthly windows, per-*destination* caps, action-granularity) = **optional new on-chain knobs, demand-gated** |
 | **W3 activity** | **DONE end-to-end** (35 events → SDK feed → live `/activity`) | leave it |
 | **W4 positions** | **MISSING** (deleted 2026-04-19; no venue SDK dep) | per-venue read / portfolio indexer — **read-side per-venue is fine** (display, not the guard) |
-| **W5 exportable audit trail** | on-chain log is a **lossy cache** (no agent on spends, no reject reasons, 128 cap); SDK has structured records but **no file export**; dashboard "Export CSV" is a **dead button** | **THE WEDGE** — index the **event stream** (feed-complete, carries the agent) → complete queryable trail → export (CSV/JSON) + reconstruct **blocked attempts** from failed-tx logs + wire the export. ~80% there. |
+| **W5 exportable audit trail** | on-chain log is a **lossy cache** (no agent on spends, no reject reasons, 128 cap); SDK has structured records but **no file export**; dashboard "Export CSV" is a **dead button** | **THE WEDGE** — index the **event stream** (feed-complete, carries the agent) → complete queryable trail → export (CSV/JSON) + reconstruct **blocked attempts** from failed-tx logs + wire the export. ~80% there. → ✅ **DONE 2026-06-27** (#74 export, kit 0.22 blocked-attempt reconstruction, #75 consume). |
 
 ## 4. Forward build order (dependency- and value-ranked, each under the mandatory pipeline)
+
+> ▶ Statuses (reconciled 2026-06-27, see top block): **1** merge/CI ✅ · M1-EXIT owed — **2** mostly ✅ (6111–6117) · pins+Certora-I1+size-locks owed — **3 ✅ DONE** — **4** open — **5** open (W4 missing) — **6 ⛔ shelved by decision**.
 1. **Close the previous plan:** M1-EXIT gate (devnet + adversarial suite + cu-budget fix) + merge/CI the M1 branch. *Foundation passes its own gate before product is built on it.*
 2. **Security hardening fold-ins** (small, alongside #1): generalize the destination-owner pin across all value-out lanes (extends F-Q8); build the `delegate`/`close_authority` authority-unchanged pins (the surviving M2-03); centralized `fn invariant()` + Certora I1 conservation rule; self-deriving zero-copy size locks (kills the SpendTracker padding-churn class). Reserve **`err 6111`** (VERIFIED free) for the conservation/floor error.
 3. **W5 audit-export wedge:** event-indexer → complete trail → export (CSV/JSON) + blocked-attempt capture. Highest value, nearest win, the ICP wedge.
