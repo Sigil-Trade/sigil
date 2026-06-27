@@ -137,26 +137,41 @@ jobs:
 
       - name: Balance gate
         run: |
+          # An upgrade writes the full ELF to a temporary buffer before swapping
+          # it in. For this ~1.476 MB program the buffer needs ~5.1 SOL of rent
+          # (refunded on success). The old 3 SOL floor PASSED but then FAILED
+          # mid-write whenever balance was in the 3-5 SOL range, stranding the
+          # partial buffer (~5 SOL lost per failure). Require real headroom so a
+          # deploy never starts under-funded.
+          MIN_SOL=12
+          WARN_SOL=18
           BAL=$(solana balance | awk '{print $1}')
           BAL_INT=$(echo "$BAL" | awk '{print int($1)}')
           echo "Deploy wallet balance: $BAL SOL"
-          if [ "$BAL_INT" -lt 3 ]; then
-            echo "::error::Deploy wallet balance too low: ${BAL} SOL (need >= 3 SOL)"
+          if [ "$BAL_INT" -lt "$MIN_SOL" ]; then
+            echo "::error::Deploy wallet balance too low: ${BAL} SOL (need >= ${MIN_SOL} SOL for the ~5 SOL upgrade buffer + headroom)"
             echo "Top up: solana airdrop 2 $(solana address) --url https://api.devnet.solana.com"
             exit 1
           fi
-          if [ "$BAL_INT" -lt 10 ]; then
+          if [ "$BAL_INT" -lt "$WARN_SOL" ]; then
             echo "::warning::Deploy wallet balance is low: ${BAL} SOL. Consider topping up."
           fi
 
       - name: Deploy program binary
         run: |
+          # Use a FIXED buffer keypair (fresh per run) so a failed attempt's
+          # partial buffer is RESUMED by the next retry instead of leaking a
+          # brand-new ~5 SOL buffer on every attempt. Any residual buffer is
+          # reclaimed in the Cleanup step below.
+          BUFFER_KEYPAIR="$HOME/.config/solana/deploy-buffer.json"
+          solana-keygen new --no-bip39-passphrase --force --silent -o "$BUFFER_KEYPAIR"
           MAX_RETRIES=3
           for i in $(seq 1 $MAX_RETRIES); do
             echo "Deploy attempt $i/$MAX_RETRIES"
             if solana program deploy target/deploy/sigil.so \
                 --program-id ${{ env.PROGRAM_ID }} \
                 --upgrade-authority "$HOME/.config/solana/id.json" \
+                --buffer "$BUFFER_KEYPAIR" \
                 --with-compute-unit-price 1000 \
                 --max-sign-attempts 50; then
               echo "Program deploy succeeded on attempt $i"
@@ -312,7 +327,28 @@ jobs:
 
       - name: Cleanup deploy wallet
         if: always()
-        run: rm -f "$HOME/.config/solana/id.json"
+        run: |
+          # Reclaim THIS run's deploy buffer if a failed/interrupted upgrade left
+          # it behind (a leaked buffer holds ~5 SOL). We close it by its specific
+          # pubkey, NOT `--buffers` — deploy-devnet and deploy-mock-defi share
+          # this wallet, so a blanket close could nuke a concurrent run's in-flight
+          # buffer. No-op if the deploy succeeded (buffer already consumed) or
+          # never created the buffer. stdin closed + non-fatal so cleanup can
+          # never hang or fail the job. set +e so a cleanup hiccup can never
+          # paint an already-successful deploy red.
+          set +e
+          BUF="$HOME/.config/solana/deploy-buffer.json"
+          if [ -f "$BUF" ] && [ -f "$HOME/.config/solana/id.json" ]; then
+            BUF_ADDR=$(solana-keygen pubkey "$BUF")
+            if [ -n "$BUF_ADDR" ]; then
+              solana program close "$BUF_ADDR" \
+                --keypair "$HOME/.config/solana/id.json" \
+                --url "${{ secrets.DEVNET_RPC_URL }}" \
+                < /dev/null \
+                || echo "::notice::no leftover buffer to close (${BUF_ADDR}) — deploy likely succeeded"
+            fi
+          fi
+          rm -f "$HOME/.config/solana/id.json" "$HOME/.config/solana/deploy-buffer.json"
 
   # ────────────────────────────────────────────────────────────────
   # Job 2: Verify deployed binary matches source (solana-verify)
