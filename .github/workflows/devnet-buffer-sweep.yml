@@ -1,0 +1,76 @@
+# Devnet deploy-wallet buffer sweep
+#
+# Belt-and-suspenders for the deploy workflows' per-run buffer cleanup. If a
+# runner is killed mid-deploy (OOM / cancellation / crash) BEFORE its Cleanup
+# step runs, the ephemeral upgrade buffer (~5 SOL of rent) is orphaned — and the
+# next deploy uses a fresh buffer address, so it can never auto-reclaim the old
+# one. This scheduled job reclaims any orphaned buffer owned by the deploy wallet
+# and refunds the rent.
+#
+# Why a blanket `--buffers` close is safe HERE (unlike the per-deploy cleanup,
+# which closes only its own buffer by pubkey): this job shares the
+# `devnet-shared-wallet` concurrency group with both deploy workflows, so it can
+# never run while a deploy holds an in-flight buffer. Any buffer present during
+# the sweep is therefore a genuine orphan.
+name: Devnet Buffer Sweep
+
+on:
+  schedule:
+    - cron: "0 7 * * *" # daily 07:00 UTC
+  workflow_dispatch:
+
+# Serialize with deploy-devnet + deploy-mock-defi (same shared wallet) so the
+# sweep never closes a buffer a live deploy is mid-write on.
+concurrency:
+  group: devnet-shared-wallet
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  SOLANA_VERSION: "v2.1.14"
+
+jobs:
+  sweep:
+    name: Reclaim orphaned deploy buffers
+    runs-on: ubuntu-latest
+    environment: devnet # required to read the DEVNET_DEPLOY_KEYPAIR env secret
+    timeout-minutes: 10
+    steps:
+      - name: Install Solana CLI
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/${{ env.SOLANA_VERSION }}/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+
+      - name: Configure deploy wallet
+        run: |
+          mkdir -p "$HOME/.config/solana"
+          echo '${{ secrets.DEVNET_DEPLOY_KEYPAIR }}' > "$HOME/.config/solana/id.json"
+          solana config set \
+            --url "${{ secrets.DEVNET_RPC_URL }}" \
+            --keypair "$HOME/.config/solana/id.json" \
+            > /dev/null 2>&1
+
+      - name: Report balance + list orphaned buffers
+        run: |
+          echo "Deploy wallet: $(solana address)"
+          echo "Balance before sweep: $(solana balance)"
+          echo "Buffers currently owned by this wallet (any present = orphan):"
+          solana program show --buffers --buffer-authority "$(solana address)" < /dev/null || true
+
+      - name: Close orphaned buffers (reclaim rent)
+        run: |
+          # set +e: a sweep hiccup must never fail the job. Non-fatal close;
+          # refunds reclaimed rent to the deploy wallet (the --keypair signer).
+          set +e
+          solana program close --buffers \
+            --keypair "$HOME/.config/solana/id.json" \
+            --url "${{ secrets.DEVNET_RPC_URL }}" \
+            < /dev/null \
+            || echo "::notice::no orphaned buffers to close (or close skipped)"
+          echo "Balance after sweep: $(solana balance)"
+
+      - name: Cleanup
+        if: always()
+        run: rm -f "$HOME/.config/solana/id.json"
