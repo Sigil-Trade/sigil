@@ -300,12 +300,17 @@ jobs:
           fi
 
       - name: Save deploy metadata
+        env:
+          # Pass git context through env (not inline ${{ }}) so an attacker-
+          # influenceable ref name can never be interpolated into the run script.
+          REF_NAME: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
           BINARY_HASH=$(sha256sum target/deploy/sigil.so | cut -d' ' -f1)
           cat > deploy-metadata.json <<EOF
           {
-            "commit": "${{ github.sha }}",
-            "branch": "${{ github.ref_name }}",
+            "commit": "$COMMIT_SHA",
+            "branch": "$REF_NAME",
             "binary_hash": "$BINARY_HASH",
             "binary_size": $(wc -c < target/deploy/sigil.so),
             "deployed_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
