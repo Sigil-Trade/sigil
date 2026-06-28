@@ -1358,9 +1358,8 @@ describe("sigil", () => {
 
       // Require-measurable-outcome (err 6115): a SPENDING session must produce a
       // measurable vault outcome. Use an acquiring swap whose output increases
-      // (M1 path) with inAmount = 0 — no stablecoin leaves the vault beyond the
-      // validate-time protocol fee, so actual_spend stays 0 and the balance-delta
-      // (= fee only) and totalVolume (= 0) assertions below are preserved.
+      // (M1 path) with a real $10 inAmount — actual_spend = 10_000_000 and the
+      // protocol fee is charged at finalize on that measured spend.
       const swap = makeSwapOutput(vaultPda, agent.publicKey);
       const swapMetas = [
         { pubkey: vaultUsdcAta, isSigner: false, isWritable: false },
@@ -1412,6 +1411,9 @@ describe("sigil", () => {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+        feeDestinationTokenAccount: null,
           payer: agent.publicKey,
           vault: vaultPda,
           session: sessionPda,
@@ -1434,13 +1436,16 @@ describe("sigil", () => {
       // (no stablecoin outflow), outAmount > 0 (the vault-owned output ATA
       // increases) → the measurable outcome is the acquisition (M1), so
       // actual_spend stays 0 and the balance delta is the protocol fee only.
+      // C-1 fix: a REAL $10 acquiring swap (inAmount = 10 USDC) so the
+      // measured spend is non-zero and the protocol fee is charged at finalize on
+      // that measured spend.
       const defiIx = buildMockSwapToVaultIx(
         vaultUsdcAta,
         swap.drainRecipientAta,
         swap.agentReserve,
         swap.vaultOutputAta,
         agent.publicKey,
-        new BN(0),
+        new BN(10_000_000),
         new BN(1_000),
       );
 
@@ -1454,14 +1459,14 @@ describe("sigil", () => {
       );
       recordCU("validate+finalize:stablecoin", txResult);
 
-      // P0 Finding 1: Vault balance delta verification (outcome-based spending)
-      // Mock DeFi is a no-op — vault balance decreases by protocol fee only.
-      // Protocol fee = amount * PROTOCOL_FEE_RATE / FEE_RATE_DENOMINATOR
-      // = 50_000_000 * 200 / 1_000_000 = 10_000
+      // P0 Finding 1: Vault balance delta verification (outcome-based spending).
+      // C-1 fix: the vault decreases by the measured DeFi spend PLUS the protocol
+      // fee (collected at finalize on the measured spend; devFeeRate = 0 here).
+      // actual_spend = 10_000_000; protocol fee = ceil(10_000_000 * 200 / 1_000_000)
+      // = 2_000 → balanceDelta = 10_002_000.
       const vaultBalAfter = getTokenBalance(svm, vaultUsdcAta);
       const balanceDelta = vaultBalBefore - vaultBalAfter;
-      // With no-op DeFi, the ONLY balance change is the protocol fee (0.02% of declared amount)
-      expect(balanceDelta).to.equal(10_000n); // 50M * 200 / 1M = 10K (protocol fee)
+      expect(balanceDelta).to.equal(10_002_000n);
 
       // Session should be closed after atomic validate+finalize. Verify
       // by raw LiteSVM account lookup — bypasses Anchor's client which
@@ -1472,9 +1477,9 @@ describe("sigil", () => {
       // Verify vault stats updated
       const vault = await program.account.agentVault.fetch(vaultPda);
       expect(vault.totalTransactions.toNumber()).to.equal(1);
-      // totalVolume uses actual_spend_tracked (outcome-based), not declared amount.
-      // Mock DeFi is a no-op (0-lamport self-transfer), so actual spend = 0.
-      expect(vault.totalVolume.toNumber()).to.equal(0);
+      // totalVolume uses actual_spend_tracked (outcome-based, fee-exclusive), not
+      // the declared amount. The real $10 acquiring swap moved 10_000_000.
+      expect(vault.totalVolume.toNumber()).to.equal(10_000_000);
     });
   });
 
@@ -1549,6 +1554,9 @@ describe("sigil", () => {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+        feeDestinationTokenAccount: null,
           payer: agent.publicKey,
           vault: vaultPda,
           session: sessionPdaLocal,
@@ -1763,17 +1771,17 @@ describe("sigil", () => {
       }
     });
 
-    it("standalone validate rejects without finalize (cap check moved to finalize)", async () => {
-      // Outcome-based model: per-tx cap checks are in finalize_session, not validate.
-      // A spending validate with its DeFi ix but NO finalize fails with
-      // MissingFinalizeInstruction. F-Q2: the sandwich must carry EXACTLY ONE
-      // counted DeFi ix, so the bundle is [validate, mock_defi] (no finalize) —
-      // defi_ix_count == 1 passes, then the missing finalize is the sole defect.
+    it("C-1: over-cap declared amount is rejected at validate (TransactionTooLarge)", async () => {
+      // C-1 fix: the declared amount on the stablecoin-input spending path is now
+      // bounded by max_transaction_size_usd at validate. A declared 200 USDC (>
+      // the 100 USDC max_tx) reverts TransactionTooLarge at validate (index 0),
+      // BEFORE the missing-finalize check would fire. (The orthogonal
+      // missing-finalize path is covered by the in-cap sibling test below.)
       try {
         const validateIx = await program.methods
           .validateAndAuthorize(
             usdcMint,
-            new BN(200_000_000), // would exceed max_transaction_size — but checked in finalize now
+            new BN(200_000_000), // 200 USDC > 100 USDC max_tx → rejected at validate
             jupiterProgramId,
             await pv(),
             new BN(0), // AC-10 expectedNonce
@@ -1815,7 +1823,7 @@ describe("sigil", () => {
         expect.fail("Should have thrown");
       } catch (err: any) {
         expectSigilError(err, {
-          name: "MissingFinalizeInstruction",
+          name: "TransactionTooLarge",
         });
       }
     });
@@ -2701,6 +2709,9 @@ describe("sigil", () => {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+        feeDestinationTokenAccount: null,
           payer: agent.publicKey,
           vault: feeVaultPda,
           session: feeSessionPda,
@@ -2826,10 +2837,9 @@ describe("sigil", () => {
         program.programId,
       );
 
-      // Require-measurable-outcome (err 6115): acquiring swap with inAmount = 0
-      // + output increase (M1). actual_spend stays 0, but the developer fee is
-      // computed on the declared amount at validate, so the fee-accounting
-      // assertion (== 5000) is preserved exactly.
+      // C-1 fix: a real acquiring swap that spends 10 USDC (inAmount) so the
+      // developer fee is charged at finalize on the MEASURED spend (5000), plus
+      // the M1 output increase satisfies the require-measurable-outcome guard.
       const fee500Swap = makeSwapOutput(feeVaultPda, agent.publicKey);
       const fee500Metas = [
         { pubkey: feeVaultUsdcAta, isSigner: false, isWritable: false },
@@ -2889,6 +2899,10 @@ describe("sigil", () => {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+        // C-1 fix: fees collected at finalize on the measured spend. devFeeRate>0
+        // here, so the developer fee destination is REQUIRED (Some).
+        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+        feeDestinationTokenAccount: feeDestUsdcAta,
           payer: agent.publicKey,
           vault: feeVaultPda,
           session: feeSessionPda,
@@ -2907,33 +2921,32 @@ describe("sigil", () => {
         .remainingAccounts(fee500Metas)
         .instruction();
 
-      // F-Q2: the single counted DeFi ix is an acquiring swap (inAmount = 0,
-      // outAmount > 0 → M1 measurable outcome; only fees leave the vault).
+      // C-1 fix: a REAL $10 acquiring swap (inAmount = 10 USDC) so the developer
+      // fee is charged at finalize on the measured spend.
       const defiIx = buildMockSwapToVaultIx(
         feeVaultUsdcAta,
         fee500Swap.drainRecipientAta,
         fee500Swap.agentReserve,
         fee500Swap.vaultOutputAta,
         agent.publicKey,
-        new BN(0),
+        new BN(10_000_000),
         new BN(1_000),
       );
       sendVersionedTx(svm, [validateIx, defiIx, finalizeIx], agent);
 
-      // developer fee = 10_000_000 * 500 / 1_000_000 = 5000
+      // developer fee = ceil(10_000_000 * 500 / 1_000_000) = 5000 (on measured spend)
       const vault = await program.account.agentVault.fetch(feeVaultPda);
       expect(vault.totalFeesCollected.toNumber()).to.equal(5000);
     });
 
-    it("zero-spend finalize always tracks developer fees in total_fees_collected", async () => {
-      // Developer fees are tracked in accounting even when no stablecoin moves.
-      // Under the require-measurable-outcome invariant (err 6115) a spending
-      // session must still produce SOME measurable outcome, so the bundle is
-      // [validate, mock_swap, finalize] where the swap acquires a vault-owned
-      // output (M1) with inAmount = 0 → actual_spend stays 0 (the "zero-spend"
-      // case this test pins) while the session settles instead of reverting.
-      // The developer fee is taken on the declared amount at validate, so it is
-      // tracked exactly as before.
+    it("zero-spend acquiring session collects NO fee (fees are on measured spend)", async () => {
+      // C-1 fix: fees are charged at FINALIZE on the MEASURED spend, not upfront
+      // on the declared amount. A zero-spend acquiring session — the swap acquires
+      // a vault-owned output (M1) with inAmount = 0 so actual_spend stays 0 while
+      // still satisfying the require-measurable-outcome guard (err 6115) — moves no
+      // stablecoin out, so NO protocol/developer fee is collected and
+      // total_fees_collected is UNCHANGED. (Pre-fix this session was charged a fee
+      // on the declared amount — the very over-charge the C-1 relocation removes.)
       [feeSessionPda] = PublicKey.findProgramAddressSync(
         [
           Buffer.from("session"),
@@ -3004,6 +3017,9 @@ describe("sigil", () => {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+        feeDestinationTokenAccount: null,
           payer: agent.publicKey,
           vault: feeVaultPda,
           session: feeSessionPda,
@@ -3036,8 +3052,8 @@ describe("sigil", () => {
       sendVersionedTx(svm, [validateIx, defiIx, finalizeIx], agent);
 
       const vault = await program.account.agentVault.fetch(feeVaultPda);
-      // Developer fees ALWAYS tracked now (fee drain fix — accounting matches reality)
-      expect(vault.totalFeesCollected.toNumber()).to.be.greaterThan(feesBefore);
+      // C-1 fix: zero measured spend → zero fee → total_fees_collected unchanged.
+      expect(vault.totalFeesCollected.toNumber()).to.equal(feesBefore);
     });
 
     it("init vault with developer_fee_rate at max (500) succeeds", async () => {
@@ -3292,6 +3308,9 @@ describe("sigil", () => {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+        feeDestinationTokenAccount: null,
           payer: lifecycleAgent.publicKey,
           vault: lifecycleVaultPda,
           session: lifecycleSessionPda,
@@ -3371,6 +3390,9 @@ describe("sigil", () => {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+        feeDestinationTokenAccount: null,
           payer: lifecycleAgent.publicKey,
           vault: lifecycleVaultPda,
           session: lifecycleSessionPda,
@@ -3452,6 +3474,9 @@ describe("sigil", () => {
         const finalizeIx = await program.methods
           .finalizeSession()
           .accountsPartial({
+        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+        feeDestinationTokenAccount: null,
             payer: lifecycleAgent.publicKey,
             vault: lifecycleVaultPda,
             session: lifecycleSessionPda,
@@ -4248,6 +4273,9 @@ describe("sigil", () => {
         const finalizeIx = await program.methods
           .finalizeSession()
           .accountsPartial({
+        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+        feeDestinationTokenAccount: null,
             payer: ringAgent.publicKey,
             vault: ringVaultPda,
             session: sessionPda,
@@ -4404,13 +4432,11 @@ describe("sigil", () => {
       const vaultBalBefore = getTokenBalance(svm, feeEdgeVaultUsdcAta);
       const treasuryBefore = getTokenBalance(svm, protocolTreasuryUsdcAta);
 
-      // ceil(1 * 200 / 1_000_000) = 1 protocol fee (devFeeRate=0 → dev fee = 0)
-      // net = 1 - 1 = 0 → delegation = 0, 1 unit goes to treasury.
-      // Require-measurable-outcome (err 6115): the net spend is structurally 0
-      // (the whole declared amount is consumed by the fee), so the ONLY way to
-      // produce a measurable outcome without altering the fee math is an
-      // acquiring swap with inAmount = 0 + output increase (M1). actual_spend
-      // stays 0; the vault still loses exactly the 1-unit protocol fee.
+      // C-1 fix: a real 1-unit acquiring spend → protocol fee = ceil(1 * 200 /
+      // 1_000_000) = 1 (devFeeRate=0 → dev fee = 0), charged at finalize on the
+      // measured spend. The acquiring output increase (M1) satisfies the
+      // require-measurable-outcome guard (err 6115). net_value_out = 1 + 1 = 2,
+      // well under max_tx, so validate's per-tx bound (amount=1) passes too.
       const fe1Swap = makeSwapOutput(feeEdgeVaultPda, feeEdgeAgent.publicKey);
       const fe1Metas = [
         { pubkey: feeEdgeVaultUsdcAta, isSigner: false, isWritable: false },
@@ -4465,6 +4491,9 @@ describe("sigil", () => {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+        feeDestinationTokenAccount: null,
           payer: feeEdgeAgent.publicKey,
           vault: feeEdgeVaultPda,
           session: sessionPda,
@@ -4486,21 +4515,23 @@ describe("sigil", () => {
       // F-Q2: the single counted DeFi ix is an acquiring swap (inAmount = 0,
       // outAmount > 0 → M1 measurable outcome). The protocol fee is collected at
       // validate, independent of the DeFi leg.
+      // C-1 fix: a real 1-unit acquiring spend (inAmount = 1) so the protocol fee
+      // = ceil(1 * 200 / 1_000_000) = 1 is charged at finalize on the measured spend.
       const defiIx = buildMockSwapToVaultIx(
         feeEdgeVaultUsdcAta,
         fe1Swap.drainRecipientAta,
         fe1Swap.agentReserve,
         fe1Swap.vaultOutputAta,
         feeEdgeAgent.publicKey,
-        new BN(0),
+        new BN(1),
         new BN(1_000),
       );
       sendVersionedTx(svm, [validateIx, defiIx, finalizeIx], feeEdgeAgent);
 
-      // Vault lost 1 unit (protocol fee), treasury gained 1 unit
+      // Vault lost 2 units (1 measured spend + 1 protocol fee); treasury gained 1.
       const vaultBalAfter = getTokenBalance(svm, feeEdgeVaultUsdcAta);
       const treasuryAfter = getTokenBalance(svm, protocolTreasuryUsdcAta);
-      expect(Number(vaultBalBefore) - Number(vaultBalAfter)).to.equal(1);
+      expect(Number(vaultBalBefore) - Number(vaultBalAfter)).to.equal(2);
       expect(Number(treasuryAfter) - Number(treasuryBefore)).to.equal(1);
     });
 
@@ -4515,12 +4546,10 @@ describe("sigil", () => {
         program.programId,
       );
 
-      // Both sub-sessions are spending sessions whose net spend is structurally
-      // 0 (the entire tiny declared amount is consumed by the protocol fee).
-      // Require-measurable-outcome (err 6115): each needs a measurable outcome
-      // without altering the fee math → an acquiring swap with inAmount = 0 +
-      // output increase (M1). actual_spend stays 0; the vault still loses only
-      // the 1-unit fee. Each session gets its own fresh output account.
+      // C-1 fix: each sub-session performs a REAL acquiring spend (inAmount =
+      // 4999 / 5000) so the protocol fee is charged at finalize on the measured
+      // spend. ceil(4999*200/1e6) = ceil(5000*200/1e6) = 1, verified at the
+      // treasury. Each session gets its own fresh output account.
       const fe4999Swap = makeSwapOutput(
         feeEdgeVaultPda,
         feeEdgeAgent.publicKey,
@@ -4584,6 +4613,9 @@ describe("sigil", () => {
       const finalizeIx1 = await program.methods
         .finalizeSession()
         .accountsPartial({
+        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+        feeDestinationTokenAccount: null,
           payer: feeEdgeAgent.publicKey,
           vault: feeEdgeVaultPda,
           session: sessionPda,
@@ -4604,20 +4636,23 @@ describe("sigil", () => {
 
       // F-Q2: acquiring swap (inAmount = 0, outAmount > 0 → M1 measurable
       // outcome; only the 1-unit fee leaves the vault).
+      // C-1 fix: real 4999-unit acquiring spend → protocol fee = ceil(4999 * 200 /
+      // 1_000_000) = 1, charged at finalize on the measured spend.
       const defiIx1 = buildMockSwapToVaultIx(
         feeEdgeVaultUsdcAta,
         fe4999Swap.drainRecipientAta,
         fe4999Swap.agentReserve,
         fe4999Swap.vaultOutputAta,
         feeEdgeAgent.publicKey,
-        new BN(0),
+        new BN(4_999),
         new BN(1_000),
       );
       sendVersionedTx(svm, [validateIx1, defiIx1, finalizeIx1], feeEdgeAgent);
 
-      // Test amount = 5000: ceil(5000 * 200 / 1_000_000) = 1 (exact division, same result)
-      // Capture vault balance BEFORE validate (fee collected during validate)
-      const vaultBalBefore = getTokenBalance(svm, feeEdgeVaultUsdcAta);
+      // Test amount = 5000: ceil(5000 * 200 / 1_000_000) = 1 (exact division).
+      // Capture the TREASURY balance before the 5000 spend so we measure the FEE
+      // alone (the vault delta would also include the 5000 measured spend).
+      const treasuryBefore5000 = getTokenBalance(svm, protocolTreasuryUsdcAta);
 
       const fe5000Swap = makeSwapOutput(
         feeEdgeVaultPda,
@@ -4680,6 +4715,9 @@ describe("sigil", () => {
       const finalizeIx2 = await program.methods
         .finalizeSession()
         .accountsPartial({
+        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+        feeDestinationTokenAccount: null,
           payer: feeEdgeAgent.publicKey,
           vault: feeEdgeVaultPda,
           session: sessionPda,
@@ -4700,20 +4738,22 @@ describe("sigil", () => {
 
       // F-Q2: acquiring swap (inAmount = 0, outAmount > 0 → M1 measurable
       // outcome; only the 1-unit fee leaves the vault).
+      // C-1 fix: real 5000-unit acquiring spend → protocol fee = ceil(5000 * 200 /
+      // 1_000_000) = 1, charged at finalize on the measured spend.
       const defiIx2 = buildMockSwapToVaultIx(
         feeEdgeVaultUsdcAta,
         fe5000Swap.drainRecipientAta,
         fe5000Swap.agentReserve,
         fe5000Swap.vaultOutputAta,
         feeEdgeAgent.publicKey,
-        new BN(0),
+        new BN(5_000),
         new BN(1_000),
       );
       sendVersionedTx(svm, [validateIx2, defiIx2, finalizeIx2], feeEdgeAgent);
 
-      // Vault balance should decrease by exactly 1 (protocol fee deducted during validate)
-      const vaultBalAfter = getTokenBalance(svm, feeEdgeVaultUsdcAta);
-      expect(Number(vaultBalBefore) - Number(vaultBalAfter)).to.equal(1);
+      // The protocol fee on the 5000 spend = 1 (ceiling) lands in the treasury.
+      const treasuryAfter5000 = getTokenBalance(svm, protocolTreasuryUsdcAta);
+      expect(Number(treasuryAfter5000) - Number(treasuryBefore5000)).to.equal(1);
     });
   });
 
@@ -7346,6 +7386,9 @@ describe("sigil", () => {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+        feeDestinationTokenAccount: null,
           payer: protoCapAgent.publicKey,
           vault: pcVault,
           session: sessionPda,
@@ -8132,6 +8175,9 @@ describe("sigil", () => {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+        feeDestinationTokenAccount: null,
           payer: ta13Agent.publicKey,
           vault: ta13Vault,
           session: sessionPda,

@@ -200,6 +200,9 @@ describe("jupiter-lend-integration", () => {
     const finalizeIx = await program.methods
       .finalizeSession()
       .accountsPartial({
+        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+        feeDestinationTokenAccount: null,
         payer: agentKp.publicKey,
         vault,
         session,

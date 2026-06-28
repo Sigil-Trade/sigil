@@ -950,6 +950,9 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+        feeDestinationTokenAccount: null,
           payer: ctx.agent.publicKey,
           vault: ctx.vault,
           session: sessionPda,
@@ -990,12 +993,16 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
       );
       expect(txResult).to.exist;
 
-      // Vault USDC delta = protocol fee + actual drain. Both leave the vault:
-      // the fee (50_000_000 * 200 / 1_000_000 = 10_000) during validate, and
-      // DRAIN_AMOUNT during the swap's input leg.
+      // C-1 fix: vault USDC delta = the measured DeFi spend (DRAIN_AMOUNT, via the
+      // swap's input leg) PLUS the protocol fee — now charged at FINALIZE on that
+      // MEASURED spend, ceil(DRAIN_AMOUNT * 200 / 1_000_000), not upfront on the
+      // declared amount.
+      const expectedProtocolFee = Math.ceil(
+        (DRAIN_AMOUNT.toNumber() * 200) / 1_000_000,
+      );
       const vaultBalAfter = getTokenBalance(svm, ctx.vaultUsdcAta);
       expect(Number(vaultBalBefore - vaultBalAfter)).to.equal(
-        10_000 + DRAIN_AMOUNT.toNumber(),
+        DRAIN_AMOUNT.toNumber() + expectedProtocolFee,
       );
 
       // Session PDA closed by finalize.

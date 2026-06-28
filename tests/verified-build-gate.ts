@@ -397,6 +397,9 @@ describe("verified-build-gate (Item 3)", () => {
     return program.methods
       .finalizeSession()
       .accountsPartial({
+        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+        feeDestinationTokenAccount: null,
         payer: agent.publicKey,
         vault: vaultPda,
         session: getSessionPda(),
