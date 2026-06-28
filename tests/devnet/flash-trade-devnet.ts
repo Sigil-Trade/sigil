@@ -351,8 +351,6 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
           agentSpendOverlay: overlayPda,
           vaultTokenAccount: vaultFlashUsdcAta,
           tokenMintAccount: FLASH_USDC_DEVNET,
-          protocolTreasuryTokenAccount: protocolTreasuryFlashUsdcAta,
-          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -372,6 +370,13 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
           tracker: trackerPda,
           agentSpendOverlay: overlayPda,
           vaultTokenAccount: vaultFlashUsdcAta,
+          // C-1 fix: fees are collected HERE (finalize) on the measured spend. A
+          // stablecoin-input spend with actual_spend > 0 (⇒ protocol fee > 0)
+          // MUST supply protocolTreasuryTokenAccount or finalize reverts
+          // InvalidProtocolTreasury; feeDestinationTokenAccount is required only
+          // when the developer fee rate is non-zero.
+          protocolTreasuryTokenAccount: protocolTreasuryFlashUsdcAta,
+          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -548,8 +553,6 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
           agentSpendOverlay: overlay,
           vaultTokenAccount: vaultAta,
           tokenMintAccount: FLASH_USDC_DEVNET,
-          protocolTreasuryTokenAccount: protocolTreasuryFlashUsdcAta,
-          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -569,6 +572,13 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
           tracker,
           agentSpendOverlay: overlay,
           vaultTokenAccount: vaultAta,
+          // C-1 fix: fees are collected HERE (finalize) on the measured spend. A
+          // stablecoin-input spend with actual_spend > 0 (⇒ protocol fee > 0)
+          // MUST supply protocolTreasuryTokenAccount or finalize reverts
+          // InvalidProtocolTreasury; feeDestinationTokenAccount is required only
+          // when the developer fee rate is non-zero.
+          protocolTreasuryTokenAccount: protocolTreasuryFlashUsdcAta,
+          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -960,8 +970,6 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
           agentSpendOverlay: vaultAllow.overlayPda,
           vaultTokenAccount: vaultAllow.vaultTokenAta,
           tokenMintAccount: mint,
-          protocolTreasuryTokenAccount: vaultAllow.protocolTreasuryAta,
-          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -998,6 +1006,13 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
           tracker: vaultAllow.trackerPda,
           agentSpendOverlay: vaultAllow.overlayPda,
           vaultTokenAccount: vaultAllow.vaultTokenAta,
+          // C-1 fix: fees are collected HERE (finalize) on the measured spend. A
+          // stablecoin-input spend with actual_spend > 0 (⇒ protocol fee > 0)
+          // MUST supply protocolTreasuryTokenAccount or finalize reverts
+          // InvalidProtocolTreasury; feeDestinationTokenAccount is required only
+          // when the developer fee rate is non-zero.
+          protocolTreasuryTokenAccount: vaultAllow.protocolTreasuryAta,
+          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -1175,8 +1190,6 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
           agentSpendOverlay: vaultStrict.overlayPda,
           vaultTokenAccount: vaultStrict.vaultTokenAta,
           tokenMintAccount: mint,
-          protocolTreasuryTokenAccount: vaultStrict.protocolTreasuryAta,
-          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -1207,6 +1220,13 @@ describe("⚡ FLASH TRADE DEVNET — Real Perpetuals Through Sigil", function ()
           tracker: vaultStrict.trackerPda,
           agentSpendOverlay: vaultStrict.overlayPda,
           vaultTokenAccount: vaultStrict.vaultTokenAta,
+          // C-1 fix: fees are collected HERE (finalize) on the measured spend. A
+          // stablecoin-input spend with actual_spend > 0 (⇒ protocol fee > 0)
+          // MUST supply protocolTreasuryTokenAccount or finalize reverts
+          // InvalidProtocolTreasury; feeDestinationTokenAccount is required only
+          // when the developer fee rate is non-zero.
+          protocolTreasuryTokenAccount: vaultStrict.protocolTreasuryAta,
+          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,

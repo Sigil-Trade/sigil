@@ -234,8 +234,6 @@ async function doComposedTx(
       agentSpendOverlay: overlay,
       vaultTokenAccount: vaultAta,
       tokenMintAccount: usdcMint,
-      protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-      feeDestinationTokenAccount: null,
       outputStablecoinAccount: null,
       outputSwapAccount: null,
       tokenProgram: TOKEN_PROGRAM_ID,
@@ -269,6 +267,13 @@ async function doComposedTx(
       tracker,
       agentSpendOverlay: overlay,
       vaultTokenAccount: vaultAta,
+      // C-1 fix: fees are collected HERE (finalize) on the measured spend. A
+      // stablecoin-input spend with actual_spend > 0 (⇒ protocol fee > 0) MUST
+      // supply protocolTreasuryTokenAccount or finalize reverts
+      // InvalidProtocolTreasury; feeDestinationTokenAccount is required only
+      // when the developer fee rate is non-zero.
+      protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+      feeDestinationTokenAccount: null,
       outputStablecoinAccount: null,
       outputSwapAccount: null,
       tokenProgram: TOKEN_PROGRAM_ID,
@@ -1122,8 +1127,6 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
           agentSpendOverlay: nsV.overlay,
           vaultTokenAccount: nsV.vaultAta,
           tokenMintAccount: usdcMint,
-          protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -1149,6 +1152,13 @@ describe("🔥 SIGIL DEVNET STRESS TEST — Real Tokens, Real Limits", function 
           tracker: nsV.tracker,
           agentSpendOverlay: nsV.overlay,
           vaultTokenAccount: nsV.vaultAta,
+          // C-1 fix: fees are collected HERE (finalize) on the measured spend. A
+          // stablecoin-input spend with actual_spend > 0 (⇒ protocol fee > 0)
+          // MUST supply protocolTreasuryTokenAccount or finalize reverts
+          // InvalidProtocolTreasury; feeDestinationTokenAccount is required only
+          // when the developer fee rate is non-zero.
+          protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
