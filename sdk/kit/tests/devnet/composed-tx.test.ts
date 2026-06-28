@@ -105,7 +105,7 @@ async function buildSwapInstructions(
     agentSpendOverlay: vault.overlayPDA,
     vaultTokenAccount: vaultTokenAta,
     tokenMintAccount: USDC_MINT_DEVNET,
-    protocolTreasuryTokenAccount: protocolTreasuryAta,
+    // C-1 fix: fee accounts relocated to finalize_session.
     tokenMint: USDC_MINT_DEVNET,
     amount,
     targetProtocol: MOCK_DEFI_PROGRAM,
@@ -136,6 +136,8 @@ async function buildSwapInstructions(
     sessionRentRecipient: agent.address,
     agentSpendOverlay: vault.overlayPDA,
     vaultTokenAccount: vaultTokenAta,
+    // C-1 fix: fees collected at finalize on the measured spend.
+    protocolTreasuryTokenAccount: protocolTreasuryAta,
   });
 
   return {
