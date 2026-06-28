@@ -6279,6 +6279,9 @@ describe("sigil", () => {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accounts({
+        // C-1 fix: relocated fee accounts (null — real-spend sites set the treasury).
+        protocolTreasuryTokenAccount: null,
+        feeDestinationTokenAccount: null,
           payer: agent.publicKey,
           vault: maVault,
           session,
@@ -6351,6 +6354,9 @@ describe("sigil", () => {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accounts({
+        // C-1 fix: relocated fee accounts (null — real-spend sites set the treasury).
+        protocolTreasuryTokenAccount: null,
+        feeDestinationTokenAccount: null,
           payer: agent.publicKey,
           vault: maVault,
           session,
