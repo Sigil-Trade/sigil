@@ -804,12 +804,14 @@ describe("devnet-routing", () => {
     const amount = 100_000_000; // 100 tokens
     const { protocolFee } = calculateFees(amount, devFeeRate);
 
-    // M1 + 6115: this test isolates FEE math (treasury deltas), so each leg must
-    // satisfy the require-measurable-outcome gate WITHOUT moving spend that
-    // would couple the two legs through the aggregate cap. inAmount=0 →
-    // actual_spend==0 (no cap accumulation); outAmount>0 → vault-owned output
-    // increases (6115 via the M1 branch). Fees are still collected upfront on
-    // `amount`, so the treasury assertions are unchanged.
+    // C-1: fees are charged at FINALIZE on the MEASURED spend, so each leg must
+    // really spend its full `amount` (inAmount = amount) for the protocol fee to
+    // land in the per-stablecoin treasury (protocolFee = ceil(amount * rate)).
+    // M1 + 6115: outAmount>0 acquires a vault-owned output so the
+    // require-measurable-outcome gate is satisfied. The two legs use different
+    // stablecoins; their aggregate net_value_out (~200.14 USDC) stays well under
+    // routingVaults[10]'s 500 USD daily cap (and each leg < the 200 USD per-tx
+    // cap), so the cap does not interfere with the fee assertions.
     const swap = await setupSwapOutput(
       connection,
       payer,
@@ -849,7 +851,7 @@ describe("devnet-routing", () => {
         swap.agentReserve,
         swap.vaultOutputAta,
         agent.publicKey,
-        new BN(0),
+        new BN(amount), // C-1: real measured spend == amount
         new BN(1_000),
       ),
     });
@@ -891,7 +893,7 @@ describe("devnet-routing", () => {
         swap.agentReserve,
         swap.vaultOutputAta,
         agent.publicKey,
-        new BN(0),
+        new BN(amount), // C-1: real measured spend == amount
         new BN(1_000),
       ),
     });

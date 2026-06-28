@@ -697,6 +697,10 @@ describe("devnet-security", () => {
         mint,
         amount: new BN(10_000_000),
         protocol: MOCK_DEFI_PROGRAM_ID,
+        // C-1: a real-spend authorize carries the treasury (consumed at finalize).
+        // This tx still reverts earlier at validate (UnauthorizedAgent), but
+        // supplying it keeps the call correct if the check order ever changes.
+        protocolTreasuryAta: freshVault.protocolTreasuryAta,
       });
       expect.fail("Should have thrown");
     } catch (err: any) {

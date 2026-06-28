@@ -409,7 +409,10 @@ describe("devnet-smoke-test", () => {
       } as any)
       .rpc();
 
-    // After deposit(100M) - protocolFee(10k from finalize) - withdraw(50M) = 49,990,000
+    // Test 5 was a non-spending session (amount=0) so NO fee was collected
+    // (C-1: fees are charged at finalize on the measured spend, which was 0).
+    // deposit(100M) - withdraw(50M) = 50,000,000 exactly; the range below allows
+    // a small margin for any incidental dust.
     const vaultAccount = await getAccount(connection, vaultUsdcAta);
     const remainingBalance = Number(vaultAccount.amount);
     expect(remainingBalance).to.be.lessThanOrEqual(50_000_000);
