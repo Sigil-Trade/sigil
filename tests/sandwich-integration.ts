@@ -592,9 +592,9 @@ describe("sandwich-integration (Phase 6.1)", () => {
       program.programId,
     );
     let builder = program.methods.finalizeSession().accountsPartial({
-        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: null,
+      // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+      protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+      feeDestinationTokenAccount: null,
       payer: ctx.agent.publicKey,
       vault: ctx.vault,
       session: sessionPda,

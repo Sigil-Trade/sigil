@@ -1409,9 +1409,9 @@ describe("sigil", () => {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
-        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: null,
+          // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+          protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+          feeDestinationTokenAccount: null,
           payer: agent.publicKey,
           vault: vaultPda,
           session: sessionPda,
@@ -1550,9 +1550,9 @@ describe("sigil", () => {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
-        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: null,
+          // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+          protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+          feeDestinationTokenAccount: null,
           payer: agent.publicKey,
           vault: vaultPda,
           session: sessionPdaLocal,
@@ -2691,9 +2691,9 @@ describe("sigil", () => {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
-        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: null,
+          // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+          protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+          feeDestinationTokenAccount: null,
           payer: agent.publicKey,
           vault: feeVaultPda,
           session: feeSessionPda,
@@ -2879,10 +2879,10 @@ describe("sigil", () => {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
-        // C-1 fix: fees collected at finalize on the measured spend. devFeeRate>0
-        // here, so the developer fee destination is REQUIRED (Some).
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: feeDestUsdcAta,
+          // C-1 fix: fees collected at finalize on the measured spend. devFeeRate>0
+          // here, so the developer fee destination is REQUIRED (Some).
+          protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+          feeDestinationTokenAccount: feeDestUsdcAta,
           payer: agent.publicKey,
           vault: feeVaultPda,
           session: feeSessionPda,
@@ -2995,9 +2995,9 @@ describe("sigil", () => {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
-        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: null,
+          // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+          protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+          feeDestinationTokenAccount: null,
           payer: agent.publicKey,
           vault: feeVaultPda,
           session: feeSessionPda,
@@ -3284,9 +3284,9 @@ describe("sigil", () => {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
-        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: null,
+          // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+          protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+          feeDestinationTokenAccount: null,
           payer: lifecycleAgent.publicKey,
           vault: lifecycleVaultPda,
           session: lifecycleSessionPda,
@@ -3364,9 +3364,9 @@ describe("sigil", () => {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
-        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: null,
+          // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+          protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+          feeDestinationTokenAccount: null,
           payer: lifecycleAgent.publicKey,
           vault: lifecycleVaultPda,
           session: lifecycleSessionPda,
@@ -3446,9 +3446,9 @@ describe("sigil", () => {
         const finalizeIx = await program.methods
           .finalizeSession()
           .accountsPartial({
-        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: null,
+            // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+            protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+            feeDestinationTokenAccount: null,
             payer: lifecycleAgent.publicKey,
             vault: lifecycleVaultPda,
             session: lifecycleSessionPda,
@@ -4241,9 +4241,9 @@ describe("sigil", () => {
         const finalizeIx = await program.methods
           .finalizeSession()
           .accountsPartial({
-        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: null,
+            // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+            protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+            feeDestinationTokenAccount: null,
             payer: ringAgent.publicKey,
             vault: ringVaultPda,
             session: sessionPda,
@@ -4457,9 +4457,9 @@ describe("sigil", () => {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
-        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: null,
+          // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+          protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+          feeDestinationTokenAccount: null,
           payer: feeEdgeAgent.publicKey,
           vault: feeEdgeVaultPda,
           session: sessionPda,
@@ -4577,9 +4577,9 @@ describe("sigil", () => {
       const finalizeIx1 = await program.methods
         .finalizeSession()
         .accountsPartial({
-        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: null,
+          // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+          protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+          feeDestinationTokenAccount: null,
           payer: feeEdgeAgent.publicKey,
           vault: feeEdgeVaultPda,
           session: sessionPda,
@@ -4677,9 +4677,9 @@ describe("sigil", () => {
       const finalizeIx2 = await program.methods
         .finalizeSession()
         .accountsPartial({
-        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: null,
+          // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+          protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+          feeDestinationTokenAccount: null,
           payer: feeEdgeAgent.publicKey,
           vault: feeEdgeVaultPda,
           session: sessionPda,
@@ -4715,7 +4715,9 @@ describe("sigil", () => {
 
       // The protocol fee on the 5000 spend = 1 (ceiling) lands in the treasury.
       const treasuryAfter5000 = getTokenBalance(svm, protocolTreasuryUsdcAta);
-      expect(Number(treasuryAfter5000) - Number(treasuryBefore5000)).to.equal(1);
+      expect(Number(treasuryAfter5000) - Number(treasuryBefore5000)).to.equal(
+        1,
+      );
     });
   });
 
@@ -6281,9 +6283,9 @@ describe("sigil", () => {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accounts({
-        // C-1 fix: relocated fee accounts (null — real-spend sites set the treasury).
-        protocolTreasuryTokenAccount: null,
-        feeDestinationTokenAccount: null,
+          // C-1 fix: relocated fee accounts (null — real-spend sites set the treasury).
+          protocolTreasuryTokenAccount: null,
+          feeDestinationTokenAccount: null,
           payer: agent.publicKey,
           vault: maVault,
           session,
@@ -6356,9 +6358,9 @@ describe("sigil", () => {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accounts({
-        // C-1 fix: relocated fee accounts (null — real-spend sites set the treasury).
-        protocolTreasuryTokenAccount: null,
-        feeDestinationTokenAccount: null,
+          // C-1 fix: relocated fee accounts (null — real-spend sites set the treasury).
+          protocolTreasuryTokenAccount: null,
+          feeDestinationTokenAccount: null,
           payer: agent.publicKey,
           vault: maVault,
           session,
@@ -7346,9 +7348,9 @@ describe("sigil", () => {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
-        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: null,
+          // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+          protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+          feeDestinationTokenAccount: null,
           payer: protoCapAgent.publicKey,
           vault: pcVault,
           session: sessionPda,
@@ -8133,9 +8135,9 @@ describe("sigil", () => {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
-        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: null,
+          // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+          protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+          feeDestinationTokenAccount: null,
           payer: ta13Agent.publicKey,
           vault: ta13Vault,
           session: sessionPda,
