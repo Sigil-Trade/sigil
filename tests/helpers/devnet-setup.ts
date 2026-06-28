@@ -1121,12 +1121,16 @@ export async function buildAuthorizeIx(opts: AuthorizeOpts) {
     mint,
     amount,
     protocol,
-    protocolTreasuryAta = null,
-    feeDestinationAta = null,
     outputStablecoinAccount = null,
     outputSwapAccount = null,
     remainingAccounts = [],
   } = opts;
+  // C-1 fix: protocol_treasury + fee_destination are NO LONGER accounts on
+  // validate_and_authorize — they were relocated to finalize_session, where the
+  // fee is charged on the MEASURED spend (inside the spend caps), not upfront on
+  // the declared `amount`. opts still carries protocolTreasuryAta/feeDestinationAta
+  // (consumed by buildFinalizeIx via authorizeAndFinalize); they are simply not
+  // attached to the validate ix anymore.
 
   // Read current policy version from on-chain if not provided.
   // Ensures tests that queue+apply policy changes use the correct version.
@@ -1172,8 +1176,6 @@ export async function buildAuthorizeIx(opts: AuthorizeOpts) {
       agentSpendOverlay: overlayPda,
       vaultTokenAccount: vaultTokenAta,
       tokenMintAccount: mint,
-      protocolTreasuryTokenAccount: protocolTreasuryAta,
-      feeDestinationTokenAccount: feeDestinationAta,
       outputStablecoinAccount,
       outputSwapAccount,
       tokenProgram: TOKEN_PROGRAM_ID,
@@ -1226,6 +1228,8 @@ export async function buildFinalizeIx(opts: FinalizeOpts) {
     sessionPda,
     agentPubkey,
     vaultTokenAta,
+    protocolTreasuryAta,
+    feeDestinationAta,
     outputStablecoinAccount = null,
     outputSwapAccount = null,
     finalizeRemainingAccounts,
@@ -1243,6 +1247,13 @@ export async function buildFinalizeIx(opts: FinalizeOpts) {
     tracker: trackerPda,
     agentSpendOverlay: overlayPda,
     vaultTokenAccount: vaultTokenAta,
+    // C-1 fix: fees are collected HERE (finalize) on the measured spend. A
+    // stablecoin-input spend with actual_spend > 0 (⇒ protocol fee > 0) MUST
+    // supply protocolTreasuryTokenAccount or finalize reverts
+    // InvalidProtocolTreasury; feeDestinationTokenAccount is required only when
+    // the developer fee rate is non-zero.
+    protocolTreasuryTokenAccount: protocolTreasuryAta,
+    feeDestinationTokenAccount: feeDestinationAta,
     outputStablecoinAccount,
     outputSwapAccount,
     tokenProgram: TOKEN_PROGRAM_ID,

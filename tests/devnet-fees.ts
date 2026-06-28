@@ -23,7 +23,6 @@ import {
   deriveSessionPda,
   createFullVault,
   applyOperatorGrants,
-  authorize,
   authorizeAndFinalize,
   sendVersionedTx,
   fundKeypair,
@@ -140,11 +139,14 @@ describe("devnet-fees", () => {
 
   it("1. protocol fee credited to treasury ATA", async () => {
     const amount = 50_000_000; // 50 USDC
-    const { protocolFee, netAmount } = calculateFees(amount, 0);
+    const { protocolFee } = calculateFees(amount, 0);
 
-    // M1 + 6115: the spend must ACQUIRE a vault-owned output and move real
-    // stablecoin (else 6112/6115 before finalize). The protocol fee is still
-    // collected upfront at validate on `amount`, so the assertion is unchanged.
+    // C-1: fees are charged at FINALIZE on the MEASURED spend. The acquiring
+    // swap really spends the full `amount` of stablecoin (inAmount = amount) so
+    // actual_spend == amount and the protocol fee = ceil(amount * rate) ==
+    // protocolFee. M1 + 6115: outAmount > 0 acquires a vault-owned output so the
+    // require-measurable-outcome gate is satisfied. Mirrors the verified LiteSVM
+    // pattern (security-exploits.ts "fee at exact boundary").
     const swap = await setupSwapOutput(
       connection,
       payer,
@@ -185,7 +187,7 @@ describe("devnet-fees", () => {
         swap.agentReserve,
         swap.vaultOutputAta,
         agentB.publicKey,
-        new BN(netAmount),
+        new BN(amount), // C-1: real measured spend == amount
         new BN(1_000),
       ),
     });
@@ -200,10 +202,11 @@ describe("devnet-fees", () => {
 
   it("2. developer fee credited to feeDestination ATA", async () => {
     const amount = 50_000_000; // 50 USDC
-    const { developerFee, netAmount } = calculateFees(amount, 500);
+    const { developerFee } = calculateFees(amount, 500);
 
-    // M1 + 6115: acquiring swap moves real stablecoin so finalize measures a
-    // spend; the developer fee is still collected upfront at validate.
+    // C-1: the developer fee is charged at FINALIZE on the MEASURED spend. The
+    // acquiring swap spends the full `amount` (inAmount = amount) so
+    // actual_spend == amount and dev fee = ceil(amount * devRate) == developerFee.
     const swap = await setupSwapOutput(
       connection,
       payer,
@@ -244,7 +247,7 @@ describe("devnet-fees", () => {
         swap.agentReserve,
         swap.vaultOutputAta,
         agentA.publicKey,
-        new BN(netAmount),
+        new BN(amount), // C-1: real measured spend == amount
         new BN(1_000),
       ),
     });
@@ -259,16 +262,17 @@ describe("devnet-fees", () => {
     );
   });
 
-  it("3. combined fees: vault debited by protocol + developer", async () => {
+  it("3. combined fees: protocol to treasury + developer to feeDestination (measured spend)", async () => {
     const amount = 100_000_000; // 100 USDC
     const { protocolFee, developerFee } = calculateFees(amount, 500);
     const totalFees = protocolFee + developerFee;
 
-    // M1 + 6115: this test asserts the vault is debited by EXACTLY the fees, so
-    // the spend must move NO stablecoin out of the vault (inAmount = 0). It
-    // still satisfies the require-measurable-outcome gate (6115) via the M1
-    // branch: a vault-owned acquiring output that INCREASES (outAmount > 0).
-    // actual_spend == 0, so the only vault stablecoin debit is the upfront fee.
+    // C-1: fees are charged at FINALIZE on the MEASURED spend, so combined fees
+    // can only be exercised by a REAL spend (a zero-spend session collects NO
+    // fee). The acquiring swap spends the full `amount` (inAmount = amount) so
+    // actual_spend == amount; the protocol fee lands in the treasury and the
+    // developer fee in the fee destination, and the vault's stablecoin ATA is
+    // debited by net_value_out = amount + protocolFee + developerFee.
     const swap = await setupSwapOutput(
       connection,
       payer,
@@ -276,6 +280,14 @@ describe("devnet-fees", () => {
       agentA.publicKey,
     );
 
+    const treasuryBefore = await getTokenBalance(
+      connection,
+      vaultA.protocolTreasuryAta,
+    );
+    const feeDestBefore = await getTokenBalance(
+      connection,
+      vaultA.feeDestinationAta!,
+    );
     const vaultBefore = await getTokenBalance(connection, vaultA.vaultTokenAta);
 
     const sessionPda = deriveSessionPda(
@@ -306,19 +318,32 @@ describe("devnet-fees", () => {
         swap.agentReserve,
         swap.vaultOutputAta,
         agentA.publicKey,
-        new BN(0), // inAmount=0 → no stablecoin leaves the vault (fees-only debit)
+        new BN(amount), // C-1: real measured spend == amount
         new BN(1_000), // outAmount>0 → vault-owned output increases (6115 via M1)
       ),
     });
 
+    const treasuryAfter = await getTokenBalance(
+      connection,
+      vaultA.protocolTreasuryAta,
+    );
+    const feeDestAfter = await getTokenBalance(
+      connection,
+      vaultA.feeDestinationAta!,
+    );
     const vaultAfter = await getTokenBalance(connection, vaultA.vaultTokenAta);
-    expect(vaultBefore - vaultAfter).to.equal(totalFees);
-    console.log(`    Combined fees deducted: ${totalFees}`);
+    // Combined fees landed in their destinations…
+    expect(treasuryAfter - treasuryBefore).to.equal(protocolFee);
+    expect(feeDestAfter - feeDestBefore).to.equal(developerFee);
+    // …and the vault was debited by the spend + both fees (net_value_out).
+    expect(vaultBefore - vaultAfter).to.equal(amount + totalFees);
+    console.log(`    Combined fees collected: ${totalFees} (spend ${amount})`);
   });
 
-  it("4. fees collected upfront, stats always increment (success param removed)", async () => {
-    // Fees are collected during validate_and_authorize (upfront), not finalize.
-    // With success param removed (PR #143), every finalize increments stats.
+  it("4. fees collected at finalize on measured spend; stats always increment (success param removed)", async () => {
+    // C-1: fees are collected at finalize_session on the MEASURED spend (not
+    // upfront at validate). With the success param removed (PR #143), every
+    // finalize increments stats regardless.
     const amount = 50_000_000;
     const { protocolFee, developerFee } = calculateFees(amount, 500);
 
@@ -333,10 +358,9 @@ describe("devnet-fees", () => {
     const vaultBefore = await program.account.agentVault.fetch(vaultA.vaultPda);
     const txCountBefore = vaultBefore.totalTransactions.toNumber();
 
-    // M1 + 6115: acquiring swap satisfies the require-measurable-outcome gate
-    // via the M1 branch (inAmount=0 → no DeFi-leg stablecoin movement; the
-    // upfront fees are still collected and asserted below; totalTransactions
-    // still increments on finalize).
+    // M1 + 6115: acquiring swap spends the full `amount` (inAmount = amount) so
+    // actual_spend == amount; the fees are charged at finalize on that measured
+    // spend and asserted below, and totalTransactions increments on finalize.
     const swap = await setupSwapOutput(
       connection,
       payer,
@@ -372,12 +396,12 @@ describe("devnet-fees", () => {
         swap.agentReserve,
         swap.vaultOutputAta,
         agentA.publicKey,
-        new BN(0),
+        new BN(amount), // C-1: real measured spend == amount
         new BN(1_000),
       ),
     });
 
-    // Fees WERE collected (upfront in validate)
+    // Fees WERE collected at finalize on the measured spend
     const treasuryAfter = await getTokenBalance(
       connection,
       vaultA.protocolTreasuryAta,
@@ -397,44 +421,60 @@ describe("devnet-fees", () => {
     );
   });
 
-  it("5. dust amount (1 lamport) rejected: ceiling fees exceed amount", async () => {
-    // ceil(1*200/1M)=1 + ceil(1*500/1M)=1 = 2 total fees > amount of 1 → Overflow
-    const sessionPda = deriveSessionPda(
-      vaultA.vaultPda,
-      agentA.publicKey,
+  it("5. dust amount (1 lamport) via agent_transfer rejected: ceiling fees exceed amount", async () => {
+    // C-1 relocated the seal-path fee to finalize on the MEASURED spend, so the
+    // old dust-overflow-at-validate no longer exists on the seal sandwich (a
+    // 1-lamport declared amount with no measurable spend now reverts 6115). The
+    // ceiling-fees-exceed-amount Overflow still applies to agent_transfer, which
+    // collects fees UPFRONT on the declared amount: ceil(1*200/1M)=1 +
+    // ceil(1*500/1M)=1 = 2 > amount of 1 → Overflow on checked_sub. Mirrors the
+    // verified LiteSVM coverage in security-exploits.ts ("agent_transfer with
+    // amount = 1, devFeeRate=500 → Overflow").
+    const destAta = await getOrCreateAssociatedTokenAccount(
+      connection,
+      payer,
       mint,
-      program.programId,
+      transferDest.publicKey,
     );
+    const livePolicyA = await program.account.policyConfig.fetch(
+      vaultA.policyPda,
+    );
+    const dustTransferIx = await program.methods
+      .agentTransfer(new BN(1), (livePolicyA as any).policyVersion)
+      .accounts({
+        agent: agentA.publicKey,
+        vault: vaultA.vaultPda,
+        policy: vaultA.policyPda,
+        tracker: vaultA.trackerPda,
+        agentSpendOverlay: vaultA.overlayPda,
+        vaultTokenAccount: vaultA.vaultTokenAta,
+        tokenMintAccount: mint,
+        destinationTokenAccount: destAta.address,
+        feeDestinationTokenAccount: vaultA.feeDestinationAta,
+        protocolTreasuryTokenAccount: vaultA.protocolTreasuryAta,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      } as any)
+      .instruction();
 
     try {
-      await authorize({
-        connection,
-        program,
-        agent: agentA,
-        vaultPda: vaultA.vaultPda,
-        policyPda: vaultA.policyPda,
-        trackerPda: vaultA.trackerPda,
-        sessionPda,
-        vaultTokenAta: vaultA.vaultTokenAta,
-        mint,
-        amount: new BN(1),
-        protocol: MOCK_DEFI_PROGRAM_ID,
-        protocolTreasuryAta: vaultA.protocolTreasuryAta,
-        feeDestinationAta: vaultA.feeDestinationAta,
-      });
+      await sendVersionedTx(connection, [dustTransferIx], agentA);
       expect.fail("should have rejected dust amount");
     } catch (err) {
       expectSigilError(err, { name: "Overflow" });
     }
-    console.log("    Dust amount: ceiling fees exceed amount, rejected");
+    console.log(
+      "    Dust amount via agent_transfer: ceiling fees exceed amount, rejected",
+    );
   });
 
   it("6. vault.totalFeesCollected tracks developer fees cumulatively", async () => {
     const vault = await program.account.agentVault.fetch(vaultA.vaultPda);
-    // After tests 2, 3 (both with devFee=500):
-    // Test 2: 50M * 500 / 1M = 25,000
-    // Test 3: 100M * 500 / 1M = 50,000
-    // Total: 75,000
+    // C-1: developer fees are charged at finalize on the MEASURED spend. Tests
+    // 2, 3, 4 (vaultA, devFee=500) each spent their full declared amount, so
+    // total_fees_collected accumulated dev fees:
+    //   Test 2: ceil(50M * 500 / 1M)  = 25,000
+    //   Test 3: ceil(100M * 500 / 1M) = 50,000
+    //   Test 4: ceil(50M * 500 / 1M)  = 25,000  → cumulative ≥ 100,000
     expect(vault.totalFeesCollected.toNumber()).to.be.greaterThan(0);
     console.log(
       `    Cumulative developer fees: ${vault.totalFeesCollected.toNumber()}`,
@@ -506,11 +546,11 @@ describe("devnet-fees", () => {
   });
 
   it("8. finalize with devFeeRate=0 and null feeDestination succeeds", async () => {
-    // Keep this a SPENDING session (amount>0) so the devFeeRate=0 + null
-    // feeDestination fee path is actually exercised. M1 + 6115: an acquiring
-    // swap (inAmount=0 → no DeFi-leg stablecoin movement; outAmount>0 → the
-    // vault-owned output increases) satisfies the require-measurable-outcome
-    // gate via the M1 branch, so finalize closes the session cleanly.
+    // C-1: a REAL measured spend (inAmount = amount) exercises the devFeeRate=0
+    // path — the protocol fee is charged at finalize (to the treasury) while the
+    // developer fee is 0, so a null feeDestination is fine. M1 + 6115: outAmount>0
+    // acquires a vault-owned output so the require-measurable-outcome gate is
+    // satisfied and finalize closes the session cleanly.
     const swap = await setupSwapOutput(
       connection,
       payer,
@@ -547,7 +587,7 @@ describe("devnet-fees", () => {
         swap.agentReserve,
         swap.vaultOutputAta,
         agentB.publicKey,
-        new BN(0),
+        new BN(50_000_000), // C-1: real measured spend == amount (protocol fee only)
         new BN(1_000),
       ),
     });
