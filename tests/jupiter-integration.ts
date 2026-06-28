@@ -208,8 +208,6 @@ describe("jupiter-integration", () => {
         agentSpendOverlay: overlayForVault,
         vaultTokenAccount: effectiveVaultAta,
         tokenMintAccount: tokenMint,
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: program.programId,
         outputStablecoinAccount: program.programId,
         outputSwapAccount: null,
         tokenProgram: TOKEN_PROGRAM_ID,
@@ -233,6 +231,9 @@ describe("jupiter-integration", () => {
     const finalizeIx = await program.methods
       .finalizeSession()
       .accountsPartial({
+        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+        feeDestinationTokenAccount: null,
         payer: agentKp.publicKey,
         vault,
         session,

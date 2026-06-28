@@ -63,6 +63,10 @@ export type FinalizeSessionInstruction<
   TAccountVaultTokenAccount extends string | AccountMeta<string> = string,
   TAccountOutputStablecoinAccount extends string | AccountMeta<string> = string,
   TAccountOutputSwapAccount extends string | AccountMeta<string> = string,
+  TAccountProtocolTreasuryTokenAccount extends string | AccountMeta<string> =
+    string,
+  TAccountFeeDestinationTokenAccount extends string | AccountMeta<string> =
+    string,
   TAccountTokenProgram extends string | AccountMeta<string> =
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
   TAccountSystemProgram extends string | AccountMeta<string> =
@@ -109,6 +113,12 @@ export type FinalizeSessionInstruction<
       TAccountOutputSwapAccount extends string
         ? WritableAccount<TAccountOutputSwapAccount>
         : TAccountOutputSwapAccount,
+      TAccountProtocolTreasuryTokenAccount extends string
+        ? WritableAccount<TAccountProtocolTreasuryTokenAccount>
+        : TAccountProtocolTreasuryTokenAccount,
+      TAccountFeeDestinationTokenAccount extends string
+        ? WritableAccount<TAccountFeeDestinationTokenAccount>
+        : TAccountFeeDestinationTokenAccount,
       TAccountTokenProgram extends string
         ? ReadonlyAccount<TAccountTokenProgram>
         : TAccountTokenProgram,
@@ -171,6 +181,8 @@ export type FinalizeSessionAsyncInput<
   TAccountVaultTokenAccount extends string = string,
   TAccountOutputStablecoinAccount extends string = string,
   TAccountOutputSwapAccount extends string = string,
+  TAccountProtocolTreasuryTokenAccount extends string = string,
+  TAccountFeeDestinationTokenAccount extends string = string,
   TAccountTokenProgram extends string = string,
   TAccountSystemProgram extends string = string,
   TAccountInstructionsSysvar extends string = string,
@@ -179,10 +191,18 @@ export type FinalizeSessionAsyncInput<
   TAccountSlotHashesSysvar extends string = string,
 > = {
   payer: TransactionSigner<TAccountPayer>;
+  /**
+   * C-1 fix: Boxed to keep `FinalizeSession::try_accounts` under the 4096-byte
+   * BPF stack frame after the C-1 relocation added the protocol-treasury +
+   * fee-destination token accounts to this struct. Box moves the deserialized
+   * account to the heap; handler access is unchanged (transparent auto-deref).
+   */
   vault: Address<TAccountVault>;
   /**
    * Session rent is returned to the session's agent (who paid for it).
    * Seeds include token_mint for per-token concurrent sessions.
+   * C-1 fix: Boxed (see `vault`) to reclaim BPF stack-frame headroom for the
+   * relocated fee token accounts. `close` is unaffected by Box.
    */
   session: Address<TAccountSession>;
   sessionRentRecipient: Address<TAccountSessionRentRecipient>;
@@ -206,11 +226,13 @@ export type FinalizeSessionAsyncInput<
    * owner field and asserts owner==vault, so this is defense-in-depth — but
    * it rejects a substituted token account at account-resolution rather than
    * deep in the handler.
+   * C-1 fix: Boxed (see `vault`) to reclaim BPF stack-frame headroom.
    */
   vaultTokenAccount?: Address<TAccountVaultTokenAccount>;
   /**
    * Vault's stablecoin ATA for outcome-based spending verification.
    * Required when session.output_mint != Pubkey::default() (all spending).
+   * C-1 fix: Boxed (see `vault`) to reclaim BPF stack-frame headroom.
    */
   outputStablecoinAccount?: Address<TAccountOutputStablecoinAccount>;
   /**
@@ -222,6 +244,21 @@ export type FinalizeSessionAsyncInput<
    * stack limit. Required whenever a stablecoin-input spend moves value.
    */
   outputSwapAccount?: Address<TAccountOutputSwapAccount>;
+  /**
+   * C-1 fix: protocol treasury token account. RELOCATED here from
+   * validate_and_authorize — the protocol fee is now collected at finalize on
+   * the MEASURED spend (inside the caps), not upfront on the declared amount.
+   * Required (Some) only on a stablecoin-input spend with actual_spend > 0;
+   * None for non-spending / non-stablecoin-input / expired sessions. Boxed to
+   * keep `try_accounts` under the 4096-byte BPF stack frame.
+   */
+  protocolTreasuryTokenAccount?: Address<TAccountProtocolTreasuryTokenAccount>;
+  /**
+   * C-1 fix: developer fee destination token account (see above). Required
+   * only when the vault's developer_fee_rate > 0 on a stablecoin-input spend
+   * with actual_spend > 0. Boxed for the same stack-frame reason.
+   */
+  feeDestinationTokenAccount?: Address<TAccountFeeDestinationTokenAccount>;
   tokenProgram?: Address<TAccountTokenProgram>;
   systemProgram?: Address<TAccountSystemProgram>;
   /** Instructions sysvar for post-finalize instruction verification. */
@@ -252,6 +289,8 @@ export async function getFinalizeSessionInstructionAsync<
   TAccountVaultTokenAccount extends string,
   TAccountOutputStablecoinAccount extends string,
   TAccountOutputSwapAccount extends string,
+  TAccountProtocolTreasuryTokenAccount extends string,
+  TAccountFeeDestinationTokenAccount extends string,
   TAccountTokenProgram extends string,
   TAccountSystemProgram extends string,
   TAccountInstructionsSysvar extends string,
@@ -271,6 +310,8 @@ export async function getFinalizeSessionInstructionAsync<
     TAccountVaultTokenAccount,
     TAccountOutputStablecoinAccount,
     TAccountOutputSwapAccount,
+    TAccountProtocolTreasuryTokenAccount,
+    TAccountFeeDestinationTokenAccount,
     TAccountTokenProgram,
     TAccountSystemProgram,
     TAccountInstructionsSysvar,
@@ -292,6 +333,8 @@ export async function getFinalizeSessionInstructionAsync<
     TAccountVaultTokenAccount,
     TAccountOutputStablecoinAccount,
     TAccountOutputSwapAccount,
+    TAccountProtocolTreasuryTokenAccount,
+    TAccountFeeDestinationTokenAccount,
     TAccountTokenProgram,
     TAccountSystemProgram,
     TAccountInstructionsSysvar,
@@ -328,6 +371,14 @@ export async function getFinalizeSessionInstructionAsync<
     },
     outputSwapAccount: {
       value: input.outputSwapAccount ?? null,
+      isWritable: true,
+    },
+    protocolTreasuryTokenAccount: {
+      value: input.protocolTreasuryTokenAccount ?? null,
+      isWritable: true,
+    },
+    feeDestinationTokenAccount: {
+      value: input.feeDestinationTokenAccount ?? null,
       isWritable: true,
     },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
@@ -451,6 +502,14 @@ export async function getFinalizeSessionInstructionAsync<
         accounts.outputStablecoinAccount,
       ),
       getAccountMeta("outputSwapAccount", accounts.outputSwapAccount),
+      getAccountMeta(
+        "protocolTreasuryTokenAccount",
+        accounts.protocolTreasuryTokenAccount,
+      ),
+      getAccountMeta(
+        "feeDestinationTokenAccount",
+        accounts.feeDestinationTokenAccount,
+      ),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
       getAccountMeta("systemProgram", accounts.systemProgram),
       getAccountMeta("instructionsSysvar", accounts.instructionsSysvar),
@@ -472,6 +531,8 @@ export async function getFinalizeSessionInstructionAsync<
     TAccountVaultTokenAccount,
     TAccountOutputStablecoinAccount,
     TAccountOutputSwapAccount,
+    TAccountProtocolTreasuryTokenAccount,
+    TAccountFeeDestinationTokenAccount,
     TAccountTokenProgram,
     TAccountSystemProgram,
     TAccountInstructionsSysvar,
@@ -492,6 +553,8 @@ export type FinalizeSessionInput<
   TAccountVaultTokenAccount extends string = string,
   TAccountOutputStablecoinAccount extends string = string,
   TAccountOutputSwapAccount extends string = string,
+  TAccountProtocolTreasuryTokenAccount extends string = string,
+  TAccountFeeDestinationTokenAccount extends string = string,
   TAccountTokenProgram extends string = string,
   TAccountSystemProgram extends string = string,
   TAccountInstructionsSysvar extends string = string,
@@ -500,10 +563,18 @@ export type FinalizeSessionInput<
   TAccountSlotHashesSysvar extends string = string,
 > = {
   payer: TransactionSigner<TAccountPayer>;
+  /**
+   * C-1 fix: Boxed to keep `FinalizeSession::try_accounts` under the 4096-byte
+   * BPF stack frame after the C-1 relocation added the protocol-treasury +
+   * fee-destination token accounts to this struct. Box moves the deserialized
+   * account to the heap; handler access is unchanged (transparent auto-deref).
+   */
   vault: Address<TAccountVault>;
   /**
    * Session rent is returned to the session's agent (who paid for it).
    * Seeds include token_mint for per-token concurrent sessions.
+   * C-1 fix: Boxed (see `vault`) to reclaim BPF stack-frame headroom for the
+   * relocated fee token accounts. `close` is unaffected by Box.
    */
   session: Address<TAccountSession>;
   sessionRentRecipient: Address<TAccountSessionRentRecipient>;
@@ -527,11 +598,13 @@ export type FinalizeSessionInput<
    * owner field and asserts owner==vault, so this is defense-in-depth — but
    * it rejects a substituted token account at account-resolution rather than
    * deep in the handler.
+   * C-1 fix: Boxed (see `vault`) to reclaim BPF stack-frame headroom.
    */
   vaultTokenAccount?: Address<TAccountVaultTokenAccount>;
   /**
    * Vault's stablecoin ATA for outcome-based spending verification.
    * Required when session.output_mint != Pubkey::default() (all spending).
+   * C-1 fix: Boxed (see `vault`) to reclaim BPF stack-frame headroom.
    */
   outputStablecoinAccount?: Address<TAccountOutputStablecoinAccount>;
   /**
@@ -543,6 +616,21 @@ export type FinalizeSessionInput<
    * stack limit. Required whenever a stablecoin-input spend moves value.
    */
   outputSwapAccount?: Address<TAccountOutputSwapAccount>;
+  /**
+   * C-1 fix: protocol treasury token account. RELOCATED here from
+   * validate_and_authorize — the protocol fee is now collected at finalize on
+   * the MEASURED spend (inside the caps), not upfront on the declared amount.
+   * Required (Some) only on a stablecoin-input spend with actual_spend > 0;
+   * None for non-spending / non-stablecoin-input / expired sessions. Boxed to
+   * keep `try_accounts` under the 4096-byte BPF stack frame.
+   */
+  protocolTreasuryTokenAccount?: Address<TAccountProtocolTreasuryTokenAccount>;
+  /**
+   * C-1 fix: developer fee destination token account (see above). Required
+   * only when the vault's developer_fee_rate > 0 on a stablecoin-input spend
+   * with actual_spend > 0. Boxed for the same stack-frame reason.
+   */
+  feeDestinationTokenAccount?: Address<TAccountFeeDestinationTokenAccount>;
   tokenProgram?: Address<TAccountTokenProgram>;
   systemProgram?: Address<TAccountSystemProgram>;
   /** Instructions sysvar for post-finalize instruction verification. */
@@ -573,6 +661,8 @@ export function getFinalizeSessionInstruction<
   TAccountVaultTokenAccount extends string,
   TAccountOutputStablecoinAccount extends string,
   TAccountOutputSwapAccount extends string,
+  TAccountProtocolTreasuryTokenAccount extends string,
+  TAccountFeeDestinationTokenAccount extends string,
   TAccountTokenProgram extends string,
   TAccountSystemProgram extends string,
   TAccountInstructionsSysvar extends string,
@@ -592,6 +682,8 @@ export function getFinalizeSessionInstruction<
     TAccountVaultTokenAccount,
     TAccountOutputStablecoinAccount,
     TAccountOutputSwapAccount,
+    TAccountProtocolTreasuryTokenAccount,
+    TAccountFeeDestinationTokenAccount,
     TAccountTokenProgram,
     TAccountSystemProgram,
     TAccountInstructionsSysvar,
@@ -612,6 +704,8 @@ export function getFinalizeSessionInstruction<
   TAccountVaultTokenAccount,
   TAccountOutputStablecoinAccount,
   TAccountOutputSwapAccount,
+  TAccountProtocolTreasuryTokenAccount,
+  TAccountFeeDestinationTokenAccount,
   TAccountTokenProgram,
   TAccountSystemProgram,
   TAccountInstructionsSysvar,
@@ -647,6 +741,14 @@ export function getFinalizeSessionInstruction<
     },
     outputSwapAccount: {
       value: input.outputSwapAccount ?? null,
+      isWritable: true,
+    },
+    protocolTreasuryTokenAccount: {
+      value: input.protocolTreasuryTokenAccount ?? null,
+      isWritable: true,
+    },
+    feeDestinationTokenAccount: {
+      value: input.feeDestinationTokenAccount ?? null,
       isWritable: true,
     },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
@@ -704,6 +806,14 @@ export function getFinalizeSessionInstruction<
         accounts.outputStablecoinAccount,
       ),
       getAccountMeta("outputSwapAccount", accounts.outputSwapAccount),
+      getAccountMeta(
+        "protocolTreasuryTokenAccount",
+        accounts.protocolTreasuryTokenAccount,
+      ),
+      getAccountMeta(
+        "feeDestinationTokenAccount",
+        accounts.feeDestinationTokenAccount,
+      ),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
       getAccountMeta("systemProgram", accounts.systemProgram),
       getAccountMeta("instructionsSysvar", accounts.instructionsSysvar),
@@ -725,6 +835,8 @@ export function getFinalizeSessionInstruction<
     TAccountVaultTokenAccount,
     TAccountOutputStablecoinAccount,
     TAccountOutputSwapAccount,
+    TAccountProtocolTreasuryTokenAccount,
+    TAccountFeeDestinationTokenAccount,
     TAccountTokenProgram,
     TAccountSystemProgram,
     TAccountInstructionsSysvar,
@@ -741,10 +853,18 @@ export type ParsedFinalizeSessionInstruction<
   programAddress: Address<TProgram>;
   accounts: {
     payer: TAccountMetas[0];
+    /**
+     * C-1 fix: Boxed to keep `FinalizeSession::try_accounts` under the 4096-byte
+     * BPF stack frame after the C-1 relocation added the protocol-treasury +
+     * fee-destination token accounts to this struct. Box moves the deserialized
+     * account to the heap; handler access is unchanged (transparent auto-deref).
+     */
     vault: TAccountMetas[1];
     /**
      * Session rent is returned to the session's agent (who paid for it).
      * Seeds include token_mint for per-token concurrent sessions.
+     * C-1 fix: Boxed (see `vault`) to reclaim BPF stack-frame headroom for the
+     * relocated fee token accounts. `close` is unaffected by Box.
      */
     session: TAccountMetas[2];
     sessionRentRecipient: TAccountMetas[3];
@@ -768,11 +888,13 @@ export type ParsedFinalizeSessionInstruction<
      * owner field and asserts owner==vault, so this is defense-in-depth — but
      * it rejects a substituted token account at account-resolution rather than
      * deep in the handler.
+     * C-1 fix: Boxed (see `vault`) to reclaim BPF stack-frame headroom.
      */
     vaultTokenAccount?: TAccountMetas[7] | undefined;
     /**
      * Vault's stablecoin ATA for outcome-based spending verification.
      * Required when session.output_mint != Pubkey::default() (all spending).
+     * C-1 fix: Boxed (see `vault`) to reclaim BPF stack-frame headroom.
      */
     outputStablecoinAccount?: TAccountMetas[8] | undefined;
     /**
@@ -784,23 +906,38 @@ export type ParsedFinalizeSessionInstruction<
      * stack limit. Required whenever a stablecoin-input spend moves value.
      */
     outputSwapAccount?: TAccountMetas[9] | undefined;
-    tokenProgram: TAccountMetas[10];
-    systemProgram: TAccountMetas[11];
+    /**
+     * C-1 fix: protocol treasury token account. RELOCATED here from
+     * validate_and_authorize — the protocol fee is now collected at finalize on
+     * the MEASURED spend (inside the caps), not upfront on the declared amount.
+     * Required (Some) only on a stablecoin-input spend with actual_spend > 0;
+     * None for non-spending / non-stablecoin-input / expired sessions. Boxed to
+     * keep `try_accounts` under the 4096-byte BPF stack frame.
+     */
+    protocolTreasuryTokenAccount?: TAccountMetas[10] | undefined;
+    /**
+     * C-1 fix: developer fee destination token account (see above). Required
+     * only when the vault's developer_fee_rate > 0 on a stablecoin-input spend
+     * with actual_spend > 0. Boxed for the same stack-frame reason.
+     */
+    feeDestinationTokenAccount?: TAccountMetas[11] | undefined;
+    tokenProgram: TAccountMetas[12];
+    systemProgram: TAccountMetas[13];
     /** Instructions sysvar for post-finalize instruction verification. */
-    instructionsSysvar: TAccountMetas[12];
+    instructionsSysvar: TAccountMetas[14];
     /**
      * Phase 7 — SUCCESS-path audit log. Written when the finalize completes
      * the non-expired branch.
      */
-    auditLogSuccess: TAccountMetas[13];
+    auditLogSuccess: TAccountMetas[15];
     /**
      * Phase 7 — REJECTED-path audit log. Written when the finalize takes
      * the expired branch (permissionless-crank cleanup). Audit #2 F-19
      * keeps this separate from the success buffer so a crank-attacker
      * cannot displace legitimate success history.
      */
-    auditLogRejected: TAccountMetas[14];
-    slotHashesSysvar: TAccountMetas[15];
+    auditLogRejected: TAccountMetas[16];
+    slotHashesSysvar: TAccountMetas[17];
   };
   data: FinalizeSessionInstructionData;
 };
@@ -813,12 +950,12 @@ export function parseFinalizeSessionInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedFinalizeSessionInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 16) {
+  if (instruction.accounts.length < 18) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 16,
+        expectedAccountMetas: 18,
       },
     );
   }
@@ -847,6 +984,8 @@ export function parseFinalizeSessionInstruction<
       vaultTokenAccount: getNextOptionalAccount(),
       outputStablecoinAccount: getNextOptionalAccount(),
       outputSwapAccount: getNextOptionalAccount(),
+      protocolTreasuryTokenAccount: getNextOptionalAccount(),
+      feeDestinationTokenAccount: getNextOptionalAccount(),
       tokenProgram: getNextAccount(),
       systemProgram: getNextAccount(),
       instructionsSysvar: getNextAccount(),

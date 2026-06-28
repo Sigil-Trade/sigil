@@ -249,8 +249,6 @@ describe("flash-trade-integration", () => {
         agentSpendOverlay: overlayForVault,
         vaultTokenAccount: effectiveVaultAta,
         tokenMintAccount: tokenMint,
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: null,
         outputStablecoinAccount: null,
         outputSwapAccount: swap ? swap.vaultOutputAta : null,
         tokenProgram: TOKEN_PROGRAM_ID,
@@ -308,6 +306,9 @@ describe("flash-trade-integration", () => {
     const finalizeIx = await program.methods
       .finalizeSession()
       .accountsPartial({
+        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+        feeDestinationTokenAccount: null,
         payer: agentKp.publicKey,
         vault,
         session,

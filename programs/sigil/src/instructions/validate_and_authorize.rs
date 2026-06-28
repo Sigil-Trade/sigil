@@ -3,10 +3,12 @@ use anchor_lang::solana_program::instruction::{get_stack_height, Instruction};
 use anchor_lang::solana_program::sysvar::instructions::{
     load_current_index_checked, load_instruction_at_checked,
 };
-use anchor_spl::token::{self, Approve, Mint, Token, TokenAccount, Transfer};
+use anchor_spl::token::{self, Approve, Mint, Token, TokenAccount};
 
 use crate::errors::SigilError;
-use crate::events::{ActionAuthorized, FeesCollected};
+// C-1 fix: FeesCollected moved to finalize_session (fees are now collected there
+// on the MEASURED spend, inside the caps); no longer emitted here.
+use crate::events::ActionAuthorized;
 use crate::state::*;
 use crate::utils::destination_check::enforce_destination_allowlist;
 
@@ -103,14 +105,10 @@ pub struct ValidateAndAuthorize<'info> {
     )]
     pub token_mint_account: Account<'info, Mint>,
 
-    /// Protocol treasury token account (needed when protocol_fee > 0)
-    #[account(mut)]
-    pub protocol_treasury_token_account: Option<Account<'info, TokenAccount>>,
-
-    /// Developer fee destination token account (needed when developer_fee > 0)
-    #[account(mut)]
-    pub fee_destination_token_account: Option<Account<'info, TokenAccount>>,
-
+    // C-1 fix: protocol_treasury_token_account + fee_destination_token_account
+    // RELOCATED to FinalizeSession. Fees are no longer collected upfront at
+    // validate (on the unbounded declared `amount`); they are collected at
+    // finalize on the MEASURED spend, inside the spend caps. See finalize_session.
     /// Vault's stablecoin ATA to snapshot (for non-stablecoin input spending).
     /// Required when input token is NOT a stablecoin (output verification in finalize).
     #[account(mut)]
@@ -357,9 +355,31 @@ pub fn handler(
     let mut output_swap_account_key = Pubkey::default();
     let mut output_swap_mint = Pubkey::default();
     let mut output_swap_balance_before: u64 = 0;
-    let (protocol_fee, developer_fee) = if is_spending {
+    // C-1 fix: fees are no longer computed/charged at validate. They are
+    // collected at finalize on the MEASURED spend, INSIDE the spend caps (the
+    // upfront fee on the UNBOUNDED declared `amount` was the fee-cap-bypass drain
+    // vector). The SPL `Approve` below now delegates the full `amount` (no fee
+    // subtraction).
+    if is_spending {
         if is_stablecoin_input {
-            // Snapshot stablecoin balance BEFORE fees or spending.
+            // C-1 fix: bound the declared (USD-denominated) `amount` by the per-tx
+            // cap. Without this the agent could declare an arbitrarily large amount;
+            // pre-fix that inflated the upfront fee to ≈ the whole vault balance
+            // (drained to the treasury) while finalize's caps saw only the dust
+            // spend. With fees now charged on measured spend inside the caps, the
+            // declared amount is also bound here so the delegation it authorizes
+            // cannot exceed the per-tx cap. `amount` is USD on the stablecoin-input
+            // path (stablecoin base units == USD 6dp), so this comparison is
+            // unit-correct; the non-stablecoin path keeps native-unit `amount`
+            // uncapped (by design — finalize measures the stablecoin inflow).
+            if policy.max_transaction_size_usd > 0 {
+                require!(
+                    amount <= policy.max_transaction_size_usd,
+                    SigilError::TransactionTooLarge
+                );
+            }
+
+            // Snapshot stablecoin balance BEFORE spending.
             // Finalize uses this to compute actual spending delta.
             stablecoin_balance_before = ctx.accounts.vault_token_account.amount;
             output_mint = token_mint;
@@ -386,15 +406,9 @@ pub fn handler(
                 output_swap_balance_before = swap_acct.amount;
             }
 
-            // Cap checks and spend recording deferred to finalize_session
-            // where actual stablecoin balance delta is measured (outcome-based).
-
-            // Calculate fees (ceiling division — guarantees non-zero fee on any non-zero spending)
-            let dev_fee_rate = policy.developer_fee_rate;
-            let p_fee = ceil_fee(amount, PROTOCOL_FEE_RATE as u64)?;
-            let d_fee = ceil_fee(amount, dev_fee_rate as u64)?;
-
-            (p_fee, d_fee)
+            // Cap checks, fee collection, and spend recording all deferred to
+            // finalize_session where the actual stablecoin balance delta is
+            // measured (outcome-based).
         } else {
             // Non-stablecoin input: snapshot stablecoin balance, verify at finalize.
             // No cap check or fees here — USD tracked when stablecoin flows in finalize.
@@ -419,14 +433,8 @@ pub fn handler(
             stablecoin_balance_before = stablecoin_acct.amount;
             // F-Q8: pin this exact ATA's pubkey; finalize asserts it matches.
             output_stablecoin_account_key = stablecoin_acct.key();
-
-            // No fees here — cap check deferred to finalize_session when stablecoin delta is known
-            (0u64, 0u64)
         }
-    } else {
-        // Non-spending: no fees, no spend tracking
-        (0u64, 0u64)
-    };
+    }
 
     // Shared across spending and non-spending scan paths
     let ix_sysvar = ctx.accounts.instructions_sysvar.to_account_info();
@@ -1054,8 +1062,6 @@ pub fn handler(
     let vault_authority = vault.vault_authority;
     let vault_id_bytes = vault.vault_id.to_le_bytes();
     let vault_bump = vault.bump;
-    let vault_fee_destination = vault.fee_destination;
-    let dev_fee_rate = policy.developer_fee_rate;
 
     let bump_slice = [vault_bump];
     let signer_seeds = [
@@ -1066,93 +1072,19 @@ pub fn handler(
     ];
     let binding = [signer_seeds.as_slice()];
 
-    // 10. Collect fees and delegate. Armed for ALL spending sessions — both
-    //     stablecoin AND volatile input. The SPL `Approve` is over the INPUT
-    //     token's ATA (`vault_token_account`, constrained mint == token_mint)
-    //     whenever `is_spending`; it is NOT stablecoin-input-only. (Magnitude of
-    //     a volatile input is bounded by the agent-declared `amount` + the
-    //     program allowlist + DEX liquidity — value-blind by design; see
-    //     finalize_session for the outcome/cap checks.)
+    // 10. Delegate. Armed for ALL spending sessions — both stablecoin AND
+    //     volatile input. The SPL `Approve` is over the INPUT token's ATA
+    //     (`vault_token_account`, constrained mint == token_mint) whenever
+    //     `is_spending`.
+    //
+    //     C-1 fix: the delegation is now the FULL `amount` (no upfront fee
+    //     subtraction). Fees are collected at finalize on the MEASURED spend,
+    //     via a vault-PDA-signed transfer (NOT via this delegation), and counted
+    //     inside the spend caps. On the stablecoin-input path `amount` is bounded
+    //     above by `max_transaction_size_usd` (checked earlier), so this
+    //     delegation can never exceed the per-tx cap.
     if is_spending {
-        let delegation_amount = amount
-            .checked_sub(protocol_fee)
-            .ok_or(SigilError::Overflow)?
-            .checked_sub(developer_fee)
-            .ok_or(SigilError::Overflow)?;
-
-        // Transfer protocol fee
-        if protocol_fee > 0 {
-            let treasury_token = ctx
-                .accounts
-                .protocol_treasury_token_account
-                .as_ref()
-                .ok_or(error!(SigilError::InvalidProtocolTreasury))?;
-            require!(
-                treasury_token.owner == PROTOCOL_TREASURY,
-                SigilError::InvalidProtocolTreasury
-            );
-            require!(
-                treasury_token.mint == token_mint,
-                SigilError::InvalidProtocolTreasury
-            );
-
-            let cpi_accounts = Transfer {
-                from: ctx.accounts.vault_token_account.to_account_info(),
-                to: treasury_token.to_account_info(),
-                authority: ctx.accounts.vault.to_account_info(),
-            };
-            let cpi_ctx = CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
-                cpi_accounts,
-                &binding,
-            );
-            token::transfer(cpi_ctx, protocol_fee)?;
-        }
-
-        // Transfer developer fee
-        if developer_fee > 0 {
-            let fee_dest = ctx
-                .accounts
-                .fee_destination_token_account
-                .as_ref()
-                .ok_or(error!(SigilError::InvalidFeeDestination))?;
-            require!(
-                fee_dest.owner == vault_fee_destination,
-                SigilError::InvalidFeeDestination
-            );
-            require!(
-                fee_dest.mint == token_mint,
-                SigilError::InvalidFeeDestination
-            );
-
-            let cpi_accounts = Transfer {
-                from: ctx.accounts.vault_token_account.to_account_info(),
-                to: fee_dest.to_account_info(),
-                authority: ctx.accounts.vault.to_account_info(),
-            };
-            let cpi_ctx = CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
-                cpi_accounts,
-                &binding,
-            );
-            token::transfer(cpi_ctx, developer_fee)?;
-        }
-
-        if protocol_fee > 0 || developer_fee > 0 {
-            emit!(FeesCollected {
-                vault: vault_key,
-                token_mint,
-                protocol_fee_amount: protocol_fee,
-                developer_fee_amount: developer_fee,
-                protocol_fee_rate: PROTOCOL_FEE_RATE,
-                developer_fee_rate: dev_fee_rate,
-                transaction_amount: amount,
-                protocol_treasury: PROTOCOL_TREASURY,
-                developer_fee_destination: vault_fee_destination,
-                cumulative_developer_fees: vault.total_fees_collected.saturating_add(developer_fee),
-                timestamp: clock.unix_timestamp,
-            });
-        }
+        let delegation_amount = amount;
 
         // CPI: approve agent as delegate on vault's token account
         let cpi_accounts = Approve {
@@ -1189,8 +1121,11 @@ pub fn handler(
         policy.effective_session_expiry_seconds(),
     );
     session.delegation_token_account = ctx.accounts.vault_token_account.key();
-    session.protocol_fee = protocol_fee;
-    session.developer_fee = developer_fee;
+    // C-1 fix: no fees are collected at validate. Fees are computed + collected at
+    // finalize on the MEASURED spend (inside the caps), so the session no longer
+    // carries pre-charged fee amounts. Stored as 0 explicitly.
+    session.protocol_fee = 0;
+    session.developer_fee = 0;
     session.delegated = is_spending;
     session.output_mint = output_mint;
     session.stablecoin_balance_before = stablecoin_balance_before;

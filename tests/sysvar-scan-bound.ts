@@ -283,8 +283,6 @@ describe("sysvar-scan-bound (M11 / SIMD-0296 pad-attack guard)", () => {
         session: sessionPda,
         vaultTokenAccount: vaultUsdcAta,
         tokenMintAccount: usdcMint,
-        protocolTreasuryTokenAccount: null,
-        feeDestinationTokenAccount: null,
         outputStablecoinAccount: null,
         outputSwapAccount: null,
         agentSpendOverlay: overlayPda,
@@ -297,6 +295,9 @@ describe("sysvar-scan-bound (M11 / SIMD-0296 pad-attack guard)", () => {
     const finalizeIx = await program.methods
       .finalizeSession()
       .accountsPartial({
+        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+        protocolTreasuryTokenAccount: null,
+        feeDestinationTokenAccount: null,
         payer: agent.publicKey,
         vault: vaultPda,
         session: sessionPda,

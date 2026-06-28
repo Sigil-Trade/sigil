@@ -285,8 +285,6 @@ describe("m1-output-redirection", () => {
         agentSpendOverlay: overlayPda,
         vaultTokenAccount: vaultUsdcAta,
         tokenMintAccount: usdcMint,
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: program.programId,
         outputStablecoinAccount: program.programId,
         // M1: the agent declares NO acquired-output account (program.programId =
         // the None sentinel). On a stablecoin-input spend with actual_spend > 0,
@@ -332,6 +330,9 @@ describe("m1-output-redirection", () => {
     const finalizeIx = await program.methods
       .finalizeSession()
       .accountsPartial({
+        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+        feeDestinationTokenAccount: null,
         payer: agent.publicKey,
         vault: vaultPda,
         session,

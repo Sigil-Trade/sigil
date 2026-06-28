@@ -913,8 +913,8 @@ impl FuzzTest {
             session: session_pda,
             vault_token_account: vault_ata,
             token_mint_account: mint,
-            protocol_treasury_token_account: None,
-            fee_destination_token_account: None,
+            // C-1 fix: fee accounts relocated to finalize_session (validate's
+            // Accounts struct no longer has them).
             output_stablecoin_account: None,
             output_swap_account: None,
             token_program: spl_token::ID,
@@ -1003,6 +1003,13 @@ impl FuzzTest {
             vault_token_account: Some(vault_ata),
             output_stablecoin_account: None,
             output_swap_account: None,
+            // C-1 fix: fees are collected at finalize on the MEASURED spend. These
+            // standalone fuzz finalize calls measure no in-tx DeFi spend, so no fee
+            // transfer occurs and None is correct; a composed spend with None here
+            // reverts InvalidProtocolTreasury (an expected revert, not an invariant
+            // break — the fuzz only checks invariants on successful settlement).
+            protocol_treasury_token_account: None,
+            fee_destination_token_account: None,
             token_program: spl_token::ID,
             system_program: solana_sdk::system_program::ID,
             instructions_sysvar: solana_sdk::sysvar::instructions::ID,
@@ -1497,6 +1504,13 @@ impl FuzzTest {
             vault_token_account: Some(vault_ata),
             output_stablecoin_account: None,
             output_swap_account: None,
+            // C-1 fix: fees are collected at finalize on the MEASURED spend. These
+            // standalone fuzz finalize calls measure no in-tx DeFi spend, so no fee
+            // transfer occurs and None is correct; a composed spend with None here
+            // reverts InvalidProtocolTreasury (an expected revert, not an invariant
+            // break — the fuzz only checks invariants on successful settlement).
+            protocol_treasury_token_account: None,
+            fee_destination_token_account: None,
             token_program: spl_token::ID,
             system_program: solana_sdk::system_program::ID,
             instructions_sysvar: solana_sdk::sysvar::instructions::ID,
@@ -1564,6 +1578,13 @@ impl FuzzTest {
             vault_token_account: Some(vault_ata),
             output_stablecoin_account: None,
             output_swap_account: None,
+            // C-1 fix: fees are collected at finalize on the MEASURED spend. These
+            // standalone fuzz finalize calls measure no in-tx DeFi spend, so no fee
+            // transfer occurs and None is correct; a composed spend with None here
+            // reverts InvalidProtocolTreasury (an expected revert, not an invariant
+            // break — the fuzz only checks invariants on successful settlement).
+            protocol_treasury_token_account: None,
+            fee_destination_token_account: None,
             token_program: spl_token::ID,
             system_program: solana_sdk::system_program::ID,
             instructions_sysvar: solana_sdk::sysvar::instructions::ID,

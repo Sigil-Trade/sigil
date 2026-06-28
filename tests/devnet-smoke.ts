@@ -341,8 +341,6 @@ describe("devnet-smoke-test", () => {
         agentSpendOverlay: overlayPda,
         vaultTokenAccount: vaultUsdcAta,
         tokenMintAccount: usdcMint,
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: null,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,

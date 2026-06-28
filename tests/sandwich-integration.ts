@@ -553,8 +553,6 @@ describe("sandwich-integration (Phase 6.1)", () => {
         session: sessionPda,
         vaultTokenAccount: ctx.vaultUsdcAta,
         tokenMintAccount: DEVNET_USDC_MINT,
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: null,
         outputStablecoinAccount: null,
         outputSwapAccount: opts.outputSwapAccount ?? null,
         agentSpendOverlay: ctx.overlay,
@@ -594,6 +592,9 @@ describe("sandwich-integration (Phase 6.1)", () => {
       program.programId,
     );
     let builder = program.methods.finalizeSession().accountsPartial({
+      // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+      protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+      feeDestinationTokenAccount: null,
       payer: ctx.agent.publicKey,
       vault: ctx.vault,
       session: sessionPda,

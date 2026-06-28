@@ -1147,8 +1147,8 @@ export async function seal(params: SealParams): Promise<SealResult> {
     agentSpendOverlay: agentOverlayPda,
     vaultTokenAccount,
     tokenMintAccount: params.tokenMint,
-    protocolTreasuryTokenAccount,
-    feeDestinationTokenAccount,
+    // C-1 fix: fee accounts relocated to finalize_session (fees are collected on
+    // the MEASURED spend, inside the caps — not upfront on the declared amount).
     outputStablecoinAccount,
     outputSwapAccount,
     tokenMint: params.tokenMint,
@@ -1225,6 +1225,12 @@ export async function seal(params: SealParams): Promise<SealResult> {
     vaultTokenAccount,
     outputStablecoinAccount,
     outputSwapAccount,
+    // C-1 fix: fee collection relocated here. The protocol treasury + developer
+    // fee-destination ATAs (derived above when spending) are attached to finalize,
+    // where fees are charged on the MEASURED spend inside the caps. Undefined for
+    // non-spending / non-stablecoin-input sessions (codama encodes as None).
+    protocolTreasuryTokenAccount,
+    feeDestinationTokenAccount,
   });
 
   // M3-01: feed the vault's other canonical stablecoin ATA(s) into finalize so

@@ -514,8 +514,6 @@ describe("cu-budget", () => {
         agentSpendOverlay: ctx.overlay,
         vaultTokenAccount: ctx.vaultAta,
         tokenMintAccount: usdcMint,
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: null,
         outputStablecoinAccount: null,
         outputSwapAccount: null,
         tokenProgram: TOKEN_PROGRAM_ID,
@@ -542,6 +540,9 @@ describe("cu-budget", () => {
     return program.methods
       .finalizeSession()
       .accountsPartial({
+        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+        feeDestinationTokenAccount: null,
         payer: agent.publicKey,
         vault: ctx.vault,
         session,

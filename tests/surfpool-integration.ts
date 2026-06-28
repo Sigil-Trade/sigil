@@ -250,8 +250,6 @@ describe("surfpool-integration", function () {
           session: sessionPda,
           vaultTokenAccount: vaultUsdcAta,
           tokenMintAccount: DEVNET_USDC_MINT,
-          protocolTreasuryTokenAccount: protocolTreasuryAta,
-          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -267,6 +265,8 @@ describe("surfpool-integration", function () {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+          protocolTreasuryTokenAccount: protocolTreasuryAta,
+          feeDestinationTokenAccount: null,
           payer: agent.publicKey,
           vault: vaultPda,
           session: sessionPda,
@@ -422,8 +422,6 @@ describe("surfpool-integration", function () {
           session: sessionPda,
           vaultTokenAccount: vaultUsdcAta,
           tokenMintAccount: DEVNET_USDC_MINT,
-          protocolTreasuryTokenAccount: protocolTreasuryAta,
-          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -439,6 +437,8 @@ describe("surfpool-integration", function () {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+          protocolTreasuryTokenAccount: protocolTreasuryAta,
+          feeDestinationTokenAccount: null,
           payer: agent.publicKey,
           vault: vaultPda,
           session: sessionPda,
@@ -499,8 +499,6 @@ describe("surfpool-integration", function () {
           session: sessionPda,
           vaultTokenAccount: vaultUsdcAta,
           tokenMintAccount: DEVNET_USDC_MINT,
-          protocolTreasuryTokenAccount: protocolTreasuryAta,
-          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -571,8 +569,6 @@ describe("surfpool-integration", function () {
           session: sessionPda,
           vaultTokenAccount: vaultUsdcAta,
           tokenMintAccount: DEVNET_USDC_MINT,
-          protocolTreasuryTokenAccount: protocolTreasuryAta,
-          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -588,6 +584,8 @@ describe("surfpool-integration", function () {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+          protocolTreasuryTokenAccount: protocolTreasuryAta,
+          feeDestinationTokenAccount: null,
           payer: agent.publicKey,
           vault: vaultPda,
           session: sessionPda,
@@ -733,8 +731,6 @@ describe("surfpool-integration", function () {
           session: sessionPda,
           vaultTokenAccount: vaultUsdcAta,
           tokenMintAccount: DEVNET_USDC_MINT,
-          protocolTreasuryTokenAccount: protocolTreasuryAta,
-          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -750,6 +746,8 @@ describe("surfpool-integration", function () {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+          protocolTreasuryTokenAccount: protocolTreasuryAta,
+          feeDestinationTokenAccount: null,
           payer: agent.publicKey,
           vault: vaultPda,
           session: sessionPda,
@@ -817,8 +815,6 @@ describe("surfpool-integration", function () {
           session: sessionPda,
           vaultTokenAccount: vaultUsdcAta,
           tokenMintAccount: DEVNET_USDC_MINT,
-          protocolTreasuryTokenAccount: protocolTreasuryAta,
-          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -831,6 +827,8 @@ describe("surfpool-integration", function () {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+          protocolTreasuryTokenAccount: protocolTreasuryAta,
+          feeDestinationTokenAccount: null,
           payer: rogueAgent.publicKey,
           vault: vaultPda,
           session: sessionPda,
@@ -909,8 +907,6 @@ describe("surfpool-integration", function () {
           session: sessionPda,
           vaultTokenAccount: vaultUsdcAta,
           tokenMintAccount: DEVNET_USDC_MINT,
-          protocolTreasuryTokenAccount: protocolTreasuryAta,
-          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -926,6 +922,8 @@ describe("surfpool-integration", function () {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+          protocolTreasuryTokenAccount: protocolTreasuryAta,
+          feeDestinationTokenAccount: null,
           payer: agent.publicKey,
           vault: vaultPda,
           session: sessionPda,
@@ -1043,7 +1041,7 @@ describe("surfpool-integration", function () {
       expect(Number(accountInfo.value.amount)).to.equal(300_000_000);
     });
 
-    it("protocol treasury receives fees on validate", async () => {
+    it("protocol treasury receives fees on finalize", async () => {
       const protocolTreasuryAta = getAssociatedTokenAddressSync(
         DEVNET_USDC_MINT,
         PROTOCOL_TREASURY,
@@ -1063,20 +1061,20 @@ describe("surfpool-integration", function () {
         program.programId,
       );
 
-      const amount = 100_000_000; // 100 USDC
+      const amount = 50_000_000; // 50 USDC declared + measured spend
       const expectedProtocolFee = Math.ceil(
         (amount * PROTOCOL_FEE_RATE) / FEE_RATE_DENOMINATOR,
       );
 
-      // require-measurable-outcome (err 6115): the fee is collected at validate on
-      // the AUTHORIZED amount (upfront, spend-independent), so this test must keep
-      // a SPENDING session (amount > 0) to prove the fee lands. To satisfy the
-      // invariant at finalize without inflating spend, the middle ix is an
-      // ACQUIRING swap with inAmount = 0 (no stablecoin leaves the vault →
-      // actual_spend == 0) and outAmount > 0 (a non-USDC, vault-owned output
-      // INCREASES → M1 satisfied). USDT (≠ USDC) is the acquired mint; the
-      // vault-owned USDT ATA (funded earlier in this suite) is the pinned output.
-      // Mirrors sandwich-integration.ts / flash-trade-integration.ts.
+      // C-1 fix: fees are now collected at FINALIZE on the MEASURED spend (not
+      // upfront at validate on the declared amount). To prove the fee lands, the
+      // middle ix is an ACQUIRING swap that REALLY spends `amount` USDC
+      // (inAmount = 50 USDC) and delivers a non-USDC, vault-owned output that
+      // INCREASES (outAmount > 0 → M1 + measurable-outcome satisfied). USDT (≠ USDC)
+      // is the acquired mint; the vault-owned USDT ATA (funded earlier in this
+      // suite) is the pinned output. net_value_out = 50_000_000 + fee is well under
+      // the vault's per-tx cap and its 500 USDC balance. Mirrors the verified
+      // LiteSVM acquiring-swap tests (sigil.ts / security-exploits.ts).
       await ensureMintExists(env.connection, DEVNET_USDT_MINT, 6);
       const agentUsdtReserve = await fundWithTokens(
         env.connection,
@@ -1084,9 +1082,9 @@ describe("surfpool-integration", function () {
         DEVNET_USDT_MINT,
         100_000_000, // agent-owned reserve funds the swap's output leg
       );
-      // Off-vault USDC recipient for the swap's input leg. With inAmount = 0 it
-      // receives nothing, but the ix lists it as a writable meta so it must be a
-      // resolvable token account in the completeness checks.
+      // Off-vault USDC recipient for the swap's input leg (the swap counterparty);
+      // receives the spent USDC and is a writable meta resolved in the completeness
+      // checks.
       const drainRecipient = Keypair.generate();
       const drainRecipientUsdcAta = await fundWithTokens(
         env.connection,
@@ -1121,8 +1119,6 @@ describe("surfpool-integration", function () {
           session: sessionPda,
           vaultTokenAccount: vaultUsdcAta,
           tokenMintAccount: DEVNET_USDC_MINT,
-          protocolTreasuryTokenAccount: protocolTreasuryAta,
-          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           // M1: pin the vault-owned USDT ATA finalize requires to have increased.
           outputSwapAccount: vaultUsdtAta,
@@ -1146,6 +1142,8 @@ describe("surfpool-integration", function () {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+          protocolTreasuryTokenAccount: protocolTreasuryAta,
+          feeDestinationTokenAccount: null,
           payer: agent.publicKey,
           vault: vaultPda,
           session: sessionPda,
@@ -1174,11 +1172,11 @@ describe("surfpool-integration", function () {
 
       const swapIx = buildMockSwapToVaultIx(
         vaultUsdcAta, // input source (vault USDC) — agent's validate delegation
-        drainRecipientUsdcAta, // input sink (receives 0; inAmount = 0)
+        drainRecipientUsdcAta, // input sink (receives the spent USDC)
         agentUsdtReserve, // output source (agent-owned USDT reserve)
         vaultUsdtAta, // vault-owned acquired output — must INCREASE (M1)
         agent.publicKey,
-        new BN(0), // inAmount = 0 → no stablecoin leaves vault (actual_spend == 0)
+        new BN(amount), // inAmount = 50 USDC → real measured spend (actual_spend > 0)
         swapOutAmount, // outAmount > 0 → vault USDT increases (satisfies 6115)
       );
 
@@ -1188,7 +1186,8 @@ describe("surfpool-integration", function () {
         agent,
       );
 
-      // Check protocol treasury balance increased (fee collected on amount > 0).
+      // C-1 fix: check the protocol treasury received the fee AFTER finalize
+      // (fees are collected at finalize on the measured spend, not at validate).
       const treasuryBalance =
         await env.connection.getTokenAccountBalance(protocolTreasuryAta);
       expect(Number(treasuryBalance.value.amount)).to.be.greaterThanOrEqual(
@@ -1316,8 +1315,6 @@ describe("surfpool-integration", function () {
           session: sessionPda,
           vaultTokenAccount: vaultUsdcAta,
           tokenMintAccount: DEVNET_USDC_MINT,
-          protocolTreasuryTokenAccount: protocolTreasuryAta,
-          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -1333,6 +1330,8 @@ describe("surfpool-integration", function () {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+          protocolTreasuryTokenAccount: protocolTreasuryAta,
+          feeDestinationTokenAccount: null,
           payer: agent.publicKey,
           vault: vaultPda,
           session: sessionPda,
@@ -1963,8 +1962,6 @@ describe("surfpool-integration", function () {
           session: sessionPda,
           vaultTokenAccount: setup.vaultUsdcAta,
           tokenMintAccount: DEVNET_USDC_MINT,
-          protocolTreasuryTokenAccount: setup.protocolTreasuryAta,
-          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -1977,6 +1974,8 @@ describe("surfpool-integration", function () {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+          protocolTreasuryTokenAccount: setup.protocolTreasuryAta,
+          feeDestinationTokenAccount: null,
           payer: setup.agent.publicKey,
           vault: setup.vaultPda,
           session: sessionPda,
@@ -2059,8 +2058,6 @@ describe("surfpool-integration", function () {
           session: sessionPda,
           vaultTokenAccount: setup.vaultUsdcAta,
           tokenMintAccount: DEVNET_USDC_MINT,
-          protocolTreasuryTokenAccount: setup.protocolTreasuryAta,
-          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -2076,6 +2073,8 @@ describe("surfpool-integration", function () {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+          protocolTreasuryTokenAccount: setup.protocolTreasuryAta,
+          feeDestinationTokenAccount: null,
           payer: setup.agent.publicKey,
           vault: setup.vaultPda,
           session: sessionPda,
@@ -2182,8 +2181,6 @@ describe("surfpool-integration", function () {
           session: sessionPda,
           vaultTokenAccount: setup.vaultUsdcAta,
           tokenMintAccount: DEVNET_USDC_MINT,
-          protocolTreasuryTokenAccount: setup.protocolTreasuryAta,
-          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -2196,6 +2193,8 @@ describe("surfpool-integration", function () {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+          protocolTreasuryTokenAccount: setup.protocolTreasuryAta,
+          feeDestinationTokenAccount: null,
           payer: setup.agent.publicKey,
           vault: setup.vaultPda,
           session: sessionPda,
@@ -2259,8 +2258,6 @@ describe("surfpool-integration", function () {
           session: sessionPda,
           vaultTokenAccount: setup.vaultUsdcAta,
           tokenMintAccount: DEVNET_USDC_MINT,
-          protocolTreasuryTokenAccount: setup.protocolTreasuryAta,
-          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -2276,6 +2273,8 @@ describe("surfpool-integration", function () {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+          protocolTreasuryTokenAccount: setup.protocolTreasuryAta,
+          feeDestinationTokenAccount: null,
           payer: agent2.publicKey,
           vault: setup.vaultPda,
           session: sessionPda,
@@ -2352,8 +2351,6 @@ describe("surfpool-integration", function () {
           session: sessionPda,
           vaultTokenAccount: setup.vaultUsdcAta,
           tokenMintAccount: DEVNET_USDC_MINT,
-          protocolTreasuryTokenAccount: setup.protocolTreasuryAta,
-          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -2369,6 +2366,8 @@ describe("surfpool-integration", function () {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+          protocolTreasuryTokenAccount: setup.protocolTreasuryAta,
+          feeDestinationTokenAccount: null,
           payer: setup.agent.publicKey,
           vault: setup.vaultPda,
           session: sessionPda,
@@ -2516,8 +2515,6 @@ describe("surfpool-integration", function () {
           session: sessionPda,
           vaultTokenAccount: swapSetup.vaultUsdcAta,
           tokenMintAccount: DEVNET_USDC_MINT,
-          protocolTreasuryTokenAccount: swapSetup.protocolTreasuryAta,
-          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -2537,6 +2534,8 @@ describe("surfpool-integration", function () {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+          protocolTreasuryTokenAccount: swapSetup.protocolTreasuryAta,
+          feeDestinationTokenAccount: null,
           payer: swapSetup.agent.publicKey,
           vault: swapSetup.vaultPda,
           session: sessionPda,
@@ -2604,8 +2603,6 @@ describe("surfpool-integration", function () {
           session: sessionPda,
           vaultTokenAccount: noSwapSetup.vaultUsdcAta,
           tokenMintAccount: DEVNET_USDC_MINT,
-          protocolTreasuryTokenAccount: noSwapSetup.protocolTreasuryAta,
-          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -2618,6 +2615,8 @@ describe("surfpool-integration", function () {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+          protocolTreasuryTokenAccount: noSwapSetup.protocolTreasuryAta,
+          feeDestinationTokenAccount: null,
           payer: noSwapSetup.agent.publicKey,
           vault: noSwapSetup.vaultPda,
           session: sessionPda,
@@ -2752,8 +2751,6 @@ describe("surfpool-integration", function () {
           session: sessionPda,
           vaultTokenAccount: swapSetup.vaultUsdcAta,
           tokenMintAccount: DEVNET_USDC_MINT,
-          protocolTreasuryTokenAccount: swapSetup.protocolTreasuryAta,
-          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -2766,6 +2763,8 @@ describe("surfpool-integration", function () {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+          protocolTreasuryTokenAccount: swapSetup.protocolTreasuryAta,
+          feeDestinationTokenAccount: null,
           payer: agent2.publicKey,
           vault: swapSetup.vaultPda,
           session: sessionPda,
@@ -2871,8 +2870,6 @@ describe("surfpool-integration", function () {
           session: sessionPda,
           vaultTokenAccount: zeroSetup.vaultUsdcAta,
           tokenMintAccount: DEVNET_USDC_MINT,
-          protocolTreasuryTokenAccount: zeroSetup.protocolTreasuryAta,
-          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -2885,6 +2882,8 @@ describe("surfpool-integration", function () {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+          protocolTreasuryTokenAccount: zeroSetup.protocolTreasuryAta,
+          feeDestinationTokenAccount: null,
           payer: zeroSetup.agent.publicKey,
           vault: zeroSetup.vaultPda,
           session: sessionPda,
@@ -3245,8 +3244,6 @@ describe("surfpool-integration", function () {
           session: sessionPda,
           vaultTokenAccount: setup.vaultUsdcAta,
           tokenMintAccount: DEVNET_USDC_MINT,
-          protocolTreasuryTokenAccount: setup.protocolTreasuryAta,
-          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -3262,6 +3259,8 @@ describe("surfpool-integration", function () {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+          protocolTreasuryTokenAccount: setup.protocolTreasuryAta,
+          feeDestinationTokenAccount: null,
           payer: setup.agent.publicKey,
           vault: setup.vaultPda,
           session: sessionPda,
@@ -3331,8 +3330,6 @@ describe("surfpool-integration", function () {
           session: sessionPda,
           vaultTokenAccount: setup.vaultUsdcAta,
           tokenMintAccount: DEVNET_USDC_MINT,
-          protocolTreasuryTokenAccount: setup.protocolTreasuryAta,
-          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -3348,6 +3345,8 @@ describe("surfpool-integration", function () {
       const finalizeIx = await program.methods
         .finalizeSession()
         .accountsPartial({
+          protocolTreasuryTokenAccount: setup.protocolTreasuryAta,
+          feeDestinationTokenAccount: null,
           payer: setup.agent.publicKey,
           vault: setup.vaultPda,
           session: sessionPda,

@@ -380,8 +380,6 @@ describe("verified-build-gate (Item 3)", () => {
         session: getSessionPda(),
         vaultTokenAccount: vaultUsdcAta,
         tokenMintAccount: usdcMint,
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: null,
         outputStablecoinAccount: null,
         outputSwapAccount: null,
         agentSpendOverlay: overlayPda,
@@ -397,6 +395,9 @@ describe("verified-build-gate (Item 3)", () => {
     return program.methods
       .finalizeSession()
       .accountsPartial({
+        // C-1 fix: relocated fee accounts (protocol treasury + dev fee dest).
+        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
+        feeDestinationTokenAccount: null,
         payer: agent.publicKey,
         vault: vaultPda,
         session: getSessionPda(),

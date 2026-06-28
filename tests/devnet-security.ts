@@ -349,8 +349,6 @@ describe("devnet-security", () => {
           agentSpendOverlay: vault.overlayPda,
           vaultTokenAccount: vault.vaultTokenAta,
           tokenMintAccount: mint,
-          protocolTreasuryTokenAccount: null,
-          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           tokenProgram: TOKEN_PROGRAM_ID,

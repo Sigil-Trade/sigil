@@ -65,10 +65,6 @@ export type ValidateAndAuthorizeInstruction<
   TAccountSession extends string | AccountMeta<string> = string,
   TAccountVaultTokenAccount extends string | AccountMeta<string> = string,
   TAccountTokenMintAccount extends string | AccountMeta<string> = string,
-  TAccountProtocolTreasuryTokenAccount extends string | AccountMeta<string> =
-    string,
-  TAccountFeeDestinationTokenAccount extends string | AccountMeta<string> =
-    string,
   TAccountOutputStablecoinAccount extends string | AccountMeta<string> = string,
   TAccountOutputSwapAccount extends string | AccountMeta<string> = string,
   TAccountTokenProgram extends string | AccountMeta<string> =
@@ -107,12 +103,6 @@ export type ValidateAndAuthorizeInstruction<
       TAccountTokenMintAccount extends string
         ? ReadonlyAccount<TAccountTokenMintAccount>
         : TAccountTokenMintAccount,
-      TAccountProtocolTreasuryTokenAccount extends string
-        ? WritableAccount<TAccountProtocolTreasuryTokenAccount>
-        : TAccountProtocolTreasuryTokenAccount,
-      TAccountFeeDestinationTokenAccount extends string
-        ? WritableAccount<TAccountFeeDestinationTokenAccount>
-        : TAccountFeeDestinationTokenAccount,
       TAccountOutputStablecoinAccount extends string
         ? WritableAccount<TAccountOutputStablecoinAccount>
         : TAccountOutputStablecoinAccount,
@@ -200,8 +190,6 @@ export type ValidateAndAuthorizeAsyncInput<
   TAccountSession extends string = string,
   TAccountVaultTokenAccount extends string = string,
   TAccountTokenMintAccount extends string = string,
-  TAccountProtocolTreasuryTokenAccount extends string = string,
-  TAccountFeeDestinationTokenAccount extends string = string,
   TAccountOutputStablecoinAccount extends string = string,
   TAccountOutputSwapAccount extends string = string,
   TAccountTokenProgram extends string = string,
@@ -231,10 +219,6 @@ export type ValidateAndAuthorizeAsyncInput<
   vaultTokenAccount: Address<TAccountVaultTokenAccount>;
   /** The token mint being spent — constrained to match token_mint arg */
   tokenMintAccount: Address<TAccountTokenMintAccount>;
-  /** Protocol treasury token account (needed when protocol_fee > 0) */
-  protocolTreasuryTokenAccount?: Address<TAccountProtocolTreasuryTokenAccount>;
-  /** Developer fee destination token account (needed when developer_fee > 0) */
-  feeDestinationTokenAccount?: Address<TAccountFeeDestinationTokenAccount>;
   /**
    * Vault's stablecoin ATA to snapshot (for non-stablecoin input spending).
    * Required when input token is NOT a stablecoin (output verification in finalize).
@@ -280,8 +264,6 @@ export async function getValidateAndAuthorizeInstructionAsync<
   TAccountSession extends string,
   TAccountVaultTokenAccount extends string,
   TAccountTokenMintAccount extends string,
-  TAccountProtocolTreasuryTokenAccount extends string,
-  TAccountFeeDestinationTokenAccount extends string,
   TAccountOutputStablecoinAccount extends string,
   TAccountOutputSwapAccount extends string,
   TAccountTokenProgram extends string,
@@ -298,8 +280,6 @@ export async function getValidateAndAuthorizeInstructionAsync<
     TAccountSession,
     TAccountVaultTokenAccount,
     TAccountTokenMintAccount,
-    TAccountProtocolTreasuryTokenAccount,
-    TAccountFeeDestinationTokenAccount,
     TAccountOutputStablecoinAccount,
     TAccountOutputSwapAccount,
     TAccountTokenProgram,
@@ -318,8 +298,6 @@ export async function getValidateAndAuthorizeInstructionAsync<
     TAccountSession,
     TAccountVaultTokenAccount,
     TAccountTokenMintAccount,
-    TAccountProtocolTreasuryTokenAccount,
-    TAccountFeeDestinationTokenAccount,
     TAccountOutputStablecoinAccount,
     TAccountOutputSwapAccount,
     TAccountTokenProgram,
@@ -348,14 +326,6 @@ export async function getValidateAndAuthorizeInstructionAsync<
     tokenMintAccount: {
       value: input.tokenMintAccount ?? null,
       isWritable: false,
-    },
-    protocolTreasuryTokenAccount: {
-      value: input.protocolTreasuryTokenAccount ?? null,
-      isWritable: true,
-    },
-    feeDestinationTokenAccount: {
-      value: input.feeDestinationTokenAccount ?? null,
-      isWritable: true,
     },
     outputStablecoinAccount: {
       value: input.outputStablecoinAccount ?? null,
@@ -461,14 +431,6 @@ export async function getValidateAndAuthorizeInstructionAsync<
       getAccountMeta("vaultTokenAccount", accounts.vaultTokenAccount),
       getAccountMeta("tokenMintAccount", accounts.tokenMintAccount),
       getAccountMeta(
-        "protocolTreasuryTokenAccount",
-        accounts.protocolTreasuryTokenAccount,
-      ),
-      getAccountMeta(
-        "feeDestinationTokenAccount",
-        accounts.feeDestinationTokenAccount,
-      ),
-      getAccountMeta(
         "outputStablecoinAccount",
         accounts.outputStablecoinAccount,
       ),
@@ -491,8 +453,6 @@ export async function getValidateAndAuthorizeInstructionAsync<
     TAccountSession,
     TAccountVaultTokenAccount,
     TAccountTokenMintAccount,
-    TAccountProtocolTreasuryTokenAccount,
-    TAccountFeeDestinationTokenAccount,
     TAccountOutputStablecoinAccount,
     TAccountOutputSwapAccount,
     TAccountTokenProgram,
@@ -510,8 +470,6 @@ export type ValidateAndAuthorizeInput<
   TAccountSession extends string = string,
   TAccountVaultTokenAccount extends string = string,
   TAccountTokenMintAccount extends string = string,
-  TAccountProtocolTreasuryTokenAccount extends string = string,
-  TAccountFeeDestinationTokenAccount extends string = string,
   TAccountOutputStablecoinAccount extends string = string,
   TAccountOutputSwapAccount extends string = string,
   TAccountTokenProgram extends string = string,
@@ -541,10 +499,6 @@ export type ValidateAndAuthorizeInput<
   vaultTokenAccount: Address<TAccountVaultTokenAccount>;
   /** The token mint being spent — constrained to match token_mint arg */
   tokenMintAccount: Address<TAccountTokenMintAccount>;
-  /** Protocol treasury token account (needed when protocol_fee > 0) */
-  protocolTreasuryTokenAccount?: Address<TAccountProtocolTreasuryTokenAccount>;
-  /** Developer fee destination token account (needed when developer_fee > 0) */
-  feeDestinationTokenAccount?: Address<TAccountFeeDestinationTokenAccount>;
   /**
    * Vault's stablecoin ATA to snapshot (for non-stablecoin input spending).
    * Required when input token is NOT a stablecoin (output verification in finalize).
@@ -590,8 +544,6 @@ export function getValidateAndAuthorizeInstruction<
   TAccountSession extends string,
   TAccountVaultTokenAccount extends string,
   TAccountTokenMintAccount extends string,
-  TAccountProtocolTreasuryTokenAccount extends string,
-  TAccountFeeDestinationTokenAccount extends string,
   TAccountOutputStablecoinAccount extends string,
   TAccountOutputSwapAccount extends string,
   TAccountTokenProgram extends string,
@@ -608,8 +560,6 @@ export function getValidateAndAuthorizeInstruction<
     TAccountSession,
     TAccountVaultTokenAccount,
     TAccountTokenMintAccount,
-    TAccountProtocolTreasuryTokenAccount,
-    TAccountFeeDestinationTokenAccount,
     TAccountOutputStablecoinAccount,
     TAccountOutputSwapAccount,
     TAccountTokenProgram,
@@ -627,8 +577,6 @@ export function getValidateAndAuthorizeInstruction<
   TAccountSession,
   TAccountVaultTokenAccount,
   TAccountTokenMintAccount,
-  TAccountProtocolTreasuryTokenAccount,
-  TAccountFeeDestinationTokenAccount,
   TAccountOutputStablecoinAccount,
   TAccountOutputSwapAccount,
   TAccountTokenProgram,
@@ -656,14 +604,6 @@ export function getValidateAndAuthorizeInstruction<
     tokenMintAccount: {
       value: input.tokenMintAccount ?? null,
       isWritable: false,
-    },
-    protocolTreasuryTokenAccount: {
-      value: input.protocolTreasuryTokenAccount ?? null,
-      isWritable: true,
-    },
-    feeDestinationTokenAccount: {
-      value: input.feeDestinationTokenAccount ?? null,
-      isWritable: true,
     },
     outputStablecoinAccount: {
       value: input.outputStablecoinAccount ?? null,
@@ -714,14 +654,6 @@ export function getValidateAndAuthorizeInstruction<
       getAccountMeta("vaultTokenAccount", accounts.vaultTokenAccount),
       getAccountMeta("tokenMintAccount", accounts.tokenMintAccount),
       getAccountMeta(
-        "protocolTreasuryTokenAccount",
-        accounts.protocolTreasuryTokenAccount,
-      ),
-      getAccountMeta(
-        "feeDestinationTokenAccount",
-        accounts.feeDestinationTokenAccount,
-      ),
-      getAccountMeta(
         "outputStablecoinAccount",
         accounts.outputStablecoinAccount,
       ),
@@ -744,8 +676,6 @@ export function getValidateAndAuthorizeInstruction<
     TAccountSession,
     TAccountVaultTokenAccount,
     TAccountTokenMintAccount,
-    TAccountProtocolTreasuryTokenAccount,
-    TAccountFeeDestinationTokenAccount,
     TAccountOutputStablecoinAccount,
     TAccountOutputSwapAccount,
     TAccountTokenProgram,
@@ -783,15 +713,11 @@ export type ParsedValidateAndAuthorizeInstruction<
     vaultTokenAccount: TAccountMetas[6];
     /** The token mint being spent — constrained to match token_mint arg */
     tokenMintAccount: TAccountMetas[7];
-    /** Protocol treasury token account (needed when protocol_fee > 0) */
-    protocolTreasuryTokenAccount?: TAccountMetas[8] | undefined;
-    /** Developer fee destination token account (needed when developer_fee > 0) */
-    feeDestinationTokenAccount?: TAccountMetas[9] | undefined;
     /**
      * Vault's stablecoin ATA to snapshot (for non-stablecoin input spending).
      * Required when input token is NOT a stablecoin (output verification in finalize).
      */
-    outputStablecoinAccount?: TAccountMetas[10] | undefined;
+    outputStablecoinAccount?: TAccountMetas[8] | undefined;
     /**
      * M1 output-ownership pin — the VAULT-OWNED token account an acquiring swap
      * on the STABLECOIN-INPUT path must credit. Pinned + snapshotted here;
@@ -807,14 +733,14 @@ export type ParsedValidateAndAuthorizeInstruction<
      * over the 4096 BPF stack limit; boxing moves the deserialized account to
      * the heap (handler access is unchanged via deref).
      */
-    outputSwapAccount?: TAccountMetas[11] | undefined;
-    tokenProgram: TAccountMetas[12];
-    systemProgram: TAccountMetas[13];
+    outputSwapAccount?: TAccountMetas[9] | undefined;
+    tokenProgram: TAccountMetas[10];
+    systemProgram: TAccountMetas[11];
     /**
      * Instructions sysvar for verifying DeFi instruction program_id
      * and protocol slippage enforcement.
      */
-    instructionsSysvar: TAccountMetas[14];
+    instructionsSysvar: TAccountMetas[12];
   };
   data: ValidateAndAuthorizeInstructionData;
 };
@@ -827,12 +753,12 @@ export function parseValidateAndAuthorizeInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedValidateAndAuthorizeInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 15) {
+  if (instruction.accounts.length < 13) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 15,
+        expectedAccountMetas: 13,
       },
     );
   }
@@ -859,8 +785,6 @@ export function parseValidateAndAuthorizeInstruction<
       session: getNextAccount(),
       vaultTokenAccount: getNextAccount(),
       tokenMintAccount: getNextAccount(),
-      protocolTreasuryTokenAccount: getNextOptionalAccount(),
-      feeDestinationTokenAccount: getNextOptionalAccount(),
       outputStablecoinAccount: getNextOptionalAccount(),
       outputSwapAccount: getNextOptionalAccount(),
       tokenProgram: getNextAccount(),
