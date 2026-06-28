@@ -2514,6 +2514,12 @@ export type Sigil = {
         },
         {
           "name": "vault",
+          "docs": [
+            "C-1 fix: Boxed to keep `FinalizeSession::try_accounts` under the 4096-byte",
+            "BPF stack frame after the C-1 relocation added the protocol-treasury +",
+            "fee-destination token accounts to this struct. Box moves the deserialized",
+            "account to the heap; handler access is unchanged (transparent auto-deref)."
+          ],
           "writable": true,
           "pda": {
             "seeds": [
@@ -2547,7 +2553,9 @@ export type Sigil = {
           "name": "session",
           "docs": [
             "Session rent is returned to the session's agent (who paid for it).",
-            "Seeds include token_mint for per-token concurrent sessions."
+            "Seeds include token_mint for per-token concurrent sessions.",
+            "C-1 fix: Boxed (see `vault`) to reclaim BPF stack-frame headroom for the",
+            "relocated fee token accounts. `close` is unaffected by Box."
           ],
           "writable": true,
           "pda": {
@@ -2657,7 +2665,8 @@ export type Sigil = {
             "by the vault PDA. The outcome path already re-reads the raw post-CPI",
             "owner field and asserts owner==vault, so this is defense-in-depth — but",
             "it rejects a substituted token account at account-resolution rather than",
-            "deep in the handler."
+            "deep in the handler.",
+            "C-1 fix: Boxed (see `vault`) to reclaim BPF stack-frame headroom."
           ],
           "writable": true,
           "optional": true
@@ -2666,7 +2675,8 @@ export type Sigil = {
           "name": "outputStablecoinAccount",
           "docs": [
             "Vault's stablecoin ATA for outcome-based spending verification.",
-            "Required when session.output_mint != Pubkey::default() (all spending)."
+            "Required when session.output_mint != Pubkey::default() (all spending).",
+            "C-1 fix: Boxed (see `vault`) to reclaim BPF stack-frame headroom."
           ],
           "writable": true,
           "optional": true
@@ -2680,6 +2690,29 @@ export type Sigil = {
             "strictly INCREASED. Owner is checked in the handler (like F-Q8 above), not",
             "as a struct constraint. Boxed to keep try_accounts under the 4096 BPF",
             "stack limit. Required whenever a stablecoin-input spend moves value."
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "protocolTreasuryTokenAccount",
+          "docs": [
+            "C-1 fix: protocol treasury token account. RELOCATED here from",
+            "validate_and_authorize — the protocol fee is now collected at finalize on",
+            "the MEASURED spend (inside the caps), not upfront on the declared amount.",
+            "Required (Some) only on a stablecoin-input spend with actual_spend > 0;",
+            "None for non-spending / non-stablecoin-input / expired sessions. Boxed to",
+            "keep `try_accounts` under the 4096-byte BPF stack frame."
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "feeDestinationTokenAccount",
+          "docs": [
+            "C-1 fix: developer fee destination token account (see above). Required",
+            "only when the vault's developer_fee_rate > 0 on a stablecoin-input spend",
+            "with actual_spend > 0. Boxed for the same stack-frame reason."
           ],
           "writable": true,
           "optional": true
@@ -5090,22 +5123,6 @@ export type Sigil = {
           "docs": [
             "The token mint being spent — constrained to match token_mint arg"
           ]
-        },
-        {
-          "name": "protocolTreasuryTokenAccount",
-          "docs": [
-            "Protocol treasury token account (needed when protocol_fee > 0)"
-          ],
-          "writable": true,
-          "optional": true
-        },
-        {
-          "name": "feeDestinationTokenAccount",
-          "docs": [
-            "Developer fee destination token account (needed when developer_fee > 0)"
-          ],
-          "writable": true,
-          "optional": true
         },
         {
           "name": "outputStablecoinAccount",

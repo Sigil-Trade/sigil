@@ -4,12 +4,14 @@ use anchor_lang::solana_program::sysvar::instructions::{
     load_current_index_checked, load_instruction_at_checked,
 };
 use anchor_spl::associated_token::get_associated_token_address_with_program_id;
-use anchor_spl::token::{self, Revoke, Token, TokenAccount};
+use anchor_spl::token::{self, Revoke, Token, TokenAccount, Transfer};
 
 use anchor_lang::accounts::account_loader::AccountLoader;
 
 use crate::errors::SigilError;
-use crate::events::{AgentSpendLimitChecked, DelegationRevoked, SessionFinalized};
+// C-1 fix: FeesCollected is now emitted here (fees collected on the measured
+// spend), relocated from validate_and_authorize.
+use crate::events::{AgentSpendLimitChecked, DelegationRevoked, FeesCollected, SessionFinalized};
 use crate::state::*;
 use crate::utils::audit_log::build_audit_entry;
 use crate::utils::destination_check::enforce_finalize_completeness_from_sysvar;
@@ -24,7 +26,11 @@ pub struct FinalizeSession<'info> {
         seeds = [b"vault", vault.vault_authority.as_ref(), vault.vault_id.to_le_bytes().as_ref()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, AgentVault>,
+    /// C-1 fix: Boxed to keep `FinalizeSession::try_accounts` under the 4096-byte
+    /// BPF stack frame after the C-1 relocation added the protocol-treasury +
+    /// fee-destination token accounts to this struct. Box moves the deserialized
+    /// account to the heap; handler access is unchanged (transparent auto-deref).
+    pub vault: Box<Account<'info, AgentVault>>,
 
     /// Session rent is returned to the session's agent (who paid for it).
     /// Seeds include token_mint for per-token concurrent sessions.
@@ -40,7 +46,9 @@ pub struct FinalizeSession<'info> {
         bump = session.bump,
         close = session_rent_recipient,
     )]
-    pub session: Account<'info, SessionAuthority>,
+    /// C-1 fix: Boxed (see `vault`) to reclaim BPF stack-frame headroom for the
+    /// relocated fee token accounts. `close` is unaffected by Box.
+    pub session: Box<Account<'info, SessionAuthority>>,
 
     /// CHECK: Set to session.agent at runtime; receives rent from closed session.
     #[account(mut)]
@@ -84,12 +92,14 @@ pub struct FinalizeSession<'info> {
         mut,
         constraint = vault_token_account.owner == vault.key() @ SigilError::InvalidTokenAccount,
     )]
-    pub vault_token_account: Option<Account<'info, TokenAccount>>,
+    /// C-1 fix: Boxed (see `vault`) to reclaim BPF stack-frame headroom.
+    pub vault_token_account: Option<Box<Account<'info, TokenAccount>>>,
 
     /// Vault's stablecoin ATA for outcome-based spending verification.
     /// Required when session.output_mint != Pubkey::default() (all spending).
+    /// C-1 fix: Boxed (see `vault`) to reclaim BPF stack-frame headroom.
     #[account(mut)]
-    pub output_stablecoin_account: Option<Account<'info, TokenAccount>>,
+    pub output_stablecoin_account: Option<Box<Account<'info, TokenAccount>>>,
 
     /// M1 output-ownership closure — the validate-pinned VAULT-OWNED account an
     /// acquiring (stablecoin-input) swap must have credited. finalize re-reads its
@@ -99,6 +109,21 @@ pub struct FinalizeSession<'info> {
     /// stack limit. Required whenever a stablecoin-input spend moves value.
     #[account(mut)]
     pub output_swap_account: Option<Box<Account<'info, TokenAccount>>>,
+
+    /// C-1 fix: protocol treasury token account. RELOCATED here from
+    /// validate_and_authorize — the protocol fee is now collected at finalize on
+    /// the MEASURED spend (inside the caps), not upfront on the declared amount.
+    /// Required (Some) only on a stablecoin-input spend with actual_spend > 0;
+    /// None for non-spending / non-stablecoin-input / expired sessions. Boxed to
+    /// keep `try_accounts` under the 4096-byte BPF stack frame.
+    #[account(mut)]
+    pub protocol_treasury_token_account: Option<Box<Account<'info, TokenAccount>>>,
+
+    /// C-1 fix: developer fee destination token account (see above). Required
+    /// only when the vault's developer_fee_rate > 0 on a stablecoin-input spend
+    /// with actual_spend > 0. Boxed for the same stack-frame reason.
+    #[account(mut)]
+    pub fee_destination_token_account: Option<Box<Account<'info, TokenAccount>>>,
 
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
@@ -482,6 +507,81 @@ fn enforce_post_execution_assertions(
     Ok(())
 }
 
+/// C-1 fix: collect the protocol + developer fee on the MEASURED spend.
+///
+/// Extracted to its OWN frame (`#[inline(never)]`) so the two `CpiContext` /
+/// `Transfer` locals and the per-fee account resolution do not inflate
+/// `finalize_session::handler`'s stack frame, which is at the 4096-byte BPF
+/// limit on the post-assertion path (same pattern as `enforce_output_ownership`).
+///
+/// Both transfers are VAULT-PDA-SIGNED (authority = vault PDA via `signer_seeds`),
+/// NOT routed through the agent's SPL delegation — so the fee is independent of
+/// the delegation amount and is bounded only by the cap accounting the caller
+/// already performed on `net_value_out`. The fee source is the vault's stablecoin
+/// ATA (`vault_token_ai`, the session token). Treasury + fee-destination accounts
+/// are owner/mint-validated exactly as the previous validate-side collection did.
+#[inline(never)]
+fn transfer_measured_fees<'info>(
+    protocol_fee: u64,
+    developer_fee: u64,
+    token_program_ai: &AccountInfo<'info>,
+    vault_token_ai: &AccountInfo<'info>,
+    vault_authority_ai: &AccountInfo<'info>,
+    protocol_treasury: &Option<Box<Account<'info, TokenAccount>>>,
+    fee_destination: &Option<Box<Account<'info, TokenAccount>>>,
+    token_mint: &Pubkey,
+    expected_fee_destination_owner: &Pubkey,
+    signer_seeds: &[&[&[u8]]],
+) -> Result<()> {
+    if protocol_fee > 0 {
+        let treasury = protocol_treasury
+            .as_ref()
+            .ok_or(error!(SigilError::InvalidProtocolTreasury))?;
+        require!(
+            treasury.owner == PROTOCOL_TREASURY,
+            SigilError::InvalidProtocolTreasury
+        );
+        require!(
+            treasury.mint == *token_mint,
+            SigilError::InvalidProtocolTreasury
+        );
+        let cpi_accounts = Transfer {
+            from: vault_token_ai.clone(),
+            to: treasury.to_account_info(),
+            authority: vault_authority_ai.clone(),
+        };
+        token::transfer(
+            CpiContext::new_with_signer(token_program_ai.clone(), cpi_accounts, signer_seeds),
+            protocol_fee,
+        )?;
+    }
+
+    if developer_fee > 0 {
+        let fee_dest = fee_destination
+            .as_ref()
+            .ok_or(error!(SigilError::InvalidFeeDestination))?;
+        require!(
+            fee_dest.owner == *expected_fee_destination_owner,
+            SigilError::InvalidFeeDestination
+        );
+        require!(
+            fee_dest.mint == *token_mint,
+            SigilError::InvalidFeeDestination
+        );
+        let cpi_accounts = Transfer {
+            from: vault_token_ai.clone(),
+            to: fee_dest.to_account_info(),
+            authority: vault_authority_ai.clone(),
+        };
+        token::transfer(
+            CpiContext::new_with_signer(token_program_ai.clone(), cpi_accounts, signer_seeds),
+            developer_fee,
+        )?;
+    }
+
+    Ok(())
+}
+
 pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
     // 0. Reject CPI calls — only top-level transaction instructions allowed.
     require!(
@@ -518,7 +618,9 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
     // from SessionAuthority; canonical source is now amount).
     let session_is_spending = session.authorized_amount > 0;
     let session_delegated = session.delegated;
-    let session_developer_fee = session.developer_fee;
+    // C-1 fix: session.protocol_fee / session.developer_fee are no longer read —
+    // fees are computed + collected at finalize on the measured spend, not
+    // pre-charged at validate (both fields are now always 0).
     let session_output_mint = session.output_mint;
     let session_balance_before = session.stablecoin_balance_before;
     // F-Q8: the validate-pinned output stablecoin ATA (Pubkey::default() on
@@ -534,7 +636,6 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
     let session_authorized_amount = session.authorized_amount;
     let session_authorized_protocol = session.authorized_protocol;
     let session_authorized_token = session.authorized_token;
-    let session_protocol_fee = session.protocol_fee;
     // Phase B2 snapshot data (assertion_snapshots [[u8;32];8] = 256 bytes,
     // snapshot_lens [u8;8]) is NO LONGER copied into a handler local — that
     // 256-byte copy lived in the handler frame for the whole function while
@@ -552,6 +653,9 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
     let vault_authority = vault.vault_authority;
     let vault_id_bytes = vault.vault_id.to_le_bytes();
     let vault_bump = vault.bump;
+    // C-1 fix: immutable fee-destination owner (set at vault creation) for the
+    // finalize-side developer-fee transfer.
+    let vault_fee_destination = vault.fee_destination;
 
     let bump_slice = [vault_bump];
     let signer_seeds = [
@@ -609,6 +713,10 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
     // the non-stablecoin branch below; stays false for stablecoin-input/expired.
     let mut spend_is_inflow: bool = false;
     let mut balance_after_tracked: u64 = 0;
+    // C-1 fix: developer fee actually charged at finalize on the measured spend.
+    // Used to advance vault.total_fees_collected (replaces the pre-charged
+    // session_developer_fee, which is now always 0).
+    let mut developer_fee_charged: u64 = 0;
 
     // --- Outcome-based spending verification (ALL non-expired spending transactions) ---
     // Measures actual stablecoin balance delta to determine real spending.
@@ -698,9 +806,10 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
 
         // CPI balance audit: verify vault balance didn't decrease more than authorized.
         // Catches compromised DeFi programs that CPI burn/transfer vault tokens via
-        // the agent's SPL delegation. stablecoin_balance_before is snapshotted BEFORE
-        // fees are collected, so the maximum legitimate decrease is the full
-        // authorized_amount (fees + delegation combined).
+        // the agent's SPL delegation. C-1 fix: this balance is read BEFORE the
+        // finalize-side fee transfer (which happens later in the outcome block), so
+        // the measured decrease here is the DeFi spend ONLY — bounded by the agent's
+        // delegation, i.e. the full authorized_amount.
         if is_stablecoin_input && session_delegated && stablecoin_current < session_balance_before {
             let actual_decrease = session_balance_before.saturating_sub(stablecoin_current);
             require!(
@@ -710,31 +819,14 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
         }
 
         if is_stablecoin_input {
-            // Stablecoin input: measure how much LEFT the vault
-            // total_decrease = snapshot - current (includes fees + DeFi spend)
-            let total_decrease = session_balance_before.saturating_sub(stablecoin_current);
-
-            // Fees already collected in validate_and_authorize via CPI transfers.
-            // actual_spend = total_decrease - fees (only the DeFi portion)
-            let fees_collected = session_protocol_fee
-                .checked_add(session_developer_fee)
-                .ok_or(SigilError::Overflow)?;
-            // F-Q9 (audit 2026-06-01, G12): checked-revert, NOT saturating.
-            // The fees were CPI'd OUT of THIS SAME ATA before the DeFi leg, so
-            // for any honest spend `current <= before - fees` ⟹
-            // `total_decrease >= fees`. `fees_collected > total_decrease` is
-            // therefore reachable ONLY when the vault's stablecoin ATA ended
-            // HIGHER than (snapshot - fees) — i.e. a net stablecoin INFLOW on
-            // this stablecoin-INPUT session (a net-positive round-trip). That
-            // is an explicitly-unsupported flow (see M2-05); failing closed is
-            // intended. The prior `saturating_sub` silently zeroed
-            // `actual_spend`, masking the anomaly and — with `ceil_fee`'s
-            // round-up — letting small spends round to 0 and skip every cap.
-            // DO NOT revert this to a saturating sub. (Conservation proof:
-            // Certora rule I1 NO-UNDERCOUNT, tracked for M2.)
-            let actual_spend = total_decrease
-                .checked_sub(fees_collected)
-                .ok_or(SigilError::SpendAccountingUnderflow)?;
+            // Stablecoin input: measure how much LEFT the vault.
+            // C-1 fix: fees are NO LONGER taken upfront at validate, so the
+            // measured decrease IS the DeFi spend directly — no fee subtraction.
+            // (A net stablecoin INFLOW on a stablecoin-input session saturates to
+            // a 0 decrease ⇒ actual_spend == 0, which then must evidence an
+            // acquiring vault-owned output via the require-measurable-outcome
+            // guard below, else 6115.)
+            let actual_spend = session_balance_before.saturating_sub(stablecoin_current);
             actual_spend_tracked = actual_spend;
 
             if actual_spend > 0 {
@@ -760,25 +852,42 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
                     session_output_swap_balance_before,
                 )?;
 
-                // Per-transaction limit
+                // ── C-1: fees on the MEASURED spend, INSIDE the caps ─────────
+                // Compute the protocol + developer fee on the actual measured
+                // spend (NOT the declared amount) and enforce EVERY spend cap
+                // against `net_value_out = actual_spend + fees`. Every lamport
+                // that leaves the vault — the DeFi spend AND the fees — is thus
+                // bounded by the per-tx / daily / per-agent / per-protocol caps.
+                // ceil_fee guarantees a non-zero protocol fee for any non-zero
+                // spend (PROTOCOL_FEE_RATE > 0).
                 let policy = &ctx.accounts.policy;
+                let policy_dev_fee_rate = policy.developer_fee_rate;
+                let true_protocol_fee = ceil_fee(actual_spend, PROTOCOL_FEE_RATE as u64)?;
+                let true_developer_fee = ceil_fee(actual_spend, policy_dev_fee_rate as u64)?;
+                let net_value_out = actual_spend
+                    .checked_add(true_protocol_fee)
+                    .ok_or(SigilError::Overflow)?
+                    .checked_add(true_developer_fee)
+                    .ok_or(SigilError::Overflow)?;
+
+                // Per-transaction limit (fees included)
                 require!(
-                    actual_spend <= policy.max_transaction_size_usd,
+                    net_value_out <= policy.max_transaction_size_usd,
                     SigilError::TransactionTooLarge
                 );
 
-                // Rolling 24h cap
+                // Rolling 24h cap (fees included)
                 let mut tracker = ctx.accounts.tracker.load_mut()?;
                 let rolling_usd = tracker.get_rolling_24h_usd(&clock);
                 let new_total = rolling_usd
-                    .checked_add(actual_spend)
+                    .checked_add(net_value_out)
                     .ok_or(SigilError::Overflow)?;
                 require!(
                     new_total <= policy.daily_spending_cap_usd,
                     SigilError::SpendingCapExceeded
                 );
 
-                // Per-agent cap
+                // Per-agent cap (fees included)
                 let agent_entry = vault
                     .get_agent(&session_agent)
                     .ok_or(error!(SigilError::UnauthorizedAgent))?;
@@ -787,7 +896,7 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
                     if agent_entry.spending_limit_usd > 0 {
                         let agent_rolling = overlay.get_agent_rolling_24h_usd(&clock, agent_slot);
                         let new_agent = agent_rolling
-                            .checked_add(actual_spend)
+                            .checked_add(net_value_out)
                             .ok_or(SigilError::Overflow)?;
                         require!(
                             new_agent <= agent_entry.spending_limit_usd,
@@ -798,13 +907,13 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
                             agent: session_agent,
                             agent_rolling_spend: agent_rolling,
                             spending_limit_usd: agent_entry.spending_limit_usd,
-                            amount: actual_spend,
+                            amount: net_value_out,
                             timestamp: clock.unix_timestamp,
                         });
                     }
-                    overlay.record_agent_contribution(&clock, agent_slot, actual_spend)?;
+                    overlay.record_agent_contribution(&clock, agent_slot, net_value_out)?;
                     overlay.lifetime_spend[agent_slot] = overlay.lifetime_spend[agent_slot]
-                        .checked_add(actual_spend)
+                        .checked_add(net_value_out)
                         .ok_or(SigilError::Overflow)?;
                     overlay.lifetime_tx_count[agent_slot] = overlay.lifetime_tx_count[agent_slot]
                         .checked_add(1)
@@ -814,33 +923,80 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
                 }
                 drop(overlay);
 
-                // TA-13 (Phase 5 ratification): per-protocol rolling 24h cap.
-                // This enforcement existed since Phase 2 (per F-15 audit) —
-                // ratified here with a distinct error code so off-chain
-                // monitors can disambiguate "rolling cap hit" from the legacy
-                // "slot allocation exhausted" path (which still returns
+                // TA-13 (Phase 5 ratification): per-protocol rolling 24h cap
+                // (fees included). This enforcement existed since Phase 2 (per
+                // F-15 audit) — ratified here with a distinct error code so
+                // off-chain monitors can disambiguate "rolling cap hit" from the
+                // legacy "slot allocation exhausted" path (which still returns
                 // ProtocolCapExceeded from inside `record_protocol_spend`).
                 if let Some(proto_cap) = policy.get_protocol_cap(&session_authorized_protocol) {
                     if proto_cap > 0 {
                         let proto_spend =
                             tracker.get_protocol_spend(&clock, &session_authorized_protocol);
                         let new_proto = proto_spend
-                            .checked_add(actual_spend)
+                            .checked_add(net_value_out)
                             .ok_or(SigilError::Overflow)?;
                         require!(new_proto <= proto_cap, SigilError::ErrDailyCapExceeded);
                     }
                 }
 
-                // Record spend
-                tracker.record_spend(&clock, actual_spend)?;
+                // Record spend (the capped net value-out, including fees)
+                tracker.record_spend(&clock, net_value_out)?;
                 if policy.has_protocol_caps {
                     tracker.record_protocol_spend(
                         &clock,
                         &session_authorized_protocol,
-                        actual_spend,
+                        net_value_out,
                     )?;
                 }
                 drop(tracker);
+
+                // ── C-1: collect the fees on the measured spend ──────────────
+                // Vault-PDA-signed transfers (NOT via the agent's delegation),
+                // from the vault's stablecoin ATA to the protocol treasury +
+                // developer fee destination. The transfer is bounded by the caps
+                // above (net_value_out) and runs AFTER cap accounting so a fee
+                // shortfall reverts the whole atomic tx (no inconsistent state).
+                // Extracted to a #[inline(never)] helper so the two CpiContext /
+                // Transfer locals live in a SEPARATE frame, keeping this handler
+                // under the 4096-byte BPF stack limit.
+                let token_program_ai = ctx.accounts.token_program.to_account_info();
+                let vault_token_ai = ctx
+                    .accounts
+                    .vault_token_account
+                    .as_ref()
+                    .ok_or(error!(SigilError::InvalidTokenAccount))?
+                    .to_account_info();
+                let vault_authority_ai = vault.to_account_info();
+                transfer_measured_fees(
+                    true_protocol_fee,
+                    true_developer_fee,
+                    &token_program_ai,
+                    &vault_token_ai,
+                    &vault_authority_ai,
+                    &ctx.accounts.protocol_treasury_token_account,
+                    &ctx.accounts.fee_destination_token_account,
+                    &session_authorized_token,
+                    &vault_fee_destination,
+                    &binding,
+                )?;
+                developer_fee_charged = true_developer_fee;
+
+                emit!(FeesCollected {
+                    vault: vault_key,
+                    token_mint: session_authorized_token,
+                    protocol_fee_amount: true_protocol_fee,
+                    developer_fee_amount: true_developer_fee,
+                    protocol_fee_rate: PROTOCOL_FEE_RATE,
+                    developer_fee_rate: policy_dev_fee_rate,
+                    transaction_amount: actual_spend,
+                    protocol_treasury: PROTOCOL_TREASURY,
+                    developer_fee_destination: vault_fee_destination,
+                    cumulative_developer_fees: vault
+                        .total_fees_collected
+                        .saturating_add(true_developer_fee),
+                    timestamp: clock.unix_timestamp,
+                });
             }
         } else {
             // Non-stablecoin input: stablecoins should INCREASE (or at least not decrease)
@@ -968,33 +1124,12 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
         session_output_swap_balance_before,
     )?;
 
-    // --- Fee-to-cap fallback (NON-SPENDING / EXPIRED sessions only) ---
-    // When a NON-spending or EXPIRED session (run_outcome_check == false) collected
-    // fees in validate_and_authorize but moved no DeFi spend, charge those fees to
-    // the spending cap (fee-drain defense). Narrowed to `!run_outcome_check`: a
-    // SPENDING session with actual_spend == 0 no longer reaches here — it reverts at
-    // the require-measurable-outcome guard above (settling on the dust fee WAS the
-    // cap-accounting slip). Fee-drain-via-no-DeFi on a spending session is
-    // independently impossible (validate requires defi_ix_count == 1 and gates the
-    // SPL Approve on it, so a zero-DeFi spending session reverts at validate).
-    let fees_collected_total = session_protocol_fee
-        .checked_add(session_developer_fee)
-        .ok_or(SigilError::Overflow)?;
-
-    if !run_outcome_check && actual_spend_tracked == 0 && fees_collected_total > 0 {
-        let policy = &ctx.accounts.policy;
-        let mut tracker = ctx.accounts.tracker.load_mut()?;
-        let rolling_usd = tracker.get_rolling_24h_usd(&clock);
-        let new_total = rolling_usd
-            .checked_add(fees_collected_total)
-            .ok_or(SigilError::Overflow)?;
-        require!(
-            new_total <= policy.daily_spending_cap_usd,
-            SigilError::SpendingCapExceeded
-        );
-        tracker.record_spend(&clock, fees_collected_total)?;
-        drop(tracker);
-    }
+    // C-1 fix: the legacy "fee-to-cap fallback" for NON-spending / EXPIRED
+    // sessions that pre-charged fees at validate is REMOVED — fees are no longer
+    // collected upfront, so a non-spending / expired session collects zero fees
+    // and there is nothing to charge to the cap. (Spending sessions collect fees
+    // at finalize INSIDE the caps in the outcome block above; a spending session
+    // with actual_spend == 0 reverts at the require-measurable-outcome guard.)
 
     // ─── Item 1: F-Q1b/M2 finalize-side completeness ───────────────────────
     // When a real spend occurred, EVERY writable non-vault meta of the counted
@@ -1398,12 +1533,13 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
         );
     }
 
-    // Always track fees that were transferred in validate (regardless of expiry or outcome).
-    // Fees are CPI-transferred in validate_and_authorize — accounting must match reality.
-    if session_developer_fee > 0 {
+    // C-1 fix: track the developer fee CHARGED AT FINALIZE on the measured spend
+    // (the `developer_fee_charged` accumulator). Fees are no longer collected at
+    // validate, so accounting now advances from the finalize-side transfer.
+    if developer_fee_charged > 0 {
         vault.total_fees_collected = vault
             .total_fees_collected
-            .checked_add(session_developer_fee)
+            .checked_add(developer_fee_charged)
             .ok_or(SigilError::Overflow)?;
     }
 
