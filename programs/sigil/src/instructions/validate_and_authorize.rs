@@ -109,7 +109,6 @@ pub struct ValidateAndAuthorize<'info> {
     // RELOCATED to FinalizeSession. Fees are no longer collected upfront at
     // validate (on the unbounded declared `amount`); they are collected at
     // finalize on the MEASURED spend, inside the spend caps. See finalize_session.
-
     /// Vault's stablecoin ATA to snapshot (for non-stablecoin input spending).
     /// Required when input token is NOT a stablecoin (output verification in finalize).
     #[account(mut)]

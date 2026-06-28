@@ -520,6 +520,7 @@ fn enforce_post_execution_assertions(
 /// already performed on `net_value_out`. The fee source is the vault's stablecoin
 /// ATA (`vault_token_ai`, the session token). Treasury + fee-destination accounts
 /// are owner/mint-validated exactly as the previous validate-side collection did.
+#[allow(clippy::too_many_arguments)]
 #[inline(never)]
 fn transfer_measured_fees<'info>(
     protocol_fee: u64,
