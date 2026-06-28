@@ -982,6 +982,19 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
                 )?;
                 developer_fee_charged = true_developer_fee;
 
+                // LOW (silent-failure review): compute the cumulative figure with
+                // CHECKED math — identical to the `vault.total_fees_collected`
+                // advance below (same base + same addend) — so the event a monitor
+                // reads never diverges from on-chain state. An overflow reverts the
+                // whole tx here, before either the emit or the state update. (We
+                // cannot mutate `vault` at this point: `agent_entry`'s immutable
+                // borrow is still live; this is an immutable read, so it coexists,
+                // and the actual assignment happens after that borrow ends.)
+                let cumulative_developer_fees_after = vault
+                    .total_fees_collected
+                    .checked_add(true_developer_fee)
+                    .ok_or(SigilError::Overflow)?;
+
                 emit!(FeesCollected {
                     vault: vault_key,
                     token_mint: session_authorized_token,
@@ -992,9 +1005,7 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
                     transaction_amount: actual_spend,
                     protocol_treasury: PROTOCOL_TREASURY,
                     developer_fee_destination: vault_fee_destination,
-                    cumulative_developer_fees: vault
-                        .total_fees_collected
-                        .saturating_add(true_developer_fee),
+                    cumulative_developer_fees: cumulative_developer_fees_after,
                     timestamp: clock.unix_timestamp,
                 });
             }
