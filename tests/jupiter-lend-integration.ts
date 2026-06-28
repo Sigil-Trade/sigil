@@ -176,8 +176,6 @@ describe("jupiter-lend-integration", () => {
         session,
         vaultTokenAccount: effectiveVaultAta,
         tokenMintAccount: tokenMint,
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: null,
         outputStablecoinAccount: null,
         outputSwapAccount: null,
         tokenProgram: TOKEN_PROGRAM_ID,

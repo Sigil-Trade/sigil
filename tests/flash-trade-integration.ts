@@ -249,8 +249,6 @@ describe("flash-trade-integration", () => {
         agentSpendOverlay: overlayForVault,
         vaultTokenAccount: effectiveVaultAta,
         tokenMintAccount: tokenMint,
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: null,
         outputStablecoinAccount: null,
         outputSwapAccount: swap ? swap.vaultOutputAta : null,
         tokenProgram: TOKEN_PROGRAM_ID,

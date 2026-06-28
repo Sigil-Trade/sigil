@@ -208,8 +208,6 @@ describe("jupiter-integration", () => {
         agentSpendOverlay: overlayForVault,
         vaultTokenAccount: effectiveVaultAta,
         tokenMintAccount: tokenMint,
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: program.programId,
         outputStablecoinAccount: program.programId,
         outputSwapAccount: null,
         tokenProgram: TOKEN_PROGRAM_ID,

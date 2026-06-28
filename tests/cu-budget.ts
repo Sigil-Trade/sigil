@@ -514,8 +514,6 @@ describe("cu-budget", () => {
         agentSpendOverlay: ctx.overlay,
         vaultTokenAccount: ctx.vaultAta,
         tokenMintAccount: usdcMint,
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: null,
         outputStablecoinAccount: null,
         outputSwapAccount: null,
         tokenProgram: TOKEN_PROGRAM_ID,
