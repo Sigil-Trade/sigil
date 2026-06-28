@@ -283,8 +283,6 @@ describe("sysvar-scan-bound (M11 / SIMD-0296 pad-attack guard)", () => {
         session: sessionPda,
         vaultTokenAccount: vaultUsdcAta,
         tokenMintAccount: usdcMint,
-        protocolTreasuryTokenAccount: null,
-        feeDestinationTokenAccount: null,
         outputStablecoinAccount: null,
         outputSwapAccount: null,
         agentSpendOverlay: overlayPda,

@@ -380,8 +380,6 @@ describe("verified-build-gate (Item 3)", () => {
         session: getSessionPda(),
         vaultTokenAccount: vaultUsdcAta,
         tokenMintAccount: usdcMint,
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: null,
         outputStablecoinAccount: null,
         outputSwapAccount: null,
         agentSpendOverlay: overlayPda,

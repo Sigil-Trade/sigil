@@ -344,8 +344,6 @@ describe("TOCTOU Security Fix", () => {
           session: sessionPda,
           vaultTokenAccount: v.vaultUsdcAta,
           tokenMintAccount: usdcMint,
-          protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           agentSpendOverlay: v.overlayPda,

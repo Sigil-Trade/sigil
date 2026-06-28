@@ -253,8 +253,6 @@ describe("analytics-counters", () => {
           session: getSessionPda(),
           vaultTokenAccount: vaultUsdcAta,
           tokenMintAccount: usdcMint,
-          protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: null,
           agentSpendOverlay: overlayPda,

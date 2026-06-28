@@ -553,8 +553,6 @@ describe("sandwich-integration (Phase 6.1)", () => {
         session: sessionPda,
         vaultTokenAccount: ctx.vaultUsdcAta,
         tokenMintAccount: DEVNET_USDC_MINT,
-        protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-        feeDestinationTokenAccount: null,
         outputStablecoinAccount: null,
         outputSwapAccount: opts.outputSwapAccount ?? null,
         agentSpendOverlay: ctx.overlay,

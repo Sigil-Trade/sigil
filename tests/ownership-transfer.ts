@@ -932,8 +932,6 @@ describe("ownership-transfer (Phase 8 Batch 3 — C26)", () => {
           session: sessionPda,
           vaultTokenAccount: ctx.vaultUsdcAta,
           tokenMintAccount: DEVNET_USDC_MINT,
-          protocolTreasuryTokenAccount: protocolTreasuryUsdcAta,
-          feeDestinationTokenAccount: null,
           outputStablecoinAccount: null,
           outputSwapAccount: swapVaultOutputAta,
           agentSpendOverlay: ctx.overlay,
