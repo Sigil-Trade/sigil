@@ -3,6 +3,15 @@
  *
  * Proves TransactionExecutor can compose, simulate, sign, and send
  * real transactions against devnet using Codama-generated builders.
+ *
+ * The spending sandwich routes a REAL acquiring swap (mock-defi `swap_to_vault`)
+ * as its counted DeFi leg: it pulls stablecoin out of the vault AND delivers a
+ * different mint into a vault-owned output. On the deployed binary a spending
+ * session (amount > 0) whose DeFi leg measures zero stablecoin movement is
+ * rejected by the require-measurable-outcome guard (ErrUnmeasurableSpend 6115),
+ * and every stablecoin-input spend must acquire a vault-owned output (M1
+ * output-ownership ErrOutputNotVaultOwned 6112) — so a no-op leg can no longer
+ * stand in for a spend. See `tests/devnet-fees.ts` (anchor) for the same pattern.
  */
 
 import { createHash } from "node:crypto";
@@ -22,7 +31,9 @@ import {
   createFundedAgent,
   ensureStablecoinBalance,
   provisionVault,
+  setupSwapOutput,
   type ProvisionVaultResult,
+  type SwapOutputFixture,
 } from "../../src/testing/devnet.js";
 
 import { TransactionExecutor } from "../../src/transaction-executor.js";
@@ -31,7 +42,11 @@ import { getFinalizeSessionInstructionAsync } from "../../src/generated/instruct
 import { resolveVaultState } from "../../src/state-resolver.js";
 import { deriveAta } from "../../src/x402/transfer-builder.js";
 import { computeScalarIntentDigest } from "../../src/seal/intent-digest.js";
-import { USDC_MINT_DEVNET, PROTOCOL_TREASURY } from "../../src/types.js";
+import {
+  USDC_MINT_DEVNET,
+  PROTOCOL_TREASURY,
+  TOKEN_PROGRAM_ADDRESS,
+} from "../../src/types.js";
 
 // Skip entire file if no devnet env
 const SKIP = !process.env.ANCHOR_PROVIDER_URL;
@@ -41,8 +56,10 @@ const SKIP = !process.env.ANCHOR_PROVIDER_URL;
 // requires EXACTLY ONE counted DeFi instruction between validate and finalize,
 // and that ix's program_id must equal the authorized target_protocol. Real
 // Jupiter needs live route accounts + liquidity (flaky); the fixture's
-// `open_position` no-op is the canonical counted-but-zero-spend leg used by
-// the on-chain suites for authorization-flow tests.
+// `swap_to_vault` ix is the canonical counted, MEASURABLE-spend leg used by the
+// on-chain suites for spending-flow tests — it pulls stablecoin out of the vault
+// (so finalize measures actual_spend > 0) AND delivers a different mint into a
+// vault-owned output (so the M1 output-ownership gate, 6112, is satisfied).
 const MOCK_DEFI_PROGRAM =
   "2heRcfqPUcSiWpH1rAp2Zf4c4ZxfKmKaaVbJWGRa7Qm6" as Address;
 
@@ -54,27 +71,59 @@ function anchorDisc(name: string): Uint8Array {
 }
 
 /**
- * Mock-defi `open_position` — a true no-op (single agent signer, handler does
- * nothing). The counted DeFi leg of the sandwich: targeting the allowlisted
- * MOCK_DEFI_PROGRAM satisfies F-Q2 (defi_ix_count == 1) while moving zero
- * tokens, so finalize_session measures actual_spend == 0 (no SpendTracker is
- * created — see the `if (state.tracker)` guard in the state-update test).
+ * Mock-defi `swap_to_vault(in_amount, out_amount)` — models an ACQUIRING swap
+ * (kit-native mirror of tests/helpers/devnet-setup.ts `buildMockSwapToVaultIx`).
+ * Leg 1 pulls `inAmount` of the stablecoin input out of `source` (the vault's
+ * token ATA) via the agent's validate-time delegation, routing it to `inputSink`
+ * (an agent-owned stablecoin ATA); leg 2 delivers `outAmount` of a DIFFERENT mint
+ * from `outputSource` (an agent-owned reserve) into `vaultOutput` (the vault-owned
+ * acquisition account finalize's M1 gate verifies increased). Both legs are
+ * authorized by `authority` (the agent signer). Accounts/data layout mirrors the
+ * fixture's `SwapToVault` struct exactly: [source, inputSink, outputSource,
+ * vaultOutput, authority(signer), token_program]; data = 8-byte disc + u64
+ * inAmount LE + u64 outAmount LE.
  */
-function buildMockDefiNoopIx(agent: KeyPairSigner): Instruction {
+function buildMockSwapToVaultIx(params: {
+  source: Address;
+  inputSink: Address;
+  outputSource: Address;
+  vaultOutput: Address;
+  authority: Address;
+  inAmount: bigint;
+  outAmount: bigint;
+}): Instruction {
+  const data = new Uint8Array(24);
+  data.set(anchorDisc("swap_to_vault"), 0);
+  const view = new DataView(data.buffer);
+  view.setBigUint64(8, params.inAmount, true);
+  view.setBigUint64(16, params.outAmount, true);
   return {
     programAddress: MOCK_DEFI_PROGRAM,
-    accounts: [{ address: agent.address, role: AccountRole.READONLY_SIGNER }],
-    data: anchorDisc("open_position"),
+    accounts: [
+      { address: params.source, role: AccountRole.WRITABLE },
+      { address: params.inputSink, role: AccountRole.WRITABLE },
+      { address: params.outputSource, role: AccountRole.WRITABLE },
+      { address: params.vaultOutput, role: AccountRole.WRITABLE },
+      { address: params.authority, role: AccountRole.READONLY_SIGNER },
+      { address: TOKEN_PROGRAM_ADDRESS, role: AccountRole.READONLY },
+    ],
+    data,
   };
 }
 
-/** Build the [validate, mock-defi no-op, finalize] sandwich for a stablecoin spend. */
+/**
+ * Build the [validate, mock-defi swap_to_vault, finalize] sandwich for a REAL
+ * measurable stablecoin spend. `inAmount == amount` (the full measured spend, so
+ * finalize charges the fee on `amount` exactly — mirrors `tests/devnet-fees.ts`
+ * test 1 post-C-1), and `outAmount > 0` so the vault-owned output increases.
+ */
 async function buildSwapInstructions(
   rpc: Rpc<SolanaRpcApi>,
   agent: KeyPairSigner,
   vault: ProvisionVaultResult,
   vaultTokenAta: Address,
   protocolTreasuryAta: Address,
+  swap: SwapOutputFixture,
   amount: bigint,
 ) {
   // D-1 (Bucket 2): the on-chain verifier recomputes the canonical scalar
@@ -106,6 +155,10 @@ async function buildSwapInstructions(
     vaultTokenAccount: vaultTokenAta,
     tokenMintAccount: USDC_MINT_DEVNET,
     // C-1 fix: fee accounts relocated to finalize_session.
+    // M1 output-ownership pin (6112): validate snapshots this vault-owned,
+    // non-input-mint account's pre-DeFi balance; finalize requires it INCREASED
+    // when actual_spend > 0. Must be supplied to BOTH validate and finalize.
+    outputSwapAccount: swap.vaultOutputAta,
     tokenMint: USDC_MINT_DEVNET,
     amount,
     targetProtocol: MOCK_DEFI_PROGRAM,
@@ -115,19 +168,50 @@ async function buildSwapInstructions(
     expectedIntentDigest,
   });
 
-  // F-Q1a completeness: the no-op DeFi ix lists the agent signer, which is the
-  // writable fee-payer in the compiled v0 message. validate's destination-
-  // completeness guard requires every writable DeFi meta be resolvable in
-  // remaining_accounts, so append the agent (mirrors seal() and sigil.ts).
+  // The counted DeFi leg: a real acquiring swap. inAmount == amount → the vault
+  // stablecoin balance drops by `amount`, so finalize measures actual_spend ==
+  // amount (> 0); outAmount > 0 → the vault-owned output increases, satisfying
+  // the M1 gate (6112). Together these satisfy require-measurable-outcome (6115).
+  const defiIx = buildMockSwapToVaultIx({
+    source: vaultTokenAta,
+    inputSink: swap.agentStablecoinAta,
+    outputSource: swap.agentReserve,
+    vaultOutput: swap.vaultOutputAta,
+    authority: agent.address,
+    inAmount: amount,
+    outAmount: 1_000n,
+  });
+
+  // F-Q1a/F-Q1b completeness (6105 at validate, 6113 at finalize): every WRITABLE
+  // meta of the counted DeFi ix — plus the fee payer (the agent, which is
+  // compiled-writable in every v0 message regardless of its declared role) — must
+  // be resolvable as a remaining account on BOTH wrapper ixs so the guard can
+  // read each account's owner byte. Fed READONLY (the compiled message de-dups by
+  // pubkey, keeping the DeFi ix's WRITABLE role). Mirrors seal()'s satisfier and
+  // the anchor authorizeAndFinalize autoRemaining set exactly.
+  const seen = new Set<Address>();
+  const completenessMetas: { address: Address; role: AccountRole }[] = [];
+  for (const acc of defiIx.accounts ?? []) {
+    if (acc.role !== AccountRole.WRITABLE) continue;
+    if (seen.has(acc.address)) continue;
+    seen.add(acc.address);
+    completenessMetas.push({
+      address: acc.address,
+      role: AccountRole.READONLY,
+    });
+  }
+  if (!seen.has(agent.address)) {
+    seen.add(agent.address);
+    completenessMetas.push({
+      address: agent.address,
+      role: AccountRole.READONLY,
+    });
+  }
+
   const validateIxWithRemaining: Instruction = {
     ...(validateIx as Instruction),
-    accounts: [
-      ...(validateIx as Instruction).accounts!,
-      { address: agent.address, role: AccountRole.READONLY },
-    ],
+    accounts: [...(validateIx as Instruction).accounts!, ...completenessMetas],
   };
-
-  const defiIx = buildMockDefiNoopIx(agent);
 
   const finalizeIx = await getFinalizeSessionInstructionAsync({
     payer: agent,
@@ -136,14 +220,25 @@ async function buildSwapInstructions(
     sessionRentRecipient: agent.address,
     agentSpendOverlay: vault.overlayPDA,
     vaultTokenAccount: vaultTokenAta,
+    // M1 output-ownership pin (6112): finalize verifies this EXACT vault-owned
+    // account increased vs the validate-time snapshot when actual_spend > 0.
+    outputSwapAccount: swap.vaultOutputAta,
     // C-1 fix: fees collected at finalize on the measured spend.
     protocolTreasuryTokenAccount: protocolTreasuryAta,
   });
 
+  // F-Q1b finalize-side completeness (6113): finalize's per-recipient cap + floor
+  // sum walk the SAME writable DeFi metas validate does, so feed it the identical
+  // READONLY set.
+  const finalizeIxWithRemaining: Instruction = {
+    ...(finalizeIx as Instruction),
+    accounts: [...(finalizeIx as Instruction).accounts!, ...completenessMetas],
+  };
+
   return {
     validateIx: validateIxWithRemaining,
     defiIx,
-    finalizeIx: finalizeIx as Instruction,
+    finalizeIx: finalizeIxWithRemaining,
   };
 }
 
@@ -162,6 +257,7 @@ describe("Kit SDK Devnet — Composed Transaction", function () {
   let vault: ProvisionVaultResult;
   let vaultTokenAta: Address;
   let protocolTreasuryAta: Address;
+  let swap: SwapOutputFixture;
 
   before(async function () {
     rpc = createDevnetRpc();
@@ -195,6 +291,20 @@ describe("Kit SDK Devnet — Composed Transaction", function () {
 
     vaultTokenAta = await deriveAta(vault.vaultAddress, USDC_MINT_DEVNET);
     protocolTreasuryAta = await deriveAta(PROTOCOL_TREASURY, USDC_MINT_DEVNET);
+
+    // Stand up the acquiring-swap fixture ONCE: a fresh non-stablecoin output
+    // mint, a vault-owned ATA receiving that output (the M1 6112 acquisition),
+    // an agent-owned reserve funding the swap's output leg, and the agent's
+    // stablecoin ATA (the swap's leg-1 input sink). The single real spend
+    // (executeTransaction test) reuses these; the compose-only test never
+    // executes, so one fixture suffices.
+    swap = await setupSwapOutput(
+      process.env.ANCHOR_PROVIDER_URL!,
+      bytes,
+      vault.vaultAddress,
+      agent.address,
+      USDC_MINT_DEVNET,
+    );
   });
 
   it("TransactionExecutor composes and simulates", async function () {
@@ -205,6 +315,7 @@ describe("Kit SDK Devnet — Composed Transaction", function () {
       vault,
       vaultTokenAta,
       protocolTreasuryAta,
+      swap,
       1_000_000n,
     );
 
@@ -230,6 +341,7 @@ describe("Kit SDK Devnet — Composed Transaction", function () {
       vault,
       vaultTokenAta,
       protocolTreasuryAta,
+      swap,
       1_000_000n,
     );
 
