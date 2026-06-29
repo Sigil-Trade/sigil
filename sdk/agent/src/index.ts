@@ -37,7 +37,13 @@ async function runMcpServer(): Promise<void> {
       instructions:
         "Sigil for AI — bounded Solana agent toolkit. " +
         "Use `get_vault_state` to inspect the vault before proposing actions. " +
-        "All mutations are sealed by Sigil's on-chain enforcement (spending caps, protocol allowlist, timelock). " +
+        "All mutations are sealed by Sigil's on-chain enforcement. GUARANTEE: an " +
+        "agent cannot steal funds to a non-vault wallet (output stays vault-owned) " +
+        "and cannot exceed the owner's spending caps, protocol allowlist, or timelock. " +
+        "BOUNDARY (be honest with the user): Sigil is value-blind — within the caps " +
+        "an agent can still make poor/wasteful trades — and it cannot verify ongoing " +
+        "custody of venue positions (perps/lending/LP). It bounds loss; it does not " +
+        "guarantee good outcomes. " +
         "If a tool returns an `isError: true` response, surface the message to the user verbatim — " +
         "Sigil errors are designed to be human-readable.",
     },
@@ -45,7 +51,13 @@ async function runMcpServer(): Promise<void> {
 
   registerGetVaultState(server);
   // Day 2: registerGetPolicy, registerGetRemainingCap, registerGetActivity,
-  //        registerSealSwap, registerSealLend, registerSealWithdraw, etc.
+  //        and ONE agnostic execution tool — `seal_transaction(instructions[])`
+  //        (+ `agent_transfer(destination, amount)` for direct stablecoin
+  //        payouts). Sigil is protocol-AGNOSTIC: NEVER expose protocol/action-
+  //        specific tools like `seal_swap`/`seal_lend`/`seal_withdraw` — the DeFi
+  //        instructions come from the caller/ecosystem (Jupiter, SAK, …) and
+  //        Sigil guards whatever they produce. The agnostic name also matches the
+  //        agent-bootstrap handoff prompt (`seal_transaction`).
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
