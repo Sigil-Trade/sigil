@@ -1,5 +1,12 @@
 # @usesigil/plugins
 
+## 20.0.0
+
+### Patch Changes
+
+- Updated dependencies [[`1fea858`](https://github.com/Sigil-Trade/sigil/commit/1fea858a3218a0325e813367a0648dda37be7335)]:
+  - @usesigil/kit@0.23.0
+
 ## 19.0.0
 
 ### Patch Changes
