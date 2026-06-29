@@ -322,4 +322,46 @@ describe("M2 session<->finalize binding", () => {
       expectSigilError(err, { name: "MissingFinalizeInstruction" });
     }
   });
+
+  it("spending-path (amount > 0) finalize ix referencing a DIFFERENT session reverts (MissingFinalizeInstruction)", async () => {
+    // M1/M2 fast-follow regression lock. The test above drives the NON-spending
+    // path (amount = 0). This pins the SAME session<->finalize binding on the
+    // SPENDING path — the security-relevant one, where a real delegation is
+    // armed. validate's forward instruction-sysvar scan asserts the finalize
+    // ix's session meta == ctx.accounts.session via `?` BEFORE it arms the SPL
+    // Approve (validate_and_authorize.rs scan loop runs ahead of the arming
+    // block), so a cross-session [validate(X), DeFi, finalize(Y)] bundle still
+    // fails closed rather than executing a spend against a foreign session.
+    const amount = new BN(1_000_000); // $1, well under the $500 per-tx cap
+    const validateIx = await buildValidateIx(amount);
+    const defiIx = buildMockDefiNoopIx(agent.publicKey);
+    const finalizeIx = await buildFinalizeIx();
+
+    // Sanity: untampered finalize meta[2] is THIS session before we swap it.
+    expect(
+      finalizeIx.keys[FINALIZE_SESSION_META_INDEX].pubkey.equals(
+        getSessionPda(),
+      ),
+      "finalize meta[2] is the session account",
+    ).to.equal(true);
+
+    const foreignSession = Keypair.generate().publicKey;
+    const tamperedFinalize = {
+      ...finalizeIx,
+      keys: finalizeIx.keys.map((k, i) =>
+        i === FINALIZE_SESSION_META_INDEX
+          ? { ...k, pubkey: foreignSession }
+          : k,
+      ),
+    };
+
+    try {
+      sendVersionedTx(svm, [validateIx, defiIx, tamperedFinalize], agent);
+      expect.fail(
+        "expected MissingFinalizeInstruction (spending-path session mismatch)",
+      );
+    } catch (err) {
+      expectSigilError(err, { name: "MissingFinalizeInstruction" });
+    }
+  });
 });

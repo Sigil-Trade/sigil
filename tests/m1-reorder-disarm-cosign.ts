@@ -493,4 +493,99 @@ describe("M1 reorder-disarm cosign evasion", () => {
       true,
     );
   });
+
+  it("(f) owner-alone DROP that disarms an armed hash by identity (non-permutation) → ErrCosignRequired", async () => {
+    // Regression lock for the NON-permutation variant. A protocol is DROPPED from
+    // the set (not merely reordered), which SHIFTS a still-armed protocol onto a
+    // zero-hash slot. Vault protocols [A, B, C] with ONLY C armed
+    // (protocol_hashes = [0, 0, H_C]). Owner-alone queue of [B, C] drops A; with
+    // protocol_hashes:None the 10-entry hash array passes through positionally,
+    // so C lands at index 1 (hash slot 1 = 0) → C disarmed BY IDENTITY.
+    //
+    // `reorders_armed_protocols` CANNOT fire here (its `same_set` predicate needs
+    // equal length: 2 != 3), so this case is caught SOLELY by
+    // `disarms_build_hash_by_identity` — proving the identity detector covers
+    // drop-induced disarms, not just same-set permutations.
+    const protoA2 = Keypair.generate().publicKey; // A (dropped)
+    const protoB2 = Keypair.generate().publicKey; // B
+    const protoC2 = Keypair.generate().publicKey; // C (armed)
+    const HASH_C = Buffer.alloc(32, 0xef);
+
+    const v4 = await initVault(new BN(24), [protoA2, protoB2, protoC2]);
+
+    // Arm C's build hash at index 2 (arming is tightening → non-elevated; cosign
+    // is still off here anyway).
+    {
+      const digest = await fetchAndComputeQueueDigest(
+        program,
+        v4.policyPda,
+        v4.vaultPda,
+        { protocolHashes: [ZERO32, ZERO32, HASH_C] },
+      );
+      await queue(
+        v4,
+        { protocolHashes: hashArray([ZERO32, ZERO32, HASH_C]) },
+        PublicKey.default,
+        digest,
+      );
+      advanceTime(svm, TIMELOCK.toNumber() + 1);
+      await applyOwner(v4);
+    }
+
+    // Enable cosign + bind cosigner (non-elevated: live cosign_required false).
+    {
+      const digest = await fetchAndComputeQueueDigest(
+        program,
+        v4.policyPda,
+        v4.vaultPda,
+        { cosignRequired: true, cosignSessionPubkey: cosigner.publicKey },
+      );
+      await queue(
+        v4,
+        { cosignRequired: true, cosignSessionPubkey: cosigner.publicKey },
+        PublicKey.default,
+        digest,
+      );
+      advanceTime(svm, TIMELOCK.toNumber() + 1);
+      await applyOwner(v4);
+    }
+
+    {
+      const armed = await program.account.policyConfig.fetch(v4.policyPda);
+      expect(armed.cosignRequired).to.equal(true);
+      expect(
+        Buffer.from(armed.protocolHashes[2]).equals(HASH_C),
+        "C armed at index 2",
+      ).to.equal(true);
+    }
+
+    // The drop+disarm, owner-alone → must be rejected by the identity detector.
+    const digest = await fetchAndComputeQueueDigest(
+      program,
+      v4.policyPda,
+      v4.vaultPda,
+      { protocols: [protoB2, protoC2] },
+    );
+    try {
+      await queue(
+        v4,
+        { protocols: [protoB2, protoC2] },
+        PublicKey.default, // owner-alone (no bound cosigner)
+        digest,
+      );
+      expect.fail(
+        "expected ErrCosignRequired (drop-induced identity disarm of C)",
+      );
+    } catch (err) {
+      expectSigilError(err, { name: "ErrCosignRequired" });
+    }
+
+    // Rejected at queue → allowlist + arming unchanged.
+    const policy = await program.account.policyConfig.fetch(v4.policyPda);
+    expect(policy.protocols.length, "still 3 protocols").to.equal(3);
+    expect(
+      Buffer.from(policy.protocolHashes[2]).equals(HASH_C),
+      "C still armed at index 2",
+    ).to.equal(true);
+  });
 });
