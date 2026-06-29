@@ -25,6 +25,15 @@ updates:
     labels:
       - "dependencies"
       - "rust"
+    ignore:
+      # Anchor 1.x is a deliberate, gated migration (Certora supports only
+      # Anchor <=0.32.1; 1.x needs solana-cli 3.1.x+). We pin =0.32.1 on
+      # purpose — a major bump breaks the build (Build Program/Trident/Certora).
+      # Closed dependabot #409/#411; ignore major bumps so they don't re-open.
+      - dependency-name: "anchor-lang"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "anchor-spl"
+        update-types: ["version-update:semver-major"]
 
   # GitHub Actions versions
   - package-ecosystem: "github-actions"
