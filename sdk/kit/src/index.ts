@@ -519,7 +519,13 @@ export type {
   SigilClientConfig,
   ClientSealOpts,
   ExecuteResult,
+  TransferOptions,
+  TransferResult,
 } from "./seal.js";
+
+// ─── Agent Transfer (standalone direct payout — NOT a seal() sandwich) ───────
+export { buildAgentTransfer } from "./agent-transfer.js";
+export type { BuildAgentTransferOptions } from "./agent-transfer.js";
 
 // ─── Create Vault ──────────────────────────────────────────────────────────
 // ─── Sprint 2: Sigil Facade + SigilVault + Hooks + Plugins ──────────────────
