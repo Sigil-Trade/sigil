@@ -339,7 +339,7 @@ jobs:
           components: rustfmt, clippy
 
       - name: Cache Cargo registry + build
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -393,7 +393,7 @@ jobs:
           toolchain: stable
 
       - name: Cache Cargo registry + build
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -404,7 +404,7 @@ jobs:
           restore-keys: anchor-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Cache Solana toolchain
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.local/share/solana
           key: solana-${{ runner.os }}-${{ runner.arch }}-${{ env.SOLANA_VERSION }}
@@ -592,7 +592,7 @@ jobs:
           toolchain: stable
 
       - name: Cache Cargo registry + build
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -603,7 +603,7 @@ jobs:
           restore-keys: build-verify-${{ runner.os }}-
 
       - name: Cache Solana toolchain
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.local/share/solana
           key: solana-${{ runner.os }}-${{ runner.arch }}-${{ env.SOLANA_VERSION }}
@@ -712,7 +712,7 @@ jobs:
           toolchain: stable
 
       - name: Cache Cargo registry + build
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -724,7 +724,7 @@ jobs:
           restore-keys: surfpool-anchor-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Cache Solana toolchain
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.local/share/solana
           key: solana-${{ runner.os }}-${{ runner.arch }}-${{ env.SOLANA_VERSION }}
@@ -935,7 +935,7 @@ jobs:
           toolchain: "1.81"
 
       - name: Cache Cargo registry + binaries
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -1004,7 +1004,7 @@ jobs:
           toolchain: stable
 
       - name: Cache Cargo registry + build
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -1022,7 +1022,7 @@ jobs:
       # sigil.so the harness panics on the first tx — so build it here, same
       # toolchain pattern as on-chain-tests/surfpool.
       - name: Cache Solana toolchain
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.local/share/solana
           key: solana-${{ runner.os }}-${{ runner.arch }}-${{ env.SOLANA_VERSION }}
