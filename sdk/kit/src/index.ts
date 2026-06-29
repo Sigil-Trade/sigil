@@ -19,8 +19,9 @@ export * from "./generated/accounts/index.js";
 // `ACTION_PERMISSION_MAP`, `hasPermission`, `permissionsToStrings`,
 // `stringsToPermissions`, `PermissionBuilder`) were DELETED in the A11
 // cleanup — they encoded a pre-v6 permission model the on-chain program no
-// longer supports. Use {@link FULL_CAPABILITY} (2n) for operator agents and
-// put granular per-action restrictions in `InstructionConstraints`.
+// longer supports. Use {@link FULL_CAPABILITY} (2n) for operator agents;
+// granular per-action enforcement is the policy allowlist + post-execution
+// assertions.
 export {
   // Program
   SIGIL_PROGRAM_ADDRESS,

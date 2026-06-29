@@ -163,9 +163,8 @@ function assertMutationMainnetConfirmed(
 
 /**
  * PEN-CROSS-3 (Phase 2 close-up): compute the post-mutation
- * policy_preview_digest for one of the 4 sibling handlers
- * (create_instruction_constraints, apply_close_constraints,
- * create_post_assertions, close_post_assertions).
+ * policy_preview_digest for the sibling flag-flip handlers
+ * (create_post_assertions, close_post_assertions).
  *
  * Reads the live PolicyConfig + AgentVault, applies the caller-specified
  * flag override, then returns the canonical digest the on-chain handler
@@ -1863,10 +1862,8 @@ export async function buildCloseVaultElevated(
 }
 
 // ─── Post-execution assertions (Phase 2) ─────────────────────────────────────
-// Composes with pre-execution InstructionConstraints — NOT a replacement.
-//
-// Pre-execution (createConstraints above): validates instruction args BEFORE
-// the DeFi call runs. Fails closed on disallowed instructions.
+// The vault's outcome-enforcement layer (the instruction-constraints engine
+// was demolished — there is no pre-execution arg validator).
 //
 // Post-execution (createPostAssertions below): snapshots account bytes before
 // finalize_session, compares against the on-chain PostExecutionAssertions PDA
