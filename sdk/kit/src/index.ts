@@ -19,8 +19,9 @@ export * from "./generated/accounts/index.js";
 // `ACTION_PERMISSION_MAP`, `hasPermission`, `permissionsToStrings`,
 // `stringsToPermissions`, `PermissionBuilder`) were DELETED in the A11
 // cleanup — they encoded a pre-v6 permission model the on-chain program no
-// longer supports. Use {@link FULL_CAPABILITY} (2n) for operator agents and
-// put granular per-action restrictions in `InstructionConstraints`.
+// longer supports. Use {@link FULL_CAPABILITY} (2n) for operator agents;
+// granular per-action enforcement is the policy allowlist + post-execution
+// assertions.
 export {
   // Program
   SIGIL_PROGRAM_ADDRESS,
@@ -519,7 +520,13 @@ export type {
   SigilClientConfig,
   ClientSealOpts,
   ExecuteResult,
+  TransferOptions,
+  TransferResult,
 } from "./seal.js";
+
+// ─── Agent Transfer (standalone direct payout — NOT a seal() sandwich) ───────
+export { buildAgentTransfer } from "./agent-transfer.js";
+export type { BuildAgentTransferOptions } from "./agent-transfer.js";
 
 // ─── Create Vault ──────────────────────────────────────────────────────────
 // ─── Sprint 2: Sigil Facade + SigilVault + Hooks + Plugins ──────────────────
@@ -808,6 +815,16 @@ export type {
   ElevatedCosignBundle,
   CosignedActionBundle,
 } from "./dashboard/mutations.js";
+// Item 3 (approve_pending_policy 2-of-2 cosign) + Item 4 (owner graylist
+// promotion / agent-violation recording) — standalone mutation wrappers (also
+// surfaced as OwnerClient methods). Generated builders stay private (A12).
+export {
+  approvePendingPolicy,
+  buildApprovePendingPolicy,
+  promoteGraylistDestination,
+  recordAgentViolation,
+} from "./dashboard/mutations.js";
+export type { ApprovePendingPolicyReview } from "./dashboard/mutations.js";
 
 // ─── Balance Tracker / P&L ──────────────────────────────────────────────────
 export {
@@ -848,3 +865,7 @@ export {
   BPF_LOADER_UPGRADEABLE_PROGRAM_ID,
   PROGRAM_DATA_HEADER_LEN,
 } from "./program-hash.js";
+// Item 1 — intent-named wrapper an owner calls to ARM the verified-build gate
+// (`PolicyChanges.protocolHashes`). Hash only; the digest/array assembly lives
+// in the policy mutation builders.
+export { computeVerifiedBuildHash } from "./policy/verified-build.js";

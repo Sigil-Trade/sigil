@@ -5,7 +5,7 @@
  * Every error includes a category, retryability flag, and
  * recovery actions that tell the agent exactly what to do next.
  *
- * Maps all 105 on-chain error codes (6000-6104) — post M1-04 constraints-engine
+ * Maps all 118 on-chain error codes (6000-6117) — post M1-04 constraints-engine
  * teardown, which removed 10 dead constraint-only variants and renumbered the
  * enum (positional). The IDL (`target/idl/sigil.json`) is the authoritative
  * code↔name source; `error-map-drift.test.ts` enforces this map agrees with it.
@@ -606,7 +606,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
     recovery_actions: [
       {
         action: "check_permissions",
-        description: "Check the agent's permission bitmask",
+        description: "Check the agent's capability tier",
         tool: "sigil_check_vault",
       },
       {

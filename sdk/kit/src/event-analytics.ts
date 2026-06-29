@@ -72,16 +72,8 @@ const EVENT_CATEGORY_MAP: Record<string, EventCategory> = {
   PolicyChangeQueued: "policy",
   PolicyChangeApplied: "policy",
   PolicyChangeCancelled: "policy",
-  InstructionConstraintsCreated: "policy",
-  // V2 (MED-2 cleanup): InstructionConstraintsUpdated / InstructionConstraintsClosed
-  // were replaced by ConstraintsChangeApplied / CloseConstraintsApplied. Dead
-  // entries removed to prevent stale event-name matches.
-  ConstraintsChangeQueued: "policy",
-  ConstraintsChangeApplied: "policy",
-  ConstraintsChangeCancelled: "policy",
-  CloseConstraintsQueued: "policy",
-  CloseConstraintsApplied: "policy",
-  CloseConstraintsCancelled: "policy",
+  // The instruction-constraints engine was demolished — no Constraints* /
+  // CloseConstraints* events are emitted on-chain. Entries removed.
   AgentRegistered: "agent",
   AgentRevoked: "agent",
   // V2: AgentPermissionsUpdated removed — replaced by ChangeQueued/Applied/Cancelled
@@ -199,21 +191,6 @@ export function describeEvent(
 
     case "DelegationRevoked":
       return "Token delegation revoked after session completion";
-
-    case "InstructionConstraintsCreated":
-      return "Instruction constraints configured for this vault";
-    case "ConstraintsChangeQueued":
-      return "Constraint change queued — waiting for timelock";
-    case "ConstraintsChangeApplied":
-      return "Queued constraint change applied";
-    case "ConstraintsChangeCancelled":
-      return "Queued constraint change cancelled";
-    case "CloseConstraintsQueued":
-      return "Constraint close queued — waiting for timelock";
-    case "CloseConstraintsApplied":
-      return "Instruction constraints closed";
-    case "CloseConstraintsCancelled":
-      return "Queued constraint close cancelled";
 
     default:
       return `${decoded.name} event`;

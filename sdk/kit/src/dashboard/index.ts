@@ -966,6 +966,87 @@ export class OwnerClient {
     );
   }
 
+  /**
+   * Item 3 — cosigner-signed approval of a queued elevated policy update
+   * (completes the 2-of-2 cosign flow before {@link applyPendingPolicy}). The
+   * `cosigner` is the fee payer + sole signer; it must equal the vault's bound
+   * `cosign_session_pubkey`. AL2 mainnet gate applies.
+   */
+  async approvePendingPolicy(
+    cosigner: TransactionSigner,
+    opts?: TxOpts,
+  ): Promise<TxResult> {
+    this.assertMainnetConfirmed("approvePendingPolicy", opts);
+    return mutations.approvePendingPolicy(
+      this.rpc,
+      this.vault,
+      cosigner,
+      this.network,
+      opts,
+    );
+  }
+
+  /**
+   * Item 3 — build (but do not sign) the cosigner's approve_pending_policy
+   * transaction AND fetch+decode the pending policy for review. The cosigner's
+   * wallet completes the signature and sends. No mainnet gate (returns an
+   * unsigned tx — nothing is broadcast here).
+   */
+  async buildApprovePendingPolicy(
+    cosigner: Address,
+    opts?: TxOpts,
+  ): Promise<mutations.ApprovePendingPolicyReview> {
+    return mutations.buildApprovePendingPolicy(
+      this.rpc,
+      this.vault,
+      cosigner,
+      opts,
+    );
+  }
+
+  /**
+   * Item 4 — promote a destination from the vault's graylist into the approved
+   * `allowed_destinations` allowlist. Owner-signed, immediate. AL2 mainnet gate
+   * applies.
+   */
+  async promoteGraylistDestination(
+    destination: Address,
+    opts?: TxOpts,
+  ): Promise<TxResult> {
+    this.assertMainnetConfirmed("promoteGraylistDestination", opts);
+    return mutations.promoteGraylistDestination(
+      this.rpc,
+      this.vault,
+      this.owner,
+      this.network,
+      destination,
+      opts,
+    );
+  }
+
+  /**
+   * Item 4 — record a policy-violation failure for an agent, incrementing its
+   * consecutive-failure counter (auto-revokes at `auto_revoke_threshold`).
+   * Owner-signed, immediate. `errorCode` is the on-chain policy-violation code
+   * (6074..=6091) observed on the failed seal. AL2 mainnet gate applies.
+   */
+  async recordAgentViolation(
+    agent: Address,
+    errorCode: number,
+    opts?: TxOpts,
+  ): Promise<TxResult> {
+    this.assertMainnetConfirmed("recordAgentViolation", opts);
+    return mutations.recordAgentViolation(
+      this.rpc,
+      this.vault,
+      this.owner,
+      this.network,
+      agent,
+      errorCode,
+      opts,
+    );
+  }
+
   // ─── Phase 8 Ownership Transfer (M-2, audit 2026-05-21) ─────────────────────
   //
   // On-chain handlers live at programs/sigil/src/instructions/

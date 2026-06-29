@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import type { Address, ReadonlyUint8Array } from "@solana/kit";
-import { getAddressEncoder, getU64Encoder } from "@solana/kit";
+import { getAddressEncoder } from "@solana/kit";
 import {
   getRolling24hUsd,
   getAgentRolling24hUsd,
@@ -16,6 +16,11 @@ import type {
   SpendingEpoch,
 } from "../src/state-resolver.js";
 import { getVaultPDA } from "../src/resolve-accounts.js";
+import {
+  getAgentVaultEncoder,
+  type AgentVaultArgs,
+} from "../src/generated/accounts/agentVault.js";
+import { VaultStatus } from "../src/generated/types/vaultStatus.js";
 import { formatUsd } from "../src/formatting.js";
 import type { EffectiveBudget, ProtocolBudget } from "../src/state-resolver.js";
 import type { SpendTracker } from "../src/generated/accounts/spendTracker.js";
@@ -827,33 +832,58 @@ describe("findVaultsByOwner", () => {
   const ORIGINAL_AUTHORITY =
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address;
 
-  const u64Encoder = getU64Encoder();
-
-  // AgentVault layout offsets used by findVaultsByOwner — keep in sync
-  // with state-resolver.ts:VAULT_AUTHORITY_OFFSET (644). The full body
-  // is 675 bytes post-LBL-01; tests build a minimally-correct buffer
-  // that places `vault_id` and `vault_authority` at the right offsets
-  // so the H-5 re-derivation logic can run.
-  const VAULT_ID_OFFSET = 40;
-  const VAULT_AUTHORITY_OFFSET = 644;
   const AGENT_VAULT_FULL_SIZE = 676;
+  // A single agent so the serialized body is SHORTER than the 10-agent layout —
+  // i.e. `vault_authority` (a Borsh tail field) lands EARLIER than offset 644.
+  // This is exactly the sub-10-agent shape the offset-644 bug (Item 5) mangled.
+  const AGENT_PUBKEY = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address;
 
   /**
-   * Build a base64-encoded full AgentVault body that places `vault_id`
-   * at offset 40 and `vault_authority` at offset 644 (F-Q6 2026-06-02
-   * inserted owner_type at 643, before vault_authority; vault_authority
-   * stays the final 32 bytes = SIZE-32). `authority`
-   * defaults to OWNER so legacy tests exercise the
-   * `vault.vault_authority === owner` (never-transferred) shape.
+   * Build a base64-encoded AgentVault via the REAL Borsh encoder (Item 5),
+   * padded to the allocated 676 bytes exactly like an on-chain account (the
+   * serialized data is followed by zero-padding). A fixed offset-644 read of
+   * `vault_authority` returns that padding for this sub-10-agent vault — the
+   * regression `findVaultsByOwner` decodes the Vec correctly instead.
+   * `authority` defaults to OWNER (never-transferred shape).
    */
   function vaultAccountData(
     id: bigint,
     authority: Address = OWNER,
   ): [string, string] {
-    const buf = new Uint8Array(AGENT_VAULT_FULL_SIZE);
-    buf.set(u64Encoder.encode(id), VAULT_ID_OFFSET);
-    buf.set(encoder.encode(authority), VAULT_AUTHORITY_OFFSET);
-    return [Buffer.from(buf).toString("base64"), "base64"];
+    const av: AgentVaultArgs = {
+      owner: OWNER,
+      vaultId: id,
+      agents: [
+        {
+          pubkey: AGENT_PUBKEY,
+          capability: 2,
+          spendingLimitUsd: 0n,
+          paused: false,
+          consecutiveFailures: 0,
+          reserved: new Uint8Array(6),
+        },
+      ],
+      feeDestination: AGENT_PUBKEY,
+      status: VaultStatus.Active,
+      bump: 254,
+      createdAt: 0n,
+      totalTransactions: 0n,
+      totalVolume: 0n,
+      totalFeesCollected: 0n,
+      totalDepositedUsd: 0n,
+      totalWithdrawnUsd: 0n,
+      totalFailedTransactions: 0n,
+      activeSessions: 0,
+      observeOnly: false,
+      frozenAtTimestamp: 0n,
+      freezeReason: 0,
+      ownerType: 0,
+      vaultAuthority: authority,
+    };
+    const encoded = getAgentVaultEncoder().encode(av);
+    const padded = new Uint8Array(AGENT_VAULT_FULL_SIZE);
+    padded.set(encoded);
+    return [Buffer.from(padded).toString("base64"), "base64"];
   }
 
   it("returns vaults for owner via getProgramAccounts", async () => {
@@ -919,6 +949,43 @@ describe("findVaultsByOwner", () => {
     );
     expect(vaults[0].vaultAddress).to.equal(transferredPda);
     expect(vaults[0].vaultId).to.equal(transferredId);
+  });
+
+  // Item 5 regression: the fixed-offset-644 `vault_authority` read only works
+  // for a full 10-agent vault. For a sub-10-agent vault the Borsh `agents` Vec
+  // serializes shorter, so `vault_authority` lands EARLIER and offset 644 falls
+  // in the account's zero-padding — the old code derived the PDA from a zero
+  // pubkey, mismatched, and silently dropped the entry. (The suite's mock RPC
+  // ignores the dataSize filter, which is why this was never caught.) The
+  // decoder-based fix reads the field at its true position.
+  it("Item 5: finds a sub-10-agent transferred vault (offset-644 read is zero-padding)", async () => {
+    const id = 3n;
+    const [pda] = await getVaultPDA(ORIGINAL_AUTHORITY, id);
+    const [dataB64] = vaultAccountData(id, ORIGINAL_AUTHORITY);
+    const raw = new Uint8Array(Buffer.from(dataB64, "base64"));
+
+    // Bug precondition: the FIXED offset-644 window is zero-padding here, so the
+    // old code re-derived the PDA from a zero seed-key and dropped the vault.
+    expect(
+      raw.subarray(644, 676).every((b) => b === 0),
+      "offset 644 must be zero-padding for a single-agent vault",
+    ).to.equal(true);
+
+    const rpc = {
+      getProgramAccounts: () => ({
+        send: async () => [
+          { pubkey: pda, account: { data: [dataB64, "base64"] } },
+        ],
+      }),
+    } as any;
+
+    const vaults = await findVaultsByOwner(rpc, OWNER);
+    expect(vaults).to.have.length(
+      1,
+      "sub-10-agent vault must be decoded + returned, not dropped",
+    );
+    expect(vaults[0].vaultAddress).to.equal(pda);
+    expect(vaults[0].vaultId).to.equal(id);
   });
 
   // Defense-in-depth: a malicious RPC that returns a fabricated pubkey

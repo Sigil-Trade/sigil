@@ -75,6 +75,8 @@ import {
 import { AltCache, mergeAltAddresses, verifySigilAlt } from "./alt-loader.js";
 import { getSigilAltAddress, getExpectedAltContents } from "./alt-config.js";
 import { deriveAta } from "./tokens.js";
+import { buildOwnerTransaction } from "./owner-transaction.js";
+import { buildAgentTransfer } from "./agent-transfer.js";
 import {
   type Network,
   isStablecoinMint,
@@ -1628,6 +1630,32 @@ export interface ExecuteResult {
  * Pattern matches viem's `createPublicClient()` — functional primitives
  * (`seal()`, `createVault()`) as the real API, factory for ergonomics.
  */
+export interface TransferOptions {
+  /** Destination WALLET address — must be in policy.allowedDestinations. */
+  destination: Address;
+  /** Amount in stablecoin base units (6 decimals): $100 = 100_000_000n. */
+  amount: bigint;
+  /** Stablecoin mint to transfer (USDC or USDT on the client's network). */
+  tokenMint: Address;
+  /** Override compute units (default: CU_OWNER_ACTION = 200,000). */
+  computeUnits?: number;
+  /** Priority fee in microLamports per CU. Default: 0. */
+  priorityFeeMicroLamports?: number;
+  /** Confirmation options forwarded to sendAndConfirmTransaction. */
+  confirmOptions?: SendAndConfirmOptions;
+  /** AL2 mainnet confirmation — see {@link ClientSealOpts.mainnetConfirmed}. */
+  mainnetConfirmed?: boolean;
+}
+
+export interface TransferResult {
+  /** Confirmed transaction signature. */
+  signature: string;
+  /** The compiled transaction that was signed + sent. */
+  transaction: ReturnType<typeof compileTransaction>;
+  /** Wire size in bytes. */
+  txSizeBytes: number;
+}
+
 export interface SigilClientApi {
   /** RPC connection carried by the client. */
   readonly rpc: Rpc<SolanaRpcApi>;
@@ -1646,6 +1674,14 @@ export interface SigilClientApi {
     instructions: Instruction[],
     opts: ClientSealOpts & { confirmOptions?: SendAndConfirmOptions },
   ): Promise<ExecuteResult>;
+
+  /**
+   * Execute a standalone `agent_transfer` — a direct stablecoin payout from the
+   * vault to an allowlisted destination wallet. This is NOT a `seal()` sandwich;
+   * `agent_transfer` is its own on-chain instruction with an upfront fee model.
+   * Builds, signs, sends, and confirms in one call.
+   */
+  transfer(opts: TransferOptions): Promise<TransferResult>;
 
   /** Invalidate blockhash + ALT caches. */
   invalidateCaches(): void;
@@ -1925,6 +1961,79 @@ export function createSigilClient(config: SigilClientConfig): SigilClientApi {
         );
         onErrorCallback?.(sdkError, {
           action: opts.amount > 0n ? "spending" : "non-spending",
+          tokenMint: opts.tokenMint,
+          amount: opts.amount,
+        });
+        throw sdkError;
+      }
+    },
+
+    async transfer(opts) {
+      // AL2 mainnet confirmation gate — `agent_transfer` moves stablecoin OUT of
+      // the vault, carrying the same fund-movement risk as a spend, so it shares
+      // executeAndConfirm's mainnet guard (Phase 9 Batch K).
+      if (network === "mainnet") {
+        const gateEnabled = requireMainnetConfirmation === true;
+        const explicitOptOut = requireMainnetConfirmation === false;
+        const confirmed = opts.mainnetConfirmed === true;
+        if (gateEnabled && !confirmed) {
+          throw new SigilSdkDomainError(
+            SIGIL_ERROR__SDK__MAINNET_CONFIRMATION_REQUIRED,
+            "Mainnet confirmation required — pass `mainnetConfirmed: true` " +
+              "in the transfer options or set " +
+              "`requireMainnetConfirmation: false` on the SigilClientConfig.",
+            { context: { vault: vault.toString(), network: "mainnet" } },
+          );
+        }
+        if (
+          !gateEnabled &&
+          !explicitOptOut &&
+          opts.mainnetConfirmed === undefined
+        ) {
+          getSigilModuleLogger().warn(
+            "[Sigil] @usesigil/kit 0.16.x defaults `requireMainnetConfirmation` " +
+              "to false. v1.0 will flip it to true; mainnet `transfer()` calls " +
+              "without `mainnetConfirmed: true` will throw. Set " +
+              "`requireMainnetConfirmation: false` to silence this warning.",
+          );
+        }
+      }
+
+      try {
+        // Build the standalone instruction (resolves accounts + live
+        // policy_version), then compose + sign + send it like an owner tx —
+        // the agent is both the instruction signer and the fee payer.
+        const ix = await buildAgentTransfer(rpc, {
+          vault,
+          agent,
+          destination: opts.destination,
+          amount: opts.amount,
+          tokenMint: opts.tokenMint,
+          network,
+        });
+        const built = await buildOwnerTransaction({
+          rpc,
+          owner: agent,
+          instructions: [ix],
+          network,
+          computeUnits: opts.computeUnits,
+          priorityFeeMicroLamports: opts.priorityFeeMicroLamports,
+        });
+        const encoded = await signAndEncode(agent, built.transaction);
+        const signature = await sendAndConfirmTransaction(
+          rpc,
+          encoded,
+          opts.confirmOptions,
+        );
+        return {
+          signature,
+          transaction: built.transaction,
+          txSizeBytes: built.txSizeBytes,
+        };
+      } catch (err) {
+        const sdkError = toSigilAgentError(err);
+        onErrorCallback?.(sdkError, {
+          action: "transfer",
           tokenMint: opts.tokenMint,
           amount: opts.amount,
         });

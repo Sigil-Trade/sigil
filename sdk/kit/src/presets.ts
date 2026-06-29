@@ -35,8 +35,8 @@ const KAMINO_LEND_PROGRAM =
 // Preset capability is the on-chain 2-bit value (0 = Disabled, 1 = Observer,
 // 2 = Operator). All presets that execute trades need `FULL_CAPABILITY` (2n).
 // Every preset configures a policy that permits spending, so every preset
-// needs Operator. Per-action restriction lives in `InstructionConstraints`,
-// not in this capability value.
+// needs Operator. Granular per-action enforcement is the policy allowlist +
+// post-execution assertions, not this capability value.
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 

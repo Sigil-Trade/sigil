@@ -1,5 +1,8 @@
 import { z } from "zod";
 import type { SigilClientApi } from "@usesigil/kit";
+import { resolveToken, toAgentError, toBaseUnits } from "@usesigil/kit";
+import type { Address } from "@solana/kit";
+import { toResolvedNetwork } from "../types.js";
 
 const schema = z.object({
   destination: z
@@ -15,31 +18,43 @@ const schema = z.object({
     .describe("Token mint address or symbol (defaults to USDC)"),
 });
 
-export function transferAction(_client: SigilClientApi) {
+export function transferAction(client: SigilClientApi) {
   return {
     description:
-      "Execute a Sigil-secured agent-to-agent stablecoin transfer. Enforces vault spending caps. " +
-      "(Not yet implemented — requires SigilClient.transfer() method.)",
+      "Execute a Sigil-secured agent-to-agent stablecoin transfer. Enforces vault " +
+      "spending caps, per-recipient caps, and the destination allowlist.",
     schema,
-    handler: async (_agent: unknown, _input: z.infer<typeof schema>) => {
-      // agent_transfer is a standalone Sigil instruction (not a DeFi CPI wrapped
-      // with validate_and_authorize + finalize_session). It requires 11 accounts
-      // with PDA derivation (policy, tracker, overlay, destination ATA, fee ATAs).
-      // This must be exposed as SigilClient.transfer() — cannot be built inline
-      // because seal() rejects empty instructions ("No target protocol").
-      return {
-        success: false as const,
-        error:
-          "sigil_transfer is not yet implemented. " +
-          "On-chain agent_transfer uses a standalone instruction, not seal(). " +
-          "Use the vault dashboard or SDK directly to transfer.",
-        recovery: [
-          {
-            action: "use_dashboard",
-            description: "Use the Sigil dashboard to execute transfers",
-          },
-        ],
-      };
+    handler: async (_agent: unknown, input: z.infer<typeof schema>) => {
+      try {
+        const net = toResolvedNetwork(client.network);
+        // Resolve the mint (symbol or address). Defaults to USDC. agent_transfer
+        // is stablecoin-only on-chain, so non-stablecoin mints reject in the SDK.
+        const token = resolveToken(input.mint ?? "USDC", net);
+        const tokenMint = (token?.mint ?? input.mint) as Address;
+        const decimals = token?.decimals ?? 6;
+        const baseAmount = toBaseUnits(input.amount, decimals);
+
+        const result = await client.transfer({
+          destination: input.destination as Address,
+          amount: baseAmount,
+          tokenMint,
+        });
+
+        return {
+          success: true as const,
+          signature: result.signature,
+          destination: input.destination,
+          amount: input.amount,
+          mint: tokenMint,
+        };
+      } catch (err) {
+        const agentErr = toAgentError(err);
+        return {
+          success: false as const,
+          error: agentErr.message,
+          recovery: agentErr.recovery_actions,
+        };
+      }
     },
   };
 }

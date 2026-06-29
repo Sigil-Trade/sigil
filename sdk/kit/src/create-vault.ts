@@ -287,8 +287,8 @@ export async function createVault(
   // would silently truncate in the `Number(...)` coercion below and then
   // fail `InvalidPermissions` on-chain after paying compute budget. Catching
   // it client-side turns a one-RTT-late devnet rejection into an immediate,
-  // descriptive error. Granular per-action restriction lives in
-  // `InstructionConstraints`, not on the capability field.
+  // descriptive error. Granular per-action enforcement is the policy allowlist
+  // + post-execution assertions, not the capability field.
   if (options.permissions !== undefined) {
     const cap = options.permissions;
     if (cap < 0n || cap > 2n) {
@@ -296,8 +296,8 @@ export async function createVault(
         SIGIL_ERROR__SDK__INVALID_CAPABILITY,
         `Invalid capability ${cap}. The on-chain program expects a 2-bit enum ` +
           `(0 = Disabled, 1 = Observer, 2 = Operator) — not a bitmask. ` +
-          `Use FULL_CAPABILITY (2n) for an agent that needs spending authority, ` +
-          `and move granular per-action restriction into InstructionConstraints.`,
+          `Use FULL_CAPABILITY (2n) for an agent that needs spending authority; ` +
+          `granular per-action enforcement is the policy allowlist + assertions.`,
       );
     }
   }

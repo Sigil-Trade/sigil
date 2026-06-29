@@ -58,11 +58,7 @@ export interface Alert {
 export interface AuditEntry {
   timestamp: number;
   txSignature: string;
-  category:
-    | "policy_change"
-    | "agent_change"
-    | "emergency"
-    | "constraint_change";
+  category: "policy_change" | "agent_change" | "emergency";
   action: string;
   actor: Address;
   details: Record<string, unknown>;
@@ -493,20 +489,13 @@ const AUDIT_EVENTS: Record<string, AuditEntry["category"]> = {
   VaultReactivated: "emergency",
   VaultClosed: "emergency",
   VaultCreated: "emergency",
-  InstructionConstraintsCreated: "constraint_change",
-  // V2 (MED-2 cleanup): InstructionConstraintsUpdated / InstructionConstraintsClosed
-  // were replaced by ConstraintsChangeApplied / CloseConstraintsApplied.
-  ConstraintsChangeQueued: "constraint_change",
-  ConstraintsChangeApplied: "constraint_change",
-  ConstraintsChangeCancelled: "constraint_change",
-  CloseConstraintsQueued: "constraint_change",
-  CloseConstraintsApplied: "constraint_change",
-  CloseConstraintsCancelled: "constraint_change",
+  // The instruction-constraints engine was demolished — no Constraints* /
+  // CloseConstraints* events are emitted on-chain. Entries removed.
 };
 
 /**
  * Filter decoded events into a compliance-focused audit trail.
- * Shows only security-relevant events (policy, agent, emergency, constraints).
+ * Shows only security-relevant events (policy, agent, emergency).
  *
  * Supports optional filtering by category, timestamp, and actor.
  *
@@ -585,7 +574,6 @@ export function getAuditTrailSummary(trail: AuditEntry[]): AuditTrailSummary {
     policy_change: 0,
     agent_change: 0,
     emergency: 0,
-    constraint_change: 0,
   };
   const actors = new Set<string>();
   let latest = 0;
