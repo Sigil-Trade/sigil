@@ -106,16 +106,29 @@ describe("@usesigil/plugins/sak", () => {
       expect(result.success).to.be.true;
     });
 
-    it("transfer action returns not-implemented error", async () => {
+    it("transfer action accepts a valid transfer and rejects a non-positive amount", () => {
+      // The handler is now wired to SigilClient.transfer() (agent_transfer);
+      // exercising it end-to-end needs a live RPC, so verify the schema here
+      // (mirrors the swap action test). Full composition is covered by
+      // sdk/kit's buildAgentTransfer suite.
       const plugin = createSigilPlugin(mockConfig());
       const transfer = plugin.methods.sigil_transfer;
 
-      const result = await transfer.handler(null, {
+      const valid = transfer.schema.safeParse({
         destination: AGENT_ADDR,
         amount: 100,
       });
-      expect(result.success).to.be.false;
-      expect(result.error).to.include("not yet implemented");
+      expect(valid.success).to.be.true;
+
+      const invalid = transfer.schema.safeParse({
+        destination: AGENT_ADDR,
+        amount: -5,
+      });
+      expect(invalid.success).to.be.false;
+      if (!invalid.success) {
+        const paths = invalid.error.issues.map((i: any) => i.path.join("."));
+        expect(paths).to.include("amount");
+      }
     });
   });
 });
