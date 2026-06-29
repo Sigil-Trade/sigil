@@ -7,6 +7,35 @@
  *
  * All succeed or all revert atomically.
  *
+ * SECURITY GUARANTEE — and its boundary. Read this before trusting an agent to
+ * transact autonomously, and surface it honestly to users; do NOT imply
+ * value-conservation.
+ *
+ * What Sigil ENFORCES on-chain (atomically, within the sandwich):
+ *  - No theft: swap output must land in the vault-owned account pinned at
+ *    `validate_and_authorize`; an agent cannot redirect value to its own wallet
+ *    (output-ownership, err 6112).
+ *  - Caps: MEASURED stablecoin outflow is bounded by every configured cap
+ *    (per-tx, rolling-24h, per-agent, per-protocol, per-recipient, balance floor).
+ *  - Allowlist: only owner-allowlisted protocols (and, on the direct-transfer
+ *    path, allowlisted destinations).
+ *  - Verified build (when armed): the target program's deployed ELF hash must
+ *    match the owner-pinned hash (err 6116/6117).
+ *
+ * What Sigil does NOT — and cannot GENERICALLY — enforce:
+ *  - Execution QUALITY / value. Sigil is value-BLIND (no oracle/price). An agent
+ *    can waste value by swapping into worthless-but-vault-owned tokens; only the
+ *    caps rate-limit that bleed.
+ *  - Position-world custody. When value returns as a venue POSITION (perps,
+ *    lending, LP) instead of a vault-owned SPL balance, the outflow is capped but
+ *    Sigil cannot generically verify the vault still CONTROLS that position.
+ *    Such venues require per-venue custody assertions or explicit owner risk
+ *    acceptance.
+ *
+ * In one line: an agent CANNOT steal to its own wallet and CANNOT exceed caps,
+ * but CAN waste value within caps and CAN move value into venue positions whose
+ * ongoing custody is not on-chain-verified.
+ *
  * Devnet prerequisites:
  * - Sigil program deployed at SIGIL_PROGRAM_ADDRESS
  * - SIGIL_ALT_DEVNET updated in alt-config.ts (currently placeholder)
