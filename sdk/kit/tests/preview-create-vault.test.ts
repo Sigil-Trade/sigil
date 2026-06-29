@@ -13,6 +13,9 @@
  *   G9 — RPC failure handling (typed throws on bad rent response)
  */
 import { expect } from "chai";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 
 import {
   previewCreateVault,
@@ -187,30 +190,58 @@ describe("previewCreateVault — PDA derivation", () => {
 // ─── G3 — Account size correctness ──────────────────────────────────────────
 
 describe("previewCreateVault — on-chain account sizes", () => {
-  it("AgentVault sizeBytes equals 676 (Phase-8 fields + F-Q6 owner_type)", async () => {
+  // CROSS-LANGUAGE drift guard (not self-referential): parse each PDA's
+  // compile-time `assert!(<Type>::SIZE == N)` pin from the Rust source and
+  // assert the preview's hardcoded size matches it. A prior bug shipped
+  // POLICY_CONFIG_SIZE = 1329 while on-chain was 1649 (the verified-build
+  // protocol_hashes added 320 bytes); the OLD test asserted against the same
+  // literal so it could not catch the drift. This reads ground truth instead.
+  const STATE_DIR = resolve(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../../programs/sigil/src/state",
+  );
+
+  /** Extract `<Type>::SIZE == <N>` from a Rust state file's compile-time pin. */
+  function rustPinnedSize(file: string, type: string): number {
+    const src = readFileSync(resolve(STATE_DIR, file), "utf8");
+    const m = src.match(new RegExp(`${type}::SIZE\\s*==\\s*([0-9_]+)`));
+    if (!m) throw new Error(`No \`${type}::SIZE == N\` pin found in ${file}`);
+    return Number(m[1]!.replace(/_/g, ""));
+  }
+
+  // One explicit `it` per PDA (kept un-looped so the static test counter sees
+  // each). pdaList canonical order: AgentVault, PolicyConfig, SpendTracker,
+  // AgentSpendOverlay.
+  it("AgentVault preview sizeBytes matches the on-chain AgentVault::SIZE pin (vault.rs)", async () => {
     const r = await previewCreateVault(baseConfig());
-    // F-Q6 (2026-06-02): 676 = 675 (Phase-8 LBL-01) + 1 owner_type. The prior
-    // 634 was stale by 41 bytes (never updated for frozen_at_timestamp +
-    // freeze_reason + vault_authority); corrected to the rent-exact size here.
-    expect(r.pdaList[0]!.sizeBytes).to.equal(676);
+    expect(r.pdaList[0]!.sizeBytes).to.equal(
+      rustPinnedSize("vault.rs", "AgentVault"),
+      "AgentVault preview size drifted from on-chain AgentVault::SIZE — update preview-create-vault.ts",
+    );
   });
 
-  it("PolicyConfig sizeBytes equals 1,329 (Phase 2-5 + G6 + D-5 + F-Q6 operator_grant_delay_seconds)", async () => {
+  it("PolicyConfig preview sizeBytes matches the on-chain PolicyConfig::SIZE pin (policy.rs)", async () => {
     const r = await previewCreateVault(baseConfig());
-    // F-Q6 (2026-06-02): +8 operator_grant_delay_seconds. (The prior 1,322 was
-    // 1 byte over — it double-counted the M1-04-removed has_constraints byte;
-    // the rent-exact size is 1,321 pre-F-Q6 → 1,329 now.)
-    expect(r.pdaList[1]!.sizeBytes).to.equal(1_329);
+    expect(r.pdaList[1]!.sizeBytes).to.equal(
+      rustPinnedSize("policy.rs", "PolicyConfig"),
+      "PolicyConfig preview size drifted from on-chain PolicyConfig::SIZE — update preview-create-vault.ts",
+    );
   });
 
-  it("SpendTracker sizeBytes equals 3,328 (TA-14 per_recipient added)", async () => {
+  it("SpendTracker preview sizeBytes matches the on-chain SpendTracker::SIZE pin (tracker.rs)", async () => {
     const r = await previewCreateVault(baseConfig());
-    expect(r.pdaList[2]!.sizeBytes).to.equal(3_328);
+    expect(r.pdaList[2]!.sizeBytes).to.equal(
+      rustPinnedSize("tracker.rs", "SpendTracker"),
+      "SpendTracker preview size drifted from on-chain SpendTracker::SIZE — update preview-create-vault.ts",
+    );
   });
 
-  it("AgentSpendOverlay sizeBytes equals 2,688 (TA-06 cooldown fields added)", async () => {
+  it("AgentSpendOverlay preview sizeBytes matches the on-chain AgentSpendOverlay::SIZE pin (agent_spend_overlay.rs)", async () => {
     const r = await previewCreateVault(baseConfig());
-    expect(r.pdaList[3]!.sizeBytes).to.equal(2_688);
+    expect(r.pdaList[3]!.sizeBytes).to.equal(
+      rustPinnedSize("agent_spend_overlay.rs", "AgentSpendOverlay"),
+      "AgentSpendOverlay preview size drifted from on-chain AgentSpendOverlay::SIZE — update preview-create-vault.ts",
+    );
   });
 });
 
@@ -263,27 +294,29 @@ describe("previewCreateVault — cost math", () => {
     // Post-D-5 (audit 2026-05-19, F-RP3-1): PolicyConfig grew 32 bytes for
     // the new `cosign_session_pubkey` field — SDK SIZE constants now match
     // on-chain:
-    //   AgentVault 676, PolicyConfig 1329, SpendTracker 3328, AgentSpendOverlay 2688.
+    //   AgentVault 676, PolicyConfig 1649, SpendTracker 3328, AgentSpendOverlay 2688.
     // F-Q6 (2026-06-02): PolicyConfig 1322 → 1329 (+8 operator_grant_delay_seconds;
     // the prior 1322 double-counted the M1-04-removed has_constraints byte) AND
     // AgentVault 634 → 676 (+1 owner_type; the prior 634 was also stale by 41
     // bytes — it predated the Phase-8 frozen_at_timestamp + freeze_reason +
     // vault_authority fields).
     // Sum of rent for the 4 PDAs at default mock formula =
-    //   ((676+128) + (1329+128) + (3328+128) + (2688+128)) × 6960
-    // = (804 + 1457 + 3456 + 2816) × 6960
-    // = 8533 × 6960 = 59_389_680 lamports.
-    // totalCostUsd = 59_389_680 × 250_000_000 / 1_000_000_000 = 14_847_420
-    // (= $14.84742 in 6-decimal USD).
-    // Prior pin (pre-AgentVault correction): rentLamports = 59_097_360, totalCostUsd = 14_774_340.
+    //   ((676+128) + (1649+128) + (3328+128) + (2688+128)) × 6960
+    // = (804 + 1777 + 3456 + 2816) × 6960
+    // = 8853 × 6960 = 61_616_880 lamports.
+    // totalCostUsd = 61_616_880 × 250_000_000 / 1_000_000_000 = 15_404_220
+    // (= $15.40422 in 6-decimal USD).
+    // Prior pin used PolicyConfig 1329 (the bug): rentLamports = 59_389_680,
+    // totalCostUsd = 14_847_420 — understated by 320 bytes of rent (the
+    // verified-build protocol_hashes array; PolicyConfig::SIZE is 1649).
     const r = await previewCreateVault(
       baseConfig({
         priorityFeeMicroLamports: 0,
         solPriceUsd: 250_000_000n,
       }),
     );
-    expect(r.rentLamports).to.equal(59_389_680n);
-    expect(r.totalCostUsd).to.equal(14_847_420n);
+    expect(r.rentLamports).to.equal(61_616_880n);
+    expect(r.totalCostUsd).to.equal(15_404_220n);
   });
 
   it("totalCostUsd is bigint (never number)", async () => {

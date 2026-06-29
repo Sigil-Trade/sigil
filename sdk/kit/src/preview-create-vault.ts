@@ -113,11 +113,15 @@ const AGENT_VAULT_SIZE = 676;
  *       + 8 per_recipient_daily_cap_usd [TA-14 Phase 5]
  *       + 1 cosign_required [G6 audit 2026-05-18]
  *       + 32 cosign_session_pubkey [D-5 audit 2026-05-19, F-RP3-1]
- *       + 8 operator_grant_delay_seconds [F-Q6 2026-06-02] = 1,329.
- *   (Was 1,322 pre-F-Q6 — that value double-counted the M1-04-removed
- *    has_constraints byte; corrected to the rent-exact 1,329 here.)
+ *       + 8 operator_grant_delay_seconds [F-Q6 2026-06-02]
+ *       + 32*10 protocol_hashes [verified-build gate, 2026-06-22] = 1,649.
+ *   (Was 1,329 pre-protocol_hashes; the fixed [[u8;32];10] verified-build
+ *    array added 320 bytes — pinned on-chain at `policy.rs:530`
+ *    `assert!(PolicyConfig::SIZE == 1649)`. The cross-language test in
+ *    preview-create-vault.test.ts parses that Rust assert so this can't
+ *    silently drift again.)
  */
-const POLICY_CONFIG_SIZE = 1_329;
+const POLICY_CONFIG_SIZE = 1_649;
 
 /**
  * `SpendTracker::SIZE` from `programs/sigil/src/state/tracker.rs:200-214`.
