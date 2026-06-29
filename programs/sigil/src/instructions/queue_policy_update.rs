@@ -443,6 +443,77 @@ pub fn handler(
             .any(|i| policy.protocol_hashes[i] != [0u8; 32] && eff_protocol_hashes[i] == [0u8; 32])
     });
 
+    // M1 (2026-06-29, reorder-disarm cosign evasion): the positional
+    // `disarms_build_hash` above MISSES a pure REORDER of the same protocol set.
+    // At runtime `enforce_verified_build_if_armed` locates the target's pinned
+    // hash BY INDEX in `policy.protocols`/`policy.protocol_hashes`, while the
+    // elevation classifier (`expands_protocols`) only fires on a NEW member or a
+    // LARGER length — so permuting the SAME set (protocol P moved index i→j) with
+    // `protocol_hashes: None` (the hash array passes through positionally
+    // unchanged) is classified non-elevated. After apply, P sits at index j whose
+    // hash slot holds a DIFFERENT protocol's hash (or zero), silently disarming
+    // P's build gate WITHOUT a cosigner. Detect the weakening BY IDENTITY: for
+    // every protocol armed in the LIVE policy, find its hash in the EFFECTIVE
+    // (post-apply) state by pubkey and flag a nonzero→zero transition. A protocol
+    // DROPPED from the set while armed is a tightening (it can no longer be
+    // invoked at all), not a disarm. A same-order no-op maps every protocol back
+    // to its own slot → no false positive. Bounded by MAX_ALLOWED_PROTOCOLS (10).
+    let disarms_build_hash_by_identity = policy.protocols.iter().enumerate().any(|(i, p)| {
+        let live_hash = policy.protocol_hashes.get(i).copied().unwrap_or([0u8; 32]);
+        if live_hash == [0u8; 32] {
+            return false; // not armed in the live policy
+        }
+        match eff_protocols_owned.iter().position(|ep| ep == p) {
+            // Effective hash for P by identity; nonzero→zero == disarmed.
+            Some(j) => eff_protocol_hashes.get(j).copied().unwrap_or([0u8; 32]) == [0u8; 32],
+            // P removed from the allowlist while armed → tightening, not a disarm.
+            None => false,
+        }
+    });
+
+    // M1 (2026-06-29): identity-based per-protocol cap weakening — the same
+    // reorder hazard as the build hash. `get_protocol_cap` reads the cap BY INDEX
+    // at finalize, so a permutation rebinds P to another slot's (possibly weaker /
+    // unlimited) cap without the positional `weakens_protocol_caps_predicate`
+    // (which compares index-for-index) noticing. For every protocol capped in the
+    // LIVE policy, resolve its EFFECTIVE cap by identity and flag a weakening
+    // (cap → 0 "unlimited", or a strictly larger cap). Only meaningful when caps
+    // are effectively ON. Honors the "0 = unlimited" convention used at
+    // finalize_session.rs / state/policy.rs.
+    let weakens_protocol_caps_by_identity = eff_has_protocol_caps
+        && policy.protocols.iter().enumerate().any(|(i, p)| {
+            let live_cap = policy.protocol_caps.get(i).copied().unwrap_or(0);
+            if live_cap == 0 {
+                return false; // already unlimited at this protocol → can't weaken
+            }
+            match eff_protocols_owned.iter().position(|ep| ep == p) {
+                Some(j) => {
+                    let eff_cap = eff_protocol_caps_owned.get(j).copied().unwrap_or(0);
+                    eff_cap == 0 || eff_cap > live_cap
+                }
+                // P removed → tightening (no longer invocable), not a weakening.
+                None => false,
+            }
+        });
+
+    // M1 (2026-06-29) belt-and-suspenders: a pure REORDER of the SAME protocol
+    // set while ANY build hash or protocol cap is armed is itself elevated — the
+    // reorder is the exact mechanism that rebinds armed hashes/caps to the wrong
+    // protocol. A benign reorder on a vault with NO armed hashes/caps stays
+    // non-elevated (do NOT over-gate). Computed against the queued `protocols`
+    // arg (not the merged-effective owned vec) so it fires only when the owner is
+    // actually supplying a reordered allowlist.
+    let reorders_armed_protocols = protocols.as_ref().is_some_and(|new| {
+        let same_set = new.len() == policy.protocols.len()
+            && new.iter().all(|p| policy.protocols.contains(p))
+            && policy.protocols.iter().all(|p| new.contains(p));
+        let order_differs = new.iter().zip(policy.protocols.iter()).any(|(a, b)| a != b);
+        let any_hash_armed = policy.protocol_hashes.iter().any(|h| *h != [0u8; 32]);
+        let any_cap_armed =
+            policy.has_protocol_caps && policy.protocol_caps.iter().any(|c| *c != 0);
+        same_set && order_differs && (any_hash_armed || any_cap_armed)
+    });
+
     // G6 (audit 2026-05-18 cosign opt-in): one-way-ratchet semantics for
     // toggling `cosign_required`.
     //
@@ -509,10 +580,13 @@ pub fn handler(
             || lowers_floor
             || weakens_per_recipient_cap
             || weakens_protocol_caps
+            || weakens_protocol_caps_by_identity
             || raises_slippage
             || raises_developer_fee
             || widens_operating_hours
-            || disarms_build_hash))
+            || disarms_build_hash
+            || disarms_build_hash_by_identity
+            || reorders_armed_protocols))
         || disables_cosign
         || rotates_cosigner;
 
