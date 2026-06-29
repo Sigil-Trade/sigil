@@ -96,6 +96,11 @@ pub fn handler(
     protocol_caps: Vec<u64>,
     observe_only: bool,
     operating_hours: u32,
+    // Init-only by design: `auto_promote_grays` + `auto_revoke_threshold` are
+    // written once here and never mutated afterward — no queue_policy_update /
+    // apply_pending_policy path touches them (those paths read live policy so
+    // the signed digest matches; see queue_policy_update.rs). Adding an update
+    // path would require a new pending field + digest change (out of scope).
     auto_promote_grays: bool,
     auto_revoke_threshold: u8,
     // TA-12 (Phase 5 post-exec): combined USDC+USDT vault floor enforced

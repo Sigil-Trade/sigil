@@ -1,6 +1,6 @@
-# Error Codes (6000-6115)
+# Error Codes (6000-6117)
 
-All 116 custom errors defined in `programs/sigil/src/errors.rs`. Use `require!(condition, SigilError::Name)`.
+All 118 custom errors defined in `programs/sigil/src/errors.rs`. Use `require!(condition, SigilError::Name)`.
 
 Source of truth: `target/idl/sigil.json` (regenerate this file by running `bash scripts/regen-error-codes-doc.sh` after any change to `errors.rs`).
 
@@ -122,3 +122,5 @@ Source of truth: `target/idl/sigil.json` (regenerate this file by running `bash 
 | 6113 | `ErrFinalizeMetaUnresolvable` | Finalize completeness: a writable DeFi account meta is absent from remaining_accounts (F-Q1b — omission would dodge per-recipient/output attribution) |
 | 6114 | `ErrDeFiInstructionNotAdjacentToFinalize` | The counted DeFi instruction must sit immediately before finalize_session (no interleaved instruction) so finalize's attribution walks bind to the correct instruction |
 | 6115 | `ErrUnmeasurableSpend` | Spending session produced no measurable in-transaction vault outcome (no stablecoin movement and no vault-owned acquisition) — async/keeper-settled or unmeasurable; recording 0 spend is rejected |
+| 6116 | `ErrProgramDataUnresolvable` | Verified-build gate: the target protocol's ProgramData account is missing/unresolvable while a build hash is armed — cannot vet the deployed build (fail-closed) |
+| 6117 | `ErrProgramBuildMismatch` | Verified-build gate: the target protocol's deployed ELF hash does not match the owner-pinned build hash — the on-chain build changed (re-pin via queue_policy_update after re-audit) |

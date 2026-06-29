@@ -16,25 +16,24 @@
 //! This helper makes the reason byte a REQUIRED argument so the type system
 //! refuses to compile a freeze site that forgets it.
 //!
-//! ## F19 lineage — `parse_token_account_raw`
+//! ## F19 lineage (historical)
 //!
 //! Round 2 finding F19 caught `finalize_session.rs` reading Anchor's cached
 //! `TokenAccount.amount` instead of re-parsing the raw bytes; a compromised
 //! DeFi program returning a stale-cache value defeated all 6 spending caps.
-//! Batch 3 will iterate `remaining_accounts` to revoke SPL delegations during
-//! freeze; that walker MUST verify (mint, owner, amount, delegate) from the
-//! raw `try_borrow_data()` bytes, NOT from Anchor's deserialized view, or
-//! the same F19 cached-deser vector reopens on the freeze path. This module
-//! exposes `parse_token_account_raw` so every future caller uses the same
-//! audited cursor.
+//! A speculative `parse_token_account_raw` cursor was once exposed here for a
+//! planned Batch-3 token-account walker. That walker was never built: the SPL
+//! delegation revocation that actually shipped (`freeze_vault.rs`) is
+//! session-driven — it iterates `SessionAuthority` PDAs via `try_borrow_data()`
+//! and revokes each `delegated` session, never inspecting token-account
+//! `amount`. The unused cursor had zero call sites and was removed (foundation
+//! review 2026-06-29).
 //!
 //! ## What this batch (Batch 2) actually does
 //!
 //! - Defines the `freeze_internal(vault, reason, clock, revoke_pairs_count)`
 //!   entry point + `MAX_REVOKE_PAIRS` bound (Council ISC-136).
 //! - Refactors the two existing write sites to call it.
-//! - Provides `parse_token_account_raw` for Batch 3 to use during
-//!   delegation revocation.
 //!
 //! ## Closed in Fix-Up B (commit `1362dac`)
 //!
@@ -118,65 +117,17 @@ pub fn freeze_internal(
     // explicitly with rent → current_owner.
 
     // NOTE (Batch 3): SPL revocation likewise MUST happen at the caller
-    // because CPI requires `token_program` + signer seeds + each ATA loaded
-    // in Anchor context. The bound (`MAX_REVOKE_PAIRS`) is enforced here so
-    // a future caller cannot accidentally feed a thousand-pair list.
+    // because CPI requires `token_program` + signer seeds + each session's
+    // delegate loaded in Anchor context. The bound (`MAX_REVOKE_PAIRS`) is
+    // enforced here so a future caller cannot accidentally feed an unbounded
+    // revocation list.
     //
-    // Per-pair validation (F19 lineage): the caller MUST validate each ATA
-    // via `parse_token_account_raw` (see below), NOT via Anchor's cached
-    // `TokenAccount.amount`. A compromised SPL Token program returning a
-    // stale-cache delegate could otherwise bypass the revocation surface.
+    // F19 lineage: the shipped caller (`freeze_vault.rs`) reads each
+    // `SessionAuthority` from its raw `try_borrow_data()` bytes — NOT from
+    // Anchor's cached deserialization — and revokes every `delegated` session
+    // via a vault-signed `Revoke` CPI. A compromised SPL Token program cannot
+    // bypass the revocation surface because the delegate set is driven by
+    // on-chain session state, not by a token account's cached fields.
 
     Ok(())
-}
-
-/// Phase 8 — raw-bytes SPL token-account parser (F19 lineage).
-///
-/// Reads `(mint, owner, amount)` directly from `account.try_borrow_data()`
-/// to bypass Anchor's cached `TokenAccount.amount`. Round 2 F19 documented
-/// the precedent: a compromised SPL Token program returning a stale-cache
-/// `amount` defeated all six spending caps in `finalize_session.rs`. Every
-/// future caller that needs to inspect a token account during the freeze
-/// path MUST use this cursor to stay aligned with the audited pattern in
-/// `agent_transfer.rs`.
-///
-/// ## Layout (SPL Token v1 + Token-2022 base, 165-byte account)
-///
-/// | offset | size | field          |
-/// |--------|------|----------------|
-/// | 0      | 32   | mint           |
-/// | 32     | 32   | owner          |
-/// | 64     | 8    | amount (LE u64)|
-/// | 72     | 36   | delegate (COption<Pubkey>)|
-/// | ...    | ...  | (state, native, delegated_amount, close_auth) |
-///
-/// We require ≥72 bytes so all three return fields are readable. Token-2022
-/// extension bytes (after offset 165) do not affect the base layout.
-///
-/// ## Why not return delegate / delegated_amount
-///
-/// Batch 2 does not iterate `remaining_accounts`; Batch 3 will, and at that
-/// point this parser can grow a second variant
-/// (`parse_token_account_raw_with_delegate`) if needed. Keeping the Batch 2
-/// surface minimal prevents YAGNI-shaped helpers that are wrong by Batch 3.
-///
-/// ## Borrow lifetime
-///
-/// `try_borrow_data()` returns a `Ref<&[u8]>`. The slice copies happen
-/// before the borrow drops at function return, so the caller never sees a
-/// dangling reference. Re-entrancy is not a concern: this is a pure read.
-pub fn parse_token_account_raw(account: &AccountInfo<'_>) -> Result<(Pubkey, Pubkey, u64)> {
-    let data = account.try_borrow_data()?;
-    require!(data.len() >= 72, SigilError::InvalidTokenAccount);
-    let mut mint_bytes = [0u8; 32];
-    mint_bytes.copy_from_slice(&data[0..32]);
-    let mut owner_bytes = [0u8; 32];
-    owner_bytes.copy_from_slice(&data[32..64]);
-    let mut amount_bytes = [0u8; 8];
-    amount_bytes.copy_from_slice(&data[64..72]);
-    Ok((
-        Pubkey::new_from_array(mint_bytes),
-        Pubkey::new_from_array(owner_bytes),
-        u64::from_le_bytes(amount_bytes),
-    ))
 }
