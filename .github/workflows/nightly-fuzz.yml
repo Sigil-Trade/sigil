@@ -37,7 +37,7 @@ jobs:
           toolchain: stable
 
       - name: Cache Cargo registry + build
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -53,7 +53,7 @@ jobs:
       # trident-tests/Trident.toml [[fuzz.programs]]). Without a freshly-built
       # sigil.so the harness fuzzes nothing — mirror the ci.yml fuzz-test job.
       - name: Cache Solana toolchain
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.local/share/solana
           key: solana-${{ runner.os }}-${{ runner.arch }}-${{ env.SOLANA_VERSION }}
