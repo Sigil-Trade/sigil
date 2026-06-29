@@ -557,6 +557,34 @@ export interface PolicyChanges {
   cosignSessionPubkey?: Address;
   /** F-Q6 operator-grant delay in seconds (gates OPERATOR seating). Not an elevation trigger. */
   operatorGrantDelaySeconds?: bigint;
+  /**
+   * Item 1 (verified-build gate arming) — per-protocol build-hash pins for
+   * `PolicyConfig.protocol_hashes`, keyed by the protocol's program address
+   * (must already be in the vault's `protocols` allowlist). Each value is
+   * either:
+   *   - a 32-byte program-data SHA-256 (from {@link computeVerifiedBuildHash})
+   *     to ARM the gate for that protocol — `validate_and_authorize` then
+   *     rejects (6116/6117) if the deployed build no longer matches, OR
+   *   - the literal `"disarm"` to clear an armed pin (set it back to zeroes).
+   *
+   * On-chain semantics are WHOLE-ARRAY replace, so the SDK seeds the full
+   * 10-entry array from the LIVE policy and applies only these deltas —
+   * protocols you don't mention keep their current pin.
+   *
+   * CONSTRAINTS (enforced by the mutation builders, fail-closed):
+   *   - Cannot be combined with `approvedApps` in the same update (reordering
+   *     the allowlist would mis-align the live-seeded hashes — the on-chain
+   *     digest would still match, silently pinning the wrong hash to the wrong
+   *     protocol). Change the allowlist first, then arm in a separate update.
+   *   - DISARMING (nonzero→zero) on a `cosign_required` vault is elevated —
+   *     route it through `queuePolicyElevated`. Arming / re-pinning stay on the
+   *     standard timelock path.
+   *
+   * @remarks Once armed, a legitimate upgrade of the target program bricks
+   *   `seal()` for that protocol (6116/6117) until the owner re-pins the new
+   *   hash — recoverable via a standard (non-elevated) re-arm.
+   */
+  protocolHashes?: ReadonlyMap<Address, Uint8Array | "disarm">;
 }
 
 // M1-04: the ConstraintEntry re-export was removed with the constraints engine.

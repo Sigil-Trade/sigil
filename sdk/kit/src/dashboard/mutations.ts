@@ -8,6 +8,7 @@
 import type {
   Address,
   Instruction,
+  ReadonlyUint8Array,
   Rpc,
   SolanaRpcApi,
   TransactionSigner,
@@ -340,6 +341,12 @@ function requireU8(value: number, field: string): void {
       new Error(`${field} must be an integer 0-255, got ${value}`),
     );
   }
+}
+
+/** True iff every byte of `bytes` is zero (an unarmed protocol_hashes slot). */
+function isAllZero(bytes: Uint8Array | ReadonlyUint8Array): boolean {
+  for (let i = 0; i < bytes.length; i++) if (bytes[i] !== 0) return false;
+  return true;
 }
 
 function mapProtocolMode(mode: string): number {
@@ -953,6 +960,104 @@ async function buildPolicyUpdateIx(
     changes.operatorGrantDelaySeconds ??
     livePolicy.data.operatorGrantDelaySeconds;
 
+  // ── Item 1 (verified-build gate arming, 2026-06-29) ───────────────────────
+  // `changes.protocolHashes` arms/disarms the per-protocol build-hash pin.
+  // On-chain semantics are WHOLE-ARRAY replace (queue_policy_update.rs:349-350
+  // `protocol_hashes.unwrap_or(policy.protocol_hashes)`), so SEED the full
+  // 10-entry array from the LIVE policy, then apply the caller's Map deltas —
+  // seeding from live preserves every already-armed entry the caller didn't
+  // mention (omitting the seed would silently DISARM them). The SAME resulting
+  // array feeds BOTH the ix arg AND the TA-19 digest (field 25), so the owner's
+  // signed digest matches the on-chain recomputation byte-for-byte (no 6071).
+  //
+  // When `changes.protocolHashes` is undefined this is a pure live pass-through
+  // (digest binds the live array; the ix passes `null`), byte-identical to the
+  // prior behaviour — additive, no change for existing callers.
+  let armProtocolHashesArg: Array<ReadonlyUint8Array> | null = null;
+  let armDigestInput: readonly ReadonlyUint8Array[] =
+    livePolicy.data.protocolHashes;
+  let armContainsDisarm = false;
+  if (changes.protocolHashes != null) {
+    // SECURITY GUARD (mandatory): arming resolves each protocol's slot from the
+    // LIVE protocol ordering. Reordering `protocols` in the SAME update would
+    // mis-align the live-seeded hashes onto the new order — and because the
+    // on-chain digest recomputes over that same mis-aligned array it STILL
+    // matches (no 6071), silently pinning the wrong build hash to the wrong
+    // protocol. Reject the combo; arm in a separate update.
+    if (changes.approvedApps != null) {
+      throw toDxError(
+        new Error(
+          "Cannot set protocolHashes together with approvedApps in the same " +
+            "update — reordering the protocol allowlist mis-aligns the " +
+            "live-seeded build hashes (the on-chain digest still matches, so " +
+            "the gate would silently pin the wrong hash to the wrong protocol). " +
+            "Change the protocol allowlist first, then arm protocol_hashes in a " +
+            "separate update.",
+        ),
+      );
+    }
+    // Seed from live (whole-array replace) — owned 32-byte copies so the deltas
+    // never alias the decoded account buffer.
+    const seeded: Uint8Array[] = livePolicy.data.protocolHashes.map((h) => {
+      const copy = new Uint8Array(32);
+      copy.set(h.subarray(0, 32));
+      return copy;
+    });
+    for (const [protocol, value] of changes.protocolHashes) {
+      const slot = effProtocols.findIndex((p) => p === protocol);
+      if (slot === -1) {
+        throw toDxError(
+          new Error(
+            `protocolHashes key ${protocol} is not in the vault's protocol ` +
+              `allowlist — arm only protocols already present in the live ` +
+              `\`protocols\` list (add it via approvedApps in a prior update).`,
+          ),
+        );
+      }
+      if (value === "disarm") {
+        if (!isAllZero(seeded[slot])) armContainsDisarm = true;
+        seeded[slot] = new Uint8Array(32);
+      } else {
+        if (value.length !== 32) {
+          throw toDxError(
+            new Error(
+              `protocolHashes value for ${protocol} must be exactly 32 bytes ` +
+                `(a program-data SHA-256 from computeVerifiedBuildHash), got ` +
+                `${value.length}.`,
+            ),
+          );
+        }
+        seeded[slot] = Uint8Array.from(value);
+      }
+    }
+    armProtocolHashesArg = seeded;
+    armDigestInput = seeded;
+  }
+
+  // Disarming an armed entry (nonzero→zero) is an ELEVATED mutation on a
+  // cosign-required vault (queue_policy_update.rs:441 `disarms_build_hash`,
+  // gated by `policy.cosign_required` at :504). On the owner-only non-elevated
+  // path it would fail closed on-chain with ErrCosignRequired (6080), so route
+  // it through queuePolicyElevated instead. We gate on the LIVE cosign_required
+  // to mirror the on-chain predicate exactly — disarming a NON-cosign vault is
+  // correctly allowed on the standard path (arming / re-pinning are always
+  // tightening/neutral and stay standard).
+  const isNonElevatedPath = cosignSession === DEFAULT_COSIGN_SESSION;
+  if (
+    armContainsDisarm &&
+    isNonElevatedPath &&
+    livePolicy.data.cosignRequired
+  ) {
+    throw toDxError(
+      new Error(
+        "Disarming protocol_hashes on a cosign-required vault is an elevated " +
+          "mutation — use queuePolicyElevated / OwnerClient.queuePolicyElevated " +
+          "with the bound cosigner (on-chain ErrCosignRequired 6080), not the " +
+          "standard queuePolicyUpdate path.",
+      ),
+    );
+  }
+
   const newPolicyPreviewDigest = computePolicyPreviewDigest({
     dailySpendingCapUsd: effDaily,
     maxTransactionSizeUsd: effMaxTx,
@@ -978,13 +1083,12 @@ async function buildPolicyUpdateIx(
     protocolCaps: effProtocolCaps,
     agentSetHash: computeAgentSetHash(liveVault.data.agents),
     cosignSessionPubkey: effCosignSessionPubkey,
-    // Item 3 (verified-build gate, 2026-06-22): merged-effective protocol_hashes.
-    // The dashboard mutation does NOT arm/disarm the gate (PR-C arms via a raw
-    // queue_policy_update with getProgramDataHash), so this is always a live
-    // pass-through — the queue ix passes `protocolHashes: null` below, the
-    // on-chain merge keeps the live array, and the recomputed digest must bind
-    // that same live array (else PolicyPreviewMismatch 6071).
-    protocolHashes: livePolicy.data.protocolHashes,
+    // Item 1 (verified-build gate arming, 2026-06-29): the merged-effective
+    // protocol_hashes array — the LIVE array when `changes.protocolHashes` is
+    // omitted (pass-through), or the seed-from-live + Map-delta array when
+    // arming/disarming. This is the EXACT array passed to the ix arg below, so
+    // the owner's signed digest matches the on-chain recomputation (no 6071).
+    protocolHashes: armDigestInput,
   });
 
   const ix = await getQueuePolicyUpdateInstructionAsync({
@@ -1009,11 +1113,11 @@ async function buildPolicyUpdateIx(
     cosignRequired: changes.cosignRequired ?? null,
     cosignSessionPubkey: changes.cosignSessionPubkey ?? null,
     operatorGrantDelaySeconds: changes.operatorGrantDelaySeconds ?? null,
-    // Item 3 (verified-build gate, 2026-06-22): the dashboard policy mutation
-    // never arms/disarms the verified-build gate (arming is a raw
-    // queue_policy_update with getProgramDataHash — see PR-C). null = on-chain
-    // pass-through of the live array, matching the digest computed above.
-    protocolHashes: null,
+    // Item 1 (verified-build gate arming, 2026-06-29): `null` = on-chain
+    // pass-through of the live array (when `changes.protocolHashes` is omitted);
+    // a 10-entry array = the seed-from-live + Map-delta whole-array replace.
+    // Either way it is the SAME array bound into the digest above (no 6071).
+    protocolHashes: armProtocolHashesArg,
     cosignSession,
     newPolicyPreviewDigest,
   });

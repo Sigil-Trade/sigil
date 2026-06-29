@@ -854,3 +854,7 @@ export {
   BPF_LOADER_UPGRADEABLE_PROGRAM_ID,
   PROGRAM_DATA_HEADER_LEN,
 } from "./program-hash.js";
+// Item 1 — intent-named wrapper an owner calls to ARM the verified-build gate
+// (`PolicyChanges.protocolHashes`). Hash only; the digest/array assembly lives
+// in the policy mutation builders.
+export { computeVerifiedBuildHash } from "./policy/verified-build.js";
