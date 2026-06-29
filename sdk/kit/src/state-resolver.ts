@@ -13,7 +13,6 @@ import {
   fetchEncodedAccounts,
   getAddressDecoder,
   getAddressEncoder,
-  getU64Decoder,
   type Address,
   type Base64EncodedBytes,
   type ReadonlyUint8Array,
@@ -26,6 +25,7 @@ import {
 } from "./generated/accounts/agentSpendOverlay.js";
 import {
   decodeAgentVault,
+  getAgentVaultDecoder,
   type AgentVault,
 } from "./generated/accounts/agentVault.js";
 // M1-04: InstructionConstraints account import removed (constraints engine deleted).
@@ -747,22 +747,6 @@ export type DiscoveredVault = VaultLocator;
  */
 const AGENT_VAULT_SIZE = 676;
 
-/** Byte offset of the `vault_id` field in AgentVault (after 8 disc + 32 owner). */
-const VAULT_ID_OFFSET = 40;
-
-/**
- * Byte offset of the `vault_authority` field in AgentVault — the Phase 8
- * LBL-01 `Pubkey` (32 bytes) remains the FINAL 32 bytes of the layout
- * (F-Q6 2026-06-02 inserted owner_type BEFORE it precisely to preserve this),
- * so the field sits at `AgentVault::SIZE - 32 = 644`. Used by H-5 to re-derive
- * vault PDAs from the IMMUTABLE seed key (which survives
- * `accept_ownership_transfer`) rather than the mutable `vault.owner`
- * byte at offset 8.
- */
-const VAULT_AUTHORITY_OFFSET = 644;
-
-const u64Decoder = getU64Decoder();
-
 /**
  * Find all vaults owned by a wallet address.
  *
@@ -938,21 +922,38 @@ export async function findVaultsByOwner(
       })
       .send();
 
-    // H-5 verification: parse `vault_id` at offset 40 AND
-    // `vault_authority` at offset 644 from each returned account, then
-    // re-derive the PDA from `vault_authority` (NOT `owner`). Drop any
-    // entry whose body is too short to contain `vault_authority` (a
-    // malformed / truncated response or a malicious RPC).
+    // H-5 verification: read `vault_id` + the IMMUTABLE Phase 8 LBL-01
+    // `vault_authority` from each returned account, then re-derive the PDA from
+    // `vault_authority` (NOT `owner`).
+    //
+    // Item 5 (offset bug fix): `AgentVault.agents` is a Borsh `Vec` serialized
+    // at the ACTUAL agent count, so the tail `vault_authority` field sits
+    // EARLIER than `SIZE - 32 = 644` on any sub-10-agent vault — a fixed
+    // offset-644 read there returns the account's zero-padding, the V-1 PDA
+    // re-derivation fails, and ownership-transfer-received vaults are silently
+    // dropped on real RPCs (the suite's mock RPC ignored the dataSize filter,
+    // masking it). Decode the full account via the generated Borsh decoder,
+    // which walks the Vec length prefix and reads both fields at their true
+    // positions (and ignores trailing zero-padding past the serialized data).
+    // Drop any entry that fails to decode (a malformed / truncated / malicious
+    // RPC response).
     const parsed = (
       accounts as { pubkey: Address; account: { data: [string, string] } }[]
     ).flatMap((entry) => {
       const raw = base64ToUint8(entry.account.data[0]);
-      if (raw.length < VAULT_AUTHORITY_OFFSET + 32) return [];
-      const vaultId = u64Decoder.decode(raw.subarray(VAULT_ID_OFFSET));
-      const vaultAuthority = addressDecoder.decode(
-        raw.subarray(VAULT_AUTHORITY_OFFSET, VAULT_AUTHORITY_OFFSET + 32),
-      ) as Address;
-      return [{ vaultAddress: entry.pubkey, vaultId, vaultAuthority }];
+      let decoded: AgentVault;
+      try {
+        decoded = getAgentVaultDecoder().decode(raw);
+      } catch {
+        return [];
+      }
+      return [
+        {
+          vaultAddress: entry.pubkey,
+          vaultId: decoded.vaultId,
+          vaultAuthority: decoded.vaultAuthority,
+        },
+      ];
     });
 
     // V-1 + H-5: re-derive PDAs from `vault_authority` (the immutable
