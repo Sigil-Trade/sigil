@@ -447,6 +447,10 @@ pub fn handler(
     // const from state/mod.rs (eliminates the 32-byte literal duplication
     // with finalize_session.rs that used to drift independently).
     let compute_budget_id = crate::state::COMPUTE_BUDGET_PROGRAM_ID;
+    // M2 (2026-06-29, explicit session<->finalize binding): snapshot this
+    // validate's session key (Copy) so the forward scan can assert the finalize
+    // ix it locates by discriminator actually operates on THIS session.
+    let session_key = ctx.accounts.session.key();
 
     // 5a. Backward instruction scan (Phase B2 security fix):
     // Reject any non-infrastructure instructions BEFORE validate_and_authorize.
@@ -754,9 +758,29 @@ pub fn handler(
         compute_budget_id: &Pubkey,
         finalize_hash: &[u8; 8],
         policy: &PolicyConfig,
+        session_key: &Pubkey,
     ) -> anchor_lang::Result<ScanAction> {
+        // FinalizeSession Accounts ordering (finalize_session.rs): payer(0),
+        // vault(1), session(2), ... — the session account meta is at index 2.
+        const FINALIZE_SESSION_META_INDEX: usize = 2;
         // Stop at finalize_session
         if ix.program_id == crate::ID && ix.data.len() >= 8 && ix.data[..8] == *finalize_hash {
+            // M2 (2026-06-29, explicit session<->finalize binding): the finalize
+            // ix was located by DISCRIMINATOR alone — pin it to THIS validate's
+            // session. Without this, a cross-session [validate(X), DeFi,
+            // finalize(Y)] bundle is rejected only EMERGENTLY (one-validate-per-tx
+            // 6082 + Anchor `init` + same-tx close); assert it directly. Fail
+            // closed (MissingFinalizeInstruction) if the session meta is absent or
+            // references a different session.
+            let finalize_session_meta = ix
+                .accounts
+                .get(FINALIZE_SESSION_META_INDEX)
+                .ok_or(error!(SigilError::MissingFinalizeInstruction))?;
+            require_keys_eq!(
+                finalize_session_meta.pubkey,
+                *session_key,
+                SigilError::MissingFinalizeInstruction
+            );
             return Ok(ScanAction::FoundFinalize);
         }
 
@@ -916,6 +940,7 @@ pub fn handler(
                 &compute_budget_id,
                 &finalize_hash,
                 policy,
+                &session_key,
             )? {
                 ScanAction::FoundFinalize => {
                     // F-Q1b adjacency (audit 2026-06-22): the single counted DeFi
@@ -1026,6 +1051,7 @@ pub fn handler(
                 &compute_budget_id,
                 &finalize_hash,
                 policy,
+                &session_key,
             )? {
                 ScanAction::FoundFinalize => {
                     found_finalize = true;
