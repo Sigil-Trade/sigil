@@ -209,6 +209,114 @@ export async function ensureStablecoinBalance(
   }
 }
 
+// ─── Acquiring-swap fixture (M1 6112 + measurable-outcome 6115) ──────────────
+
+export interface SwapOutputFixture {
+  /** Fresh non-stablecoin output mint (random address — never USDC/USDT). */
+  outputMint: Address;
+  /** VAULT-OWNED ATA for outputMint — the M1 gate verifies this increased. */
+  vaultOutputAta: Address;
+  /** Agent-owned reserve ATA funding the swap's output leg (test-only). */
+  agentReserve: Address;
+  /** Agent-owned stablecoin ATA — the swap's leg-1 destination (input sink). */
+  agentStablecoinAta: Address;
+}
+
+/**
+ * Kit-native equivalent of the anchor `tests/helpers/devnet-setup.ts`
+ * `setupSwapOutput`. Stands up an ACQUIRING-swap fixture on the LIVE cluster so a
+ * stablecoin-input spending sandwich satisfies the two finalize gates that bind
+ * every such spend on the deployed binary:
+ *   - M1 output-ownership (ErrOutputNotVaultOwned 6112): the spend must deliver a
+ *     DIFFERENT mint INTO a vault-owned account that INCREASED.
+ *   - require-measurable-outcome (ErrUnmeasurableSpend 6115): a spending session
+ *     (amount > 0) must produce a measurable vault delta.
+ *
+ * Creates a fresh non-stablecoin output mint, a VAULT-OWNED ATA to receive it
+ * (the acquisition the M1 gate verifies), an agent-owned reserve funded so the
+ * swap's output leg has tokens to deliver (a real swap sources output from a
+ * pool — this is the test stand-in), and the agent-owned stablecoin ATA the
+ * swap's leg-1 routes the pulled input into. Pair `vaultOutputAta` with the
+ * `outputSwapAccount` of BOTH validate and finalize, and feed `agentStablecoinAta`
+ * / `agentReserve` / `vaultOutputAta` into the mock-defi `swap_to_vault` middle
+ * ix. Mirrors the verified anchor pattern (`tests/devnet-fees.ts` test 1) and the
+ * mock-defi `swap_to_vault` fixture exactly — no new mechanism.
+ *
+ * Uses @solana/spl-token + @solana/web3.js for token setup only (same convention
+ * as `ensureStablecoinBalance`). `ownerSecretKey` is the fee payer AND the output
+ * mint authority.
+ */
+export async function setupSwapOutput(
+  rpcUrl: string,
+  ownerSecretKey: Uint8Array,
+  vaultAddress: Address,
+  agentAddress: Address,
+  stablecoinMint: Address,
+): Promise<SwapOutputFixture> {
+  const { Connection, Keypair, PublicKey } = await import("@solana/web3.js");
+  const { createMint, getOrCreateAssociatedTokenAccount, mintTo } =
+    await import("@solana/spl-token");
+
+  const connection = new Connection(rpcUrl, {
+    commitment: "confirmed",
+    fetch: createThrottledFetch(),
+  });
+  const payer = Keypair.fromSecretKey(ownerSecretKey);
+  const vaultPk = new PublicKey(vaultAddress);
+  const agentPk = new PublicKey(agentAddress);
+
+  // Fresh non-stablecoin mint (random address → never matches USDC/USDT, so the
+  // acquired output is a DIFFERENT mint from the stablecoin input). Mint
+  // authority = payer.publicKey so mintTo below can sign with `payer`.
+  const outputMint = await createMint(
+    connection,
+    payer,
+    payer.publicKey,
+    null,
+    6,
+  );
+
+  // Vault-owned output ATA (allowOwnerOffCurve — the vault is a PDA).
+  const vaultOutputAccount = await getOrCreateAssociatedTokenAccount(
+    connection,
+    payer,
+    outputMint,
+    vaultPk,
+    true,
+  );
+
+  // Agent-owned reserve funding the swap's output leg.
+  const agentReserveAccount = await getOrCreateAssociatedTokenAccount(
+    connection,
+    payer,
+    outputMint,
+    agentPk,
+  );
+  await mintTo(
+    connection,
+    payer,
+    outputMint,
+    agentReserveAccount.address,
+    payer, // mint authority = payer.publicKey
+    1_000_000_000, // healthy reserve — far exceeds any per-test outAmount
+  );
+
+  // Agent-owned stablecoin ATA — the swap's leg-1 destination (input sink).
+  const agentStablecoinAccount = await getOrCreateAssociatedTokenAccount(
+    connection,
+    payer,
+    new PublicKey(stablecoinMint),
+    agentPk,
+  );
+
+  return {
+    outputMint: outputMint.toString() as Address,
+    vaultOutputAta: vaultOutputAccount.address.toString() as Address,
+    agentReserve: agentReserveAccount.address.toString() as Address,
+    agentStablecoinAta: agentStablecoinAccount.address.toString() as Address,
+  };
+}
+
 // ─── Transient-RPC retry (public-devnet 429 tolerance) ──────────────────────
 
 /**
