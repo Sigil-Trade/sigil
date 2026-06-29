@@ -26,6 +26,7 @@ import {
   signTransactionMessageWithSigners,
   partiallySignTransactionMessageWithSigners,
   getBase64EncodedWireTransaction,
+  createNoopSigner,
   type Instruction as KitInstruction,
 } from "../kit-adapter.js";
 import {
@@ -76,6 +77,14 @@ import { getWithdrawFundsInstructionAsync } from "../generated/instructions/with
 import { getQueuePolicyUpdateInstructionAsync } from "../generated/instructions/queuePolicyUpdate.js";
 import { getApplyPendingPolicyInstructionAsync } from "../generated/instructions/applyPendingPolicy.js";
 import { getCancelPendingPolicyInstructionAsync } from "../generated/instructions/cancelPendingPolicy.js";
+// Item 3 (approve_pending_policy 2-of-2 cosign) + Item 4 (owner graylist/violation).
+import { getApprovePendingPolicyInstructionAsync } from "../generated/instructions/approvePendingPolicy.js";
+import { getPromoteGraylistDestinationInstructionAsync } from "../generated/instructions/promoteGraylistDestination.js";
+import { getRecordAgentViolationInstructionAsync } from "../generated/instructions/recordAgentViolation.js";
+import {
+  fetchPendingPolicyUpdate,
+  type PendingPolicyUpdate,
+} from "../generated/accounts/pendingPolicyUpdate.js";
 import { getQueueAgentPermissionsUpdateInstructionAsync } from "../generated/instructions/queueAgentPermissionsUpdate.js";
 import { getApplyAgentPermissionsUpdateInstructionAsync } from "../generated/instructions/applyAgentPermissionsUpdate.js";
 import { getCancelAgentPermissionsUpdateInstructionAsync } from "../generated/instructions/cancelAgentPermissionsUpdate.js";
@@ -1232,6 +1241,164 @@ export async function cancelPendingPolicy(
 ): Promise<TxResult> {
   const ix = await getCancelPendingPolicyInstructionAsync({ owner, vault });
   return run(rpc, owner, network, [ix], opts);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Item 3 — approve_pending_policy (completes the 2-of-2 cosign flow).
+//
+// When queue_policy_update detected an ELEVATED mutation it bound a cosign
+// digest to the PendingPolicyUpdate and set cosign_required. apply_pending_policy
+// then refuses (ErrCosignRequired 6080) until the BOUND cosigner has recorded an
+// approval via approve_pending_policy. The cosigner is the SOLE signer + fee
+// payer of this instruction; it carries no args and recomputes nothing (the
+// on-chain handler relies on the queue-time digest + the apply-time staleness
+// check), so the cosigner is attesting to the ALREADY-QUEUED pending policy.
+// `buildApprovePendingPolicy` surfaces that decoded pending policy so the
+// cosigner can review the exact change before signing.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Cosigner-signed approval of a queued (elevated) policy update. The `cosigner`
+ * is the fee payer + sole signer; on-chain it must equal the vault's bound
+ * `cosign_session_pubkey`. Use {@link buildApprovePendingPolicy} for a
+ * wallet-handoff flow that returns the decoded pending policy for review.
+ */
+export async function approvePendingPolicy(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  cosigner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  opts?: TxOpts,
+): Promise<TxResult> {
+  requireValidAddress(cosigner.address, "Cosigner address");
+  const ix = await getApprovePendingPolicyInstructionAsync({ cosigner, vault });
+  // The cosigner is the fee payer + sole signer (no owner account on this ix).
+  return run(rpc, cosigner, network, [ix as unknown as Instruction], opts);
+}
+
+/** Review bundle for the wallet-handoff approve flow ({@link buildApprovePendingPolicy}). */
+export interface ApprovePendingPolicyReview {
+  /**
+   * Base64 wire transaction with the cosigner as fee payer + sole required
+   * signer, and an EMPTY signature slot. Hand to the cosigner's wallet to sign
+   * and send. (Built via a noop signer — no key is held by the SDK here.)
+   */
+  unsignedTransactionBase64: string;
+  /**
+   * The decoded {@link PendingPolicyUpdate} the cosigner is approving — the
+   * exact queued change, surfaced so the cosigner can review the merged-effective
+   * deltas before signing.
+   */
+  pendingPolicy: PendingPolicyUpdate;
+  /** The PendingPolicyUpdate PDA the cosigner is approving. */
+  pendingPolicyPda: Address;
+}
+
+/**
+ * Build (but do not sign) the cosigner's approve_pending_policy transaction AND
+ * fetch+decode the pending policy for review. The cosigner is the fee payer +
+ * sole required signer; their wallet completes the signature and sends.
+ *
+ * Throws if no pending policy exists for the vault (nothing to approve).
+ */
+export async function buildApprovePendingPolicy(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  cosigner: Address,
+  opts?: TxOpts,
+): Promise<ApprovePendingPolicyReview> {
+  requireValidAddress(cosigner, "Cosigner address");
+  const [pendingPolicyPda] = await getPendingPolicyPDA(vault);
+  let pendingPolicy: PendingPolicyUpdate;
+  try {
+    const fetched = await fetchPendingPolicyUpdate(rpc, pendingPolicyPda);
+    pendingPolicy = fetched.data;
+  } catch (err) {
+    throw toDxError(
+      new Error(
+        `No pending policy to approve for vault ${vault} ` +
+          `(PendingPolicyUpdate ${pendingPolicyPda} not found). Queue an ` +
+          `elevated policy update first. Cause: ${redactCause(err)}`,
+      ),
+    );
+  }
+  const cosignerSigner = createNoopSigner(cosigner);
+  const ix = await getApprovePendingPolicyInstructionAsync({
+    cosigner: cosignerSigner,
+    vault,
+  });
+  const unsignedTransactionBase64 = await buildOwnerPartialSignedTx(
+    rpc,
+    cosignerSigner,
+    [ix as unknown as Instruction],
+    opts,
+  );
+  return { unsignedTransactionBase64, pendingPolicy, pendingPolicyPda };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Item 4 — owner-signed graylist promotion + agent-violation recording.
+//
+// promote_graylist_destination: owner moves a destination from the graylist
+// (seen-but-unapproved) into the approved allowlist. record_agent_violation:
+// owner (or owner-run monitor) increments an agent's consecutive-failure
+// counter after observing a policy-violation reject, driving auto-revoke. Both
+// are owner-signed, immediate (no timelock), and use the generated async
+// builders (policy/audit-log/sysvar accounts auto-resolved).
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Promote a destination from the vault's graylist into the approved
+ * `allowed_destinations` allowlist. Owner-signed, immediate.
+ */
+export async function promoteGraylistDestination(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  destination: Address,
+  opts?: TxOpts,
+): Promise<TxResult> {
+  requireValidAddress(destination, "Destination address");
+  const ix = await getPromoteGraylistDestinationInstructionAsync({
+    owner,
+    vault,
+    destination,
+  });
+  return run(rpc, owner, network, [ix as unknown as Instruction], opts);
+}
+
+/**
+ * Record a policy-violation failure for an agent, incrementing its
+ * consecutive-failure counter (auto-revokes the agent at
+ * `policy.auto_revoke_threshold`). Owner-signed, immediate. `errorCode` is the
+ * on-chain policy-violation code observed on the failed seal (6074..=6091).
+ */
+export async function recordAgentViolation(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  owner: TransactionSigner,
+  network: "devnet" | "mainnet",
+  agent: Address,
+  errorCode: number,
+  opts?: TxOpts,
+): Promise<TxResult> {
+  requireValidAddress(agent, "Agent address");
+  if (!Number.isInteger(errorCode) || errorCode < 0 || errorCode > 0xffffffff) {
+    throw toDxError(
+      new Error(
+        `errorCode must be a u32 (0..=4294967295), got ${errorCode}. Pass the ` +
+          `on-chain policy-violation code observed on the failed seal (6074..=6091).`,
+      ),
+    );
+  }
+  const ix = await getRecordAgentViolationInstructionAsync({
+    owner,
+    vault,
+    agent,
+    errorCode,
+  });
+  return run(rpc, owner, network, [ix as unknown as Instruction], opts);
 }
 
 export async function queueAgentPermissions(

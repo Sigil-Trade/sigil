@@ -814,6 +814,16 @@ export type {
   ElevatedCosignBundle,
   CosignedActionBundle,
 } from "./dashboard/mutations.js";
+// Item 3 (approve_pending_policy 2-of-2 cosign) + Item 4 (owner graylist
+// promotion / agent-violation recording) — standalone mutation wrappers (also
+// surfaced as OwnerClient methods). Generated builders stay private (A12).
+export {
+  approvePendingPolicy,
+  buildApprovePendingPolicy,
+  promoteGraylistDestination,
+  recordAgentViolation,
+} from "./dashboard/mutations.js";
+export type { ApprovePendingPolicyReview } from "./dashboard/mutations.js";
 
 // ─── Balance Tracker / P&L ──────────────────────────────────────────────────
 export {
