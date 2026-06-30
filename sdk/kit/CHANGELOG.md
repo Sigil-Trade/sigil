@@ -1,5 +1,15 @@
 # @usesigil/kit
 
+## 0.24.1
+
+### Patch Changes
+
+- [#422](https://github.com/Sigil-Trade/sigil/pull/422) [`8f435ef`](https://github.com/Sigil-Trade/sigil/commit/8f435ef2a5adfaf9ceb33526d98d455515c26ed5) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - Regenerate codama output so the generated `PolicyConfig` JSDoc reflects the corrected `ErrReactivateCosignRequiredForFullCapability` (6104) citation (was a stale 6114 in the source comment that flowed through the IDL). Generated-code/doc only.
+
+- [#418](https://github.com/Sigil-Trade/sigil/pull/418) [`9ecbeb2`](https://github.com/Sigil-Trade/sigil/commit/9ecbeb286493e1b27b7456923ad639ff2553b840) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - Fix `previewCreateVault` understating rent: `POLICY_CONFIG_SIZE` was 1329 but the on-chain `PolicyConfig::SIZE` is 1649 (the verified-build `protocol_hashes` array added 320 bytes). The cost/rent shown to a human before signing the vault-creation tx was understated by ~0.0022 SOL. The size regression test is now a cross-language guard that parses the Rust `assert!(<Type>::SIZE == N)` pins for all four preview PDAs, so it can't silently drift again.
+
+- [#420](https://github.com/Sigil-Trade/sigil/pull/420) [`6402b94`](https://github.com/Sigil-Trade/sigil/commit/6402b94b95089641d12ed6c98a6bf4258cd100a8) Thanks [@Kaleb-Rupe](https://github.com/Kaleb-Rupe)! - Document Sigil's honest security guarantee + boundary on `seal()`: it ENFORCES no-theft (output stays vault-owned), spend caps, allowlist, and the verified-build gate — but is value-blind (an agent can waste value within caps) and cannot generically verify ongoing custody of venue positions (perps/lending/LP). Surfacing this prevents over-implying value-conservation to users and agents (M3 of the foundation review).
+
 ## 0.24.0
 
 ### Minor Changes
