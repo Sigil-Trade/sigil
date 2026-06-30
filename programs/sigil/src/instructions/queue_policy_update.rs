@@ -164,6 +164,10 @@ pub fn handler(
             SigilError::InvalidProtocolMode
         );
     }
+    // Single-valued by design: `destination_mode` accepts exactly one legal
+    // value (`DESTINATION_MODE_RESTRICTED`). The arg is retained for forward
+    // compatibility and digest stability; there is no "open" destination mode
+    // to switch to, so any other value is rejected rather than applied.
     if let Some(ref mode) = destination_mode {
         require!(
             *mode == DESTINATION_MODE_RESTRICTED,

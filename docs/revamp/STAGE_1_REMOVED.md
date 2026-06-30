@@ -289,7 +289,7 @@ flowchart TB
         PC["PolicyConfig<br/>[b'policy', vault]"]:::kept
         ST["SpendTracker (zero-copy)<br/>[b'tracker', vault]"]:::kept
         SA["SessionAuthority<br/>[b'session', vault, agent, mint]"]:::kept
-        ASO["AgentSpendOverlay (zero-copy)<br/>[b'agent_spend', vault]"]:::kept
+        ASO["AgentSpendOverlay (zero-copy)<br/>[b'agent_spend', vault, &[0u8]]"]:::kept
         PEA["PostExecutionAssertions<br/>[b'post_assertions', vault]"]:::kept
         IC["InstructionConstraints<br/>[b'constraints', vault]"]:::kept
         PEND["Pending update PDAs<br/>policy / constraints /<br/>agent_permissions / close_constraints"]:::pending

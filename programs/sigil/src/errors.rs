@@ -246,6 +246,9 @@ pub enum SigilError {
     QueuedUpdateExpired,
 
     // --- M5: Squads SAP parity — account writability enforcement ---
+    /// DEPRECATED (foundation review 2026-06-29): unreachable — writability
+    /// enforcement is covered by `ErrProtectedWritable` (6083). Retained for
+    /// append-only error-code stability; never renumber or remove.
     #[msg("Account writability flag does not match constraint requirement")]
     AccountWritabilityMismatch,
 
@@ -565,6 +568,11 @@ pub enum SigilError {
     /// before queueing a new target. Prevents a phished owner from quietly
     /// chaining multiple pending transfers and racing the timelock with
     /// whichever target apply()s first.
+    ///
+    /// DEPRECATED (foundation review 2026-06-29): unreachable — a second
+    /// queue attempt collides on Anchor's `init` of the PendingOwnershipTransfer
+    /// PDA, which surfaces first. Retained for append-only error-code
+    /// stability; never renumber or remove.
     #[msg("An ownership transfer is already pending; cancel it first")]
     ErrPendingOwnershipExists,
 
@@ -662,6 +670,11 @@ pub enum SigilError {
     /// where freeze→reactivate(new_agent=ATTACKER, FULL_CAPABILITY) in one
     /// transaction silently elevates an attacker-controlled agent. Cosign
     /// pubkey is configured via `policy.cosign_session_pubkey`.
+    ///
+    /// DEPRECATED (foundation review 2026-06-29): unreachable as a distinct
+    /// code — the reactivate cosign gate still fires, but it raises the shared
+    /// `ErrCosignRequired` (6080). Retained for append-only error-code
+    /// stability; never renumber or remove.
     #[msg("Reactivate with FULL_CAPABILITY new agent requires cosign")]
     ErrReactivateCosignRequiredForFullCapability,
 
@@ -738,6 +751,11 @@ pub enum SigilError {
     /// masking the anomaly and — with `ceil_fee`'s round-up — letting small spends
     /// round to 0 and skip the caps. Now rejected fail-closed rather than
     /// under-counting the spend. Certora conservation proof tracked for M2.
+    ///
+    /// DEPRECATED (foundation review 2026-06-29): unreachable post-C-1 — fees
+    /// are now ADDED to the measured spend at finalize, never subtracted from
+    /// it, so this underflow branch can no longer be taken. Retained for
+    /// append-only error-code stability; never renumber or remove.
     #[msg(
         "finalize spend accounting underflow: collected fees exceed realized stablecoin outflow"
     )]
