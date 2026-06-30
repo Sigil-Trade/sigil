@@ -121,7 +121,7 @@ pub fn handler(ctx: Context<AcceptOwnershipTransfer>) -> Result<()> {
 
     // Defense-in-depth: bind the signer to the queued target exactly. Anchor
     // already enforces `pending.bump` + PDA seeds, but this surfaces the
-    // intent at the handler level and gives a precise error code (6104
+    // intent at the handler level and gives a precise error code (6095
     // ErrPendingOwnershipNotReady — semantically "not ready for THIS caller").
     require_keys_eq!(
         ctx.accounts.new_owner.key(),

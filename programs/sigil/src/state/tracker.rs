@@ -83,8 +83,8 @@ pub struct SpendTracker {
     /// Padding for 8-byte alignment after the new u8 counter.
     pub _padding_recipient: [u8; 7], // 7 bytes
 }
-// Total data: 2,824 + 480 + 1 + 7 = 3,312 bytes
-//             + 8 (discriminator) = 3,320 bytes
+// Total data: 2,824 + 8 (bump + padding) + 480 + 1 + 7 = 3,320 bytes
+//             + 8 (discriminator) = 3,328 bytes
 
 /// A single epoch bucket tracking aggregate USD spend.
 /// 16 bytes per bucket. USD-only — rate limiting stays client-side.
