@@ -1,6 +1,6 @@
-# Error Codes (6000-6117)
+# Error Codes (6000-6118)
 
-All 118 custom errors defined in `programs/sigil/src/errors.rs`. Use `require!(condition, SigilError::Name)`.
+All 119 custom errors defined in `programs/sigil/src/errors.rs`. Use `require!(condition, SigilError::Name)`.
 
 Source of truth: `target/idl/sigil.json` (regenerate this file by running `bash scripts/regen-error-codes-doc.sh` after any change to `errors.rs`).
 
@@ -124,3 +124,4 @@ Source of truth: `target/idl/sigil.json` (regenerate this file by running `bash 
 | 6115 | `ErrUnmeasurableSpend` | Spending session produced no measurable in-transaction vault outcome (no stablecoin movement and no vault-owned acquisition) — async/keeper-settled or unmeasurable; recording 0 spend is rejected |
 | 6116 | `ErrProgramDataUnresolvable` | Verified-build gate: the target protocol's ProgramData account is missing/unresolvable while a build hash is armed — cannot vet the deployed build (fail-closed) |
 | 6117 | `ErrProgramBuildMismatch` | Verified-build gate: the target protocol's deployed ELF hash does not match the owner-pinned build hash — the on-chain build changed (re-pin via queue_policy_update after re-audit) |
+| 6118 | `TimelockTooLong` | Timelock duration exceeds the maximum (MAX_TIMELOCK_DURATION = 172_800s / 48h) — a longer timelock could never mature inside the policy-apply freshness window (brick); choose a value <= 48h |

@@ -6736,6 +6736,11 @@
       "code": 6117,
       "name": "ErrProgramBuildMismatch",
       "msg": "Verified-build gate: the target protocol's deployed ELF hash does not match the owner-pinned build hash — the on-chain build changed (re-pin via queue_policy_update after re-audit)"
+    },
+    {
+      "code": 6118,
+      "name": "TimelockTooLong",
+      "msg": "Timelock duration exceeds the maximum (MAX_TIMELOCK_DURATION = 172_800s / 48h) — a longer timelock could never mature inside the policy-apply freshness window (brick); choose a value <= 48h"
     }
   ],
   "types": [

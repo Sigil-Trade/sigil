@@ -215,6 +215,11 @@ pub fn handler(
     }
     if let Some(ref tl) = timelock_duration {
         require!(*tl >= MIN_TIMELOCK_DURATION, SigilError::TimelockTooShort);
+        // F-1 fix (2026-06-30): symmetric ceiling. A timelock above
+        // MAX_TIMELOCK_DURATION (48h) could fail to mature inside the
+        // policy-apply freshness window (MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN),
+        // permanently bricking the queued update — a tier-2 liveness failure.
+        require!(*tl <= MAX_TIMELOCK_DURATION, SigilError::TimelockTooLong);
     }
     // F-Q6 (2026-06-02): bound the OPERATOR-grant delay at its sole write site.
     // A value above MAX_OPERATOR_GRANT_DELAY (48h) could exceed the apply-time

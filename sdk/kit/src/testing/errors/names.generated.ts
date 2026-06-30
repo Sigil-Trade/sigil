@@ -14,7 +14,7 @@
  */
 
 // ────────────────────────────────────────────────────────────────
-// Sigil program errors (6000-6117)
+// Sigil program errors (6000-6118)
 // ────────────────────────────────────────────────────────────────
 
 export const SIGIL_ERRORS = {
@@ -136,6 +136,7 @@ export const SIGIL_ERRORS = {
   ErrUnmeasurableSpend: 6115,
   ErrProgramDataUnresolvable: 6116,
   ErrProgramBuildMismatch: 6117,
+  TimelockTooLong: 6118,
 } as const;
 
 /**

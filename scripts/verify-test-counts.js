@@ -198,6 +198,7 @@ const actual = {
     TS_RE,
   ),
   "tests/toctou-security.ts": countOneFile("tests/toctou-security.ts", TS_RE),
+  "tests/f1-timelock-1b.ts": countOneFile("tests/f1-timelock-1b.ts", TS_RE),
   "tests/verified-build-gate.ts": countOneFile(
     "tests/verified-build-gate.ts",
     TS_RE,
