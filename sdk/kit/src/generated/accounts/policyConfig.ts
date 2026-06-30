@@ -349,7 +349,7 @@ export type PolicyConfig = {
    * agent, the handler REQUIRES a matching signer in
    * `ctx.remaining_accounts` whose key equals this pubkey AND
    * `is_signer == true`. Otherwise rejects with
-   * `ErrReactivateCosignRequiredForFullCapability` (6114).
+   * `ErrReactivateCosignRequiredForFullCapability` (6104).
    *
    * Default `Pubkey::default()` at `initialize_vault` time means
    * existing vaults retain today's behavior (no cosign gate on
@@ -688,7 +688,7 @@ export type PolicyConfigArgs = {
    * agent, the handler REQUIRES a matching signer in
    * `ctx.remaining_accounts` whose key equals this pubkey AND
    * `is_signer == true`. Otherwise rejects with
-   * `ErrReactivateCosignRequiredForFullCapability` (6114).
+   * `ErrReactivateCosignRequiredForFullCapability` (6104).
    *
    * Default `Pubkey::default()` at `initialize_vault` time means
    * existing vaults retain today's behavior (no cosign gate on
