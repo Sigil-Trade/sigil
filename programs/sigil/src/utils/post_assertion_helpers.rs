@@ -96,7 +96,7 @@ pub fn verify_ata_authority_pin(
     let mut authority_bytes = [0u8; 32];
     authority_bytes.copy_from_slice(&target_data[32..64]);
     let authority = Pubkey::new_from_array(authority_bytes);
-    require!(authority == *vault_key, SigilError::ErrAtaAuthorityChanged);
+    require_keys_eq!(authority, *vault_key, SigilError::ErrAtaAuthorityChanged);
 
     Ok(())
 }
