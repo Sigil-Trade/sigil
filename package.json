@@ -39,23 +39,23 @@
     "flash-sdk": "^15.16.8"
   },
   "devDependencies": {
-    "@changesets/changelog-github": "^0.6.0",
-    "@changesets/cli": "^2.30.0",
-    "@codama/nodes-from-anchor": "^1.4.0",
-    "@codama/renderers-js": "^2.1.0",
+    "@changesets/changelog-github": "^0.7.0",
+    "@changesets/cli": "^2.31.0",
+    "@codama/nodes-from-anchor": "^1.5.1",
+    "@codama/renderers-js": "^2.3.0",
     "@types/bn.js": "^5.1.5",
-    "@types/chai": "^4.3.20",
+    "@types/chai": "^5.2.3",
     "@types/mocha": "^10.0.6",
-    "@types/node": "^25.5.0",
+    "@types/node": "^26.0.1",
     "chai": "^6.2.2",
     "husky": "^9.1.7",
-    "litesvm": "^0.6.0",
-    "mocha": "^11.7.5",
-    "prettier": "^3.2.5",
-    "sinon": "^21.0.3",
+    "litesvm": "^1.2.0",
+    "mocha": "^11.7.6",
+    "prettier": "^3.9.4",
+    "sinon": "^22.0.0",
     "ts-mocha": "^11.1.0",
-    "typescript": "^5.9.3",
-    "yaml": "^2.8.3"
+    "typescript": "^6.0.3",
+    "yaml": "^2.9.0"
   },
   "pnpm": {
     "overrides": {
