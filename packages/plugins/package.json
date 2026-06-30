@@ -25,7 +25,7 @@
     "test": "mocha --require tsx tests/*.test.ts --timeout 30000"
   },
   "peerDependencies": {
-    "@usesigil/kit": ">=0.24.0",
+    "@usesigil/kit": ">=0.24.1",
     "solana-agent-kit": ">=2.0.0"
   },
   "peerDependenciesMeta": {
