@@ -1446,8 +1446,7 @@ export function calculateFees(amount: number, devFeeRate: number) {
 
 // The legacy substring-matching `expectErrorLegacy` helper was deleted by
 // the 2026-04-20 council codemod. All call sites migrated to strict typed
-// helpers at `@usesigil/kit/testing`. See:
-//   MEMORY/WORK/20260420-201121_test-assertion-precision-council/COUNCIL_DECISION.md
+// helpers at `@usesigil/kit/testing`:
 //   import { expectSigilError, expectAnchorError, expectOneOfSigilErrors,
 //            expectOneOfAnchorErrors, expectSystemError } from "@usesigil/kit/testing";
 

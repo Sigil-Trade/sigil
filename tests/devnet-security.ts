@@ -46,7 +46,7 @@ import {
   buildExpectedIntentDigest,
   digestAsArgs,
 } from "./helpers/intent-digest-fixture";
-// Strict error helpers — see MEMORY/WORK/20260420-201121_test-assertion-precision-council/
+// Strict error helpers assert the EXACT expected error code — see tests/helpers/strict-errors.ts
 import { expectSigilError } from "./helpers/strict-errors";
 
 describe("devnet-security", () => {
@@ -709,7 +709,7 @@ describe("devnet-security", () => {
       // linearize() order. UnauthorizedAgent (6001) is the deterministic
       // outcome. If check-order changes and VaultNotActive fires instead, we
       // WANT this test to fail loudly — that's a real regression.
-      // See: MEMORY/WORK/20260420-201121_test-assertion-precision-council/COUNCIL_DECISION.md
+      // Strict error helpers assert the EXACT expected error code — see tests/helpers/strict-errors.ts
       expectSigilError(err, {
         name: "UnauthorizedAgent",
       });
@@ -879,7 +879,7 @@ describe("devnet-security", () => {
       // admin path does not exist in Sigil's current instruction set —
       // vault freeze is only reachable through the revoke-all-agents
       // cascade, so this test path is definitive.
-      // See: MEMORY/WORK/20260420-201121_test-assertion-precision-council/COUNCIL_DECISION.md
+      // Strict error helpers assert the EXACT expected error code — see tests/helpers/strict-errors.ts
       expectSigilError(err, {
         name: "UnauthorizedAgent",
       });

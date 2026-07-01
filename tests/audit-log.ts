@@ -1,7 +1,7 @@
 /**
  * Phase 7 audit-log adversarial tests.
  *
- * Coverage map (per HARDENED_V2_PROMPT_MAP.md §6 Phase 7 spec):
+ * Coverage map:
  *   1. 128 success finalizes → buffer wraps correctly, last 128 retained
  *   2. Rejected (expired-finalize) cranks fill the rejected buffer, success
  *      buffer untouched (closes F-19 spam-displacement attack)

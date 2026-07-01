@@ -37,12 +37,6 @@
       "claudePattern": "tests/security-exploits.ts` (ts-mocha + LiteSVM, %d tests)"
     },
     {
-      "name": "Escrow integration (deposit/settle/refund)",
-      "count": 0,
-      "onChain": true,
-      "claudePattern": "tests/escrow-integration.ts` (removed; escrow primitive deleted in v2 revamp Stage 1)"
-    },
-    {
       "name": "TOCTOU security (policy version + timelock)",
       "count": 6,
       "onChain": true,
@@ -59,12 +53,6 @@
       "count": 7,
       "onChain": true,
       "claudePattern": "tests/analytics-counters.ts` (ts-mocha + LiteSVM, %d tests)"
-    },
-    {
-      "name": "Post-execution assertions E2E (DELETED in Phase 1 Option A demolition \u2014 CrossFieldLte primitive removed)",
-      "count": 0,
-      "onChain": true,
-      "claudePattern": "DELETED post-Phase-1: tests/post-assertion-integration.ts removed wholesale (was 9 tests for CrossFieldLte leverage cap)"
     },
     {
       "name": "Devnet integration tests (real network)",

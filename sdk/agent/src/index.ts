@@ -21,7 +21,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerGetVaultState } from "./tools/get-vault-state.js";
 
-const VERSION = "0.1.0";
+const VERSION = "0.1.1";
 
 async function runMcpServer(): Promise<void> {
   const server = new McpServer(

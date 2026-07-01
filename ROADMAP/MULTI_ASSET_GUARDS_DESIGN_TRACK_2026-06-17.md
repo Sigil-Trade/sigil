@@ -94,6 +94,8 @@ inheritance at the mechanism, mint-agnostically — no enumeration needed.
 
 ## 4. Facet B — Non-stablecoin & position value guarding (the position world)
 
+> **⚠️ PARTLY OBE / SUPERSEDED (read before treating as active scope).** Facet B is **no longer wholly-open scope.** Its perp/leverage/lend-health strand has been **overtaken by events**: subsequent decisions (1) **accepted the leverage/liquidation/PnL risk as a disclosed, owner-owned risk** — losses on an owner-allowlisted venue are an *authorized* agent action bounded by spend caps + instant freeze, not an on-chain Sigil mechanism (cf. the §8.1 "health bound DISSOLVED" verdict in `SIGIL_V2_AUTHORITATIVE_ARCHITECTURE_2026-06-06.md`), and (2) **shelved perp/position custody guarding** as a separate deferred track. Treat the perp-notional/leverage/lend-health and per-venue-position sub-items below as **superseded / on-ice**, not active work. The still-live residual is the **non-stablecoin *flow* value-cap gap** (an agent moving large non-stablecoin value with ~zero stablecoin balance-delta, so USD caps don't fire); read the rest of this section as background, not a committed design.
+
 This is the hard, irreducible part. **The design answer largely already exists**
 — the value-anchor fork was settled in the 2026-06-16 MASTER PLAN verdict:
 **value-BLIND conservation over an owner-declared mint set + output-ownership

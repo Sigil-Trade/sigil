@@ -23,7 +23,7 @@
 #   sdk/custody → Custody adapter tests (96 tests)
 #   packages/plugins → Plugin tests (14 tests)
 #
-# Total: ~2,758 tests across 21 suites (1994 TS + 574 on-chain + 49 Surfpool + 141 devnet)
+# Total: ~2,758 tests across 19 suites (1994 TS + 574 on-chain + 49 Surfpool + 141 devnet)
 # All security checks are BLOCKING — zero tolerance for known issues.
 
 name: CI
@@ -178,8 +178,6 @@ jobs:
       #
       # Directory existence is verified BEFORE grep to catch layout drift
       # that would otherwise silently return "no violations" (M-5 fix).
-      #
-      # See: MEMORY/WORK/20260420-201121_test-assertion-precision-council/COUNCIL_DECISION.md
       - name: Forbid legacy variadic error-assertion helpers
         run: |
           set -eu

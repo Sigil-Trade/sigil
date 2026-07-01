@@ -37,8 +37,8 @@ import {
 const JUPITER = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4";
 
 // Note: numeric codes referenced below (6000, 6001, 6006, 6021, 6015, 6022,
-// 6038, 2003, 2006) are from the post-position-counter-deletion renumber
-// (see MEMORY/... COUNCIL_DECISION.md). If the IDL shifts again, the
+// 6038, 2003, 2006) are from the post-position-counter-deletion renumber.
+// If the IDL shifts again, the
 // coupled {name, code} types will make tsc fail here — which is the point.
 // SIGIL_ERRORS imported above gives the current canonical mapping.
 void SIGIL_ERRORS;

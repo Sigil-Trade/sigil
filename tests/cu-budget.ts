@@ -202,8 +202,8 @@ interface SyntheticEntry {
  * entries in one TX). Writes the same layout the on-chain code reads via
  * `bytemuck::from_bytes::<InstructionConstraints>`.
  *
- * Layout (35,888 bytes) — V2 (REVAMP_PLAN §2.2): strict_mode byte removed,
- * padding grew from 4 to 5 to preserve the 35,888-byte invariant.
+ * Layout (35,888 bytes) — V2: strict_mode byte removed, padding grew from
+ * 4 to 5 to preserve the 35,888-byte invariant.
  *   [0..8)         Anchor disc
  *   [8..40)        vault: [u8; 32]
  *   [40..40+64×560)  entries: [ConstraintEntryZC; 64]
@@ -261,7 +261,7 @@ function buildConstraintsAccountData(
     // discriminator_format = 0 (Anchor8) — already zero
   }
   // V2 layout: entry_count, bump, constraint_version, padding follow the
-  // entries array (strict_mode byte removed — REVAMP_PLAN §2.2).
+  // entries array (strict_mode byte removed).
   const tailOffset = 40 + MAX_CONSTRAINT_ENTRIES * CONSTRAINT_ENTRY_ZC_SIZE;
   buf.writeUInt8(entries.length, tailOffset + 0); // entry_count
   buf.writeUInt8(bump, tailOffset + 1); // bump

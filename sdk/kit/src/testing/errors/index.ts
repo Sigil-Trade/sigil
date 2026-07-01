@@ -1,8 +1,7 @@
 // @usesigil/kit/testing/errors
 //
 // Strict error-assertion helpers for Sigil tests.
-//
-// See: MEMORY/WORK/20260420-201121_test-assertion-precision-council/COUNCIL_DECISION.md
+// Assert the EXACT {name, code} pair (IDL-coupled), not substrings.
 
 export {
   expectAnchorError,

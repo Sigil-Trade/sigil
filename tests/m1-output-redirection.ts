@@ -47,8 +47,8 @@ import {
  * stablecoin balance *decreased* by ≤ the authorized amount — it NEVER checks
  * WHERE the value went. So a compromised agent can spend its delegation to move
  * vault USDC straight into its OWN token account, up to the cap. The guard bounds
- * MAGNITUDE, not OWNERSHIP. (Confirmed open at main@7bfcc5e5; see
- * ROADMAP/MASTER_PLAN.md Phase 2.)
+ * MAGNITUDE, not OWNERSHIP. (Confirmed open at main@7bfcc5e5; fix is
+ * tracked as a Phase 2 item.)
  *
  * This test encodes the SECURE expectation (the drain must revert / the agent
  * must gain nothing). It is therefore RED today and must stay red until Phase 2
