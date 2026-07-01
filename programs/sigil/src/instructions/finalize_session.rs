@@ -757,9 +757,10 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
             let mut mint_bytes = [0u8; 32];
             mint_bytes.copy_from_slice(&data[0..32]);
             let mint_field = Pubkey::new_from_array(mint_bytes);
-            require!(owner_field == vault_key, SigilError::InvalidTokenAccount);
-            require!(
-                mint_field == session_authorized_token,
+            require_keys_eq!(owner_field, vault_key, SigilError::InvalidTokenAccount);
+            require_keys_eq!(
+                mint_field,
+                session_authorized_token,
                 SigilError::InvalidTokenAccount
             );
             let mut amount_bytes = [0u8; 8];
@@ -792,9 +793,10 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
             let mut mint_bytes = [0u8; 32];
             mint_bytes.copy_from_slice(&data[0..32]);
             let mint_field = Pubkey::new_from_array(mint_bytes);
-            require!(owner_field == vault_key, SigilError::InvalidTokenAccount);
-            require!(
-                mint_field == session_output_mint,
+            require_keys_eq!(owner_field, vault_key, SigilError::InvalidTokenAccount);
+            require_keys_eq!(
+                mint_field,
+                session_output_mint,
                 SigilError::InvalidTokenAccount
             );
             let mut amount_bytes = [0u8; 8];

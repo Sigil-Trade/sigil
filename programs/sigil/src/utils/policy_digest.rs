@@ -34,6 +34,10 @@
 //! 19. `cosign_required: bool`        (1 byte, 0/1)  — G6 (audit 2026-05-18 cosign opt-in)
 //! 20. `agent_set_hash: [u8; 32]`     (32 bytes)     — Phase 8 PEN-CROSS-1
 //! 21. `cosign_session_pubkey: Pubkey` (32 bytes)    — D-5 (audit 2026-05-19, F-RP3-1)
+//! 22. `operator_grant_delay_seconds: u64` (8 bytes, LE) — F-Q6 (2026-06-02)
+//! 23. `has_protocol_caps: bool`      (1 byte, 0/1)  — M-1 (audit 2026-06-11)
+//! 24. `protocol_caps: Vec<u64>`      (4 byte LE len ++ each cap u64 8 bytes LE) — M-1
+//! 25. `protocol_hashes`             (4 byte LE protocols.len() ++ each 32 bytes, index-aligned to protocols) — Item 3 (2026-06-22)
 //!
 //! Phase 3 append-only additions (TA-05/07/17): the three new policy-owned
 //! fields are appended at positions 15-17 to preserve the existing 14-field

@@ -208,7 +208,7 @@ impl AgentSpendOverlay {
         } else {
             // Zero only the gap buckets: (last_write_epoch+1)..=current_epoch
             for offset in 1..=gap {
-                let epoch = entry.last_write_epoch + offset;
+                let epoch = entry.last_write_epoch.saturating_add(offset);
                 let idx = (epoch % OVERLAY_NUM_EPOCHS as i64) as usize;
                 entry.contributions[idx] = 0;
             }
@@ -252,8 +252,8 @@ impl AgentSpendOverlay {
                 break;
             }
 
-            let bucket_start = epoch_for_k * OVERLAY_EPOCH_DURATION;
-            let bucket_end = bucket_start + OVERLAY_EPOCH_DURATION;
+            let bucket_start = epoch_for_k.saturating_mul(OVERLAY_EPOCH_DURATION);
+            let bucket_end = bucket_start.saturating_add(OVERLAY_EPOCH_DURATION);
 
             // If this bucket ends before the window start, we're done (going backward)
             if bucket_end <= window_start_ts {
