@@ -4,7 +4,7 @@ Sigil PR template — single-trunk model.
 All PRs target `main`. Auto-merge is DISABLED on `main` per ruleset.
 You will need to click "Merge" manually after CI is green and review is approved.
 
-If your PR touches `programs/sigil/src/**`, the devnet program
+If your PR touches `programs/sigil/src/**` or `Anchor.toml`, the devnet program
 (7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK) is redeployed to devnet
 automatically after merge to main (`deploy-devnet.yml`). This is a devnet
 development deployment — mainnet is not in scope yet.

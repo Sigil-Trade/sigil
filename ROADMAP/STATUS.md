@@ -9,7 +9,7 @@
 > **The dated tables, commit hashes, and test baselines below are retained as the historical provenance record of how the milestones were reached — read them as "how we got here," not as an open to-do list.** Where a row still reads `PLANNED` / `DESIGN` / `PARTIAL`, that captures its state *at the time it was written during the milestone arc*; it is superseded by the milestone-level COMPLETE status above. For any specific live claim (error count, sizes, instruction count, test totals), trust the code and `scripts/test-counts.json`, not the point-in-time numbers frozen into this ledger.
 
 **Created:** 2026-05-30 · **Program ID:** `7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK` (upgrade-in-place, no new ID)
-**Milestone branch (now merged):** `revamp/onchain-m1`. The two roadmap framings that coexisted during the arc — this ledger's original `M1-XX` items and the 2026-06-01 audit's `F-Qx` items (mapping: M1-01=F-Q1a, M1-05≈F-Q8, M1-06≈F-Q4) — are preserved inline below for provenance; the enforcement-spec doc that held the `F-Qx` framing was archived in the doc cleanup (see note above).
+**Milestone branch (now merged):** `revamp/onchain-m1`. The two roadmap framings that coexisted during the arc — this ledger's original `M1-XX` items and the 2026-06-01 audit's `F-Qx` items (mapping: M1-01=F-Q1a, M1-05≈F-Q8, M1-06≈F-Q4) — are preserved inline below for provenance; the canonical `F-Qx` enforcement spec remains in `ENFORCEMENT_MODEL.md` (kept).
 
 ## Plan approval
 - [x] Master roadmap approved by Kaleb (2026-05-30)

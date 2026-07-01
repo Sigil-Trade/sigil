@@ -179,7 +179,7 @@ Twelve PDA account types. Seeds and sizes are verified against `programs/sigil/s
 
 ## Quick Start
 
-### Option A — Add to an Existing Project
+### Add to an Existing Project
 
 ```bash
 npm install @usesigil/kit
