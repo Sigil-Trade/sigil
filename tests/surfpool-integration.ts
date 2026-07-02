@@ -67,6 +67,7 @@ import {
   ensureMintExists,
   setupVaultWithAgent,
   seatOperatorAgent,
+  matureTimelockPending,
   initVaultInline,
   expectTxError,
   VaultSetupResult,
@@ -1646,14 +1647,25 @@ describe("surfpool-integration", function () {
         await program.account.pendingPolicyUpdate.fetch(pendingPolicyPda);
       expect(pending.dailySpendingCapUsd!.toNumber()).to.equal(200_000_000);
 
-      // Time travel past the timelock (1800 seconds + buffer)
-      // Surfnet absoluteTimestamp is in milliseconds
-      await timeTravel(env.connection, {
-        absoluteTimestamp: Date.now() + 2_000_000,
-      });
+      // Mature the 1800s timelock by backdating the pending's executes_at +
+      // queued_at_slot in place (see matureTimelockPending) instead of
+      // timeTravel: the surfnet forks live devnet, so its clock runs far ahead of
+      // wall-clock (a Date.now() absoluteTimestamp targets the surfnet's past →
+      // RPC reject) and its slot is non-monotonic across timeTravel (the apply's
+      // clock.slot lands below queued_at_slot → F-1 fail-closed freshness
+      // checked_sub underflows, Overflow 6020). Applying at the natural clock
+      // avoids both.
+      await matureTimelockPending(
+        env,
+        program,
+        pendingPolicyPda,
+        "pendingPolicyUpdate",
+      );
 
-      // Apply should now succeed
-      await program.methods
+      // Apply should now succeed. Route through sendVersionedTx (not .rpc()) so a
+      // real revert surfaces as a named error instead of anchor/web3.js's
+      // "Unknown action 'undefined'" mask.
+      const applyIx = await program.methods
         .applyPendingPolicy()
         .accounts({
           owner: env.payer.publicKey,
@@ -1662,7 +1674,8 @@ describe("surfpool-integration", function () {
           tracker: trackerPda,
           pendingPolicy: pendingPolicyPda,
         } as any)
-        .rpc();
+        .instruction();
+      await sendVersionedTx(env.connection, [applyIx], env.payer);
 
       // Verify policy was updated
       const policy = await program.account.policyConfig.fetch(policyPda);
@@ -1727,10 +1740,10 @@ describe("surfpool-integration", function () {
       } catch (err: any) {
         const errStr = err.message || JSON.stringify(err);
         expect(
-          errStr.includes("TimelockNotExpired") || errStr.includes("6026"),
+          errStr.includes("TimelockNotExpired") || errStr.includes("6022"),
         ).to.equal(
           true,
-          `Expected TimelockNotExpired (6026) but got: ${errStr.slice(0, 200)}`,
+          `Expected TimelockNotExpired (6022) but got: ${errStr.slice(0, 200)}`,
         );
       }
     });
@@ -2670,21 +2683,22 @@ describe("surfpool-integration", function () {
         } as any)
         .rpc();
 
-      // Time travel past 1800s timelock
-      const SYSVAR_CLOCK = new PublicKey(
-        "SysvarC1ock11111111111111111111111111111111",
+      // Mature the 1800s timelock via backdating (see matureTimelockPending)
+      // rather than timeTravel — the surfnet slot is non-monotonic across
+      // timeTravel, so the apply's clock.slot lands below queued_at_slot and
+      // underflows F-1's fail-closed freshness checked_sub (Overflow 6020,
+      // reproduced at apply_agent_permissions_update.rs:115). Applying at the
+      // natural clock via sendVersionedTx avoids the anomaly and unmasks any real
+      // revert.
+      await matureTimelockPending(
+        env,
+        program,
+        pendingAgentPerms,
+        "pendingAgentPermissionsUpdate",
       );
-      const clockInfo = await env.connection.getAccountInfo(SYSVAR_CLOCK);
-      let travelTs = Math.floor(Date.now() / 1000);
-      if (clockInfo && clockInfo.data.length >= 40) {
-        travelTs = Number(clockInfo.data.readBigInt64LE(32));
-      }
-      await timeTravel(env.connection, {
-        absoluteTimestamp: (travelTs + 2000) * 1000,
-      });
 
       // Apply
-      await program.methods
+      const applyIx = await program.methods
         .applyAgentPermissionsUpdate()
         .accounts({
           owner: env.payer.publicKey,
@@ -2693,7 +2707,8 @@ describe("surfpool-integration", function () {
           pendingAgentPerms: pendingAgentPerms,
           agentSpendOverlay: swapSetup.overlayPda,
         } as any)
-        .rpc();
+        .instruction();
+      await sendVersionedTx(env.connection, [applyIx], env.payer);
 
       const vault = await program.account.agentVault.fetch(swapSetup.vaultPda);
       const agentEntry = vault.agents.find(

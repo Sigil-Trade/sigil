@@ -1272,6 +1272,114 @@ export async function seatOperatorAgent(
   await sendVersionedTx(env.connection, [applyIx], env.payer, signers);
 }
 
+/**
+ * Byte offsets (after the 8-byte Anchor discriminator) of the two timelock
+ * fields backdated by `matureTimelockPending`, per struct field order in
+ * state/pending_policy.rs and state/pending_agent_perms.rs. Both fields are
+ * fixed-width and precede any Option/Vec, so the offsets are layout-invariant.
+ * They are cross-checked at runtime against the Anchor-decoded values before any
+ * write, so future layout drift fails loudly rather than corrupting the account.
+ */
+const TIMELOCK_PENDING_LAYOUT = {
+  // disc(0..8) vault(8..40) queued_at(40..48) executes_at(48..56) queued_at_slot(56..64)
+  pendingPolicyUpdate: { executesAt: 48, queuedAtSlot: 56 },
+  // …spending_limit_usd(80..88) queued_at(88..96) executes_at(96..104) queued_at_slot(104..112)
+  pendingAgentPermissionsUpdate: { executesAt: 96, queuedAtSlot: 104 },
+} as const;
+
+// executes_at backdated this many seconds into the past ⇒ matured; queued_at_slot
+// this many slots back ⇒ fresh (Δ≈10 ≪ MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN=700_000).
+const BACKDATE_ELAPSED_SECS = 60;
+const BACKDATE_SLOTS = 10;
+
+/**
+ * Mature a queued timelock pending (PendingPolicyUpdate /
+ * PendingAgentPermissionsUpdate) IN PLACE so its `apply` succeeds at the NATURAL
+ * surfnet clock — the Surfpool analogue of litesvm's `advanceTime`, and the
+ * direct sibling of `seatOperatorAgent`'s backdate for PendingAgentGrant.
+ *
+ * Backdates two fixed-width fields via `surfnet_setAccount`:
+ *   • executes_at (i64)    ← now-BACKDATE_ELAPSED_SECS  → clears maturity gate
+ *        `require!(pending.is_ready(now))` == `now >= executes_at`
+ *        (apply_pending_policy.rs:163 / apply_agent_permissions_update.rs:90).
+ *   • queued_at_slot (u64) ← slot-BACKDATE_SLOTS        → clears freshness gate
+ *        `clock.slot.checked_sub(queued_at_slot)` must be Some (≥0) and
+ *        `< MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN` (700_000)
+ *        (apply_pending_policy.rs:211-229 / apply_agent_permissions_update.rs:112-119).
+ *
+ * WHY backdate, not `timeTravel` (same rationale as `seatOperatorAgent`, and
+ * reproduced directly on this branch): the surfnet forks live devnet, so (a) its
+ * clock runs far ahead of the test machine's wall-clock — a `Date.now()`-based
+ * `absoluteTimestamp` targets the surfnet's PAST and the RPC rejects it
+ * ("Cannot travel to past timestamp"); and (b) the slot is NOT monotonic across
+ * `timeTravel` — after a forward `absoluteTimestamp` jump the apply's tx-time
+ * `clock.slot` lands BELOW `queued_at_slot`, so F-1's fail-closed `checked_sub`
+ * (#425: `saturating_sub`→`checked_sub`) UNDERFLOWS to `Overflow` (6020). `main`'s
+ * `saturating_sub` returned 0 and silently passed; F-1 correctly rejects the
+ * surfnet clock anomaly. `surfnet_timeTravel` also rejects a multi-key map, so
+ * slot+timestamp cannot be advanced together. Applying at the natural, monotonic
+ * clock sidesteps every one of these.
+ *
+ * NO digest recompute (unlike the 97-byte agent-grant case): neither pending type
+ * carries a content digest over executes_at / queued_at / queued_at_slot
+ * (state/pending_policy.rs and state/pending_agent_perms.rs define no
+ * `canonical_bytes_of_*`; their digests bind policy/cosign content only and are
+ * invariant under these edits). Only two 8-byte little-endian words move; every
+ * other byte is preserved verbatim. This SIMULATES elapsed time for setup and
+ * weakens NO on-chain assertion — the apply still runs the real maturity,
+ * freshness, digest, capability, and merge checks.
+ */
+export async function matureTimelockPending(
+  env: SurfpoolTestEnv,
+  program: Program<any>,
+  pending: PublicKey,
+  accountName: keyof typeof TIMELOCK_PENDING_LAYOUT,
+): Promise<void> {
+  const { executesAt: executesAtOffset, queuedAtSlot: queuedAtSlotOffset } =
+    TIMELOCK_PENDING_LAYOUT[accountName];
+
+  const info = await env.connection.getAccountInfo(pending);
+  if (!info) {
+    throw new Error(
+      `${accountName} ${pending.toString()} not found — queue it first`,
+    );
+  }
+  const data = Buffer.from(info.data);
+
+  // Cross-check the offsets against the Anchor-decoded values BEFORE writing.
+  const decoded = await (program.account as any)[accountName].fetch(pending);
+  const rawExecutesAt = data.readBigInt64LE(executesAtOffset);
+  const rawQueuedAtSlot = data.readBigUInt64LE(queuedAtSlotOffset);
+  if (rawExecutesAt !== BigInt(decoded.executesAt.toString())) {
+    throw new Error(
+      `${accountName}: executes_at offset ${executesAtOffset} mismatch ` +
+        `(raw=${rawExecutesAt} decoded=${decoded.executesAt})`,
+    );
+  }
+  if (rawQueuedAtSlot !== BigInt(decoded.queuedAtSlot.toString())) {
+    throw new Error(
+      `${accountName}: queued_at_slot offset ${queuedAtSlotOffset} mismatch ` +
+        `(raw=${rawQueuedAtSlot} decoded=${decoded.queuedAtSlot})`,
+    );
+  }
+
+  const { slot, timestamp } = await getClock(env.connection);
+  data.writeBigInt64LE(
+    BigInt(timestamp - BACKDATE_ELAPSED_SECS),
+    executesAtOffset,
+  );
+  data.writeBigUInt64LE(BigInt(slot - BACKDATE_SLOTS), queuedAtSlotOffset);
+
+  await surfnetRpc(env.connection, "surfnet_setAccount", [
+    pending.toString(),
+    {
+      data: data.toString("hex"),
+      owner: info.owner.toString(),
+      lamports: info.lamports,
+    },
+  ]);
+}
+
 // ─── Vault setup helper ─────────────────────────────────────────────────────
 
 export interface SetupVaultOpts {
