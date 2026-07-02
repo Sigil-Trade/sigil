@@ -163,10 +163,14 @@ describe("categorizeDxError — exact range boundaries", () => {
     {
       code: 6117,
       category: "program",
-      description:
-        "program upper bound (Item 3 verified-build ErrProgramBuildMismatch)",
+      description: "in-range (Item 3 verified-build ErrProgramBuildMismatch)",
     },
-    { code: 6118, category: "unknown", description: "one above program range" },
+    {
+      code: 6118,
+      category: "program",
+      description: "program upper bound (F-1 timelock TimelockTooLong)",
+    },
+    { code: 6119, category: "unknown", description: "one above program range" },
     { code: 6999, category: "unknown", description: "one below user range" },
     { code: 7200, category: "unknown", description: "one above network range" },
     { code: 7999, category: "unknown", description: "DX_ERROR_CODE_UNMAPPED" },

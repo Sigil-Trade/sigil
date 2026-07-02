@@ -31,16 +31,17 @@ describe("agent-errors", () => {
       // F-Q1b adjacency appended 6114 (ErrDeFiInstructionNotAdjacentToFinalize);
       // require-measurable-outcome appended 6115 (ErrUnmeasurableSpend);
       // Item 3 verified-build gate appended 6116 (ErrProgramDataUnresolvable)
-      // and 6117 (ErrProgramBuildMismatch).
+      // and 6117 (ErrProgramBuildMismatch); F-1 timelock cap appended 6118
+      // (TimelockTooLong).
       // The IDL↔generated↔hand-map bijection (incl. name-per-code) is enforced
       // by error-map-drift.test.ts; this test guards the count/extremes only.
-      expect(codes).to.have.lengthOf(118);
+      expect(codes).to.have.lengthOf(119);
       expect(codes[0]).to.equal(6000);
-      expect(codes[codes.length - 1]).to.equal(6117);
+      expect(codes[codes.length - 1]).to.equal(6118);
     });
 
-    it("every code from 6000-6117 is present with no gaps post Item 3", () => {
-      for (let code = 6000; code <= 6117; code++) {
+    it("every code from 6000-6118 is present with no gaps post Item 3", () => {
+      for (let code = 6000; code <= 6118; code++) {
         const entry = ON_CHAIN_ERROR_MAP[code];
         expect(entry, `Missing error code ${code}`).to.exist;
         expect(entry.name).to.be.a("string").and.not.be.empty;
