@@ -24,8 +24,8 @@ Also:
   2. Removes the legacy import from "./helpers/devnet-setup" / litesvm-setup.
   3. Emits a punt list to /tmp/codemod-punts.txt for manual review.
 
-Council decision (7-0 STRICT):
-  MEMORY/WORK/20260420-201121_test-assertion-precision-council/COUNCIL_DECISION.md
+Council decision (7-0 STRICT): use coupled {name, code} error assertions,
+not substring matching.
 """
 
 import json

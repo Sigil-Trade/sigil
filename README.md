@@ -79,7 +79,7 @@ Sigil provides three layers of protection in a single integration:
 - **Rolling 24h spending caps** — 144-epoch circular buffer tracks stablecoin outflows. No exploitable midnight reset
 - **Risk-reducing actions exempt** — closing positions, decreasing exposure, and removing collateral never count as spending
 - **On-chain slippage verification** — Jupiter and Flash Trade slippage enforced by Solana validators via `max_slippage_bps` policy
-- **Token delegation** — SPL `approve`/`revoke` CPI instead of escrow transfers
+- **Token delegation** — SPL `approve`/`revoke` CPI; funds never leave the vault
 - **Timelocked policy changes** — queue updates with configurable delay to prevent rug-pulls
 - **Agent transfers** — destination-allowlisted stablecoin transfers initiated by agents
 - **Kill switch** — owner can freeze any vault instantly, revoking all agent permissions
@@ -102,70 +102,71 @@ All instructions succeed or all revert atomically. The agent's signing key is va
 
 ### Account Model
 
-| Account                      | Seeds                                              | Purpose                                                                |
-| ---------------------------- | -------------------------------------------------- | ---------------------------------------------------------------------- |
-| **AgentVault**               | `[b"vault", owner, vault_id]`                      | Multi-agent vault: up to 10 agents with per-agent permission bitmasks  |
-| **PolicyConfig**             | `[b"policy", vault]`                               | Spending caps, protocol allowlist, leverage/slippage limits, timelock  |
-| **SpendTracker**             | `[b"tracker", vault]`                              | Zero-copy 144-epoch circular buffer for rolling 24h USD spend tracking |
-| **SessionAuthority**         | `[b"session", vault, agent, token_mint]`           | Ephemeral PDA created per action, expires after 20 slots               |
-| **PendingPolicyUpdate**      | `[b"pending_policy", vault]`                       | Queued policy change with timelock, applied after delay                |
-| **EscrowDeposit**            | `[b"escrow", source_vault, dest_vault, escrow_id]` | Cross-vault stablecoin escrow with optional SHA-256 condition proof    |
-| **InstructionConstraints**   | `[b"constraints", vault]`                          | Up to 16 per-program instruction constraints with 7 operators          |
-| **PendingConstraintsUpdate** | `[b"pending_constraints", vault]`                  | Queued constraint changes with timelock                                |
-| **AgentSpendOverlay**        | `[b"agent_spend", vault, shard_index]`             | Per-agent rolling 24h spend tracking (10 agent slots)                  |
+Twelve PDA account types. Seeds and sizes are verified against `programs/sigil/src/state/` (the code is the source of truth).
 
-### On-Chain Instructions (35)
+| Account                             | Seeds                                    | Size (bytes)      | Purpose                                                          |
+| ----------------------------------- | ---------------------------------------- | ----------------- | --------------------------------------------------------------- |
+| **AgentVault**                      | `[b"vault", owner, vault_id]`            | 676               | Multi-agent vault: up to 10 agents, each a 2-bit capability      |
+| **PolicyConfig**                    | `[b"policy", vault]`                     | 1,649             | Spending caps, protocol allowlist, leverage/slippage, timelock   |
+| **SpendTracker**                    | `[b"tracker", vault]`                    | 3,328 (zero-copy) | 144-epoch circular buffer for rolling 24h USD spend tracking     |
+| **SessionAuthority**                | `[b"session", vault, agent, token_mint]` | 619               | Ephemeral PDA created per action, expires after 30s wall-clock   |
+| **PendingPolicyUpdate**             | `[b"pending_policy", vault]`             | 1,349             | Queued policy change with timelock, applied after delay          |
+| **PendingAgentGrant**               | `[b"pending_agent_grant", vault]`        | 144               | Queued agent grant awaiting timelock apply                       |
+| **PendingAgentPermissionsUpdate**   | `[b"pending_agent_perms", vault, agent]` | 185               | Queued per-agent capability/limit change awaiting apply          |
+| **PendingOwnershipTransfer**        | `[b"pending_owner", vault]`              | 136               | Queued vault ownership handover (single or multisig accept)      |
+| **AgentSpendOverlay**               | `[b"agent_spend", vault, &[0u8]]`        | 2,688 (zero-copy) | Per-agent rolling 24h spend tracking (10 agent slots)            |
+| **PostExecutionAssertions**         | `[b"post_assertions", vault]`            | 672 (zero-copy)   | Optional post-execution checks (leverage, balance-delta)         |
+| **AuditLogRejected**                | `[b"audit_rejected", vault]`             | 4,152 (zero-copy) | On-chain ring buffer of rejected actions                         |
+| **AuditLogSuccess**                 | `[b"audit_success", vault]`              | 8,248 (zero-copy) | On-chain ring buffer of successful actions                       |
 
-> Policy-level mutations are timelock-guarded (minimum 1800s). The "direct"
-> `update_policy`, `update_agent_permissions`, `update_instruction_constraints`,
-> and `close_instruction_constraints` handlers were removed — all such changes
-> now go through queue/apply/cancel flows for TOCTOU protection.
+### On-Chain Instructions (32)
 
-| Instruction                             | Signer      | Description                                                               |
-| --------------------------------------- | ----------- | ------------------------------------------------------------------------- |
-| **Vault Lifecycle**                     |             |                                                                           |
-| `initialize_vault`                      | Owner       | Create vault, policy, tracker, overlay PDAs (mandatory timelock)          |
-| `freeze_vault`                          | Owner       | Protective freeze — blocks agent execution, preserves agents              |
-| `reactivate_vault` (resume)             | Owner       | Unfreeze vault, optionally add new agent                                  |
-| `close_vault`                           | Owner       | Close all PDAs, reclaim rent. Requires no active sessions.                |
-| **Fund Management**                     |             |                                                                           |
-| `deposit_funds`                         | Owner       | Transfer SPL tokens into vault (SPL Token only, no Token-2022)            |
-| `withdraw_funds`                        | Owner       | Withdraw tokens to owner                                                  |
-| **Agent Execution**                     |             |                                                                           |
-| `validate_and_authorize`                | Agent       | Check policy + constraints, collect fees, create session, delegate tokens |
-| `finalize_session`                      | Agent       | Outcome-based spend measurement, revoke delegation, close session PDA     |
-| `agent_transfer`                        | Agent       | Stablecoin transfer to allowlisted destination (bypasses DeFi sandwich)   |
-| **Agent Management**                    |             |                                                                           |
-| `register_agent` (addAgent)             | Owner       | Register agent with capability tier + spending limit (max 10 agents)      |
-| `revoke_agent`                          | Owner       | Remove agent from vault                                                   |
-| `pause_agent`                           | Owner       | Temporarily block agent without revoking                                  |
-| `unpause_agent`                         | Owner       | Restore paused agent                                                      |
-| `queue_agent_permissions_update`        | Owner       | Queue timelocked capability/limit change for agent                        |
-| `apply_agent_permissions_update`        | Owner       | Apply queued agent permission change after timelock                       |
-| `cancel_agent_permissions_update`       | Owner       | Cancel queued agent permission change                                     |
-| **Policy**                              |             |                                                                           |
-| `queue_policy_update`                   | Owner       | Queue timelocked policy change (min 1800s)                                |
-| `apply_pending_policy`                  | Owner       | Apply queued change after timelock expires                                |
-| `cancel_pending_policy`                 | Owner       | Cancel queued policy change                                               |
-| **Escrow**                              |             |                                                                           |
-| `create_escrow`                         | Agent       | Cross-vault stablecoin escrow (max 30 days)                               |
-| `settle_escrow`                         | Agent       | Settle escrow to destination vault                                        |
-| `refund_escrow`                         | Owner/Agent | Refund expired escrow to source vault                                     |
-| `close_settled_escrow`                  | Owner       | Close settled/refunded escrow PDA, reclaim rent                           |
-| **Instruction Constraints**             |             |                                                                           |
-| `allocate_constraints_pda`              | Owner       | Allocate InstructionConstraints PDA (35,888 bytes)                        |
-| `allocate_pending_constraints_pda`      | Owner       | Allocate PendingConstraintsUpdate PDA                                     |
-| `extend_pda`                            | Owner       | Extend PDA in multiple transactions (large-account bootstrap)             |
-| `create_instruction_constraints`        | Owner       | Populate constraints after allocation                                     |
-| `queue_constraints_update`              | Owner       | Queue timelocked constraint change                                        |
-| `apply_constraints_update`              | Owner       | Apply queued constraint change after timelock                             |
-| `cancel_constraints_update`             | Owner       | Cancel queued constraint change                                           |
-| `queue_close_constraints`               | Owner       | Queue timelocked constraint deletion                                      |
-| `apply_close_constraints`               | Owner       | Apply close after timelock, close PDA                                     |
-| `cancel_close_constraints`              | Owner       | Cancel queued close                                                       |
-| **Post-Execution Assertions (Phase B)** |             |                                                                           |
-| `create_post_assertions`                | Owner       | Create PostExecutionAssertions PDA (leverage, balance delta checks)       |
-| `close_post_assertions`                 | Owner       | Remove post-execution assertions                                          |
+> Policy- and agent-level mutations are timelock-guarded and go through
+> queue/apply/cancel flows for TOCTOU protection — there are no "direct" policy
+> or permission mutation handlers.
+
+| Instruction | Signer | Description |
+| --- | --- | --- |
+| **Vault Lifecycle** | | |
+| `initialize_vault` | Owner | Create vault, policy, tracker, overlay PDAs (mandatory timelock) |
+| `freeze_vault` | Owner | Protective freeze — blocks agent execution, preserves agents |
+| `reactivate_vault` | Owner | Unfreeze vault, optionally add a new agent |
+| `close_vault` | Owner | Close all PDAs, reclaim rent. Requires no active sessions. |
+| **Fund Management** | | |
+| `deposit_funds` | Owner | Transfer SPL tokens into vault |
+| `withdraw_funds` | Owner | Withdraw tokens to owner |
+| **Agent Execution** | | |
+| `validate_and_authorize` | Agent | Check policy, collect fees, create session, delegate tokens |
+| `finalize_session` | Agent | Outcome-based spend measurement, revoke delegation, close session |
+| `agent_transfer` | Agent | Stablecoin transfer to an allowlisted destination |
+| **Agent Management** | | |
+| `register_agent` | Owner | Register agent with capability + spending limit (max 10 agents) |
+| `revoke_agent` | Owner | Remove agent from vault |
+| `pause_agent` | Owner | Temporarily block an agent without revoking |
+| `unpause_agent` | Owner | Restore a paused agent |
+| `set_observe_only` | Owner | Downgrade an agent to OBSERVER capability |
+| `record_agent_violation` | Owner | Record an off-chain-observed agent violation on-chain |
+| **Timelocked Agent Changes** | | |
+| `queue_agent_grant` | Owner | Queue a timelocked new-agent grant |
+| `apply_agent_grant` | Owner | Apply a queued agent grant after timelock |
+| `cancel_agent_grant` | Owner | Cancel a queued agent grant |
+| `queue_agent_permissions_update` | Owner | Queue timelocked capability/limit change for an agent |
+| `apply_agent_permissions_update` | Owner | Apply a queued agent permission change after timelock |
+| `cancel_agent_permissions_update` | Owner | Cancel a queued agent permission change |
+| **Policy** | | |
+| `queue_policy_update` | Owner | Queue a timelocked policy change |
+| `apply_pending_policy` | Owner | Apply a queued policy change after timelock |
+| `cancel_pending_policy` | Owner | Cancel a queued policy change |
+| `approve_pending_policy` | Owner | Co-sign/approve a queued policy change |
+| `promote_graylist_destination` | Owner | Promote a graylisted transfer destination to allowlisted |
+| **Ownership Transfer** | | |
+| `initiate_ownership_transfer` | Owner | Begin a two-step vault ownership handover |
+| `accept_ownership_transfer` | Owner | Accept a pending ownership transfer |
+| `accept_ownership_transfer_multisig` | Owner | Accept a pending ownership transfer via multisig |
+| `cancel_ownership_transfer` | Owner | Cancel a pending ownership transfer |
+| **Post-Execution Assertions** | | |
+| `create_post_assertions` | Owner | Create PostExecutionAssertions PDA (leverage, balance-delta) |
+| `close_post_assertions` | Owner | Remove post-execution assertions |
 
 ## Packages
 
@@ -178,7 +179,7 @@ All instructions succeed or all revert atomically. The agent's signing key is va
 
 ## Quick Start
 
-### Option A — Add to an Existing Project
+### Add to an Existing Project
 
 ```bash
 npm install @usesigil/kit
@@ -203,16 +204,15 @@ import { seal } from "@usesigil/kit";
 # Build the Anchor program (--no-idl required on stable Rust with Anchor 0.32.1)
 anchor build --no-idl
 
-# Generate IDL separately (requires nightly Rust — anchor-syn 0.32.1 bug)
-RUSTUP_TOOLCHAIN=nightly anchor idl build -o target/idl/sigil.json
+# Restore the committed IDL after building (build may emit a stale one)
+git checkout -- target/idl/ target/types/
 
 # Run on-chain tests (581 LiteSVM tests — no validator needed)
 npx ts-mocha -p ./tsconfig.json -t 300000 \
   tests/sigil.ts tests/jupiter-integration.ts \
-  tests/flash-trade-integration.ts tests/security-exploits.ts \
-  tests/instruction-constraints.ts tests/escrow-integration.ts
+  tests/flash-trade-integration.ts tests/security-exploits.ts
 
-# Run all SDK tests (1,218 tests across 4 packages)
+# Run all SDK package tests
 pnpm -r run test
 
 # Lint
@@ -222,44 +222,36 @@ cargo fmt --check --manifest-path programs/sigil/Cargo.toml
 
 ### Test Suites
 
-| Suite                                                                                                    | Tests    |
-| -------------------------------------------------------------------------------------------------------- | -------- |
-| Core vault management & permission engine                                                                | 120      |
-| Missing-coverage gap-fill (DC audit 2026-05-19)                                                          | 14       |
-| Jupiter integration (composed swaps)                                                                     | 9        |
-| Jupiter Lend integration (deposit/withdraw)                                                              | 7        |
-| Flash Trade integration (leveraged perps)                                                                | 17       |
-| Security exploit scenarios                                                                               | 187      |
-| Escrow integration (deposit/settle/refund)                                                               | 0        |
-| TOCTOU security (policy version + timelock)                                                              | 6        |
-| F-1 timelock-brick close (1b)                                                                            | 7        |
-| Verified-build gate (Item 3 — upgrade-TOCTOU pin)                                                        | 9        |
-| Analytics counters (failed TX + per-agent TX count)                                                      | 7        |
-| Post-execution assertions E2E (DELETED in Phase 1 Option A demolition — CrossFieldLte primitive removed) | 0        |
-| Devnet integration tests (real network)                                                                  | 64       |
-| Surfpool integration tests (local Surfnet)                                                               | 49       |
-| Platform client tests (`@usesigil/platform`)                                                             | 17       |
-| Custody adapters (`@usesigil/custody`)                                                                   | 96       |
-| Kit-native SDK (`@usesigil/kit` — includes merged core + dashboard)                                      | 1867     |
-| Kit SDK devnet tests (`@usesigil/kit` devnet)                                                            | 34       |
-| Plugins (`@usesigil/plugins`)                                                                            | 14       |
-| Rust unit tests (cargo test)                                                                             | 182      |
-| Devnet extended scenarios (flash-trade + stress)                                                         | 43       |
-| Trident fuzz tests (1K iterations)                                                                       | 16       |
-| **Total**                                                                                                | **2765** |
+| Suite                                                               | Tests    |
+| ------------------------------------------------------------------- | -------- |
+| Core vault management & permission engine                           | 120      |
+| Missing-coverage gap-fill (DC audit 2026-05-19)                     | 14       |
+| Jupiter integration (composed swaps)                                | 9        |
+| Jupiter Lend integration (deposit/withdraw)                         | 7        |
+| Flash Trade integration (leveraged perps)                           | 17       |
+| Security exploit scenarios                                          | 187      |
+| TOCTOU security (policy version + timelock)                         | 6        |
+| F-1 timelock-brick close (1b)                                       | 7        |
+| Verified-build gate (Item 3 — upgrade-TOCTOU pin)                   | 9        |
+| Analytics counters (failed TX + per-agent TX count)                 | 7        |
+| Devnet integration tests (real network)                             | 64       |
+| Surfpool integration tests (local Surfnet)                          | 49       |
+| Platform client tests (`@usesigil/platform`)                        | 17       |
+| Custody adapters (`@usesigil/custody`)                              | 96       |
+| Kit-native SDK (`@usesigil/kit` — includes merged core + dashboard) | 1867     |
+| Kit SDK devnet tests (`@usesigil/kit` devnet)                       | 34       |
+| Plugins (`@usesigil/plugins`)                                       | 14       |
+| Rust unit tests (cargo test)                                        | 182      |
+| Devnet extended scenarios (flash-trade + stress)                    | 43       |
+| Trident fuzz tests (1K iterations)                                  | 16       |
+| **Total**                                                           | **2765** |
 
 ## Security
 
-- [Vulnerability Disclosure Policy](./SECURITY.md)
-- [Security Findings Log](./docs/SECURITY-FINDINGS-2026-04-07.md) — Phase 1.5 findings + closures
-- [Published audit reports](./SECURITY.md) — disclosure policy + public reports (when available)
+- [Vulnerability Disclosure Policy](./SECURITY.md) — how to report, and published audit reports when available
+- [Error codes (6000–6117)](./docs/ERROR-CODES.md)
 
-Raw scan output is stored as private CI artifacts (accessible to repo collaborators only). Published audit reports are added to `docs/audits/` after auditor release.
-
-## V1 Launch
-
-- [V1 Launch Runbook](./docs/V1-LAUNCH-RUNBOOK.md) — program upgrade authority handover (Drift Apr-2026 + OptiFi analog)
-- [V1 Launch Notes](./docs/V1-LAUNCH-NOTES.md) — known V1 limitations integrators must know before allowlisting protocols
+Raw scan output is stored as private CI artifacts (accessible to repo collaborators only).
 
 ## License
 

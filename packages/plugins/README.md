@@ -17,13 +17,17 @@ npm install @usesigil/plugins
 ## Usage — Solana Agent Kit
 
 ```typescript
+import { createSolanaRpc } from "@solana/kit";
 import { createSigilPlugin } from "@usesigil/plugins/sak";
+
+// `rpc` is an instantiated @solana/kit client (Rpc<SolanaRpcApi>), not a URL string.
+const rpc = createSolanaRpc("https://api.devnet.solana.com");
 
 const plugin = createSigilPlugin({
   vault: "YOUR_VAULT_ADDRESS",
   agent: agentSigner,
   network: "devnet",
-  rpcUrl: "https://api.devnet.solana.com",
+  rpc,
 });
 
 // Register with Solana Agent Kit

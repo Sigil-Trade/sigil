@@ -492,7 +492,7 @@ breaks for existing mainnet integrations in 0.16.x.
 
 - `dashboard/reads.ts` V2 schema sync (14 new fields).
 - `@deprecated` tagging pass on the 54 root-barrel exports
-  enumerated in `docs/review/PHASE_9_REVIEW/dead-export-audit.md`.
+  enumerated in the Phase 9 dead-export audit.
 - On-chain AL3 verifier (post_assertions extension carrying the
   digest input) — until this lands, AL3 is a client-integrity
   primitive, not a chain-enforced one.

@@ -12,7 +12,7 @@
  *     Stablecoin-only architecture.
  *     finalizeSession includes policy and tracker accounts.
  */
-// Strict error helpers — see MEMORY/WORK/20260420-201121_test-assertion-precision-council/
+// Strict error helpers assert the EXACT expected error code — see tests/helpers/strict-errors.ts
 import { expectAnchorError } from "./helpers/strict-errors";
 import * as anchor from "@coral-xyz/anchor";
 import {

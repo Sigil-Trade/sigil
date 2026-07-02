@@ -2,7 +2,7 @@
 #
 # Single-trunk model: all PRs target `main`. Reviewers are auto-requested per the
 # rules below. The `main-protection` ruleset enforces "review by code owner" for
-# matched paths — see `docs/DEPLOYMENT.md`.
+# matched paths.
 #
 # Today (pre-mainnet, single dev): @Kaleb-Rupe is the sole owner everywhere.
 #
@@ -13,8 +13,7 @@
 # Drift/MarginFi pattern for graceful escalation without ruleset changes.
 #
 # WHEN mainnet ships, also add the path-filtered "Required reviewers" rule to
-# the `main-protection` ruleset — covered in pre-mainnet checklist in
-# `docs/DEPLOYMENT.md` (Squads V4 multisig migration milestone).
+# the `main-protection` ruleset (Squads V4 multisig migration milestone).
 
 # Default fallback — catches anything not matched below
 *                                  @Kaleb-Rupe
@@ -45,7 +44,6 @@
 /target/types/                     @Kaleb-Rupe
 
 # ── Documentation (review for accuracy of contract claims) ──────────────────
-/docs/SECURITY.md                  @Kaleb-Rupe
+/SECURITY.md                       @Kaleb-Rupe
 /docs/ERROR-CODES.md               @Kaleb-Rupe
-/docs/ARCHITECTURE.md              @Kaleb-Rupe
-/docs/INSTRUCTIONS.md              @Kaleb-Rupe
+/ROADMAP/                          @Kaleb-Rupe

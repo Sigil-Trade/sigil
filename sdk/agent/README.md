@@ -4,6 +4,12 @@
 
 ## Install
 
+> **Not published yet.** `@usesigil/agent` is currently `private` — it is not on
+> npm, so `npx @usesigil/agent` will not resolve until the first release. Until
+> then, build it locally (`pnpm --filter @usesigil/agent build`) and point the
+> MCP `command`/`args` at the built `dist/index.js`. Once published, the config
+> below works as pasted.
+
 Pasted once into your AI runtime's MCP config:
 
 ```json
@@ -40,9 +46,19 @@ Works in Claude Desktop, Claude Code, Cursor, Continue, Cline, Goose, and any ot
 
 - `get_vault_state` — current on-chain state: owner, status, balance, P&L, health checks
 
-Coming in v0.2:
-- `get_policy`, `get_remaining_cap`, `get_recent_activity`
-- `seal_swap`, `seal_lend`, `seal_withdraw`, `seal_transfer`
+Planned:
+- Read tools: `get_policy`, `get_remaining_cap`, `get_activity`
+- Execution tools — **protocol-agnostic by design**:
+  - `seal_transaction(instructions[])` — the single generic exec tool. It wraps
+    arbitrary DeFi instructions from any source (Jupiter, Solana Agent Kit, MCP,
+    …) with Sigil's `validate_and_authorize` + `finalize_session` and guards
+    whatever they produce.
+  - `agent_transfer(destination, amount)` — direct stablecoin payout.
+
+  Sigil is protocol-agnostic: there are deliberately **no** protocol- or
+  action-specific tools (no `seal_swap` / `seal_lend` / `seal_withdraw` /
+  `seal_transfer`). The DeFi instructions come from the ecosystem; Sigil only
+  guards them. The generic name also matches the agent-bootstrap handoff prompt.
 - `npx @usesigil/agent setup` first-run wizard
 
 ## How it relates to the rest of the stack

@@ -22,8 +22,8 @@
  * table divergence; the helper LOGIC drift is caught by the SDK meta-
  * tests at `sdk/kit/tests/errors/expect-assertion.test.ts`.
  *
- * Council decision: 7-0 STRICT (2026-04-20). See:
- *   MEMORY/WORK/20260420-201121_test-assertion-precision-council/COUNCIL_DECISION.md
+ * Council decision: 7-0 STRICT (2026-04-20) — assert the EXACT coupled
+ * {name, code} pair (IDL-generated), never substring matching.
  *
  * Any behavioral change to assertions should be made HERE AND in
  * `sdk/kit/src/testing/errors/expect.ts` simultaneously.

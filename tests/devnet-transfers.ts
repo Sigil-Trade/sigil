@@ -7,7 +7,7 @@
  *     Stablecoin-only architecture. agentTransfer requires tokenMintAccount.
  *     Removed per-token max_tx_base test (V1 concept not in V2).
  */
-// Strict error helpers — see MEMORY/WORK/20260420-201121_test-assertion-precision-council/
+// Strict error helpers assert the EXACT expected error code — see tests/helpers/strict-errors.ts
 import { expectSigilError } from "./helpers/strict-errors";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import {

@@ -29,8 +29,7 @@
  * only DETECTS the configuration to give the dashboard ergonomic
  * affordances — it is NOT a security boundary.
  *
- * Off-chain helper category per [INTERFACES_V2 §4.4]:
- * (https://github.com/usesigil/agent-middleware/blob/main/docs/revamp/INTERFACES_V2.md)
+ * This is an off-chain helper category:
  * `TA-18` is the existing Squads detection primitive locked LOCKED-OFF-
  * CHAIN-ONLY. This file is the V2 implementation surface for that
  * primitive, scoped to the read-only program-owner check.

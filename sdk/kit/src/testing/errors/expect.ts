@@ -4,8 +4,7 @@
  * Replaces the legacy `expectError(err, ...keywords)` and variadic
  * `expectSigilError(errString, ...names)` helpers.
  *
- * Council decision: 7-0 STRICT (2026-04-20). See:
- *   MEMORY/WORK/20260420-201121_test-assertion-precision-council/COUNCIL_DECISION.md
+ * Council decision: 7-0 STRICT (2026-04-20) — assert coupled {name, code} pairs.
  *
  * Design tenets:
  *   1. Coupled {name, code} pairs via IDL-generated types.

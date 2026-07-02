@@ -2,7 +2,7 @@
  * @usesigil/kit — Phase 7 audit-log read helpers.
  *
  * Bootstrap of the on-chain audit-log surface added in Phase 7 of the V2
- * revamp (see HARDENED_V2_PROMPT_MAP.md §6 Phase 7). Phase 9 SDK redesign
+ * revamp. Phase 9 SDK redesign
  * will expand this into a full analytics layer; for V1 we expose only the
  * fetch + decode + ordering primitives needed by the dashboard and tests.
  *

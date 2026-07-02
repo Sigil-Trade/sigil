@@ -9,7 +9,7 @@
  *     Mandatory minimum timelockDuration: 1800.
  *     Test 1 verifies updatePolicy instruction no longer exists.
  */
-// Strict error helpers — see MEMORY/WORK/20260420-201121_test-assertion-precision-council/
+// Strict error helpers assert the EXACT expected error code — see tests/helpers/strict-errors.ts
 import { expectSigilError } from "./helpers/strict-errors";
 import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
 import { expect } from "chai";

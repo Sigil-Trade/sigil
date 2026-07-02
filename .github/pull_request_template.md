@@ -4,10 +4,10 @@ Sigil PR template — single-trunk model.
 All PRs target `main`. Auto-merge is DISABLED on `main` per ruleset.
 You will need to click "Merge" manually after CI is green and review is approved.
 
-If your PR touches `programs/sigil/`, expect the staging program (STAGSigi...)
-to be redeployed to devnet automatically after merge. The production program
-(7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK) is NEVER deployed by CI —
-mainnet upgrades go through the Squads V4 multisig flow (see docs/DEPLOYMENT.md).
+If your PR touches `programs/sigil/src/**` or `Anchor.toml`, the devnet program
+(7FtAXUcrann7P5HoLG7vnWcVpozwj9nqcNm6bPwA1wuK) is redeployed to devnet
+automatically after merge to main (`deploy-devnet.yml`). This is a devnet
+development deployment — mainnet is not in scope yet.
 -->
 
 ## Summary
@@ -43,23 +43,15 @@ mainnet upgrades go through the Squads V4 multisig flow (see docs/DEPLOYMENT.md)
 
 ## Devnet rehearsal
 
-<!-- After merge, the staging program (STAGSigi...) auto-deploys to devnet.
+<!-- After merge, the devnet program auto-deploys (if you touched `programs/sigil/src/**`).
      Verify your changes there before opening any follow-up PRs that depend on the new behavior. -->
 
-- [ ] Will verify on devnet (staging program) within 24h of merge
+- [ ] Will verify on devnet within 24h of merge
 - [ ] N/A — change does not require devnet verification
-
-## Mainnet impact (if applicable)
-
-<!-- Skip if pre-mainnet or doc-only. -->
-
-- [ ] This change requires a mainnet program upgrade (Squads V4 multisig proposal — see `docs/DEPLOYMENT.md`)
-- [ ] This change requires a mainnet timelock window (≥24h) before activation
-- [ ] N/A
 
 ## Linked issues / context
 
-<!-- e.g. Closes #123, refs Drift hack postmortem, references docs/SECURITY.md §X -->
+<!-- e.g. Closes #123, refs Drift hack postmortem, references the root SECURITY.md disclosure policy -->
 
 ---
 

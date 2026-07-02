@@ -900,7 +900,6 @@ export function resetCUMeasurements(): void {
 // The canonical name→code map now lives ONLY in
 // `sdk/kit/src/testing/errors/names.generated.ts` (IDL-generated) and
 // the public `SIGIL_ERRORS` export from `@usesigil/kit/testing`.
-// See: MEMORY/WORK/20260420-201121_test-assertion-precision-council/COUNCIL_DECISION.md
 
 // ─── Multi-instruction PDA creation helpers ─────────────────────────────────
 // InstructionConstraints (35,888 bytes) and PendingConstraintsUpdate (35,912

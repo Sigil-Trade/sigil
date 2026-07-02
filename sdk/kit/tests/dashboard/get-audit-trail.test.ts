@@ -114,7 +114,7 @@ describe("buildAuditTrail (S12)", () => {
     expect(entries[0].actor).to.equal("");
   });
 
-  // Escrow events were removed in V2 (REVAMP_PLAN §2.1). `buildAuditTrail`
+  // Escrow events were removed in V2. `buildAuditTrail`
   // only maps policy/agent/security categories — see `AUDIT_CATEGORY_TO_TYPE`
   // in `sdk/kit/src/dashboard/reads.ts`. The "maps escrow events" case is
   // gone with no V2 equivalent.

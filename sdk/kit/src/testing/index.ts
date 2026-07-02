@@ -21,8 +21,7 @@ export {
   type MockVaultStateOverrides,
 } from "./mock-state.js";
 
-// Strict error-assertion helpers — see:
-//   MEMORY/WORK/20260420-201121_test-assertion-precision-council/COUNCIL_DECISION.md
+// Strict error-assertion helpers — assert the EXACT {name, code} pair, not substrings.
 //
 // Replaces the legacy substring-matching helpers with structured
 // {name, code}-coupled typed helpers. Importing from the barrel gives

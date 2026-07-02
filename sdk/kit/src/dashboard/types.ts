@@ -58,8 +58,8 @@ export interface TxOpts {
   computeUnits?: number;
   /** Priority fee in micro-lamports. Default: 0. */
   priorityFeeMicroLamports?: number;
-  // strictMode option removed in V2 (REVAMP_PLAN §2.2): every constraint
-  // entry is strictly enforced on-chain. Callers no longer pass a mode flag.
+  // strictMode option removed in V2: every constraint entry is strictly
+  // enforced on-chain. Callers no longer pass a mode flag.
   /**
    * AL2 mainnet confirmation gate (H-9, Phase 10 Bucket 1). Set to
    * `true` to confirm a mutation is intentional on mainnet. Required

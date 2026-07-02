@@ -12,7 +12,7 @@ Kit-native TypeScript SDK for **Sigil** — on-chain spending limits, permission
 npm install @usesigil/kit @solana/kit
 ```
 
-`@solana/kit ^6.2.0` is a peer dependency. Node >= 18.
+`@solana/kit ^6.2.0` is a peer dependency. Node >= 20.10.0.
 
 ---
 
@@ -54,51 +54,9 @@ Nothing an agent does can bypass the on-chain gate. If the validate instruction 
 
 ## Quickstart
 
-Provision a vault and execute your first agent-authorized swap:
-
-```ts
-import {
-  createAndSendVault,
-  SigilClient,
-  SAFETY_PRESETS,
-  parseUsd,
-  createConsoleLogger,
-} from "@usesigil/kit";
-
-// 1. Owner provisions the vault on devnet.
-const { vaultAddress } = await createAndSendVault({
-  rpc, // Rpc<SolanaRpcApi> from @solana/kit
-  network: "devnet",
-  owner: ownerSigner, // TransactionSigner
-  agent: agentSigner, // TransactionSigner — separate key from owner
-  // Required safety posture (v0.9.0 — no silent defaults):
-  ...SAFETY_PRESETS.development,
-});
-
-// 2. Agent opens an async client with genesis-hash verification.
-const client = await SigilClient.create({
-  rpc,
-  vault: vaultAddress,
-  agent: agentSigner,
-  network: "devnet",
-  logger: createConsoleLogger(), // opt in to structured warnings
-});
-
-// 3. Wrap arbitrary DeFi instructions from Jupiter, SAK, MCP, etc.
-const jupiterInstructions = await buildJupiterSwap(/* your call */);
-const { signature } = await client.executeAndConfirm(jupiterInstructions, {
-  tokenMint: USDC_MINT_DEVNET,
-  amount: parseUsd("$10"), // strict parser → 10_000_000n base units
-});
-```
-
-The agent's signing key is never enough on its own — Sigil's validate instruction in the same transaction has to authorize the spend, and the finalize instruction has to record it. A leaked agent key cannot exceed the owner-configured daily cap or transfer to a non-allowed destination.
-
----
-
-## Sigil Facade (v0.11.0)
-
-The six-step quickstart above is fine, but v0.11.0 ships a single-call facade that wraps it. `Sigil.quickstart()` provisions the vault + returns a handle; `Sigil.fromVault()` binds a handle to an existing vault:
+Provision a vault and execute your first agent-authorized action in one call.
+`Sigil.quickstart()` is the current entry point — it provisions (and optionally
+funds) the vault and returns a bound handle:
 
 ```ts
 import {
@@ -108,22 +66,49 @@ import {
   USDC_MINT_DEVNET,
 } from "@usesigil/kit";
 
-// Provision + get a handle in one call.
-const { vault, funded, signatures } = await Sigil.quickstart({
-  rpc,
+// 1. Owner provisions + funds the vault and gets a handle in one call.
+const { vault, funded } = await Sigil.quickstart({
+  rpc, // Rpc<SolanaRpcApi> from @solana/kit
   network: "devnet",
-  owner: ownerSigner,
-  agent: agentSigner,
-  ...SAFETY_PRESETS.development,
-  initialFundingUsd: parseUsd("$100"), // optional — zero or omit to skip
-  fundingMint: USDC_MINT_DEVNET, // defaults to USDC on target network
+  owner: ownerSigner, // TransactionSigner
+  agent: agentSigner, // TransactionSigner — separate key from owner
+  ...SAFETY_PRESETS.development, // required safety posture — no silent defaults
+  initialFundingUsd: parseUsd("$100"), // optional — omit to skip funding
+  fundingMint: USDC_MINT_DEVNET,
 });
 
 if (!funded.funded) {
-  console.warn("Vault live but not funded:", funded.reason, funded.error);
+  console.warn("Vault live but not funded:", funded.reason);
 }
 
-// Use the handle directly — no separate SigilClient / OwnerClient to wire.
+// 2. Wrap arbitrary DeFi instructions from Jupiter, SAK, MCP, etc.
+const jupiterInstructions = await buildJupiterSwap(/* your call */);
+const { signature } = await vault.execute(jupiterInstructions, {
+  tokenMint: USDC_MINT_DEVNET,
+  amount: parseUsd("$10"), // strict parser → 10_000_000n base units
+});
+```
+
+Prefer a lower-level client? `createSigilClient({ rpc, vault, agent, network })`
+returns a stateful `SigilClientApi` with `seal()`, `executeAndConfirm()`, and the
+read helpers. The old `SigilClient` class — including `new SigilClient()` and
+`SigilClient.create()` — is **`@deprecated` and removed at v1.0**; migrate to
+`createSigilClient()` or the `Sigil` facade above.
+
+The agent's signing key is never enough on its own — Sigil's validate instruction in the same transaction has to authorize the spend, and the finalize instruction has to record it. A leaked agent key cannot exceed the owner-configured daily cap or transfer to a non-allowed destination.
+
+---
+
+## Sigil Facade (v0.11.0)
+
+The `Sigil` facade is a frozen namespace of one-call helpers. `Sigil.quickstart()`
+(used in the Quickstart above) provisions the vault and returns a handle;
+`Sigil.fromVault()` binds a handle to an existing vault. The handle exposes
+`execute()` / `overview()` / `budget()` directly:
+
+```ts
+// The handle from Sigil.quickstart() / Sigil.fromVault() drives everything —
+// no separate SigilClient / OwnerClient to wire.
 const result = await vault.execute(jupiterInstructions, {
   tokenMint: USDC_MINT_DEVNET,
   amount: parseUsd("$10"),
@@ -296,7 +281,7 @@ Consumers who don't use React never install the peer deps and never see a warnin
 **What the SDK enforces pre-submission:**
 
 - Agent capability check (2-bit enum: Disabled / Observer / Operator)
-- Genesis-hash assertion on `SigilClient.create()` — prevents cluster mismatch
+- Genesis-hash assertion on the `Sigil.quickstart()` / `Sigil.fromVault()` facade path — prevents cluster mismatch
 - Strict USD parsing (`parseUsd`) — no `parseFloat` rounding
 - Aggregate cap guard — sum of per-agent caps ≤ vault cap
 - SPL token-operation detection — blocks non-whitelisted transfer patterns
@@ -385,17 +370,53 @@ Any Jupiter-supported protocol flows through the same path; Sigil treats the ins
 
 ---
 
+## Public builders
+
+Beyond `seal()` / `createSigilClient()` / `Sigil`, the root barrel ships typed
+builders and helpers for the common owner + agent flows. Every name below is a
+root export of `@usesigil/kit`:
+
+**Agent execution**
+
+- `buildAgentTransfer` — standalone direct stablecoin payout (a policy-gated transfer, _not_ a `seal()` sandwich).
+
+**Owner actions**
+
+- `buildOwnerTransaction` / `buildUnsigned` — compose (and optionally offline-sign) any owner mutation.
+- `approvePendingPolicy` / `buildApprovePendingPolicy` — complete the 2-of-2 cosign policy approval.
+- `promoteGraylistDestination`, `recordAgentViolation` — owner-signed graylist promotion + agent-violation recording.
+- `buildInitiateOwnershipTransferIx`, `buildAcceptOwnershipTransferIx`, `buildAcceptOwnershipTransferMultisigIx`, `buildCancelOwnershipTransferIx` — two-step ownership transfer.
+
+**Cosign (elevated mutations)**
+
+- `buildCosignBundle` — client-side cosign session + digest for elevated `queue_policy_update` mutations.
+- `computeCosignDigest` / `cosignDigestsEqual` / `computeAgentPermsCosignDigest` — byte-for-byte mirrors of the on-chain cosign digests.
+
+**Digests / previews**
+
+- `computeSealInputDigest` — per-call AL3 intent digest (also surfaced as `SealResult.intentDigest`).
+- `computeAgentSetHash` — client mirror of the on-chain agent-set hash (TA-19).
+- `previewCreateVault` — rent + PDA list + cost + unsigned tx for the vault-creation preview.
+
+**Verified-build gate**
+
+- `computeVerifiedBuildHash` — intent-named helper to ARM the verified-build gate (`PolicyChanges.protocolHashes`).
+- `getProgramDataHash` / `getProgramDataAddress` — SHA-256 of a deployed program's ELF, the value pinned into `PolicyConfig.protocol_hashes`.
+
+---
+
 ## Subpath imports
 
-| Import                         | Use for                                                              |
-| ------------------------------ | -------------------------------------------------------------------- |
-| `@usesigil/kit`                | Main API: `seal`, `SigilClient`, `createVault`, analytics, presets   |
-| `@usesigil/kit/errors`         | The 52 `SIGIL_ERROR__*` code constants for `catch`-block narrowing   |
-| `@usesigil/kit/dashboard`      | `OwnerClient` for vault management (reads + owner mutations)         |
-| `@usesigil/kit/x402`           | HTTP 402 Payment Required helpers (`shieldedFetch`, payment parsing) |
-| `@usesigil/kit/react`          | TanStack Query hooks (v0.11.0) — optional React peer deps            |
-| `@usesigil/kit/testing`        | Mock RPCs and fixtures for unit tests                                |
-| `@usesigil/kit/testing/devnet` | Devnet test harness (browser-incompatible — Node only)               |
+| Import                         | Use for                                                                                     |
+| ------------------------------ | ------------------------------------------------------------------------------------------- |
+| `@usesigil/kit`                | Main API: `seal`, `createSigilClient`, `Sigil`, `createVault`, builders, analytics, presets |
+| `@usesigil/kit/errors`         | The 52 `SIGIL_ERROR__*` code constants for `catch`-block narrowing                           |
+| `@usesigil/kit/dashboard`      | `OwnerClient` for vault management (reads + owner mutations)                                 |
+| `@usesigil/kit/x402`           | x402 (HTTP 402 Payment Required) helpers — `shieldedFetch`, payment selection, facilitator verify |
+| `@usesigil/kit/react`          | TanStack Query hooks — optional React peer deps                                              |
+| `@usesigil/kit/testing`        | Mock RPCs and fixtures for unit tests                                                        |
+| `@usesigil/kit/testing/devnet` | Devnet test harness (browser-incompatible — Node only)                                       |
+| `@usesigil/kit/testing/errors` | Error-name assertion helpers for tests (generated Anchor error names)                        |
 
 ---
 
@@ -422,14 +443,14 @@ v0.11.0 also added three new error codes to `/errors` (for a total of 52):
 v0.9.0 is a breaking release. The headline changes:
 
 1. **`createVault` now requires three fields** that previously had silent defaults: `spendingLimitUsd`, `dailySpendingCapUsd`, `timelockDuration`. Set them explicitly or spread `SAFETY_PRESETS.development` / `applySafetyPreset("production", {...})`.
-2. **`SigilClient.create(config)` is the new preferred entry point** — it asserts the RPC's genesis hash matches the configured network. `new SigilClient(config)` is deprecated (removal in Sprint 2) and logs a warning.
+2. **`createSigilClient(config)` is the entry point** for the stateful client. The `SigilClient` class (both `new SigilClient()` and `SigilClient.create()`) is now `@deprecated` and removed at v1.0 — migrate to `createSigilClient()` or the `Sigil` facade. For genesis-hash-verified provisioning, use `Sigil.quickstart()` / `Sigil.fromVault()`.
 3. **49 `SIGIL_ERROR__*` constants moved from the root barrel** to the `./errors` subpath. Update imports:
    ```diff
    - import { SIGIL_ERROR__SDK__CAP_EXCEEDED } from "@usesigil/kit";
    + import { SIGIL_ERROR__SDK__CAP_EXCEEDED } from "@usesigil/kit/errors";
    ```
 4. **Root barrel lost ~325 exports** (Codama instruction builders, event/struct types, hex error constants). Consumers who imported generated internals should migrate to `seal()` / `createVault()` / `OwnerClient`. Account decoders stay at root.
-5. **Structured logger replaces `console.warn`** inside the SDK. Pass `logger: createConsoleLogger()` to `SigilClient.create()` (or your preferred logger matching the `SigilLogger` interface) to receive diagnostic output.
+5. **Structured logger replaces `console.warn`** inside the SDK. Pass `logger: createConsoleLogger()` to `createSigilClient()` / the `Sigil` facade (or your preferred logger matching the `SigilLogger` interface) to receive diagnostic output.
 
 See `CHANGELOG.md` and the upgrade checklist for every grep you need to run.
 

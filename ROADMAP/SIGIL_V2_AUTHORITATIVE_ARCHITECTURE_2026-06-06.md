@@ -1,6 +1,16 @@
 # Sigil v2 — Authoritative Architecture: the Agnostic, Non-Custodial Agent Guardrail
 
-**Status: AUTHORITATIVE DESIGN (report-only — no code changed). Supersedes** `GUARD_SPINE_AND_CUSTODY_DESIGN.md` §8 and the "Decision Fork" in `AGNOSTIC_RESET_FINDINGS_2026-06-06.md`. Those remain valid as findings/history; this is the design of record.
+> ---
+> ## ⚠️ DEFERRED / FUTURE DESIGN OF RECORD — NOT THE CURRENTLY-SHIPPED ARCHITECTURE
+>
+> **This document describes a "vault-signs-everything" (`invoke_signed`, zero standing agent authority) re-architecture that has NOT been built. It is retained as the design of record for *if/when* that direction is pursued — it does NOT describe how Sigil works today.**
+>
+> **The currently-shipped model is different:** it uses **SPL-`Approve` delegation** (the owner approves the vault/agent to spend, and the token program's `delegated_amount` is the hard cap), a per-agent **2-bit capability** (DISABLED / OBSERVER / OPERATOR), the atomic `validate_and_authorize → DeFi ix → finalize_session` sandwich, 32 instructions, 118 error codes (6000–6117), and 12 PDA account types. In particular, §2's central claim — "there is **no SPL-`Approve` delegation**" — is the *opposite* of the shipped state; do not read this file as current reality. The source of truth for what is live is the on-chain program code, not this design.
+>
+> A future session must NOT mistake anything below for the current architecture. Nothing here supersedes the shipped SPL-Approve model unless and until this design is explicitly adopted, built, reviewed, and merged.
+> ---
+
+**Status: DEFERRED / FUTURE DESIGN OF RECORD (report-only — no code changed; NOT currently shipped — see banner above). Supersedes** `GUARD_SPINE_AND_CUSTODY_DESIGN.md` §8 and the "Decision Fork" in `AGNOSTIC_RESET_FINDINGS_2026-06-06.md`. Those remain valid as findings/history; this is the design of record.
 
 > **🔒 SCOPE LOCKED (2026-06-06):** Sigil's security boundary is **vault-conservation** — a transaction may only move value/control to **vault-owned** destinations and may never alter the vault's authority or lock out the owner. **Losses are out of scope:** slippage, leverage, liquidation, borrowing/debt, and PnL on any protocol the owner allowlisted are the agent trading on the owner's chosen venue — surfaced at add-time in the UI, bounded by spending caps + instant freeze, **never an on-chain Sigil mechanism.** Consequences for the text below: (1) the **owner allowlist is the primary scoping control** — the agent can only ever touch protocols the owner pinned, so "wash-trade through a malicious pool" and similar are non-issues unless the owner allowlisted that venue (their disclosed risk). (2) The **mandatory on-chain floor is the destination-owner pin + authority-unchanged assertion (§5), NOT a value floor** — §4's value/slippage "deltas" (min_output, value-conservation, exact-out ceiling) are **reclassified OPTIONAL / off-chain** (slippage is already an SDK route parameter, correctly); the only mandatory carry-over from §4 is signed-widen math for the assertions. (3) **§8.1 (perp/lend health bound) is DISSOLVED** — no health/leverage decision exists; it is out of scope.
 

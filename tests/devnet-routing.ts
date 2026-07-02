@@ -10,7 +10,7 @@
  *
  * Vault ID prefix: 9
  */
-// Strict error helpers — see MEMORY/WORK/20260420-201121_test-assertion-precision-council/
+// Strict error helpers assert the EXACT expected error code — see tests/helpers/strict-errors.ts
 import { expectSigilError } from "./helpers/strict-errors";
 import * as anchor from "@coral-xyz/anchor";
 import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
