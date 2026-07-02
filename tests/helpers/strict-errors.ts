@@ -152,6 +152,7 @@ export const SIGIL_ERRORS = {
   ErrUnmeasurableSpend: 6115,
   ErrProgramDataUnresolvable: 6116,
   ErrProgramBuildMismatch: 6117,
+  TimelockTooLong: 6118,
 } as const;
 
 export type SigilErrorName = keyof typeof SIGIL_ERRORS;

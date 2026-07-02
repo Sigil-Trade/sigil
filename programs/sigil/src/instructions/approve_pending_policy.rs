@@ -95,9 +95,11 @@ pub fn handler(ctx: Context<ApprovePendingPolicy>) -> Result<()> {
     );
 
     // Approve only AFTER the timelock matures (adversarial review 2026-06-17).
-    // `timelock_duration` has no upper bound; approving early on a long-timelock
-    // pending would age `approved_at_slot` past MAX_APPLY_AGE_SLOTS before apply
-    // is legal and PERMANENTLY brick the update. Gating on `is_ready` anchors the
+    // `timelock_duration` is floored at MIN_TIMELOCK_DURATION and (F-1 fix,
+    // 2026-06-30) capped at MAX_TIMELOCK_DURATION (48h); approving early on a
+    // long-timelock pending would age `approved_at_slot` past the policy-apply
+    // freshness window (MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN) before apply is
+    // legal and PERMANENTLY brick the update. Gating on `is_ready` anchors the
     // approval inside the apply-able window, keeping the F-10 re-anchor coherent.
     require!(
         pending.is_ready(clock.unix_timestamp),

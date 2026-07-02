@@ -5,7 +5,7 @@
  * Every error includes a category, retryability flag, and
  * recovery actions that tell the agent exactly what to do next.
  *
- * Maps all 118 on-chain error codes (6000-6117) — post M1-04 constraints-engine
+ * Maps all 119 on-chain error codes (6000-6118) — post M1-04 constraints-engine
  * teardown, which removed 10 dead constraint-only variants and renumbered the
  * enum (positional). The IDL (`target/idl/sigil.json`) is the authoritative
  * code↔name source; `error-map-drift.test.ts` enforces this map agrees with it.
@@ -81,13 +81,13 @@ export const SIGIL_ON_CHAIN_ERROR_MIN = 6000;
 /**
  * Highest Anchor-error code currently in use. Bump when errors.rs grows.
  *
- * The enum tops out at 6117 (Item 3 verified-build gate: 6116/6117). The drift
+ * The enum tops out at 6118 (F-1 timelock cap: TimelockTooLong). The drift
  * gate at `tests/error-map-drift.test.ts` derives the expected count from
  * `target/idl/sigil.json` (the authoritative code↔name source) and asserts
  * this map agrees with it by code AND name — so adding or renumbering an
  * on-chain error without updating this map fails at test time.
  */
-export const SIGIL_ON_CHAIN_ERROR_MAX = 6117;
+export const SIGIL_ON_CHAIN_ERROR_MAX = 6118;
 
 interface ErrorMapping {
   name: string;
@@ -2008,6 +2008,20 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
         action: "re_pin_or_disarm_the_build_hash",
         description:
           "If the upgrade is legitimate and audited, re-pin the new build hash via queue_policy_update (getProgramDataHash recomputes it). To stop enforcing the gate for this protocol, disarm it (set its entry to all-zero) — note that disarming is an elevated mutation on a cosign-required vault.",
+      },
+    ],
+  },
+  6118: {
+    name: "TimelockTooLong",
+    message:
+      "The vault's timelock_duration exceeds the maximum (MAX_TIMELOCK_DURATION = 172,800s / 48h). A timelock longer than the policy-apply freshness window could never mature, which would permanently brick pending policy and agent-permission updates — so the write is rejected up front.",
+    category: "INPUT_VALIDATION",
+    retryable: false,
+    recovery_actions: [
+      {
+        action: "choose_a_timelock_within_the_cap",
+        description:
+          "Re-submit initialize_vault or queue_policy_update with a timelock_duration between MIN_TIMELOCK_DURATION (1,800s / 30min) and MAX_TIMELOCK_DURATION (172,800s / 48h). Values above 48h are refused because they cannot mature before the apply window closes.",
       },
     ],
   },

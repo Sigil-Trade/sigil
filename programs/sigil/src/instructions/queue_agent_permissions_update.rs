@@ -195,13 +195,19 @@ pub fn handler(
     // ALWAYS >= SINGLE_KEY_OPERATOR_DELAY_FLOOR (600s) — compile-asserted in
     // utils/operator_grant.rs. So an Observer→OPERATOR elevation already
     // satisfies the F-Q6 single-key floor. We deliberately do NOT pull in the
-    // configurable operator_grant_delay_seconds (0..48h): this PDA family's
-    // apply-time freshness ceiling is the NARROW MAX_APPLY_AGE_SLOTS (~24h), so a
-    // configured delay in (24h, 48h] would mature only AFTER the apply window
-    // closes and permanently brick the grant (a tier-2 liveness failure). The
-    // configurable delay governs the dedicated OPERATOR-SEATING paths
-    // (register_agent / queue_agent_grant, which use the wide admin ceiling),
-    // NOT re-permissioning of an already-registered agent.
+    // configurable operator_grant_delay_seconds (0..48h): re-permissioning of an
+    // already-registered agent is governed by the standard policy timelock, while
+    // the configurable delay governs the dedicated OPERATOR-SEATING paths
+    // (register_agent / queue_agent_grant).
+    //
+    // F-1 fix (2026-06-30): policy.timelock_duration is now capped at
+    // MAX_TIMELOCK_DURATION (48h) and `apply_agent_permissions_update` was moved
+    // onto the WIDE MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN (~78h) apply window — the
+    // same widening F-1 applied to the policy-apply path — so a timelock up to the
+    // 48h ceiling (and the 24h production preset at the 400ms slot floor) matures
+    // INSIDE the window. Previously this path used the narrow ~24h ceiling, which
+    // would have bricked re-permissioning once policy.timelock_duration exceeded
+    // it (the same tier-2 liveness brick F-1 closes for the policy path).
     let clock = Clock::get()?;
     let pending = &mut ctx.accounts.pending_agent_perms;
     pending.vault = vault.key();

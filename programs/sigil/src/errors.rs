@@ -861,4 +861,16 @@ pub enum SigilError {
     /// owner-attested build hash against the live deployed build.
     #[msg("Verified-build gate: the target protocol's deployed ELF hash does not match the owner-pinned build hash — the on-chain build changed (re-pin via queue_policy_update after re-audit)")]
     ErrProgramBuildMismatch,
+
+    /// 6118 — F-1 fix (timelock-brick close, 2026-06-30): an
+    /// `initialize_vault` / `queue_policy_update` (or the apply-time re-check)
+    /// supplied a `timelock_duration` greater than `MAX_TIMELOCK_DURATION`
+    /// (172_800s / 48h). The symmetric ceiling to `TimelockTooShort`. A timelock
+    /// above the cap could fail to mature inside the policy-apply freshness
+    /// window (`MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN`), leaving the queued policy
+    /// update PERMANENTLY unapplyable — a tier-2 liveness brick. Enforced at
+    /// every timelock write site so the brick is unsettable; the cap is pinned
+    /// (compile-time assert) to the apply window so the two cannot drift.
+    #[msg("Timelock duration exceeds the maximum (MAX_TIMELOCK_DURATION = 172_800s / 48h) — a longer timelock could never mature inside the policy-apply freshness window (brick); choose a value <= 48h")]
+    TimelockTooLong,
 }

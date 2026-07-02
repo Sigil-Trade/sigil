@@ -9,7 +9,7 @@
 Your policies are enforced by Solana validators, not software promises.
 
 [![CI](https://github.com/Sigil-Trade/sigil/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Sigil-Trade/sigil/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-2758-brightgreen)
+![Tests](https://img.shields.io/badge/tests-2765-brightgreen)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 
 </div>
@@ -207,7 +207,7 @@ anchor build --no-idl
 # Restore the committed IDL after building (build may emit a stale one)
 git checkout -- target/idl/ target/types/
 
-# Run on-chain tests (574 LiteSVM tests — no validator needed)
+# Run on-chain tests (581 LiteSVM tests — no validator needed)
 npx ts-mocha -p ./tsconfig.json -t 300000 \
   tests/sigil.ts tests/jupiter-integration.ts \
   tests/flash-trade-integration.ts tests/security-exploits.ts
@@ -231,6 +231,7 @@ cargo fmt --check --manifest-path programs/sigil/Cargo.toml
 | Flash Trade integration (leveraged perps)                           | 17       |
 | Security exploit scenarios                                          | 187      |
 | TOCTOU security (policy version + timelock)                         | 6        |
+| F-1 timelock-brick close (1b)                                       | 7        |
 | Verified-build gate (Item 3 — upgrade-TOCTOU pin)                   | 9        |
 | Analytics counters (failed TX + per-agent TX count)                 | 7        |
 | Devnet integration tests (real network)                             | 64       |
@@ -243,7 +244,7 @@ cargo fmt --check --manifest-path programs/sigil/Cargo.toml
 | Rust unit tests (cargo test)                                        | 182      |
 | Devnet extended scenarios (flash-trade + stress)                    | 43       |
 | Trident fuzz tests (1K iterations)                                  | 16       |
-| **Total**                                                           | **2758** |
+| **Total**                                                           | **2765** |
 
 ## Security
 

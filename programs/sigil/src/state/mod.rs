@@ -84,6 +84,50 @@ pub const MAX_SLIPPAGE_BPS: u16 = 5000;
 /// Once a vault has a timelock, it can never be reduced below this floor.
 pub const MIN_TIMELOCK_DURATION: u64 = 1800;
 
+/// F-1 fix (timelock-brick close, 2026-06-30): maximum policy timelock
+/// duration — 48h in seconds.
+///
+/// `MIN_TIMELOCK_DURATION` floored the timelock but nothing capped it. The
+/// policy-apply freshness check (`apply_pending_policy.rs`) rejects a pending
+/// update once `clock.slot - anchor_slot >= window`. With a near/over-24h
+/// timelock under the OLD narrow `MAX_APPLY_AGE_SLOTS` (216_000 ≈ 24h at the
+/// 400ms slot floor), the slot window could close BEFORE the timelock matured —
+/// making the queued update PERMANENTLY unapplyable (a tier-2 liveness brick).
+/// The shipped 24h production preset (`sdk/kit presets.ts` = 86_400s) sat at
+/// that brick edge (worked only because real slots run ~450ms, not the floor).
+///
+/// F-1 fix (Option 1b): the policy-apply path now uses the wider
+/// `MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN` window (the same one the admin PDAs
+/// already use for their 48h timelock), and this ceiling caps the timelock so
+/// it always matures inside that window. Enforced at EVERY write site
+/// (`initialize_vault`, `queue_policy_update`, and the apply-time re-check) so
+/// the brick is unsettable. 48h mirrors `MAX_OPERATOR_GRANT_DELAY` /
+/// `PendingAgentGrant::DEFAULT_MIN_DELAY`, both already proven to apply within
+/// the 700_000-slot window.
+pub const MAX_TIMELOCK_DURATION: u64 = 172_800;
+
+// Compile-time brick-guard (mirrors operator_grant.rs
+// `_MAX_OPERATOR_GRANT_DELAY_FITS_APPLY_WINDOW`): the timelock ceiling must
+// mature strictly INSIDE the policy-apply freshness window even at the 400ms
+// slot floor. Express both sides in wall-clock milliseconds: the timelock's
+// wall-clock (MAX_TIMELOCK_DURATION seconds × 1000) must be less than the
+// window's wall-clock at the fastest possible slots
+// (MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN slots × 400 ms). 172_800_000 <
+// 280_000_000 holds with ~62% of the window consumed (~30h of slot headroom
+// past the 48h timelock). Ties the cap to the window so neither can silently
+// drift into a brick.
+const _MAX_TIMELOCK_DURATION_FITS_APPLY_WINDOW: () = assert!(
+    MAX_TIMELOCK_DURATION * 1000 < MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN * 400,
+    "MAX_TIMELOCK_DURATION must mature inside the timelocked-admin apply window at the 400ms slot floor (else policy updates brick)"
+);
+
+// Sanity: the ceiling must stay strictly above the floor (otherwise every
+// timelock value would be invalid and ALL queue/init paths would brick).
+const _MAX_TIMELOCK_DURATION_ABOVE_FLOOR: () = assert!(
+    MAX_TIMELOCK_DURATION > MIN_TIMELOCK_DURATION,
+    "MAX_TIMELOCK_DURATION must stay strictly above MIN_TIMELOCK_DURATION"
+);
+
 /// F-10 audit fix: maximum age (in slots) between queue and apply for any
 /// pending administrative update.
 ///
@@ -101,17 +145,32 @@ pub const MIN_TIMELOCK_DURATION: u64 = 1800;
 /// update is stale and must be re-queued by the owner.
 pub const MAX_APPLY_AGE_SLOTS: u64 = 216_000;
 
-/// CH-1 close (Bucket-3 audit 2026-05-23): F-10 freshness window for the
-/// two TIMELOCKED-ADMIN pending PDA families (PendingAgentGrant +
-/// PendingOwnershipTransfer). These default to MIN_DELAY = 172_800s (48h),
-/// so the normal 216_000-slot (~24h) freshness window would reject
-/// legitimate apply attempts that come AFTER the timelock matures.
+/// CH-1 close (Bucket-3 audit 2026-05-23) + F-1 fix (2026-06-30): F-10
+/// freshness window for the FOUR TIMELOCKED-UPDATE pending PDA families:
+///   1. PendingAgentGrant      (admin; DEFAULT_MIN_DELAY = 172_800s / 48h)
+///   2. PendingOwnershipTransfer (admin; DEFAULT_MIN_DELAY = 172_800s / 48h)
+///   3. PendingPolicyUpdate     (F-1; owner-set `policy.timelock_duration`,
+///      floored 1800s and now CAPPED at MAX_TIMELOCK_DURATION = 172_800s / 48h)
+///   4. PendingAgentPermissionsUpdate (F-1; matures on the SAME
+///      `policy.timelock_duration` as family 3 — see
+///      `queue_agent_permissions_update` — so it inherits the identical
+///      up-to-48h delay and therefore the same wide window)
+///
+/// All four carry an owner-controlled or default timelock that can reach 48h,
+/// so the normal 216_000-slot (~24h) `MAX_APPLY_AGE_SLOTS` window would reject
+/// legitimate apply attempts that come AFTER the timelock matures — a tier-2
+/// liveness brick. Families 3 and 4 were added by F-1: both apply paths mature
+/// on `policy.timelock_duration` (always > 0), so they use this wider window
+/// unconditionally. (Even the 24h production preset = 86_400s brick-edges the
+/// narrow 216_000 window at the 400ms slot floor — exactly the F-1 bug — so
+/// both `policy.timelock_duration` consumers must use this wider window.)
 ///
 /// 700_000 slots ≈ 78 hours at 400ms/slot — leaves 48h timelock + 24h
 /// owner-grace + 6h network-clock-skew margin. Wider than the 216_000
-/// non-admin window because the 48h timelock is the PRIMARY defense for
-/// these elevation primitives; F-10 is supplementary (caps the pre-sign
-/// hold window, not the timelock itself).
+/// non-admin window because the (up-to-)48h timelock is the PRIMARY defense
+/// for these primitives; F-10 is supplementary (caps the pre-sign hold window,
+/// not the timelock itself). `MAX_TIMELOCK_DURATION` is pinned (compile-time
+/// assert) to mature inside this window at the 400ms slot floor.
 pub const MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN: u64 = 700_000;
 
 /// TA-07 (Phase 3): 24-hour graylist friction window in seconds.

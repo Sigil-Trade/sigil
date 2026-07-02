@@ -187,17 +187,44 @@ pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
     // pre-signing attacks (Drift Protocol April 2026 $285M analog). ASYNC COSIGN
     // re-anchor (2026-06-17): for an elevated (approved) pending, measure freshness
     // from the APPROVAL slot — the cosigner may approve long after queue, but a
-    // held apply stays bounded to MAX_APPLY_AGE_SLOTS past the approval (the
-    // authorization-complete point). Non-elevated pendings keep the queue anchor.
-    // The `cosign_approved` gate above guarantees `approved_at_slot` is set
-    // (non-zero) whenever this branch reads it.
+    // held apply stays bounded past the approval (the authorization-complete
+    // point). Non-elevated pendings keep the queue anchor. The `cosign_approved`
+    // gate above guarantees `approved_at_slot` is set (non-zero) whenever this
+    // branch reads it.
+    //
+    // F-1 fix (timelock-brick close, 2026-06-30): use the WIDER
+    // `MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN` (700_000 slots ≈ 78h) window — the
+    // SAME window the PendingAgentGrant + PendingOwnershipTransfer admin
+    // families already use — instead of the narrow `MAX_APPLY_AGE_SLOTS`
+    // (216_000 ≈ 24h). `queue_policy_update` requires the live
+    // `policy.timelock_duration > 0` (NoTimelockConfigured), so EVERY pending
+    // policy is timelocked; the timelock can reach 48h
+    // (`MAX_TIMELOCK_DURATION`), which would not mature inside the 24h window —
+    // the queued update would be PERMANENTLY unapplyable (a tier-2 liveness
+    // brick; the shipped 24h production preset sat at that edge). There is no
+    // non-timelocked policy-apply path, so the wider window applies
+    // unconditionally. The tier-3 cost (a wider F-10 pre-sign hold window) is
+    // identical to the one already accepted for the two admin families, and the
+    // 48h timelock + async-cosign approval remain the PRIMARY defenses. The
+    // `MAX_TIMELOCK_DURATION` ceiling is pinned (compile-time assert) to mature
+    // inside this window even at the 400ms slot floor.
     let freshness_anchor_slot = if no_cosign {
         pending.queued_at_slot
     } else {
         pending.approved_at_slot
     };
+    // F-1 / F-A (silent-failure review 2026-06-30): use checked_sub, not
+    // saturating_sub, so an impossible-in-prod clock-backward anomaly
+    // (anchor slot > current slot) surfaces as `Overflow` (fail-closed)
+    // rather than saturating to 0 and PASSING the freshness gate (fail-open).
+    // Mirrors the audited admin-path pattern (apply_agent_grant.rs F-4 close)
+    // that this policy path now shares.
+    let slot_delta = clock
+        .slot
+        .checked_sub(freshness_anchor_slot)
+        .ok_or(error!(SigilError::Overflow))?;
     require!(
-        clock.slot.saturating_sub(freshness_anchor_slot) < MAX_APPLY_AGE_SLOTS,
+        slot_delta < MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN,
         SigilError::QueuedUpdateExpired,
     );
 
@@ -251,6 +278,12 @@ pub fn handler(ctx: Context<ApplyPendingPolicy>) -> Result<()> {
     }
     if let Some(tl) = pending.timelock_duration {
         require!(tl >= MIN_TIMELOCK_DURATION, SigilError::TimelockTooShort);
+        // F-1 fix (2026-06-30): symmetric apply-time ceiling (defense-in-depth).
+        // A rogue program with the same account discriminator could rewrite the
+        // pending args between queue and apply; re-validating the MAX here (as
+        // we already do the MIN) keeps an out-of-range timelock from ever
+        // landing in the live policy and bricking future applies.
+        require!(tl <= MAX_TIMELOCK_DURATION, SigilError::TimelockTooLong);
         policy.timelock_duration = tl;
     }
     if let Some(ref destinations) = pending.allowed_destinations {
