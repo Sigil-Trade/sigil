@@ -21,17 +21,22 @@
 name: Deploy to Devnet
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "programs/sigil/src/**"
-      - "Anchor.toml"
-  workflow_dispatch: # Manual trigger for devnet reset recovery or debugging
+  # MANUAL ONLY. Each devnet deploy churns a ~8.5 SOL buffer for the 1.16 MB
+  # program plus IDL-account close/init on the large Sigil IDL — several SOL net
+  # per run. Auto-deploying on every program push burned ~20 SOL/day of finite
+  # devnet SOL (verified against the daily buffer-sweep balance trajectory,
+  # 2026-07). Deploy deliberately when devnet needs the latest program:
+  #   gh workflow run deploy-devnet.yml        (or the Actions "Run workflow" UI)
+  # The release lockstep gate still checks the LATEST deploy run before it
+  # publishes @usesigil/kit, so after a program change you intend to release,
+  # run this once and let it go green before cutting the release.
+  # (deploy-mock-defi.yml is already manual for the same shared-wallet reason.)
+  workflow_dispatch:
 
 # Never cancel a deploy mid-flight — incomplete deploys waste SOL
-# Shared with devnet-test.yml (group: devnet-shared-wallet) so a push-triggered
-# deploy and a nightly test run serialize on the one funded devnet wallet
-# instead of racing it. Same string in both workflows is load-bearing.
+# Shared with devnet-test.yml (group: devnet-shared-wallet) so a manually
+# triggered deploy and a nightly test run serialize on the one funded devnet
+# wallet instead of racing it. Same string in both workflows is load-bearing.
 concurrency:
   group: devnet-shared-wallet
   cancel-in-progress: false
