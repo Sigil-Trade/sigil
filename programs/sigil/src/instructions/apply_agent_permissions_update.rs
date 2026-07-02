@@ -94,8 +94,27 @@ pub fn handler(ctx: Context<ApplyAgentPermissionsUpdate>) -> Result<()> {
 
     // F-10 audit fix: slot-bounded freshness check defends against durable-nonce
     // pre-signing attacks (Drift Protocol April 2026 $285M analog).
+    //
+    // F-1 fix (timelock-brick close, 2026-06-30): this path's maturity is
+    // `queued_at + policy.timelock_duration` (queue_agent_permissions_update.rs),
+    // the SAME field the policy-apply path uses — and F-1 now caps that field at
+    // MAX_TIMELOCK_DURATION (48h). The narrow MAX_APPLY_AGE_SLOTS (216_000 ≈ 24h
+    // at the 400ms slot floor) would reject a legitimate apply once the timelock
+    // exceeds the window: a timelock in (24h, 48h] — or even the 24h production
+    // preset AT the 400ms floor (86_400s = 216_000 slots, not < 216_000) — would
+    // mature only AFTER the window closed, permanently bricking agent
+    // re-permissioning (a tier-2 liveness brick). Use the WIDER
+    // MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN (700_000 ≈ 78h) window — the same one
+    // the policy-apply + admin-grant + ownership-transfer paths use — so any
+    // timelock up to the 48h ceiling matures inside it. checked_sub (not
+    // saturating_sub) keeps the gate fail-closed on a clock-backward anomaly,
+    // mirroring apply_agent_grant.rs (F-4 close) / apply_pending_policy.rs.
+    let slot_delta = clock
+        .slot
+        .checked_sub(pending.queued_at_slot)
+        .ok_or(error!(SigilError::Overflow))?;
     require!(
-        clock.slot.saturating_sub(pending.queued_at_slot) < MAX_APPLY_AGE_SLOTS,
+        slot_delta < MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN,
         SigilError::QueuedUpdateExpired,
     );
 

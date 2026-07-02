@@ -250,6 +250,8 @@ export const SIGIL_ERROR__ERR_UNMEASURABLE_SPEND = 0x17e3; // 6115
 export const SIGIL_ERROR__ERR_PROGRAM_DATA_UNRESOLVABLE = 0x17e4; // 6116
 /** ErrProgramBuildMismatch: Verified-build gate: the target protocol's deployed ELF hash does not match the owner-pinned build hash — the on-chain build changed (re-pin via queue_policy_update after re-audit) */
 export const SIGIL_ERROR__ERR_PROGRAM_BUILD_MISMATCH = 0x17e5; // 6117
+/** TimelockTooLong: Timelock duration exceeds the maximum (MAX_TIMELOCK_DURATION = 172_800s / 48h) — a longer timelock could never mature inside the policy-apply freshness window (brick); choose a value <= 48h */
+export const SIGIL_ERROR__TIMELOCK_TOO_LONG = 0x17e6; // 6118
 
 export type SigilError =
   | typeof SIGIL_ERROR__ACCOUNT_WRITABILITY_MISMATCH
@@ -352,6 +354,7 @@ export type SigilError =
   | typeof SIGIL_ERROR__SPENDING_CAP_EXCEEDED
   | typeof SIGIL_ERROR__SYSVAR_SCAN_BOUND_EXCEEDED
   | typeof SIGIL_ERROR__TIMELOCK_NOT_EXPIRED
+  | typeof SIGIL_ERROR__TIMELOCK_TOO_LONG
   | typeof SIGIL_ERROR__TIMELOCK_TOO_SHORT
   | typeof SIGIL_ERROR__TOO_MANY_ALLOWED_PROTOCOLS
   | typeof SIGIL_ERROR__TOO_MANY_DE_FI_INSTRUCTIONS
@@ -474,6 +477,7 @@ if (process.env.NODE_ENV !== "production") {
     [SIGIL_ERROR__SPENDING_CAP_EXCEEDED]: `Rolling 24h spending cap would be exceeded`,
     [SIGIL_ERROR__SYSVAR_SCAN_BOUND_EXCEEDED]: `Sysvar instruction scan exceeded the per-tx safety bound`,
     [SIGIL_ERROR__TIMELOCK_NOT_EXPIRED]: `Timelock period has not expired yet`,
+    [SIGIL_ERROR__TIMELOCK_TOO_LONG]: `Timelock duration exceeds the maximum (MAX_TIMELOCK_DURATION = 172_800s / 48h) — a longer timelock could never mature inside the policy-apply freshness window (brick); choose a value <= 48h`,
     [SIGIL_ERROR__TIMELOCK_TOO_SHORT]: `Timelock duration below minimum (1800 seconds / 30 minutes)`,
     [SIGIL_ERROR__TOO_MANY_ALLOWED_PROTOCOLS]: `Policy configuration invalid: too many allowed protocols`,
     [SIGIL_ERROR__TOO_MANY_DE_FI_INSTRUCTIONS]: `Spending allows at most one DeFi instruction`,

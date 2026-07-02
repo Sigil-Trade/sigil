@@ -2,8 +2,8 @@
 // Regenerate via `pnpm -C sdk/kit codegen:errors` after IDL changes.
 //
 // Source: agent-middleware/target/idl/sigil.json
-// Generated: 2026-06-23T03:13:58.068Z
-// Codes: 118 (min 6000, max 6117)
+// Generated: 2026-06-30T05:07:15.263Z
+// Codes: 119 (min 6000, max 6118)
 
 /** Pure IDL projection of every Anchor error variant. */
 export interface IdlErrorEntry {
@@ -139,13 +139,14 @@ export const IDL_ERROR_MAP: Readonly<Record<number, IdlErrorEntry>> =
     6115: { code: 6115, name: "ErrUnmeasurableSpend", msg: "Spending session produced no measurable in-transaction vault outcome (no stablecoin movement and no vault-owned acquisition) — async/keeper-settled or unmeasurable; recording 0 spend is rejected" },
     6116: { code: 6116, name: "ErrProgramDataUnresolvable", msg: "Verified-build gate: the target protocol's ProgramData account is missing/unresolvable while a build hash is armed — cannot vet the deployed build (fail-closed)" },
     6117: { code: 6117, name: "ErrProgramBuildMismatch", msg: "Verified-build gate: the target protocol's deployed ELF hash does not match the owner-pinned build hash — the on-chain build changed (re-pin via queue_policy_update after re-audit)" },
+    6118: { code: 6118, name: "TimelockTooLong", msg: "Timelock duration exceeds the maximum (MAX_TIMELOCK_DURATION = 172_800s / 48h) — a longer timelock could never mature inside the policy-apply freshness window (brick); choose a value <= 48h" },
   });
 
 /** Total error-code count derived from the IDL at generation time. */
-export const IDL_ERROR_COUNT = 118;
+export const IDL_ERROR_COUNT = 119;
 
 /** Lowest IDL error code. */
 export const IDL_ERROR_MIN = 6000;
 
 /** Highest IDL error code. */
-export const IDL_ERROR_MAX = 6117;
+export const IDL_ERROR_MAX = 6118;

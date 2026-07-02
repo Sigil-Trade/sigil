@@ -188,6 +188,15 @@ pub fn handler(
         timelock_duration >= MIN_TIMELOCK_DURATION,
         SigilError::TimelockTooShort
     );
+    // F-1 fix (2026-06-30): symmetric ceiling at the init write site. A vault
+    // created with a timelock above MAX_TIMELOCK_DURATION (48h) could never
+    // apply a queued policy update within the freshness window
+    // (MAX_APPLY_AGE_SLOTS_TIMELOCKED_ADMIN) — a tier-2 liveness brick set at
+    // birth. Cap it here so the brick is unsettable from the start.
+    require!(
+        timelock_duration <= MAX_TIMELOCK_DURATION,
+        SigilError::TimelockTooLong
+    );
 
     // Validate per-protocol caps
     if !protocol_caps.is_empty() {
