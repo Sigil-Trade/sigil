@@ -100,9 +100,10 @@ pub fn handler(
     //
     // The cooldown protects against fat-finger unfreeze + brief panic-then-
     // reactivate workflows. Owner freezes, observes for 5 min, then can
-    // reactivate. UX safety net — see T-19 in THREAT_MODEL_V2.md for the
-    // close+reinit adversarial bypass acknowledgement (V1.1 mitigation
-    // deferred per L-2 no-additional-rent-cost preference).
+    // reactivate. UX safety net, NOT an adversarial control: an adversary can
+    // bypass it via close_vault + re-init at the same PDA (threat-model item
+    // T-19, an acknowledged residual; V1.1 mitigation deferred per the L-2
+    // no-additional-rent-cost preference).
     //
     // Reads the new `frozen_at_timestamp` field added in Phase 8 Batch 1
     // (AgentVault APPEND-ONLY +9 bytes). Existing post-freeze vaults that

@@ -1613,9 +1613,8 @@ pub fn handler(ctx: Context<FinalizeSession>) -> Result<()> {
     vault.active_sessions = vault.active_sessions.saturating_sub(1);
 
     // AC-10 (Phase 4): nonce bump — dead-on-close under V2 (`close =
-    // session_rent_recipient`); forward-compat for Phase 8 M-5 reuse.
-    // See `docs/revamp/AUDIT_2026_05_18/G2_DEFERRAL_RATIONALE.md`. M-6
-    // audit 2026-05-19 compressed prior 4-line comment to this 3-line cite.
+    // session_rent_recipient`); kept as forward-compat for Phase 8 M-5 reuse
+    // (G2 deferral rationale, audit 2026-05-18).
     {
         let session = &mut ctx.accounts.session;
         session.nonce = session.nonce.checked_add(1).ok_or(SigilError::Overflow)?;

@@ -347,7 +347,7 @@ pub mod sigil {
     // (9-1 vote, 2026-04-19). See Plans/we-need-to-plan-serialized-summit.md.
 
     // Escrow instructions (create_escrow, settle_escrow, refund_escrow,
-    // close_settled_escrow) REMOVED in Stage 1 of v2 revamp (REVAMP_PLAN.md §2.1).
+    // close_settled_escrow) REMOVED in Stage 1 of the v2 revamp.
     // DEEP-2 audit found freeze-bypass in settle_escrow and there is no
     // validated customer flow for the feature.
 
