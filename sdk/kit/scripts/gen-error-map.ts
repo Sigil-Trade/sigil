@@ -60,7 +60,8 @@ function main(): void {
     "// Regenerate via `pnpm -C sdk/kit codegen:errors` after IDL changes.",
     "//",
     "// Source: agent-middleware/target/idl/sigil.json",
-    `// Generated: ${new Date().toISOString()}`,
+    // No timestamp: output must be DETERMINISTIC so `pnpm regen:check`
+    // (regenerate + git diff) can gate freshness without noise churn.
     `// Codes: ${errors.length} (min ${errors[0]!.code}, max ${errors[errors.length - 1]!.code})`,
     "",
     "/** Pure IDL projection of every Anchor error variant. */",
