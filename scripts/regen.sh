@@ -56,13 +56,23 @@ if [ ! -d node_modules ]; then
   echo "error: node_modules missing — run 'pnpm install' first (codama + tsx generators)." >&2
   exit 1
 fi
+# CI pins anchor-cli 0.32.1; a different local version can format the IDL
+# differently and make regen:check disagree with CI. Parity is fail-closed.
+if ! anchor --version 2>/dev/null | grep -q '0\.32\.1'; then
+  echo "error: anchor-cli 0.32.1 required (found: $(anchor --version 2>/dev/null || echo 'none'))." >&2
+  echo "  CI pins 0.32.1 — a version mismatch makes regen output disagree with CI." >&2
+  exit 1
+fi
 
 if [ "$CHECK_MODE" = 1 ]; then
   # A dirty generated set would contaminate the freshness diff below.
+  # Three kinds of dirt: unstaged edits, STAGED-but-uncommitted edits, and
+  # untracked files inside the generated set.
   if ! git diff --quiet -- "${GEN_SET[@]}" || \
+     ! git diff --cached --quiet -- "${GEN_SET[@]}" || \
      [ -n "$(git ls-files --others --exclude-standard -- "${GEN_SET[@]}")" ]; then
-    echo "error: generated artifacts have uncommitted changes — commit or stash them" >&2
-    echo "       before running regen:check (the freshness diff would be meaningless)." >&2
+    echo "error: generated artifacts have uncommitted (or staged) changes — commit or stash" >&2
+    echo "       them before running regen:check (the freshness diff would be meaningless)." >&2
     git status --short -- "${GEN_SET[@]}" >&2
     exit 1
   fi
@@ -71,7 +81,10 @@ fi
 # ── 1. IDL (nightly side-build; crash-safe: never clobber the committed IDL
 #         with a partial/failed build — write to a temp file, validate, then move)
 echo "[regen 1/6] target/idl/sigil.json (nightly anchor idl build — compiles the program, takes a while)"
-IDL_TMP=$(mktemp)
+# Temp file lives NEXT TO the target so the final `mv` is a same-filesystem
+# atomic rename ($TMPDIR is often a different mount → copy+unlink, not atomic).
+mkdir -p target/idl
+IDL_TMP=$(mktemp target/idl/.sigil.json.tmp.XXXXXX)
 trap 'rm -f "$IDL_TMP"' EXIT
 if ! RUSTUP_TOOLCHAIN=nightly anchor idl build 2>/dev/null \
     | grep -v '^\s*Compiling\|^\s*Finished\|^\s*Running' > "$IDL_TMP"; then
@@ -109,6 +122,15 @@ bash scripts/regen-error-codes-doc.sh
 pnpm exec prettier --write sdk/kit/src/testing/errors/names.generated.ts >/dev/null
 
 if [ "$CHECK_MODE" = 1 ]; then
+  # `git diff` alone is blind to BRAND-NEW generated files (untracked), so
+  # probe those explicitly too.
+  UNTRACKED=$(git ls-files --others --exclude-standard -- "${GEN_SET[@]}")
+  if [ -n "$UNTRACKED" ]; then
+    echo "regen:check FAILED — regeneration created new untracked files:" >&2
+    echo "$UNTRACKED" >&2
+    echo "Run 'pnpm regen', review, and commit the result." >&2
+    exit 1
+  fi
   if git diff --exit-code -- "${GEN_SET[@]}"; then
     echo "regen:check OK — all generated artifacts are fresh."
   else

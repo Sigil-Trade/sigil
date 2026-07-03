@@ -274,34 +274,14 @@ jobs:
         working-directory: sdk/kit
         run: |
           node codama.mjs --protocol=sigil --skip-hash-check
-          if [ -n "$(git diff --name-only src/generated/)" ]; then
-            echo "::error::Generated code is stale. Run 'pnpm codama' and commit."
-            git diff --stat src/generated/
+          # `git status --porcelain` (not `git diff`) so BRAND-NEW generated
+          # files (untracked) are caught too, not just edits to tracked ones.
+          if [ -n "$(git status --porcelain src/generated/)" ]; then
+            echo "::error::Generated code is stale. Run 'pnpm regen' (or 'pnpm codama') and commit."
+            git status --short src/generated/
             exit 1
           fi
           echo "Generated code is up-to-date."
-
-      - name: Verify ERROR-CODES.md is fresh (generated from committed IDL)
-        # docs/ERROR-CODES.md is a deterministic jq projection of the committed
-        # IDL's errors[] and previously had NO drift gate anywhere — a new error
-        # code silently rotted the doc. Cheap (<1s bash+jq), so it runs
-        # unconditionally, same rationale as the staleness check above.
-        run: |
-          bash scripts/regen-error-codes-doc.sh
-          if ! git diff --quiet -- docs/ERROR-CODES.md; then
-            echo "::error::docs/ERROR-CODES.md is stale. Run 'pnpm regen' (or bash scripts/regen-error-codes-doc.sh) and commit the result."
-            git --no-pager diff -- docs/ERROR-CODES.md
-            exit 1
-          fi
-          echo "ERROR-CODES.md is up to date."
-
-      - name: Verify test counts match the actual test files (count:check)
-        # verify-test-counts.js RECOUNTS real test files vs scripts/test-counts.json.
-        # Previously local-only (pre-push hook + pr:check) — a `git push
-        # --no-verify` could land counts that disagree with the tree and CI never
-        # noticed: the push-to-main step below only checks PROPAGATION of the
-        # JSON into README/workflows, never the recount itself.
-        run: pnpm count:check
 
       - name: Generate test summary
         if: always()
@@ -465,10 +445,11 @@ jobs:
         run: git checkout -- target/idl/ target/types/
 
       - name: Install nightly toolchain (IDL drift gate)
-        # `anchor idl build` requires nightly. This gate used to self-skip
-        # ("Not blocking") whenever nightly was absent — and nothing in the
-        # repo installed it, so the gate's liveness silently depended on the
-        # runner image. Install it explicitly; the gate below is fail-closed.
+        # `anchor idl build` requires nightly. This gate COULD silently
+        # self-skip ("Not blocking") whenever nightly was absent — nothing in
+        # the repo installed it, so its liveness silently depended on the
+        # runner image (logs show it did run, but by luck of the image).
+        # Install it explicitly; the gate below is fail-closed.
         run: rustup toolchain install nightly --profile minimal
 
       - name: Check for IDL drift
@@ -477,10 +458,17 @@ jobs:
           # If they differ, the Rust changes affected the program interface and
           # the committed IDL needs to be regenerated. FAIL-CLOSED: a skipped
           # drift check is how doc-comment IDL drift shipped (#421/#422).
+          # The `if !` wrapper matters: under the runner's `bash -eo pipefail`
+          # a bare failing pipeline would abort the step with a generic error
+          # before any friendly message could print.
           echo "Generating IDL from source..."
-          RUSTUP_TOOLCHAIN=nightly anchor idl build 2>/dev/null \
-            | grep -v '^\s*Compiling\|^\s*Finished\|^\s*Running' \
-            > /tmp/generated-idl.json 2>/dev/null
+          if ! RUSTUP_TOOLCHAIN=nightly anchor idl build 2>/dev/null \
+              | grep -v '^\s*Compiling\|^\s*Finished\|^\s*Running' \
+              > /tmp/generated-idl.json; then
+            echo "::error::'anchor idl build' failed or produced no IDL — the drift gate cannot run."
+            echo "This gate is FAIL-CLOSED: silently skipping it is how IDL drift shipped before."
+            exit 1
+          fi
 
           if [ -s /tmp/generated-idl.json ]; then
             # Normalize both JSONs (sort keys) for stable comparison
@@ -510,8 +498,9 @@ jobs:
               fi
             fi
           else
-            echo "::error::'anchor idl build' produced no IDL — the drift gate cannot run."
-            echo "This gate is FAIL-CLOSED: silently skipping it is how IDL drift shipped before."
+            # Redundant belt-and-suspenders (the `if !` wrapper above already
+            # catches build failure / empty output) — kept fail-closed.
+            echo "::error::generated IDL is empty — the drift gate cannot run."
             exit 1
           fi
 
@@ -1139,12 +1128,51 @@ jobs:
           fi
           echo "::notice::All workflow uses: references are pinned to 40-char SHAs."
 
+  # ──────────────────────────────────────────────────────────────
+  # Freshness gates — dep-free, ALWAYS run (never path-filtered).
+  # These two checks previously lived in build-lint-test, which skips on
+  # Rust-only PRs (`any-ts` filter) — re-admitting the exact "stale artifact
+  # merges → red main" failure they exist to stop. Both need only the
+  # checkout + runner-provided node/jq (no pnpm install), so they run
+  # unconditionally in ~seconds.
+  # ──────────────────────────────────────────────────────────────
+  freshness-gates:
+    name: Freshness Gates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Verify ERROR-CODES.md is fresh (generated from committed IDL)
+        # docs/ERROR-CODES.md is a deterministic jq projection of the committed
+        # IDL's errors[] and previously had NO drift gate anywhere — a new
+        # error code silently rotted the doc.
+        run: |
+          command -v jq >/dev/null || { echo "::error::jq missing on runner"; exit 1; }
+          bash scripts/regen-error-codes-doc.sh
+          if ! git diff --quiet -- docs/ERROR-CODES.md; then
+            echo "::error::docs/ERROR-CODES.md is stale. Run 'pnpm regen' (or bash scripts/regen-error-codes-doc.sh) and commit the result."
+            git --no-pager diff -- docs/ERROR-CODES.md
+            exit 1
+          fi
+          echo "ERROR-CODES.md is up to date."
+
+      - name: Verify test counts match the actual test files (count:check)
+        # verify-test-counts.js RECOUNTS real test files (incl. Rust #[test]
+        # under programs/) vs scripts/test-counts.json using only node stdlib.
+        # Previously local-only (pre-push hook + pr:check) — a `git push
+        # --no-verify` could land counts that disagree with the tree and CI
+        # never noticed: the push-to-main step in build-lint-test only checks
+        # PROPAGATION of the JSON into README/workflows, never the recount.
+        run: node scripts/verify-test-counts.js
+
   security-gate:
     name: Security Gate
     runs-on: ubuntu-latest
     if: always()
     needs:
       - changes
+      - freshness-gates
       - build-lint-test
       - rust-checks
       - build-program
@@ -1165,6 +1193,7 @@ jobs:
           echo "  on-chain-tests:        ${{ needs.on-chain-tests.result }}"
           echo "  build-verification:    ${{ needs.build-verification.result }}"
           echo "  surfpool-integration:  ${{ needs.surfpool-integration.result }}"
+          echo "  freshness-gates:       ${{ needs.freshness-gates.result }}"
           echo "  security-scan:         ${{ needs.security-scan.result }}"
           echo "  formal-verification:   ${{ needs.formal-verification.result }}"
           echo "  fuzz-test:             ${{ needs.fuzz-test.result }}"
@@ -1193,6 +1222,13 @@ jobs:
           # ci-lint must always succeed (runs unconditionally)
           if [ "${{ needs.ci-lint.result }}" != "success" ]; then
             echo "::error::ci-lint did not succeed"
+            FAILED=1
+          fi
+
+          # freshness-gates must always succeed (runs unconditionally —
+          # deliberately NOT path-filtered; see the job's comment)
+          if [ "${{ needs.freshness-gates.result }}" != "success" ]; then
+            echo "::error::freshness-gates did not succeed"
             FAILED=1
           fi
 
