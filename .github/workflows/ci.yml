@@ -281,6 +281,28 @@ jobs:
           fi
           echo "Generated code is up-to-date."
 
+      - name: Verify ERROR-CODES.md is fresh (generated from committed IDL)
+        # docs/ERROR-CODES.md is a deterministic jq projection of the committed
+        # IDL's errors[] and previously had NO drift gate anywhere — a new error
+        # code silently rotted the doc. Cheap (<1s bash+jq), so it runs
+        # unconditionally, same rationale as the staleness check above.
+        run: |
+          bash scripts/regen-error-codes-doc.sh
+          if ! git diff --quiet -- docs/ERROR-CODES.md; then
+            echo "::error::docs/ERROR-CODES.md is stale. Run 'pnpm regen' (or bash scripts/regen-error-codes-doc.sh) and commit the result."
+            git --no-pager diff -- docs/ERROR-CODES.md
+            exit 1
+          fi
+          echo "ERROR-CODES.md is up to date."
+
+      - name: Verify test counts match the actual test files (count:check)
+        # verify-test-counts.js RECOUNTS real test files vs scripts/test-counts.json.
+        # Previously local-only (pre-push hook + pr:check) — a `git push
+        # --no-verify` could land counts that disagree with the tree and CI never
+        # noticed: the push-to-main step below only checks PROPAGATION of the
+        # JSON into README/workflows, never the recount itself.
+        run: pnpm count:check
+
       - name: Generate test summary
         if: always()
         run: |
@@ -442,15 +464,23 @@ jobs:
       - name: Restore committed IDL (cache may contain stale version)
         run: git checkout -- target/idl/ target/types/
 
+      - name: Install nightly toolchain (IDL drift gate)
+        # `anchor idl build` requires nightly. This gate used to self-skip
+        # ("Not blocking") whenever nightly was absent — and nothing in the
+        # repo installed it, so the gate's liveness silently depended on the
+        # runner image. Install it explicitly; the gate below is fail-closed.
+        run: rustup toolchain install nightly --profile minimal
+
       - name: Check for IDL drift
         run: |
           # Build the IDL using nightly toolchain and compare to committed version.
           # If they differ, the Rust changes affected the program interface and
-          # the committed IDL needs to be regenerated.
+          # the committed IDL needs to be regenerated. FAIL-CLOSED: a skipped
+          # drift check is how doc-comment IDL drift shipped (#421/#422).
           echo "Generating IDL from source..."
           RUSTUP_TOOLCHAIN=nightly anchor idl build 2>/dev/null \
             | grep -v '^\s*Compiling\|^\s*Finished\|^\s*Running' \
-            > /tmp/generated-idl.json 2>/dev/null || true
+            > /tmp/generated-idl.json 2>/dev/null
 
           if [ -s /tmp/generated-idl.json ]; then
             # Normalize both JSONs (sort keys) for stable comparison
@@ -459,10 +489,7 @@ jobs:
 
             if ! diff -q /tmp/committed.json /tmp/generated.json > /dev/null 2>&1; then
               echo "::error::IDL drift detected! The committed IDL does not match the generated IDL."
-              echo "Run this locally to update:"
-              echo "  RUSTUP_TOOLCHAIN=nightly anchor idl build 2>/dev/null | grep -v '^\s*Compiling\|^\s*Finished\|^\s*Running' > target/idl/sigil.json"
-              echo "  anchor idl type target/idl/sigil.json -o target/types/sigil.ts"
-              echo "  git add target/idl/sigil.json target/types/sigil.ts && git commit -m 'chore: regenerate IDL + types'"
+              echo "Run 'pnpm regen' locally (regenerates IDL + types + codama + error maps + docs in order), then commit the result."
               echo ""
               echo "=== Diff ==="
               diff /tmp/committed.json /tmp/generated.json | head -50 || true
@@ -483,7 +510,9 @@ jobs:
               fi
             fi
           else
-            echo "IDL generation skipped (nightly toolchain not available or build failed). Not blocking."
+            echo "::error::'anchor idl build' produced no IDL — the drift gate cannot run."
+            echo "This gate is FAIL-CLOSED: silently skipping it is how IDL drift shipped before."
+            exit 1
           fi
 
       - name: Upload program artifact (.so)
