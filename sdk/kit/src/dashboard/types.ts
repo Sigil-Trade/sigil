@@ -80,6 +80,15 @@ export interface VaultState {
     /** Lifetime USD volume (6-decimal). */
     totalVolume: bigint;
     totalFees: bigint;
+    /**
+     * Observe-only kill switch (AgentVault.observe_only). When true, every
+     * `validate_and_authorize` rejects (ObserveOnlyModeBlocksExecute) — a hard
+     * execute-path stop independent of freeze. Written by `setObserveOnly`,
+     * readable here for parity. Optional for backward-compatible construction
+     * (pre-0.25 callers) + MCP round-trip of older JSON; the resolver always
+     * populates it.
+     */
+    observeOnly?: boolean;
   };
   balance: {
     /** Sum of all stablecoin ATAs (6-decimal USD). */
@@ -216,6 +225,17 @@ export interface ActivityFilters {
   type?: ActivityType;
   /** Max events to fetch. Default: 50. */
   limit?: number;
+  /**
+   * Pagination cursor — fetch signatures strictly OLDER than this one. Pass
+   * the previous page's {@link ActivityData.nextCursor} to page backwards.
+   * Threaded into `getSignaturesForAddress({ before })`.
+   */
+  before?: string;
+  /**
+   * Pagination cursor — fetch signatures until this one (older bound).
+   * Threaded into `getSignaturesForAddress({ until })`.
+   */
+  until?: string;
 }
 
 export interface ActivityData {
@@ -227,6 +247,14 @@ export interface ActivityData {
     /** Total USD volume (6-decimal). */
     volume: bigint;
   };
+  /**
+   * Oldest signature in the underlying fetch page — pass as
+   * {@link ActivityFilters.before} to load the next (older) page. `null` when
+   * the fetch returned fewer than `limit` signatures (end of history). Tracks
+   * the RAW signature page, independent of any client-side row filtering.
+   * Optional for backward-compatible construction + round-trip of pre-0.25 JSON.
+   */
+  nextCursor?: string | null;
   toJSON(): SerializedActivityData;
 }
 
@@ -250,6 +278,33 @@ export interface HealthData {
 }
 
 // ─── Policy Data ─────────────────────────────────────────────────────────────
+
+/**
+ * One entry of the verified-build gate read-back (Item 2). Index-aligned to
+ * {@link PolicyData.approvedApps}: `approvedApps[i]` ↔ `protocolHashes[i]`.
+ * Mirrors `PolicyConfig.protocol_hashes[i]` — an all-zero on-chain entry means
+ * the gate is DISARMED for that protocol.
+ */
+export interface ProtocolHashInfo {
+  /** Program address the pin applies to (same as `approvedApps[i].programId`). */
+  programId: string;
+  /** True when a non-zero build hash is pinned — `validate_and_authorize` enforces it. */
+  armed: boolean;
+  /** Hex-encoded 32-byte program-data SHA-256 when armed; `null` when disarmed. */
+  hash: string | null;
+}
+
+/**
+ * One entry of the first-time-destination graylist read-back (Item 2). Mirrors
+ * `PolicyConfig.destination_graylist[i]` — a destination that is allowlisted but
+ * still within its 24h friction window (or awaiting owner promotion).
+ */
+export interface GraylistEntry {
+  /** Destination wallet/PDA pubkey (also present in `allowedDestinations`). */
+  destination: string;
+  /** Unix seconds at which the destination unlocks without owner promotion. */
+  unlockUnix: bigint;
+}
 
 export interface PolicyData {
   // Spending
@@ -276,6 +331,50 @@ export interface PolicyData {
   timelockSeconds: number;
   /** Incremented on every apply (TOCTOU fix — agents check this). */
   policyVersion: bigint;
+  // ── Advanced security controls (read-back parity — 0.25 Item 2) ──────────
+  // These fields are WRITABLE via PolicyChanges but were previously not
+  // READABLE. All optional for backward-compatible construction of PolicyData
+  // (pre-0.25 callers) + MCP round-trip of older JSON; the resolver always
+  // populates them from the decoded PolicyConfig.
+  /** TA-09 elevated-mutation cosign gate (PolicyConfig.cosign_required). */
+  cosignRequired?: boolean;
+  /**
+   * D-5 reactivate-time cosigner (PolicyConfig.cosign_session_pubkey). `null`
+   * when unset (on-chain default `Pubkey::default()` — gate disabled).
+   */
+  cosignSessionPubkey?: Address | null;
+  /**
+   * TA-12 hard floor on combined USDC+USDT balance, 6-decimal USD
+   * (PolicyConfig.stable_balance_floor). `0n` = no floor.
+   */
+  stableBalanceFloor?: bigint;
+  /**
+   * TA-14 rolling-24h per-recipient outflow cap, 6-decimal USD
+   * (PolicyConfig.per_recipient_daily_cap_usd). `null` = no per-recipient cap
+   * (on-chain default `0`).
+   */
+  perRecipientDailyCapUsd?: bigint | null;
+  /**
+   * Destination access-control mode (PolicyConfig.destination_mode). Raw u8:
+   * `0` = Restricted (the only value the current program accepts).
+   */
+  destinationMode?: number;
+  /**
+   * F-Q6 delay (seconds) before an OPERATOR grant takes effect
+   * (PolicyConfig.operator_grant_delay_seconds). `0n` = no delay.
+   */
+  operatorGrantDelaySeconds?: bigint;
+  /**
+   * Verified-build gate state per approved protocol (PolicyConfig.protocol_hashes),
+   * index-aligned to {@link approvedApps}. See {@link ProtocolHashInfo}.
+   */
+  protocolHashes?: ProtocolHashInfo[];
+  /**
+   * First-time-destination graylist (PolicyConfig.destination_graylist) —
+   * allowlisted destinations still inside their 24h friction window. See
+   * {@link GraylistEntry}.
+   */
+  graylist?: GraylistEntry[];
   // Pending changes
   pendingUpdate?: {
     changes: Partial<PolicyChanges>;
@@ -655,6 +754,8 @@ export interface SerializedVaultState {
     agentCount: number;
     totalVolume: string;
     totalFees: string;
+    /** AgentVault.observe_only. Optional for round-trip of pre-0.25 JSON. */
+    observeOnly?: boolean;
   };
   balance: {
     total: string;
@@ -713,6 +814,8 @@ export interface SerializedActivityRow {
 export interface SerializedActivityData {
   rows: SerializedActivityRow[];
   summary: { total: number; approved: number; blocked: number; volume: string };
+  /** Oldest fetched signature, or null at end of history. */
+  nextCursor?: string | null;
 }
 
 /** @internal */
@@ -742,6 +845,16 @@ export interface SerializedPolicyData {
   sessionExpirySeconds: string;
   timelockSeconds: number;
   policyVersion: string;
+  // Advanced security controls (0.25 Item 2) — bigint → string; optional for
+  // round-trip of pre-0.25 JSON.
+  cosignRequired?: boolean;
+  cosignSessionPubkey?: string | null;
+  stableBalanceFloor?: string;
+  perRecipientDailyCapUsd?: string | null;
+  destinationMode?: number;
+  operatorGrantDelaySeconds?: string;
+  protocolHashes?: { programId: string; armed: boolean; hash: string | null }[];
+  graylist?: { destination: string; unlockUnix: string }[];
   pendingUpdate?: {
     changes: Record<string, unknown>;
     appliesAt: number;
@@ -785,4 +898,47 @@ export interface SerializedAuditTrailEntry {
   actor: string;
   details: string;
   txSignature: string;
+}
+
+// ─── Pending Ownership Transfer (0.25 Item 2) ────────────────────────────────
+
+/**
+ * Read-back of an in-flight ownership transfer (PendingOwnershipTransfer PDA).
+ *
+ * Returned by `getPendingOwnership`; `null` when no transfer is queued. The
+ * on-chain accept gate is WALL-CLOCK based (`unix_now - queued_at >=
+ * min_delay_seconds`), so the maturation time is surfaced as `executesAtUnix`
+ * (Unix seconds), NOT a slot. `queuedAtSlot` is the freshness slot the program
+ * records; it is exposed verbatim but is not the accept deadline.
+ */
+export interface PendingOwnershipData {
+  /** Target owner — the pubkey that must sign `acceptOwnershipTransfer`. */
+  newOwner: string;
+  /** Owner at queue time — the pubkey that can `cancelOwnershipTransfer`. */
+  currentOwner: string;
+  /** `Clock::unix_timestamp` (seconds) at queue time. */
+  queuedAt: bigint;
+  /** Owner-configured timelock in seconds (default 172800 / 48h). */
+  minDelaySeconds: bigint;
+  /**
+   * Unix seconds at/after which `acceptOwnershipTransfer` may land
+   * (`queuedAt + minDelaySeconds`). Multiply by 1000 for a JS Date.
+   */
+  executesAtUnix: bigint;
+  /** True when the accept path is the Squads V4 multisig variant. */
+  isMultisigTarget: boolean;
+  /** Slot recorded at queue time (freshness; not the accept deadline). */
+  queuedAtSlot: bigint;
+  toJSON(): SerializedPendingOwnershipData;
+}
+
+/** @internal */
+export interface SerializedPendingOwnershipData {
+  newOwner: string;
+  currentOwner: string;
+  queuedAt: string;
+  minDelaySeconds: string;
+  executesAtUnix: string;
+  isMultisigTarget: boolean;
+  queuedAtSlot: string;
 }

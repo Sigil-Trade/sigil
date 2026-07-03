@@ -30,14 +30,17 @@ import { getAgentProfile } from "../agent-analytics.js";
 import { getSpendingBreakdown } from "../spending-analytics.js";
 import { getSpendingVelocity } from "../spending-analytics.js";
 import type { SpendingBreakdown } from "../spending-analytics.js";
-import { getVaultActivity } from "../event-analytics.js";
+import { getVaultActivity, getVaultActivityPage } from "../event-analytics.js";
 import type { VaultActivityItem, EventCategory } from "../event-analytics.js";
 import { resolveProtocolName } from "../protocol-names.js";
 import type { Network } from "../types.js";
+import { SYSTEM_PROGRAM_ADDRESS } from "../types.js";
 import type { ResolvedVaultState } from "../state-resolver.js";
 import type { AgentVault } from "../generated/accounts/agentVault.js";
 import type { PolicyConfig } from "../generated/accounts/policyConfig.js";
 import type { PendingPolicyUpdate } from "../generated/accounts/pendingPolicyUpdate.js";
+import { fetchMaybePendingOwnershipTransfer } from "../generated/accounts/pendingOwnershipTransfer.js";
+import { findPendingOwnerPda } from "./close-vault.js";
 
 /**
  * Cast ResolvedVaultStateForOwner to ResolvedVaultState.
@@ -66,6 +69,7 @@ import type {
   AuditTrailEntry,
   AuditTrailOptions,
   AuditEventType,
+  PendingOwnershipData,
 } from "./types.js";
 
 import { SigilSdkDomainError } from "../errors/sdk.js";
@@ -79,6 +83,20 @@ function toNet(network: "devnet" | "mainnet"): Network {
 
 function bs(v: bigint): string {
   return v.toString();
+}
+
+/** True when any byte is non-zero (a verified-build hash is armed). */
+function isNonZeroBytes(bytes: ArrayLike<number>): boolean {
+  for (let i = 0; i < bytes.length; i++) if (bytes[i] !== 0) return true;
+  return false;
+}
+
+/** Lowercase hex of a byte array (32-byte program-data SHA-256). */
+function bytesToHex(bytes: ArrayLike<number>): string {
+  let out = "";
+  for (let i = 0; i < bytes.length; i++)
+    out += bytes[i].toString(16).padStart(2, "0");
+  return out;
 }
 
 function serializeBigints(obj: unknown): unknown {
@@ -174,6 +192,8 @@ export function buildVaultState(ctx: OverviewContext): VaultState {
   const status = (
     v.status === 0 ? "active" : v.status === 1 ? "frozen" : "closed"
   ) as VaultState["vault"]["status"];
+  // 0.25 Item 2 — observe-only read-back (AgentVault.observe_only).
+  const observeOnly = v.observeOnly ?? false;
 
   return {
     vault: {
@@ -183,6 +203,7 @@ export function buildVaultState(ctx: OverviewContext): VaultState {
       agentCount: v.agents?.length ?? 0,
       totalVolume: v.totalVolume,
       totalFees: v.totalFeesCollected,
+      observeOnly,
     },
     balance: { total, tokens },
     pnl: { percent: pnlPercent, absolute: pnlAbsolute },
@@ -195,6 +216,7 @@ export function buildVaultState(ctx: OverviewContext): VaultState {
         agentCount: v.agents?.length ?? 0,
         totalVolume: bs(v.totalVolume),
         totalFees: bs(v.totalFeesCollected),
+        observeOnly,
       },
       balance: {
         total: bs(total),
@@ -437,6 +459,38 @@ export function buildPolicy(ctx: OverviewContext): PolicyData {
   const policyVer = (p.policyVersion ?? 0n) as bigint;
   const timelockSec = Number(p.timelockDuration);
 
+  // 0.25 Item 2 — advanced security controls read-back (decoded PolicyConfig).
+  const cosignRequired = p.cosignRequired ?? false;
+  // On-chain default is `Pubkey::default()` (all-zero → "111…1", the System
+  // Program address) meaning "gate disabled" — surface that as `null`.
+  const rawCosignSession = p.cosignSessionPubkey as Address | undefined;
+  const cosignSessionPubkey =
+    rawCosignSession && rawCosignSession !== SYSTEM_PROGRAM_ADDRESS
+      ? rawCosignSession
+      : null;
+  const stableBalanceFloor = p.stableBalanceFloor ?? 0n;
+  // On-chain default `0` means "no per-recipient cap" — surface that as `null`.
+  const perRecipientRaw = p.perRecipientDailyCapUsd ?? 0n;
+  const perRecipientDailyCapUsd =
+    perRecipientRaw === 0n ? null : perRecipientRaw;
+  const destinationMode = p.destinationMode ?? 0;
+  const operatorGrantDelaySeconds = p.operatorGrantDelaySeconds ?? 0n;
+  // protocol_hashes is a fixed 10-entry array index-aligned to `protocols`;
+  // an all-zero entry means the verified-build gate is disarmed for that slot.
+  const protocolHashes = protocols.map((addr: Address, i: number) => {
+    const bytes = p.protocolHashes?.[i];
+    const armed = bytes ? isNonZeroBytes(bytes) : false;
+    return {
+      programId: addr as string,
+      armed,
+      hash: armed && bytes ? bytesToHex(bytes) : null,
+    };
+  });
+  const graylist = (p.destinationGraylist ?? []).map((e) => ({
+    destination: e.destination as string,
+    unlockUnix: e.unlockUnix,
+  }));
+
   let pendingUpdate: PolicyData["pendingUpdate"];
   if (pendingPolicy) {
     const pp = pendingPolicy as PendingPolicyUpdate;
@@ -492,6 +546,14 @@ export function buildPolicy(ctx: OverviewContext): PolicyData {
     sessionExpirySeconds: sessionExpiry,
     timelockSeconds: timelockSec,
     policyVersion: policyVer,
+    cosignRequired,
+    cosignSessionPubkey,
+    stableBalanceFloor,
+    perRecipientDailyCapUsd,
+    destinationMode,
+    operatorGrantDelaySeconds,
+    protocolHashes,
+    graylist,
     pendingUpdate,
     toJSON: () => ({
       dailyCap: bs(dailyCap),
@@ -506,6 +568,18 @@ export function buildPolicy(ctx: OverviewContext): PolicyData {
       sessionExpirySeconds: bs(sessionExpiry),
       timelockSeconds: timelockSec,
       policyVersion: bs(policyVer),
+      cosignRequired,
+      cosignSessionPubkey,
+      stableBalanceFloor: bs(stableBalanceFloor),
+      perRecipientDailyCapUsd:
+        perRecipientDailyCapUsd === null ? null : bs(perRecipientDailyCapUsd),
+      destinationMode,
+      operatorGrantDelaySeconds: bs(operatorGrantDelaySeconds),
+      protocolHashes,
+      graylist: graylist.map((g) => ({
+        destination: g.destination,
+        unlockUnix: bs(g.unlockUnix),
+      })),
       pendingUpdate: pendingUpdate
         ? {
             changes: serializeBigints(pendingUpdate.changes) as Record<
@@ -660,8 +734,17 @@ export async function getActivity(
 ): Promise<ActivityData> {
   try {
     const limit = filters?.limit ?? 50;
-    const items = await getVaultActivity(rpc, vault, limit, toNet(network));
-    let rows = buildActivityRows(items);
+    // 0.25 Item 3 — cursor-aware, bounded-parallel fetch. `before`/`until` page
+    // the RAW signature list; the client-side filters below narrow the built
+    // rows. `nextCursor` reflects the signature page, NOT the filtered subset.
+    const page = await getVaultActivityPage(rpc, vault, {
+      limit,
+      before: filters?.before,
+      until: filters?.until,
+      network: toNet(network),
+    });
+    const nextCursor = page.nextCursor;
+    let rows = buildActivityRows(page.items);
 
     if (filters?.agent) rows = rows.filter((r) => r.agent === filters.agent);
     if (filters?.protocol)
@@ -683,9 +766,11 @@ export async function getActivity(
     return {
       rows,
       summary: { total: rows.length, approved, blocked, volume },
+      nextCursor,
       toJSON: () => ({
         rows: rows.map((r) => r.toJSON()),
         summary: { total: rows.length, approved, blocked, volume: bs(volume) },
+        nextCursor,
       }),
     };
   } catch (err) {
@@ -1148,5 +1233,64 @@ export async function getAuditTrail(
     return entries;
   } catch (err) {
     throw toDxError(err, "OwnerClient.getAuditTrail");
+  }
+}
+
+// ─── getPendingOwnership (0.25 Item 2) ───────────────────────────────────────
+
+/**
+ * Read the in-flight ownership transfer for a vault, or `null` when none is
+ * queued. Derives the `[b"pending_owner", vault]` PDA via
+ * {@link findPendingOwnerPda} and fetches + decodes it.
+ *
+ * The on-chain accept gate is WALL-CLOCK based, so the returned
+ * `executesAtUnix` (= `queuedAt + minDelaySeconds`, Unix seconds) is the real
+ * "acceptable at" time — `queuedAtSlot` is exposed verbatim for freshness but
+ * is NOT the accept deadline.
+ *
+ * `network` is accepted for signature symmetry with the other OwnerClient reads
+ * (the PDA + fetch are network-independent — the `rpc` already binds the cluster).
+ */
+export async function getPendingOwnership(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  _network: "devnet" | "mainnet",
+): Promise<PendingOwnershipData | null> {
+  try {
+    const pda = await findPendingOwnerPda(vault);
+    const maybe = await fetchMaybePendingOwnershipTransfer(rpc, pda);
+    if (!maybe.exists) return null;
+
+    const d = maybe.data;
+    const queuedAt = d.queuedAt;
+    const minDelaySeconds = d.minDelaySeconds;
+    const executesAtUnix = queuedAt + minDelaySeconds;
+    const newOwner = d.newOwner as string;
+    const currentOwner = d.currentOwner as string;
+    const isMultisigTarget = d.isMultisigTarget;
+    const queuedAtSlot = d.queuedAtSlot;
+
+    return {
+      newOwner,
+      currentOwner,
+      queuedAt,
+      minDelaySeconds,
+      executesAtUnix,
+      isMultisigTarget,
+      queuedAtSlot,
+      toJSON: () => ({
+        newOwner,
+        currentOwner,
+        queuedAt: bs(queuedAt),
+        minDelaySeconds: bs(minDelaySeconds),
+        executesAtUnix: bs(executesAtUnix),
+        isMultisigTarget,
+        queuedAtSlot: bs(queuedAtSlot),
+      }),
+    };
+  } catch (err) {
+    // Account-not-found ≡ "no pending transfer" (same convention as getPolicy).
+    if (isAccountNotFoundError(err)) return null;
+    throw toDxError(err, "OwnerClient.getPendingOwnership");
   }
 }

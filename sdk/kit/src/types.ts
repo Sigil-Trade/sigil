@@ -135,6 +135,20 @@ export const U64_MAX = BigInt("18446744073709551615");
 
 export const MAX_SLIPPAGE_BPS = 5_000; // 50%
 
+// ─── Timelock Constants ───────────────────────────────────────────────────────
+//
+// Owner-policy timelock bounds, mirrored byte-for-byte from the on-chain
+// `programs/sigil/src/state/mod.rs` constants of the same name. A
+// `timelock_duration` outside `[MIN_TIMELOCK_DURATION, MAX_TIMELOCK_DURATION]`
+// is rejected on-chain (TimelockTooShort 6018 / TimelockTooLong 6118). Seconds.
+// Typed as plain `number` to match the neighboring duration/count constants in
+// this file (EPOCH_DURATION, ROLLING_WINDOW_SECONDS, MAX_ALLOWED_PROTOCOLS).
+
+/** Minimum policy timelock in seconds (30 min). Mirror of on-chain `MIN_TIMELOCK_DURATION`. */
+export const MIN_TIMELOCK_DURATION = 1_800;
+/** Maximum policy timelock in seconds (48 h). Mirror of on-chain `MAX_TIMELOCK_DURATION`. */
+export const MAX_TIMELOCK_DURATION = 172_800;
+
 // ─── SpendTracker Constants ───────────────────────────────────────────────────
 
 export const EPOCH_DURATION = 600; // 10 minutes in seconds

@@ -70,6 +70,7 @@ import {
   SYSTEM_PROGRAM_ADDRESS,
   MAX_DEVELOPER_FEE_RATE,
   MAX_ALLOWED_PROTOCOLS,
+  MIN_TIMELOCK_DURATION,
   U64_MAX,
   type CapabilityTier,
   type UsdBaseUnits,
@@ -161,8 +162,11 @@ const DAILY_CAP_HIGH_THRESHOLD = 1_000_000_000_000n;
  */
 const MAX_USD_BASE_UNITS = U64_MAX;
 
-/** Mirror of `MIN_TIMELOCK_DURATION` (1800) from `state/mod.rs`. */
-const MIN_TIMELOCK_DURATION_SECONDS = 1_800n;
+/** Mirror of `MIN_TIMELOCK_DURATION` (1800) from `state/mod.rs`, as a bigint
+ *  for comparison against the bigint `timelockDuration` config field. Derived
+ *  from the canonical numeric {@link MIN_TIMELOCK_DURATION} export (no second
+ *  magic number). */
+const MIN_TIMELOCK_DURATION_SECONDS = BigInt(MIN_TIMELOCK_DURATION);
 
 /** Mirror of `MAX_ALLOWED_DESTINATIONS` (10) from `state/mod.rs`. */
 const MAX_ALLOWED_DESTINATIONS_COUNT = 10;

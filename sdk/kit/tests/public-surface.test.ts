@@ -132,6 +132,21 @@ describe("v0.9.0 root barrel — kept exports", () => {
   it("DOES export SIGIL_PROGRAM_ADDRESS", () => {
     expect(kit.SIGIL_PROGRAM_ADDRESS).to.be.a("string");
   });
+
+  it("DOES export the 0.25 dashboard punch-list additions (Items 1/3/4/5)", () => {
+    // Item 1 — send/poll primitive.
+    expect(kit.sendAndConfirmTransaction).to.be.a("function");
+    // Item 3 — cursor-aware paginated activity fetcher.
+    expect(kit.getVaultActivityPage).to.be.a("function");
+    // Item 4 — timelock bounds (seconds), mirror on-chain state/mod.rs.
+    expect(kit.MIN_TIMELOCK_DURATION).to.equal(1_800);
+    expect(kit.MAX_TIMELOCK_DURATION).to.equal(172_800);
+    // Item 5 — instruction discriminators (8 bytes each).
+    expect(kit.INITIALIZE_VAULT_DISCRIMINATOR).to.be.an.instanceof(Uint8Array);
+    expect(kit.INITIALIZE_VAULT_DISCRIMINATOR).to.have.lengthOf(8);
+    expect(kit.REGISTER_AGENT_DISCRIMINATOR).to.be.an.instanceof(Uint8Array);
+    expect(kit.REGISTER_AGENT_DISCRIMINATOR).to.have.lengthOf(8);
+  });
 });
 
 describe("v0.9.0 /errors subpath smoke", () => {
@@ -155,7 +170,11 @@ describe("v0.13.0 root barrel — PR B barrel closeout (54 internals hidden)", (
   // SDK use via relative imports; only the public barrel is pruned.
   // See .changeset/pr-b-barrel-closeout.md for rationale.
 
-  it("does NOT re-export Category 1 — internal RPC plumbing (15)", () => {
+  it("does NOT re-export Category 1 — internal RPC plumbing (14)", () => {
+    // `sendAndConfirmTransaction` was REMOVED from this list in the 0.25
+    // dashboard punch-list (Item 1): it is now an intentional root export
+    // (send/poll primitive the dashboard's offline-signing flows need). The
+    // rest of the v0.13 barrel-closeout plumbing stays internal.
     const removed = [
       "BlockhashCache",
       "getBlockhashCache",
@@ -165,7 +184,6 @@ describe("v0.13.0 root barrel — PR B barrel closeout (54 internals hidden)", (
       "SIGIL_ALT_MAINNET",
       "getSigilAltAddress",
       "signAndEncode",
-      "sendAndConfirmTransaction",
       "composeSigilTransaction",
       "validateTransactionSize",
       "measureTransactionSize",

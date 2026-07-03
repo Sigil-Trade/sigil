@@ -11,6 +11,7 @@ import type {
   Rpc,
   SolanaRpcApi,
 } from "./kit-adapter.js";
+import type { Signature } from "@solana/kit";
 import { AccountRole, getBase58Encoder } from "./kit-adapter.js";
 import type { DecodedSigilEvent, SigilEventName } from "./events.js";
 import { parseAndDecodeSigilEvents } from "./events.js";
@@ -567,28 +568,95 @@ export function buildBlockedActivityItem(
 
 // ─── Activity Feed Fetcher ───────────────────────────────────────────────────
 
+/** One page of vault activity plus the forward-pagination cursor. */
+export interface VaultActivityPage {
+  /** Activity items for this page, newest-first (timestamp descending). */
+  items: VaultActivityItem[];
+  /**
+   * Signature to pass as `before` on the next call to page further back
+   * (older) in history, or `null` when the underlying signature fetch
+   * returned fewer than `limit` rows — i.e. the end of the vault's history
+   * has been reached.
+   *
+   * The cursor tracks the RAW signature page and is independent of any
+   * client-side activity filtering the caller applies afterwards: page the
+   * signatures, then filter the built items.
+   */
+  nextCursor: string | null;
+}
+
+/** Options for {@link getVaultActivityPage}. */
+export interface GetVaultActivityPageOptions {
+  /** Max signatures to fetch. Default 20. */
+  limit?: number;
+  /**
+   * Start searching backwards from (before) this transaction signature —
+   * pass the previous page's {@link VaultActivityPage.nextCursor}. Threaded
+   * straight into `getSignaturesForAddress`.
+   */
+  before?: string;
+  /**
+   * Search until this transaction signature (older bound). Threaded straight
+   * into `getSignaturesForAddress`.
+   */
+  until?: string;
+  /** Network for protocol/token resolution in built items. Default "mainnet-beta". */
+  network?: Network;
+}
+
 /**
- * Fetch and build a complete activity feed for a vault.
- * Uses getSignaturesForAddress + getTransaction (standard RPC).
+ * Bounded fan-out for the per-signature `getTransaction` calls. The previous
+ * implementation issued them strictly sequentially; 5-at-a-time keeps RPC
+ * pressure/rate-limit risk modest while cutting wall time ~5×.
+ */
+const ACTIVITY_FETCH_CONCURRENCY = 5;
+
+/**
+ * Fetch and build one page of a vault's activity feed, cursor-aware.
+ * Uses getSignaturesForAddress (with optional `before`/`until` cursors) +
+ * getTransaction (standard RPC). The per-signature getTransaction calls run
+ * with BOUNDED concurrency ({@link ACTIVITY_FETCH_CONCURRENCY}), preserving
+ * signature order during assembly before the final timestamp sort.
  * For better performance, use Helius Enhanced Transactions API in the dashboard.
  *
  * Failed transactions that carry a Sigil policy-block error code in their
  * program logs are reconstructed into a single blocked activity item (the
  * revert emits no event, so this is the only way they reach the feed).
  */
-export async function getVaultActivity(
+export async function getVaultActivityPage(
   rpc: Rpc<SolanaRpcApi>,
   vault: Address,
-  limit = 20,
-  network: Network = "mainnet-beta",
-): Promise<VaultActivityItem[]> {
-  const signatures = await rpc.getSignaturesForAddress(vault, { limit }).send();
+  options: GetVaultActivityPageOptions = {},
+): Promise<VaultActivityPage> {
+  const { limit = 20, before, until, network = "mainnet-beta" } = options;
 
-  if (signatures.length === 0) return [];
+  // Only include cursor keys when defined — some RPCs reject an explicit
+  // `before: undefined` / `until: undefined`. `before`/`until` are the branded
+  // `Signature` type on the RPC config; the public API takes plain strings, so
+  // cast at the boundary (the values ARE transaction signatures).
+  const sigConfig: { limit: number; before?: Signature; until?: Signature } = {
+    limit,
+  };
+  if (before !== undefined) sigConfig.before = before as Signature;
+  if (until !== undefined) sigConfig.until = until as Signature;
 
-  const items: VaultActivityItem[] = [];
+  const signatures = await rpc.getSignaturesForAddress(vault, sigConfig).send();
 
-  for (const sigInfo of signatures) {
+  if (signatures.length === 0) return { items: [], nextCursor: null };
+
+  // nextCursor: the OLDEST signature in this page (getSignaturesForAddress
+  // returns newest-first). Null on a short page — no older history remains.
+  const nextCursor =
+    signatures.length < limit
+      ? null
+      : (signatures[signatures.length - 1].signature as string);
+
+  // Build 0..n items per signature (multiple events, or one reconstructed
+  // blocked item). Inline closure keeps `sigInfo`'s branded Signature type so
+  // `getTransaction` type-checks. A failed fetch degrades that signature to [].
+  const buildForSignature = async (
+    sigInfo: (typeof signatures)[number],
+  ): Promise<VaultActivityItem[]> => {
     try {
       const tx = await rpc
         .getTransaction(sigInfo.signature, {
@@ -597,11 +665,12 @@ export async function getVaultActivity(
         })
         .send();
 
-      if (!tx?.meta?.logMessages) continue;
+      if (!tx?.meta?.logMessages) return [];
 
+      const out: VaultActivityItem[] = [];
       const decoded = parseAndDecodeSigilEvents([...tx.meta.logMessages]);
       for (const event of decoded) {
-        items.push(
+        out.push(
           buildActivityItem(
             event,
             sigInfo.signature,
@@ -622,15 +691,42 @@ export async function getVaultActivity(
           sigInfo.signature,
           Number(sigInfo.blockTime ?? 0),
         );
-        if (blocked) items.push(blocked);
+        if (blocked) out.push(blocked);
       }
+      return out;
     } catch {
-      continue;
+      return [];
     }
+  };
+
+  // Chunked Promise.all: bounded concurrency, order-preserving assembly.
+  const perSignature: VaultActivityItem[][] = [];
+  for (let i = 0; i < signatures.length; i += ACTIVITY_FETCH_CONCURRENCY) {
+    const chunk = signatures.slice(i, i + ACTIVITY_FETCH_CONCURRENCY);
+    const built = await Promise.all(chunk.map(buildForSignature));
+    perSignature.push(...built);
   }
 
+  const items = perSignature.flat();
   items.sort((a, b) => b.timestamp - a.timestamp);
-  return items;
+  return { items, nextCursor };
+}
+
+/**
+ * Fetch and build a complete activity feed for a vault (items only).
+ *
+ * Thin back-compat wrapper over {@link getVaultActivityPage} — same output as
+ * before (now fetched with bounded-parallel getTransaction). For pagination
+ * cursors (`before`/`until` + `nextCursor`) call `getVaultActivityPage`.
+ */
+export async function getVaultActivity(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+  limit = 20,
+  network: Network = "mainnet-beta",
+): Promise<VaultActivityItem[]> {
+  const page = await getVaultActivityPage(rpc, vault, { limit, network });
+  return page.items;
 }
 
 // ─── Internal Helpers ────────────────────────────────────────────────────────
