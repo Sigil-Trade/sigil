@@ -29,6 +29,8 @@
     "count:check": "node scripts/verify-test-counts.js",
     "gen:error-types": "tsx scripts/gen-error-types.ts",
     "verify:error-drift": "tsx scripts/verify-error-drift.ts",
+    "regen": "bash scripts/regen.sh",
+    "regen:check": "bash scripts/regen.sh --check",
     "pr:check": "pnpm count:check && pnpm verify:error-drift && pnpm test:all",
     "prepare": "husky"
   },

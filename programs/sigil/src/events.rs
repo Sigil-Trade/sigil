@@ -162,7 +162,7 @@ pub struct AgentTransferExecuted {
 // CloseConstraints{Queued,Applied,Cancelled}, OrphanConstraintsPdaCleaned.
 
 // Escrow events (EscrowCreated, EscrowSettled, EscrowRefunded) REMOVED in
-// Stage 1 of v2 revamp (REVAMP_PLAN.md §2.1).
+// Stage 1 of the v2 revamp.
 
 #[event]
 pub struct VaultFrozen {

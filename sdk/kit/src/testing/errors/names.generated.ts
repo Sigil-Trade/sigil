@@ -1,7 +1,7 @@
 /**
  * AUTO-GENERATED FILE — DO NOT EDIT BY HAND.
  *
- * Regenerate with: `pnpm --filter @usesigil/kit run gen:error-types`
+ * Regenerate with: `pnpm run gen:error-types` (root script; part of `pnpm regen`)
  * Source of truth: target/idl/sigil.json (errors[])
  * Verified in CI by: scripts/verify-error-drift.ts
  *

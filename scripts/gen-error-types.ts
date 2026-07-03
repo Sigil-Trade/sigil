@@ -3,7 +3,7 @@
  * Regenerate `sdk/kit/src/testing/errors/names.generated.ts` from the
  * canonical IDL at `target/idl/sigil.json`.
  *
- * Invoke:   pnpm --filter @usesigil/kit run gen:error-types
+ * Invoke:   pnpm run gen:error-types        (root script; part of `pnpm regen`)
  * Or:       tsx scripts/gen-error-types.ts
  *
  * Works by parsing the IDL's `errors` array and emitting a stable,

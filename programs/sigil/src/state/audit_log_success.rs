@@ -5,7 +5,7 @@ use anchor_lang::prelude::*;
 /// `AUDIT_LOG_SUCCESS_CAPACITY`. Capacity sized to retain ~24h of activity
 /// at typical agent cadences while keeping account rent below the L-12
 /// budget envelope (~8KB success buffer + ~4KB rejected buffer = ~12KB
-/// combined). See `docs/revamp/HARDENED_V2_PROMPT_MAP.md` §6 Phase 7.
+/// combined).
 pub const AUDIT_LOG_SUCCESS_CAPACITY: usize = 128;
 
 /// Discriminator allocation for `AuditEntry.discriminator`.
