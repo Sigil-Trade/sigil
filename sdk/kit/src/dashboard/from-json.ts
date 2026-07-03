@@ -88,6 +88,8 @@ export function vaultStateFromJSON(data: SerializedVaultState): VaultState {
       agentCount: data.vault.agentCount,
       totalVolume: bi(data.vault.totalVolume),
       totalFees: bi(data.vault.totalFees),
+      // 0.25 Item 2 — default false for round-trip of pre-0.25 JSON.
+      observeOnly: data.vault.observeOnly ?? false,
     },
     balance: {
       total: bi(data.balance.total),
@@ -183,6 +185,8 @@ export function activityDataFromJSON(
       blocked: data.summary.blocked,
       volume: bi(data.summary.volume),
     },
+    // 0.25 Item 3 — default null for round-trip of pre-0.25 JSON.
+    nextCursor: data.nextCursor ?? null,
     toJSON: () => data,
   };
 }
@@ -223,6 +227,23 @@ export function policyDataFromJSON(data: SerializedPolicyData): PolicyData {
     sessionExpirySeconds: bi(data.sessionExpirySeconds),
     timelockSeconds: data.timelockSeconds,
     policyVersion: bi(data.policyVersion),
+    // 0.25 Item 2 — advanced security controls; defaults preserve behavior when
+    // round-tripping pre-0.25 JSON that lacks these keys (`bi` maps undefined→0n).
+    cosignRequired: data.cosignRequired ?? false,
+    cosignSessionPubkey:
+      data.cosignSessionPubkey != null ? addr(data.cosignSessionPubkey) : null,
+    stableBalanceFloor: bi(data.stableBalanceFloor),
+    perRecipientDailyCapUsd:
+      data.perRecipientDailyCapUsd != null
+        ? bi(data.perRecipientDailyCapUsd)
+        : null,
+    destinationMode: data.destinationMode ?? 0,
+    operatorGrantDelaySeconds: bi(data.operatorGrantDelaySeconds),
+    protocolHashes: data.protocolHashes ?? [],
+    graylist: (data.graylist ?? []).map((g) => ({
+      destination: g.destination,
+      unlockUnix: bi(g.unlockUnix),
+    })),
     pendingUpdate: data.pendingUpdate,
     toJSON: () => data,
   };

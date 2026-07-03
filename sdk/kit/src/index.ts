@@ -50,6 +50,10 @@ export {
   type ProtocolMeta,
   // Slippage
   MAX_SLIPPAGE_BPS,
+  // Timelock bounds (seconds) — mirror on-chain state/mod.rs; dashboard
+  // clamps owner-entered timelock values against these before queueing.
+  MIN_TIMELOCK_DURATION,
+  MAX_TIMELOCK_DURATION,
   // Protocol mode
   PROTOCOL_MODE_ALL,
   PROTOCOL_MODE_ALLOWLIST,
@@ -869,3 +873,33 @@ export {
 // (`PolicyChanges.protocolHashes`). Hash only; the digest/array assembly lives
 // in the policy mutation builders.
 export { computeVerifiedBuildHash } from "./policy/verified-build.js";
+
+// ─── Send + confirm (dashboard punch-list Item 1) ────────────────────────────
+// `sendAndConfirmTransaction` is the send/poll primitive every internal send
+// path already uses (seal, mutations, owner-transaction). Promoted to the root
+// barrel so dashboard/CLI consumers that build a base64 wire transaction
+// themselves (offline-signing, Squads handoff, custom fee-payer flows) can send
+// + confirm without re-implementing the getSignatureStatuses poll loop. Also
+// re-exported from `@usesigil/kit/dashboard` (its natural consumer).
+export { sendAndConfirmTransaction } from "./rpc-helpers.js";
+export type { SendAndConfirmOptions } from "./rpc-helpers.js";
+
+// ─── Instruction discriminators (dashboard punch-list Item 5) ────────────────
+// The 8-byte Anchor discriminators the dashboard's server needs to recognize
+// initialize_vault / register_agent instructions in decoded transactions
+// (previously hand-copied byte arrays — now sourced from the generated
+// builders so they can never drift from the IDL). Only these two are needed;
+// the generated instruction BUILDERS stay private (A12 barrel policy).
+export { INITIALIZE_VAULT_DISCRIMINATOR } from "./generated/instructions/initializeVault.js";
+export { REGISTER_AGENT_DISCRIMINATOR } from "./generated/instructions/registerAgent.js";
+
+// ─── Paginated activity page (dashboard punch-list Item 3) ───────────────────
+// `getVaultActivityPage` is the cursor-aware, bounded-parallel sibling of
+// `getVaultActivity`: it accepts `before`/`until` signature cursors, fans the
+// per-signature `getTransaction` calls out 5-at-a-time, and returns the
+// oldest-fetched signature as `nextCursor` for forward pagination.
+export { getVaultActivityPage } from "./event-analytics.js";
+export type {
+  VaultActivityPage,
+  GetVaultActivityPageOptions,
+} from "./event-analytics.js";

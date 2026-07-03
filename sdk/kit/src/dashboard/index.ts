@@ -136,6 +136,19 @@ export {
   enumerateExistingPendingPdasForClose,
 } from "./close-vault.js";
 
+// ─── Pending ownership transfer read (0.25 punch-list Item 2) ────────────────
+// Standalone read (no OwnerClient method — keeps the read-method inventory
+// stable). Returns `null` when no transfer is queued.
+export { getPendingOwnership } from "./reads.js";
+export type { PendingOwnershipData } from "./types.js";
+
+// ─── Send + confirm (0.25 punch-list Item 1 — dashboard-friendly re-export) ──
+// The dashboard is the natural consumer of the send/poll primitive: its
+// offline-signing / Squads handoff flows build a base64 wire transaction and
+// need to send + confirm it. Also on the root barrel (`@usesigil/kit`).
+export { sendAndConfirmTransaction } from "../rpc-helpers.js";
+export type { SendAndConfirmOptions } from "../rpc-helpers.js";
+
 // ─── Post-execution assertion authoring (Phase 2) ────────────────────────────
 // Client-side validator that mirrors the on-chain validate_entries check so
 // callers fail fast before burning an RPC round-trip. Typed error surface
