@@ -9,15 +9,11 @@ import {
   type SealParams,
   type SigilClientConfig,
 } from "../src/seal.js";
-import { createVault, type CreateVaultOptions } from "../src/create-vault.js";
+import { createVault } from "../src/create-vault.js";
 import { deriveAta } from "../src/x402/transfer-builder.js";
 import { VaultStatus } from "../src/generated/types/vaultStatus.js";
 import type { ResolvedVaultState } from "../src/state-resolver.js";
-import {
-  FULL_CAPABILITY,
-  PROTOCOL_TREASURY,
-  USDC_MINT_DEVNET,
-} from "../src/types.js";
+import { USDC_MINT_DEVNET } from "../src/types.js";
 import { createMockAgent, createMockVaultState } from "../src/testing/index.js";
 
 // ─── Test Addresses ─────────────────────────────────────────────────────────
