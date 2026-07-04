@@ -42,9 +42,9 @@
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@solana/kit": "^6.7.0",
+    "@solana/kit": "^7.0.0",
     "@usesigil/kit": "workspace:*",
-    "zod": "^3.25.0"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
