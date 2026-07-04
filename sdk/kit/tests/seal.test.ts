@@ -330,8 +330,16 @@ describe("createVault()", () => {
     expect(result.vaultId).to.equal(0n);
     expect(result.initializeVaultIx).to.exist;
     expect(result.initializeVaultIx.programAddress).to.be.a("string");
-    expect(result.registerAgentIx).to.exist;
-    expect(result.registerAgentIx.programAddress).to.be.a("string");
+    // F-Q6: default first-agent capability is OPERATOR; on the single-key vault
+    // createVault produces, that seats via the queued-grant composition
+    // ([init, queue_agent_grant]) — register_agent alone would revert 6107.
+    expect(result.registerAgentIx).to.equal(undefined);
+    expect(result.queueAgentGrantIx).to.exist;
+    expect(result.queueAgentGrantIx?.programAddress).to.be.a("string");
+    expect(result.instructions).to.have.length(2);
+    expect(result.operatorGrant?.queued).to.equal(true);
+    expect(result.operatorGrant?.capability).to.equal(2);
+    expect(result.operatorGrant?.delaySeconds).to.equal(600);
   });
 
   it("throws on owner === agent", async () => {
@@ -571,7 +579,10 @@ describe("SigilClient", () => {
     expect(result.policyAddress).to.be.a("string");
     expect(result.vaultId).to.equal(0n);
     expect(result.initializeVaultIx).to.exist;
-    expect(result.registerAgentIx).to.exist;
+    // F-Q6 default OPERATOR → queued-grant composition (see the createVault()
+    // test above); register_agent is not emitted on this path.
+    expect(result.queueAgentGrantIx).to.exist;
+    expect(result.operatorGrant?.queued).to.equal(true);
   });
 });
 

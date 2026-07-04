@@ -18,10 +18,11 @@ import type { CreateVaultOptions } from "./create-vault.js";
 import { usd, type UsdBaseUnits } from "./types.js";
 import {
   FULL_CAPABILITY,
-  PROTOCOL_MODE_ALL,
   PROTOCOL_MODE_ALLOWLIST,
+  MAX_ALLOWED_PROTOCOLS,
   JUPITER_PROGRAM_ADDRESS,
 } from "./types.js";
+import { RECOGNIZED_PROTOCOLS } from "./protocol-names.js";
 
 // ─── Protocol Addresses ──────────────────────────────────────────────────────
 
@@ -31,6 +32,18 @@ const JUPITER_LEND_PROGRAM =
   "JLend2fEim9xUFcaHsyGePEoBzFLvkjMi3MnPcSuCdu" as Address;
 const KAMINO_LEND_PROGRAM =
   "KLend2g3cP87ber8CzRaqeECGwNvLFM9acPVcRkRHvM" as Address;
+
+// Full Access allowlist: every Sigil-recognized protocol, capped at the
+// on-chain max of 10. The deployed program is ALLOWLIST-ONLY —
+// `initialize_vault` hard-rejects protocol_mode 0 (ALL) / 2 (DENYLIST), so
+// "full access" is expressed as "all recognized venues allow-listed", NOT an
+// unbounded allow-all. Owners can widen this by passing extra program IDs to
+// createVault. If the recognized registry ever exceeds 10, the on-chain cap
+// wins and the canonical leading set is taken.
+const FULL_ACCESS_PROTOCOLS: Address[] = RECOGNIZED_PROTOCOLS.slice(
+  0,
+  MAX_ALLOWED_PROTOCOLS,
+).map((p) => p.id);
 
 // Preset capability is the on-chain 2-bit value (0 = Disabled, 1 = Observer,
 // 2 = Operator). All presets that execute trades need `FULL_CAPABILITY` (2n).
@@ -62,11 +75,23 @@ export interface VaultPreset {
   dailySpendingCapUsd: UsdBaseUnits;
   /** Max single transaction size in USD base units. */
   maxTransactionSizeUsd: UsdBaseUnits;
-  /** Max slippage in basis points. */
+  /**
+   * Advisory max slippage in basis points. NOTE: `max_slippage_bps` is stored
+   * on-chain and bound into the policy digest, but the program does NOT reject
+   * a swap by realized slippage — slippage enforcement is delegated to the
+   * off-chain SDK / the DeFi instruction's own guard (e.g. Jupiter's
+   * `slippageBps`). On-chain spending enforcement is outcome-based:
+   * `finalize_session` measures the actual stablecoin balance delta against
+   * the caps. Treat this as a client-side hint, not an on-chain guarantee.
+   */
   maxSlippageBps: number;
-  /** Protocol mode: 0 = all, 1 = allowlist, 2 = denylist. */
+  /**
+   * Protocol mode. The deployed program accepts ONLY 1 = allowlist;
+   * `initialize_vault` rejects 0 (all) and 2 (denylist). Kept as `number` to
+   * mirror the on-chain field width.
+   */
   protocolMode: number;
-  /** Allowed/denied protocol addresses (empty if mode = all). */
+  /** Allow-listed protocol addresses (required — the on-chain mode is allowlist-only). */
   protocols: Address[];
 }
 
@@ -88,7 +113,7 @@ export const VAULT_PRESETS = {
   "perps-trader": {
     label: "Perps Trader",
     description:
-      "Leveraged trading on Flash Trade and Jupiter. Operator capability with position limits.",
+      "Leveraged trading on Flash Trade and Jupiter. Operator capability, higher caps ($5,000/day, $1,000/tx).",
     capability: FULL_CAPABILITY,
     permissions: FULL_CAPABILITY,
     dailySpendingCapUsd: usd(5_000_000_000n), // $5,000
@@ -100,7 +125,7 @@ export const VAULT_PRESETS = {
   "lending-optimizer": {
     label: "Lending Optimizer",
     description:
-      "Deposit and withdraw across lending protocols. Operator capability, low slippage, moderate caps.",
+      "Deposit and withdraw across lending protocols. Operator capability, moderate caps ($2,000/day, $500/tx).",
     capability: FULL_CAPABILITY,
     permissions: FULL_CAPABILITY,
     dailySpendingCapUsd: usd(2_000_000_000n), // $2,000
@@ -116,14 +141,14 @@ export const VAULT_PRESETS = {
   "full-access": {
     label: "Full Access",
     description:
-      "Full capability enabled, all protocols allowed. For experienced users who need maximum flexibility.",
+      "Full capability enabled; every Sigil-recognized protocol allow-listed (up to the on-chain max of 10). For experienced users who need maximum flexibility.",
     capability: FULL_CAPABILITY,
     permissions: FULL_CAPABILITY,
     dailySpendingCapUsd: usd(10_000_000_000n), // $10,000
     maxTransactionSizeUsd: usd(5_000_000_000n), // $5,000
-    maxSlippageBps: 500, // 5%
-    protocolMode: PROTOCOL_MODE_ALL,
-    protocols: [],
+    maxSlippageBps: 500, // 5% (advisory — not enforced on-chain; see VaultPreset.maxSlippageBps)
+    protocolMode: PROTOCOL_MODE_ALLOWLIST,
+    protocols: FULL_ACCESS_PROTOCOLS,
   },
 } as const satisfies Record<string, VaultPreset>;
 

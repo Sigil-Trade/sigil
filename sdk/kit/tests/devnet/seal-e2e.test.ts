@@ -149,10 +149,12 @@ describe("Kit SDK Devnet — seal() + createVault() E2E", function () {
       expect(result.vaultAddress).to.be.a("string");
       expect(result.vaultId).to.be.a("bigint");
       expect(result.initializeVaultIx).to.exist;
+      // OBSERVER first agent → register_agent path (F-Q6: OPERATOR would be a
+      // queued grant instead; here `registerAgentIx` is defined).
       expect(result.registerAgentIx).to.exist;
 
       // Seat the OBSERVER agent (instant register — no F-Q6 timelock).
-      await sendKitTransaction(rpc, owner, [result.registerAgentIx]);
+      await sendKitTransaction(rpc, owner, [result.registerAgentIx!]);
 
       // 4. Verify vault exists on-chain
       const state = await resolveVaultState(

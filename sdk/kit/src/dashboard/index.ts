@@ -142,6 +142,14 @@ export {
 export { getPendingOwnership } from "./reads.js";
 export type { PendingOwnershipData } from "./types.js";
 
+// ─── Pending agent-grant read (F-Q6 queued OPERATOR seat) ────────────────────
+// Standalone read mirroring getPendingOwnership. Surfaces the queued OPERATOR
+// grant createVault emits for a single-key vault so the UI can render the
+// "Operator activates at" countdown; returns `null` once apply/cancel closes
+// it. The apply path is the already-exported OwnerClient.applyAgentGrant.
+export { getPendingAgentGrant } from "./reads.js";
+export type { PendingAgentGrantData } from "./types.js";
+
 // ─── Send + confirm (0.25 punch-list Item 1 — dashboard-friendly re-export) ──
 // The dashboard is the natural consumer of the send/poll primitive: its
 // offline-signing / Squads handoff flows build a base64 wire transaction and

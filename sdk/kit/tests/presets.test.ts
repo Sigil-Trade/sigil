@@ -15,11 +15,12 @@ import {
 } from "../src/presets.js";
 import {
   FULL_CAPABILITY,
-  PROTOCOL_MODE_ALL,
   PROTOCOL_MODE_ALLOWLIST,
   JUPITER_PROGRAM_ADDRESS,
   MAX_SLIPPAGE_BPS,
+  MAX_ALLOWED_PROTOCOLS,
 } from "../src/types.js";
+import { RECOGNIZED_PROTOCOLS } from "../src/protocol-names.js";
 
 // ─── Base58 validation helper ────────────────────────────────────────────────
 
@@ -74,13 +75,15 @@ describe("VAULT_PRESETS", () => {
         }
       });
 
-      it("allowlist mode has protocols, allow-all mode has none", () => {
-        if (preset.protocolMode === PROTOCOL_MODE_ALLOWLIST) {
-          expect(preset.protocols.length).to.be.greaterThan(0);
-        }
-        if (preset.protocolMode === PROTOCOL_MODE_ALL) {
-          expect(preset.protocols.length).to.equal(0);
-        }
+      it("uses allowlist mode with a non-empty, capped protocol list", () => {
+        // The deployed program is allowlist-only (initialize_vault rejects
+        // protocol_mode 0/2), so every preset must be ALLOWLIST with at least
+        // one protocol and at most the on-chain max of 10.
+        expect(preset.protocolMode).to.equal(PROTOCOL_MODE_ALLOWLIST);
+        expect(preset.protocols.length).to.be.greaterThan(0);
+        expect(preset.protocols.length).to.be.lessThanOrEqual(
+          MAX_ALLOWED_PROTOCOLS,
+        );
       });
     });
   }
@@ -132,10 +135,22 @@ describe("preset values", () => {
     expect(VAULT_PRESETS["full-access"].capability).to.equal(FULL_CAPABILITY);
   });
 
-  it("full-access uses protocol mode all", () => {
-    expect(VAULT_PRESETS["full-access"].protocolMode).to.equal(
-      PROTOCOL_MODE_ALL,
+  it("full-access uses allowlist mode with the recognized-protocol set", () => {
+    // F-Q6 preset-truth fix: the program is allowlist-only, so "full access" is
+    // every Sigil-recognized protocol allow-listed (≤ 10), NOT allow-all.
+    const preset = VAULT_PRESETS["full-access"];
+    expect(preset.protocolMode).to.equal(PROTOCOL_MODE_ALLOWLIST);
+    expect(preset.protocols.length).to.be.greaterThan(0);
+    expect(preset.protocols.length).to.be.lessThanOrEqual(
+      MAX_ALLOWED_PROTOCOLS,
     );
+    expect(preset.protocols).to.include(JUPITER_PROGRAM_ADDRESS);
+    // Sourced from the exported recognized registry (capped at the on-chain max).
+    const recognizedIds = RECOGNIZED_PROTOCOLS.slice(
+      0,
+      MAX_ALLOWED_PROTOCOLS,
+    ).map((p) => p.id);
+    expect([...preset.protocols]).to.deep.equal(recognizedIds);
   });
 
   it("every preset's capability is within the on-chain invariant (<= 2n)", () => {

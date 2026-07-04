@@ -533,10 +533,11 @@ export async function previewCreateVault(
   const ownerTx = await buildOwnerTransaction({
     rpc: config.rpc,
     owner: ownerSigner,
-    instructions: [
-      createResult.initializeVaultIx,
-      createResult.registerAgentIx,
-    ],
+    // F-Q6: use the composition createVault chose — [init, register_agent] for
+    // an OBSERVER/DISABLED first agent, or [init, queue_agent_grant] for the
+    // default queued OPERATOR seat. Never hand-assemble from the individual ix
+    // fields (registerAgentIx is undefined on the queued-grant path).
+    instructions: createResult.instructions,
     network: buildNetwork,
     computeUnits,
     priorityFeeMicroLamports,
