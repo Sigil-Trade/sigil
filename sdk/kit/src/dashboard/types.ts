@@ -942,3 +942,54 @@ export interface SerializedPendingOwnershipData {
   isMultisigTarget: boolean;
   queuedAtSlot: string;
 }
+
+/**
+ * Read-back of an in-flight queued OPERATOR grant (PendingAgentGrant PDA) —
+ * written by `queue_agent_grant` (the F-Q6 queued-seat path `createVault` emits
+ * for a single-key OPERATOR agent) and closed by `apply_agent_grant` /
+ * `cancel_agent_grant`.
+ *
+ * Returned by `getPendingAgentGrant`; `null` when no grant is queued. The
+ * on-chain apply gate is WALL-CLOCK based (`unix_now - queued_at >=
+ * min_delay_seconds`), so the maturation time is surfaced as `executesAtUnix`
+ * (Unix seconds), NOT a slot. `queuedAtSlot` is the freshness slot the program
+ * records; it is exposed verbatim but is not the apply deadline.
+ */
+export interface PendingAgentGrantData {
+  /** The vault the grant is bound to. */
+  vault: string;
+  /** The agent that will be seated at `capability` once applied. */
+  agent: string;
+  /** Queued capability (OPERATOR = 2). */
+  capability: number;
+  /** Per-agent spending cap (6-decimal USD base units) the agent is seated with. */
+  spendingLimitUsd: bigint;
+  /** `Clock::unix_timestamp` (seconds) at queue time. */
+  queuedAt: bigint;
+  /**
+   * Effective tier-derived timelock in seconds
+   * (`SINGLE_KEY_OPERATOR_DELAY_FLOOR` = 600 for the single-key vault
+   * `createVault` produces).
+   */
+  minDelaySeconds: bigint;
+  /**
+   * Unix seconds at/after which `apply_agent_grant` may land
+   * (`queuedAt + minDelaySeconds`). Multiply by 1000 for a JS Date.
+   */
+  executesAtUnix: bigint;
+  /** Slot recorded at queue time (freshness; not the apply deadline). */
+  queuedAtSlot: bigint;
+  toJSON(): SerializedPendingAgentGrantData;
+}
+
+/** @internal */
+export interface SerializedPendingAgentGrantData {
+  vault: string;
+  agent: string;
+  capability: number;
+  spendingLimitUsd: string;
+  queuedAt: string;
+  minDelaySeconds: string;
+  executesAtUnix: string;
+  queuedAtSlot: string;
+}

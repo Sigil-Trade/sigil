@@ -318,7 +318,12 @@ export type {
 } from "./advanced-analytics.js";
 
 // ─── Protocol Names ──────────────────────────────────────────────────────────
-export { resolveProtocolName, PROTOCOL_NAMES } from "./protocol-names.js";
+export {
+  resolveProtocolName,
+  PROTOCOL_NAMES,
+  RECOGNIZED_PROTOCOLS,
+} from "./protocol-names.js";
+export type { RecognizedProtocol } from "./protocol-names.js";
 
 // ─── Vault Analytics ─────────────────────────────────────────────────────────
 export { getVaultHealth, getVaultSummary } from "./vault-analytics.js";

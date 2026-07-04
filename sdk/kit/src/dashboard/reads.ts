@@ -40,7 +40,11 @@ import type { AgentVault } from "../generated/accounts/agentVault.js";
 import type { PolicyConfig } from "../generated/accounts/policyConfig.js";
 import type { PendingPolicyUpdate } from "../generated/accounts/pendingPolicyUpdate.js";
 import { fetchMaybePendingOwnershipTransfer } from "../generated/accounts/pendingOwnershipTransfer.js";
-import { findPendingOwnerPda } from "./close-vault.js";
+import { fetchMaybePendingAgentGrant } from "../generated/accounts/pendingAgentGrant.js";
+import {
+  findPendingOwnerPda,
+  findPendingAgentGrantPda,
+} from "./close-vault.js";
 
 /**
  * Cast ResolvedVaultStateForOwner to ResolvedVaultState.
@@ -70,6 +74,7 @@ import type {
   AuditTrailOptions,
   AuditEventType,
   PendingOwnershipData,
+  PendingAgentGrantData,
 } from "./types.js";
 
 import { SigilSdkDomainError } from "../errors/sdk.js";
@@ -1292,5 +1297,66 @@ export async function getPendingOwnership(
     // Account-not-found ≡ "no pending transfer" (same convention as getPolicy).
     if (isAccountNotFoundError(err)) return null;
     throw toDxError(err, "OwnerClient.getPendingOwnership");
+  }
+}
+
+/**
+ * Read-back of an in-flight queued OPERATOR grant (PendingAgentGrant PDA).
+ *
+ * Returns `null` when no grant is queued for the vault (the account does not
+ * exist) — the steady state after `apply_agent_grant` / `cancel_agent_grant`
+ * closes it. Mirrors {@link getPendingOwnership}.
+ *
+ * The on-chain apply gate is WALL-CLOCK based, so the returned `executesAtUnix`
+ * (= `queuedAt + minDelaySeconds`, Unix seconds) is the real "applyable at"
+ * time — surface it as the "Operator activates at" countdown. `queuedAtSlot` is
+ * exposed verbatim for freshness but is NOT the apply deadline.
+ *
+ * The PDA + fetch are network-independent (the `rpc` already binds the
+ * cluster), so — unlike the ownership read — no `network` argument is taken.
+ */
+export async function getPendingAgentGrant(
+  rpc: Rpc<SolanaRpcApi>,
+  vault: Address,
+): Promise<PendingAgentGrantData | null> {
+  try {
+    const pda = await findPendingAgentGrantPda(vault);
+    const maybe = await fetchMaybePendingAgentGrant(rpc, pda);
+    if (!maybe.exists) return null;
+
+    const d = maybe.data;
+    const vaultAddr = d.vault as string;
+    const agent = d.agent as string;
+    const capability = d.capability;
+    const spendingLimitUsd = d.spendingLimitUsd;
+    const queuedAt = d.queuedAt;
+    const minDelaySeconds = d.minDelaySeconds;
+    const executesAtUnix = queuedAt + minDelaySeconds;
+    const queuedAtSlot = d.queuedAtSlot;
+
+    return {
+      vault: vaultAddr,
+      agent,
+      capability,
+      spendingLimitUsd,
+      queuedAt,
+      minDelaySeconds,
+      executesAtUnix,
+      queuedAtSlot,
+      toJSON: () => ({
+        vault: vaultAddr,
+        agent,
+        capability,
+        spendingLimitUsd: bs(spendingLimitUsd),
+        queuedAt: bs(queuedAt),
+        minDelaySeconds: bs(minDelaySeconds),
+        executesAtUnix: bs(executesAtUnix),
+        queuedAtSlot: bs(queuedAtSlot),
+      }),
+    };
+  } catch (err) {
+    // Account-not-found ≡ "no pending grant" (same convention as getPolicy).
+    if (isAccountNotFoundError(err)) return null;
+    throw toDxError(err, "OwnerClient.getPendingAgentGrant");
   }
 }

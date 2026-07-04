@@ -1859,7 +1859,7 @@ export const ON_CHAIN_ERROR_MAP: Record<number, ErrorMapping> = {
       {
         action: "use_queue_agent_grant",
         description:
-          "Seat the OPERATOR via queue_agent_grant, wait the effective delay (>=10 min for a single-key vault, else the configured operator_grant_delay_seconds), then apply_agent_grant. A cosign-bound vault at zero delay can seat instantly by including the bound cosigner's signature in register_agent.",
+          "Seat the OPERATOR via queue_agent_grant, wait the effective delay (>=10 min for a single-key vault, else the configured operator_grant_delay_seconds), then apply_agent_grant. A cosign-bound vault at zero delay can seat instantly by including the bound cosigner's signature in register_agent. The @usesigil/kit createVault helper does this for you when the first agent is OPERATOR (firstOperatorSeating: 'queued-grant', the default): it emits [initialize_vault, queue_agent_grant] and returns operatorGrant with the activation countdown.",
       },
     ],
   },

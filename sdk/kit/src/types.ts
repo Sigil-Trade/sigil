@@ -118,6 +118,17 @@ export const MAX_ALLOWED_PROTOCOLS = 10;
 export const FULL_CAPABILITY: CapabilityTier = capability(2n);
 /** @deprecated Use FULL_CAPABILITY instead. Kept for backward compatibility. */
 export const FULL_PERMISSIONS: CapabilityTier = FULL_CAPABILITY;
+
+// Numeric mirrors of the on-chain 2-bit capability enum
+// (`programs/sigil/src/state/mod.rs`). Use these for branching on a
+// requested capability tier; `FULL_CAPABILITY` is the branded `CapabilityTier`
+// value passed into policy fields.
+/** Capability 0 — Disabled (no authority). */
+export const CAPABILITY_DISABLED = 0;
+/** Capability 1 — Observer (non-spending authorized actions only). */
+export const CAPABILITY_OBSERVER = 1;
+/** Capability 2 — Operator ("can spend" + "can hold positions"). */
+export const CAPABILITY_OPERATOR = 2;
 // Legacy 21-bit permission bitmasks (SWAP_ONLY, PERPS_ONLY, TRANSFER_ONLY,
 // ESCROW_ONLY, PERPS_FULL) were removed in the A11 cleanup — they encoded a
 // pre-v6 permission model the on-chain program no longer supports. Use
@@ -148,6 +159,18 @@ export const MAX_SLIPPAGE_BPS = 5_000; // 50%
 export const MIN_TIMELOCK_DURATION = 1_800;
 /** Maximum policy timelock in seconds (48 h). Mirror of on-chain `MAX_TIMELOCK_DURATION`. */
 export const MAX_TIMELOCK_DURATION = 172_800;
+
+/**
+ * Forced minimum OPERATOR-grant delay for a single-key (EOA, cosign-off) vault,
+ * in seconds (10 min). Mirror of on-chain `SINGLE_KEY_OPERATOR_DELAY_FLOOR`
+ * (`programs/sigil/src/utils/operator_grant.rs`). The time-delay is the missing
+ * 2nd authorization factor: a single owner key cannot INSTANTLY seat an
+ * OPERATOR, so `queue_agent_grant` floors the wait at this value. A freshly
+ * created vault is always single-key at `operator_grant_delay_seconds == 0`, so
+ * this is the exact effective delay of the queued OPERATOR grant `createVault`
+ * emits.
+ */
+export const SINGLE_KEY_OPERATOR_DELAY_FLOOR = 600;
 
 // ─── SpendTracker Constants ───────────────────────────────────────────────────
 

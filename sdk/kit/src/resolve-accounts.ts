@@ -173,6 +173,23 @@ export async function getPendingPolicyPDA(
   return [pda, bump];
 }
 
+/**
+ * Derive the PDA for `PendingAgentGrant` at `[b"pending_agent_grant", vault]`.
+ * Written by `queue_agent_grant` (the F-Q6 queued OPERATOR-seat path) and
+ * closed by `apply_agent_grant` / `cancel_agent_grant`. One in-flight grant
+ * per vault (the `init` account collides on a duplicate queue).
+ */
+export async function getPendingAgentGrantPDA(
+  vault: Address,
+  programAddress: Address = SIGIL_PROGRAM_ADDRESS,
+): Promise<[Address, number]> {
+  const [pda, bump] = await getProgramDerivedAddress({
+    programAddress,
+    seeds: [seedString("pending_agent_grant"), seedAddress(vault)],
+  });
+  return [pda, bump];
+}
+
 // getEscrowPDA REMOVED in v2 revamp Stage 1 (escrow feature deleted).
 
 export async function getAgentOverlayPDA(

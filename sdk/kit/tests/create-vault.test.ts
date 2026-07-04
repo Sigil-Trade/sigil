@@ -21,6 +21,8 @@ import {
   SIGIL_ERROR__SDK__CAP_EXCEEDED,
 } from "../src/errors/codes.js";
 import type { UsdBaseUnits } from "../src/types.js";
+import { capability } from "../src/types.js";
+import { presetToCreateVaultFields } from "../src/presets.js";
 
 function createMockSigner(addr: Address): TransactionSigner {
   return {
@@ -237,5 +239,87 @@ describe("createVault — aggregate cap guard (F3/D12)", () => {
         expect(err.code).to.not.equal(SIGIL_ERROR__SDK__INVALID_PARAMS);
       }
     }
+  });
+});
+
+describe("createVault — Full Access preset (F-Q6 preset-truth)", () => {
+  // Regression: pre-fix, the full-access preset was protocol_mode ALL with an
+  // empty allowlist, so the active-vault F-11 guard threw INVALID_PARAMS at
+  // construction. The preset is now allowlist-mode over the recognized set, so
+  // it builds — and because its capability is OPERATOR (2) on the single-key
+  // vault createVault produces, it seats via the queued-grant composition.
+  // vaultId + createdAtSlot are supplied so no RPC is touched (stub `{}` rpc).
+  function fullAccessOpts() {
+    const preset = presetToCreateVaultFields("full-access");
+    return {
+      rpc: {} as any,
+      network: "devnet" as const,
+      owner: createMockSigner(OWNER),
+      agent: createMockSigner(AGENT),
+      spendingLimitUsd: 100_000_000n as UsdBaseUnits,
+      dailySpendingCapUsd: preset.dailySpendingCapUsd,
+      timelockDuration: 1800,
+      vaultId: 7n,
+      createdAtSlot: 1000n,
+      permissions: preset.permissions,
+      protocolMode: preset.protocolMode,
+      protocols: preset.protocols,
+      maxSlippageBps: preset.maxSlippageBps,
+    };
+  }
+
+  it("builds without throwing INVALID_PARAMS (was throwing pre-fix)", async () => {
+    // Must not throw at all now — the non-empty allowlist clears the F-11 guard.
+    const result = await createVault(fullAccessOpts());
+    expect(result.vaultAddress).to.be.a("string");
+    expect(result.instructions).to.have.length(2);
+  });
+
+  it("seats the first OPERATOR agent via the queued-grant composition", async () => {
+    const result = await createVault(fullAccessOpts());
+    expect(result.registerAgentIx).to.equal(undefined);
+    expect(result.queueAgentGrantIx).to.exist;
+    expect(result.instructions).to.have.length(2);
+    expect(result.operatorGrant?.queued).to.equal(true);
+    expect(result.operatorGrant?.capability).to.equal(2);
+    expect(result.operatorGrant?.delaySeconds).to.equal(600);
+    expect(result.operatorGrant?.agent).to.equal(AGENT);
+  });
+});
+
+describe("createVault — F-Q6 first-agent seating branches", () => {
+  // createdAtSlot is supplied so createVault skips the getSlot() RPC and reaches
+  // the Step 5 seating logic against the stub `{}` rpc.
+  it("firstOperatorSeating='immediate' with an OPERATOR first agent throws INVALID_PARAMS", async () => {
+    const opts = {
+      ...baseOpts(),
+      createdAtSlot: 1000n,
+      firstOperatorSeating: "immediate" as const,
+      // permissions defaults to OPERATOR (FULL_PERMISSIONS) — the rejected case.
+    };
+    try {
+      await createVault(opts);
+      expect.fail("expected throw");
+    } catch (err) {
+      expect(err).to.be.instanceOf(SigilSdkDomainError);
+      expect((err as SigilSdkDomainError).code).to.equal(
+        SIGIL_ERROR__SDK__INVALID_PARAMS,
+      );
+      expect((err as Error).message).to.match(/immediate|queued-grant/i);
+    }
+  });
+
+  it("an OBSERVER first agent seats via register_agent (no queued grant)", async () => {
+    const opts = {
+      ...baseOpts(),
+      createdAtSlot: 1000n,
+      spendingLimitUsd: 0n as UsdBaseUnits,
+      permissions: capability(1n), // OBSERVER
+    };
+    const result = await createVault(opts);
+    expect(result.registerAgentIx).to.exist;
+    expect(result.queueAgentGrantIx).to.equal(undefined);
+    expect(result.operatorGrant).to.equal(undefined);
+    expect(result.instructions).to.have.length(2);
   });
 });
