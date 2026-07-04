@@ -23,7 +23,6 @@
  * `sendVersionedTx` — i.e. the exact multi-ix atomic shape the kit builds.
  */
 
-import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { Sigil } from "../target/types/sigil";
 import {
