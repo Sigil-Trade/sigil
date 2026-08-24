@@ -35,7 +35,7 @@ bytemuck = { version = "1.14", features = ["derive", "min_const_generics"] }
 
 # Pin blake3 to avoid constant_time_eq 0.4.2 which requires edition 2024
 # (BPF platform-tools cargo 1.84 doesn't support edition 2024)
-blake3 = "=1.5.5"
+blake3 = "=1.8.7"
 cvlr = { version = "0.6", optional = true }
 
 # NOTE: there is intentionally no `[dev-dependencies]` block.
